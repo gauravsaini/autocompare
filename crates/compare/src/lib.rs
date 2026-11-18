@@ -6,6 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+mod binary;
+mod folder;
+mod text;
+
 use std::fmt;
 use std::path::Path;
 use std::time::SystemTime;
@@ -59,9 +63,7 @@ pub struct TextOptions {
 /// leniently (invalid bytes become replacement characters) and splits
 /// into lines. A trailing newline does not create a last empty line.
 pub fn load_lines(path: &Path) -> Result<Vec<String>> {
-    // STUB: replaced by the real implementation in crates/compare.
-    let _ = path;
-    Ok(Vec::new())
+    text::load_lines(path)
 }
 
 /// The result of comparing two text files.
@@ -76,16 +78,7 @@ pub struct TextComparison {
 
 /// Compares two text files line by line, honouring `opts`.
 pub fn compare_text_files(left: &Path, right: &Path, opts: &TextOptions) -> Result<TextComparison> {
-    // STUB: replaced by the real implementation in crates/compare.
-    let _ = (left, right, opts);
-    Ok(TextComparison {
-        left_lines: Vec::new(),
-        right_lines: Vec::new(),
-        script: DiffScript {
-            ops: Vec::new(),
-            exact: true,
-        },
-    })
+    text::compare_text_files(left, right, opts)
 }
 
 /// Metadata for one side of a compared node.
@@ -179,12 +172,7 @@ pub fn compare_folders(
     right: &Path,
     opts: &FolderOptions,
 ) -> Result<FolderComparison> {
-    // STUB: replaced by the real implementation in crates/compare.
-    let _ = (left, right, opts);
-    Ok(FolderComparison {
-        entries: Vec::new(),
-        truncated: false,
-    })
+    folder::compare_folders(left, right, opts)
 }
 
 /// One run of differing bytes, capped in length.
@@ -223,7 +211,5 @@ pub fn compare_binary_files(
     right: &Path,
     max_hunks: usize,
 ) -> Result<BinaryComparison> {
-    // STUB: replaced by the real implementation in crates/compare.
-    let _ = (left, right, max_hunks);
-    Ok(BinaryComparison::default())
+    binary::compare_binary_files(left, right, max_hunks)
 }
