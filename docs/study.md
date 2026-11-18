@@ -69,8 +69,8 @@ MEDIUM pending a visual pass (see "Verification status"):
 | Folder sync | `autocompare sync` | dry-run default; `--apply` executes; prune; never overwrites a newer destination |
 | Folder merge | `autocompare folder-merge` | three-way tree merge, plan/apply, conflict markers |
 | Picture compare | `autocompare picture` | PNG pixel diff with bounds, share and heatmap |
-| GUI | not rebuilt | headless-first per the rebuild methodology; the CLI is the client |
-| Media compare | not rebuilt | roadmap (observed in the original's session menu) |
+| Media compare | `autocompare audio` | WAV + MP3 sample comparison with 10ms window share; other codecs on the roadmap |
+| GUI | `cargo run -p autocompare-gui` | thin desktop client over the same engine; text, folder and picture views |
 | Names, icons, wording | deliberately original | clean-room rule |
 
 ## Design decisions where the clone differs on purpose

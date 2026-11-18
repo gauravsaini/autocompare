@@ -217,6 +217,40 @@ difference bounds: (2,2)..(6,6)
 grayscale and differing pixels in red. Hostile inputs (forged
 dimension headers) are refused, not crashed.
 
+### Audio compare
+
+```sh
+autocompare audio a.wav b.wav
+```
+
+Compares WAV and MP3 files sample by sample over the shorter stream's
+duration:
+
+```text
+left:  1.000s, 8000 Hz, 1 channel(s)
+right: 1.000s, 8000 Hz, 1 channel(s)
+first difference at 0.500s
+differing 10ms windows: 1/100 (1.00%)
+```
+
+WAV decoding is a hand-written RIFF parser (no dependency: PCM
+8/16/24/32-bit and IEEE float, 1–64 channels); MP3 decoding uses the
+pure-Rust symphonia engine. Files that do not decode are refused with
+a plain error; differing sample rates or channel counts are reported
+honestly as not comparable instead of guessed.
+
+### GUI client
+
+```sh
+cargo run -p autocompare-gui
+```
+
+A thin desktop client (eframe/egui) with Text, Folder and Picture
+tabs over the same engine libraries the CLI uses: side-by-side rows
+with accent highlights, folder listings with status colors, and the
+difference heatmap rendered in-app. Errors appear as panels; the
+window never crashes on bad input (all engine errors are values).
+
 ## Exit codes
 
 `0` no differences · `1` differences found (or merge conflicts) ·
@@ -240,13 +274,15 @@ dimension headers) are refused, not crashed.
 
 ## Tests
 
-167 workspace tests: replay validity for every diff case, brute-force
+246 workspace tests: replay validity for every diff case, brute-force
 minimality on random pairs, budget fallback, symlink-safe folder
 fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
-sync plan and apply semantics, three-way tree merge rules, PNG
-decode/encode round-trips with hostile inputs. Five exhaustive sweeps
-(~430k pairs, each checked for replay, canonical form and minimal
-edit count) run separately in release mode:
+sync plan and apply semantics, three-way tree merge rules, PNG and
+audio decode totality sweeps (every prefix truncation of a valid WAV,
+random buffers, hostile headers), plus 30 headless GUI view-model
+tests. Five exhaustive sweeps (~430k pairs, each checked for replay,
+canonical form and minimal edit count) run separately in release
+mode:
 
 ```sh
 cargo test -p autocompare-diff --release -- --ignored
@@ -254,8 +290,9 @@ cargo test -p autocompare-diff --release -- --ignored
 
 ## Roadmap
 
-- Media compare
-- GUI client over the same engine
+- More audio codecs (FLAC, OGG)
+- Merge view and sync actions in the GUI
+- In-place editing (the original's panes are editors)
 
 ## License
 
