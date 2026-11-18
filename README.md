@@ -251,6 +251,14 @@ with accent highlights, folder listings with status colors, and the
 difference heatmap rendered in-app. Errors appear as panels; the
 window never crashes on bad input (all engine errors are values).
 
+On Linux, the windowing system development packages are needed first
+(the CI workflow installs exactly this set):
+
+```sh
+sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 \
+  libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+```
+
 ## Exit codes
 
 `0` no differences · `1` differences found (or merge conflicts) ·
