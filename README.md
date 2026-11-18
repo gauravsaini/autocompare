@@ -169,6 +169,54 @@ performs prune deletes; every step's failure is recorded and the run
 continues. Exit codes: dry run with steps → 1; apply without failures
 → 0; any failed step → 1.
 
+### Folder merge
+
+```sh
+autocompare folder-merge base/ left/ right/                 # dry run
+autocompare folder-merge base/ left/ right/ --apply --output merged/
+```
+
+Three-way merge of two trees over their common base. Identical sides
+take the left copy; one-sided edits take the edited side; files
+changed on both sides merge as text (clean merges become `M`,
+overlapping edits become `C` with git-style markers in the output);
+both-changed binaries keep the left copy and are flagged as
+conflicts. Deletions against an unchanged other side omit the file.
+
+```text
+L a.txt
+R b.txt
+C f.txt
+M e.txt
+~ c.txt (deleted on the left; right unchanged from base)
+! f.txt (conflict)
+13 step(s) planned, 1 omitted, 2 conflict(s)
+```
+
+`--apply` requires `--output DIR`, which must be missing or empty;
+nothing is merged in place. Symlinks are never followed, read or
+copied. Files above 32 MiB are treated as binary.
+
+### Picture compare
+
+```sh
+autocompare picture left.png right.png [--heatmap diff.png]
+```
+
+Compares two PNG images pixel by pixel over their overlap:
+
+```text
+left:  8x8
+right: 8x8
+overlap: 8x8 (64 pixels)
+differing pixels: 14 (21.88%)
+difference bounds: (2,2)..(6,6)
+```
+
+`--heatmap FILE` writes a PNG with identical pixels dimmed to 30%
+grayscale and differing pixels in red. Hostile inputs (forged
+dimension headers) are refused, not crashed.
+
 ## Exit codes
 
 `0` no differences · `1` differences found (or merge conflicts) ·
@@ -192,13 +240,13 @@ continues. Exit codes: dry run with steps → 1; apply without failures
 
 ## Tests
 
-126 workspace tests: replay validity for every diff case, brute-force
+167 workspace tests: replay validity for every diff case, brute-force
 minimality on random pairs, budget fallback, symlink-safe folder
-fixtures, streamed binary compare, RFC-4180-lite parser edge cases
-(NULs, megabyte cells, multibyte, unterminated quotes), sync plan and
-apply semantics on real trees. Five exhaustive sweeps (~430k pairs,
-each checked for replay, canonical form and minimal edit count) run
-separately in release mode:
+fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
+sync plan and apply semantics, three-way tree merge rules, PNG
+decode/encode round-trips with hostile inputs. Five exhaustive sweeps
+(~430k pairs, each checked for replay, canonical form and minimal
+edit count) run separately in release mode:
 
 ```sh
 cargo test -p autocompare-diff --release -- --ignored
@@ -206,8 +254,7 @@ cargo test -p autocompare-diff --release -- --ignored
 
 ## Roadmap
 
-- Media and picture compares
-- Folder merge
+- Media compare
 - GUI client over the same engine
 
 ## License

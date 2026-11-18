@@ -67,8 +67,10 @@ MEDIUM pending a visual pass (see "Verification status"):
 | Three-way text merge | `autocompare merge` | git-style conflict markers; no merge UI |
 | Table compare | `autocompare table` | cell-level `[old => new]` deltas, quoted fields |
 | Folder sync | `autocompare sync` | dry-run default; `--apply` executes; prune; never overwrites a newer destination |
+| Folder merge | `autocompare folder-merge` | three-way tree merge, plan/apply, conflict markers |
+| Picture compare | `autocompare picture` | PNG pixel diff with bounds, share and heatmap |
 | GUI | not rebuilt | headless-first per the rebuild methodology; the CLI is the client |
-| Folder merge, media and picture compares | not rebuilt | roadmap (all observed in the original's session menu) |
+| Media compare | not rebuilt | roadmap (observed in the original's session menu) |
 | Names, icons, wording | deliberately original | clean-room rule |
 
 ## Design decisions where the clone differs on purpose
