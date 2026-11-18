@@ -120,6 +120,55 @@ delta
 
 Options: `--output FILE` writes the result instead of standard output.
 
+### Table compare
+
+```sh
+autocompare table old.csv new.csv
+```
+
+Compares delimited (CSV-style) files cell by cell. Changed cells show
+as `[old => new]`; rows are aligned by position, inserted rows `R`,
+removed rows `L`, equal rows `=` (dim). Quoted fields are parsed
+RFC-4180-lite, so delimiters and line breaks inside quotes are data.
+
+```text
+!  hdr | name | [size => extent] | kind
+=    1 | alpha | 10 | core
+!    2 | bravo | [20 => 25] | core
+=    3 | charlie,x | 30 | extra
+R    4 | echo | 50 | core
+=    5 | delta | 40 | core
+```
+
+Options: `--delimiter <char>` (default `,`), `--no-header`.
+
+### Folder sync
+
+```sh
+autocompare sync left/ right/            # dry run: prints the plan
+autocompare sync left/ right/ --apply    # executes it
+```
+
+Plans a one-directional (`--direction l2r|r2l`) or `--newer` sync.
+One-directional sync never overwrites a newer destination (skipped
+with a reason); entries whose content differs never lose to either
+side; `--prune` deletes one-sided entries on the losing side.
+Symlinks are never followed, copied or written through.
+
+```text
+→ left-only.txt
+→ nested/deep-file.txt
+~ mismatch.txt (content differs; no side wins)
+~ newer.txt (destination is newer)
+2 step(s) planned, 5 skipped
+dry run: nothing changed (pass --apply to run)
+```
+
+`--apply` copies files (creating parent directories as needed) and
+performs prune deletes; every step's failure is recorded and the run
+continues. Exit codes: dry run with steps → 1; apply without failures
+→ 0; any failed step → 1.
+
 ## Exit codes
 
 `0` no differences · `1` differences found (or merge conflicts) ·
@@ -143,11 +192,13 @@ Options: `--output FILE` writes the result instead of standard output.
 
 ## Tests
 
-72 workspace tests: replay validity for every diff case, brute-force
+126 workspace tests: replay validity for every diff case, brute-force
 minimality on random pairs, budget fallback, symlink-safe folder
-fixtures, streamed binary compare. Five exhaustive sweeps (~430k
-pairs, each checked for replay, canonical form and minimal edit count)
-run separately in release mode:
+fixtures, streamed binary compare, RFC-4180-lite parser edge cases
+(NULs, megabyte cells, multibyte, unterminated quotes), sync plan and
+apply semantics on real trees. Five exhaustive sweeps (~430k pairs,
+each checked for replay, canonical form and minimal edit count) run
+separately in release mode:
 
 ```sh
 cargo test -p autocompare-diff --release -- --ignored
@@ -155,9 +206,8 @@ cargo test -p autocompare-diff --release -- --ignored
 
 ## Roadmap
 
-- Table (CSV/delimited) compare
-- Picture compare
-- Folder sync actions (copy left→right)
+- Media and picture compares
+- Folder merge
 - GUI client over the same engine
 
 ## License
