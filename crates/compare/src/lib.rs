@@ -464,10 +464,16 @@ pub fn plan_tree_merge(base: &Path, left: &Path, right: &Path) -> Result<TreeMer
     folder_merge::plan_tree_merge(base, left, right)
 }
 
-/// Applies a merge plan into `output`. The output directory must not
+/// Applies a merge plan into `output`, taking copied content from
+/// the `left` and `right` roots. The output directory must not
 /// exist or must be empty (anything else is
 /// [`Error::Unsupported`]); it is created as needed. Each step's
 /// failure is recorded and the run continues. Never panics.
-pub fn apply_tree_merge(plan: &TreeMergePlan, output: &Path) -> Result<TreeMergeReport> {
-    folder_merge::apply_tree_merge(plan, output)
+pub fn apply_tree_merge(
+    left: &Path,
+    right: &Path,
+    plan: &TreeMergePlan,
+    output: &Path,
+) -> Result<TreeMergeReport> {
+    folder_merge::apply_tree_merge(left, right, plan, output)
 }

@@ -392,7 +392,12 @@ fn run(command: Command, color: bool) -> autocompare_compare::Result<Outcome> {
                         what: "--apply needs an output directory",
                     });
                 };
-                let report = autocompare_compare::apply_tree_merge(&plan, Path::new(&out))?;
+                let report = autocompare_compare::apply_tree_merge(
+                    Path::new(&left),
+                    Path::new(&right),
+                    &plan,
+                    Path::new(&out),
+                )?;
                 render_foldermerge::print_report(&report, color);
                 Ok(if report.failed.is_empty() && plan.conflicts.is_empty() {
                     Outcome::Same
