@@ -83,9 +83,15 @@ app in a later pass — see "Verification status"):
 
 - [x] Workspace compiles; `clippy -D warnings` green at scaffold
       (2026-11-18).
-- [ ] Line diff replay + minimality tests green (diff crate gates).
-- [ ] Folder / binary / hex fixture tests green (compare crate gates).
-- [ ] Live sanity runs against real sample trees via the CLI.
+- [x] Line diff replay + minimality tests green (33 tests; five
+      exhaustive release-mode sweeps over ~430k pairs verified replay,
+      canonical form and minimal edit count).
+- [x] Folder / binary / hex fixture tests green (39 tests).
+- [x] Live sanity runs against real sample trees via the CLI
+      (2026-11-18): all six folder statuses, `--content` flip from
+      newer→different, identical-inputs exit 0, differences exit 1,
+      missing path exit 2, hex hunk at the right offset, clean and
+      conflicted merges with exact marker lines.
 - [ ] Re-verify the MEDIUM items above against the running original
       (screenshot pass). Not done this session; until then those items
       stay MEDIUM.
