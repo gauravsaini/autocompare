@@ -9,6 +9,7 @@
 mod binary;
 mod folder;
 mod folder_merge;
+mod media;
 mod picture;
 mod sync;
 mod table;
@@ -476,4 +477,19 @@ pub fn apply_tree_merge(
     output: &Path,
 ) -> Result<TreeMergeReport> {
     folder_merge::apply_tree_merge(left, right, plan, output)
+}
+
+/// The result of comparing two audio files.
+pub struct AudioComparison {
+    /// Decoded stream statistics.
+    pub diff: autocompare_diff::AudioDiff,
+}
+
+/// Compares two WAV or MP3 files sample by sample over the shorter
+/// stream's duration. Files that do not decode are
+/// [`Error::Unsupported`]; a sample-rate or channel mismatch is
+/// reported through the diff (not comparable, honestly), not as an
+/// error.
+pub fn compare_audio_files(left: &Path, right: &Path) -> Result<AudioComparison> {
+    media::compare_audio_files(left, right)
 }

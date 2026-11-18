@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod render_audio;
 mod render_folder;
 mod render_foldermerge;
 mod render_hex;
@@ -180,6 +181,13 @@ enum Command {
         /// Execute the plan into --output (default is a dry run).
         #[arg(long)]
         apply: bool,
+    },
+    /// Compare two audio files (WAV, MP3) sample by sample.
+    Audio {
+        /// Left file.
+        left: String,
+        /// Right file.
+        right: String,
     },
 }
 
@@ -405,6 +413,12 @@ fn run(command: Command, color: bool) -> autocompare_compare::Result<Outcome> {
                     Outcome::Different
                 })
             }
+        }
+        Command::Audio { left, right } => {
+            let cmp =
+                autocompare_compare::compare_audio_files(Path::new(&left), Path::new(&right))?;
+            render_audio::print(&cmp, color);
+            Ok(render_audio::outcome(&cmp))
         }
     }
 }

@@ -4,6 +4,7 @@ members = [
     "crates/diff",
     "crates/compare",
     "crates/cli",
+    "crates/gui",
 ]
 
 [workspace.package]

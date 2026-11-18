@@ -1,0 +1,18 @@
+[package]
+name = "autocompare-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Desktop client over the autocompare engine"
+
+[[bin]]
+name = "autocompare-gui"
+path = "src/main.rs"
+
+[dependencies]
+autocompare-diff = { path = "../diff" }
+autocompare-compare = { path = "../compare" }
+eframe = "0.37.0"
+
+[lints]
+workspace = true

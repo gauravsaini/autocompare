@@ -10,3 +10,4 @@ workspace = true
 
 [dependencies]
 png = "0.18.1"
+symphonia-bundle-mp3 = "0.6.1"

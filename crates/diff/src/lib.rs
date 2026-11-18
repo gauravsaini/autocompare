@@ -6,12 +6,16 @@
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod engine;
 mod image;
 mod merge3;
 mod table;
 mod word_diff;
 
+pub use audio::{
+    AudioDiff, MAX_SAMPLES, PcmAudio, decode_audio, decode_mp3, decode_wav, diff_audio,
+};
 pub use image::{PictureDiff, RgbaImage, decode_png, diff_pictures, encode_png, picture_heatmap};
 pub use table::{Table, diff_cells, diff_rows, parse_delimited};
 
