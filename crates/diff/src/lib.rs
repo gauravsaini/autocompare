@@ -6,6 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+mod engine;
+mod merge3;
+mod word_diff;
+
 /// One edit operation over two sequences of lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
@@ -33,18 +37,14 @@ pub struct DiffScript {
 /// Maximum edit distance attempted before falling back to a coarse script.
 pub const EDIT_BUDGET: usize = 50_000;
 
-/// Compares two line sequences (Myers diff, O(N + D)).
+/// Compares two line sequences (Myers diff, linear space).
 ///
 /// Falls back to common prefix/suffix trimming plus a single
 /// delete+insert when the edit distance exceeds [`EDIT_BUDGET`].
 /// Never panics.
 pub fn diff_lines(a: &[&str], b: &[&str]) -> DiffScript {
-    // STUB: replaced by the real implementation in crates/diff.
-    let _ = (a, b);
-    DiffScript {
-        ops: Vec::new(),
-        exact: false,
-    }
+    let (ops, exact) = engine::diff_slices(a, b, Some(EDIT_BUDGET));
+    DiffScript { ops, exact }
 }
 
 /// A pair of changed character ranges within one line pair (half-open).
@@ -65,9 +65,7 @@ pub struct InlineSpan {
 /// aid: highlighting is computed on the raw lines, whatever the
 /// comparison options were.
 pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
-    // STUB: replaced by the real implementation in crates/diff.
-    let _ = (a, b);
-    Vec::new()
+    word_diff::inline_diff(a, b)
 }
 
 /// Three-way merge of `base`, `left` and `right` line sequences.
@@ -76,7 +74,5 @@ pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
 /// edits become conflict hunks delimited by `<<<<<<<` / `>>>>>>>`
 /// markers. Never panics; the result is always complete lines.
 pub fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
-    // STUB: replaced by the real implementation in crates/diff.
-    let _ = (base, left, right);
-    Vec::new()
+    merge3::merge3(base, left, right)
 }
