@@ -4,26 +4,24 @@
 //! `autocompare-compare` and `autocompare-diff` libraries the CLI
 //! uses. Errors render as panels; the app never panics on bad paths
 //! or hostile input.
+//!
+//! Layout: [`app`] holds state and drives the engine, [`viewmodel`]
+//! turns engine results into pure row models (the crate's test
+//! surface), [`views`] paints those models with egui.
 
 #![forbid(unsafe_code)]
+
+mod app;
+mod viewmodel;
+mod views;
 
 fn main() {
     let options = eframe::NativeOptions::default();
     if let Err(err) = eframe::run_native(
         "autocompare",
         options,
-        Box::new(|_cc| Ok(Box::new(App::default()))),
+        Box::new(|_cc| Ok(Box::new(app::App::default()))),
     ) {
         eprintln!("autocompare-gui: {err}");
-    }
-}
-
-#[derive(Default)]
-struct App {}
-
-impl eframe::App for App {
-    fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
-        ui.heading("autocompare");
-        ui.label("desktop client scaffold");
     }
 }
