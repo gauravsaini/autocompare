@@ -31,26 +31,29 @@ independently re-verified this session;
 | Localizations: de, en, fr, ja, zh_cn | bundle `Info.plist` |
 | Ships a help book; executable is `BCompare`; runs with `LC_CTYPE=UTF-8` | bundle `Info.plist` |
 
-## User-visible capability model (MEDIUM)
+## User-visible capability model (MEDIUM unless noted)
 
-A user of this product class sees the following in the original
-(expected behavior of the class, to be re-verified against the running
-app in a later pass — see "Verification status"):
+The original's session types, directly observed 2026-11-18 by
+enumerating the running app's own accessibility UI (Session → New
+Session menu): **Folder Compare, Folder Merge, Folder Sync, Text
+Compare, Text Merge, Hex Compare, Media Compare, Picture Compare,
+Table Compare** — observed, not assumed. (Registry and version
+compares are not offered by this macOS build's menu.)
 
-1. Session types: text compare, three-way text merge, folder compare,
-   folder sync, table compare, hex compare, media compare, registry
-   compare, version compare.
-2. Text compare: two side-by-side panes; equal lines aligned; changed
+The following are expected behavior of the product class, still
+MEDIUM pending a visual pass (see "Verification status"):
+
+1. Text compare: two side-by-side panes; equal lines aligned; changed
    lines flagged with a background; the changed characters inside a
    changed line flagged more strongly; lines present on only one side
    shown as orphans with the other side blank; line numbers; next /
    previous difference navigation; content is editable.
-3. Folder compare: recursive listing of two trees; per-node status
+2. Folder compare: recursive listing of two trees; per-node status
    (same, newer left, newer right, different, one-sided); size and date
    columns; name filters; copy/sync actions.
-4. Hex compare: aligned byte view in hex and ASCII, differing bytes
+3. Hex compare: aligned byte view in hex and ASCII, differing bytes
    flagged.
-5. Merge: base / left / right versions; non-conflicting edits applied;
+4. Merge: base / left / right versions; non-conflicting edits applied;
    conflicts surfaced for manual resolution.
 
 ## What autocompare 0.1 rebuilds — and what it does not
@@ -63,7 +66,7 @@ app in a later pass — see "Verification status"):
 | Hex compare | `autocompare hex` | 8-byte rows, differing bytes accented, `--max-hunks` |
 | Three-way text merge | `autocompare merge` | git-style conflict markers; no merge UI |
 | GUI | not rebuilt | headless-first per the rebuild methodology; the CLI is the client |
-| Table / registry / media / version compares, sync actions, snapshots, scripting | not rebuilt | roadmap |
+| Folder merge, folder sync, media/picture/table compares | not rebuilt | roadmap (all observed in the original's session menu) |
 | Names, icons, wording | deliberately original | clean-room rule |
 
 ## Design decisions where the clone differs on purpose
@@ -92,6 +95,15 @@ app in a later pass — see "Verification status"):
       newer→different, identical-inputs exit 0, differences exit 1,
       missing path exit 2, hex hunk at the right offset, clean and
       conflicted merges with exact marker lines.
-- [ ] Re-verify the MEDIUM items above against the running original
-      (screenshot pass). Not done this session; until then those items
-      stay MEDIUM.
+- [x] Session-type list re-verified against the running original
+      (2026-11-18) via the macOS accessibility API (the app's own
+      Session → New Session menu): Folder Compare, Folder Merge,
+      Folder Sync, Text Compare, Text Merge, Hex Compare, Media
+      Compare, Picture Compare, Table Compare.
+- [ ] Visual pass (screenshots of pane layout, colors and navigation):
+      attempted 2026-11-18 and **blocked by the macOS screen-recording
+      permission** for this terminal context (`screencapture` fails
+      with "could not create image"). Remediation: grant Screen
+      Recording to the terminal app in System Settings → Privacy &
+      Security, or capture manually. The MEDIUM items above stay
+      MEDIUM until that pass happens.
