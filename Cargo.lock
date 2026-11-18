@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "autocompare-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autocompare-compare",
  "autocompare-diff",
@@ -63,14 +63,14 @@ dependencies = [
 
 [[package]]
 name = "autocompare-compare"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "autocompare-diff",
 ]
 
 [[package]]
 name = "autocompare-diff"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "clap"
