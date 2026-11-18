@@ -2,6 +2,14 @@
 
 ## UPDATED ON : 2026-11-18
 
+### Feature (2026-11-18) — v0.4.0: audio compare and the desktop GUI client
+
+1. **Scope**: `autocompare audio` (WAV via a hand-written RIFF parser, MP3 via symphonia, 10ms-window PCM comparison) and `autocompare-gui` (eframe/egui thin client with Text/Folder/Picture tabs over the same engine). All 9 session types observed in the original's menu now have coverage.
+2. **Tests** (before → after): 167 → 246 workspace tests (+49 audio incl. decode totality sweeps and a real ffmpeg-encoded MP3, +30 headless GUI view-model), `clippy -D warnings` clean; live runs verified audio against hand-computed ground truth (0.500s single-sample flip, 1/100 windows) and GUI startup liveness.
+3. **Files changed**: `crates/diff/src/audio.rs`, `crates/compare/src/media.rs`, `crates/gui/src/*`, README, docs/study.md, CI (Linux GUI deps).
+
+## UPDATED ON : 2026-11-18
+
 ### Feature (2026-11-18) — v0.3.0: picture compare and three-way folder merge
 
 1. **Scope**: `autocompare picture` (PNG pixel diff, bounds, heatmap; first third-party dep: pure-Rust `png` crate) and `autocompare folder-merge` (plan/apply three-way tree merge over the existing content-merge engine); 7 of the original's 9 observed session types now rebuilt.
