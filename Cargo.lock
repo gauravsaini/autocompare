@@ -485,6 +485,7 @@ version = "0.3.0"
 dependencies = [
  "png",
  "symphonia-bundle-mp3",
+ "symphonia-core",
 ]
 
 [[package]]
