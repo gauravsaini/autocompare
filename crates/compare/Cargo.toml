@@ -1,0 +1,12 @@
+[package]
+name = "autocompare-compare"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "File, folder and binary comparison over the filesystem"
+
+[lints]
+workspace = true
+
+[dependencies]
+autocompare-diff = { path = "../diff" }
