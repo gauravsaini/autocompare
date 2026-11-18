@@ -293,6 +293,27 @@ fn paint_pane(
     out
 }
 
+/// The first line number a hunk header needs: the first numbered
+/// record inside the range, or one past the last numbered record
+/// before it (so a hunk opening with a pure deletion anchors past the
+/// previous context line).
+fn anchor<F>(lines: &[ULine<'_>], start: usize, pick: F) -> usize
+where
+    F: Fn(&ULine<'_>) -> Option<usize>,
+{
+    for line in lines.iter().skip(start) {
+        if let Some(no) = pick(line) {
+            return no;
+        }
+    }
+    for line in lines.iter().take(start).rev() {
+        if let Some(no) = pick(line) {
+            return no.saturating_add(1);
+        }
+    }
+    0
+}
+
 /// A single line of a unified diff.
 struct ULine<'a> {
     kind: UKind,
@@ -388,7 +409,7 @@ pub fn unified(cmp: &TextComparison, color: bool) {
         let mut last = first;
         let mut look = group_start + 1;
         while let Some(&pos) = changed.get(look) {
-            if pos <= last.saturating_add(2 * ctx + 1) {
+            if pos <= last.saturating_add(2 * ctx) {
                 last = pos;
                 look = look.saturating_add(1);
             } else {
@@ -406,13 +427,16 @@ pub fn unified(cmp: &TextComparison, color: bool) {
 }
 
 fn emit_hunk(lines: &[ULine<'_>], start: usize, end: usize, color: bool) {
-    let start = start.min(lines.len().saturating_sub(1));
-    let end = end.min(lines.len().saturating_sub(1));
+    if lines.is_empty() {
+        return;
+    }
+    let start = start.min(lines.len() - 1);
+    let end = end.min(lines.len() - 1);
     if end < start {
         return;
     }
-    let old_start = lines.get(start).and_then(|l| l.old_no).unwrap_or(0);
-    let new_start = lines.get(start).and_then(|l| l.new_no).unwrap_or(0);
+    let old_start = anchor(lines, start, |l| l.old_no);
+    let new_start = anchor(lines, start, |l| l.new_no);
     let mut old_count = 0usize;
     let mut new_count = 0usize;
     for line in lines.iter().take(end.saturating_add(1)).skip(start) {
