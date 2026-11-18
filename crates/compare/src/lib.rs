@@ -8,6 +8,8 @@
 
 mod binary;
 mod folder;
+mod sync;
+mod table;
 mod text;
 
 use std::fmt;
@@ -79,6 +81,49 @@ pub struct TextComparison {
 /// Compares two text files line by line, honouring `opts`.
 pub fn compare_text_files(left: &Path, right: &Path, opts: &TextOptions) -> Result<TextComparison> {
     text::compare_text_files(left, right, opts)
+}
+
+/// Options for table comparison.
+#[derive(Debug, Clone, Copy)]
+pub struct TableOptions {
+    /// Field delimiter (',' by default).
+    pub delimiter: char,
+    /// Treat the first row as a header.
+    pub header: bool,
+}
+
+impl Default for TableOptions {
+    fn default() -> Self {
+        Self {
+            delimiter: ',',
+            header: true,
+        }
+    }
+}
+
+/// The result of comparing two delimited tables.
+pub struct TableComparison {
+    /// Header cells of the left table (empty when no header).
+    pub header_l: Vec<String>,
+    /// Header cells of the right table.
+    pub header_r: Vec<String>,
+    /// Data rows of the left table.
+    pub rows_l: Vec<Vec<String>>,
+    /// Data rows of the right table.
+    pub rows_r: Vec<Vec<String>>,
+    /// Row-level edit script between the data rows.
+    pub script: DiffScript,
+}
+
+/// Compares two delimited files row by row, cell by cell. The files
+/// are read whole (quoted fields may span lines) and decoded
+/// leniently.
+pub fn compare_table_files(
+    left: &Path,
+    right: &Path,
+    opts: &TableOptions,
+) -> Result<TableComparison> {
+    table::compare_table_files(left, right, opts)
 }
 
 /// Metadata for one side of a compared node.
@@ -212,4 +257,105 @@ pub fn compare_binary_files(
     max_hunks: usize,
 ) -> Result<BinaryComparison> {
     binary::compare_binary_files(left, right, max_hunks)
+}
+
+/// Direction of a folder sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncDirection {
+    /// Copy left-side content over the right side.
+    LeftToRight,
+    /// Copy right-side content over the left side.
+    RightToLeft,
+    /// Copy whichever side is newer over the older one.
+    NewerWins,
+}
+
+/// Options for building a sync plan.
+#[derive(Debug, Clone, Copy)]
+pub struct SyncOptions {
+    /// Which side wins.
+    pub direction: SyncDirection,
+    /// Delete one-sided entries on the losing side (mirror). Only
+    /// meaningful for one-directional syncs.
+    pub prune: bool,
+}
+
+impl Default for SyncOptions {
+    fn default() -> Self {
+        Self {
+            direction: SyncDirection::LeftToRight,
+            prune: false,
+        }
+    }
+}
+
+/// What one planned step does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncAction {
+    /// Copy the left copy over the right one.
+    CopyToRight,
+    /// Copy the right copy over the left one.
+    CopyToLeft,
+    /// Delete the right copy (prune).
+    DeleteRight,
+    /// Delete the left copy (prune).
+    DeleteLeft,
+}
+
+/// One planned change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncStep {
+    /// Path relative to the roots, '/'-separated.
+    pub rel_path: String,
+    /// Whether the subject is a directory.
+    pub is_dir: bool,
+    /// What would happen.
+    pub action: SyncAction,
+}
+
+/// A whole sync plan: the steps to apply and the entries intentionally
+/// left alone, with reasons.
+#[derive(Debug, Clone, Default)]
+pub struct SyncPlan {
+    /// Actions to apply, parents before children.
+    pub steps: Vec<SyncStep>,
+    /// Entries left alone: (relative path, plain-English reason).
+    pub skipped: Vec<(String, String)>,
+    /// Whether the underlying comparison stopped at the depth limit;
+    /// deeper entries are not planned.
+    pub truncated: bool,
+}
+
+/// Outcome of applying a plan.
+#[derive(Debug, Clone, Default)]
+pub struct SyncReport {
+    /// Files successfully copied.
+    pub copied: usize,
+    /// Files or directories successfully deleted.
+    pub deleted: usize,
+    /// Steps that failed: (relative path, plain-English error).
+    pub failed: Vec<(String, String)>,
+}
+
+/// Builds a sync plan from a folder comparison. Read-only: building a
+/// plan never touches the filesystem beyond the comparison walk.
+///
+/// Rules: `NewerLeft`/`LeftOnly` copy rightwards (in LeftToRight and
+/// NewerWins), `NewerRight`/`RightOnly` copy leftwards (in RightToLeft
+/// and NewerWins); a one-directional sync never overwrites a newer
+/// destination (that step is skipped with a reason instead).
+/// `Different` entries are always skipped: no side wins on content.
+/// With `prune`, one-sided entries on the losing side are deleted
+/// instead of being left alone. Symlinks are never followed, so they
+/// are never copied or deleted.
+pub fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result<SyncPlan> {
+    sync::plan_sync(left, right, opts)
+}
+
+/// Applies a plan: copies files (creating parent directories as
+/// needed) and deletes files or whole directories. Each step's
+/// failure is recorded in the report and the run continues; the roots
+/// themselves must exist. Never panics.
+pub fn apply_sync(left: &Path, right: &Path, plan: &SyncPlan) -> Result<SyncReport> {
+    sync::apply_sync(left, right, plan)
 }

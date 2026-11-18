@@ -9,6 +9,7 @@ pub const DIM: &str = "\x1b[2m";
 pub const RED: &str = "\x1b[31m";
 pub const GREEN: &str = "\x1b[32m";
 pub const BLUE: &str = "\x1b[34m";
+pub const YELLOW: &str = "\x1b[33m";
 
 /// Accent for changed characters inside a highlighted line.
 pub const ACCENT: &str = "\x1b[1;4m";

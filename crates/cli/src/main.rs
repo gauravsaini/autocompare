@@ -12,6 +12,8 @@ use clap::{Parser, Subcommand};
 
 mod render_folder;
 mod render_hex;
+mod render_sync;
+mod render_table;
 mod render_text;
 mod term;
 
@@ -28,6 +30,17 @@ enum ColorWhen {
     Auto,
     Always,
     Never,
+}
+
+/// Which side wins a folder sync.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum SyncDir {
+    /// Copy left-side content over the right.
+    L2r,
+    /// Copy right-side content over the left.
+    R2l,
+    /// Copy whichever side is newer over the older one.
+    Newer,
 }
 
 #[derive(Parser)]
@@ -110,6 +123,35 @@ enum Command {
         /// Write the merge result to this file instead of standard output.
         #[arg(long)]
         output: Option<String>,
+    },
+    /// Compare two delimited (CSV-style) tables cell by cell.
+    Table {
+        /// Left file.
+        left: String,
+        /// Right file.
+        right: String,
+        /// Field delimiter.
+        #[arg(long, default_value_t = ',')]
+        delimiter: char,
+        /// Treat the first row as data, not a header.
+        #[arg(long)]
+        no_header: bool,
+    },
+    /// Plan (and optionally apply) a folder sync.
+    Sync {
+        /// Left folder.
+        left: String,
+        /// Right folder.
+        right: String,
+        /// Which side wins.
+        #[arg(long, value_enum, default_value_t = SyncDir::L2r)]
+        direction: SyncDir,
+        /// Delete one-sided entries on the losing side.
+        #[arg(long)]
+        prune: bool,
+        /// Execute the plan (default is a dry run).
+        #[arg(long)]
+        apply: bool,
     },
 }
 
@@ -210,6 +252,67 @@ fn run(command: Command, color: bool) -> autocompare_compare::Result<Outcome> {
             } else {
                 Outcome::Same
             })
+        }
+        Command::Table {
+            left,
+            right,
+            delimiter,
+            no_header,
+        } => {
+            let opts = autocompare_compare::TableOptions {
+                delimiter,
+                header: !no_header,
+            };
+            let cmp = autocompare_compare::compare_table_files(
+                Path::new(&left),
+                Path::new(&right),
+                &opts,
+            )?;
+            render_table::print(&cmp, color);
+            Ok(render_table::outcome(&cmp))
+        }
+        Command::Sync {
+            left,
+            right,
+            direction,
+            prune,
+            apply,
+        } => {
+            let dir = match direction {
+                SyncDir::L2r => autocompare_compare::SyncDirection::LeftToRight,
+                SyncDir::R2l => autocompare_compare::SyncDirection::RightToLeft,
+                SyncDir::Newer => autocompare_compare::SyncDirection::NewerWins,
+            };
+            let opts = autocompare_compare::SyncOptions {
+                direction: dir,
+                prune,
+            };
+            let plan = autocompare_compare::plan_sync(Path::new(&left), Path::new(&right), &opts)?;
+            render_sync::print_plan(&plan, color);
+            if !apply {
+                println!(
+                    "{}",
+                    term::paint(
+                        color,
+                        term::DIM,
+                        "dry run: nothing changed (pass --apply to run)"
+                    )
+                );
+                Ok(if plan.steps.is_empty() {
+                    Outcome::Same
+                } else {
+                    Outcome::Different
+                })
+            } else {
+                let report =
+                    autocompare_compare::apply_sync(Path::new(&left), Path::new(&right), &plan)?;
+                render_sync::print_report(&report, color);
+                Ok(if report.failed.is_empty() {
+                    Outcome::Same
+                } else {
+                    Outcome::Different
+                })
+            }
         }
     }
 }

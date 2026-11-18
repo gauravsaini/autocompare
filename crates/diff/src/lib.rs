@@ -8,7 +8,10 @@
 
 mod engine;
 mod merge3;
+mod table;
 mod word_diff;
+
+pub use table::{Table, diff_cells, diff_rows, parse_delimited};
 
 /// One edit operation over two sequences of lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
