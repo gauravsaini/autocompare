@@ -8,6 +8,8 @@
 
 mod binary;
 mod folder;
+mod folder_merge;
+mod picture;
 mod sync;
 mod table;
 mod text;
@@ -28,6 +30,8 @@ pub enum Error {
         path: String,
         source: std::io::Error,
     },
+    /// A path exists but its content cannot be handled as requested.
+    Unsupported { path: String, what: &'static str },
 }
 
 impl fmt::Display for Error {
@@ -35,6 +39,7 @@ impl fmt::Display for Error {
         match self {
             Error::Missing { path } => write!(f, "path not found: {path}"),
             Error::Io { path, source } => write!(f, "reading {path} failed: {source}"),
+            Error::Unsupported { path, what } => write!(f, "{path}: {what}"),
         }
     }
 }
@@ -358,4 +363,111 @@ pub fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result<SyncPl
 /// themselves must exist. Never panics.
 pub fn apply_sync(left: &Path, right: &Path, plan: &SyncPlan) -> Result<SyncReport> {
     sync::apply_sync(left, right, plan)
+}
+
+/// Options for picture comparison.
+#[derive(Debug, Clone, Default)]
+pub struct PictureOptions {
+    /// When set, a heatmap PNG (identical pixels dimmed, differing
+    /// pixels red) is written to this path. This is a real file write.
+    pub heatmap: Option<std::path::PathBuf>,
+}
+
+/// The result of comparing two pictures.
+pub struct PictureComparison {
+    /// Sizes and difference statistics.
+    pub diff: autocompare_diff::PictureDiff,
+}
+
+/// Compares two PNG files pixel by pixel over their overlap. Files
+/// that do not decode as PNG are [`Error::Unsupported`]. When
+/// `opts.heatmap` is set, the heatmap is written (a declared file
+/// write) before the result returns.
+pub fn compare_picture_files(
+    left: &Path,
+    right: &Path,
+    opts: &PictureOptions,
+) -> Result<PictureComparison> {
+    picture::compare_picture_files(left, right, opts)
+}
+
+/// What one step of a three-way tree merge does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TreeMergeAction {
+    /// Take the left side's copy.
+    TakeLeft,
+    /// Take the right side's copy.
+    TakeRight,
+    /// Write text merged from base/left/right (a clean merge; the
+    /// lines are in the step's `merged`).
+    MergedText,
+    /// Both sides changed differently: the step carries either
+    /// marker-laden text (`merged` set) or nothing (binary conflict:
+    /// the left copy is written), and the path is recorded in the
+    /// plan's conflicts.
+    Conflict,
+    /// Create this directory.
+    MakeDir,
+}
+
+/// One planned write in a three-way tree merge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeMergeStep {
+    /// Path relative to the roots, '/'-separated.
+    pub rel_path: String,
+    /// What to do.
+    pub action: TreeMergeAction,
+    /// Lines to write for `MergedText` and text-conflict steps;
+    /// `None` when the content is copied from a side.
+    pub merged: Option<Vec<String>>,
+}
+
+/// A whole three-way merge plan.
+#[derive(Debug, Clone, Default)]
+pub struct TreeMergePlan {
+    /// Steps sorted by relative path, `MakeDir` steps before their
+    /// children.
+    pub steps: Vec<TreeMergeStep>,
+    /// Relative paths with conflicts, sorted.
+    pub conflicts: Vec<String>,
+    /// Entries left out of the output, with reasons: (path, reason).
+    pub skipped: Vec<(String, String)>,
+}
+
+/// Outcome of applying a merge plan.
+#[derive(Debug, Clone, Default)]
+pub struct TreeMergeReport {
+    /// Files written (copies and merges).
+    pub written: usize,
+    /// Directories created.
+    pub dirs_created: usize,
+    /// Steps that failed: (relative path, plain-English error).
+    pub failed: Vec<(String, String)>,
+}
+
+/// Plans a three-way merge of two trees over their common base.
+/// Read-only.
+///
+/// Per file: identical sides take the left copy; a one-sided change
+/// takes the changed side; both-changed text files (everything
+/// decodes as UTF-8, base included) merge via three-way content
+/// merge — cleanly into `MergedText`, overlapping edits into a
+/// `Conflict` carrying marker lines. Both-changed binaries conflict
+/// with the left copy written. A side that deleted while the other
+/// side left the file unchanged from base omits the file (recorded
+/// with a reason); a delete against a change keeps the changed copy
+/// and records a conflict. Two new files with different content
+/// conflict (text merges over an empty base; binaries take the left
+/// copy). Directories existing on either side produce `MakeDir`
+/// steps so empty ones survive.
+pub fn plan_tree_merge(base: &Path, left: &Path, right: &Path) -> Result<TreeMergePlan> {
+    folder_merge::plan_tree_merge(base, left, right)
+}
+
+/// Applies a merge plan into `output`. The output directory must not
+/// exist or must be empty (anything else is
+/// [`Error::Unsupported`]); it is created as needed. Each step's
+/// failure is recorded and the run continues. Never panics.
+pub fn apply_tree_merge(plan: &TreeMergePlan, output: &Path) -> Result<TreeMergeReport> {
+    folder_merge::apply_tree_merge(plan, output)
 }

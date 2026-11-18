@@ -11,7 +11,9 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod render_folder;
+mod render_foldermerge;
 mod render_hex;
+mod render_picture;
 mod render_sync;
 mod render_table;
 mod render_text;
@@ -150,6 +152,32 @@ enum Command {
         #[arg(long)]
         prune: bool,
         /// Execute the plan (default is a dry run).
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Compare two PNG images pixel by pixel.
+    Picture {
+        /// Left file.
+        left: String,
+        /// Right file.
+        right: String,
+        /// Write a heatmap PNG (identical pixels dimmed, differing
+        /// pixels red) to this path.
+        #[arg(long)]
+        heatmap: Option<String>,
+    },
+    /// Plan (and optionally apply) a three-way folder merge.
+    FolderMerge {
+        /// The common ancestor tree.
+        base: String,
+        /// The left (ours) tree.
+        left: String,
+        /// The right (theirs) tree.
+        right: String,
+        /// Directory to write the merged tree to (required with --apply).
+        #[arg(long)]
+        output: Option<String>,
+        /// Execute the plan into --output (default is a dry run).
         #[arg(long)]
         apply: bool,
     },
@@ -308,6 +336,65 @@ fn run(command: Command, color: bool) -> autocompare_compare::Result<Outcome> {
                     autocompare_compare::apply_sync(Path::new(&left), Path::new(&right), &plan)?;
                 render_sync::print_report(&report, color);
                 Ok(if report.failed.is_empty() {
+                    Outcome::Same
+                } else {
+                    Outcome::Different
+                })
+            }
+        }
+        Command::Picture {
+            left,
+            right,
+            heatmap,
+        } => {
+            let opts = autocompare_compare::PictureOptions {
+                heatmap: heatmap.as_deref().map(std::path::PathBuf::from),
+            };
+            let cmp = autocompare_compare::compare_picture_files(
+                Path::new(&left),
+                Path::new(&right),
+                &opts,
+            )?;
+            render_picture::print(&cmp, color, heatmap.as_deref());
+            Ok(render_picture::outcome(&cmp))
+        }
+        Command::FolderMerge {
+            base,
+            left,
+            right,
+            output,
+            apply,
+        } => {
+            let plan = autocompare_compare::plan_tree_merge(
+                Path::new(&base),
+                Path::new(&left),
+                Path::new(&right),
+            )?;
+            render_foldermerge::print_plan(&plan, color);
+            if !apply {
+                println!(
+                    "{}",
+                    term::paint(
+                        color,
+                        term::DIM,
+                        "dry run: nothing written (pass --apply and --output to run)"
+                    )
+                );
+                Ok(if plan.steps.is_empty() && plan.skipped.is_empty() {
+                    Outcome::Same
+                } else {
+                    Outcome::Different
+                })
+            } else {
+                let Some(out) = output else {
+                    return Err(autocompare_compare::Error::Unsupported {
+                        path: "--output".to_string(),
+                        what: "--apply needs an output directory",
+                    });
+                };
+                let report = autocompare_compare::apply_tree_merge(&plan, Path::new(&out))?;
+                render_foldermerge::print_report(&report, color);
+                Ok(if report.failed.is_empty() && plan.conflicts.is_empty() {
                     Outcome::Same
                 } else {
                     Outcome::Different

@@ -7,10 +7,12 @@
 #![forbid(unsafe_code)]
 
 mod engine;
+mod image;
 mod merge3;
 mod table;
 mod word_diff;
 
+pub use image::{PictureDiff, RgbaImage, decode_png, diff_pictures, encode_png, picture_heatmap};
 pub use table::{Table, diff_cells, diff_rows, parse_delimited};
 
 /// One edit operation over two sequences of lines.

@@ -7,3 +7,6 @@ description = "Pure diff algorithms: line diff, inline spans, three-way merge"
 
 [lints]
 workspace = true
+
+[dependencies]
+png = "0.18.1"
