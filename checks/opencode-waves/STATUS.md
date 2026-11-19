@@ -573,3 +573,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 32 A landed wave complete
 - A abe1790 verified+pushed: OWNS clean (4 files), tests 172 green, fmt clean, owned clippy clean. 5 dead-code in Wave H files documented out-of-scope (Wave J cleanup).
 - Wave I complete: wiring + gaps + verify all landed. Next: Wave J dead-code cleanup + picture/media + local-run re-verify.
+
+## Wave J plan cleanup+picture+reverify (3 parallel, disjoint)
+- J-A ses-cleanup-j OWNS views_hex+views_table+checks/parity-cleanup: real-use dead-code, clippy zero goal.
+- J-B ses-picture-j OWNS app+views+checks/parity-picture: picture side-by-side/zoom/pan + sync/merge/audio checklists.
+- J-C ses-reverify-j OWNS checks/wave-j-verify: release+harness+PNG+tests report-only.
+- Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
