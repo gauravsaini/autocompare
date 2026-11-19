@@ -1561,6 +1561,282 @@ pub fn merge_pick_summary(lines: &[String], picks: &[MergeHunkPick]) -> MergePic
 }
 
 // ----------------------------------------------------------------------------
+// Three-pane merge plan (headless; paint wiring next wave)
+// ----------------------------------------------------------------------------
+//
+// Gap #7 model half (text side): `TriplePaths` (base/left/right) se 3-pane
+// merge plan. `merge_conflict_hunks` already-merged marker lines par kaam
+// karta hai; ye section usse ek kadam pehle ka plan hai: base/left/right
+// line slices seedha hunk rows me align hote hain, har hunk par ek
+// take-side decision (`TakeChoice` reuse) lagti hai, aur summary helper
+// paint ki progress line deta hai. Decided hunks splice hote hain,
+// undecided conflicts marker block banate hain taaki existing
+// `merge_conflict_hunks` / `merge_pick_summary` downstream chalte rahen.
+// WIRING (next wave): paint `ThreePanePlan::new` se plan banakar per-hunk
+// cards dikhaye, card buttons `decide` call karen, output `merge_lines` se,
+// summary line `summary().summary_line()` se. No egui, no I/O.
+
+/// One aligned hunk ka change shape.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (next wave) lists one card per hunk
+pub enum ThreePaneKind {
+    /// Teenon sides ek jaise.
+    #[default]
+    Same,
+    /// Sirf left base se alag (right base jaisa).
+    LeftChange,
+    /// Sirf right base se alag (left base jaisa).
+    RightChange,
+    /// Dono ek jaise badle (clean auto-merge).
+    BothSameChange,
+    /// Dono alag-alag badle (manual pick chahiye).
+    Conflict,
+}
+
+/// Teen panes ki ek aligned hunk row.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (next wave) lists one card per hunk
+pub struct ThreePaneHunk {
+    /// Hunk order (0-based, `decisions` isi se judte hain).
+    pub index: usize,
+    /// Is hunk ka change shape.
+    pub kind: ThreePaneKind,
+    /// Base side ki lines (chhoti side par kam entries).
+    pub base: Vec<String>,
+    /// Left side ki lines.
+    pub left: Vec<String>,
+    /// Right side ki lines.
+    pub right: Vec<String>,
+    /// Sirf `Conflict` par true.
+    pub conflicted: bool,
+}
+
+/// Ek hunk par staged take-side decision (`TakeChoice` reuse:
+/// Left/Right/Base/Both).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (next wave) stages button picks
+pub struct ThreePaneDecision {
+    /// Kaunsa hunk resolve hota hai.
+    pub hunk: usize,
+    /// Kaunsi side li jaye.
+    pub side: TakeChoice,
+}
+
+/// Teen panes ka poora plan: hunks plus staged decisions.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (next wave) keeps one per merge tab
+pub struct ThreePanePlan {
+    /// Aligned hunks, order me.
+    pub hunks: Vec<ThreePaneHunk>,
+    /// Staged per-hunk decisions (ek hunk par aakhri staged jeetta hai).
+    pub decisions: Vec<ThreePaneDecision>,
+}
+
+/// Per-hunk progress over the plan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
+pub struct ThreePaneSummary {
+    /// Kul hunks.
+    pub total: usize,
+    /// Asli hunk naam wale distinct staged picks.
+    pub decided: usize,
+    /// Faisle ke intezar me hunks.
+    pub pending: usize,
+    /// Koi conflict bina decision ke bacha hai.
+    pub conflicted: bool,
+}
+
+#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
+impl ThreePaneSummary {
+    /// Honest one-line progress.
+    pub fn summary_line(self) -> String {
+        format!(
+            "{} hunk(s), {} decided, {} pending{}",
+            self.total,
+            self.decided,
+            self.pending,
+            if self.conflicted { ", conflicted" } else { "" }
+        )
+    }
+}
+
+/// Ek line position ka shape: missing tail `None` hai, isliye chhoti
+/// side ki extra lines apne side ka change banti hain. Pure.
+#[allow(dead_code)] // wiring-pending: `three_pane_hunks` helper
+fn three_pane_line_kind(
+    base: Option<&str>,
+    left: Option<&str>,
+    right: Option<&str>,
+) -> ThreePaneKind {
+    if left == base && right == base {
+        ThreePaneKind::Same
+    } else if right == base {
+        ThreePaneKind::LeftChange
+    } else if left == base {
+        ThreePaneKind::RightChange
+    } else if left == right {
+        ThreePaneKind::BothSameChange
+    } else {
+        ThreePaneKind::Conflict
+    }
+}
+
+/// Base/left/right slices ko maximal same-shape runs me align karta hai.
+/// Missing tails `None` hain (koi padding line nahi), har side apni
+/// maujood lines rakhta hai. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: `ThreePanePlan::new` + paint (next wave)
+pub fn three_pane_hunks(base: &[String], left: &[String], right: &[String]) -> Vec<ThreePaneHunk> {
+    let total = base.len().max(left.len()).max(right.len());
+    let mut hunks: Vec<ThreePaneHunk> = Vec::new();
+    let mut i = 0usize;
+    while i < total {
+        let kind = three_pane_line_kind(
+            base.get(i).map(String::as_str),
+            left.get(i).map(String::as_str),
+            right.get(i).map(String::as_str),
+        );
+        let continues = hunks.last().is_some_and(|hunk| hunk.kind == kind);
+        if !continues {
+            hunks.push(ThreePaneHunk {
+                index: hunks.len(),
+                kind,
+                base: Vec::new(),
+                left: Vec::new(),
+                right: Vec::new(),
+                conflicted: kind == ThreePaneKind::Conflict,
+            });
+        }
+        if let Some(hunk) = hunks.last_mut() {
+            if let Some(line) = base.get(i) {
+                hunk.base.push(line.clone());
+            }
+            if let Some(line) = left.get(i) {
+                hunk.left.push(line.clone());
+            }
+            if let Some(line) = right.get(i) {
+                hunk.right.push(line.clone());
+            }
+        }
+        i = i.saturating_add(1);
+    }
+    hunks
+}
+
+/// Decisions ko merged lines me badalta hai. Decided hunk `TakeChoice`
+/// se splice hota hai (duplicate picks me aakhri staged jeetta hai);
+/// undecided non-conflict auto-resolve hota hai (badli side jeetti hai,
+/// dono-same par left), undecided conflict marker block banata hai taaki
+/// `merge_conflict_hunks` use downstream dekh sake. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (next wave) output pane
+pub fn three_pane_merge_lines(
+    hunks: &[ThreePaneHunk],
+    decisions: &[ThreePaneDecision],
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for hunk in hunks {
+        let pick = decisions
+            .iter()
+            .rev()
+            .find(|decision| decision.hunk == hunk.index)
+            .map(|decision| decision.side);
+        match pick {
+            Some(side) => match side {
+                TakeChoice::Left => out.extend(hunk.left.iter().cloned()),
+                TakeChoice::Right => out.extend(hunk.right.iter().cloned()),
+                TakeChoice::Base => out.extend(hunk.base.iter().cloned()),
+                TakeChoice::Both => {
+                    out.extend(hunk.left.iter().cloned());
+                    out.extend(hunk.right.iter().cloned());
+                }
+            },
+            None => match hunk.kind {
+                ThreePaneKind::Same => out.extend(hunk.base.iter().cloned()),
+                ThreePaneKind::LeftChange => out.extend(hunk.left.iter().cloned()),
+                ThreePaneKind::RightChange => out.extend(hunk.right.iter().cloned()),
+                ThreePaneKind::BothSameChange => out.extend(hunk.left.iter().cloned()),
+                ThreePaneKind::Conflict => {
+                    out.push("<<<<<<< left".to_string());
+                    out.extend(hunk.left.iter().cloned());
+                    out.push("||||||| base".to_string());
+                    out.extend(hunk.base.iter().cloned());
+                    out.push("=======".to_string());
+                    out.extend(hunk.right.iter().cloned());
+                    out.push(">>>>>>> right".to_string());
+                }
+            },
+        }
+    }
+    out
+}
+
+/// Hunks + decisions par honest progress: unknown hunk naam wale picks
+/// kabhi decided nahi ginte. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
+pub fn three_pane_summary(
+    hunks: &[ThreePaneHunk],
+    decisions: &[ThreePaneDecision],
+) -> ThreePaneSummary {
+    let total = hunks.len();
+    let mut seen: Vec<usize> = Vec::new();
+    for decision in decisions {
+        if hunks.get(decision.hunk).is_some() && !seen.contains(&decision.hunk) {
+            seen.push(decision.hunk);
+        }
+    }
+    let decided = seen.len();
+    let mut conflicted = false;
+    for hunk in hunks {
+        if hunk.conflicted && !seen.contains(&hunk.index) {
+            conflicted = true;
+            break;
+        }
+    }
+    ThreePaneSummary {
+        total,
+        decided,
+        pending: total.saturating_sub(decided),
+        conflicted,
+    }
+}
+
+#[allow(dead_code)] // wiring-pending: paint (next wave) keeps one per merge tab
+impl ThreePanePlan {
+    /// Teen slices se naya plan (koi decision staged nahi).
+    pub fn new(base: &[String], left: &[String], right: &[String]) -> Self {
+        Self {
+            hunks: three_pane_hunks(base, left, right),
+            decisions: Vec::new(),
+        }
+    }
+
+    /// Ek hunk par decision stage karta hai (aakhri staged jeetta hai).
+    /// Unknown hunk index chup-chaap ignore hota hai, kabhi jhootha
+    /// decided count nahi banata.
+    pub fn decide(&mut self, hunk: usize, side: TakeChoice) {
+        if self.hunks.get(hunk).is_none() {
+            return;
+        }
+        for decision in self.decisions.iter_mut() {
+            if decision.hunk == hunk {
+                decision.side = side;
+                return;
+            }
+        }
+        self.decisions.push(ThreePaneDecision { hunk, side });
+    }
+
+    /// Current decisions se merged output lines.
+    pub fn merge_lines(&self) -> Vec<String> {
+        three_pane_merge_lines(&self.hunks, &self.decisions)
+    }
+
+    /// Current decisions par honest progress.
+    pub fn summary(&self) -> ThreePaneSummary {
+        three_pane_summary(&self.hunks, &self.decisions)
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Truncation paging (headless; wiring owned by views.rs / agent A)
 // ----------------------------------------------------------------------------
 //
@@ -2781,5 +3057,165 @@ mod tests {
         // Non-positive travel keeps the (clamped) current fraction.
         assert_eq!(split_apply_drag(0.50, 80.0, 0.0), 0.50);
         assert_eq!(split_apply_drag(9.9, 0.0, 0.0), SPLIT_MAX_FRACTION);
+    }
+
+    // ---- three-pane merge plan (Gap #7 model half) ----
+
+    fn pane_lines(items: &[&str]) -> Vec<String> {
+        let mut out = Vec::new();
+        for item in items {
+            out.push((*item).to_string());
+        }
+        out
+    }
+
+    #[test]
+    fn three_pane_hunks_split_by_change_shape() {
+        let base = pane_lines(&["same", "l-old", "r-old", "both-old", "clash"]);
+        let left = pane_lines(&["same", "L2", "r-old", "BOTH", "LC"]);
+        let right = pane_lines(&["same", "l-old", "R3", "BOTH", "RC"]);
+        let hunks = three_pane_hunks(&base, &left, &right);
+        assert_eq!(hunks.len(), 5);
+        let kinds: Vec<ThreePaneKind> = hunks.iter().map(|hunk| hunk.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ThreePaneKind::Same,
+                ThreePaneKind::LeftChange,
+                ThreePaneKind::RightChange,
+                ThreePaneKind::BothSameChange,
+                ThreePaneKind::Conflict,
+            ]
+        );
+        for (idx, hunk) in hunks.iter().enumerate() {
+            assert_eq!(hunk.index, idx);
+            assert_eq!(hunk.conflicted, hunk.kind == ThreePaneKind::Conflict);
+        }
+        // Same hunk teenon sides rakhta hai; conflict hunk har side ki line.
+        let Some(first) = hunks.first() else {
+            return;
+        };
+        assert_eq!(first.base, pane_lines(&["same"]));
+        assert_eq!(first.left, pane_lines(&["same"]));
+        assert_eq!(first.right, pane_lines(&["same"]));
+    }
+
+    #[test]
+    fn three_pane_hunks_coalesce_runs_and_cover_tails() {
+        // Lagatar same-shape lines ek hunk me judte hain.
+        let base = pane_lines(&["a", "b", "c"]);
+        let left = pane_lines(&["a", "B", "C"]);
+        let right = pane_lines(&["a", "b", "c"]);
+        let hunks = three_pane_hunks(&base, &left, &right);
+        assert_eq!(hunks.len(), 2);
+        let Some(second) = hunks.get(1) else {
+            return;
+        };
+        assert_eq!(second.kind, ThreePaneKind::LeftChange);
+        assert_eq!(second.left, pane_lines(&["B", "C"]));
+        // Chhoti side ki extra lines us side ka change hain, padding nahi.
+        let short = pane_lines(&["only"]);
+        let empty: Vec<String> = Vec::new();
+        let tail = three_pane_hunks(&empty, &short, &empty);
+        assert_eq!(tail.len(), 1);
+        let Some(hunk) = tail.first() else {
+            return;
+        };
+        assert_eq!(hunk.kind, ThreePaneKind::LeftChange);
+        assert!(hunk.base.is_empty());
+        assert_eq!(hunk.left, pane_lines(&["only"]));
+        // Teenon khaali: koi hunk nahi, jhootha plan nahi.
+        assert!(three_pane_hunks(&empty, &empty, &empty).is_empty());
+    }
+
+    #[test]
+    fn three_pane_merge_lines_auto_and_decided() {
+        let base = pane_lines(&["same", "l-old", "clash"]);
+        let left = pane_lines(&["same", "L2", "LC"]);
+        let right = pane_lines(&["same", "l-old", "RC"]);
+        let plan = ThreePanePlan::new(&base, &left, &right);
+        assert_eq!(plan.hunks.len(), 3);
+        // Bina decision: auto sides + undecided conflict marker block.
+        let auto = plan.merge_lines();
+        assert!(auto.contains(&"same".to_string()));
+        assert!(auto.contains(&"L2".to_string()));
+        assert!(auto.iter().any(|line| line.starts_with("<<<<<<<")));
+        assert!(auto.iter().any(|line| line.starts_with(">>>>>>>")));
+        // Marker block downstream hunks me dikhta hai.
+        assert_eq!(merge_conflict_hunks(&auto).len(), 1);
+        // Conflict par Left decide: markers gayab, left line rahti hai.
+        let mut decided = plan.clone();
+        decided.decide(2, TakeChoice::Left);
+        let out = decided.merge_lines();
+        assert!(out.contains(&"LC".to_string()));
+        assert!(!out.iter().any(|line| line.starts_with("<<<<<<<")));
+        assert!(merge_conflict_hunks(&out).is_empty());
+        // Both decide: dono sides judti hain.
+        let mut both = plan.clone();
+        both.decide(2, TakeChoice::Both);
+        let both_out = both.merge_lines();
+        assert!(both_out.contains(&"LC".to_string()));
+        assert!(both_out.contains(&"RC".to_string()));
+    }
+
+    #[test]
+    fn three_pane_plan_decide_dedup_and_reject_unknown() {
+        let base = pane_lines(&["a"]);
+        let left = pane_lines(&["L"]);
+        let right = pane_lines(&["R"]);
+        let mut plan = ThreePanePlan::new(&base, &left, &right);
+        // Aakhri staged jeetta hai (dedup, ek hi entry).
+        plan.decide(0, TakeChoice::Left);
+        plan.decide(0, TakeChoice::Right);
+        assert_eq!(plan.decisions.len(), 1);
+        let Some(decision) = plan.decisions.first() else {
+            return;
+        };
+        assert_eq!(decision.side, TakeChoice::Right);
+        assert_eq!(plan.merge_lines(), pane_lines(&["R"]));
+        // Unknown hunk ignore: decisions nahi badhte, summary jhooth nahi.
+        plan.decide(7, TakeChoice::Left);
+        assert_eq!(plan.decisions.len(), 1);
+        let summary = plan.summary();
+        assert_eq!(summary.total, 1);
+        assert_eq!(summary.decided, 1);
+        assert_eq!(summary.pending, 0);
+    }
+
+    #[test]
+    fn three_pane_summary_counts_progress_honestly() {
+        let base = pane_lines(&["same", "clash"]);
+        let left = pane_lines(&["same", "LC"]);
+        let right = pane_lines(&["same", "RC"]);
+        let plan = ThreePanePlan::new(&base, &left, &right);
+        assert_eq!(plan.hunks.len(), 2);
+        let none = plan.summary();
+        assert_eq!((none.total, none.decided, none.pending), (2, 0, 2));
+        assert!(none.conflicted);
+        assert!(none.summary_line().contains("0 decided"));
+        assert!(none.summary_line().contains("conflicted"));
+        // Same hunk decide karne se conflict nahi mit-ta.
+        let mut half = plan.clone();
+        half.decide(0, TakeChoice::Base);
+        let mid = half.summary();
+        assert_eq!((mid.decided, mid.pending), (1, 1));
+        assert!(mid.conflicted);
+        // Dono decide: koi pending/conflict nahi.
+        half.decide(1, TakeChoice::Base);
+        let full = half.summary();
+        assert_eq!((full.decided, full.pending), (2, 0));
+        assert!(!full.conflicted);
+        assert!(full.summary_line().contains("2 decided"));
+        // Unknown picks decided nahi ginte.
+        let unknown = three_pane_summary(
+            &plan.hunks,
+            &[ThreePaneDecision {
+                hunk: 9,
+                side: TakeChoice::Left,
+            }],
+        );
+        assert_eq!(unknown.decided, 0);
+        assert_eq!(unknown.pending, 2);
+        assert!(unknown.conflicted);
     }
 }

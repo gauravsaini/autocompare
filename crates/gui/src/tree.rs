@@ -1755,3 +1755,353 @@ mod dual_tree_tests {
         assert!(right.contains("2026-01-03 04:05"));
     }
 }
+
+// ----------------------------------------------------------------------------
+// Three-way tree merge plan (headless; paint wiring next wave).
+// Gap #7 model half (tree side): `TriplePaths` (base/left/right) se folder
+// 3-way plan. Teen snapshots ki presence union se sorted rows bante hain,
+// har row par ek take-side decision lagti hai, summary helper paint ki
+// progress line deta hai. Conflict rule sirf presence se (content compare
+// bina): base maujood + ek side ne hataya (delete-vs-keep), ya base gayab
+// + dono sides ne joda (added-both-sides). Dirs kabhi conflict nahi
+// (kisi bhi side par maujood dir auto-keep). Apply/I/O OPEN hai (agla
+// wave ya host): ye section sirf plan + decisions + summary deta hai.
+// WIRING (next wave): paint `three_way_tree_rows` se rows, per-row
+// Take buttons `ThreeWayDecision` stage karen, header
+// `summary().summary_line()` se. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Teen snapshots me ek path ki presence row.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ThreeWayTreeRow {
+    /// Roots se relative path, '/'-separated.
+    pub rel_path: String,
+    /// Kisi bhi side par directory.
+    pub is_dir: bool,
+    /// Base snapshot me maujood.
+    pub has_base: bool,
+    /// Left snapshot me maujood.
+    pub has_left: bool,
+    /// Right snapshot me maujood.
+    pub has_right: bool,
+}
+
+/// Ek tree row par take-side decision: kaunsi side ka copy rakha jaye.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThreeWaySide {
+    /// Left side ka copy rakho.
+    #[default]
+    Left,
+    /// Base side ka copy rakho (badlav wapas lo).
+    Base,
+    /// Right side ka copy rakho.
+    Right,
+}
+
+impl ThreeWaySide {
+    /// Menu/paint label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Left => "Take Left",
+            Self::Base => "Take Base",
+            Self::Right => "Take Right",
+        }
+    }
+}
+
+/// Ek tree row par staged decision.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThreeWayDecision {
+    /// Kaunsi row (relative path).
+    pub rel_path: String,
+    /// Kaunsi side li jaye.
+    pub side: ThreeWaySide,
+}
+
+/// Teen snapshots ki union se sorted presence rows. Har path ek baar;
+/// `is_dir` pehli mili side se. Pure; unit-tested.
+pub fn three_way_tree_rows(
+    base: &[FolderRow],
+    left: &[FolderRow],
+    right: &[FolderRow],
+) -> Vec<ThreeWayTreeRow> {
+    let mut paths = BTreeSet::new();
+    for row in base.iter().chain(left.iter()).chain(right.iter()) {
+        paths.insert(row.rel_path.clone());
+    }
+    let mut rows = Vec::new();
+    for path in paths {
+        let on_base = base.iter().find(|row| row.rel_path == path);
+        let on_left = left.iter().find(|row| row.rel_path == path);
+        let on_right = right.iter().find(|row| row.rel_path == path);
+        let probe = on_base.or(on_left).or(on_right);
+        if let Some(found) = probe {
+            rows.push(ThreeWayTreeRow {
+                rel_path: path,
+                is_dir: found.is_dir,
+                has_base: on_base.is_some(),
+                has_left: on_left.is_some(),
+                has_right: on_right.is_some(),
+            });
+        }
+    }
+    rows
+}
+
+/// Kya ye row manual pick maangti hai (files only; dirs auto-keep).
+/// Delete-vs-keep (base tha, ek side ne hataya) ya added-both-sides
+/// (base nahi tha, dono ne joda). Pure; unit-tested.
+pub fn is_three_way_conflict(row: &ThreeWayTreeRow) -> bool {
+    if row.is_dir {
+        return false;
+    }
+    if row.has_base {
+        row.has_left != row.has_right
+    } else {
+        row.has_left && row.has_right
+    }
+}
+
+/// Conflict rows ke relative paths, order me. Pure; unit-tested.
+pub fn three_way_conflicts(rows: &[ThreeWayTreeRow]) -> Vec<String> {
+    let mut out = Vec::new();
+    for row in rows {
+        if is_three_way_conflict(row) {
+            out.push(row.rel_path.clone());
+        }
+    }
+    out
+}
+
+/// Per-row progress over the tree plan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ThreeWayTreeSummary {
+    /// Kul rows.
+    pub total: usize,
+    /// Asli row naam wale distinct staged picks.
+    pub decided: usize,
+    /// Faisle ke intezar me rows.
+    pub pending: usize,
+    /// Kul conflict rows.
+    pub conflicts: usize,
+    /// Koi conflict bina decision ke bacha hai.
+    pub conflicted: bool,
+}
+
+impl ThreeWayTreeSummary {
+    /// Honest one-line progress.
+    pub fn summary_line(self) -> String {
+        format!(
+            "{} path(s), {} decided, {} pending, {} conflict(s){}",
+            self.total,
+            self.decided,
+            self.pending,
+            self.conflicts,
+            if self.conflicted { " (unresolved)" } else { "" }
+        )
+    }
+}
+
+/// Rows + decisions par honest progress: unknown path naam wale picks
+/// kabhi decided nahi ginte. Pure; unit-tested.
+pub fn three_way_tree_summary(
+    rows: &[ThreeWayTreeRow],
+    decisions: &[ThreeWayDecision],
+) -> ThreeWayTreeSummary {
+    let total = rows.len();
+    let mut seen: Vec<String> = Vec::new();
+    for decision in decisions {
+        let names_real_row = rows.iter().any(|row| row.rel_path == decision.rel_path);
+        if names_real_row && !seen.contains(&decision.rel_path) {
+            seen.push(decision.rel_path.clone());
+        }
+    }
+    let decided = seen.len();
+    let mut conflicts = 0usize;
+    let mut unresolved = 0usize;
+    for row in rows {
+        if is_three_way_conflict(row) {
+            conflicts = conflicts.saturating_add(1);
+            if !seen.contains(&row.rel_path) {
+                unresolved = unresolved.saturating_add(1);
+            }
+        }
+    }
+    ThreeWayTreeSummary {
+        total,
+        decided,
+        pending: total.saturating_sub(decided),
+        conflicts,
+        conflicted: unresolved > 0,
+    }
+}
+
+#[cfg(test)]
+mod three_way_tree_tests {
+    use super::*;
+
+    fn snapshot_row(path: &str, is_dir: bool) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        }
+    }
+
+    fn decide(path: &str, side: ThreeWaySide) -> ThreeWayDecision {
+        ThreeWayDecision {
+            rel_path: path.to_string(),
+            side,
+        }
+    }
+
+    #[test]
+    fn three_way_rows_union_sorted_with_presence() {
+        let base = vec![
+            snapshot_row("a.txt", false),
+            snapshot_row("gone.txt", false),
+        ];
+        let left = vec![
+            snapshot_row("a.txt", false),
+            snapshot_row("new-l.txt", false),
+        ];
+        let right = vec![
+            snapshot_row("a.txt", false),
+            snapshot_row("new-r.txt", false),
+        ];
+        let rows = three_way_tree_rows(&base, &left, &right);
+        assert_eq!(rows.len(), 4);
+        // Sorted union: har path ek baar.
+        let paths: Vec<String> = rows.iter().map(|row| row.rel_path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                "a.txt".to_string(),
+                "gone.txt".to_string(),
+                "new-l.txt".to_string(),
+                "new-r.txt".to_string(),
+            ]
+        );
+        // Teenon me maujood: saare flags.
+        let Some(shared) = rows.first() else {
+            return;
+        };
+        assert!(shared.has_base && shared.has_left && shared.has_right);
+        assert!(!shared.is_dir);
+        // Base-only: sirf base flag.
+        let Some(gone) = rows.get(1) else {
+            return;
+        };
+        assert!(gone.has_base && !gone.has_left && !gone.has_right);
+        // Teenon khaali: koi row nahi.
+        let empty: Vec<FolderRow> = Vec::new();
+        assert!(three_way_tree_rows(&empty, &empty, &empty).is_empty());
+    }
+
+    #[test]
+    fn three_way_conflict_covers_delete_and_double_add() {
+        let dir = ThreeWayTreeRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            has_base: true,
+            has_left: true,
+            has_right: false,
+        };
+        // Dirs kabhi conflict nahi (auto-keep).
+        assert!(!is_three_way_conflict(&dir));
+        let kept_everywhere = ThreeWayTreeRow {
+            rel_path: "keep.txt".to_string(),
+            is_dir: false,
+            has_base: true,
+            has_left: true,
+            has_right: true,
+        };
+        assert!(!is_three_way_conflict(&kept_everywhere));
+        // Delete-vs-keep: base tha, ek side ne hataya.
+        let deleted_left = ThreeWayTreeRow {
+            rel_path: "del.txt".to_string(),
+            is_dir: false,
+            has_base: true,
+            has_left: false,
+            has_right: true,
+        };
+        assert!(is_three_way_conflict(&deleted_left));
+        // Added-both-sides: base nahi tha, dono ne joda.
+        let double_added = ThreeWayTreeRow {
+            rel_path: "new.txt".to_string(),
+            is_dir: false,
+            has_base: false,
+            has_left: true,
+            has_right: true,
+        };
+        assert!(is_three_way_conflict(&double_added));
+        // Single-side add clean hai.
+        let single_added = ThreeWayTreeRow {
+            rel_path: "one.txt".to_string(),
+            is_dir: false,
+            has_base: false,
+            has_left: true,
+            has_right: false,
+        };
+        assert!(!is_three_way_conflict(&single_added));
+        // Side labels paint-ready hain.
+        assert_eq!(ThreeWaySide::Left.label(), "Take Left");
+        assert_eq!(ThreeWaySide::Base.label(), "Take Base");
+        assert_eq!(ThreeWaySide::Right.label(), "Take Right");
+    }
+
+    #[test]
+    fn three_way_summary_counts_decisions_honestly() {
+        let base = vec![
+            snapshot_row("keep.txt", false),
+            snapshot_row("del.txt", false),
+        ];
+        let left = vec![snapshot_row("keep.txt", false)];
+        let right = vec![
+            snapshot_row("keep.txt", false),
+            snapshot_row("del.txt", false),
+        ];
+        let rows = three_way_tree_rows(&base, &left, &right);
+        // del.txt delete-vs-keep conflict hai.
+        assert_eq!(three_way_conflicts(&rows), vec!["del.txt".to_string()]);
+        let none = three_way_tree_summary(&rows, &[]);
+        assert_eq!(none.total, 2);
+        assert_eq!(none.decided, 0);
+        assert_eq!(none.pending, 2);
+        assert_eq!(none.conflicts, 1);
+        assert!(none.conflicted);
+        assert!(none.summary_line().contains("1 conflict(s)"));
+        // Conflict decide: conflicted mit-ta hai.
+        let one = three_way_tree_summary(&rows, &[decide("del.txt", ThreeWaySide::Right)]);
+        assert_eq!((one.decided, one.pending), (1, 1));
+        assert!(!one.conflicted);
+        // Unknown path kabhi decided nahi ginta.
+        let unknown = three_way_tree_summary(
+            &rows,
+            &[ThreeWayDecision {
+                rel_path: "ghost.txt".to_string(),
+                side: ThreeWaySide::Left,
+            }],
+        );
+        assert_eq!(unknown.decided, 0);
+        assert!(unknown.conflicted);
+        // Duplicate picks: aakhri jeetta, ek hi ginta hai.
+        let dup = three_way_tree_summary(
+            &rows,
+            &[
+                decide("keep.txt", ThreeWaySide::Left),
+                decide("keep.txt", ThreeWaySide::Right),
+                decide("del.txt", ThreeWaySide::Base),
+            ],
+        );
+        assert_eq!((dup.decided, dup.pending), (2, 0));
+        assert_eq!(dup.conflicts, 1);
+        assert!(!dup.conflicted);
+        assert!(dup.summary_line().contains("2 decided"));
+    }
+}
