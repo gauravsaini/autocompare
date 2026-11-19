@@ -1007,3 +1007,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AI-TABLEFIND `sess-tablefind-ai`: OWNS views_table.rs+app.rs+checks/gui-tablefind-ai (Gap #12 table find box+N/M; caller signature same).
 - AI-MERGEPICK `sess-mergepick-ai`: OWNS views.rs+checks/gui-mergepick-ai (Gap #13 per-hunk pick buttons; decision wiring next).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AI complete (2 parallel: table-find UI + merge-pick UI)
+- TABLEFIND `80d9b4e` table find box with prev/next + N/M count inside views_table paint fn — OWNS views_table.rs+app.rs (Gap #12 table half).
+- MERGEPICK `d59ce16` per-hunk Take Left/Right/Base/Both buttons with staged intent display — OWNS views.rs (Gap #13 pick half).
+- Verify combined: 364 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AJ (hex-find paint, table/hex find completion, per-hunk decision App wiring, home polish).
