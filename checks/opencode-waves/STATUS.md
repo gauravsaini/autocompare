@@ -561,3 +561,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 29 status plumbing
 - A live, diff steady 536. Table summary default + hex over-cap view + status line plumbing.
 - No commit. Wait.
+
+## Wave I poll 30 REPORT writing
+- A live, paint calls wired (paint_hex/paint_table_keyed with views). REPORT writing, commit next.
+- Wait for land.
