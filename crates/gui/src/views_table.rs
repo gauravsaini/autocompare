@@ -373,6 +373,221 @@ pub fn table_cell_display(rows: &[Vec<String>], pos: TableCellCursor) -> Option<
     }
 }
 
+/// Cell text ka find matcher: khali needle kabhi match nahi karta.
+fn table_cell_contains(cell: &str, needle: &str, ignore_case: bool) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if ignore_case {
+        cell.to_lowercase().contains(&needle.to_lowercase())
+    } else {
+        cell.contains(needle)
+    }
+}
+
+/// Agli cell `(row, col)` jisme needle hai, `from_row` se (inclusive),
+/// row-major order me, wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_next(
+    rows: &[Vec<String>],
+    needle: &str,
+    from_row: usize,
+    ignore_case: bool,
+) -> Option<(usize, usize)> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut row = from_row % total.max(1);
+    for _ in 0..total {
+        let cells = rows.get(row)?;
+        for (col, cell) in cells.iter().enumerate() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                return Some((row, col));
+            }
+        }
+        row = row.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhli cell `(row, col)` jisme needle hai, `from_row` se peeche
+/// (exclusive), wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_prev(
+    rows: &[Vec<String>],
+    needle: &str,
+    from_row: usize,
+    ignore_case: bool,
+) -> Option<(usize, usize)> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut row = if from_row == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from_row.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let cells = rows.get(row)?;
+        for (col, cell) in cells.iter().enumerate().rev() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                return Some((row, col));
+            }
+        }
+        row = if row == 0 {
+            total.saturating_sub(1)
+        } else {
+            row.saturating_sub(1)
+        };
+    }
+    None
+}
+
+// ----------------------------------------------------------------------------
+// Per-hunk merge (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #10: table tab me har modified/orphan row par
+// take-left/take-right. Ye pure row choice hai; file apply (I/O)
+// wiring ka kaam hai aur OPEN rehta hai. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Per-row merge choice: kaunsi side ki row rakhi jaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableMergeSide {
+    /// Left row rakho.
+    #[default]
+    Left,
+    /// Right row rakho.
+    Right,
+}
+
+/// Ek row ka merge result: chosen side ki cells. `None` side matlab
+/// orphan ka missing side: dusri side milti hai; dono `None` par khali row.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_resolve_row(
+    left_row: Option<&[String]>,
+    right_row: Option<&[String]>,
+    side: TableMergeSide,
+) -> Vec<String> {
+    let chosen = match side {
+        TableMergeSide::Left => left_row.or(right_row),
+        TableMergeSide::Right => right_row.or(left_row),
+    };
+    chosen.unwrap_or(&[]).to_vec()
+}
+
+// ----------------------------------------------------------------------------
+// Paging (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3: lambi table me page-wise move. Chhota pager top
+// data-row rakhta hai; paint PageUp/PageDown se isko chalata hai.
+// Pure math, saturating, kabhi panic nahi. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Page-wise scroll state ek table grid ke liye (header fixed rehta hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TablePager {
+    /// Kul data rows (header ko count nahi karta).
+    pub total_rows: usize,
+    /// Ek page me kitni rows.
+    pub rows_per_page: usize,
+    /// Visible window ki pehli data row.
+    pub top: usize,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+impl TablePager {
+    /// Naya pager: page size kam se kam 1, top 0.
+    pub fn new(total_rows: usize, rows_per_page: usize) -> Self {
+        Self {
+            total_rows,
+            rows_per_page: rows_per_page.max(1),
+            top: 0,
+        }
+    }
+
+    /// Kul pages (khali grid = 0).
+    pub fn page_count(self) -> usize {
+        if self.total_rows == 0 {
+            return 0;
+        }
+        self.total_rows
+            .saturating_sub(1)
+            .saturating_div(self.rows_per_page.max(1))
+            .saturating_add(1)
+    }
+
+    /// Aakhri valid top.
+    pub fn last_top(self) -> usize {
+        let count = self.page_count();
+        if count == 0 {
+            return 0;
+        }
+        count
+            .saturating_sub(1)
+            .saturating_mul(self.rows_per_page.max(1))
+    }
+
+    /// Top ko valid range me rakhta hai.
+    pub fn clamp_top(&mut self) {
+        let last = self.last_top();
+        if self.top > last {
+            self.top = last;
+        }
+    }
+
+    /// Ek page aage, aakhri page par clamp.
+    pub fn next_page(&mut self) {
+        self.top = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.last_top());
+    }
+
+    /// Ek page peeche, 0 par clamp.
+    pub fn prev_page(&mut self) {
+        self.top = self.top.saturating_sub(self.rows_per_page.max(1));
+    }
+
+    /// Visible window `[top, end)`: end kabhi total se aage nahi.
+    pub fn visible_range(self) -> (usize, usize) {
+        let end = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.total_rows);
+        (self.top, end.max(self.top))
+    }
+
+    /// `row` dikhe isliye top adjust karta hai. Returns whether top moved.
+    pub fn bring_into_view(&mut self, row: usize) -> bool {
+        if self.total_rows == 0 {
+            return false;
+        }
+        let row = row.min(self.total_rows.saturating_sub(1));
+        let (start, end) = self.visible_range();
+        if row >= start && row < end {
+            return false;
+        }
+        if row < self.top {
+            self.top = row;
+        } else {
+            self.top = row
+                .saturating_add(1)
+                .saturating_sub(self.rows_per_page.max(1));
+        }
+        self.clamp_top();
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -594,6 +809,77 @@ mod tests {
         assert_eq!(line.len(), 2);
         assert_eq!(line.first().map(String::len), widths.first().copied());
         assert_eq!(line.get(1).map(String::len), widths.get(1).copied());
+    }
+
+    #[test]
+    fn table_find_scans_cells_row_major_with_wrap() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "5.00".to_string()],
+        ];
+        assert_eq!(table_find_next(&rows, "apple", 0, false), Some((1, 0)));
+        // Case-sensitive: "banana" chhota nahi milega, ignore_case par milega.
+        assert_eq!(table_find_next(&rows, "banana", 0, false), None);
+        assert_eq!(table_find_next(&rows, "banana", 0, true), Some((2, 0)));
+        // Wrap: aakhri row ke baad pehli match.
+        assert_eq!(table_find_next(&rows, "ID", 1, false), Some((0, 0)));
+        // Prev: peeche scan, wrap ke saath.
+        assert_eq!(table_find_prev(&rows, "apple", 2, false), Some((1, 0)));
+        assert_eq!(table_find_prev(&rows, "apple", 0, false), Some((1, 0)));
+        // Khali needle/rows: None.
+        assert_eq!(table_find_next(&rows, "", 0, false), None);
+        assert_eq!(table_find_next(&[], "x", 0, false), None);
+        assert_eq!(table_find_prev(&rows, "", 1, false), None);
+        assert_eq!(table_find_prev(&[], "x", 1, false), None);
+        assert_eq!(table_find_next(&rows, "zzz", 0, false), None);
+    }
+
+    #[test]
+    fn table_merge_picks_chosen_side_with_orphan_fallback() {
+        let left = vec!["1".to_string(), "9.99".to_string()];
+        let right = vec!["1".to_string(), "10.04".to_string()];
+        assert_eq!(
+            table_resolve_row(Some(&left), Some(&right), TableMergeSide::Left),
+            left
+        );
+        assert_eq!(
+            table_resolve_row(Some(&left), Some(&right), TableMergeSide::Right),
+            right
+        );
+        // Orphan: missing side par dusri side milti hai.
+        assert_eq!(
+            table_resolve_row(Some(&left), None, TableMergeSide::Right),
+            left
+        );
+        assert_eq!(
+            table_resolve_row(None, Some(&right), TableMergeSide::Left),
+            right
+        );
+        assert!(table_resolve_row(None, None, TableMergeSide::Left).is_empty());
+    }
+
+    #[test]
+    fn table_pager_pages_and_brings_rows_into_view() {
+        let mut pager = TablePager::new(25, 10);
+        assert_eq!(pager.page_count(), 3);
+        assert_eq!(pager.visible_range(), (0, 10));
+        pager.next_page();
+        assert_eq!(pager.top, 10);
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        pager.prev_page();
+        assert_eq!(pager.top, 10);
+        assert!(!pager.bring_into_view(12));
+        assert!(pager.bring_into_view(24));
+        assert_eq!(pager.top, 15);
+        let mut empty = TablePager::new(0, 10);
+        assert_eq!(empty.page_count(), 0);
+        assert!(!empty.bring_into_view(0));
+        let one = TablePager::new(3, 0);
+        assert_eq!(one.rows_per_page, 1);
     }
 
     #[test]

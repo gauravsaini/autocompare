@@ -545,6 +545,318 @@ pub fn hex_row_has_diff(row_start: u64, hunks: &[HexHunkView]) -> bool {
     false
 }
 
+// ----------------------------------------------------------------------------
+// Gutter-click jump (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3/#4: long diffs me manual scroll ke bajaye gutter
+// click ya next/prev control seedha change par jump kare. Ye section
+// pure offset math hai: kaunsa hunk ek offset/row ko cover karta hai
+// aur uske aage/peeche kaunsa hunk hai. No egui, no I/O; paint ek
+// gutter row click ko `hex_row_start(row)` se offset banakar in
+// helpers ko deta hai, orchestrator `navigate_to_offset` se selection
+// move karta hai.
+// ----------------------------------------------------------------------------
+
+/// Hunk index jo `offset` byte ko cover karta hai, agar koi hai.
+/// Hunk range `[offset, offset + max(left_len, right_len))` hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_hunk_at_offset(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
+    for (idx, hunk) in hunks.iter().enumerate() {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let end = hunk.offset.saturating_add(run as u64);
+        if hunk.offset <= offset && offset < end {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Pehla hunk jo `offset` par ya uske baad shuru hota hai.
+/// Gutter next-change button isi ko `navigate_to_offset` jaisa use karta hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_next_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
+    let mut found: Option<usize> = None;
+    for (idx, hunk) in hunks.iter().enumerate() {
+        if hunk.offset >= offset {
+            found = Some(idx);
+            break;
+        }
+    }
+    found
+}
+
+/// Aakhri hunk jo `offset` se pehle shuru hota hai (strictly `<`).
+/// Gutter prev-change button isko use karta hai; already-selected hunk
+/// par dobara rukne ke bajaye peeche jata hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_prev_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
+    let mut found: Option<usize> = None;
+    for (idx, hunk) in hunks.iter().enumerate() {
+        if hunk.offset < offset {
+            found = Some(idx);
+        } else {
+            break;
+        }
+    }
+    found
+}
+
+/// Grid row `row` ka pehla covering hunk, gutter row-click ke liye.
+/// Row range `[hex_row_start(row), +16)` hai; jo hunk is range ko
+/// chhuta hai wahi jump target hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_to_hunk(row: u64, hunks: &[HexHunkView]) -> Option<usize> {
+    let row_start = hex_row_start(row);
+    let row_end = row_start.saturating_add(HEX_BYTES_PER_ROW as u64);
+    for (idx, hunk) in hunks.iter().enumerate() {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let end = hunk.offset.saturating_add(run as u64);
+        if hunk.offset < row_end && end > row_start {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+// ----------------------------------------------------------------------------
+// Find-box (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #15: bade diff me symbol dhoondhna manual scan hai.
+// Ye pure search helpers hain: forward/backward, wrapping, khali
+// needle par `None`. Paint ek text field se needle lekar inhe
+// current cursor se chalata hai. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Agli needle occurrence `from` se (inclusive), wrap ke saath.
+/// Khali needle ya khali haystack par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_next(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
+    if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    let total = haystack.len() as u64;
+    let start = from.min(total.saturating_sub(1));
+    let mut idx = start;
+    for _ in 0..total {
+        let begin = idx as usize;
+        let Some(window) = haystack.get(begin..begin.saturating_add(needle.len())) else {
+            idx = idx.saturating_add(1) % total.max(1);
+            continue;
+        };
+        if window == needle {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhli needle occurrence `from` se peeche (exclusive), wrap ke saath.
+/// Khali needle ya khali haystack par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_prev(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
+    if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    let total = haystack.len() as u64;
+    if total == 0 {
+        return None;
+    }
+    let mut idx = if from == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let begin = idx as usize;
+        if let Some(window) = haystack.get(begin..begin.saturating_add(needle.len()))
+            && window == needle
+        {
+            return Some(idx);
+        }
+        idx = if idx == 0 {
+            total.saturating_sub(1)
+        } else {
+            idx.saturating_sub(1)
+        };
+    }
+    None
+}
+
+// ----------------------------------------------------------------------------
+// Per-hunk merge (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #10: product view-only hai, comparable tools har hunk
+// par take-left/take-right dete hain. Ye pure byte choice hai: hunk ke
+// liye left ya right side ke bytes. Poori file apply karna (I/O) wiring
+// ka kaam hai aur OPEN rehta hai. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Per-hunk merge choice: kaunsi side ke bytes rakhe jayen.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HunkSide {
+    /// Left side ke bytes rakho.
+    #[default]
+    Left,
+    /// Right side ke bytes rakho.
+    Right,
+}
+
+/// Hunk range ke bytes ek side se surakshit nikaalta hai.
+/// Out-of-range bytes skip hote hain (saturating, kabhi panic nahi).
+fn slice_hunk_bytes(data: &[u8], offset: u64, len: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    let start = offset.min(usize::MAX as u64) as usize;
+    for i in 0..len {
+        let Some(byte) = data.get(start.saturating_add(i)) else {
+            break;
+        };
+        out.push(*byte);
+    }
+    out
+}
+
+/// Ek hunk ka merge result: chosen side ke bytes.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_resolve_hunk(left: &[u8], right: &[u8], hunk: &HexHunkView, side: HunkSide) -> Vec<u8> {
+    match side {
+        HunkSide::Left => slice_hunk_bytes(left, hunk.offset, hunk.left_len),
+        HunkSide::Right => slice_hunk_bytes(right, hunk.offset, hunk.right_len),
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Paging (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3: lambi hex grid me page-wise move. Ye chhota pager
+// top row rakhta hai; paint PageUp/PageDown aur scrollbar se isko
+// chalata hai. Pure math, saturating, kabhi panic nahi. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Page-wise scroll state ek hex grid ke liye (rows = `hex_row_count`).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HexPager {
+    /// Kul grid rows.
+    pub total_rows: u64,
+    /// Ek page me kitni rows.
+    pub rows_per_page: u64,
+    /// Visible window ki pehli row.
+    pub top: u64,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+impl HexPager {
+    /// Naya pager: page size kam se kam 1, top 0.
+    pub fn new(total_rows: u64, rows_per_page: u64) -> Self {
+        let per = rows_per_page.max(1);
+        Self {
+            total_rows,
+            rows_per_page: per,
+            top: 0,
+        }
+    }
+
+    /// Total badalne par top clamp hota hai.
+    pub fn set_total(&mut self, total_rows: u64) {
+        self.total_rows = total_rows;
+        self.clamp_top();
+    }
+
+    /// Page size badalne par top clamp hota hai.
+    pub fn set_page_size(&mut self, rows_per_page: u64) {
+        self.rows_per_page = rows_per_page.max(1);
+        self.clamp_top();
+    }
+
+    /// Kul pages (khali grid = 0).
+    pub fn page_count(self) -> u64 {
+        if self.total_rows == 0 {
+            return 0;
+        }
+        self.total_rows
+            .saturating_sub(1)
+            .saturating_div(self.rows_per_page.max(1))
+            .saturating_add(1)
+    }
+
+    /// Aakhri valid top (aakhri page ki pehli row).
+    pub fn last_top(self) -> u64 {
+        let count = self.page_count();
+        if count == 0 {
+            return 0;
+        }
+        count
+            .saturating_sub(1)
+            .saturating_mul(self.rows_per_page.max(1))
+    }
+
+    /// Top ko valid range me rakhta hai.
+    pub fn clamp_top(&mut self) {
+        let last = self.last_top();
+        if self.top > last {
+            self.top = last;
+        }
+    }
+
+    /// Ek page aage, aakhri page par clamp.
+    pub fn next_page(&mut self) {
+        self.top = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.last_top());
+    }
+
+    /// Ek page peeche, 0 par clamp.
+    pub fn prev_page(&mut self) {
+        self.top = self.top.saturating_sub(self.rows_per_page.max(1));
+    }
+
+    /// Visible window `[top, end)`: end kabhi total se aage nahi.
+    pub fn visible_range(self) -> (u64, u64) {
+        let end = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.total_rows);
+        (self.top, end.max(self.top))
+    }
+
+    /// `row` dikhe isliye top adjust karta hai; bahar ki row par top
+    /// clamp hota hai. Returns whether the top moved.
+    pub fn bring_into_view(&mut self, row: u64) -> bool {
+        if self.total_rows == 0 {
+            return false;
+        }
+        let row = row.min(self.total_rows.saturating_sub(1));
+        let (start, end) = self.visible_range();
+        if row >= start && row < end {
+            return false;
+        }
+        if row < self.top {
+            self.top = row;
+        } else {
+            self.top = row
+                .saturating_add(1)
+                .saturating_sub(self.rows_per_page.max(1));
+        }
+        self.clamp_top();
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -827,5 +1139,140 @@ mod tests {
         assert!(hex_row_has_diff(16, &view.hunks));
         assert!(!hex_row_has_diff(32, &view.hunks));
         assert!(!hex_row_has_diff(0, &[]));
+    }
+
+    #[test]
+    fn hex_find_wraps_forward_and_backward() {
+        let hay = vec![10u8, 20, 30, 20, 30, 40];
+        let needle = vec![20u8, 30];
+        assert_eq!(hex_find_next(&hay, &needle, 0), Some(1));
+        assert_eq!(hex_find_next(&hay, &needle, 2), Some(3));
+        // Wrap: aakhri occurrence ke baad pehli.
+        assert_eq!(hex_find_next(&hay, &needle, 4), Some(1));
+        assert_eq!(hex_find_prev(&hay, &needle, 4), Some(3));
+        assert_eq!(hex_find_prev(&hay, &needle, 3), Some(1));
+        // Wrap peeche: shuru se peeche aakhri.
+        assert_eq!(hex_find_prev(&hay, &needle, 0), Some(3));
+        // Khali needle/haystack ya badi needle: None.
+        assert_eq!(hex_find_next(&hay, &[], 0), None);
+        assert_eq!(hex_find_next(&[], &needle, 0), None);
+        assert_eq!(hex_find_next(&[1u8], &[1u8, 2u8], 0), None);
+        assert_eq!(hex_find_prev(&hay, &[], 0), None);
+        assert_eq!(hex_find_prev(&[], &needle, 0), None);
+        // Missing needle: None.
+        assert_eq!(hex_find_next(&hay, &[99u8], 0), None);
+        assert_eq!(hex_find_prev(&hay, &[99u8], 2), None);
+    }
+
+    #[test]
+    fn hex_merge_resolves_chosen_side_bytes() {
+        let left = vec![1u8, 2, 3, 4];
+        let right = vec![1u8, 9, 3, 4];
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(view.hunks.len(), 1);
+        let Some(hunk) = view.hunks.first() else {
+            return;
+        };
+        assert_eq!(
+            hex_resolve_hunk(&left, &right, hunk, HunkSide::Left),
+            vec![2u8]
+        );
+        assert_eq!(
+            hex_resolve_hunk(&left, &right, hunk, HunkSide::Right),
+            vec![9u8]
+        );
+        // Out-of-range hunk kabhi panic nahi karta.
+        let past = HexHunkView {
+            offset: 100,
+            left_len: 4,
+            right_len: 4,
+        };
+        assert!(hex_resolve_hunk(&left, &right, &past, HunkSide::Left).is_empty());
+        assert!(hex_resolve_hunk(&left, &right, &past, HunkSide::Right).is_empty());
+        // Insertion hunk: ek side khali.
+        let ins = HexHunkView {
+            offset: 2,
+            left_len: 0,
+            right_len: 2,
+        };
+        assert!(hex_resolve_hunk(&left, &right, &ins, HunkSide::Left).is_empty());
+        assert_eq!(
+            hex_resolve_hunk(&right, &right, &ins, HunkSide::Right).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn hex_pager_pages_and_brings_rows_into_view() {
+        let mut pager = HexPager::new(100, 16);
+        assert_eq!(pager.page_count(), 7);
+        assert_eq!(pager.visible_range(), (0, 16));
+        pager.next_page();
+        assert_eq!(pager.top, 16);
+        pager.prev_page();
+        assert_eq!(pager.top, 0);
+        // Aakhri page par clamp: 96-99.
+        for _ in 0..20 {
+            pager.next_page();
+        }
+        assert_eq!(pager.top, 96);
+        assert_eq!(pager.visible_range(), (96, 100));
+        pager.next_page();
+        assert_eq!(pager.top, 96);
+        // Visible row par koi move nahi.
+        assert!(!pager.bring_into_view(97));
+        // Upar ki row par top jump.
+        assert!(pager.bring_into_view(10));
+        assert_eq!(pager.top, 10);
+        // Neeche ki row par window ka aakhri row banta hai.
+        let mut small = HexPager::new(100, 10);
+        assert!(small.bring_into_view(50));
+        assert_eq!(small.top, 41);
+        // Khali grid: pages 0, koi move nahi.
+        let mut empty = HexPager::new(0, 10);
+        assert_eq!(empty.page_count(), 0);
+        assert!(!empty.bring_into_view(5));
+        // Page size 0 matlab 1.
+        let one = HexPager::new(5, 0);
+        assert_eq!(one.rows_per_page, 1);
+        assert_eq!(one.page_count(), 5);
+    }
+
+    #[test]
+    fn hex_gutter_jump_targets_covering_hunks() {
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        if let Some(slot) = right.get_mut(50) {
+            *slot = 7;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(view.hunks.len() >= 2);
+        // Covering hunk milta hai, bahar ka offset nahi.
+        let first = view.hunks.first().map(|h| h.offset).unwrap_or(0);
+        assert_eq!(hex_hunk_at_offset(first, &view.hunks), Some(0));
+        assert_eq!(hex_hunk_at_offset(0, &view.hunks), None);
+        assert_eq!(hex_hunk_at_offset(10_000, &view.hunks), None);
+        // Next/prev offset se.
+        assert_eq!(hex_next_hunk_from(0, &view.hunks), Some(0));
+        assert_eq!(
+            hex_next_hunk_from(first.saturating_add(1), &view.hunks),
+            Some(1)
+        );
+        assert_eq!(hex_next_hunk_from(10_000, &view.hunks), None);
+        assert_eq!(hex_prev_hunk_from(0, &view.hunks), None);
+        let second = view.hunks.get(1).map(|h| h.offset).unwrap_or(0);
+        assert_eq!(hex_prev_hunk_from(second, &view.hunks), Some(0));
+        assert_eq!(
+            hex_prev_hunk_from(second.saturating_add(1), &view.hunks),
+            Some(1)
+        );
+        // Gutter row-click: row 1 (16-31) pehla hunk, row 0 khali.
+        assert_eq!(hex_row_to_hunk(1, &view.hunks), Some(0));
+        assert_eq!(hex_row_to_hunk(0, &view.hunks), None);
+        assert_eq!(hex_row_to_hunk(99, &view.hunks), None);
+        assert_eq!(hex_row_to_hunk(0, &[]), None);
     }
 }

@@ -925,6 +925,109 @@ mod tests {
     }
 
     #[test]
+    fn folder_find_matches_paths_with_wrap_and_case() {
+        let rows = vec![
+            make_glyph_row("src/lib.rs", false, '='),
+            make_glyph_row("README.md", false, '='),
+            make_glyph_row("Src/main.rs", false, '!'),
+        ];
+        assert_eq!(folder_find_next(&rows, "src", 0, false), Some(0));
+        // Case-sensitive: "Src" alag hai.
+        assert_eq!(folder_find_next(&rows, "SRC", 0, false), None);
+        assert_eq!(folder_find_next(&rows, "SRC", 0, true), Some(0));
+        // Wrap forward: aakhri ke baad pehli.
+        assert_eq!(folder_find_next(&rows, "src", 1, true), Some(2));
+        // Prev: peeche scan.
+        assert_eq!(folder_find_prev(&rows, "src", 2, true), Some(0));
+        assert_eq!(folder_find_prev(&rows, "src", 0, false), Some(0));
+        // Khali/gayab: None.
+        assert_eq!(folder_find_next(&rows, "", 0, false), None);
+        assert_eq!(folder_find_next(&[], "x", 0, false), None);
+        assert_eq!(folder_find_prev(&rows, "", 1, false), None);
+        assert_eq!(folder_find_next(&rows, "zzz", 0, false), None);
+    }
+
+    #[test]
+    fn folder_merge_resolves_one_row_action() {
+        // Changed/newer/orphan rows: side ke hisab se copy direction.
+        assert_eq!(
+            folder_resolve_row('>', false, FolderMergeSide::Left),
+            Some(SyncAction::CopyToRight)
+        );
+        assert_eq!(
+            folder_resolve_row('<', false, FolderMergeSide::Right),
+            Some(SyncAction::CopyToLeft)
+        );
+        assert_eq!(
+            folder_resolve_row('L', false, FolderMergeSide::Left),
+            Some(SyncAction::CopyToRight)
+        );
+        assert_eq!(
+            folder_resolve_row('R', false, FolderMergeSide::Right),
+            Some(SyncAction::CopyToLeft)
+        );
+        // Same/diff/manual aur dirs: koi one-click action nahi.
+        assert_eq!(folder_resolve_row('=', false, FolderMergeSide::Left), None);
+        assert_eq!(folder_resolve_row('!', false, FolderMergeSide::Left), None);
+        assert_eq!(folder_resolve_row('>', true, FolderMergeSide::Left), None);
+        assert_eq!(folder_resolve_row('R', true, FolderMergeSide::Right), None);
+    }
+
+    #[test]
+    fn row_pager_pages_and_brings_nodes_into_view() {
+        let mut pager = RowPager::new(25, 10);
+        assert_eq!(pager.page_count(), 3);
+        assert_eq!(pager.visible_range(), (0, 10));
+        pager.next_page();
+        assert_eq!(pager.top, 10);
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        assert_eq!(pager.visible_range(), (20, 25));
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        pager.prev_page();
+        assert_eq!(pager.top, 10);
+        assert!(!pager.bring_into_view(12));
+        assert!(pager.bring_into_view(24));
+        assert_eq!(pager.top, 15);
+        let mut empty = RowPager::new(0, 10);
+        assert_eq!(empty.page_count(), 0);
+        assert!(!empty.bring_into_view(0));
+    }
+
+    #[test]
+    fn folder_gutter_jump_wraps_over_changed_rows() {
+        let rows = vec![
+            make_glyph_row("same.txt", false, '='),
+            make_glyph_row("diff.txt", false, '!'),
+            make_glyph_row("same2.txt", false, '='),
+            make_glyph_row("newer.txt", false, '>'),
+        ];
+        assert_eq!(folder_next_changed(&rows, 0), Some(1));
+        assert_eq!(folder_next_changed(&rows, 1), Some(3));
+        // Wrap: aakhri changed ke baad pehla changed.
+        assert_eq!(folder_next_changed(&rows, 3), Some(1));
+        assert_eq!(folder_prev_changed(&rows, 3), Some(1));
+        assert_eq!(folder_prev_changed(&rows, 1), Some(3));
+        assert_eq!(folder_prev_changed(&rows, 0), Some(3));
+        // Gutter click: changed par wahi, unchanged par agla changed.
+        assert_eq!(folder_gutter_target(&rows, 1), Some(1));
+        assert_eq!(folder_gutter_target(&rows, 0), Some(1));
+        assert_eq!(folder_gutter_target(&rows, 2), Some(3));
+        assert_eq!(folder_gutter_target(&rows, 99), None);
+        // Sab same: koi target nahi.
+        let clean = vec![
+            make_glyph_row("a.txt", false, '='),
+            make_glyph_row("b.txt", false, '='),
+        ];
+        assert_eq!(folder_next_changed(&clean, 0), None);
+        assert_eq!(folder_prev_changed(&clean, 1), None);
+        assert_eq!(folder_gutter_target(&clean, 0), None);
+        assert_eq!(folder_next_changed(&[], 0), None);
+        assert_eq!(folder_prev_changed(&[], 0), None);
+    }
+
+    #[test]
     fn folder_lines_keep_side_columns_aligned() {
         let header = folder_header_line();
         assert!(header.contains("Path"));
@@ -950,6 +1053,285 @@ mod tests {
         // Pad helper lamba text kaat-ta hai, chhota pad karta hai.
         assert_eq!(pad_folder_cell("ab", 4), "ab  ");
         assert_eq!(pad_folder_cell("abcdef", 4), "abcd");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Gutter-click jump (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3/#4: folder gutter me change markers par click ya
+// next/prev control seedha agle changed row par jump kare. Pure index
+// math hai: `changed` flag par next/prev scan, wrapping ke saath.
+// No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Agle changed row ka index `from` se aage (exclusive), wrap ke saath.
+/// Koi changed row nahi to `None`. Gutter next-change isi ko use karta hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_next_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
+    if rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut idx = from.saturating_add(1) % total.max(1);
+    for _ in 0..total {
+        let row = rows.get(idx)?;
+        if row.changed {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhle changed row ka index `from` se peeche (exclusive), wrap ke saath.
+/// Koi changed row nahi to `None`. Gutter prev-change isi ko use karta hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_prev_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
+    if rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut idx = if from == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let row = rows.get(idx)?;
+        if row.changed {
+            return Some(idx);
+        }
+        idx = if idx == 0 {
+            total.saturating_sub(1)
+        } else {
+            idx.saturating_sub(1)
+        };
+    }
+    None
+}
+
+/// Gutter row-click target: `row_idx` khud changed hai to wahi, warna
+/// uske baad ka agla changed (wrap ke saath). Paint click ko index
+/// me badalkar ye helper deta hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_gutter_target(rows: &[FolderRow], row_idx: usize) -> Option<usize> {
+    let row = rows.get(row_idx)?;
+    if row.changed {
+        return Some(row_idx);
+    }
+    folder_next_changed(rows, row_idx)
+}
+
+/// Path ka find matcher: khali needle kabhi match nahi karta.
+fn folder_name_contains(path: &str, needle: &str, ignore_case: bool) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if ignore_case {
+        path.to_lowercase().contains(&needle.to_lowercase())
+    } else {
+        path.contains(needle)
+    }
+}
+
+/// Agla folder row jiske path me needle hai, `from` se (inclusive),
+/// wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_find_next(
+    rows: &[FolderRow],
+    needle: &str,
+    from: usize,
+    ignore_case: bool,
+) -> Option<usize> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut idx = from % total.max(1);
+    for _ in 0..total {
+        let row = rows.get(idx)?;
+        if folder_name_contains(&row.rel_path, needle, ignore_case) {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhla folder row jiske path me needle hai, `from` se peeche
+/// (exclusive), wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_find_prev(
+    rows: &[FolderRow],
+    needle: &str,
+    from: usize,
+    ignore_case: bool,
+) -> Option<usize> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut idx = if from == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let row = rows.get(idx)?;
+        if folder_name_contains(&row.rel_path, needle, ignore_case) {
+            return Some(idx);
+        }
+        idx = if idx == 0 {
+            total.saturating_sub(1)
+        } else {
+            idx.saturating_sub(1)
+        };
+    }
+    None
+}
+
+// ----------------------------------------------------------------------------
+// Per-hunk merge (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #10: folder tab me har row par take-left/take-right.
+// `sync_preview` poori list ka plan banata hai; ye helper ek row ka
+// faisla expose karta hai taaki paint per-row merge button dikha sake.
+// '=' aur '!' kabhi action nahi dete (same / manual resolve), baaki
+// UpdateBoth rules follow karte hain. File apply (I/O) OPEN rehta hai.
+// ----------------------------------------------------------------------------
+
+/// Per-row merge choice: kaunsi side ka content rakha jaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FolderMergeSide {
+    /// Left content rakho (right par copy).
+    #[default]
+    Left,
+    /// Right content rakho (left par copy).
+    Right,
+}
+
+/// Ek folder row ka merge action, `None` jab koi copy na ho.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn folder_resolve_row(glyph: char, is_dir: bool, side: FolderMergeSide) -> Option<SyncAction> {
+    if is_dir || glyph == '=' || glyph == '!' {
+        return None;
+    }
+    match side {
+        FolderMergeSide::Left => Some(SyncAction::CopyToRight),
+        FolderMergeSide::Right => Some(SyncAction::CopyToLeft),
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Paging (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3: lambe folder tree me page-wise move. Chhota pager
+// visible-node top rakhta hai; paint PageUp/PageDown se isko chalata hai.
+// Pure math, saturating, kabhi panic nahi. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Page-wise scroll state ek folder tree ke liye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RowPager {
+    /// Kul visible nodes.
+    pub total_rows: usize,
+    /// Ek page me kitne nodes.
+    pub rows_per_page: usize,
+    /// Visible window ka pehla node.
+    pub top: usize,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+impl RowPager {
+    /// Naya pager: page size kam se kam 1, top 0.
+    pub fn new(total_rows: usize, rows_per_page: usize) -> Self {
+        Self {
+            total_rows,
+            rows_per_page: rows_per_page.max(1),
+            top: 0,
+        }
+    }
+
+    /// Kul pages (khali tree = 0).
+    pub fn page_count(self) -> usize {
+        if self.total_rows == 0 {
+            return 0;
+        }
+        self.total_rows
+            .saturating_sub(1)
+            .saturating_div(self.rows_per_page.max(1))
+            .saturating_add(1)
+    }
+
+    /// Aakhri valid top.
+    pub fn last_top(self) -> usize {
+        let count = self.page_count();
+        if count == 0 {
+            return 0;
+        }
+        count
+            .saturating_sub(1)
+            .saturating_mul(self.rows_per_page.max(1))
+    }
+
+    /// Top ko valid range me rakhta hai.
+    pub fn clamp_top(&mut self) {
+        let last = self.last_top();
+        if self.top > last {
+            self.top = last;
+        }
+    }
+
+    /// Ek page aage, aakhri page par clamp.
+    pub fn next_page(&mut self) {
+        self.top = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.last_top());
+    }
+
+    /// Ek page peeche, 0 par clamp.
+    pub fn prev_page(&mut self) {
+        self.top = self.top.saturating_sub(self.rows_per_page.max(1));
+    }
+
+    /// Visible window `[top, end)`: end kabhi total se aage nahi.
+    pub fn visible_range(self) -> (usize, usize) {
+        let end = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.total_rows);
+        (self.top, end.max(self.top))
+    }
+
+    /// `row` dikhe isliye top adjust karta hai. Returns whether top moved.
+    pub fn bring_into_view(&mut self, row: usize) -> bool {
+        if self.total_rows == 0 {
+            return false;
+        }
+        let row = row.min(self.total_rows.saturating_sub(1));
+        let (start, end) = self.visible_range();
+        if row >= start && row < end {
+            return false;
+        }
+        if row < self.top {
+            self.top = row;
+        } else {
+            self.top = row
+                .saturating_add(1)
+                .saturating_sub(self.rows_per_page.max(1));
+        }
+        self.clamp_top();
+        true
     }
 }
 
