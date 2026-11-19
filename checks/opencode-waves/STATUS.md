@@ -63,3 +63,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Poll 09
 - Breakage clearing: no error mentions in latest tails. Text writing tests, folder on fmt, shell produced before/after screenshots (9174 vs 9846 bytes, both PNG magic OK, content DIFFERENT — first visual proof of real UI change).
 - No land commits yet.
+
+## Poll 10
+- Folder: 90 tests green + clippy done — land imminent.
+- Shell: own-file warnings check running, build recovering.
+- Diff +1889/-23 across 6 files, banned-pattern scan CLEAN.
