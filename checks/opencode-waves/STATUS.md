@@ -124,3 +124,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 04
 - Diff +90, all attributed: app.rs +3 (folder_session hold in App — folder agent, correct OWNS), gutter +18 + viewmodel +69 (hooks agent tests). Banned-scan clean.
+
+## Wave D poll 05
+- Diff +461/-12: app +315 (folder wiring), views +54 (paint prefs hook), screenshot +17 (folder fixture starting), gutter +18, viewmodel +69. Both alive. Folder log silent but edits prove work. Scan clean.
