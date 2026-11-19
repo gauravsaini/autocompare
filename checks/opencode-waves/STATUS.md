@@ -94,3 +94,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Poll 15
 - Text fixing clippy hits in views.rs (495/500/604), still landing. CI still queued.
+
+## Poll 16
+- Text probing TextViewState block (assert miss — likely renamed during dead-code fix) + 4 collapsible-if warnings. Still working, no land. CI still queued.
