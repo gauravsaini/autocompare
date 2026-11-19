@@ -12,6 +12,7 @@ Deterministic one-round console parity check plus the fix-and-repeat loop.
 ```sh
 python3 tools/parity-harness/make-fixtures.py   # regenerate fixtures (rarely needed)
 tools/parity-harness/run-round.sh checks/round-N # writes checks/round-N/parity-report.md
+tools/parity-harness/run-visual.sh checks/round-N # writes checks/round-N/visual-report.md (PNG magic, size, non-blank)
 ```
 
 `RESULT: PASS` means all 9 session commands return diff-convention exits
@@ -32,6 +33,6 @@ per-command `.out` logs beside the report.
 
 - Fixtures are original byte patterns only; never copy files, strings, or
   assets from the original app.
-- GUI `--screenshot` visual checks plug into this loop once the flag exists;
-  until then this skill covers console parity only.
+- GUI `--screenshot` visual checks run via run-visual.sh in the same round dir;
+  folder fixtures stay SKIP-listed until the screenshot Folder-fixture hook lands.
 - Keep every round dir; never rewrite history.
