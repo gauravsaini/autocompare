@@ -292,17 +292,26 @@ pub fn chrome_status_role() -> TypoRole {
 }
 
 /// Paint-applied Home title size: routes through the home contract
-/// so paint stays in sync headlessly.
+/// so paint stays in sync headlessly. Test-only since typo adoption
+/// (paint `TypoRole::HomeTitle.rich` directly); unit tests lock the
+/// contract here.
+#[allow(dead_code)] // test-only since typo adoption
 pub fn home_title_paint_size() -> f32 {
     home_card_title_size()
 }
 
-/// Whether the Home description paints small + weak.
+/// Whether the Home description paints small + weak. Test-only since
+/// typo adoption (paint branches on this but renders
+/// `TypoRole::HomeDesc.rich`); unit tests lock the contract here.
+#[allow(dead_code)] // test-only since typo adoption
 pub fn home_desc_paint_is_small_weak() -> bool {
     home_card_desc_is_small_weak()
 }
 
-/// Paint-applied Home button size (body scale).
+/// Paint-applied Home button size (body scale). Test-only since typo
+/// adoption (paint `TypoRole::HomeButton.rich` directly); unit tests
+/// lock the contract here.
+#[allow(dead_code)] // test-only since typo adoption
 pub fn home_button_paint_size() -> f32 {
     home_card_button_size()
 }
@@ -401,14 +410,10 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
                     ui.set_width(CARD_W);
                     ui.set_height(home_paint_card_height());
                     ui.vertical_centered(|ui| {
-                        ui.label(
-                            RichText::new(item.title)
-                                .strong()
-                                .size(home_title_paint_size()),
-                        );
+                        ui.label(TypoRole::HomeTitle.rich(item.title));
                         let mut desc = RichText::new(item.description);
                         if home_desc_paint_is_small_weak() {
-                            desc = desc.small().weak();
+                            desc = TypoRole::HomeDesc.rich(item.description);
                         }
                         ui.label(desc);
                         ui.add_space(TIGHT_GAP);
@@ -417,8 +422,7 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
                             .add_sized(
                                 egui::vec2(cta_w, cta_h),
                                 egui::Button::new(
-                                    RichText::new(format!("Open {}", item.title))
-                                        .size(home_button_paint_size()),
+                                    TypoRole::HomeButton.rich(format!("Open {}", item.title)),
                                 ),
                             )
                             .clicked()
@@ -643,7 +647,7 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
                     break;
                 };
                 ui.set_row_height(row_height);
-                ui.label(RichText::new(line.as_str()).monospace());
+                ui.label(TypoRole::Mono.rich(line.as_str()));
             }
         });
 }
@@ -765,9 +769,12 @@ pub fn parse_gutter_row_text(text: &str) -> Option<u64> {
 
 /// Adapts a painted [`TableModel`] to the headless find API
 /// [`views_table::table_find_next`]: each painted row becomes one
-/// single-cell row carrying its display text (`label | text`), so the
-/// find-box searches exactly what paint shows. Pure; unit-tested.
-/// Wired: `paint_table` isi par `table_find_match_rows` chalata hai.
+/// single-cell row carrying its display text (`label | text`).
+/// Test-only contract (P3 find-source switch ke baad paint
+/// `data_cells` par `table_find_match_rows` chalata hai — grid coords
+/// align karne ke liye); unit tests isi par find row mapping lock
+/// karte hain. Pure; unit-tested.
+#[allow(dead_code)] // test-only since P3 (paint uses data_cells grid coords now)
 pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
     model
         .rows
@@ -1190,19 +1197,15 @@ pub fn paint_hex(
             pager.next_page();
         }
     });
-    ui.label(
-        RichText::new(format!(
-            "page {} of {}, showing {} row(s)",
-            pager.top / pager.rows_per_page.max(1) + 1,
-            pager.page_count().max(1),
-            pager
-                .visible_range()
-                .1
-                .saturating_sub(pager.visible_range().0),
-        ))
-        .small()
-        .weak(),
-    );
+    ui.label(TypoRole::Small.rich(format!(
+        "page {} of {}, showing {} row(s)",
+        pager.top / pager.rows_per_page.max(1) + 1,
+        pager.page_count().max(1),
+        pager
+            .visible_range()
+            .1
+            .saturating_sub(pager.visible_range().0),
+    )));
     if view.hunks.is_empty() {
         ui.label(RichText::new("(no differing hunks)").weak());
     } else {
@@ -1226,7 +1229,7 @@ pub fn paint_hex(
                             let selected = view.selected == Some(i);
                             ui.set_row_height(row_height);
                             if ui
-                                .selectable_label(selected, RichText::new(line).monospace())
+                                .selectable_label(selected, TypoRole::Mono.rich(line))
                                 .clicked()
                             {
                                 view.selected = Some(i);
@@ -1298,11 +1301,7 @@ pub fn paint_hex(
         // (offset/len se). Monospace cells, GEO spacing reuse
         // (`SECTION_GAP` x, `TIGHT_GAP` y), koi naya token/color nahi.
         ui.add_space(TIGHT_GAP);
-        ui.label(
-            RichText::new("byte grid (offsets only: ?? = diff byte)")
-                .small()
-                .weak(),
-        );
+        ui.label(TypoRole::Small.rich("byte grid (offsets only: ?? = diff byte)"));
         let mut grid_rows: Vec<u64> = Vec::new();
         for hunk in view.hunks.get(wstart..wend).unwrap_or(&[]) {
             for row in hex_grid_rows_for_hunk(hunk) {
@@ -1323,9 +1322,9 @@ pub fn paint_hex(
             .show(ui, |ui| {
                 for row in grid_rows {
                     let (addr, hex, ascii) = format_hex_grid_cells(row, &view.hunks);
-                    ui.label(RichText::new(addr).monospace());
-                    ui.label(RichText::new(hex).monospace());
-                    ui.label(RichText::new(format!("|{ascii}|")).monospace());
+                    ui.label(TypoRole::Mono.rich(addr));
+                    ui.label(TypoRole::Mono.rich(hex));
+                    ui.label(TypoRole::Mono.rich(format!("|{ascii}|")));
                     ui.end_row();
                 }
             });
@@ -1392,6 +1391,25 @@ pub fn table_grid_columns(widths: &[usize]) -> usize {
     widths.len().saturating_add(1)
 }
 
+/// Har `model.rows` index ka `data_cells` row index (hdr-filtered):
+/// header (`hdr`) rows `None` map hoti hain, baaki grid order me.
+/// Reverse vec har data-row ko wapas uske model-row par laata hai
+/// (`bring_into_view` pager `model.rows` par chalta hai). Pure;
+/// unit-tested.
+pub fn table_data_index_map(model: &TableModel) -> (Vec<Option<usize>>, Vec<usize>) {
+    let mut fwd = Vec::with_capacity(model.rows.len());
+    let mut rev = Vec::new();
+    for (idx, row) in model.rows.iter().enumerate() {
+        if row.label.trim() == "hdr" {
+            fwd.push(None);
+        } else {
+            fwd.push(Some(rev.len()));
+            rev.push(idx);
+        }
+    }
+    (fwd, rev)
+}
+
 /// The model-driven table view: keyed summary line, the key-column
 /// bar when a header row exists, the positional note when no key
 /// columns are selected, pager-driven row window, then the legacy
@@ -1409,7 +1427,7 @@ pub fn paint_table_keyed(
     if let Some(note) = view.positional_note() {
         paint_note(ui, note);
     }
-    paint_table(ui, model, pager);
+    paint_table(ui, view, model, pager);
 }
 /// Merge 3-pane column count: left / base / right teen panes.
 /// Headless contract (test-locked); paint spells the three panes
@@ -1589,15 +1607,11 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
         .data_mut(|data| data.get_temp::<Vec<viewmodel::MergeHunkPick>>(merge_pick_id(lines)))
         .unwrap_or_default();
     let summary = viewmodel::merge_pick_summary(lines, &picks);
-    ui.label(
-        RichText::new(merge_three_pane_summary_line(
-            summary.total,
-            summary.pending,
-            summary.conflicted,
-        ))
-        .small()
-        .weak(),
-    );
+    ui.label(TypoRole::Small.rich(merge_three_pane_summary_line(
+        summary.total,
+        summary.pending,
+        summary.conflicted,
+    )));
     if hunks.is_empty() {
         ui.label(RichText::new("(no conflict hunks: single merged pane below)").weak());
         return;
@@ -1609,18 +1623,14 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
         let mut staged: Option<viewmodel::TakeChoice> = None;
         ui.group(|ui| {
             ui.label(
-                RichText::new(format_merge_hunk_title(idx, total))
-                    .small()
+                TypoRole::Small
+                    .rich(format_merge_hunk_title(idx, total))
                     .strong(),
             );
-            ui.label(
-                RichText::new(format_merge_hunk_decision_with_pick(
-                    idx,
-                    merge_pick_for_hunk(&picks, idx),
-                ))
-                .small()
-                .weak(),
-            );
+            ui.label(TypoRole::Small.rich(format_merge_hunk_decision_with_pick(
+                idx,
+                merge_pick_for_hunk(&picks, idx),
+            )));
             ui.add_space(TIGHT_GAP);
             // Aligned 3-pane row: equal thirds from [`three_pane_widths`]
             // (same interior width for every card, so left/base/right
@@ -1630,40 +1640,40 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(left_w);
-                    ui.label(RichText::new("Left").small().strong());
+                    ui.label(TypoRole::Small.rich("Left").strong());
                     if left.is_empty() {
-                        ui.label(RichText::new("(empty)").small().weak());
+                        ui.label(TypoRole::Small.rich("(empty)"));
                     }
                     for line in &left {
-                        ui.label(RichText::new(line.as_str()).monospace());
+                        ui.label(TypoRole::Mono.rich(line.as_str()));
                     }
                 });
                 ui.separator();
                 ui.vertical(|ui| {
                     ui.set_width(base_w);
-                    ui.label(RichText::new("Base").small().strong());
+                    ui.label(TypoRole::Small.rich("Base").strong());
                     if base.is_empty() {
-                        ui.label(RichText::new("(empty)").small().weak());
+                        ui.label(TypoRole::Small.rich("(empty)"));
                     }
                     for line in &base {
-                        ui.label(RichText::new(line.as_str()).monospace());
+                        ui.label(TypoRole::Mono.rich(line.as_str()));
                     }
                 });
                 ui.separator();
                 ui.vertical(|ui| {
                     ui.set_width(right_w);
-                    ui.label(RichText::new("Right").small().strong());
+                    ui.label(TypoRole::Small.rich("Right").strong());
                     if right.is_empty() {
-                        ui.label(RichText::new("(empty)").small().weak());
+                        ui.label(TypoRole::Small.rich("(empty)"));
                     }
                     for line in &right {
-                        ui.label(RichText::new(line.as_str()).monospace());
+                        ui.label(TypoRole::Mono.rich(line.as_str()));
                     }
                 });
             });
             ui.add_space(TIGHT_GAP);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Take:").small().weak());
+                ui.label(TypoRole::Small.rich("Take:"));
                 if ui.small_button("Take Left").clicked() {
                     staged = Some(viewmodel::TakeChoice::Left);
                 }
@@ -1738,7 +1748,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
                 let marker = line.starts_with("<<<<<<<")
                     || line.starts_with("=======")
                     || line.starts_with(">>>>>>>");
-                let mut text = RichText::new(line.as_str()).monospace();
+                let mut text = TypoRole::Mono.rich(line.as_str());
                 if marker {
                     text = text.color(red_for(dark)).strong();
                 }
@@ -1835,7 +1845,7 @@ pub fn paint_merge_apply(
     summary: Option<&MergeApplySummary>,
     summary_line: &str,
 ) -> bool {
-    ui.label(RichText::new(merge_apply_section_title()).small().strong());
+    ui.label(TypoRole::Small.rich(merge_apply_section_title()).strong());
     let mut apply_clicked = false;
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
@@ -1867,7 +1877,12 @@ pub fn paint_merge_apply(
 /// rows se sync hota hai; Prev/Next page aur PageUp/PageDown
 /// `next_page`/`prev_page` chalate hain, find result
 /// `bring_into_view` se visible rehta hai.
-pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::TablePager) {
+pub fn paint_table(
+    ui: &mut Ui,
+    view: &mut views_table::TableKeyView,
+    model: &TableModel,
+    pager: &mut views_table::TablePager,
+) {
     let dark = ui.visuals().dark_mode;
     if model.truncated {
         paint_note(ui, "showing the first rows only; the rest is cut off");
@@ -1879,19 +1894,36 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     // Find row (Gap #12 final wiring, tablefind precedent
     // `checks/gui-tablefind-ai/REPORT.md`): table window ke andar
     // `views_table::paint_table_find_bar` (signature same). Needle +
-    // cursor caller-local temp me (App untouched); search exactly what
-    // paint shows ([`table_model_text_rows`]), count N/M
-    // `table_find_badge_label` se; Next/Prev `pager.bring_into_view`
-    // chalata hai. Geometry/typo callee me, yahan koi naya token nahi.
+    // cursor caller-local temp me (App untouched); search grid coords
+    // par (`data_cells`, hdr-filtered — wahi jo Grid paint karta hai),
+    // count N/M `table_find_badge_label` se; Next/Prev
+    // `pager.bring_into_view` chalata hai (data-row se model-row map karke).
+    // Geometry/typo callee me, yahan koi naya token nahi.
     let mut needle: String = ui
         .data_mut(|data| data.get_temp::<String>(table_find_needle_id()))
         .unwrap_or_default();
     let mut cursor: usize = ui
         .data_mut(|data| data.get_temp::<usize>(table_find_cursor_id()))
         .unwrap_or(0);
+    // Header/data cells grid coords par: `data_cells` hdr-filtered hai
+    // (`paint_table_data_cell` find coords isi par hain), isliye find
+    // matches bhi isi par bante hain (`table_model_text_rows` single-cell
+    // paint text par tha — grid se align nahi tha). Widths + index maps
+    // pure hain (koi paint order change nahi).
+    let header = table_header_cells(model);
+    let data_cells: Vec<Vec<String>> = model
+        .rows
+        .iter()
+        .filter(|row| row.label.trim() != "hdr")
+        .map(|row| split_table_cells(&row.text))
+        .collect();
+    let widths = match header.as_ref() {
+        Some(cells) => views_table::table_column_widths(cells, &data_cells),
+        None => Vec::new(),
+    };
+    let (data_idx_of_row, model_idx_of_data_row) = table_data_index_map(model);
     let old_needle = needle.clone();
-    let mut matches =
-        views_table::table_find_match_rows(&table_model_text_rows(model), &needle, false);
+    let mut matches = views_table::table_find_match_rows(&data_cells, &needle, false);
     let mut total = matches.len();
     if total == 0 {
         cursor = 0;
@@ -1907,7 +1939,7 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     let (find_prev, find_next) = views_table::paint_table_find_bar(ui, &mut needle, &badge);
     if needle != old_needle {
         cursor = 0;
-        matches = views_table::table_find_match_rows(&table_model_text_rows(model), &needle, false);
+        matches = views_table::table_find_match_rows(&data_cells, &needle, false);
         total = matches.len();
     }
     if let Some(next_idx) = find_cursor_step(cursor, total, find_prev, find_next)
@@ -1915,10 +1947,12 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     {
         cursor = next_idx;
         pager.total_rows = model.rows.len();
-        pager.bring_into_view(row);
+        // `matches` grid coords (data-row) me hai; pager `model.rows`
+        // index par chalta hai — reverse map se wapas lao.
+        pager.bring_into_view(model_idx_of_data_row.get(row).copied().unwrap_or(row));
     }
     ui.data_mut(|data| {
-        data.insert_temp(table_find_needle_id(), needle);
+        data.insert_temp(table_find_needle_id(), needle.clone());
         data.insert_temp(table_find_cursor_id(), cursor);
     });
     pager.total_rows = model.rows.len();
@@ -1943,19 +1977,15 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
         if ui.small_button("Next page ▶").clicked() {
             pager.next_page();
         }
-        ui.label(
-            RichText::new(format!(
-                "page {} of {}, showing {} row(s)",
-                pager.top / pager.rows_per_page.max(1) + 1,
-                pager.page_count().max(1),
-                pager
-                    .visible_range()
-                    .1
-                    .saturating_sub(pager.visible_range().0),
-            ))
-            .small()
-            .weak(),
-        );
+        ui.label(TypoRole::Small.rich(format!(
+            "page {} of {}, showing {} row(s)",
+            pager.top / pager.rows_per_page.max(1) + 1,
+            pager.page_count().max(1),
+            pager
+                .visible_range()
+                .1
+                .saturating_sub(pager.visible_range().0),
+        )));
     });
     ui.add_space(TIGHT_GAP);
     // Header bar + cell grid: `hdr` row header banta hai (glyph
@@ -1963,17 +1993,6 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     // (glyph + padded mono cells). Padding/borders
     // `views_table::pad_table_row` se, window existing TablePager se,
     // spacing GEO tokens se; koi naya color/token nahi.
-    let header = table_header_cells(model);
-    let data_cells: Vec<Vec<String>> = model
-        .rows
-        .iter()
-        .filter(|row| row.label.trim() != "hdr")
-        .map(|row| split_table_cells(&row.text))
-        .collect();
-    let widths = match header.as_ref() {
-        Some(cells) => views_table::table_column_widths(cells, &data_cells),
-        None => Vec::new(),
-    };
     if let Some(cells) = header.as_ref() {
         let line = format_table_bordered_row(cells, &widths);
         egui::Grid::new(views_table::TABLE_CELL_HEADER_GRID_ID)
@@ -1983,15 +2002,15 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
                 views_table::TABLE_GRID_ROW_GAP,
             ])
             .show(ui, |ui| {
-                ui.label(RichText::new(views_table::TABLE_CELL_GLYPH_PAD).monospace());
+                ui.label(TypoRole::Mono.rich(views_table::TABLE_CELL_GLYPH_PAD));
                 for cell in views_table::pad_table_row(cells, &widths) {
-                    ui.label(RichText::new(cell).monospace().strong());
+                    ui.label(TypoRole::Mono.rich(cell).strong());
                 }
                 ui.end_row();
             });
         ui.label(
-            RichText::new(indented_content(&format_table_header_rule(line.len())))
-                .monospace()
+            TypoRole::Mono
+                .rich(indented_content(&format_table_header_rule(line.len())))
                 .weak(),
         );
     }
@@ -1999,6 +2018,21 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     let (wstart, wend) = pager.visible_range();
     let wend = wend.min(model.rows.len());
     let count = wend.saturating_sub(wstart);
+    // Cell paint inputs: same mono font + caller panel fill; `fg`
+    // per-row pre-tinted hai (`row.changed` par CHANGED_FG — Plain /
+    // KeyStrong arms caller fg reuse karte hain). `current` grid coords
+    // me hai (`data_cells` par, hdr-filtered).
+    let mono_font = TypoRole::Mono.resolved_font_id(ui.style());
+    let panel_bg = ui.visuals().panel_fill;
+    let current = views_table::table_find_current_cell(&matches, cursor);
+    let find_ctx = views_table::TableCellFindCtx {
+        needle: &needle,
+        ignore_case: false,
+        current,
+    };
+    // Painter overlays (P4) ka origin: pehle painted data cell ka
+    // top-left + uska data-row index (grid origin = cell - idx*stride).
+    let first_cell: std::cell::Cell<Option<(egui::Pos2, usize)>> = std::cell::Cell::new(None);
     if widths.is_empty() {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -2009,7 +2043,7 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
                         break;
                     };
                     ui.set_row_height(row_height);
-                    let mut glyph = RichText::new(row.glyph.to_string()).monospace();
+                    let mut glyph = TypoRole::Mono.rich(row.glyph.to_string());
                     glyph = match row.glyph {
                         '=' => glyph.color(dim_for(dark)),
                         '!' | 'L' => glyph.color(red_for(dark)),
@@ -2018,9 +2052,7 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
                     };
                     ui.horizontal(|ui| {
                         ui.label(glyph);
-                        ui.label(
-                            RichText::new(format!("{} | {}", row.label, row.text)).monospace(),
-                        );
+                        ui.label(TypoRole::Mono.rich(format!("{} | {}", row.label, row.text)));
                     });
                 }
             });
@@ -2029,16 +2061,19 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
-            egui::Grid::new("table_data_grid")
+            egui::Grid::new(views_table::TABLE_CELL_GRID_ID)
                 .num_columns(table_grid_columns(&widths))
-                .spacing([SECTION_GAP, TIGHT_GAP])
+                .spacing([
+                    views_table::TABLE_GRID_COL_GAP,
+                    views_table::TABLE_GRID_ROW_GAP,
+                ])
                 .show(ui, |ui| {
                     for pos in range {
                         let i = wstart.saturating_add(pos);
                         let Some(row) = model.rows.get(i) else {
                             break;
                         };
-                        let mut glyph = RichText::new(row.glyph.to_string()).monospace();
+                        let mut glyph = TypoRole::Mono.rich(row.glyph.to_string());
                         glyph = match row.glyph {
                             '=' => glyph.color(dim_for(dark)),
                             '!' | 'L' => glyph.color(red_for(dark)),
@@ -2046,16 +2081,96 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
                             _ => glyph.color(dim_for(dark)),
                         };
                         ui.label(glyph);
-                        for cell in table_row_cells(&row.text, &widths) {
-                            let mut body = RichText::new(cell).monospace();
-                            if row.changed {
-                                body = body.color(CHANGED_FG);
+                        // Grid coords `data_cells` par hain (hdr-filtered) —
+                        // `model.rows` index `i` NAHI. `paint_table_data_cell`
+                        // isi `(row, col)` par current-hit milata hai.
+                        let data_row_idx = data_idx_of_row.get(i).copied().flatten().unwrap_or(0);
+                        for (col_idx, cell) in
+                            table_row_cells(&row.text, &widths).iter().enumerate()
+                        {
+                            if col_idx == 0 && first_cell.get().is_none() {
+                                first_cell.set(Some((ui.min_rect().min, data_row_idx)));
                             }
-                            ui.label(body);
+                            let fg = if row.changed {
+                                CHANGED_FG
+                            } else {
+                                ui.visuals().text_color()
+                            };
+                            let style = views_table::TableCellStyle {
+                                font: mono_font.clone(),
+                                fg,
+                                bg: panel_bg,
+                            };
+                            views_table::paint_table_data_cell(
+                                ui,
+                                view,
+                                cell,
+                                data_row_idx,
+                                col_idx,
+                                find_ctx,
+                                &style,
+                            );
                         }
                         ui.end_row();
                     }
                 });
+            // Painter overlays (P4): key-col vertical boxes + find-hit
+            // underline strips. Rect math `views_table.rs` pure helpers se,
+            // measure paint-side (`char_w` caller font measure, origin pehle
+            // data cell se) — `views_table.rs` me koi change nahi.
+            if let Some((origin, first_data_idx)) = first_cell.get() {
+                let stride = row_height + views_table::TABLE_GRID_ROW_GAP;
+                let grid = views_table::TableCellGrid {
+                    origin_x: origin.x,
+                    origin_y: origin.y - first_data_idx as f32 * stride,
+                    row_h: row_height,
+                    col_gap: views_table::TABLE_GRID_COL_GAP,
+                    row_gap: views_table::TABLE_GRID_ROW_GAP,
+                };
+                let char_w = ui
+                    .ctx()
+                    .fonts_mut(|fonts| fonts.glyph_width(&mono_font, 'M'));
+                let col_widths_px: Vec<f32> = widths.iter().map(|w| char_w * (*w as f32)).collect();
+                let overlay_fg = ui.visuals().text_color();
+                for box_rect in
+                    views_table::table_key_box_rects(view, grid, &col_widths_px, data_cells.len())
+                {
+                    ui.painter().rect_stroke(
+                        egui::Rect::from_min_size(
+                            egui::pos2(box_rect.x, box_rect.y),
+                            egui::vec2(box_rect.w, box_rect.h),
+                        ),
+                        egui::CornerRadius::ZERO,
+                        egui::Stroke::new(views_table::TABLE_FIND_UNDERLINE_W, overlay_fg),
+                        egui::StrokeKind::Middle,
+                    );
+                }
+                for (row, col, start, end) in
+                    views_table::table_find_grid_spans(&data_cells, &needle, false)
+                {
+                    if let Some(cell) = views_table::table_cell_rect(grid, col, row, &col_widths_px)
+                    {
+                        let width_chars = widths
+                            .get(col)
+                            .copied()
+                            .unwrap_or(views_table::TABLE_MIN_COL_CHARS);
+                        for underline in views_table::table_find_underline_rects_for_cell(
+                            cell,
+                            &[(start, end)],
+                            width_chars,
+                            char_w,
+                        ) {
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(underline.x, underline.y),
+                                    egui::pos2(underline.x + underline.w, underline.y),
+                                ],
+                                egui::Stroke::new(views_table::TABLE_FIND_UNDERLINE_W, overlay_fg),
+                            );
+                        }
+                    }
+                }
+            }
         });
 }
 
@@ -2066,19 +2181,14 @@ pub fn paint_error(ui: &mut Ui, message: &str) {
     frame.fill = ERROR_BG;
     frame.show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.label(
-                RichText::new("error:")
-                    .monospace()
-                    .strong()
-                    .color(DELETED_FG),
-            );
+            ui.label(TypoRole::Mono.rich("error:").strong().color(DELETED_FG));
             ui.label(RichText::new(message).color(DELETED_FG));
         });
     });
 }
 
 fn paint_note(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).small().weak());
+    ui.label(TypoRole::Small.rich(text));
 }
 
 // ----------------------------------------------------------------------------
@@ -2207,7 +2317,7 @@ fn paint_text_body(
             nav_action = Some(true);
         }
         ui.separator();
-        ui.label(RichText::new("Show:").small().weak());
+        ui.label(TypoRole::Small.rich("Show:"));
         ui.selectable_value(&mut model.filter, viewmodel::TextFilter::All, "All");
         ui.selectable_value(
             &mut model.filter,
@@ -2233,7 +2343,7 @@ fn paint_text_body(
         // alag na lage, row ke end par ek pad ke saath chipka rehta hai.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(BADGE_PAD);
-            ui.label(RichText::new(nav_badge.as_str()).small().weak());
+            ui.label(TypoRole::Small.rich(nav_badge.as_str()));
         });
     });
 
@@ -2281,16 +2391,12 @@ fn paint_text_body(
         Some(i) => format!("selected row {i}"),
         None => "no selection".to_string(),
     };
-    ui.label(
-        RichText::new(format!(
-            "{} rows ({} shown): {} diffs, {} same | {selected_text}",
-            counts.total, counts.shown, counts.diffs, counts.sames
-        ))
-        .small()
-        .weak(),
-    );
+    ui.label(TypoRole::Small.rich(format!(
+        "{} rows ({} shown): {} diffs, {} same | {selected_text}",
+        counts.total, counts.shown, counts.diffs, counts.sames
+    )));
 
-    let font_id = egui::TextStyle::Monospace.resolve(ui.style());
+    let font_id = TypoRole::Mono.resolved_font_id(ui.style());
     let row_height = row_height_for_line(text_row_height(ui));
     let base_text = ui.style().visuals.text_color();
     let dark = ui.visuals().dark_mode;
@@ -2458,7 +2564,7 @@ fn paint_text_body(
                                 if sub == 0 {
                                     ui.horizontal(|ui| {
                                         if is_selected {
-                                            ui.label(RichText::new("▶").monospace().strong());
+                                            ui.label(TypoRole::Mono.rich("▶").strong());
                                         } else if ui.small_button("·").clicked() {
                                             select_action = Some(orig);
                                         }
@@ -2485,9 +2591,7 @@ fn paint_text_body(
                                                 ));
                                             }
                                         } else {
-                                            ui.label(
-                                                RichText::new(" | ").monospace().color(gutter_dim),
-                                            );
+                                            ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
                                         }
                                         ui.label(right_job);
                                         let do_scroll = want_scroll && sub == scroll_sub;
@@ -2501,14 +2605,10 @@ fn paint_text_body(
                                 } else {
                                     ui.horizontal(|ui| {
                                         ui.label(
-                                            RichText::new(CONTENT_LEAD)
-                                                .monospace()
-                                                .color(gutter_dim),
+                                            TypoRole::Mono.rich(CONTENT_LEAD).color(gutter_dim),
                                         );
                                         ui.label(left_job);
-                                        ui.label(
-                                            RichText::new(" | ").monospace().color(gutter_dim),
-                                        );
+                                        ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
                                         ui.label(right_job);
                                         if want_scroll && sub == scroll_sub {
                                             ui.scroll_to_rect(
@@ -2538,7 +2638,7 @@ fn paint_text_body(
                             let is_selected = model.selected == Some(orig);
                             ui.horizontal(|ui| {
                                 if is_selected {
-                                    ui.label(RichText::new("▶").monospace().strong());
+                                    ui.label(TypoRole::Mono.rich("▶").strong());
                                 } else if ui.small_button("·").clicked() {
                                     select_action = Some(orig);
                                 }
@@ -2595,7 +2695,7 @@ fn paint_text_body(
                                             Some((orig, viewmodel::CopyDirection::RightToLeft));
                                     }
                                 } else {
-                                    ui.label(RichText::new(" | ").monospace().color(gutter_dim));
+                                    ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
                                 }
 
                                 let right_job = if let Some(fr) = find_row {
@@ -4099,32 +4199,28 @@ pub fn paint_folder(
         if ui.small_button("Next page ▶").clicked() {
             pager.next_page();
         }
-        ui.label(
-            RichText::new(format!(
-                "page {} of {}, showing {} row(s)",
-                pager.top / pager.rows_per_page.max(1) + 1,
-                pager.page_count().max(1),
-                pager
-                    .visible_range()
-                    .1
-                    .saturating_sub(pager.visible_range().0),
-            ))
-            .small()
-            .weak(),
-        );
+        ui.label(TypoRole::Small.rich(format!(
+            "page {} of {}, showing {} row(s)",
+            pager.top / pager.rows_per_page.max(1) + 1,
+            pager.page_count().max(1),
+            pager
+                .visible_range()
+                .1
+                .saturating_sub(pager.visible_range().0),
+        )));
     });
     ui.add_space(TIGHT_GAP);
     // Column header: tree col defs se (`folder_header_line`), mono
     // weak — path flex, sides fixed widths par padded. Rule table
     // header jaisi (`indented_content` lead + `-` line), GEO reuse.
     let folder_header = crate::tree::folder_header_line();
-    ui.label(RichText::new(folder_header.clone()).monospace().weak());
+    ui.label(TypoRole::Mono.rich(folder_header.clone()).weak());
     ui.label(
-        RichText::new(indented_content(&format_table_header_rule(
-            folder_header.len(),
-        )))
-        .monospace()
-        .weak(),
+        TypoRole::Mono
+            .rich(indented_content(&format_table_header_rule(
+                folder_header.len(),
+            )))
+            .weak(),
     );
     let row_height = row_height_for_line(text_row_height(ui));
     let dark = ui.visuals().dark_mode;
@@ -4435,19 +4531,15 @@ pub fn paint_folder_sync(
         if ui.small_button("Next page ▶").clicked() {
             pager.next_page();
         }
-        ui.label(
-            RichText::new(format!(
-                "page {} of {}, showing {} row(s)",
-                pager.top / pager.rows_per_page.max(1) + 1,
-                pager.page_count().max(1),
-                pager
-                    .visible_range()
-                    .1
-                    .saturating_sub(pager.visible_range().0),
-            ))
-            .small()
-            .weak(),
-        );
+        ui.label(TypoRole::Small.rich(format!(
+            "page {} of {}, showing {} row(s)",
+            pager.top / pager.rows_per_page.max(1) + 1,
+            pager.page_count().max(1),
+            pager
+                .visible_range()
+                .1
+                .saturating_sub(pager.visible_range().0),
+        )));
     });
     ui.add_space(TIGHT_GAP);
     // Header grid row: glyph khali + badge `S` + data headers, mono
@@ -4629,9 +4721,7 @@ pub fn paint_folder_dual(
 ) {
     ui.label(chrome_status_role().rich(summary));
     ui.label(
-        RichText::new("dual-tree preview: per-row actions stub hain, koi file nahi badalti")
-            .small()
-            .weak(),
+        TypoRole::Small.rich("dual-tree preview: per-row actions stub hain, koi file nahi badalti"),
     );
     ui.add_space(TIGHT_GAP);
     if rows.is_empty() {
@@ -4660,20 +4750,16 @@ pub fn paint_folder_dual(
         if ui.small_button("Next page ▶").clicked() {
             state.pager.next_page();
         }
-        ui.label(
-            RichText::new(format!(
-                "page {} of {}, showing {} row(s)",
-                state.pager.top / state.pager.rows_per_page.max(1) + 1,
-                state.pager.page_count().max(1),
-                state
-                    .pager
-                    .visible_range()
-                    .1
-                    .saturating_sub(state.pager.visible_range().0),
-            ))
-            .small()
-            .weak(),
-        );
+        ui.label(TypoRole::Small.rich(format!(
+            "page {} of {}, showing {} row(s)",
+            state.pager.top / state.pager.rows_per_page.max(1) + 1,
+            state.pager.page_count().max(1),
+            state
+                .pager
+                .visible_range()
+                .1
+                .saturating_sub(state.pager.visible_range().0),
+        )));
     });
     ui.add_space(TIGHT_GAP);
     *split = clamp_split_fraction(*split);
@@ -4811,11 +4897,7 @@ pub fn paint_folder_dual(
     if let Some((action, path)) = pending {
         ui.add_space(TIGHT_GAP);
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(dual_pending_text(action, &path))
-                    .small()
-                    .weak(),
-            );
+            ui.label(TypoRole::Small.rich(dual_pending_text(action, &path)));
             if ui.small_button("Clear").clicked() {
                 state.clear_action();
             }
@@ -4992,7 +5074,7 @@ pub fn paint_picture_compare(
     ui.label(chrome_status_role().rich(picture_status_line(model)));
     ui.add_space(TIGHT_GAP);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Layout:").small().weak());
+        ui.label(TypoRole::Small.rich("Layout:"));
         let mut mode = view.mode;
         for candidate in PictureMode::all() {
             ui.radio_value(&mut mode, candidate, candidate.label());
@@ -5010,46 +5092,34 @@ pub fn paint_picture_compare(
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(left_w);
-                    ui.label(RichText::new("left").small().weak());
+                    ui.label(TypoRole::Small.rich("left"));
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_l, model.height_l)).monospace(),
                     );
                     ui.add_space(tree_indent(1));
-                    ui.label(
-                        RichText::new(format!(
-                            "overlap {}x{} ({} px)",
-                            model.overlap_w, model.overlap_h, model.total
-                        ))
-                        .small()
-                        .weak(),
-                    );
+                    ui.label(TypoRole::Small.rich(format!(
+                        "overlap {}x{} ({} px)",
+                        model.overlap_w, model.overlap_h, model.total
+                    )));
                 });
                 paint_split_handle(ui, split, avail);
                 ui.vertical(|ui| {
                     ui.set_width(right_w);
-                    ui.label(RichText::new("right").small().weak());
+                    ui.label(TypoRole::Small.rich("right"));
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_r, model.height_r)).monospace(),
                     );
                     ui.add_space(tree_indent(1));
-                    ui.label(
-                        RichText::new(if model.identical {
-                            "verdict: identical".to_string()
-                        } else {
-                            format!("differing: {}", model.differing)
-                        })
-                        .small()
-                        .weak(),
-                    );
+                    ui.label(TypoRole::Small.rich(if model.identical {
+                        "verdict: identical".to_string()
+                    } else {
+                        format!("differing: {}", model.differing)
+                    }));
                 });
             });
         }
         PictureMode::Overlay => {
-            ui.label(
-                RichText::new("overlay: heatmap frame, slider blends sides")
-                    .small()
-                    .weak(),
-            );
+            ui.label(TypoRole::Small.rich("overlay: heatmap frame, slider blends sides"));
             let mut mix = clamp_overlay_mix(view.overlay_mix);
             let mix_text = overlay_label(mix);
             ui.add(egui::Slider::new(&mut mix, 0..=crate::app::PICTURE_OVERLAY_MAX).text(mix_text));
@@ -7499,6 +7569,39 @@ mod tests {
         assert_eq!(views_table::TABLE_GRID_ROW_GAP, TIGHT_GAP);
         assert_eq!(views_table::TABLE_CELL_GLYPH_PAD, CONTENT_LEAD);
         assert_eq!(views_table::TABLE_CELL_GLYPH_PAD, "  ");
+    }
+
+    #[test]
+    fn tablep34_data_index_map_skips_header_rows() {
+        // P3 grid coords `data_cells` (hdr-filtered) par hain: hdr rows
+        // `None`, data rows grid order me; reverse map pager (`model.rows`
+        // index) par wapas laata hai.
+        let model = TableModel {
+            rows: vec![
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: "hdr".to_string(),
+                    text: "ID | Price".to_string(),
+                    changed: false,
+                },
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: "   1".to_string(),
+                    text: "1 | 9.99".to_string(),
+                    changed: false,
+                },
+                crate::viewmodel::TableRow {
+                    glyph: '!',
+                    label: "   2".to_string(),
+                    text: "2 | 1.50".to_string(),
+                    changed: true,
+                },
+            ],
+            truncated: false,
+        };
+        let (fwd, rev) = table_data_index_map(&model);
+        assert_eq!(fwd, vec![None, Some(0), Some(1)]);
+        assert_eq!(rev, vec![1, 2]);
     }
 
     #[test]

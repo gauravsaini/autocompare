@@ -1,0 +1,5 @@
+ M crates/gui/src/views.rs
+?? checks/gui-tablep34typo-bb/
+ crates/gui/src/views.rs | 559 ++++++++++++++++++++++++++++--------------------
+ 1 file changed, 331 insertions(+), 228 deletions(-)
+OWNS-CLEAN
