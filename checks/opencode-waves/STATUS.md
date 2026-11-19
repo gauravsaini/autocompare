@@ -50,3 +50,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Collision self-resolving: TextFilter enum now defined at viewmodel.rs:383 (text agent). Folder agent on fmt-check of own files. No interrupt needed.
 - Shell agent writing tests (status-bar asserts in log). All 3 alive, logs growing.
 - Local-run report.md unstaged edits gone with no new commit — left alone (agent OWNS).
+
+## Poll 07
+- Git state confirmed sane: 1d2ae61 touches only checks/local-run/run-proof.md (+153, inside agent OWNS) — pushed.
+- Folder agent: 84 tests green (baseline was 57, +27 new). Land approaching.
+- Text agent writing viewmodel tests; shell agent in screenshot code.
