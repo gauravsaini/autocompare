@@ -470,3 +470,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 06 C landed A/B wiring
 - C dab07ad landed+pushed (verify REPORT 2686B, OWNS clean). C done.
 - A+B live. M main/gutter/viewmodel. A wiring diffs, B viewmodel tests. No A/B commits yet. Wait.
+
+## Wave I poll 07 both writing disjoint holds
+- A+B live. M main(A) + gutter/tree/viewmodel(B), no overlap. Diff 894+ lines. A wiring, B pure models.
+- No commits yet. Wait.
