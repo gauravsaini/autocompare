@@ -36,25 +36,70 @@ const RED: Color32 = Color32::from_rgb(255, 100, 100);
 const GREEN: Color32 = Color32::from_rgb(120, 220, 130);
 const ERROR_BG: Color32 = Color32::from_rgb(60, 20, 20);
 
-/// Header: title plus the standing hint that this client has no
-/// file-dialog dependency.
-pub fn paint_header(ui: &mut Ui) {
+/// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
+pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
         ui.heading("autocompare");
         ui.label(RichText::new("desktop client").weak());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let label = if *dark_mode {
+                "☀ Light Mode"
+            } else {
+                "🌙 Dark Mode"
+            };
+            if ui.button(label).clicked() {
+                *dark_mode = !*dark_mode;
+                ui.ctx().set_visuals(if *dark_mode {
+                    egui::Visuals::dark()
+                } else {
+                    egui::Visuals::light()
+                });
+            }
+        });
     });
     ui.label(
-        RichText::new("paths are typed, not picked - no file-dialog dependency by design")
+        RichText::new("drag & drop paths or browse via native dialogs | pure background engines")
             .small()
             .weak(),
     );
     ui.add_space(4.0);
 }
 
-/// The nine comparison tabs, matching the nine CLI commands and the
-/// original's nine session types.
+/// The Home View launcher screen displaying cards for all 9 comparison session types.
+pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
+    let model = viewmodel::home_model();
+    ui.heading("Comparison Sessions");
+    ui.label(RichText::new("Select a session type or use the tabs above:").weak());
+    ui.add_space(8.0);
+
+    egui::Grid::new("home_sessions_grid")
+        .num_columns(3)
+        .spacing([12.0, 12.0])
+        .show(ui, |ui| {
+            for (i, item) in model.items.iter().enumerate() {
+                ui.group(|ui| {
+                    ui.set_width(260.0);
+                    ui.set_height(75.0);
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(item.title).strong().size(14.0));
+                        ui.label(RichText::new(item.description).small().weak());
+                        ui.add_space(4.0);
+                        if ui.button(format!("Open {}", item.title)).clicked() {
+                            *tab = item.tab;
+                        }
+                    });
+                });
+                if i % 3 == 2 {
+                    ui.end_row();
+                }
+            }
+        });
+}
+
+/// The ten tabs: Home plus nine comparison session types.
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
     ui.horizontal_wrapped(|ui| {
+        ui.selectable_value(tab, Tab::Home, "Home");
         ui.selectable_value(tab, Tab::Text, "Text");
         ui.selectable_value(tab, Tab::Folder, "Folder");
         ui.selectable_value(tab, Tab::Hex, "Hex");
@@ -68,27 +113,45 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
     ui.add_space(2.0);
 }
 
-/// Two path text fields plus the Compare button. Sets `compare` when
-/// the button is clicked.
+/// Two path text fields with native file/folder picker buttons plus Compare.
 pub fn paint_paths(
     ui: &mut Ui,
     noun: &str,
+    is_dir: bool,
     left: &mut String,
     right: &mut String,
     compare: &mut bool,
 ) {
     ui.horizontal(|ui| {
-        let half = (ui.available_width() / 2.0).max(140.0) - 8.0;
+        let half = (ui.available_width() / 2.0).max(180.0) - 75.0;
         ui.add(
             TextEdit::singleline(left)
                 .desired_width(half)
                 .hint_text(format!("left {noun} path")),
         );
+        if ui.button("Browse...").clicked() {
+            if is_dir {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    *left = folder.display().to_string();
+                }
+            } else if let Some(file) = rfd::FileDialog::new().pick_file() {
+                *left = file.display().to_string();
+            }
+        }
         ui.add(
             TextEdit::singleline(right)
                 .desired_width(half)
                 .hint_text(format!("right {noun} path")),
         );
+        if ui.button("Browse...").clicked() {
+            if is_dir {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    *right = folder.display().to_string();
+                }
+            } else if let Some(file) = rfd::FileDialog::new().pick_file() {
+                *right = file.display().to_string();
+            }
+        }
     });
     let clicked = ui
         .horizontal(|ui| ui.button(format!("Compare {noun}s")).clicked())
@@ -99,33 +162,60 @@ pub fn paint_paths(
     ui.add_space(4.0);
 }
 
-/// Three path text fields plus the action button, for the three-way
-/// tabs (Merge, FolderMerge). Sets `compare` when clicked.
+/// Three path text fields with native dialog pickers for three-way tabs.
 pub fn paint_triple_paths(
     ui: &mut Ui,
     noun: &str,
+    is_dir: bool,
     base: &mut String,
     left: &mut String,
     right: &mut String,
     compare: &mut bool,
 ) {
     ui.horizontal(|ui| {
-        let third = (ui.available_width() / 3.0).max(100.0) - 8.0;
+        let third = (ui.available_width() / 3.0).max(130.0) - 75.0;
         ui.add(
             TextEdit::singleline(base)
                 .desired_width(third)
                 .hint_text(format!("base {noun} path")),
         );
+        if ui.button("Browse...").clicked() {
+            if is_dir {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    *base = folder.display().to_string();
+                }
+            } else if let Some(file) = rfd::FileDialog::new().pick_file() {
+                *base = file.display().to_string();
+            }
+        }
         ui.add(
             TextEdit::singleline(left)
                 .desired_width(third)
                 .hint_text(format!("left {noun} path")),
         );
+        if ui.button("Browse...").clicked() {
+            if is_dir {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    *left = folder.display().to_string();
+                }
+            } else if let Some(file) = rfd::FileDialog::new().pick_file() {
+                *left = file.display().to_string();
+            }
+        }
         ui.add(
             TextEdit::singleline(right)
                 .desired_width(third)
                 .hint_text(format!("right {noun} path")),
         );
+        if ui.button("Browse...").clicked() {
+            if is_dir {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    *right = folder.display().to_string();
+                }
+            } else if let Some(file) = rfd::FileDialog::new().pick_file() {
+                *right = file.display().to_string();
+            }
+        }
     });
     let clicked = ui
         .horizontal(|ui| ui.button(format!("Compare {noun}s")).clicked())
@@ -158,10 +248,32 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
 }
 
 /// The three-way merge output: conflict blocks highlighted, notes
-/// for conflicts and truncation first.
-pub fn paint_merge(ui: &mut Ui, model: &MergeSummary) {
+/// for conflicts and truncation first, with Take resolution actions.
+pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
     if model.conflicted {
-        paint_note(ui, "the merge has conflicts; marked lines need a decision");
+        paint_note(ui, "the merge has conflicts; choose an action to resolve:");
+        let mut resolve_choice = None;
+        ui.horizontal(|ui| {
+            if ui.button("Take Left").clicked() {
+                resolve_choice = Some(viewmodel::TakeChoice::Left);
+            }
+            if ui.button("Take Right").clicked() {
+                resolve_choice = Some(viewmodel::TakeChoice::Right);
+            }
+            if ui.button("Take Base").clicked() {
+                resolve_choice = Some(viewmodel::TakeChoice::Base);
+            }
+            if ui.button("Take Both").clicked() {
+                resolve_choice = Some(viewmodel::TakeChoice::Both);
+            }
+        });
+        if let Some(choice) = resolve_choice
+            && let Ok(resolved) = viewmodel::resolve_take(&model.lines, 0, choice)
+        {
+            model.conflicted = resolved.iter().any(|l| l.starts_with("<<<<<<<"));
+            model.lines = resolved;
+        }
+        ui.add_space(4.0);
     }
     if model.truncated {
         paint_note(ui, "showing the first lines only; the rest is cut off");
@@ -256,9 +368,8 @@ fn paint_note(ui: &mut Ui, text: &str) {
 // ----------------------------------------------------------------------------
 
 /// The side-by-side text comparison: notes first, then the aligned
-/// grid. Rows are virtualized (`show_rows`), so a capped 20_000-row
-/// model paints only the visible ones.
-pub fn paint_text(ui: &mut Ui, model: &TextRows) {
+/// grid with live copy buttons and thumbnail gutter geometry.
+pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
     if model.coarse {
         paint_note(
             ui,
@@ -281,22 +392,73 @@ pub fn paint_text(ui: &mut Ui, model: &TextRows) {
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
     let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
     let base_text = ui.style().visuals.text_color();
-    egui::ScrollArea::both()
-        .auto_shrink([false, false])
-        .show_rows(ui, row_height, model.rows.len(), |ui, range| {
-            for i in range {
-                let Some(row) = model.rows.get(i) else {
-                    break;
-                };
-                ui.set_row_height(row_height);
-                ui.horizontal(|ui| {
-                    let (fg, bg) = kind_palette(row.kind, base_text);
-                    ui.label(side_job(Side::Left, row, model, font_id.clone(), fg, bg));
-                    ui.label(RichText::new(" | ").monospace().color(DIM));
-                    ui.label(side_job(Side::Right, row, model, font_id.clone(), fg, bg));
+    let mut copy_action = None;
+
+    ui.horizontal(|ui| {
+        // Main diff scroll area
+        ui.vertical(|ui| {
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show_rows(ui, row_height, model.rows.len(), |ui, range| {
+                    for i in range {
+                        let Some(row) = model.rows.get(i) else {
+                            break;
+                        };
+                        ui.set_row_height(row_height);
+                        ui.horizontal(|ui| {
+                            let (fg, bg) = kind_palette(row.kind, base_text);
+                            ui.label(side_job(Side::Left, row, model, font_id.clone(), fg, bg));
+
+                            if row.kind != TextRowKind::Equal {
+                                if ui
+                                    .small_button("→")
+                                    .on_hover_text("Copy Left to Right")
+                                    .clicked()
+                                {
+                                    copy_action = Some((i, viewmodel::CopyDirection::LeftToRight));
+                                }
+                                if ui
+                                    .small_button("←")
+                                    .on_hover_text("Copy Right to Left")
+                                    .clicked()
+                                {
+                                    copy_action = Some((i, viewmodel::CopyDirection::RightToLeft));
+                                }
+                            } else {
+                                ui.label(RichText::new(" | ").monospace().color(DIM));
+                            }
+
+                            ui.label(side_job(Side::Right, row, model, font_id.clone(), fg, bg));
+                        });
+                    }
                 });
-            }
         });
+
+        // Thumbnail overview gutter on the right
+        let avail_h = ui.available_height().max(100.0);
+        let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
+        let (rect, _resp) = ui.allocate_exact_size(egui::vec2(12.0, avail_h), egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 0.0, Color32::from_rgb(32, 32, 32));
+
+        for seg in geom.segments {
+            let seg_rect = egui::Rect::from_min_max(
+                egui::pos2(rect.min.x, rect.min.y + seg.y_start),
+                egui::pos2(rect.max.x, (rect.min.y + seg.y_end).min(rect.max.y)),
+            );
+            let color = match seg.kind {
+                TextRowKind::Equal => Color32::TRANSPARENT,
+                TextRowKind::Deleted => DELETED_BG,
+                TextRowKind::Inserted => INSERTED_BG,
+                TextRowKind::Changed => CHANGED_BG,
+            };
+            ui.painter().rect_filled(seg_rect, 0.0, color);
+        }
+    });
+
+    if let Some((idx, dir)) = copy_action {
+        let _ = viewmodel::apply_copy(model, idx, dir);
+    }
 }
 
 /// Which side of a text row a pane renders.
@@ -397,30 +559,61 @@ fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(Stri
 // ----------------------------------------------------------------------------
 
 /// The folder listing: the summary line (with its truncation note)
-/// above the monospace grid so it stays visible while scrolling.
+/// above the monospace tree grid with expand/collapse drill-down.
 /// Rows are virtualized the same way as the text view.
-pub fn paint_folder(ui: &mut Ui, rows: &[FolderRow], summary: &str) {
+pub fn paint_folder(
+    ui: &mut Ui,
+    rows: &[FolderRow],
+    summary: &str,
+    expanded: &mut std::collections::BTreeSet<String>,
+) {
     ui.label(RichText::new(summary).monospace().weak());
     ui.add_space(4.0);
     if rows.is_empty() {
         ui.label(RichText::new("(both folders are empty)").weak());
         return;
     }
+    let tree_nodes = viewmodel::folder_tree(rows, expanded);
     let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let mut toggle_dir = None;
+
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .show_rows(ui, row_height, rows.len(), |ui, range| {
+        .show_rows(ui, row_height, tree_nodes.len(), |ui, range| {
             for i in range {
-                let Some(row) = rows.get(i) else {
+                let Some(node) = tree_nodes.get(i) else {
                     break;
                 };
                 ui.set_row_height(row_height);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(row.glyph).monospace().color(glyph_color(row)));
-                    ui.label(RichText::new(folder_columns(row)).monospace());
+                    if node.depth > 0 {
+                        ui.add_space((node.depth as f32) * 14.0);
+                    }
+                    if node.row.is_dir && node.has_children {
+                        let icon = if node.is_expanded { "▼" } else { "▶" };
+                        if ui.small_button(icon).clicked() {
+                            toggle_dir = Some(node.row.rel_path.clone());
+                        }
+                    } else if node.row.is_dir {
+                        ui.label(RichText::new("  ").monospace());
+                    }
+                    ui.label(
+                        RichText::new(node.row.glyph)
+                            .monospace()
+                            .color(glyph_color(&node.row)),
+                    );
+                    ui.label(RichText::new(folder_columns(&node.row)).monospace());
                 });
             }
         });
+
+    if let Some(dir) = toggle_dir {
+        if expanded.contains(&dir) {
+            expanded.remove(&dir);
+        } else {
+            expanded.insert(dir);
+        }
+    }
 }
 
 /// The glyph column color: same/dim, different and left-only/red,

@@ -1,0 +1,218 @@
+//! CLI argument models and subcommands for autocompare.
+//!
+//! Defines the clap-derived command hierarchy supporting all 9 comparison
+//! subcommands, VCS flags, and reporting parameters.
+
+use clap::{Parser, Subcommand};
+
+/// When to emit ANSI color sequences in output.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ColorWhen {
+    /// Detect terminal capability automatically.
+    #[default]
+    Auto,
+    /// Force ANSI color sequences on.
+    Always,
+    /// Suppress all ANSI color sequences.
+    Never,
+}
+
+/// Direction for folder synchronization.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SyncDir {
+    /// Copy left-side content over the right side.
+    #[default]
+    L2r,
+    /// Copy right-side content over the left side.
+    R2l,
+    /// Copy whichever side is newer over the older one.
+    Newer,
+}
+
+/// Command line options for autocompare and bcomp compat mode.
+#[derive(Parser, Debug, Clone)]
+#[command(
+    name = "autocompare",
+    version,
+    about = "Compare text, folders and bytes, and merge three ways",
+    disable_help_subcommand = true
+)]
+pub struct Cli {
+    /// When to color output.
+    #[arg(long, value_enum, default_value_t = ColorWhen::Auto, global = true)]
+    pub color: ColorWhen,
+
+    /// Generate comparison report: format:path (html, text, xml, patch).
+    #[arg(long, global = true)]
+    pub report: Option<String>,
+
+    /// Read-only mode for VCS tools and sessions.
+    #[arg(long, global = true)]
+    pub ro: bool,
+
+    /// Automatically merge when there are no conflicts.
+    #[arg(long, global = true)]
+    pub automerge: bool,
+
+    /// Output destination path for 3-way merge results.
+    #[arg(long, global = true)]
+    pub mergeoutput: Option<String>,
+
+    /// VCS input 1 alias (typically left/local).
+    #[arg(long, global = true)]
+    pub vcs1: Option<String>,
+
+    /// VCS input 2 alias (typically right/remote).
+    #[arg(long, global = true)]
+    pub vcs2: Option<String>,
+
+    /// VCS input 3 alias (typically base/ancestor).
+    #[arg(long, global = true)]
+    pub vcs3: Option<String>,
+
+    /// VCS input 4 alias (typically output/merged).
+    #[arg(long, global = true)]
+    pub vcs4: Option<String>,
+
+    /// Path to a session document to load and execute.
+    #[arg(long, global = true)]
+    pub session: Option<String>,
+
+    /// Save the current comparison session configuration to path.
+    #[arg(long, global = true)]
+    pub save_session: Option<String>,
+
+    /// Comparison subcommand to run.
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+/// Comparison and merge subcommands.
+#[derive(Subcommand, Debug, Clone)]
+pub enum Command {
+    /// Compare two text files line by line, side by side.
+    Text {
+        /// Left file path.
+        left: String,
+        /// Right file path.
+        right: String,
+        /// Ignore differences in letter case.
+        #[arg(long)]
+        ignore_case: bool,
+        /// Ignore whitespace differences inside lines.
+        #[arg(long)]
+        ignore_space_change: bool,
+        /// Print a unified diff instead of side-by-side.
+        #[arg(long)]
+        unified: bool,
+        /// Total width of the side-by-side view.
+        #[arg(long, default_value_t = 80)]
+        width: usize,
+    },
+    /// Compare two folder trees recursively by size and modified time.
+    Folder {
+        /// Left folder path.
+        left: String,
+        /// Right folder path.
+        right: String,
+        /// Also compare file bytes, not only size and modified time.
+        #[arg(long)]
+        content: bool,
+        /// Match file names case-insensitively.
+        #[arg(long)]
+        ignore_case: bool,
+        /// Only walk this many levels deep.
+        #[arg(long, default_value_t = 32)]
+        depth: usize,
+        /// Only compare names matching this simple glob ('*' and '?').
+        #[arg(long)]
+        include: Option<String>,
+        /// Skip names matching this simple glob ('*' and '?').
+        #[arg(long)]
+        exclude: Option<String>,
+    },
+    /// Compare two files byte by byte.
+    Hex {
+        /// Left file path.
+        left: String,
+        /// Right file path.
+        right: String,
+        /// Show at most this many differing runs.
+        #[arg(long, default_value_t = 50)]
+        max_hunks: usize,
+    },
+    /// Merge two files that share a common base version.
+    Merge {
+        /// The common ancestor version.
+        base: String,
+        /// The left (ours) version.
+        left: String,
+        /// The right (theirs) version.
+        right: String,
+        /// Write the merge result to this file instead of standard output.
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Compare two delimited (CSV-style) tables cell by cell.
+    Table {
+        /// Left file path.
+        left: String,
+        /// Right file path.
+        right: String,
+        /// Field delimiter.
+        #[arg(long, default_value_t = ',')]
+        delimiter: char,
+        /// Treat the first row as data, not a header.
+        #[arg(long)]
+        no_header: bool,
+    },
+    /// Plan (and optionally apply) a folder sync.
+    Sync {
+        /// Left folder path.
+        left: String,
+        /// Right folder path.
+        right: String,
+        /// Which side wins.
+        #[arg(long, value_enum, default_value_t = SyncDir::L2r)]
+        direction: SyncDir,
+        /// Delete one-sided entries on the losing side.
+        #[arg(long)]
+        prune: bool,
+        /// Execute the plan (default is a dry run).
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Compare two PNG images pixel by pixel.
+    Picture {
+        /// Left file path.
+        left: String,
+        /// Right file path.
+        right: String,
+        /// Write a heatmap PNG to this path.
+        #[arg(long)]
+        heatmap: Option<String>,
+    },
+    /// Plan (and optionally apply) a three-way folder merge.
+    #[command(name = "folder-merge")]
+    FolderMerge {
+        /// The common ancestor tree.
+        base: String,
+        /// The left (ours) tree.
+        left: String,
+        /// The right (theirs) tree.
+        right: String,
+        /// Directory to write the merged tree to (required with --apply).
+        #[arg(long)]
+        output: Option<String>,
+        /// Execute the plan into --output (default is a dry run).
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Compare two audio files (WAV, MP3) sample by sample.
+    Audio {
+        /// Left file path.
+        left: String,
+        /// Right file path.
+        right: String,
+    },
+}

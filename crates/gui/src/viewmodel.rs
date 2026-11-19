@@ -16,6 +16,22 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// ponytail: re-export modular headless helpers for Home, gutter, copy, Take, tree, and theme contrast
+#[allow(unused_imports)]
+pub use crate::copy::{CopyDirection, CopyError, apply_copy};
+#[allow(unused_imports)]
+pub use crate::gutter::{GutterGeometry, GutterSegment, gutter_geometry};
+#[allow(unused_imports)]
+pub use crate::home::{HomeItem, HomeModel, Tab, home_model};
+#[allow(unused_imports)]
+pub use crate::take::{TakeChoice, TakeError, resolve_take};
+#[allow(unused_imports)]
+pub use crate::theme::{
+    relative_luminance, theme_contrast_ok, theme_contrast_ratio, theme_mode_contrast_ok,
+};
+#[allow(unused_imports)]
+pub use crate::tree::{FolderTreeNode, folder_tree};
+
 use autocompare_compare::{
     BinaryComparison, FolderComparison, FolderStatus, SyncAction, SyncPlan, TableComparison,
     TextComparison, TreeMergeAction, TreeMergePlan,
