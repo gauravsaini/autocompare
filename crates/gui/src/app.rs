@@ -2089,6 +2089,30 @@ impl App {
         }
     }
 
+    /// Rows-aware empty state: identical folders `AllSame` dete hain
+    /// (glyph-blind legacy `folder_empty_state` prune/all-same me farak
+    /// nahi karta). Paint-adoption par paint isi ko padhe.
+    pub fn folder_empty_state_full_rows(&self) -> Option<tree::FolderEmptyState> {
+        match self.folder_rows() {
+            Some(rows) => {
+                let visible = self.folder_session.visible_tree(rows).len();
+                tree::folder_empty_state_full_rows(
+                    true,
+                    rows,
+                    visible,
+                    &self.folder_session.display,
+                )
+            }
+            None => Some(tree::FolderEmptyState::NoResults),
+        }
+    }
+
+    /// Rows-aware hint line: `folder_empty_state_full_rows` ka paint roop.
+    /// Identical par "all same, nothing to sync", warna legacy line.
+    pub fn folder_empty_hint_full_rows(&self) -> &'static str {
+        tree::folder_empty_hint(self.folder_empty_state_full_rows())
+    }
+
     /// Rows the folder tree paints: filtered, then hierarchical/flat.
     pub fn folder_visible_tree(&self) -> Vec<tree::FolderTreeNode> {
         match self.folder_rows() {
@@ -6477,6 +6501,29 @@ mod tests {
         assert_eq!(app.folder_active_filter_count(), 0);
         assert_eq!(app.folder_visible_tree().len(), 3);
         assert!(app.status.contains("cleared"));
+    }
+
+    #[test]
+    fn folder_empty_full_rows_routes_identical_vs_pruned() {
+        let mut empty = App::default();
+        empty.set_tab(Tab::Folder);
+        assert_eq!(
+            empty.folder_empty_state_full_rows(),
+            Some(crate::tree::FolderEmptyState::NoResults)
+        );
+        let mut app = App::default();
+        app.set_tab(Tab::Folder);
+        app.folder_model = Some((
+            vec![folder_row("same.txt", false, '=')],
+            String::from("1 entries"),
+        ));
+        app.set_folder_status_filter(crate::tree::FolderStatusFilter::Different);
+        assert_eq!(app.folder_visible_tree().len(), 0);
+        assert_eq!(
+            app.folder_empty_state_full_rows(),
+            Some(crate::tree::FolderEmptyState::AllSame)
+        );
+        assert!(app.folder_empty_hint_full_rows().contains("all same"));
     }
 
     #[test]

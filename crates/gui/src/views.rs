@@ -4060,6 +4060,7 @@ pub fn folder_filtered_summary(rows: &[FolderRow], display: &crate::tree::Folder
 
 /// Khali view ka paint-stable hint: model rows vs visible nodes par.
 /// `None` (kuch dikh raha hai) par khali string. Pure; unit-tested.
+#[allow(dead_code)] // Legacy glyph-blind paint lock; frozen test is par hai, paint `_full_rows` par gaya
 pub fn folder_paint_empty_hint(
     rows: &[FolderRow],
     visible_rows: usize,
@@ -4069,6 +4070,23 @@ pub fn folder_paint_empty_hint(
         rows.len(),
         visible_rows,
         display.is_active(),
+    ))
+}
+
+/// Rows-aware paint hint: identical folders ko prune se alag wording.
+/// Legacy `folder_paint_empty_hint` frozen hai; `_full_rows` adopt kare to
+/// diff-seeking filter par identical model `AllSame` deta hai. Paint me
+/// `rows` model se aate hain isliye `has_model` hamesha `true`.
+pub fn folder_paint_empty_hint_full_rows(
+    rows: &[FolderRow],
+    visible_rows: usize,
+    display: &crate::tree::FolderDisplay,
+) -> &'static str {
+    crate::tree::folder_empty_hint(crate::tree::folder_empty_state_full_rows(
+        true,
+        rows,
+        visible_rows,
+        display,
     ))
 }
 
@@ -4158,7 +4176,7 @@ pub fn paint_folder(
     pager.total_rows = tree_nodes.len();
     pager.clamp_top();
     if tree_nodes.is_empty() {
-        let hint = folder_paint_empty_hint(rows, tree_nodes.len(), display);
+        let hint = folder_paint_empty_hint_full_rows(rows, tree_nodes.len(), display);
         ui.add_space(SECTION_GAP);
         ui.vertical_centered(|ui| {
             ui.label(chrome_status_role().rich(hint));
@@ -6834,6 +6852,28 @@ mod tests {
         assert!(folder_paint_empty_hint(&rows, 0, &display).contains("clear filters"));
         let display = crate::tree::FolderDisplay::default();
         assert_eq!(folder_paint_empty_hint(&rows, 1, &display), "");
+    }
+
+    #[test]
+    fn folder_paint_empty_hint_full_rows_routes_all_same() {
+        let display = crate::tree::FolderDisplay::default();
+        let empty: Vec<FolderRow> = Vec::new();
+        assert_eq!(
+            folder_paint_empty_hint_full_rows(&empty, 0, &display),
+            crate::tree::folder_empty_hint(Some(crate::tree::FolderEmptyState::NoResults))
+        );
+        let rows = vec![filterpaint_row("a.txt", false, '=')];
+        let display = crate::tree::FolderDisplay {
+            status: crate::tree::FolderStatusFilter::Different,
+            ..Default::default()
+        };
+        assert_eq!(
+            folder_paint_empty_hint_full_rows(&rows, 0, &display),
+            crate::tree::folder_empty_hint(Some(crate::tree::FolderEmptyState::AllSame))
+        );
+        assert!(folder_paint_empty_hint_full_rows(&rows, 0, &display).contains("all same"));
+        let display = crate::tree::FolderDisplay::default();
+        assert_eq!(folder_paint_empty_hint_full_rows(&rows, 1, &display), "");
     }
 
     #[test]
