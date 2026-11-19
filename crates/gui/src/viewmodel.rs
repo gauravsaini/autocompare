@@ -16,8 +16,11 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use autocompare_compare::{FolderComparison, FolderStatus, TextComparison};
-use autocompare_diff::{Op, PictureDiff, RgbaImage, inline_diff};
+use autocompare_compare::{
+    BinaryComparison, FolderComparison, FolderStatus, SyncAction, SyncPlan, TableComparison,
+    TextComparison, TreeMergeAction, TreeMergePlan,
+};
+use autocompare_diff::{AudioDiff, Op, PictureDiff, RgbaImage, diff_cells, inline_diff};
 
 /// Cap on modeled text rows. Comparisons longer than this stop early
 /// and set [`TextRows::truncated`]; painting virtualizes rows anyway,
@@ -479,6 +482,457 @@ pub fn build_heatmap_rgba(heatmap: &RgbaImage) -> (Vec<u8>, u32, u32) {
 }
 
 // ----------------------------------------------------------------------------
+// Hex
+// ----------------------------------------------------------------------------
+
+/// Summary lines for a byte-level comparison, mirroring the CLI's
+/// `render_hex.rs` wording without color codes.
+pub fn build_hex_summary(cmp: &BinaryComparison) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(format!("left:  {} bytes", cmp.left_size));
+    lines.push(format!("right: {} bytes", cmp.right_size));
+    match cmp.first_diff {
+        None => {
+            lines.push("no differences".to_string());
+        }
+        Some(off) => {
+            lines.push(format!("first difference at offset {off:#010x}"));
+            lines.push(format!("{} differing run(s)", cmp.hunks.len()));
+            for hunk in &cmp.hunks {
+                lines.push(format!(
+                    "{:#010x}: {} vs {} byte(s)",
+                    hunk.offset,
+                    hunk.left.len(),
+                    hunk.right.len()
+                ));
+            }
+        }
+    }
+    if cmp.truncated {
+        lines.push("note: more differing runs exist (hunk limit reached)".to_string());
+    }
+    lines
+}
+
+// ----------------------------------------------------------------------------
+// Text three-way merge
+// ----------------------------------------------------------------------------
+
+/// The merged-text model: capped output lines plus conflict status.
+#[derive(Debug, Clone, Default)]
+pub struct MergeSummary {
+    /// Merged output lines, at most [`MAX_ROWS`].
+    pub lines: Vec<String>,
+    /// Whether any line opens a conflict marker.
+    pub conflicted: bool,
+    /// Whether lines beyond the cap were cut off.
+    pub truncated: bool,
+}
+
+/// Builds the merge summary from already-merged output lines (the
+/// engine's `merge3` result). Conflict detection is the same rule the
+/// CLI uses: a line starting with `<<<<<<<`.
+pub fn build_merge_summary(merged: &[String]) -> MergeSummary {
+    let mut lines = Vec::new();
+    let mut conflicted = false;
+    let mut truncated = false;
+    for line in merged {
+        if lines.len() >= MAX_ROWS {
+            truncated = true;
+            break;
+        }
+        if line.starts_with("<<<<<<<") {
+            conflicted = true;
+        }
+        lines.push(line.clone());
+    }
+    MergeSummary {
+        lines,
+        conflicted,
+        truncated,
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Table
+// ----------------------------------------------------------------------------
+
+/// One painted row of a table comparison.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TableRow {
+    /// Status glyph: `=` equal, `!` changed, `L` left-only, `R` right-only.
+    pub glyph: char,
+    /// Row label (` hdr` or a right-aligned 1-based number).
+    pub label: String,
+    /// Cell text joined with ` | `; changed cells read `[old => new]`.
+    pub text: String,
+    /// Whether the row differs.
+    pub changed: bool,
+}
+
+/// The table model: rows plus a truncation flag.
+#[derive(Debug, Clone, Default)]
+pub struct TableModel {
+    /// Painted rows, at most [`MAX_ROWS`].
+    pub rows: Vec<TableRow>,
+    /// Whether rows beyond the cap were cut off.
+    pub truncated: bool,
+}
+
+fn table_row_label(n: usize) -> String {
+    format!("{n:>4}")
+}
+
+fn table_cells(left: &[String], right: &[String]) -> String {
+    let changed = diff_cells(left, right);
+    let mut cells = Vec::new();
+    let mut idx = 0usize;
+    loop {
+        if left.get(idx).is_none() && right.get(idx).is_none() {
+            break;
+        }
+        let l = left.get(idx).cloned().unwrap_or_default();
+        let r = right.get(idx).cloned().unwrap_or_default();
+        if changed.contains(&idx) {
+            cells.push(format!("[{l} => {r}]"));
+        } else {
+            cells.push(r);
+        }
+        idx = idx.saturating_add(1);
+        if idx > 10_000 {
+            break;
+        }
+    }
+    cells.join(" | ")
+}
+
+fn table_plain(cells: &[String]) -> String {
+    cells.join(" | ")
+}
+
+/// Builds table rows mirroring the CLI walk: the header once, then one
+/// row per data row with delete+insert runs paired index-wise.
+pub fn build_table_rows(cmp: &TableComparison) -> TableModel {
+    let mut rows: Vec<TableRow> = Vec::new();
+    let mut truncated = false;
+    let mut push = |row: TableRow, truncated: &mut bool| {
+        if rows.len() >= MAX_ROWS {
+            *truncated = true;
+        } else {
+            rows.push(row);
+        }
+    };
+    if !cmp.header_l.is_empty() || !cmp.header_r.is_empty() {
+        if cmp.header_l == cmp.header_r {
+            push(
+                TableRow {
+                    glyph: '=',
+                    label: " hdr".to_string(),
+                    text: table_plain(&cmp.header_r),
+                    changed: false,
+                },
+                &mut truncated,
+            );
+        } else {
+            push(
+                TableRow {
+                    glyph: '!',
+                    label: " hdr".to_string(),
+                    text: table_cells(&cmp.header_l, &cmp.header_r),
+                    changed: true,
+                },
+                &mut truncated,
+            );
+        }
+    }
+    let mut lrow = 0usize;
+    let mut rrow = 0usize;
+    let mut ops = cmp.script.ops.iter().cloned().peekable();
+    while let Some(op) = ops.next() {
+        if truncated {
+            break;
+        }
+        match op {
+            Op::Equal { len } => {
+                for _ in 0..len {
+                    if truncated {
+                        break;
+                    }
+                    let cells = cmp.rows_r.get(rrow).cloned().unwrap_or_default();
+                    let label = table_row_label(rrow.saturating_add(1));
+                    lrow = lrow.saturating_add(1);
+                    rrow = rrow.saturating_add(1);
+                    push(
+                        TableRow {
+                            glyph: '=',
+                            label,
+                            text: table_plain(&cells),
+                            changed: false,
+                        },
+                        &mut truncated,
+                    );
+                }
+            }
+            Op::Delete { len } => {
+                let lend = lrow.saturating_add(len).min(cmp.rows_l.len());
+                let mut left_rows = Vec::new();
+                let mut i = lrow;
+                while i < lend {
+                    if let Some(r) = cmp.rows_l.get(i) {
+                        left_rows.push(r.clone());
+                    }
+                    i = i.saturating_add(1);
+                }
+                let lbase = lrow;
+                lrow = lrow.saturating_add(len);
+                if let Some(Op::Insert { len: ins }) = ops.peek().cloned() {
+                    ops.next();
+                    let rend = rrow.saturating_add(ins).min(cmp.rows_r.len());
+                    let mut right_rows = Vec::new();
+                    let mut j = rrow;
+                    while j < rend {
+                        if let Some(r) = cmp.rows_r.get(j) {
+                            right_rows.push(r.clone());
+                        }
+                        j = j.saturating_add(1);
+                    }
+                    let rbase = rrow;
+                    rrow = rrow.saturating_add(ins);
+                    let pairs = left_rows.len().min(right_rows.len());
+                    let mut k = 0usize;
+                    while k < pairs {
+                        if truncated {
+                            break;
+                        }
+                        let l = left_rows.get(k).cloned().unwrap_or_default();
+                        let r = right_rows.get(k).cloned().unwrap_or_default();
+                        let label = table_row_label(rbase.saturating_add(k).saturating_add(1));
+                        push(
+                            TableRow {
+                                glyph: '!',
+                                label,
+                                text: table_cells(&l, &r),
+                                changed: true,
+                            },
+                            &mut truncated,
+                        );
+                        k = k.saturating_add(1);
+                    }
+                    let mut e = pairs;
+                    while e < left_rows.len() {
+                        if truncated {
+                            break;
+                        }
+                        let cells = left_rows.get(e).cloned().unwrap_or_default();
+                        let label = table_row_label(lbase.saturating_add(e).saturating_add(1));
+                        push(
+                            TableRow {
+                                glyph: 'L',
+                                label,
+                                text: table_plain(&cells),
+                                changed: true,
+                            },
+                            &mut truncated,
+                        );
+                        e = e.saturating_add(1);
+                    }
+                    let mut e = pairs;
+                    while e < right_rows.len() {
+                        if truncated {
+                            break;
+                        }
+                        let cells = right_rows.get(e).cloned().unwrap_or_default();
+                        let label = table_row_label(rbase.saturating_add(e).saturating_add(1));
+                        push(
+                            TableRow {
+                                glyph: 'R',
+                                label,
+                                text: table_plain(&cells),
+                                changed: true,
+                            },
+                            &mut truncated,
+                        );
+                        e = e.saturating_add(1);
+                    }
+                } else {
+                    let mut k = 0usize;
+                    while k < left_rows.len() {
+                        if truncated {
+                            break;
+                        }
+                        let cells = left_rows.get(k).cloned().unwrap_or_default();
+                        let label = table_row_label(lbase.saturating_add(k).saturating_add(1));
+                        push(
+                            TableRow {
+                                glyph: 'L',
+                                label,
+                                text: table_plain(&cells),
+                                changed: true,
+                            },
+                            &mut truncated,
+                        );
+                        k = k.saturating_add(1);
+                    }
+                }
+            }
+            Op::Insert { len } => {
+                let rend = rrow.saturating_add(len).min(cmp.rows_r.len());
+                let mut right_rows = Vec::new();
+                let mut j = rrow;
+                while j < rend {
+                    if let Some(r) = cmp.rows_r.get(j) {
+                        right_rows.push(r.clone());
+                    }
+                    j = j.saturating_add(1);
+                }
+                let rbase = rrow;
+                rrow = rrow.saturating_add(len);
+                let mut k = 0usize;
+                while k < right_rows.len() {
+                    if truncated {
+                        break;
+                    }
+                    let cells = right_rows.get(k).cloned().unwrap_or_default();
+                    let label = table_row_label(rbase.saturating_add(k).saturating_add(1));
+                    push(
+                        TableRow {
+                            glyph: 'R',
+                            label,
+                            text: table_plain(&cells),
+                            changed: true,
+                        },
+                        &mut truncated,
+                    );
+                    k = k.saturating_add(1);
+                }
+            }
+        }
+    }
+    TableModel { rows, truncated }
+}
+
+// ----------------------------------------------------------------------------
+// Folder sync (dry-run plan view)
+// ----------------------------------------------------------------------------
+
+/// Summary lines for a sync plan, mirroring the CLI's `print_plan`
+/// wording without color codes. The GUI shows the dry-run plan only;
+/// applying stays a CLI operation.
+pub fn build_sync_summary(plan: &SyncPlan) -> Vec<String> {
+    let mut lines = Vec::new();
+    if plan.truncated {
+        lines.push(
+            "note: the walk stopped at the depth limit; deeper entries are not planned".to_string(),
+        );
+    }
+    if plan.steps.is_empty() && plan.skipped.is_empty() {
+        lines.push("nothing to do: the trees already match the plan".to_string());
+        return lines;
+    }
+    for step in &plan.steps {
+        let glyph = match step.action {
+            SyncAction::CopyToRight => ">",
+            SyncAction::CopyToLeft => "<",
+            SyncAction::DeleteRight | SyncAction::DeleteLeft => "x",
+        };
+        let dir_mark = if step.is_dir { "/" } else { "" };
+        lines.push(format!("{glyph} {}{dir_mark}", step.rel_path));
+    }
+    for (path, reason) in &plan.skipped {
+        lines.push(format!("~ {path} ({reason})"));
+    }
+    lines.push(format!(
+        "{} step(s) planned, {} skipped",
+        plan.steps.len(),
+        plan.skipped.len()
+    ));
+    lines
+}
+
+// ----------------------------------------------------------------------------
+// Folder merge (dry-run plan view)
+// ----------------------------------------------------------------------------
+
+/// Summary lines for a three-way folder-merge plan, mirroring the
+/// CLI's `print_plan` wording without color codes.
+pub fn build_folder_merge_summary(plan: &TreeMergePlan) -> Vec<String> {
+    let mut lines = Vec::new();
+    if plan.steps.is_empty() && plan.skipped.is_empty() {
+        lines.push("nothing to do: the merge plan is empty".to_string());
+        return lines;
+    }
+    for step in &plan.steps {
+        let glyph = match step.action {
+            TreeMergeAction::TakeLeft => "L",
+            TreeMergeAction::TakeRight => "R",
+            TreeMergeAction::MergedText => "M",
+            TreeMergeAction::Conflict => "C",
+            TreeMergeAction::MakeDir => "+",
+        };
+        let dir_mark = if matches!(step.action, TreeMergeAction::MakeDir) {
+            "/"
+        } else {
+            ""
+        };
+        lines.push(format!("{glyph} {}{dir_mark}", step.rel_path));
+    }
+    for (path, reason) in &plan.skipped {
+        lines.push(format!("~ {path} ({reason})"));
+    }
+    for path in &plan.conflicts {
+        lines.push(format!("! {path} (conflict)"));
+    }
+    lines.push(format!(
+        "{} step(s) planned, {} omitted, {} conflict(s)",
+        plan.steps.len(),
+        plan.skipped.len(),
+        plan.conflicts.len()
+    ));
+    lines
+}
+
+// ----------------------------------------------------------------------------
+// Audio (media compare)
+// ----------------------------------------------------------------------------
+
+/// Summary lines for an audio comparison, mirroring the CLI's
+/// `render_audio.rs` wording without color codes.
+pub fn build_audio_summary(d: &AudioDiff) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "left:  {:.3}s, {} Hz, {} channel(s)",
+        d.duration_l, d.sample_rate_l, d.channels_l
+    ));
+    lines.push(format!(
+        "right: {:.3}s, {} Hz, {} channel(s)",
+        d.duration_r, d.sample_rate_r, d.channels_r
+    ));
+    if d.config_mismatch {
+        lines.push(
+            "note: stream configurations differ; sample comparison is not meaningful and was skipped"
+                .to_string(),
+        );
+    } else if d.identical {
+        lines.push("no differences".to_string());
+    } else {
+        match d.first_diff_at {
+            Some(at) => lines.push(format!("first difference at {at:.3}s")),
+            None => lines.push("first difference: -".to_string()),
+        }
+        let pct = if d.windows_total > 0 {
+            d.windows_differing as f64 / d.windows_total as f64 * 100.0
+        } else {
+            0.0
+        };
+        lines.push(format!(
+            "differing 10ms windows: {}/{} ({pct:.2}%)",
+            d.windows_differing, d.windows_total
+        ));
+    }
+    lines
+}
+
+// ----------------------------------------------------------------------------
 // Civil date
 // ----------------------------------------------------------------------------
 
@@ -929,5 +1383,249 @@ mod tests {
             .checked_sub(Duration::from_secs(1))
             .unwrap_or(UNIX_EPOCH);
         assert_eq!(format_time(t), "-");
+    }
+
+    // ---- hex ----
+
+    #[test]
+    fn hex_identical_models_no_differences() {
+        use autocompare_compare::BinaryComparison;
+        let cmp = BinaryComparison {
+            left_size: 13,
+            right_size: 13,
+            first_diff: None,
+            hunks: Vec::new(),
+            truncated: false,
+        };
+        let lines = build_hex_summary(&cmp);
+        assert!(lines.iter().any(|l| l.contains("no differences")));
+        assert!(lines.iter().any(|l| l.contains("13 bytes")));
+    }
+
+    #[test]
+    fn hex_difference_models_offset_and_run() {
+        use autocompare_compare::{BinaryComparison, BinaryHunk};
+        let cmp = BinaryComparison {
+            left_size: 13,
+            right_size: 13,
+            first_diff: Some(12),
+            hunks: vec![BinaryHunk {
+                offset: 12,
+                left: vec![0x41],
+                right: vec![0x42],
+            }],
+            truncated: true,
+        };
+        let lines = build_hex_summary(&cmp);
+        assert!(lines.iter().any(|l| l.contains("first difference at")));
+        assert!(lines.iter().any(|l| l.contains("1 differing run(s)")));
+        assert!(lines.iter().any(|l| l.contains("hunk limit")));
+    }
+
+    // ---- merge ----
+
+    #[test]
+    fn merge_clean_models_lines_without_conflict() {
+        let merged = vec!["alpha".to_string(), "bravo".to_string()];
+        let summary = build_merge_summary(&merged);
+        assert!(!summary.conflicted);
+        assert!(!summary.truncated);
+        assert_eq!(summary.lines.len(), 2);
+    }
+
+    #[test]
+    fn merge_conflict_markers_flag_conflicted() {
+        let merged = vec![
+            "alpha".to_string(),
+            "<<<<<<< left".to_string(),
+            "bravo".to_string(),
+            "=======".to_string(),
+            "BRAVO".to_string(),
+            ">>>>>>> right".to_string(),
+        ];
+        let summary = build_merge_summary(&merged);
+        assert!(summary.conflicted);
+        assert_eq!(summary.lines.len(), 6);
+    }
+
+    // ---- table ----
+
+    #[test]
+    fn table_equal_rows_model_plain() {
+        use autocompare_compare::TableComparison;
+        use autocompare_diff::DiffScript;
+        let cmp = TableComparison {
+            header_l: vec!["a".to_string()],
+            header_r: vec!["a".to_string()],
+            rows_l: vec![vec!["x".to_string()]],
+            rows_r: vec![vec!["x".to_string()]],
+            script: DiffScript {
+                ops: vec![Op::Equal { len: 1 }],
+                exact: true,
+            },
+        };
+        let model = build_table_rows(&cmp);
+        assert!(!model.truncated);
+        assert!(model.rows.iter().any(|r| r.glyph == '=' && !r.changed));
+    }
+
+    #[test]
+    fn table_changed_cells_show_old_new() {
+        use autocompare_compare::TableComparison;
+        use autocompare_diff::DiffScript;
+        let cmp = TableComparison {
+            header_l: vec!["h".to_string()],
+            header_r: vec!["h".to_string()],
+            rows_l: vec![vec!["20".to_string()]],
+            rows_r: vec![vec!["25".to_string()]],
+            script: DiffScript {
+                ops: vec![Op::Delete { len: 1 }, Op::Insert { len: 1 }],
+                exact: true,
+            },
+        };
+        let model = build_table_rows(&cmp);
+        let changed = model
+            .rows
+            .iter()
+            .find(|r| r.glyph == '!')
+            .cloned()
+            .unwrap_or_default();
+        assert!(changed.changed);
+        assert!(changed.text.contains("[20 => 25]"));
+    }
+
+    // ---- sync ----
+
+    #[test]
+    fn sync_empty_plan_models_nothing_to_do() {
+        use autocompare_compare::SyncPlan;
+        let plan = SyncPlan::default();
+        let lines = build_sync_summary(&plan);
+        assert!(lines.iter().any(|l| l.contains("nothing to do")));
+    }
+
+    #[test]
+    fn sync_plan_models_steps_skips_and_counts() {
+        use autocompare_compare::{SyncAction, SyncPlan, SyncStep};
+        let plan = SyncPlan {
+            steps: vec![SyncStep {
+                rel_path: "a.txt".to_string(),
+                is_dir: false,
+                action: SyncAction::CopyToRight,
+            }],
+            skipped: vec![("b.txt".to_string(), "destination is newer".to_string())],
+            truncated: true,
+        };
+        let lines = build_sync_summary(&plan);
+        assert!(lines.iter().any(|l| l.contains("depth limit")));
+        assert!(lines.iter().any(|l| l.contains("a.txt")));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("1 step(s) planned, 1 skipped"))
+        );
+    }
+
+    // ---- folder merge ----
+
+    #[test]
+    fn folder_merge_empty_plan_models_nothing_to_do() {
+        use autocompare_compare::TreeMergePlan;
+        let plan = TreeMergePlan::default();
+        let lines = build_folder_merge_summary(&plan);
+        assert!(lines.iter().any(|l| l.contains("merge plan is empty")));
+    }
+
+    #[test]
+    fn folder_merge_conflict_models_markers_and_counts() {
+        use autocompare_compare::{TreeMergeAction, TreeMergePlan, TreeMergeStep};
+        let plan = TreeMergePlan {
+            steps: vec![TreeMergeStep {
+                rel_path: "m.txt".to_string(),
+                action: TreeMergeAction::Conflict,
+                merged: None,
+            }],
+            conflicts: vec!["m.txt".to_string()],
+            skipped: Vec::new(),
+        };
+        let lines = build_folder_merge_summary(&plan);
+        assert!(lines.iter().any(|l| l.contains("C m.txt")));
+        assert!(lines.iter().any(|l| l.contains("(conflict)")));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("1 step(s) planned, 0 omitted, 1 conflict(s)"))
+        );
+    }
+
+    // ---- audio ----
+
+    #[test]
+    fn audio_identical_models_no_differences() {
+        use autocompare_diff::AudioDiff;
+        let d = AudioDiff {
+            sample_rate_l: 44_100,
+            sample_rate_r: 44_100,
+            channels_l: 1,
+            channels_r: 1,
+            duration_l: 1.0,
+            duration_r: 1.0,
+            config_mismatch: false,
+            first_diff_at: None,
+            windows_total: 100,
+            windows_differing: 0,
+            identical: true,
+        };
+        let lines = build_audio_summary(&d);
+        assert!(lines.iter().any(|l| l.contains("no differences")));
+    }
+
+    #[test]
+    fn audio_mismatch_models_not_comparable_note() {
+        use autocompare_diff::AudioDiff;
+        let d = AudioDiff {
+            sample_rate_l: 44_100,
+            sample_rate_r: 48_000,
+            channels_l: 1,
+            channels_r: 1,
+            duration_l: 1.0,
+            duration_r: 1.0,
+            config_mismatch: true,
+            first_diff_at: None,
+            windows_total: 0,
+            windows_differing: 0,
+            identical: false,
+        };
+        let lines = build_audio_summary(&d);
+        assert!(lines.iter().any(|l| l.contains("not meaningful")));
+    }
+
+    #[test]
+    fn audio_difference_models_windows_share() {
+        use autocompare_diff::AudioDiff;
+        let d = AudioDiff {
+            sample_rate_l: 44_100,
+            sample_rate_r: 44_100,
+            channels_l: 2,
+            channels_r: 2,
+            duration_l: 1.0,
+            duration_r: 1.0,
+            config_mismatch: false,
+            first_diff_at: Some(0.5),
+            windows_total: 100,
+            windows_differing: 1,
+            identical: false,
+        };
+        let lines = build_audio_summary(&d);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("first difference at 0.500s"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("differing 10ms windows: 1/100"))
+        );
     }
 }

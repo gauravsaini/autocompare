@@ -17,7 +17,7 @@ use eframe::egui::{
 };
 
 use crate::app::Tab;
-use crate::viewmodel::{self, FolderRow, TextRow, TextRowKind, TextRows};
+use crate::viewmodel::{self, FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
 
 // The fixed diff palette (semantic colors, own contrast).
 const DELETED_FG: Color32 = Color32::from_rgb(255, 170, 170);
@@ -51,12 +51,19 @@ pub fn paint_header(ui: &mut Ui) {
     ui.add_space(4.0);
 }
 
-/// The three comparison tabs.
+/// The nine comparison tabs, matching the nine CLI commands and the
+/// original's nine session types.
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.selectable_value(tab, Tab::Text, "Text");
         ui.selectable_value(tab, Tab::Folder, "Folder");
+        ui.selectable_value(tab, Tab::Hex, "Hex");
+        ui.selectable_value(tab, Tab::Merge, "Merge");
+        ui.selectable_value(tab, Tab::Table, "Table");
+        ui.selectable_value(tab, Tab::Sync, "Sync");
         ui.selectable_value(tab, Tab::Picture, "Picture");
+        ui.selectable_value(tab, Tab::FolderMerge, "FolderMerge");
+        ui.selectable_value(tab, Tab::Audio, "Audio");
     });
     ui.add_space(2.0);
 }
@@ -90,6 +97,136 @@ pub fn paint_paths(
         *compare = true;
     }
     ui.add_space(4.0);
+}
+
+/// Three path text fields plus the action button, for the three-way
+/// tabs (Merge, FolderMerge). Sets `compare` when clicked.
+pub fn paint_triple_paths(
+    ui: &mut Ui,
+    noun: &str,
+    base: &mut String,
+    left: &mut String,
+    right: &mut String,
+    compare: &mut bool,
+) {
+    ui.horizontal(|ui| {
+        let third = (ui.available_width() / 3.0).max(100.0) - 8.0;
+        ui.add(
+            TextEdit::singleline(base)
+                .desired_width(third)
+                .hint_text(format!("base {noun} path")),
+        );
+        ui.add(
+            TextEdit::singleline(left)
+                .desired_width(third)
+                .hint_text(format!("left {noun} path")),
+        );
+        ui.add(
+            TextEdit::singleline(right)
+                .desired_width(third)
+                .hint_text(format!("right {noun} path")),
+        );
+    });
+    let clicked = ui
+        .horizontal(|ui| ui.button(format!("Compare {noun}s")).clicked())
+        .inner;
+    if clicked {
+        *compare = true;
+    }
+    ui.add_space(4.0);
+}
+
+/// Generic scrollable summary lines for the plan/stat tabs
+/// (Hex, Sync, FolderMerge, Audio).
+pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
+    if lines.is_empty() {
+        ui.label(RichText::new("(no output)").weak());
+        return;
+    }
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, lines.len(), |ui, range| {
+            for i in range {
+                let Some(line) = lines.get(i) else {
+                    break;
+                };
+                ui.set_row_height(row_height);
+                ui.label(RichText::new(line.as_str()).monospace());
+            }
+        });
+}
+
+/// The three-way merge output: conflict blocks highlighted, notes
+/// for conflicts and truncation first.
+pub fn paint_merge(ui: &mut Ui, model: &MergeSummary) {
+    if model.conflicted {
+        paint_note(ui, "the merge has conflicts; marked lines need a decision");
+    }
+    if model.truncated {
+        paint_note(ui, "showing the first lines only; the rest is cut off");
+    }
+    if model.lines.is_empty() {
+        ui.label(RichText::new("(merged output is empty)").weak());
+        return;
+    }
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, model.lines.len(), |ui, range| {
+            for i in range {
+                let Some(line) = model.lines.get(i) else {
+                    break;
+                };
+                ui.set_row_height(row_height);
+                let marker = line.starts_with("<<<<<<<")
+                    || line.starts_with("=======")
+                    || line.starts_with(">>>>>>>");
+                let mut text = RichText::new(line.as_str()).monospace();
+                if marker {
+                    text = text.color(RED).strong();
+                }
+                ui.label(text);
+            }
+        });
+}
+
+/// The table comparison rows: changed rows highlighted, changed cells
+/// already marked `[old => new]` by the view model.
+pub fn paint_table(ui: &mut Ui, model: &TableModel) {
+    if model.truncated {
+        paint_note(ui, "showing the first rows only; the rest is cut off");
+    }
+    if model.rows.is_empty() {
+        ui.label(RichText::new("(both tables are empty)").weak());
+        return;
+    }
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, model.rows.len(), |ui, range| {
+            for i in range {
+                let Some(row) = model.rows.get(i) else {
+                    break;
+                };
+                ui.set_row_height(row_height);
+                let mut glyph = RichText::new(row.glyph.to_string()).monospace();
+                glyph = match row.glyph {
+                    '=' => glyph.color(DIM),
+                    '!' | 'L' => glyph.color(RED),
+                    'R' => glyph.color(GREEN),
+                    _ => glyph.color(DIM),
+                };
+                let mut body = RichText::new(format!("{} | {}", row.label, row.text)).monospace();
+                if row.changed {
+                    body = body.color(CHANGED_FG);
+                }
+                ui.horizontal(|ui| {
+                    ui.label(glyph);
+                    ui.label(body);
+                });
+            }
+        });
 }
 
 /// The red error panel: every engine failure ends up here, never as a
