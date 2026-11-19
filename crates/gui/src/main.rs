@@ -40,7 +40,10 @@ fn main() {
         std::process::exit(0);
     }
 
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default().with_title("Home - autocompare"),
+        ..Default::default()
+    };
     if let Err(err) = eframe::run_native(
         "autocompare",
         options,

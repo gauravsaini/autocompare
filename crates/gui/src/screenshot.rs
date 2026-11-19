@@ -267,7 +267,7 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
         dims,
         16,
         578,
-        "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done",
+        "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done: 7 row(s)",
         FG_DIM,
     );
 

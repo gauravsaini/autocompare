@@ -428,6 +428,8 @@ impl App {
             } else {
                 1
             },
+            selected: model.selected,
+            filter: model.filter,
         };
         if !self.show_line_numbers {
             for row in &mut out.rows {
@@ -984,7 +986,11 @@ impl eframe::App for App {
                     egui::Button::new("Swap Sides"),
                 );
                 if swap_resp.clicked() {
-                    self.swap_sides();
+                    // Swap, then re-run so both sides refresh like
+                    // Beyond Compare does; empty sides report validation.
+                    if self.swap_sides() {
+                        self.run_active_tab();
+                    }
                 }
                 let reload_resp = ui.add_enabled(
                     toolbar_active,
@@ -1115,8 +1121,78 @@ impl eframe::App for App {
                 Tab::Home => {}
                 Tab::Text => {
                     if let Some(snapshot) = self.text_model.clone() {
+                        ui.style_mut().wrap_mode = Some(if self.word_wrap {
+                            egui::TextWrapMode::Wrap
+                        } else {
+                            egui::TextWrapMode::Extend
+                        });
                         let mut view = self.view_text_for_paint(&snapshot);
                         views::paint_text(ui, &mut view);
+                        // paint_text works on the view clone (toggles are
+                        // view-only): propagate navigation selection and
+                        // display-filter choices back so they stick.
+                        if view.selected != snapshot.selected
+                            && let Some(real) = self.text_model.as_mut()
+                        {
+                            real.selected = view.selected;
+                        }
+                        if view.filter != snapshot.filter {
+                            if let Some(real) = self.text_model.as_mut() {
+                                real.filter = view.filter;
+                            }
+                            let name = match view.filter {
+                                viewmodel::TextFilter::All => "all rows",
+                                viewmodel::TextFilter::Differences => "differences only",
+                                viewmodel::TextFilter::Same => "same rows only",
+                                viewmodel::TextFilter::Context => "differences with context",
+                            };
+                            self.status = format!("text filter: {name}");
+                        }
+                        // The copy buttons inside paint_text mutate the
+                        // view clone; propagate one copy back to the real
+                        // model so the buttons work under any toggle
+                        // combination, and report it in the status bar.
+                        let mut copied = None;
+                        if let Some(real) = self.text_model.as_ref() {
+                            for (idx, view_row) in view.rows.iter().enumerate() {
+                                let Some(real_row) = real.rows.get(idx) else {
+                                    break;
+                                };
+                                if real_row.kind != viewmodel::TextRowKind::Equal
+                                    && view_row.kind == viewmodel::TextRowKind::Equal
+                                {
+                                    if view_row.right == real_row.left
+                                        && view_row.left == real_row.left
+                                    {
+                                        copied = Some((
+                                            idx,
+                                            viewmodel::CopyDirection::LeftToRight,
+                                        ));
+                                        break;
+                                    }
+                                    if view_row.left == real_row.right
+                                        && view_row.right == real_row.right
+                                    {
+                                        copied = Some((
+                                            idx,
+                                            viewmodel::CopyDirection::RightToLeft,
+                                        ));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((idx, dir)) = copied {
+                            if let Some(real) = self.text_model.as_mut() {
+                                let _ = viewmodel::apply_copy(real, idx, dir);
+                            }
+                            let arrow = match dir {
+                                viewmodel::CopyDirection::LeftToRight => "left->right",
+                                viewmodel::CopyDirection::RightToLeft => "right->left",
+                            };
+                            self.status =
+                                format!("copied row {} {arrow}", idx.saturating_add(1));
+                        }
                     } else {
                         ui.label(
                             RichText::new("no text results yet: type both file paths and Compare.")
@@ -1302,6 +1378,32 @@ mod tests {
     }
 
     #[test]
+    fn swap_sides_text_exchanges_paths_and_clears_model() {
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_text_paths("l.txt", "r.txt");
+        app.text_model = Some(TextRows {
+            rows: vec![TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            }],
+            truncated: false,
+            coarse: false,
+            pane_chars: 5,
+            gutter_chars: 4,
+            selected: None,
+            filter: TextFilter::All,
+        });
+        assert!(app.swap_sides());
+        assert_eq!(app.text_paths(), ("r.txt".to_string(), "l.txt".to_string()));
+        assert!(app.text_model.is_none());
+        assert!(app.error.is_none());
+        assert!(app.status.contains("swapped sides"));
+        assert!(app.session_identity().contains("r.txt"));
+    }
+
+    #[test]
     fn swap_sides_on_home_reports_without_swapping() {
         let mut app = App::default();
         assert_eq!(app.current_tab(), Tab::Home);
@@ -1327,7 +1429,7 @@ mod tests {
 
     #[test]
     fn view_prefs_hide_line_numbers_and_accents() {
-        use crate::viewmodel::{TextRow, TextRowKind, TextRows};
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
         let mut app = App::default();
         let model = TextRows {
             rows: vec![TextRow {
@@ -1343,6 +1445,8 @@ mod tests {
             coarse: false,
             pane_chars: 200,
             gutter_chars: 4,
+            selected: None,
+            filter: TextFilter::All,
         };
         app.set_line_numbers(false);
         app.set_syntax_highlight(false);
@@ -1360,6 +1464,25 @@ mod tests {
     }
 
     #[test]
+    fn view_clone_preserves_selection_and_filter() {
+        use crate::viewmodel::{TextFilter, TextRows};
+        let app = App::default();
+        let model = TextRows {
+            rows: Vec::new(),
+            truncated: false,
+            coarse: false,
+            pane_chars: 10,
+            gutter_chars: 4,
+            selected: Some(2),
+            filter: TextFilter::Differences,
+        };
+        let view = app.view_text_for_paint(&model);
+        assert_eq!(view.selected, Some(2));
+        assert_eq!(view.filter, TextFilter::Differences);
+        assert!(view.rows.is_empty());
+    }
+
+    #[test]
     fn session_identity_carries_paths_and_tab() {
         let mut app = App::default();
         assert!(app.session_identity().contains("Home"));
@@ -1374,7 +1497,7 @@ mod tests {
 
     #[test]
     fn status_line_reports_honest_counts() {
-        use crate::viewmodel::{TextRow, TextRowKind, TextRows};
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
         let mut app = App::default();
         app.set_tab(Tab::Text);
         assert!(app.status_line().contains("no results yet"));
@@ -1393,6 +1516,8 @@ mod tests {
             coarse: false,
             pane_chars: 10,
             gutter_chars: 4,
+            selected: None,
+            filter: TextFilter::All,
         });
         let line = app.status_line();
         assert!(line.contains("2 rows"));

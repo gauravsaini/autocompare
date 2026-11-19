@@ -103,3 +103,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Poll 18
 - Text: 92 tests green + rustfmt clean on owned files. Land imminent. CI still queued.
+
+## Verify 02 (text 84dfe28 + full tree)
+- OWNS respected (copy/viewmodel/views + gui-text only). Banned-scan CLEAN. PNGs magic OK.
+- Orchestrator reran: cargo test 92 passed, clippy -D warnings clean, fmt clean — full tree green together, interface collision resolved.
