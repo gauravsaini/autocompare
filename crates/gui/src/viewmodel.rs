@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // ponytail: re-export modular headless helpers for Home, gutter, copy, Take, tree, and theme contrast
 #[allow(unused_imports)]
-pub use crate::copy::{CopyDirection, CopyError, apply_copy};
+pub use crate::copy::{CopyDirection, CopyError, apply_copy, copy_line, copy_section};
 #[allow(unused_imports)]
 pub use crate::gutter::{GutterGeometry, GutterSegment, gutter_geometry};
 #[allow(unused_imports)]
@@ -98,6 +98,10 @@ pub struct TextRows {
     /// Digit width of the largest line number (minimum 4, like the
     /// CLI's 4-wide numbers).
     pub gutter_chars: usize,
+    /// Selected row index (original model index); navigation moves it.
+    pub selected: Option<usize>,
+    /// Current display filter.
+    pub filter: TextFilter,
 }
 
 /// Walks the edit script the way the CLI's `blocks()` does: equal
@@ -172,6 +176,8 @@ pub fn build_text_rows(cmp: &TextComparison) -> TextRows {
         coarse: !cmp.script.exact,
         pane_chars,
         gutter_chars,
+        selected: None,
+        filter: TextFilter::All,
     }
 }
 
@@ -370,6 +376,248 @@ fn take_run(lines: &[String], start: usize, len: usize) -> Vec<String> {
 /// Decimal digits of `n` (1 for zero).
 fn digits(n: usize) -> usize {
     n.to_string().len()
+}
+
+// ----------------------------------------------------------------------------
+// Text navigation, selection and display filters (headless)
+// ----------------------------------------------------------------------------
+
+/// Display filter for the text view: which rows stay visible.
+/// `Context` shows every difference plus `CONTEXT_RADIUS` equal rows
+/// around each hunk, like a unified diff with context.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TextFilter {
+    /// Show every row.
+    #[default]
+    All,
+    /// Show only changed/deleted/inserted rows.
+    Differences,
+    /// Show only equal rows.
+    Same,
+    /// Show differences plus surrounding equal rows.
+    Context,
+}
+
+/// How many equal rows `TextFilter::Context` keeps around each hunk.
+pub const CONTEXT_RADIUS: usize = 2;
+
+/// Honest counts for the current filter: total model rows plus what
+/// the filter shows, split by kind.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FilterCounts {
+    /// Rows in the full model.
+    pub total: usize,
+    /// Rows visible under the current filter.
+    pub shown: usize,
+    /// Difference rows in the full model.
+    pub diffs: usize,
+    /// Equal rows in the full model.
+    pub sames: usize,
+}
+
+/// Whether a row counts as a difference (anything but `Equal`).
+pub fn is_diff_row(row: &TextRow) -> bool {
+    !matches!(row.kind, TextRowKind::Equal)
+}
+
+/// Original-model indices of all difference rows, in order.
+pub fn diff_indices(rows: &[TextRow]) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    for row in rows {
+        if is_diff_row(row) {
+            out.push(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Next difference strictly after `from` (`None` means from before start).
+/// Wraps to the first difference when past the end, so Prev/Next can
+/// cycle like a find loop.
+pub fn next_diff_idx(rows: &[TextRow], from: Option<usize>) -> Option<usize> {
+    let start = match from {
+        Some(i) => i.saturating_add(1),
+        None => 0,
+    };
+    let mut idx = start;
+    while idx < rows.len() {
+        if rows.get(idx).is_some_and(is_diff_row) {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    // Wrap: first difference from the top.
+    let mut idx = 0usize;
+    while idx < start.min(rows.len()) {
+        if rows.get(idx).is_some_and(is_diff_row) {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    None
+}
+
+/// Previous difference strictly before `from` (`None` means from past end).
+/// Wraps to the last difference when before the start.
+pub fn prev_diff_idx(rows: &[TextRow], from: Option<usize>) -> Option<usize> {
+    let end = match from {
+        Some(0) | None => rows.len(),
+        Some(i) => i.min(rows.len()),
+    };
+    // Search backwards in [0, end).
+    let mut idx = end;
+    while idx > 0 {
+        idx = idx.saturating_sub(1);
+        if rows.get(idx).is_some_and(is_diff_row) {
+            // Only accept rows strictly before `from`; when `from` is
+            // None we start from the end so the first hit is the last diff.
+            match from {
+                Some(f) if idx >= f => continue,
+                _ => return Some(idx),
+            }
+        }
+    }
+    // Wrap: last difference in the model.
+    if from.is_some() {
+        let mut idx = rows.len();
+        while idx > end {
+            idx = idx.saturating_sub(1);
+            if rows.get(idx).is_some_and(is_diff_row) {
+                return Some(idx);
+            }
+        }
+    }
+    None
+}
+
+/// Moves selection to the next difference; no-op when no diffs.
+pub fn select_next_diff(rows: &[TextRow], selected: &mut Option<usize>) {
+    if let Some(next) = next_diff_idx(rows, *selected) {
+        *selected = Some(next);
+    }
+}
+
+/// Moves selection to the previous difference; no-op when no diffs.
+/// When nothing is selected, Prev jumps to the last difference.
+pub fn select_prev_diff(rows: &[TextRow], selected: &mut Option<usize>) {
+    let from = match *selected {
+        Some(i) => Some(i),
+        None => {
+            if rows.is_empty() {
+                None
+            } else {
+                Some(rows.len())
+            }
+        }
+    };
+    if let Some(prev) = prev_diff_idx(rows, from) {
+        *selected = Some(prev);
+    }
+}
+
+/// Contiguous non-equal hunk containing `idx`: `(start, end)` with
+/// `start <= idx < end`. `None` when out of bounds or on an equal row.
+pub fn section_bounds(rows: &[TextRow], idx: usize) -> Option<(usize, usize)> {
+    rows.get(idx)?;
+    if !rows.get(idx).is_some_and(is_diff_row) {
+        return None;
+    }
+    let mut start = idx;
+    while start > 0 {
+        let prev = start.saturating_sub(1);
+        match rows.get(prev) {
+            Some(r) if is_diff_row(r) => start = prev,
+            _ => break,
+        }
+    }
+    let mut end = idx.saturating_add(1);
+    while end < rows.len() {
+        match rows.get(end) {
+            Some(r) if is_diff_row(r) => end = end.saturating_add(1),
+            _ => break,
+        }
+    }
+    Some((start, end))
+}
+
+/// Original-model indices visible under `filter`, in order.
+/// `Context` keeps `CONTEXT_RADIUS` equal rows around every hunk.
+pub fn filtered_indices(rows: &[TextRow], filter: TextFilter) -> Vec<usize> {
+    match filter {
+        TextFilter::All => {
+            let mut out = Vec::with_capacity(rows.len());
+            let mut i = 0usize;
+            while i < rows.len() {
+                out.push(i);
+                i = i.saturating_add(1);
+            }
+            out
+        }
+        TextFilter::Differences => diff_indices(rows),
+        TextFilter::Same => {
+            let mut out = Vec::new();
+            let mut i = 0usize;
+            for row in rows {
+                if !is_diff_row(row) {
+                    out.push(i);
+                }
+                i = i.saturating_add(1);
+            }
+            out
+        }
+        TextFilter::Context => {
+            let mut keep = vec![false; rows.len()];
+            let mut i = 0usize;
+            while i < rows.len() {
+                if rows.get(i).is_some_and(is_diff_row) {
+                    let lo = i.saturating_sub(CONTEXT_RADIUS);
+                    let hi = i
+                        .saturating_add(CONTEXT_RADIUS)
+                        .saturating_add(1)
+                        .min(rows.len());
+                    let mut j = lo;
+                    while j < hi {
+                        if let Some(flag) = keep.get_mut(j) {
+                            *flag = true;
+                        }
+                        j = j.saturating_add(1);
+                    }
+                }
+                i = i.saturating_add(1);
+            }
+            let mut out = Vec::new();
+            let mut k = 0usize;
+            for flag in &keep {
+                if *flag {
+                    out.push(k);
+                }
+                k = k.saturating_add(1);
+            }
+            out
+        }
+    }
+}
+
+/// Honest counts: full-model totals plus visible count under filter.
+pub fn filter_counts(rows: &[TextRow], filter: TextFilter) -> FilterCounts {
+    let mut diffs = 0usize;
+    let mut sames = 0usize;
+    for row in rows {
+        if is_diff_row(row) {
+            diffs = diffs.saturating_add(1);
+        } else {
+            sames = sames.saturating_add(1);
+        }
+    }
+    let shown = filtered_indices(rows, filter).len();
+    FilterCounts {
+        total: rows.len(),
+        shown,
+        diffs,
+        sames,
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1642,6 +1890,126 @@ mod tests {
             lines
                 .iter()
                 .any(|l| l.contains("differing 10ms windows: 1/100"))
+        );
+    }
+
+    // ---- text navigation / filter (P0) ----
+
+    fn nav_rows() -> Vec<TextRow> {
+        vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "a".to_string(),
+                right: "b".to_string(),
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "c".to_string(),
+                right: "d".to_string(),
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Deleted,
+                left: "x".to_string(),
+                ..Default::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn next_prev_diff_cycle_with_wrap() {
+        let rows = nav_rows();
+        assert_eq!(next_diff_idx(&rows, None), Some(1));
+        assert_eq!(next_diff_idx(&rows, Some(1)), Some(2));
+        assert_eq!(next_diff_idx(&rows, Some(2)), Some(4));
+        // Wrap past the end back to the first diff.
+        assert_eq!(next_diff_idx(&rows, Some(4)), Some(1));
+        // Prev from past-end lands on the last diff.
+        assert_eq!(prev_diff_idx(&rows, Some(rows.len())), Some(4));
+        assert_eq!(prev_diff_idx(&rows, Some(4)), Some(2));
+        assert_eq!(prev_diff_idx(&rows, Some(2)), Some(1));
+        // Wrap before the start lands on the last diff.
+        assert_eq!(prev_diff_idx(&rows, Some(1)), Some(4));
+        // No diffs: both directions stay None.
+        let flat = vec![TextRow {
+            kind: TextRowKind::Equal,
+            ..Default::default()
+        }];
+        assert_eq!(next_diff_idx(&flat, None), None);
+        assert_eq!(prev_diff_idx(&flat, Some(1)), None);
+    }
+
+    #[test]
+    fn selection_follows_navigation() {
+        let rows = nav_rows();
+        let mut sel = None;
+        select_next_diff(&rows, &mut sel);
+        assert_eq!(sel, Some(1));
+        select_next_diff(&rows, &mut sel);
+        assert_eq!(sel, Some(2));
+        select_prev_diff(&rows, &mut sel);
+        assert_eq!(sel, Some(1));
+        // Prev with nothing selected jumps to the last diff.
+        let mut sel2 = None;
+        select_prev_diff(&rows, &mut sel2);
+        assert_eq!(sel2, Some(4));
+    }
+
+    #[test]
+    fn section_bounds_cover_contiguous_hunks() {
+        let rows = nav_rows();
+        assert_eq!(section_bounds(&rows, 1), Some((1, 3)));
+        assert_eq!(section_bounds(&rows, 2), Some((1, 3)));
+        assert_eq!(section_bounds(&rows, 4), Some((4, 5)));
+        assert_eq!(section_bounds(&rows, 0), None);
+        assert_eq!(section_bounds(&rows, 99), None);
+    }
+
+    #[test]
+    fn filters_show_honest_subsets_and_counts() {
+        let rows = nav_rows();
+        assert_eq!(filtered_indices(&rows, TextFilter::All).len(), 5);
+        assert_eq!(
+            filtered_indices(&rows, TextFilter::Differences),
+            vec![1, 2, 4]
+        );
+        assert_eq!(filtered_indices(&rows, TextFilter::Same), vec![0, 3]);
+        // Context radius 2 around hunks [1,2] and [4] covers everything here.
+        assert_eq!(filtered_indices(&rows, TextFilter::Context).len(), 5);
+        let counts = filter_counts(&rows, TextFilter::Differences);
+        assert_eq!(counts.total, 5);
+        assert_eq!(counts.shown, 3);
+        assert_eq!(counts.diffs, 3);
+        assert_eq!(counts.sames, 2);
+        let counts_all = filter_counts(&rows, TextFilter::All);
+        assert_eq!(counts_all.shown, 5);
+        // Long equal run with one diff in the middle: context trims tails.
+        let mut long = Vec::new();
+        let mut i = 0usize;
+        while i < 11 {
+            let kind = if i == 5 {
+                TextRowKind::Changed
+            } else {
+                TextRowKind::Equal
+            };
+            long.push(TextRow {
+                kind,
+                ..Default::default()
+            });
+            i = i.saturating_add(1);
+        }
+        assert_eq!(
+            filtered_indices(&long, TextFilter::Context),
+            vec![3, 4, 5, 6, 7]
         );
     }
 }

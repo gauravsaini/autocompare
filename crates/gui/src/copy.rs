@@ -62,6 +62,43 @@ pub fn apply_copy(
     Ok(())
 }
 
+/// Copies a single line: thin wrapper over [`apply_copy`] so the UI has
+/// one named entry point per action and no duplicated mutation logic.
+pub fn copy_line(
+    model: &mut TextRows,
+    row_idx: usize,
+    dir: CopyDirection,
+) -> Result<(), CopyError> {
+    apply_copy(model, row_idx, dir)
+}
+
+/// Copies the whole contiguous difference section containing `row_idx`.
+/// Reuses [`apply_copy`] per row, so section and line copies can never
+/// drift apart. Returns how many rows were copied. An equal row is a
+/// no-op `Ok(0)`; only an out-of-bounds index is an error.
+pub fn copy_section(
+    model: &mut TextRows,
+    row_idx: usize,
+    dir: CopyDirection,
+) -> Result<usize, CopyError> {
+    if model.rows.get(row_idx).is_none() {
+        return Err(CopyError::IndexOutOfBounds);
+    }
+    let Some((start, end)) = crate::viewmodel::section_bounds(&model.rows, row_idx) else {
+        return Ok(0);
+    };
+    let mut copied = 0usize;
+    let mut idx = start;
+    while idx < end {
+        // `apply_copy` cannot fail here: bounds come from the model.
+        if apply_copy(model, idx, dir).is_ok() {
+            copied = copied.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    Ok(copied)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,6 +120,8 @@ mod tests {
             coarse: false,
             pane_chars: 10,
             gutter_chars: 4,
+            selected: None,
+            filter: crate::viewmodel::TextFilter::All,
         };
 
         apply_copy(&mut model, 0, CopyDirection::LeftToRight).unwrap_or_default();
@@ -100,6 +139,75 @@ mod tests {
     fn apply_copy_out_of_bounds_returns_error() {
         let mut model = TextRows::default();
         let err = apply_copy(&mut model, 10, CopyDirection::RightToLeft);
+        assert_eq!(err, Err(CopyError::IndexOutOfBounds));
+    }
+
+    fn section_model() -> TextRows {
+        TextRows {
+            rows: vec![
+                TextRow {
+                    kind: TextRowKind::Equal,
+                    left: "same".to_string(),
+                    right: "same".to_string(),
+                    left_no: Some(1),
+                    right_no: Some(1),
+                    ..Default::default()
+                },
+                TextRow {
+                    kind: TextRowKind::Changed,
+                    left: "a".to_string(),
+                    right: "b".to_string(),
+                    left_no: Some(2),
+                    right_no: Some(2),
+                    ..Default::default()
+                },
+                TextRow {
+                    kind: TextRowKind::Changed,
+                    left: "c".to_string(),
+                    right: "d".to_string(),
+                    left_no: Some(3),
+                    right_no: Some(3),
+                    ..Default::default()
+                },
+            ],
+            truncated: false,
+            coarse: false,
+            pane_chars: 4,
+            gutter_chars: 4,
+            selected: None,
+            filter: crate::viewmodel::TextFilter::All,
+        }
+    }
+
+    #[test]
+    fn copy_line_reuses_single_row_mutation() {
+        let mut model = section_model();
+        let res = copy_line(&mut model, 1, CopyDirection::LeftToRight);
+        assert!(res.is_ok());
+        let second = model.rows.get(1).cloned().unwrap_or_default();
+        assert_eq!(second.kind, TextRowKind::Equal);
+        assert_eq!(second.right, "a");
+        // Neighbour hunk row untouched: line scope only.
+        let third = model.rows.get(2).cloned().unwrap_or_default();
+        assert_eq!(third.kind, TextRowKind::Changed);
+    }
+
+    #[test]
+    fn copy_section_copies_whole_hunk_and_reports_count() {
+        let mut model = section_model();
+        let count = copy_section(&mut model, 1, CopyDirection::LeftToRight).unwrap_or_default();
+        assert_eq!(count, 2);
+        for idx in [1usize, 2usize] {
+            let row = model.rows.get(idx).cloned().unwrap_or_default();
+            assert_eq!(row.kind, TextRowKind::Equal);
+            assert_eq!(row.right, row.left);
+        }
+        // Equal row section is a no-op zero.
+        let mut model2 = section_model();
+        let zero = copy_section(&mut model2, 0, CopyDirection::LeftToRight).unwrap_or_default();
+        assert_eq!(zero, 0);
+        // Out of bounds stays an error.
+        let err = copy_section(&mut model2, 99, CopyDirection::LeftToRight);
         assert_eq!(err, Err(CopyError::IndexOutOfBounds));
     }
 }

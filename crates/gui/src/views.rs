@@ -367,7 +367,8 @@ fn paint_note(ui: &mut Ui, text: &str) {
 // Text view
 // ----------------------------------------------------------------------------
 
-/// The side-by-side text comparison: notes first, then the aligned
+/// The side-by-side text comparison: notes first, then the toolbar
+/// (Prev/Next diff, display filter, copy section/line), the aligned
 /// grid with live copy buttons and thumbnail gutter geometry.
 pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
     if model.coarse {
@@ -389,24 +390,156 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
         ui.label(RichText::new("(nothing to display: both sides are empty)").weak());
         return;
     }
+    // Selection and filter live on the model (single source of
+    // truth); clamp a stale selection after a fresh compare.
+    if let Some(sel) = model.selected
+        && model.rows.get(sel).is_none()
+    {
+        model.selected = None;
+    }
+
+    // Keyboard nav: F3 / Shift+F3 like a find loop, Ctrl+N / Ctrl+P
+    // as the terminal-friendly alternative. Plain N/P stay free for
+    // typing in the path fields above.
+    let (key_next, key_prev) = ui.input(|input| {
+        let f3 = input.key_pressed(egui::Key::F3);
+        let ctrl = input.modifiers.ctrl || input.modifiers.mac_cmd;
+        let next = (f3 && !input.modifiers.shift) || (input.key_pressed(egui::Key::N) && ctrl);
+        let prev = (f3 && input.modifiers.shift) || (input.key_pressed(egui::Key::P) && ctrl);
+        (next, prev)
+    });
+    // One-shot scroll: follow the selection only on nav frames.
+    let mut scroll_to: Option<usize> = None;
+    if key_next {
+        viewmodel::select_next_diff(&model.rows, &mut model.selected);
+        scroll_to = model.selected;
+    }
+    if key_prev {
+        viewmodel::select_prev_diff(&model.rows, &mut model.selected);
+        scroll_to = model.selected;
+    }
+
+    let counts = viewmodel::filter_counts(&model.rows, model.filter);
+    let visible = viewmodel::filtered_indices(&model.rows, model.filter);
+
+    // Toolbar: diff navigation + display filter + copy actions.
+    let mut nav_action: Option<bool> = None;
+    let mut copy_section_action = None;
+    let mut copy_line_action = None;
+    ui.horizontal(|ui| {
+        if ui.small_button("◀ Prev").clicked() {
+            nav_action = Some(false);
+        }
+        if ui.small_button("Next ▶").clicked() {
+            nav_action = Some(true);
+        }
+        ui.separator();
+        ui.label(RichText::new("Show:").small().weak());
+        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::All, "All");
+        ui.selectable_value(
+            &mut model.filter,
+            viewmodel::TextFilter::Differences,
+            "Differences",
+        );
+        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Same, "Same");
+        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Context, "Context");
+        ui.separator();
+        if ui.small_button("Section →").clicked() {
+            copy_section_action = Some(viewmodel::CopyDirection::LeftToRight);
+        }
+        if ui.small_button("← Section").clicked() {
+            copy_section_action = Some(viewmodel::CopyDirection::RightToLeft);
+        }
+        if ui.small_button("Line →").clicked() {
+            copy_line_action = Some(viewmodel::CopyDirection::LeftToRight);
+        }
+        if ui.small_button("← Line").clicked() {
+            copy_line_action = Some(viewmodel::CopyDirection::RightToLeft);
+        }
+    });
+
+    if let Some(next) = nav_action {
+        if next {
+            viewmodel::select_next_diff(&model.rows, &mut model.selected);
+        } else {
+            viewmodel::select_prev_diff(&model.rows, &mut model.selected);
+        }
+        scroll_to = model.selected;
+    }
+
+    // Resolve the action target: selection first, else first visible diff.
+    let mut target_idx = model.selected;
+    if target_idx.is_none() {
+        let mut i = 0usize;
+        while i < visible.len() {
+            let mut candidate = None;
+            if visible
+                .get(i)
+                .copied()
+                .is_some_and(|orig| model.rows.get(orig).is_some_and(viewmodel::is_diff_row))
+            {
+                candidate = visible.get(i).copied();
+            }
+            if candidate.is_some() {
+                target_idx = candidate;
+                break;
+            }
+            i = i.saturating_add(1);
+        }
+    }
+    if let (Some(idx), Some(dir)) = (target_idx, copy_section_action)
+        && viewmodel::copy_section(model, idx, dir).is_ok()
+    {
+        model.selected = Some(idx);
+    }
+    if let (Some(idx), Some(dir)) = (target_idx, copy_line_action)
+        && viewmodel::copy_line(model, idx, dir).is_ok()
+    {
+        model.selected = Some(idx);
+    }
+
+    let selected_text = match model.selected {
+        Some(i) => format!("selected row {i}"),
+        None => "no selection".to_string(),
+    };
+    ui.label(
+        RichText::new(format!(
+            "{} rows ({} shown): {} diffs, {} same | {selected_text}",
+            counts.total, counts.shown, counts.diffs, counts.sames
+        ))
+        .small()
+        .weak(),
+    );
+
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
     let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
     let base_text = ui.style().visuals.text_color();
     let mut copy_action = None;
+    let mut select_action = None;
 
     ui.horizontal(|ui| {
         // Main diff scroll area
         ui.vertical(|ui| {
             egui::ScrollArea::both()
                 .auto_shrink([false, false])
-                .show_rows(ui, row_height, model.rows.len(), |ui, range| {
-                    for i in range {
-                        let Some(row) = model.rows.get(i) else {
-                            break;
+                .show_rows(ui, row_height, visible.len(), |ui, range| {
+                    for vis_pos in range {
+                        let Some(orig) = visible.get(vis_pos).copied() else {
+                            continue;
+                        };
+                        let Some(row) = model.rows.get(orig) else {
+                            continue;
                         };
                         ui.set_row_height(row_height);
+                        let is_selected = model.selected == Some(orig);
                         ui.horizontal(|ui| {
+                            if is_selected {
+                                ui.label(RichText::new("▶").monospace().strong());
+                            } else if ui.small_button("·").clicked() {
+                                select_action = Some(orig);
+                            }
                             let (fg, bg) = kind_palette(row.kind, base_text);
+                            let bg = if is_selected { CHANGED_BG } else { bg };
                             ui.label(side_job(Side::Left, row, model, font_id.clone(), fg, bg));
 
                             if row.kind != TextRowKind::Equal {
@@ -415,20 +548,25 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
                                     .on_hover_text("Copy Left to Right")
                                     .clicked()
                                 {
-                                    copy_action = Some((i, viewmodel::CopyDirection::LeftToRight));
+                                    copy_action =
+                                        Some((orig, viewmodel::CopyDirection::LeftToRight));
                                 }
                                 if ui
                                     .small_button("←")
                                     .on_hover_text("Copy Right to Left")
                                     .clicked()
                                 {
-                                    copy_action = Some((i, viewmodel::CopyDirection::RightToLeft));
+                                    copy_action =
+                                        Some((orig, viewmodel::CopyDirection::RightToLeft));
                                 }
                             } else {
                                 ui.label(RichText::new(" | ").monospace().color(DIM));
                             }
 
                             ui.label(side_job(Side::Right, row, model, font_id.clone(), fg, bg));
+                            if scroll_to == Some(orig) {
+                                ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
+                            }
                         });
                     }
                 });
@@ -456,8 +594,13 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
         }
     });
 
-    if let Some((idx, dir)) = copy_action {
-        let _ = viewmodel::apply_copy(model, idx, dir);
+    if let Some((idx, dir)) = copy_action
+        && viewmodel::copy_line(model, idx, dir).is_ok()
+    {
+        model.selected = Some(idx);
+    }
+    if let Some(idx) = select_action {
+        model.selected = Some(idx);
     }
 }
 
@@ -850,6 +993,8 @@ mod tests {
             coarse: false,
             pane_chars: 4,
             gutter_chars: 4,
+            selected: None,
+            filter: viewmodel::TextFilter::All,
         };
         let job = side_job(
             Side::Left,
