@@ -441,3 +441,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 14 B landed wave complete
 - B 6349ca7 verified+pushed: OWNS clean (4 files, 995+), tests 125 green, clippy clean, fmt clean, patch apply --check ok. New models unwired (mod wiring via patch, orchestrator wave next).
 - Wave H complete: A local-run + B hex/table + C exquisite all landed. Next: Wave I wiring + picture/media + gutter-click/find/merge-hunk gaps from A REPORT.
+
+## Wave I plan wiring+gaps+verify (3 parallel, disjoint)
+- I-A ses-wire-i OWNS main.rs+app.rs+views.rs+checks/parity-wiring: apply patch + wire hex/table models, 147 target.
+- I-B ses-gaps-i OWNS gutter+viewmodel+tree+checks/parity-gaps: click-jump/find/per-hunk/paging pure models.
+- I-C ses-verify-i OWNS checks/wave-i-verify only: read-only rolling gates.
+- Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
