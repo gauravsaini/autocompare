@@ -956,3 +956,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - APPLY `5b4d744` one-direction folder sync apply, dry-run default — OWNS app.rs+checks/gui-apply-ad (Gap #8 first real wiring). COLLISION: purani sess-apply-ad freeze ke baad khud jaag gayi, ac2 ke saath same files concurrently edit (brace mismatch). Dono ko STOP karaya, mixed tree verify (317 green, clippy 0, fmt clean, banned 0, harness PASS) karke orchestrator ne single commit kiya. Lesson: frozen session ko respawn se PEHLE aur der tak observe karo; respawn ke baad purane session ko turant STOP bhejo, kaam shuru hone ka wait mat karo.
 - Verify combined: 317 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
 - Pushed. Next: Wave AE (find-paint wiring, 3-pane paint, header/chrome).
+
+## 2026-11-20 — Wave AE plan (2 parallel: text-find paint + hex-find model)
+- AE-FINDPAINT `sess-findpaint-ae`: OWNS views.rs+viewmodel.rs+checks/gui-findpaint-ae (Gap #12 text find box + N/M badge paint).
+- AE-HEXFIND `sess-hexfind-ae`: OWNS views_hex.rs+checks/gui-hexfind-ae (Gap #12 hex find model; paint next wave).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Nudge protocol active. Orchestrator verifies then pushes.
