@@ -1088,3 +1088,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AP-MINIMAP `sess-minimap-ap`: OWNS views.rs+checks/gui-minimap-ap (Gap #5 minimap click-to-jump).
 - AP-SESSION `sess-session-ap`: OWNS home.rs+app.rs+checks/gui-session-ap (session restore).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AP complete (2 parallel: minimap-click + session restore)
+- MINIMAP `d3a678a` overview-ruler click-to-jump + a11y labels — OWNS views.rs (Gap #5).
+- SESSION `9cd183b` session restore with recent history + graceful reopen — OWNS home.rs+app.rs.
+- Verify combined: 440 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AQ (text wrap parity, folder sync, home recent polish).
