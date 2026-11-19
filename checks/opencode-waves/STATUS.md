@@ -458,3 +458,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 03 B editing A reading
 - All 3 live. B M gutter.rs (bar-width asserts, OWNS ok). A reading table/viewmodel. C harness loop.
 - No commits yet. Wait.
+
+## Wave I poll 04 B 85 lines C green
+- All 3 live. B gutter +85 (click-jump pure mapping, OWNS ok). A reading/wiring prep. C rolling 125 green.
+- No commits yet. Wait.
