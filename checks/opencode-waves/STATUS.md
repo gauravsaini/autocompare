@@ -139,3 +139,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - GEO agent: pane widths/splits, margins, padding, alignment, positioning. Proof in px (measured margins/padding from layout code + screenshots), not vibes.
 - TYPO agent: font family/weight/line-height/letter-spacing via egui text styles, per-pane hierarchy. Proof: before/after screenshots + style table.
 - Note: screenshot.rs .expect() hits all inside mod tests (8/8) — permitted, non-test code clean.
+
+## Wave D poll 08
+- Diff +1000/-22. checks/gui-folder-vis/ appeared (folder proof incoming). Hooks retrying views.rs edit after oldString miss. Both alive.
