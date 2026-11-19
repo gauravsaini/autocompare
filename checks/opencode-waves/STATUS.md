@@ -787,3 +787,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Q-FIND ses-find-q (opencode default): OWNS app.rs+checks/gui-find-q/**. Text-view find box state + cursor + N/M count badge model + tests (table_find_next_cell reuse); views.rs hook as INTEGRATION.patch (apply-check OK). No views.rs edits.
 - Q-GRID ses-grid-q (opencode default): OWNS views.rs+checks/gui-grid-q/**. Hex byte-grid paint (address + 8+8 + ASCII, views_hex grid math) + table header bar + cell borders + minimap click-to-jump (views.rs:914 hover->click). No app.rs edits (read-only OK for state shape).
 - Splitter (#1, needs both files) next wave after these land. Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
+
+## Wave Q poll 01 ALL LANDED wave complete
+- GRID 2efbedc verified+pushed: OWNS clean (views 415 + grid-q REPORT 51 + harness proof incl clippy/fmt outs). Hex byte-grid + table header/cell borders + minimap click-to-jump paint. Banned 0, harness PASS.
+- FIND f2a41a9 + 0fc6503 verified+pushed: OWNS clean (app 394 + REPORT 30 + INTEGRATION.patch 56 apply-check OK + round artifacts). Text find-box + N/M badge + hex needle model.
+- Orchestrator micro-fixes: 5x set_total->field+clamp (Wave O, owned files) + 1 let-chain split attempt (superseded — agent restructured itself, no orch edit needed).
+- Post-land verify: 218 green, clippy zero, fmt clean, disjoint held. All pushed. Wave Q complete.
+- Remaining top-5: #1 draggable splitter (needs views+app, next wave single agent or sequential).
