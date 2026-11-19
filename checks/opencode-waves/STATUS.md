@@ -224,3 +224,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave E poll 07 all green
 - fmt FIXED by TYPO (0 diff), tests 111 green, clippy clean, harness gui-geo PASS. Diff 306 lines across 6 files, OWNS respected, colors untouched.
 - GEO+TYPO live 17032/17049 finalizing commits NO push. Orchestrator to verify commits then push + binary.
+
+## Wave E poll 08 transient red self-healed
+- Mid-edit test red E0599 seen once, next run green 115 passed (was 111, +4 tree_indent). Clippy clean, fmt 0, diff 331 lines. Agents live 17032/17049 fixing own files, no interrupt needed.
