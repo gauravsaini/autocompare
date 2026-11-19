@@ -776,3 +776,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - P-RELEASE ses-release-p (opencode default): OWNS checks/wave-p-release/**, zero source edits. Release rebuild post-paint (time/size vs 11022272B), --screenshot PNG (vs 9914B), harness round-P-1, workspace tests (vs 43-suites/211-gui), clippy/fmt/layers/secrets. REPORT + commit NO push.
 - P-GAPRECHECK ses-gaprecheck-p (opencode default): OWNS checks/wave-p-gaps/**, zero source edits. BC-window recheck post-paint (BC running): which OPEN/PARTIAL gaps closed by pager-consume + gutter-jump + find wiring; own-words, file:line evidence; remaining OPEN list with owner waves. REPORT + commit NO push.
 - Rules: Hinglish Roman, English conventional NO push, clean-room, STATUS orch-only.
+
+## Wave P poll 01 ALL LANDED wave complete
+- GAPRECHECK 0b922ff: OWNS clean (wave-p-gaps REPORT 53 lines, post-paint deltas with file:line).
+- RELEASE d1b31db verified+pushed: OWNS clean (REPORT 59 + PNGs + round-P-1). Release 49.37s 11056624B (+0.31% paint code), PNG 9914B exact match magic ok 256, harness PASS, 43 suites 0 failed (579 passed), gui 211, clippy/fmt/layers/secrets per report.
+- All pushed. Wave P complete. Baselines updated: release 11056624B, gui 211, workspace 579 passed.
