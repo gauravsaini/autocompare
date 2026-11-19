@@ -19,10 +19,11 @@ use eframe::egui::{self, RichText, TextureHandle};
 
 use autocompare_compare::{FolderOptions, SyncAction, TextOptions};
 use autocompare_compare::{
-    JobHandle, JobProgress, JobRunner, PictureOptions, SyncOptions, SyncPlan, TableOptions,
-    TreeMergeAction, TreeMergePlan, compare_audio_files, compare_binary_files_aligned,
-    compare_folders_cancellable, compare_picture_files, compare_table_files,
-    compare_table_files_by_key, compare_text_files, load_lines, plan_sync, plan_tree_merge,
+    JobHandle, JobProgress, JobRunner, PictureOptions, SyncDirection, SyncOptions, SyncPlan,
+    SyncReport, TableOptions, TreeMergeAction, TreeMergePlan, apply_sync, compare_audio_files,
+    compare_binary_files_aligned, compare_folders_cancellable, compare_picture_files,
+    compare_table_files, compare_table_files_by_key, compare_text_files, load_lines, plan_sync,
+    plan_tree_merge,
 };
 use autocompare_diff::{AudioDiff, PictureDiff};
 
@@ -82,6 +83,11 @@ pub struct App {
     pub table_view: views_table::TableKeyView,
     pub table_tolerance_text: String,
     pub sync_model: Option<SyncChecklist>,
+    /// Sync-tab Apply gate: dry-run default on (no writes), explicit
+    /// confirm off. One direction only (checked left->right copies).
+    pub sync_dry_run: bool,
+    pub sync_confirmed: bool,
+    pub sync_last_report: Option<String>,
     pub picture_model: Option<PictureCompareModel>,
     pub picture_view: PictureViewState,
     pub folder_merge_model: Option<FolderMergeChecklist>,
@@ -98,6 +104,14 @@ pub struct App {
     /// folder panes (`views::paint_folder_dual`). Page size mirrors
     /// `folder_pager` (20); totals sync from compare results.
     pub folder_dual: tree::DualTreeState,
+    /// Dry-run gate behind Folder Apply (Gap #8 kadam 1): default true
+    /// means Apply only reports what would copy, never writes. User
+    /// must explicitly uncheck to allow real writes, plus keep the
+    /// existing consent checkbox on. No destructive default.
+    pub folder_sync_dry_run: bool,
+    /// Last mirror-copy outcome line for the Folder Apply section.
+    /// `None` until a dry-run or real apply reports one.
+    pub folder_sync_last_report: Option<String>,
     pub hex_gutter_row_text: String,
     pub table_find_needle: String,
     pub table_find_from: usize,
@@ -159,6 +173,9 @@ impl Default for App {
             table_view: views_table::TableKeyView::new(),
             table_tolerance_text: String::new(),
             sync_model: None,
+            sync_dry_run: true,
+            sync_confirmed: false,
+            sync_last_report: None,
             picture_model: None,
             picture_view: PictureViewState::default(),
             folder_merge_model: None,
@@ -172,6 +189,8 @@ impl Default for App {
             table_pager: views_table::TablePager::new(0, 20),
             folder_pager: tree::RowPager::new(0, 20),
             folder_dual: tree::DualTreeState::new(20),
+            folder_sync_dry_run: true,
+            folder_sync_last_report: None,
             hex_gutter_row_text: String::new(),
             table_find_needle: String::new(),
             table_find_from: 0,
@@ -394,6 +413,7 @@ impl App {
             Tab::Folder => {
                 std::mem::swap(&mut self.folder.left, &mut self.folder.right);
                 self.folder_model = None;
+                self.folder_sync_last_report = None;
                 self.reset_folder_dual();
                 true
             }
@@ -418,6 +438,8 @@ impl App {
             Tab::Sync => {
                 std::mem::swap(&mut self.sync.left, &mut self.sync.right);
                 self.sync_model = None;
+                self.sync_last_report = None;
+                self.sync_confirmed = false;
                 true
             }
             Tab::Picture => {
@@ -1364,6 +1386,232 @@ impl App {
     pub fn folder_sync_options_label(&self) -> String {
         let opts = tree::sync_options_for(self.folder_session.sync_mode);
         format!("options: {opts:?} (plan_sync parity, dry-run only)")
+    }
+
+    /// Safe one-direction options behind Gap #8 kadam 1: left-to-right
+    /// copies only, no prune. `plan_sync` with these options can only
+    /// produce `CopyToRight` steps; right-only / newer-right entries
+    /// stay skipped, nothing is ever deleted. Pure; headless-tested.
+    pub fn mirror_copy_options() -> SyncOptions {
+        SyncOptions {
+            direction: SyncDirection::LeftToRight,
+            prune: false,
+        }
+    }
+
+    /// Defensive subset of an engine plan: keeps only `CopyToRight`
+    /// file steps, drops deletes and reverse copies even if a caller
+    /// passes a wider plan. Skips and truncation pass through so the
+    /// summary stays honest. Pure; headless-tested.
+    pub fn mirror_copy_subset(plan: &SyncPlan) -> SyncPlan {
+        let mut out = SyncPlan {
+            steps: Vec::new(),
+            skipped: plan.skipped.clone(),
+            truncated: plan.truncated,
+        };
+        for step in &plan.steps {
+            if step.action == SyncAction::CopyToRight {
+                out.steps.push(step.clone());
+            }
+        }
+        out
+    }
+
+    /// Plans the safe mirror copy via the engine (read-only): left and
+    /// right roots must exist as directories. Errors become strings;
+    /// never panics. Pure filesystem read; headless-tested.
+    pub fn plan_mirror_copy(left: &Path, right: &Path) -> Result<SyncPlan, String> {
+        plan_sync(left, right, &Self::mirror_copy_options())
+            .map(|plan| Self::mirror_copy_subset(&plan))
+            .map_err(|err| err.to_string())
+    }
+
+    /// Applies a (possibly pre-filtered) plan via the engine, keeping
+    /// only the safe `CopyToRight` subset first. Each step failure is
+    /// recorded in the report; missing roots are a `String` error.
+    /// Never panics. Headless-tested over temp dirs.
+    pub fn apply_mirror_copy(
+        left: &Path,
+        right: &Path,
+        plan: &SyncPlan,
+    ) -> Result<SyncReport, String> {
+        let safe = Self::mirror_copy_subset(plan);
+        apply_sync(left, right, &safe).map_err(|err| err.to_string())
+    }
+
+    /// One-line outcome behind Folder Apply: copies, no deletes, and
+    /// the failure count. Pure; headless-tested.
+    pub fn describe_mirror_report(report: &SyncReport) -> String {
+        format!(
+            "mirror copy: {} copied, {} deleted, {} failed",
+            report.copied,
+            report.deleted,
+            report.failed.len()
+        )
+    }
+
+    /// Sets the dry-run gate. Default true; turning it off still needs
+    /// the consent checkbox before any write happens.
+    pub fn set_folder_sync_dry_run(&mut self, dry_run: bool) {
+        self.folder_sync_dry_run = dry_run;
+        self.status = if dry_run {
+            String::from("sync dry-run on: Apply reports only, no writes")
+        } else {
+            String::from("sync dry-run off: consented Apply writes left->right copies")
+        };
+    }
+
+    /// Whether Folder Apply may write now: dry-run off, consented, and
+    /// the current preview has steps. Pure; headless-tested.
+    pub fn folder_should_write(&self) -> bool {
+        !self.folder_sync_dry_run && self.folder_can_apply()
+    }
+
+    /// Folder Apply entry point (Gap #8 kadam 1). Dry-run reports what
+    /// the engine would copy and writes nothing; consented non-dry-run
+    /// plans via `plan_mirror_copy` and applies the safe subset, then
+    /// refreshes the report line + status. Returns true when a report
+    /// line was produced. Never panics; roots missing is a message.
+    pub fn run_folder_mirror_apply(&mut self) -> bool {
+        let preview = self.folder_sync_preview();
+        if preview.steps.is_empty() {
+            self.folder_sync_last_report = Some(String::from("mirror copy: nothing to do"));
+            self.status = String::from("sync apply: nothing to do");
+            return false;
+        }
+        if self.folder_sync_dry_run {
+            let mut copies = 0usize;
+            for step in &preview.steps {
+                if step.action == SyncAction::CopyToRight {
+                    copies = copies.saturating_add(1);
+                }
+            }
+            let line =
+                format!("dry-run: {copies} left->right cop(ies) would run, 0 deletes (no writes)");
+            self.folder_sync_last_report = Some(line.clone());
+            self.status = format!("sync apply {line}");
+            return true;
+        }
+        if !self.folder_session.consented {
+            self.folder_sync_last_report = Some(String::from("mirror copy: consent needed"));
+            self.status = String::from("sync apply needs consent first");
+            return false;
+        }
+        let (left, right) = (self.folder.left.clone(), self.folder.right.clone());
+        if left.trim().is_empty() || right.trim().is_empty() {
+            self.folder_sync_last_report =
+                Some(String::from("mirror copy: type both folder paths first"));
+            self.status = String::from("sync apply needs both folder paths");
+            return false;
+        }
+        let planned = Self::plan_mirror_copy(Path::new(&left), Path::new(&right));
+        let plan = match planned {
+            Ok(plan) => plan,
+            Err(err) => {
+                self.folder_sync_last_report = Some(format!("mirror copy failed: {err}"));
+                self.status = format!("sync apply failed: {err}");
+                return false;
+            }
+        };
+        match Self::apply_mirror_copy(Path::new(&left), Path::new(&right), &plan) {
+            Ok(report) => {
+                let line = Self::describe_mirror_report(&report);
+                self.folder_sync_last_report = Some(line.clone());
+                self.status = format!("sync apply done: {line}");
+                true
+            }
+            Err(err) => {
+                self.folder_sync_last_report = Some(format!("mirror copy failed: {err}"));
+                self.status = format!("sync apply failed: {err}");
+                false
+            }
+        }
+    }
+
+    /// Sets the Sync-tab dry-run gate. Default true; turning it off
+    /// still needs the confirm checkbox before any write happens.
+    pub fn set_sync_dry_run(&mut self, dry_run: bool) {
+        self.sync_dry_run = dry_run;
+        self.status = if dry_run {
+            String::from("sync dry-run on: Apply reports only, no writes")
+        } else {
+            String::from("sync dry-run off: confirmed Apply writes checked left->right copies")
+        };
+    }
+
+    /// Sets explicit Apply confirm for the Sync-tab checklist. Every
+    /// real Apply resets it, so consent never carries over.
+    pub fn set_sync_confirmed(&mut self, confirmed: bool) {
+        self.sync_confirmed = confirmed;
+        self.status = if confirmed {
+            String::from("sync confirm on: Apply enabled when checked copies exist")
+        } else {
+            String::from("sync confirm off: preview only")
+        };
+    }
+
+    /// Sync-tab Apply entry point (Gap #8, Sync checklist side).
+    /// Dry-run counts checked left->right copies and writes nothing;
+    /// a confirmed non-dry-run run plans nothing new — it converts the
+    /// checklist (`copy_right_plan`) and applies via the same safe
+    /// `apply_mirror_copy` subset the Folder tab uses, then refreshes
+    /// the report line + status and drops confirm. Returns true when a
+    /// report line was produced. Never panics; roots missing is a message.
+    pub fn run_sync_checklist_apply(&mut self) -> bool {
+        let (copy_steps, checked_total) = match self.sync_model.as_ref() {
+            Some(list) => (list.copy_right_plan().steps.len(), list.checked_count()),
+            None => {
+                self.sync_last_report = Some(String::from("sync apply: compare first"));
+                self.status = String::from("sync apply: compare first");
+                return false;
+            }
+        };
+        if copy_steps == 0 {
+            self.sync_last_report = Some(String::from("sync apply: no checked left->right copies"));
+            self.status = String::from("sync apply: nothing to copy");
+            return false;
+        }
+        if self.sync_dry_run {
+            let line = sync_dry_run_summary(copy_steps, checked_total);
+            self.sync_last_report = Some(line.clone());
+            self.status = format!("sync apply {line}");
+            self.sync_confirmed = false;
+            return true;
+        }
+        if !self.sync_confirmed {
+            self.sync_last_report = Some(String::from("sync apply: confirm needed"));
+            self.status = String::from("sync apply needs confirm first");
+            return false;
+        }
+        let (left, right) = (self.sync.left.clone(), self.sync.right.clone());
+        if left.trim().is_empty() || right.trim().is_empty() {
+            self.sync_last_report = Some(String::from("sync apply: type both folder paths first"));
+            self.status = String::from("sync apply needs both folder paths");
+            return false;
+        }
+        let plan = match self.sync_model.as_ref() {
+            Some(list) => list.copy_right_plan(),
+            None => {
+                self.sync_last_report = Some(String::from("sync apply: compare first"));
+                self.status = String::from("sync apply: compare first");
+                return false;
+            }
+        };
+        let outcome = Self::apply_mirror_copy(Path::new(&left), Path::new(&right), &plan);
+        self.sync_confirmed = false;
+        match outcome {
+            Ok(report) => {
+                let line = Self::describe_mirror_report(&report);
+                self.sync_last_report = Some(line.clone());
+                self.status = format!("sync apply done: {line}");
+                true
+            }
+            Err(err) => {
+                self.sync_last_report = Some(format!("sync apply failed: {err}"));
+                self.status = format!("sync apply failed: {err}");
+                false
+            }
+        }
     }
 
     /// Width panes paint at. Word wrap caps the model width at 80 so
@@ -2352,6 +2600,43 @@ impl SyncChecklist {
             row.checked = on;
         }
     }
+
+    /// One-direction plan behind Sync-tab Apply (Gap #8): keeps only
+    /// checked `CopyToRight` file rows, drops deletes, reverse copies
+    /// and unchecked rows. Skips + truncation pass through so the
+    /// summary stays honest. Pure; headless-tested. The write path
+    /// re-checks via [`App::mirror_copy_subset`] before touching disk.
+    pub fn copy_right_plan(&self) -> SyncPlan {
+        SyncPlan {
+            steps: self
+                .rows
+                .iter()
+                .filter(|row| row.checked && !row.is_dir && row.action == SyncAction::CopyToRight)
+                .map(|row| autocompare_compare::SyncStep {
+                    rel_path: row.rel_path.clone(),
+                    is_dir: false,
+                    action: row.action,
+                })
+                .collect(),
+            skipped: self.skipped.clone(),
+            truncated: self.truncated,
+        }
+    }
+}
+
+/// Whether Sync-tab Apply may run now: explicit confirm on and at
+/// least one checked left->right copy. Dry-run needs the same gate;
+/// the flag only decides writes vs report. Pure; headless-tested.
+pub fn sync_apply_enabled(confirmed: bool, copy_steps: usize) -> bool {
+    confirmed && copy_steps > 0
+}
+
+/// Dry-run report line: how many checked copies would run, with the
+/// explicit no-writes promise. Pure; headless-tested.
+pub fn sync_dry_run_summary(copy_steps: usize, checked_total: usize) -> String {
+    format!(
+        "dry-run: {copy_steps} of {checked_total} checked step(s) would copy left->right (no writes)"
+    )
 }
 
 /// One planned folder-merge step as a checklist row.
@@ -2685,11 +2970,13 @@ impl eframe::App for App {
                             self.folder_model = Some(model);
                             self.sync_folder_dual();
                             self.error = None;
+                            self.folder_sync_last_report = None;
                             self.status = format!("folder compare done: {n} entries");
                         }
                         Err(err) => {
                             self.folder_model = None;
                             self.reset_folder_dual();
+                            self.folder_sync_last_report = None;
                             self.status = format!("folder compare failed: {err}");
                             self.error = Some(err);
                         }
@@ -2753,10 +3040,14 @@ impl eframe::App for App {
                             let n = model.rows.len();
                             self.sync_model = Some(model);
                             self.error = None;
+                            self.sync_last_report = None;
+                            self.sync_confirmed = false;
                             self.status = format!("sync plan done: {n} step(s)");
                         }
                         Err(err) => {
                             self.sync_model = None;
+                            self.sync_last_report = None;
+                            self.sync_confirmed = false;
                             self.status = format!("sync plan failed: {err}");
                             self.error = Some(err);
                         }
@@ -3324,13 +3615,31 @@ impl eframe::App for App {
                         if consented != self.folder_session.consented {
                             self.set_folder_consent(consented);
                         }
+                        // Gap #8 kadam 1: dry-run default on, real writes
+                        // only when user explicitly unchecks + consents.
+                        // ONE direction: left->right copies, no deletes.
+                        let mut dry_run = self.folder_sync_dry_run;
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut dry_run, "Dry-run (no writes)");
+                            ui.label(
+                                RichText::new("uncheck + consent to copy left->right").small().weak(),
+                            );
+                        });
+                        if dry_run != self.folder_sync_dry_run {
+                            self.set_folder_sync_dry_run(dry_run);
+                        }
+                        ui.label(
+                            RichText::new("Apply copies left->right only, never deletes.")
+                                .small()
+                                .weak(),
+                        );
+                        if let Some(report) = self.folder_sync_last_report.clone() {
+                            ui.label(RichText::new(report).monospace().small().weak());
+                        }
                         let can_apply = self.folder_can_apply();
                         let apply = ui.add_enabled(can_apply, egui::Button::new("Apply sync plan"));
                         if apply.clicked() {
-                            let n = preview.steps.len();
-                            self.status = format!(
-                                "sync apply approved: {n} step(s) (preview only, no filesystem writes)"
-                            );
+                            self.run_folder_mirror_apply();
                         }
                     }
                 }
@@ -3531,6 +3840,57 @@ impl eframe::App for App {
                             RichText::new("no sync plan yet: type both folder paths and Compare.")
                                 .weak(),
                         );
+                    }
+                    // Gap #8: one-direction Apply (checked left->right
+                    // copies only, never deletes). Dry-run default on;
+                    // real writes need uncheck + explicit confirm.
+                    ui.add_space(views::TIGHT_GAP);
+                    ui.separator();
+                    ui.label(
+                        RichText::new("Apply copies checked left->right only, never deletes.")
+                            .small()
+                            .weak(),
+                    );
+                    let mut dry_run = self.sync_dry_run;
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut dry_run, "Dry-run (no writes)");
+                        ui.label(
+                            RichText::new("uncheck + confirm to copy left->right")
+                                .small()
+                                .weak(),
+                        );
+                    });
+                    if dry_run != self.sync_dry_run {
+                        self.set_sync_dry_run(dry_run);
+                    }
+                    let mut confirmed = self.sync_confirmed;
+                    ui.checkbox(&mut confirmed, "I understand Apply copies files left->right");
+                    if confirmed != self.sync_confirmed {
+                        self.set_sync_confirmed(confirmed);
+                    }
+                    if let Some(report) = self.sync_last_report.clone() {
+                        ui.label(RichText::new(report).monospace().small().weak());
+                    }
+                    let (copy_steps, checked_total) = match self.sync_model.as_ref() {
+                        Some(list) => (
+                            list.copy_right_plan().steps.len(),
+                            list.checked_count(),
+                        ),
+                        None => (0, 0),
+                    };
+                    ui.label(
+                        RichText::new(format!(
+                            "{copy_steps} of {checked_total} checked step(s) are left->right copies"
+                        ))
+                        .small()
+                        .weak(),
+                    );
+                    let apply = ui.add_enabled(
+                        sync_apply_enabled(self.sync_confirmed, copy_steps),
+                        egui::Button::new("Apply checked copies"),
+                    );
+                    if apply.clicked() {
+                        self.run_sync_checklist_apply();
                     }
                 }
                 Tab::Picture => {
@@ -4316,6 +4676,197 @@ mod tests {
         assert!(line.contains("2 step(s) planned, 1 skipped"));
     }
 
+    #[test]
+    fn sync_copy_right_plan_keeps_only_checked_copies() {
+        let mut list = SyncChecklist::from_plan(&sync_plan_fixture());
+        // Fixture: new.txt CopyToRight + old/ DeleteLeft, both checked.
+        let plan = list.copy_right_plan();
+        assert_eq!(plan.steps.len(), 1);
+        let Some(step) = plan.steps.first() else {
+            return;
+        };
+        assert_eq!(step.rel_path, "new.txt");
+        assert_eq!(step.action, autocompare_compare::SyncAction::CopyToRight);
+        assert_eq!(plan.skipped.len(), 1);
+        // Unchecking the copy leaves zero copy steps (delete never passes).
+        assert!(list.set_checked(0, false));
+        assert!(list.copy_right_plan().steps.is_empty());
+        // Re-checking the delete row still yields no copy steps.
+        list.set_all(true);
+        assert!(list.set_checked(0, false));
+        assert!(list.copy_right_plan().steps.is_empty());
+    }
+
+    #[test]
+    fn sync_apply_gate_needs_confirm_and_steps() {
+        assert!(!sync_apply_enabled(false, 0));
+        assert!(!sync_apply_enabled(false, 2));
+        assert!(!sync_apply_enabled(true, 0));
+        assert!(sync_apply_enabled(true, 1));
+        assert!(sync_apply_enabled(true, 3));
+        assert!(
+            sync_dry_run_summary(1, 2).contains("no writes"),
+            "unexpected: {}",
+            sync_dry_run_summary(1, 2)
+        );
+        assert!(sync_dry_run_summary(0, 0).contains("0 of 0"));
+    }
+
+    #[test]
+    fn sync_dry_run_default_reports_without_writes() {
+        let mut app = App::default();
+        assert!(app.sync_dry_run);
+        assert!(!app.sync_confirmed);
+        assert!(app.sync_last_report.is_none());
+        app.sync_model = Some(SyncChecklist::from_plan(&sync_plan_fixture()));
+        assert!(app.run_sync_checklist_apply());
+        let Some(report) = app.sync_last_report.clone() else {
+            return;
+        };
+        assert!(report.contains("no writes"), "unexpected: {report}");
+        assert!(report.contains("1 of 2"), "unexpected: {report}");
+        assert!(!app.sync_confirmed);
+    }
+
+    #[test]
+    fn sync_apply_without_confirm_writes_nothing() {
+        let mut app = App::default();
+        app.set_sync_dry_run(false);
+        app.sync_model = Some(SyncChecklist::from_plan(&sync_plan_fixture()));
+        assert!(!app.run_sync_checklist_apply());
+        assert!(app.status.contains("confirm"));
+        // Model untouched so the user can confirm and retry.
+        let Some(list) = app.sync_model.as_ref() else {
+            return;
+        };
+        assert_eq!(list.checked_count(), 2);
+    }
+
+    static APPLY_TEST_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    fn apply_test_dirs(tag: &str) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        let n = APPLY_TEST_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let base = std::env::temp_dir().join(format!("ad-apply-{}-{n}-{tag}", std::process::id()));
+        let left = base.join("left");
+        let right = base.join("right");
+        if std::fs::create_dir_all(&left).is_err() {
+            return None;
+        }
+        if std::fs::create_dir_all(&right).is_err() {
+            return None;
+        }
+        Some((left, right))
+    }
+
+    fn write_test_file(path: &std::path::Path, bytes: &[u8]) -> bool {
+        std::fs::write(path, bytes).is_ok()
+    }
+
+    fn read_test_file(path: &std::path::Path) -> String {
+        match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(_) => String::from("<missing>"),
+        }
+    }
+
+    fn remove_test_tree(left: &std::path::Path, right: &std::path::Path) {
+        let base = left.parent().unwrap_or(right);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    /// Makes `path` deterministically newer than `older` by stamping
+    /// mtime +60s. Same-size files compare by mtime (content compare
+    /// off by default), so this turns a pair into `NewerLeft` without
+    /// any sleep. Pure test helper; false on any io hiccup.
+    fn touch_newer(path: &std::path::Path, older: &std::path::Path) -> bool {
+        let base = match std::fs::metadata(older).and_then(|meta| meta.modified()) {
+            Ok(time) => time,
+            Err(_) => return false,
+        };
+        let newer = base
+            .checked_add(std::time::Duration::from_secs(60))
+            .unwrap_or(base);
+        match std::fs::OpenOptions::new().write(true).open(path) {
+            Ok(file) => file.set_modified(newer).is_ok(),
+            Err(_) => false,
+        }
+    }
+
+    #[test]
+    fn sync_apply_copies_new_and_changed_left_to_right() {
+        let Some((left, right)) = apply_test_dirs("copy") else {
+            return;
+        };
+        // changed.txt is the same size both sides so the engine grades
+        // by mtime; touch_newer makes the left copy win (NewerLeft).
+        let setup_ok = write_test_file(&left.join("new.txt"), b"new")
+            && write_test_file(&left.join("changed.txt"), b"left-new!!")
+            && write_test_file(&right.join("changed.txt"), b"right-old!")
+            && write_test_file(&right.join("right-only.txt"), b"keep");
+        assert!(setup_ok);
+        assert!(touch_newer(
+            &left.join("changed.txt"),
+            &right.join("changed.txt")
+        ));
+        // plan_sync reuse: engine plan, then the checklist one-direction filter.
+        let Ok(planned) = App::plan_mirror_copy(&left, &right) else {
+            remove_test_tree(&left, &right);
+            return;
+        };
+        let list = SyncChecklist::from_plan(&planned);
+        let one_way = list.copy_right_plan();
+        assert_eq!(one_way.steps.len(), 2);
+        // Confirmed real run through the same safe subset the UI uses.
+        let Ok(report) = App::apply_mirror_copy(&left, &right, &one_way) else {
+            remove_test_tree(&left, &right);
+            return;
+        };
+        assert_eq!(report.copied, 2);
+        assert_eq!(report.deleted, 0);
+        assert!(report.failed.is_empty());
+        assert_eq!(read_test_file(&right.join("new.txt")), "new");
+        assert_eq!(read_test_file(&right.join("changed.txt")), "left-new!!");
+        // Right-only entry survives: no prune, no deletes, left untouched.
+        assert_eq!(read_test_file(&right.join("right-only.txt")), "keep");
+        assert_eq!(read_test_file(&left.join("changed.txt")), "left-new!!");
+        remove_test_tree(&left, &right);
+    }
+
+    #[test]
+    fn sync_checklist_apply_end_to_end_confirmed() {
+        let Some((left, right)) = apply_test_dirs("e2e") else {
+            return;
+        };
+        let setup_ok = write_test_file(&left.join("a.txt"), b"a")
+            && write_test_file(&right.join("b.txt"), b"b");
+        assert!(setup_ok);
+        let mut app = App::default();
+        app.set_tab(Tab::Sync);
+        // Dry-run first: report, no writes.
+        let Ok(planned) = App::plan_mirror_copy(&left, &right) else {
+            remove_test_tree(&left, &right);
+            return;
+        };
+        app.sync_model = Some(SyncChecklist::from_plan(&planned));
+        app.sync.left = left.to_string_lossy().into_owned();
+        app.sync.right = right.to_string_lossy().into_owned();
+        assert!(app.run_sync_checklist_apply());
+        assert_eq!(read_test_file(&right.join("a.txt")), "<missing>");
+        // Confirm + real run: left->right copy lands, right-only stays.
+        app.set_sync_dry_run(false);
+        app.set_sync_confirmed(true);
+        assert!(app.run_sync_checklist_apply());
+        assert!(!app.sync_confirmed);
+        assert_eq!(read_test_file(&right.join("a.txt")), "a");
+        assert_eq!(read_test_file(&right.join("b.txt")), "b");
+        let Some(report) = app.sync_last_report.clone() else {
+            remove_test_tree(&left, &right);
+            return;
+        };
+        assert!(report.contains("1 copied"), "unexpected: {report}");
+        remove_test_tree(&left, &right);
+    }
+
     fn merge_plan_fixture() -> autocompare_compare::TreeMergePlan {
         autocompare_compare::TreeMergePlan {
             steps: vec![
@@ -4959,5 +5510,193 @@ mod tests {
             "unexpected status: {}",
             app.status
         );
+    }
+
+    /// Unique temp root behind mirror-copy tests (no new deps):
+    /// `std::env::temp_dir` + pid + atomic counter, best-effort cleanup.
+    fn mirror_test_root() -> Option<std::path::PathBuf> {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "autocompare-apply-ad-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        if std::fs::create_dir_all(&dir).is_err() {
+            return None;
+        }
+        Some(dir)
+    }
+
+    fn mirror_write_file(path: &std::path::Path, contents: &str) -> bool {
+        if let Some(parent) = path.parent()
+            && std::fs::create_dir_all(parent).is_err()
+        {
+            return false;
+        }
+        std::fs::write(path, contents).is_ok()
+    }
+
+    fn mirror_read_file(path: &std::path::Path) -> Option<String> {
+        std::fs::read_to_string(path).ok()
+    }
+
+    #[test]
+    fn mirror_copy_options_are_left_to_right_without_prune() {
+        let opts = App::mirror_copy_options();
+        assert_eq!(opts.direction, SyncDirection::LeftToRight);
+        assert!(!opts.prune);
+    }
+
+    #[test]
+    fn mirror_copy_subset_keeps_only_copy_to_right() {
+        let plan = autocompare_compare::SyncPlan {
+            steps: vec![
+                autocompare_compare::SyncStep {
+                    rel_path: String::from("new.txt"),
+                    is_dir: false,
+                    action: SyncAction::CopyToRight,
+                },
+                autocompare_compare::SyncStep {
+                    rel_path: String::from("back.txt"),
+                    is_dir: false,
+                    action: SyncAction::CopyToLeft,
+                },
+                autocompare_compare::SyncStep {
+                    rel_path: String::from("gone"),
+                    is_dir: true,
+                    action: SyncAction::DeleteRight,
+                },
+            ],
+            skipped: vec![(String::from("same.txt"), String::from("already in sync"))],
+            truncated: false,
+        };
+        let safe = App::mirror_copy_subset(&plan);
+        assert_eq!(safe.steps.len(), 1);
+        let Some(first) = safe.steps.first() else {
+            return;
+        };
+        assert_eq!(first.action, SyncAction::CopyToRight);
+        assert_eq!(first.rel_path, "new.txt");
+        assert_eq!(safe.skipped.len(), 1);
+        assert_eq!(
+            App::describe_mirror_report(&SyncReport::default()),
+            "mirror copy: 0 copied, 0 deleted, 0 failed"
+        );
+    }
+
+    fn mirror_set_old_mtime(path: &std::path::Path) -> bool {
+        use std::time::{Duration, UNIX_EPOCH};
+        let old = UNIX_EPOCH
+            .checked_add(Duration::from_secs(1_700_000_000))
+            .unwrap_or(UNIX_EPOCH);
+        let file = match std::fs::File::options().write(true).open(path) {
+            Ok(file) => file,
+            Err(_) => return false,
+        };
+        file.set_times(std::fs::FileTimes::new().set_modified(old))
+            .is_ok()
+    }
+
+    #[test]
+    fn mirror_copy_applies_left_to_right_in_temp_dirs() {
+        let Some(root) = mirror_test_root() else {
+            return;
+        };
+        let left = root.join("left");
+        let right = root.join("right");
+        if std::fs::create_dir_all(&left).is_err() || std::fs::create_dir_all(&right).is_err() {
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        }
+        // Right stale copy pehle (phir old mtime), left updated copy baad
+        // me taaki engine ise NewerLeft maane: same size + left newer.
+        // Bina mtime fix ke dono writes ek hi tick me gir sakte hain.
+        let wrote = mirror_write_file(&right.join("upd.txt"), "v1\n")
+            && mirror_write_file(&right.join("keep.txt"), "mine\n")
+            && mirror_write_file(&left.join("new.txt"), "fresh\n")
+            && mirror_write_file(&left.join("upd.txt"), "v2\n");
+        if !wrote {
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        }
+        if !mirror_set_old_mtime(&right.join("upd.txt")) {
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        }
+        let planned = App::plan_mirror_copy(&left, &right);
+        let Ok(plan) = planned else {
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        };
+        // Safe subset: only left->right copies, no deletes.
+        for step in &plan.steps {
+            assert_eq!(step.action, SyncAction::CopyToRight);
+        }
+        assert!(plan.steps.iter().any(|s| s.rel_path == "new.txt"));
+        let applied = App::apply_mirror_copy(&left, &right, &plan);
+        let Ok(report) = applied else {
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        };
+        assert!(report.failed.is_empty());
+        assert_eq!(report.deleted, 0);
+        assert!(report.copied >= 1);
+        // Right now mirrors left for the copied paths...
+        assert_eq!(
+            mirror_read_file(&right.join("new.txt")),
+            Some(String::from("fresh\n"))
+        );
+        assert_eq!(
+            mirror_read_file(&right.join("upd.txt")),
+            Some(String::from("v2\n"))
+        );
+        // ...while the right-only file is left alone (no prune here).
+        assert_eq!(
+            mirror_read_file(&right.join("keep.txt")),
+            Some(String::from("mine\n"))
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn folder_mirror_apply_defaults_to_dry_run_and_needs_consent() {
+        let mut app = App::default();
+        // Dry-run default on, consent off: no write path open.
+        assert!(app.folder_sync_dry_run);
+        assert!(!app.folder_session.consented);
+        assert!(!app.folder_should_write());
+        assert!(app.folder_sync_last_report.is_none());
+        app.set_folder_sync_dry_run(false);
+        assert!(!app.folder_sync_dry_run);
+        // Consent still missing, so writes stay closed.
+        assert!(!app.folder_should_write());
+        app.set_folder_consent(true);
+        // Bina compare rows ke steps nahi, isliye abhi bhi band.
+        assert!(!app.folder_should_write());
+        // Dry-run wapas on: report line banti hai, write nahi hota.
+        app.set_folder_sync_dry_run(true);
+        assert!(app.status.contains("dry-run"));
+    }
+
+    #[test]
+    fn apply_reports_clear_on_swap() {
+        // Sync tab: swap drops the stale report + confirm, dry-run rehta hai.
+        let mut app = App::default();
+        app.set_tab(Tab::Sync);
+        app.sync_model = Some(SyncChecklist::from_plan(&sync_plan_fixture()));
+        app.sync_last_report = Some(String::from("old report"));
+        app.sync_confirmed = true;
+        assert!(app.swap_sides());
+        assert!(app.sync_last_report.is_none());
+        assert!(!app.sync_confirmed);
+        assert!(app.sync_dry_run);
+        // Folder tab: swap drops the stale mirror report.
+        app.set_tab(Tab::Folder);
+        app.set_folder_paths("left-dir", "right-dir");
+        app.folder_sync_last_report = Some(String::from("old report"));
+        assert!(app.swap_sides());
+        assert!(app.folder_sync_last_report.is_none());
+        assert!(app.folder_sync_dry_run);
     }
 }
