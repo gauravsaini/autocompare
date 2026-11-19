@@ -85,8 +85,19 @@ pub struct App {
     /// App-owned per-hunk staged merge picks (Gap #13 App half).
     /// AI-MERGEPICK temp-store intent ka App truth: `decide_merge_hunk`
     /// yahi persist karta hai, summary yahi se ginta hai. Naya compare /
-    /// swap / error par clear hota hai; file apply (I/O) agle wave ka hai.
+    /// swap / error par clear hota hai; file apply (I/O) `run_merge_apply`
+    /// se hota hai (dry-run default on).
     pub merge_picks: Vec<viewmodel::MergeHunkPick>,
+    /// Merge Apply gate (Gap #7/#8 App half): dry-run default on (no
+    /// writes), output path khali (user type kare), last report line
+    /// `None` jab tak dry-run ya real apply report na de. Naya compare /
+    /// swap / error par clear hota hai. Paint wiring agle wave ka hai.
+    pub merge_dry_run: bool,
+    /// Merge output file path (Apply yahi likhta hai).
+    pub merge_output_path: String,
+    /// Last merge dry-run ya real apply outcome line.
+    /// `None` until a dry-run or real apply reports one.
+    pub merge_apply_last_report: Option<String>,
     pub table_model: Option<TableModel>,
     pub table_view: views_table::TableKeyView,
     pub table_tolerance_text: String,
@@ -187,6 +198,9 @@ impl Default for App {
             ),
             merge_model: None,
             merge_picks: Vec::new(),
+            merge_dry_run: true,
+            merge_output_path: String::new(),
+            merge_apply_last_report: None,
             table_model: None,
             table_view: views_table::TableKeyView::new(),
             table_tolerance_text: String::new(),
@@ -471,6 +485,7 @@ impl App {
                 std::mem::swap(&mut self.merge.left, &mut self.merge.right);
                 self.merge_model = None;
                 self.merge_picks.clear();
+                self.merge_apply_last_report = None;
                 true
             }
             Tab::Table => {
@@ -1202,6 +1217,185 @@ impl App {
                 )
             }
             None => String::from("merge: no results yet"),
+        }
+    }
+
+    /// Resolves staged take-side picks over the live merged lines
+    /// (Gap #7/#8 apply path). Take-left/right/base/both decisions
+    /// `apply_merge_picks` se splice hote hain; undecided hunks marker
+    /// block bankar rehte hain taaki output kabhi jhooth na bole. No
+    /// model par `Err` (compare first), stale picks par engine error
+    /// string me. Pure-headless core; no I/O, never panics.
+    pub fn merge_resolved_lines(&self) -> Result<Vec<String>, String> {
+        match self.merge_model.as_ref() {
+            Some(model) => viewmodel::apply_merge_picks(&model.lines, &self.merge_picks)
+                .map_err(|err| err.to_string()),
+            None => Err(String::from("merge apply: compare first")),
+        }
+    }
+
+    /// Resolved merge lines ko file text me jodta hai: `"\n"` join plus
+    /// trailing newline jab non-empty, khali par khali. Pure;
+    /// headless-tested.
+    pub fn join_merge_output(lines: &[String]) -> String {
+        if lines.is_empty() {
+            return String::new();
+        }
+        let mut out = String::new();
+        for (idx, line) in lines.iter().enumerate() {
+            if idx > 0 {
+                out.push('\n');
+            }
+            out.push_str(line);
+        }
+        out.push('\n');
+        out
+    }
+
+    /// Resolved lines ka file text. No model ya stale picks par `Err`
+    /// string. Pure; headless-tested.
+    pub fn merge_apply_text(&self) -> Result<String, String> {
+        match self.merge_resolved_lines() {
+            Ok(lines) => Ok(Self::join_merge_output(&lines)),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Dry-run report line: kitni output lines likhi jayengi, kitne
+    /// hunks decided/pending, saath me no-writes promise. Pure;
+    /// headless-tested.
+    pub fn merge_dry_run_summary(
+        resolved: usize,
+        decided: usize,
+        total: usize,
+        pending: usize,
+    ) -> String {
+        format!(
+            "dry-run: {resolved} line(s) output, {decided}/{total} decided, {pending} pending (no writes)"
+        )
+    }
+
+    /// Honest dry-run line over live model + staged picks. No model par
+    /// compare-first note taaki ginti kabhi jhooth na bole. Pure-headless
+    /// core (paint isi ko frame-start report karta hai).
+    pub fn merge_dry_run_line(&self) -> String {
+        match self.merge_model.as_ref() {
+            Some(model) => {
+                let summary = viewmodel::merge_pick_summary(&model.lines, &self.merge_picks);
+                let resolved = match self.merge_resolved_lines() {
+                    Ok(lines) => lines.len(),
+                    Err(_) => 0,
+                };
+                Self::merge_dry_run_summary(
+                    resolved,
+                    summary.resolved,
+                    summary.total,
+                    summary.pending,
+                )
+            }
+            None => String::from("merge apply: compare first"),
+        }
+    }
+
+    /// Real-write outcome line: likhi lines plus output path. Pure;
+    /// headless-tested.
+    pub fn describe_merge_apply_report(wrote_lines: usize, out: &str) -> String {
+        format!("merge apply done: {wrote_lines} line(s) -> {out}")
+    }
+
+    /// Merge output text ko `out` path par likhta hai. Missing parent ya
+    /// permission fail graceful `Err` string me aata hai, kabhi panic
+    /// nahi. Returns likhi line count (trailing newline = lines).
+    /// Pure filesystem write; headless-tested over temp dirs.
+    pub fn write_merge_output(out: &Path, text: &str) -> Result<usize, String> {
+        match std::fs::write(out, text) {
+            Ok(()) => {
+                if text.is_empty() {
+                    Ok(0)
+                } else {
+                    Ok(text.bytes().filter(|byte| *byte == b'\n').count())
+                }
+            }
+            Err(err) => Err(format!(
+                "merge apply failed: writing {}: {err}",
+                out.display()
+            )),
+        }
+    }
+
+    /// Sets the merge dry-run gate. Default true; turning it off still
+    /// needs a typed output path before any write happens.
+    pub fn set_merge_dry_run(&mut self, dry_run: bool) {
+        self.merge_dry_run = dry_run;
+        self.status = if dry_run {
+            String::from("merge dry-run on: Apply reports only, no writes")
+        } else {
+            String::from("merge dry-run off: Apply writes resolved output")
+        };
+    }
+
+    /// Sets the merge output file path Apply likhega.
+    pub fn set_merge_output_path(&mut self, path: impl Into<String>) {
+        self.merge_output_path = path.into();
+    }
+
+    /// Whether Merge Apply may write now: dry-run off, model maujood,
+    /// output path typed. Pending hunks write nahi rokte (markers ke
+    /// saath likhe jate hain, report pending ginata hai). Pure;
+    /// headless-tested.
+    pub fn merge_should_write(&self) -> bool {
+        !self.merge_dry_run
+            && self.merge_model.is_some()
+            && !self.merge_output_path.trim().is_empty()
+    }
+
+    /// Merge Apply entry point (Gap #7/#8, merge side). Dry-run staged
+    /// decisions se output ginta hai aur kuch nahi likhta; real run
+    /// output path par resolved text likhta hai. Har I/O ya resolve
+    /// failure graceful message banta hai, model untouched rehta hai
+    /// taaki user retry kar sake. Returns true jab report line bani ho.
+    /// Never panics; roots missing file error ek message hai.
+    pub fn run_merge_apply(&mut self) -> bool {
+        let resolved = match self.merge_resolved_lines() {
+            Ok(lines) => lines,
+            Err(err) => {
+                self.merge_apply_last_report = Some(err.clone());
+                self.status = format!("merge apply: {err}");
+                return false;
+            }
+        };
+        let summary = self.merge_pick_summary();
+        if self.merge_dry_run {
+            let line = Self::merge_dry_run_summary(
+                resolved.len(),
+                summary.resolved,
+                summary.total,
+                summary.pending,
+            );
+            self.merge_apply_last_report = Some(line.clone());
+            self.status = format!("merge apply {line}");
+            return true;
+        }
+        let out = self.merge_output_path.trim().to_string();
+        if out.is_empty() {
+            let msg = String::from("merge apply: type an output path first");
+            self.merge_apply_last_report = Some(msg.clone());
+            self.status = msg;
+            return false;
+        }
+        let text = Self::join_merge_output(&resolved);
+        match Self::write_merge_output(Path::new(&out), &text) {
+            Ok(wrote) => {
+                let line = Self::describe_merge_apply_report(wrote, &out);
+                self.merge_apply_last_report = Some(line.clone());
+                self.status = format!("merge apply done: {line}");
+                true
+            }
+            Err(err) => {
+                self.merge_apply_last_report = Some(err.clone());
+                self.status = format!("merge apply: {err}");
+                false
+            }
         }
     }
 
@@ -3405,6 +3599,7 @@ impl eframe::App for App {
                             let conflicted = model.conflicted;
                             self.merge_model = Some(model);
                             self.merge_picks.clear();
+                            self.merge_apply_last_report = None;
                             self.error = None;
                             self.status = format!(
                                 "merge done: {n} line(s){}",
@@ -3414,6 +3609,7 @@ impl eframe::App for App {
                         Err(err) => {
                             self.merge_model = None;
                             self.merge_picks.clear();
+                            self.merge_apply_last_report = None;
                             self.status = format!("merge failed: {err}");
                             self.error = Some(err);
                         }
@@ -4773,6 +4969,229 @@ mod tests {
         assert_eq!(
             app.merge_pick_for_hunk(1),
             Some(viewmodel::TakeChoice::Both)
+        );
+    }
+
+    /// Merge apply fixture: header, one full-marker conflict block
+    /// (left/base/right sections), footer.
+    fn merge_apply_fixture() -> MergeSummary {
+        viewmodel::build_merge_summary(&[
+            "header".to_string(),
+            "<<<<<<< left".to_string(),
+            "left change".to_string(),
+            "||||||| base".to_string(),
+            "base change".to_string(),
+            "=======".to_string(),
+            "right change".to_string(),
+            ">>>>>>> right".to_string(),
+            "footer".to_string(),
+        ])
+    }
+
+    fn merge_apply_expected(choice: viewmodel::TakeChoice) -> Vec<String> {
+        let mut out = vec!["header".to_string()];
+        match choice {
+            viewmodel::TakeChoice::Left => out.push("left change".to_string()),
+            viewmodel::TakeChoice::Right => out.push("right change".to_string()),
+            viewmodel::TakeChoice::Base => out.push("base change".to_string()),
+            viewmodel::TakeChoice::Both => {
+                out.push("left change".to_string());
+                out.push("right change".to_string());
+            }
+        }
+        out.push("footer".to_string());
+        out
+    }
+
+    static MERGE_APPLY_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// Temp dir ke andar merge output file path deta hai. Dir pehle se
+    /// bani hoti hai taaki real write seedha chal sake. Fail par `None`.
+    fn merge_apply_test_path(tag: &str) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        let n = MERGE_APPLY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("am-apply-{}-{n}-{tag}", std::process::id()));
+        if std::fs::create_dir_all(&dir).is_err() {
+            return None;
+        }
+        let out = dir.join("merged.txt");
+        Some((dir, out))
+    }
+
+    fn remove_merge_apply_tree(dir: &std::path::Path) {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn read_merge_apply_file(path: &std::path::Path) -> String {
+        match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(_) => String::from("<missing>"),
+        }
+    }
+
+    #[test]
+    fn merge_apply_takes_left_right_base_both() {
+        for choice in [
+            viewmodel::TakeChoice::Left,
+            viewmodel::TakeChoice::Right,
+            viewmodel::TakeChoice::Base,
+            viewmodel::TakeChoice::Both,
+        ] {
+            let mut app = App {
+                merge_model: Some(merge_apply_fixture()),
+                ..Default::default()
+            };
+            assert!(app.decide_merge_hunk(0, choice));
+            let Ok(lines) = app.merge_resolved_lines() else {
+                continue;
+            };
+            assert_eq!(lines, merge_apply_expected(choice));
+        }
+    }
+
+    #[test]
+    fn merge_apply_undecided_keeps_markers() {
+        let app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        let Ok(lines) = app.merge_resolved_lines() else {
+            return;
+        };
+        assert!(lines.iter().any(|line| line.starts_with("<<<<<<<")));
+        assert!(lines.iter().any(|line| line.starts_with(">>>>>>>")));
+        assert_eq!(app.merge_pick_summary().pending, 1);
+    }
+
+    #[test]
+    fn merge_apply_without_model_reports_compare_first() {
+        let app = App::default();
+        assert!(app.merge_model.is_none());
+        let Err(err) = app.merge_resolved_lines() else {
+            return;
+        };
+        assert!(err.contains("compare first"));
+        assert_eq!(app.merge_dry_run_line(), "merge apply: compare first");
+        let mut app = app;
+        assert!(!app.run_merge_apply());
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            return;
+        };
+        assert!(report.contains("compare first"));
+    }
+
+    #[test]
+    fn merge_apply_dry_run_default_reports_without_writes() {
+        let Some((dir, out)) = merge_apply_test_path("dry") else {
+            return;
+        };
+        let mut app = App::default();
+        assert!(app.merge_dry_run);
+        assert!(app.merge_apply_last_report.is_none());
+        app.merge_model = Some(merge_apply_fixture());
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        app.set_merge_output_path(out.to_string_lossy().into_owned());
+        assert!(!app.merge_should_write());
+        assert!(app.run_merge_apply());
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert!(report.contains("no writes"), "unexpected: {report}");
+        assert!(report.contains("1/1 decided"), "unexpected: {report}");
+        assert_eq!(read_merge_apply_file(&out), "<missing>");
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_apply_real_write_end_to_end() {
+        let Some((dir, out)) = merge_apply_test_path("e2e") else {
+            return;
+        };
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Both));
+        app.set_merge_output_path(out.to_string_lossy().into_owned());
+        assert!(!app.merge_should_write());
+        app.set_merge_dry_run(false);
+        assert!(app.merge_should_write());
+        assert!(app.run_merge_apply());
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert!(report.contains("merge apply done"), "unexpected: {report}");
+        assert!(report.contains("4 line(s)"), "unexpected: {report}");
+        assert_eq!(
+            read_merge_apply_file(&out),
+            "header\nleft change\nright change\nfooter\n"
+        );
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_apply_missing_output_path_writes_nothing() {
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Right));
+        app.set_merge_dry_run(false);
+        assert!(!app.merge_should_write());
+        assert!(!app.run_merge_apply());
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            return;
+        };
+        assert!(report.contains("output path"));
+    }
+
+    #[test]
+    fn merge_apply_io_error_graceful_on_dir_path() {
+        let Some((dir, out)) = merge_apply_test_path("ioerr") else {
+            return;
+        };
+        // Output path par dir banana: `fs::write` fail hoga, graceful Err.
+        let clash = dir.join("clash");
+        if std::fs::create_dir_all(&clash).is_err() {
+            remove_merge_apply_tree(&dir);
+            return;
+        }
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Base));
+        app.set_merge_output_path(clash.to_string_lossy().into_owned());
+        app.set_merge_dry_run(false);
+        assert!(app.merge_should_write());
+        assert!(!app.run_merge_apply());
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert!(
+            report.contains("merge apply failed"),
+            "unexpected: {report}"
+        );
+        assert_eq!(read_merge_apply_file(&out), "<missing>");
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_dry_run_summary_honest_counts() {
+        let line = App::merge_dry_run_summary(9, 1, 2, 1);
+        assert!(line.contains("9 line(s) output"));
+        assert!(line.contains("1/2 decided"));
+        assert!(line.contains("1 pending"));
+        assert!(line.contains("no writes"));
+        let done = App::describe_merge_apply_report(4, "out.txt");
+        assert!(done.contains("4 line(s)"));
+        assert!(done.contains("out.txt"));
+        assert_eq!(App::join_merge_output(&[]), String::new());
+        assert_eq!(
+            App::join_merge_output(&["a".to_string(), "b".to_string()]),
+            "a\nb\n"
         );
     }
 
