@@ -596,12 +596,88 @@ fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), co
     }
 }
 
-// 5x7 ASCII font column definitions for clean raster text rendering.
-fn draw_string(pixels: &mut [u8], dims: (u32, u32), mut x: u32, y: u32, s: &str, color: [u8; 4]) {
-    for b in s.bytes() {
-        draw_glyph(pixels, dims, x, y, b, color);
-        x = x.saturating_add(7);
+// 5x7 ASCII font: geometry first (advance/kerning), typography second (bitmap tuning).
+// Colors frozen: this module only moves the pen and picks bits, never hues.
+//
+// Advance table: default 6px (5 cols + 1 gap, was 7) so fixture rows fit the
+// 460px panes without clipping; single-stem / punctuation glyphs take 4px.
+// `kern_adjust` tucks known overhang pairs by 1px (never more, never pushes).
+fn glyph_advance(ch: u8) -> u32 {
+    match ch {
+        b' ' => 4,
+        b'\'' | b',' | b'.' | b':' | b';' | b'!' | b'I' | b'i' | b'j' | b'l' | b't' | b'|'
+        | b'`' => 4,
+        _ => 6,
     }
+}
+
+/// Kerning nudge in pixels between two adjacent bytes: -1 (tuck), else 0.
+/// Explicit caps pairs first, then one general rule for top-right overhangs
+/// (`T/Y/V/r/f`) tucking into round/lowercase/punctuation followers.
+fn kern_adjust(prev: u8, curr: u8) -> i32 {
+    match (prev, curr) {
+        (b'A', b'V')
+        | (b'A', b'W')
+        | (b'L', b'T')
+        | (b'L', b'V')
+        | (b'L', b'Y')
+        | (b'P', b'A')
+        | (b'T', b'o')
+        | (b'T', b'e')
+        | (b'T', b'a')
+        | (b'V', b'A')
+        | (b'Y', b'V') => -1,
+        _ => {
+            let tight_prev = matches!(prev, b'T' | b'Y' | b'V' | b'r' | b'f');
+            let tuck_curr = matches!(curr, b'a' | b'c' | b'e' | b'o' | b'.' | b',' | b'\'' | b'"');
+            if tight_prev && tuck_curr { -1 } else { 0 }
+        }
+    }
+}
+
+/// Pen width of `s` under the advance + kerning rules (layout proof helper).
+fn text_width(s: &str) -> u32 {
+    let mut w = 0u32;
+    let mut prev: Option<u8> = None;
+    for b in s.bytes() {
+        if let Some(p) = prev {
+            let k = kern_adjust(p, b);
+            if k < 0 {
+                w = w.saturating_sub(1);
+            }
+        }
+        w = w.saturating_add(glyph_advance(b));
+        prev = Some(b);
+    }
+    w
+}
+
+/// Count of non-empty columns in a 5-wide pattern (readability probe helper).
+fn nonzero_columns(pattern: &[u8; 5]) -> usize {
+    pattern.iter().filter(|c| **c != 0).count()
+}
+
+fn draw_string(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    mut x: u32,
+    y: u32,
+    s: &str,
+    color: [u8; 4],
+) -> u32 {
+    let mut prev: Option<u8> = None;
+    for b in s.bytes() {
+        if let Some(p) = prev {
+            let k = kern_adjust(p, b);
+            if k < 0 {
+                x = x.saturating_sub(1);
+            }
+        }
+        draw_glyph(pixels, dims, x, y, b, color);
+        x = x.saturating_add(glyph_advance(b));
+        prev = Some(b);
+    }
+    x
 }
 
 fn draw_glyph(pixels: &mut [u8], dims: (u32, u32), x: u32, y: u32, ch: u8, color: [u8; 4]) {
@@ -643,9 +719,11 @@ fn glyph_pattern(ch: u8) -> [u8; 5] {
         b')' => [0x00, 0x41, 0x22, 0x1c, 0x00],
         b'*' => [0x14, 0x08, 0x3e, 0x08, 0x14],
         b'+' => [0x08, 0x08, 0x3e, 0x08, 0x08],
-        b',' => [0x00, 0x50, 0x30, 0x00, 0x00],
+        // Single-stem punctuation: one active column reads sharper at 1x than
+        // the old doubled blocks; comma/semicolon keep a 1px descender tail.
+        b',' => [0x00, 0x00, 0x50, 0x20, 0x00],
         b'-' => [0x08, 0x08, 0x08, 0x08, 0x08],
-        b'.' => [0x00, 0x60, 0x60, 0x00, 0x00],
+        b'.' => [0x00, 0x00, 0x60, 0x00, 0x00],
         b'/' => [0x20, 0x10, 0x08, 0x04, 0x02],
         b'0' => [0x3e, 0x51, 0x49, 0x45, 0x3e],
         b'1' => [0x00, 0x42, 0x7f, 0x40, 0x00],
@@ -657,8 +735,8 @@ fn glyph_pattern(ch: u8) -> [u8; 5] {
         b'7' => [0x01, 0x71, 0x09, 0x05, 0x03],
         b'8' => [0x36, 0x49, 0x49, 0x49, 0x36],
         b'9' => [0x06, 0x49, 0x49, 0x29, 0x1e],
-        b':' => [0x00, 0x36, 0x36, 0x00, 0x00],
-        b';' => [0x00, 0x56, 0x36, 0x00, 0x00],
+        b':' => [0x00, 0x00, 0x36, 0x00, 0x00],
+        b';' => [0x00, 0x00, 0x56, 0x20, 0x00],
         b'<' => [0x08, 0x14, 0x22, 0x41, 0x00],
         b'=' => [0x14, 0x14, 0x14, 0x14, 0x14],
         b'>' => [0x00, 0x41, 0x22, 0x14, 0x08],
@@ -726,7 +804,8 @@ fn glyph_pattern(ch: u8) -> [u8; 5] {
         b'|' => [0x00, 0x00, 0x7f, 0x00, 0x00],
         b'}' => [0x00, 0x41, 0x36, 0x08, 0x00],
         b'~' => [0x08, 0x04, 0x08, 0x10, 0x08],
-        _ => [0x7f, 0x7f, 0x7f, 0x7f, 0x7f],
+        // Unknown bytes render as `?` outline, never a solid block.
+        _ => [0x02, 0x01, 0x51, 0x09, 0x06],
     }
 }
 
@@ -773,5 +852,75 @@ mod tests {
         assert!(png_magic_ok(&text_bytes));
         assert!(png_magic_ok(&folder_bytes));
         assert_ne!(text_bytes, folder_bytes);
+    }
+
+    #[test]
+    fn narrow_glyphs_use_tighter_advance() {
+        for ch in *b" ',.:;!Iijlt|`" {
+            assert_eq!(glyph_advance(ch), 4);
+        }
+        for ch in *b"MWaen=>/" {
+            assert_eq!(glyph_advance(ch), 6);
+        }
+        assert!(glyph_advance(b'i') < glyph_advance(b'M'));
+    }
+
+    #[test]
+    fn kern_tight_pairs_tuck_one_pixel() {
+        assert_eq!(kern_adjust(b'A', b'V'), -1);
+        assert_eq!(kern_adjust(b'L', b'T'), -1);
+        assert_eq!(kern_adjust(b'T', b'o'), -1);
+        assert_eq!(kern_adjust(b'V', b'A'), -1);
+        assert_eq!(kern_adjust(b'r', b'e'), -1);
+        assert_eq!(kern_adjust(b'n', b'n'), 0);
+        assert_eq!(kern_adjust(b'e', b'e'), 0);
+        assert_eq!(kern_adjust(b'T', b'n'), 0);
+    }
+
+    #[test]
+    fn punctuation_dots_are_single_stem() {
+        assert_eq!(nonzero_columns(&glyph_pattern(b'.')), 1);
+        assert_eq!(nonzero_columns(&glyph_pattern(b':')), 1);
+        assert_eq!(nonzero_columns(&glyph_pattern(b',')), 2);
+        assert_eq!(nonzero_columns(&glyph_pattern(b';')), 2);
+        assert_eq!(glyph_pattern(b'.').get(2), Some(&0x60u8));
+        assert_eq!(glyph_pattern(b',').get(3), Some(&0x20u8));
+        // Unknown bytes fall back to the `?` outline, never a solid block.
+        assert_eq!(glyph_pattern(0x80), glyph_pattern(b'?'));
+    }
+
+    #[test]
+    fn text_width_respects_kerning_and_fits_panes() {
+        let plain = glyph_advance(b'T').saturating_add(glyph_advance(b'o'));
+        assert_eq!(text_width("To"), plain.saturating_sub(1));
+        assert_eq!(
+            text_width("nn"),
+            glyph_advance(b'n').saturating_add(glyph_advance(b'n'))
+        );
+        // Fixture strings must fit their painted fields at 960px canvas width.
+        assert!(text_width("fixtures/left.rs") < 380);
+        assert!(text_width("fixtures/right.rs") < 380);
+        assert!(
+            text_width("[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax")
+                < 928
+        );
+        assert!(
+            text_width(
+                "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done: 7 row(s)"
+            ) < 928
+        );
+    }
+
+    #[test]
+    fn draw_string_returns_pen_and_clips_safely() {
+        let dims = (20u32, 10u32);
+        let total = 20usize.saturating_mul(10).saturating_mul(4);
+        let mut pixels = vec![0u8; total];
+        let pen = draw_string(&mut pixels, dims, 2, 1, "Hi.", FG_TEXT);
+        assert_eq!(pen, 2u32.saturating_add(text_width("Hi.")));
+        // Pen near the right edge clips glyph pixels but still advances.
+        let edge = draw_string(&mut pixels, dims, 19, 1, "Hi.", FG_TEXT);
+        assert_eq!(edge, 19u32.saturating_add(text_width("Hi.")));
+        assert_eq!(pixels.len(), total);
     }
 }
