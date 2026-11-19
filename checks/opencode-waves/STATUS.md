@@ -290,3 +290,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave F COMPLETE int+release
 - 1c710e8 feat(gui-int) verified: OWNS home/views+gui-int, scan clean, 117 green clippy/fmt clean. Minor: no REPORT.md, harness+tests proof accepted.
 - 408b41d docs(release) already pushed. Both waves done.
+
+## Wave G launched colors + sessions
+- ses-color-exq: theme.rs+views.rs+checks/gui-color, typed palette WCAG, geometry/typo frozen.
+- ses-sess-exq: sessions/reports/vfs/evidence+checks/parity-sess, headless persistence+reports, no gui.
