@@ -1287,3 +1287,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave BH plan (1 agent: fresh localrun on BG state)
 - BH-LOCALRUN `sess-localrun-bh`: OWNS checks/localrun-bh (harness + screenshots incl. hex + allsame scenes + gap re-rank vs BF §4; all .rs READ-ONLY).
 - Agent commits locally, NO PUSH (push MANA hai). REPORT se Wave BI plan banega.
+
+## 2026-11-20 — Wave BH complete (localrun on BG state)
+- LOCALRUN `64dbf91` 8 scenes (naya hex + allsame), 589 green read-only, BF re-rank: P0s CLOSE, nibble threading CLOSED (rects live), grid-text ?? OPEN, AllSame scene CLOSE.
+- Verify: OWNS clean (checks only), PNG magic-ok x8, STATUS untouched, no code edits. Stray .outs removed.
+- Pushed. Next: Wave BI (hex grid-cell real digits + merge/sync parity audit).
+
+## 2026-11-20 — Wave BI plan (2 parallel: hex grid text + merge/sync audit)
+- BI-HEXTEXT `sess-hextext-bi`: OWNS views_hex.rs+checks/gui-hextext-bi (format_hex_grid_cells real byte digits; screenshot.rs read-only unless fixture breaks; views.rs callsite + app.rs snap FROZEN).
+- BI-MERGESYNC `sess-mergesync-bi`: OWNS checks/gui-mergesync-bi ONLY (merge-view + sync-view geometry parity audit vs BC, exact follow-up specs; zero .rs edits).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
