@@ -1,0 +1,3 @@
+test result: ok. 245 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+workspace: 601 passed 0 failed (baseline 579) full-run
+note: gui count drifted 233->245 across runs; concurrent uncommitted edits in crates/gui (other wave) changed tree under test

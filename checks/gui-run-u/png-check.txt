@@ -1,0 +1,3 @@
+G2 evidence: target/release/autocompare-gui --screenshot checks/gui-run-u/after.png
+exit=0, size=9914 vs baseline 9914 (exact), magic-ok=True, distinct-bytes=256
+folder variant: checks/gui-run-u/folder.png size=10300 magic-ok distinct=256

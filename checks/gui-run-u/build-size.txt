@@ -1,0 +1,3 @@
+G1 evidence: cargo build --release -p autocompare-gui
+wall=50.35s (47.55s user), exit=0
+size=11074592 bytes vs baseline 11074624 (delta -32B)

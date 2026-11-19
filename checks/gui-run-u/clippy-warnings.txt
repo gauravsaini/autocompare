@@ -1,0 +1,9 @@
+   2 warning: function `paint_text_find_bar` is never used
+   1 warning: this assertion has a constant value
+   1 warning: function `find_bar_has_room` is never used
+   1 warning: constant `GUTTER_W` is never used
+   1 warning: constant `FIND_NEEDLE_W` is never used
+   1 warning: constant `FIND_BAR_H` is never used
+   1 warning: constant `BADGE_PAD` is never used
+   1 warning: `autocompare-gui` (bin "autocompare-gui") generated 6 warnings
+   1 warning: `autocompare-gui` (bin "autocompare-gui" test) generated 2 warnings
