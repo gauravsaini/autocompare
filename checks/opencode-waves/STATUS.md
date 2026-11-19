@@ -447,3 +447,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - I-B ses-gaps-i OWNS gutter+viewmodel+tree+checks/parity-gaps: click-jump/find/per-hunk/paging pure models.
 - I-C ses-verify-i OWNS checks/wave-i-verify only: read-only rolling gates.
 - Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
+
+## Wave I poll 01 all live baselines green
+- PIDs 41851/41852/41853 live. A baseline 125 green, patch apply + wiring next (147 target). B gap mapping done, pure models next. C baseline 125 green, rolling loop.
