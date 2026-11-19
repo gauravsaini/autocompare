@@ -159,3 +159,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 12
 - Hooks in views.rs accent/color fmt code, no land. Both alive.
+
+## Wave D poll 13
+- Hooks in paint fg/bg code, no land. Both alive.
