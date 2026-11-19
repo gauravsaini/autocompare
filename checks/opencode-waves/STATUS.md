@@ -339,3 +339,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 15 dangling refs
 - Duplicates gone by deleting old palette, now E0425 12 errors RED/DIM/GREEN in tests need token names. COLOR live fixing. PCOMP no diff yet.
+
+## Wave G poll 16 refs 12->7
+- COLOR errors shrinking, DIM/RED left. PCOMP no diff. Both live.
