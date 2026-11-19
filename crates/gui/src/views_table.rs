@@ -26,6 +26,8 @@ use autocompare_diff::{
 };
 use eframe::egui;
 
+use crate::theme::TypoRole;
+
 /// Note shown when no key columns are selected: rows compare
 /// positionally, so reordered rows read as deletes plus inserts.
 pub const POSITIONAL_NOTE: &str = "no key columns: rows compare positionally";
@@ -1087,18 +1089,7 @@ pub fn paint_table_cell_grid(
         return;
     }
     let cols = table_cell_grid_columns(&widths);
-    if !header.is_empty() {
-        egui::Grid::new(TABLE_CELL_HEADER_GRID_ID)
-            .num_columns(cols)
-            .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
-            .show(ui, |ui| {
-                ui.label(egui::RichText::new(TABLE_CELL_GLYPH_PAD).monospace());
-                for cell in format_table_header(header, &widths) {
-                    ui.label(egui::RichText::new(cell).monospace().strong());
-                }
-                ui.end_row();
-            });
-    }
+    paint_table_header_row(ui, header, &widths);
     egui::Grid::new(TABLE_CELL_GRID_ID)
         .num_columns(cols)
         .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
@@ -1112,6 +1103,135 @@ pub fn paint_table_cell_grid(
                 ui.end_row();
             }
         });
+}
+
+// ----------------------------------------------------------------------------
+// Table header row + compact toolbar (BQ wave: G-B1 + G-B2 + G-B3).
+// Gap livecomp-BM TABLE G-B1/G-B2/G-B3: header data row ki tarah paint hota
+// hai (`=` marker + dashed `----` rule, `views.rs` paint_table), Find + nav
+// duplicate rows hain (app.rs Table branch + paint_table dono me Find +
+// Prev/Next), cells Grid ke bajay flow me hain. Ye section paint pieces hai
+// (caller wiring orchestrator ke paas rehti hai — signatures stable,
+// `views.rs` untouched): header Grid me real header row (strong,
+// small-caps intent — egui me small-caps nahi, isliye Mono strong stand-in;
+// TypoRole alias reuse, koi naya size), Find + page nav ek compact toolbar
+// row me (geometry find-bar precedent reuse), data Grid `TABLE_CELL_GRID_ID`
+// reuse (header ka apna `TABLE_CELL_HEADER_GRID_ID`, dono kabhi takrate
+// nahi). Colors frozen: koi Color32/Visuals yahan nahi. No I/O. Paint fns
+// test-only until wiring lands (orchestrator owns paint); pure helpers
+// unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Header text role: grid-content Mono (gutter/hex `*_text_role`
+/// precedent). Small-caps intent paint-side `.strong()` composition hai
+/// (folder caption-strong precedent — naya size/token nahi; egui me
+/// small-caps/letter-tracking nahi, `TYPO_LETTER_SPACING` 0.0). Pure;
+/// unit-tested.
+pub const fn table_header_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Real header row Grid me: glyph placeholder + har header cell
+/// [`table_header_text_role`] strong me. Koi `=` marker nahi, koi dashed
+/// separator row nahi (G-B1: header data row nahi). Khali header par no-op
+/// (honest — data grid khud empty note dikhata hai). `TABLE_CELL_GRID_ID`
+/// ko chhoota nahi (header ka apna id, compose me takrao nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[usize]) {
+    if header.is_empty() {
+        return;
+    }
+    let cols = header.len().saturating_add(1);
+    egui::Grid::new(TABLE_CELL_HEADER_GRID_ID)
+        .num_columns(cols)
+        .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
+        .show(ui, |ui| {
+            ui.label(table_header_text_role().rich(TABLE_CELL_GLYPH_PAD));
+            for cell in format_table_header(header, widths) {
+                ui.label(table_header_text_role().rich(cell).strong());
+            }
+            ui.end_row();
+        });
+}
+
+/// Page label text pager se: `views.rs` paint wording reuse
+/// (`page {n} of {m}, showing {k} row(s)`), koi naya wording nahi.
+/// [`TablePager::page_count`] + [`TablePager::visible_range`] reuse,
+/// saturating only. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn format_table_page_label(pager: TablePager) -> String {
+    let per_page = pager.rows_per_page.max(1);
+    let page = pager.top.saturating_div(per_page).saturating_add(1);
+    let pages = pager.page_count().max(1);
+    let (start, end) = pager.visible_range();
+    let showing = end.saturating_sub(start);
+    format!("page {page} of {pages}, showing {showing} row(s)")
+}
+
+/// Compact table toolbar ka click result: Find pair + page pair, ek row.
+/// Caller cursor/pager advance App state me karta hai
+/// (`table_find_next_row` / `pager.next_page` precedent). Copy; unit-tested
+/// defaults.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableToolbarAction {
+    /// Find Prev daba (needle cursor peeche).
+    pub find_prev: bool,
+    /// Find Next daba (needle cursor aage).
+    pub find_next: bool,
+    /// Page Prev daba (pager ek page peeche).
+    pub page_prev: bool,
+    /// Page Next daba (pager ek page aage).
+    pub page_next: bool,
+}
+
+/// Compact table toolbar: Find needle + Prev/Next + page Prev/Next +
+/// page label + N/M badge — sab ek [`TABLE_FIND_BAR_H`] row me (G-B2: ab do
+/// Find bars / do nav rows nahi — caller ek hi toolbar chalata hai).
+/// Button labels existing wording reuse (`paint_table_find_bar` Find pair +
+/// page pair, koi naya wording nahi); bar height, needle chaudai, col gap,
+/// badge pad find-bar precedent reuse. Badge right-end small weak me,
+/// page label Small role me (status precedent). Returns find + page clicks.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_toolbar(
+    ui: &mut egui::Ui,
+    needle: &mut String,
+    badge: &str,
+    page_label: &str,
+) -> TableToolbarAction {
+    let mut action = TableToolbarAction::default();
+    let avail = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
+        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
+        ui.label(egui::RichText::new("Find:").small().weak());
+        ui.add(
+            egui::TextEdit::singleline(needle)
+                .desired_width(TABLE_FIND_NEEDLE_W)
+                .hint_text("needle"),
+        );
+        if ui.small_button("◀ Prev").clicked() {
+            action.find_prev = true;
+        }
+        if ui.small_button("Next ▶").clicked() {
+            action.find_next = true;
+        }
+        if ui.small_button("◀ Prev page").clicked() {
+            action.page_prev = true;
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            action.page_next = true;
+        }
+        ui.label(TypoRole::Small.rich(page_label));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_FIND_BADGE_PAD);
+            ui.label(egui::RichText::new(badge).small().weak());
+        });
+    });
+    action
 }
 
 // ----------------------------------------------------------------------------
@@ -2294,5 +2414,63 @@ mod tests {
         assert_eq!(rects.get(1).map(|r| r.x), Some(42.0));
         assert!(table_find_underline_rects_for_cell(cell, &[], 8, 8.0).is_empty());
         assert!(table_find_underline_rects_for_cell(cell, &spans, 8, 0.0).is_empty());
+    }
+
+    #[test]
+    fn table_header_role_reuses_mono_grid_content() {
+        // TypoRole reuse: header Mono grid content hai (gutter/hex
+        // `*_text_role` precedent); small-caps intent paint-side `.strong()`
+        // composition hai (folder caption-strong precedent) — koi naya
+        // size/token nahi.
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_header_text_role(), TypoRole::content_grid());
+        assert!(table_header_text_role().is_mono());
+        assert_eq!(
+            table_header_text_role().zoomed_point_size(0),
+            crate::theme::TYPO_MONO_SIZE
+        );
+        // Grid ids kabhi takrate nahi (header vs data Compose).
+        assert_ne!(TABLE_CELL_GRID_ID, TABLE_CELL_HEADER_GRID_ID);
+    }
+
+    #[test]
+    fn table_page_label_mirrors_pager_state() {
+        let mut pager = TablePager::new(25, 10);
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 1 of 3, showing 10 row(s)"
+        );
+        pager.next_page();
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 2 of 3, showing 10 row(s)"
+        );
+        pager.next_page();
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 3 of 3, showing 5 row(s)"
+        );
+        // Khali grid: honest 0 rows, pages floor 1 (views.rs precedent).
+        let empty = TablePager::new(0, 10);
+        assert_eq!(
+            format_table_page_label(empty),
+            "page 1 of 1, showing 0 row(s)"
+        );
+    }
+
+    #[test]
+    fn table_toolbar_defaults_quiet_and_reuses_find_geometry() {
+        // Koi click nahi to sab false (caller App state untouched rakhta hai).
+        let action = TableToolbarAction::default();
+        assert!(!action.find_prev);
+        assert!(!action.find_next);
+        assert!(!action.page_prev);
+        assert!(!action.page_next);
+        // Toolbar geometry find-bar precedent reuse karti hai (single bar —
+        // G-B2 duplicate rows ka fix, koi naya token nahi).
+        assert_eq!(TABLE_FIND_BAR_H, TABLE_KEY_BAR_H);
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, TABLE_KEY_BADGE_PAD);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
     }
 }
