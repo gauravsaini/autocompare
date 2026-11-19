@@ -244,3 +244,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - GEO 007714d + TYPO 20cabdb landed disjoint, pushed. Tree 115 green, clippy clean, fmt clean, harness gui-geo+gui-typo PASS, PNGs 9914B valid, colors untouched.
 - Geometry: central inner_margin OUTER_MARGIN, single toolbar row, gap tokens, equal halves/thirds, centered cards, equal panes, consistent indent. Typography: TypoRole scale 18/13/11/12 mono + Home 14, gutter_for_font, wrap/full chars, letter-spacing 0.0 documented.
 - Next: colors wave + integration applying TypoRole/HOME consts in paint_home/text panes, release binary refresh, full parity waves.
+
+## Wave F launched integration + release
+- ses-int-exq PID 22935: views.rs+home.rs+checks/gui-int, apply TypoRole in paint, geometry frozen, colors out.
+- ses-rel-exq PID 22936: checks/local-run+release-smoke only, release build + screenshot + report, no source.
+- Default model, Hinglish Roman, NO push by agents.
