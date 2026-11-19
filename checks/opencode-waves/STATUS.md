@@ -45,3 +45,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Interface collision: folder tree.rs references TextFilter, text viewmodel.rs mid-edit — 16 compile errors on folder side. Folder agent self-diagnosing (fmt diffs, own-files-only fix). No orchestrator interrupt yet; re-check next poll, intervene only if still red.
 - Text agent still reading viewmodel (offset 409). Shell agent reading app.rs tail sections.
 - Banned-pattern scan CLEAN.
+
+## Poll 06
+- Collision self-resolving: TextFilter enum now defined at viewmodel.rs:383 (text agent). Folder agent on fmt-check of own files. No interrupt needed.
+- Shell agent writing tests (status-bar asserts in log). All 3 alive, logs growing.
+- Local-run report.md unstaged edits gone with no new commit — left alone (agent OWNS).
