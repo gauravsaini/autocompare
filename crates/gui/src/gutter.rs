@@ -101,9 +101,9 @@ pub const fn gutter_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
 
-/// Gutter text size: the shared mono token.
+/// Gutter text size: the shared mono token via role (single source).
 pub const fn gutter_text_size() -> f32 {
-    crate::theme::TYPO_MONO_SIZE
+    crate::theme::TypoRole::Mono.size()
 }
 
 /// Gutter line-height source: the shared measured mono row height.

@@ -118,9 +118,9 @@ pub const HOME_CARD_DESC_SMALL_WEAK: bool = true;
 /// Home card button uses the body scale (default size, no small/strong).
 pub const HOME_CARD_BUTTON_BODY_SIZE: f32 = crate::theme::TYPO_BODY_SIZE;
 
-/// Title point size for Home cards.
+/// Title point size for Home cards (via role, single source: 14.0).
 pub const fn home_card_title_size() -> f32 {
-    HOME_CARD_TITLE_SIZE
+    crate::theme::TypoRole::HomeTitle.size()
 }
 
 /// Whether the Home card description paints small + weak.
@@ -128,9 +128,9 @@ pub const fn home_card_desc_is_small_weak() -> bool {
     HOME_CARD_DESC_SMALL_WEAK
 }
 
-/// Button point size for Home cards (body scale).
+/// Button point size for Home cards (via role, single source: body 13.0).
 pub const fn home_card_button_size() -> f32 {
-    HOME_CARD_BUTTON_BODY_SIZE
+    crate::theme::TypoRole::HomeButton.size()
 }
 
 /// Home card title role: strong proportional 14. Typography only;
