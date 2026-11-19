@@ -622,3 +622,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 11 disjoint holds 962
 - A2 views_hex 71 lines, B app 947 + views 4 (theme imports). M files map 1:1 to owners (hex=A2, app+views=B). No overlap.
 - No commits. Wait.
+
+## Wave J poll 12 picture paint 370
+- B views 370 lines picture paint (status line, checklists). A2 chunk_run/HEX_HUNK_LEN analysis. Diff 1328.
+- No commits. Wait.
