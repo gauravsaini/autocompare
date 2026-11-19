@@ -708,3 +708,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave L poll 04 parity +511 tests 189
 - PARITY diff +511 (hex 238 + table 198 + tree 75, all owned), tests 189 green (182+7 new). K-B release rebuilt post-K-A: 7 warnings now (was 3, investigating which are new vs pre-existing) + mac ls-flag hiccup (adapting).
 - GEO reading views gap constants (TAB_BOTTOM_GAP/FOOTER_GAP), TYPO steady, LOCALBIN2 scoping. No lands yet. Wait.
+
+## Wave L poll 05 steady progress
+- PARITY +517 refining (dead_code comment cleanup), LOCALBIN2 release binary confirmed 11022272B, GEO/TYPO/K-B in builds/reads. No lands yet. Wait.
