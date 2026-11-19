@@ -1187,3 +1187,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - HARNESS `62a1c6f` sync fixtures to live contracts + picture/wrap/table-find scenes — OWNS screenshot.rs.
 - Verify combined: 547 green, clippy 0, fmt clean, banned 0, PNG magic-ok x3.
 - Pushed. Next: fresh localrun on AX state (harness now live) + Wave AY.
+
+## 2026-11-20 — Wave AY plan (2 parallel: table cell accent + hex minimap paint)
+- AY-TABLECELL `sess-tablecell-ay`: OWNS views_table.rs+checks/gui-tablecell-ay (cell-level key-col highlight + find underline in Grid paint; AX2 §10.3).
+- AY-HEXMINI `sess-hexmini-ay`: OWNS views_hex.rs+checks/gui-hexmini-ay (24px minimap hit-rect + nibble-level geometry in paint; AX2 §10.3/10.4).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
