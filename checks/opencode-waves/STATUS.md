@@ -165,3 +165,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 14
 - Hooks WHITE/BLACK hits all in test module (9 in-test, 0 non-test) — no color-scope creep. No land. Both alive.
+
+## Wave D poll 15
+- Hooks red test fixed (gutter test ok, 7/7 focused pass). Land approaching.
