@@ -367,3 +367,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave G poll 24 COLOR landed in 71fab3a (mixed)
 - 71fab3a includes COLOR gui-color REPORT+PNG+theme245+views100 (agent staged, orchestrator status commit swept it). Verified from HEAD: gui 122 green, clippy clean, fmt clean for gui part, REPORT documents tokens+WCAG.
 - Lesson: use git commit --only for status to avoid sweeping agent staged files. PCOMP live with 8 headless files, fmt RED + NaN red, fixing.
+
+## Wave G poll 25 NaN fixed COLOR done
+- COLOR terminal done (landed 71fab3a). PCOMP live 05:56: diff 52 green (NaN fixed), gui 122 green, clippy clean, fmt RED 5 files, proof dir pending, commit pending.
