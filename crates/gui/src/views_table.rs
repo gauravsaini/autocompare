@@ -24,6 +24,7 @@ use autocompare_diff::{
     Table, TableCompareOptions, TableKeyDiff, cells_equal_with_options, detect_key_columns,
     diff_table_by_key_with_options,
 };
+use eframe::egui;
 
 /// Note shown when no key columns are selected: rows compare
 /// positionally, so reordered rows read as deletes plus inserts.
@@ -460,6 +461,80 @@ pub fn table_find_prev(
     None
 }
 
+/// Table find bar ki geometry (text/folder precedent reuse, koi naya
+/// token nahi): bar `28.0` px uncha, needle field `120.0` px chauda,
+/// badge right-end se `4.0` px pad par.
+pub const TABLE_FIND_BAR_H: f32 = 28.0;
+/// Table find needle field ki chaudai (text precedent reuse).
+pub const TABLE_FIND_NEEDLE_W: f32 = 120.0;
+/// Table find badge ka right-end pad (text precedent reuse).
+pub const TABLE_FIND_BADGE_PAD: f32 = 4.0;
+
+/// Sab matching cells row-major order me: har `(row, col)` jisme
+/// needle hai. Khali needle par khali vec. `table_find_next` ka
+/// poora-hit judvaan (N/M count `len()` se aata hai). Pure; unit-tested.
+pub fn table_find_match_rows(
+    rows: &[Vec<String>],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (row_idx, cells) in rows.iter().enumerate() {
+        for (col_idx, cell) in cells.iter().enumerate() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                out.push((row_idx, col_idx));
+            }
+        }
+    }
+    out
+}
+
+/// N/M badge text table find bar ke liye: `Some(2), 5 -> "2/5"`,
+/// koi hit nahi par `"0/0"`. Text precedent mirror. Pure; unit-tested.
+pub fn table_find_badge_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
+
+/// Table window ke andar find row: needle field + Prev/Next + N/M
+/// badge. Text find bar precedent ka geometry/typo reuse (wahi bar
+/// height, wahi needle chaudai, wahi button labels, badge right me
+/// ek pad ke saath small weak typo me). Returns
+/// `(prev_clicked, next_clicked)`; cursor/badge advance App state
+/// (`table_find_next_row` / `table_find_prev_row`) me hota hai.
+/// Caller signature same rehti hai (table tab wiring isi ko chalati
+/// hai, `views.rs` caller untouched).
+pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    let avail = ui.available_width();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
+        ui.label(egui::RichText::new("Find:").small().weak());
+        ui.add(
+            egui::TextEdit::singleline(needle)
+                .desired_width(TABLE_FIND_NEEDLE_W)
+                .hint_text("needle"),
+        );
+        if ui.small_button("◀ Prev").clicked() {
+            prev = true;
+        }
+        if ui.small_button("Next ▶").clicked() {
+            next = true;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_FIND_BADGE_PAD);
+            ui.label(egui::RichText::new(badge).small().weak());
+        });
+    });
+    (prev, next)
+}
+
 // ----------------------------------------------------------------------------
 // Per-hunk merge (headless; paint wiring stays with the orchestrator).
 // Gap local-run-l #10: table tab me har modified/orphan row par
@@ -846,6 +921,38 @@ mod tests {
         assert_eq!(table_find_prev(&rows, "", 1, false), None);
         assert_eq!(table_find_prev(&[], "x", 1, false), None);
         assert_eq!(table_find_next(&rows, "zzz", 0, false), None);
+    }
+
+    #[test]
+    fn table_find_match_rows_collects_all_hits() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "apple pie".to_string()],
+        ];
+        assert_eq!(
+            table_find_match_rows(&rows, "apple", false),
+            vec![(1, 0), (2, 1)]
+        );
+        // Case-sensitive: chhota "banana" nahi milega, ignore_case par milega.
+        assert!(table_find_match_rows(&rows, "banana", false).is_empty());
+        assert_eq!(table_find_match_rows(&rows, "banana", true), vec![(2, 0)]);
+        // Khali needle/rows: khali vec.
+        assert!(table_find_match_rows(&rows, "", false).is_empty());
+        assert!(table_find_match_rows(&[], "x", false).is_empty());
+        assert!(table_find_match_rows(&rows, "zzz", false).is_empty());
+        // Geometry tokens text precedent reuse karte hain.
+        assert_eq!(TABLE_FIND_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, 4.0);
+    }
+
+    #[test]
+    fn table_find_badge_labels_position_over_total() {
+        assert_eq!(table_find_badge_label(Some(2), 5), "2/5");
+        assert_eq!(table_find_badge_label(Some(1), 1), "1/1");
+        assert_eq!(table_find_badge_label(None, 0), "0/0");
+        assert_eq!(table_find_badge_label(None, 4), "0/4");
     }
 
     #[test]

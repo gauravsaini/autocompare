@@ -115,6 +115,10 @@ pub struct App {
     pub hex_gutter_row_text: String,
     pub table_find_needle: String,
     pub table_find_from: usize,
+    /// Table find N/M cursor: `table_find_matches` list me index.
+    /// Text `text_find_cursor` precedent mirror; legacy `table_find_from`
+    /// (row-based) compat ke liye rehta hai.
+    pub table_find_cursor: usize,
     pub folder_find_needle: String,
     pub folder_cursor: usize,
     pub text_find_needle: String,
@@ -198,6 +202,7 @@ impl Default for App {
             hex_gutter_row_text: String::new(),
             table_find_needle: String::new(),
             table_find_from: 0,
+            table_find_cursor: 0,
             folder_find_needle: String::new(),
             folder_cursor: 0,
             text_find_needle: String::new(),
@@ -919,6 +924,115 @@ impl App {
         self.table_pager.bring_into_view(found.0);
         self.table_find_from = found.0.saturating_add(1) % texts.len().max(1);
         self.status = format!("table find: row {} col {}", found.0 + 1, found.1 + 1);
+        Some(found)
+    }
+
+    /// Table find search rows: painted `label | text` rows par needle
+    /// dhoondha jata hai (legacy `table_find_next_paged` precedent).
+    /// Khali model par khali vec. Pure-headless core (paint isi par
+    /// matches gin-ta hai).
+    fn table_find_search_rows(&self) -> Vec<Vec<String>> {
+        match self.table_model.as_ref() {
+            Some(model) => model
+                .rows
+                .iter()
+                .map(|row| vec![format!("{} | {}", row.label, row.text)])
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Current needle par sab table matches (model order me cell pos).
+    /// Khali needle par khali vec; paint badge isi se `N/M` gin-ta hai.
+    pub fn table_find_matches(&self) -> Vec<(usize, usize)> {
+        let needle = self.table_find_needle.clone();
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let texts = self.table_find_search_rows();
+        views_table::table_find_match_rows(&texts, &needle, self.table_view.ignore_case)
+    }
+
+    /// Total matches ("M" badge ke liye).
+    pub fn table_find_total(&self) -> usize {
+        self.table_find_matches().len()
+    }
+
+    /// 1-based cursor position ("N" badge ke liye), match na ho par None.
+    /// Text `text_find_position` precedent mirror.
+    pub fn table_find_position(&self) -> Option<usize> {
+        let total = self.table_find_total();
+        if total == 0 {
+            return None;
+        }
+        let at = self.table_find_cursor % total.max(1);
+        Some(at.saturating_add(1))
+    }
+
+    /// N/M badge text: "2/5", koi match nahi par "0/0". Paint-side
+    /// `views_table::paint_table_find_bar` ka App-side judvaan (text
+    /// `text_find_badge` precedent mirror).
+    pub fn table_find_badge(&self) -> String {
+        views_table::table_find_badge_label(self.table_find_position(), self.table_find_total())
+    }
+
+    /// Needle badalne par cursor pehle match par; khali par 0 rehta hai.
+    /// Legacy `table_find_from` (row-based) bhi reset hota hai taaki
+    /// purana paged nav consistent rahe.
+    pub fn table_find_set_needle(&mut self, needle: impl Into<String>) {
+        self.table_find_needle = needle.into();
+        self.table_find_cursor = 0;
+        self.table_find_from = 0;
+    }
+
+    /// Agla table match: cursor wrap, pager bring-into-view + status
+    /// `table find: row R (N/M)`. Khali needle ya zero matches par None.
+    pub fn table_find_next_row(&mut self) -> Option<(usize, usize)> {
+        let matches = self.table_find_matches();
+        if matches.is_empty() {
+            self.status = String::from("table find: no match");
+            return None;
+        }
+        let at = self.table_find_cursor % matches.len().max(1);
+        let found = matches.get(at).copied()?;
+        self.table_find_cursor = at.saturating_add(1) % matches.len().max(1);
+        let total_rows = self.table_find_search_rows().len();
+        self.table_find_from = found.0.saturating_add(1) % total_rows.max(1);
+        self.sync_table_pager();
+        self.table_pager.bring_into_view(found.0);
+        let pos = at.saturating_add(1);
+        self.status = format!(
+            "table find: row {} ({pos}/{})",
+            found.0.saturating_add(1),
+            matches.len()
+        );
+        Some(found)
+    }
+
+    /// Pichhla table match: cursor peeche wrap, pager bring-into-view +
+    /// status `table find: row R (N/M)`. Khali needle ya zero matches par None.
+    pub fn table_find_prev_row(&mut self) -> Option<(usize, usize)> {
+        let matches = self.table_find_matches();
+        if matches.is_empty() {
+            self.status = String::from("table find: no match");
+            return None;
+        }
+        let len = matches.len();
+        let at = if self.table_find_cursor == 0 {
+            len.saturating_sub(1)
+        } else {
+            (self.table_find_cursor.saturating_sub(1)) % len.max(1)
+        };
+        let found = matches.get(at).copied()?;
+        self.table_find_cursor = at;
+        self.table_find_from = found.0;
+        self.sync_table_pager();
+        self.table_pager.bring_into_view(found.0);
+        let pos = at.saturating_add(1);
+        self.status = format!(
+            "table find: row {} ({pos}/{len})",
+            found.0.saturating_add(1)
+        );
         Some(found)
     }
 
@@ -3917,18 +4031,27 @@ impl eframe::App for App {
                     if rerun {
                         self.run_table();
                     }
+                    // Table find row table window ke andar `views_table` paint fn
+                    // se (text/folder precedent reuse): needle + Prev/Next +
+                    // N/M badge; cursor advance App state me hota hai.
+                    let old_table_needle = self.table_find_needle.clone();
+                    let table_badge = self.table_find_badge();
+                    let (table_prev, table_next) = views_table::paint_table_find_bar(
+                        ui,
+                        &mut self.table_find_needle,
+                        &table_badge,
+                    );
+                    if self.table_find_needle != old_table_needle {
+                        self.table_find_cursor = 0;
+                        self.table_find_from = 0;
+                    }
+                    if table_next && self.table_find_next_row().is_none() {
+                        self.status = String::from("table find: no match");
+                    }
+                    if table_prev && self.table_find_prev_row().is_none() {
+                        self.status = String::from("table find: no match");
+                    }
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Find:").small().weak());
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.table_find_needle)
-                                .desired_width(120.0)
-                                .hint_text("needle"),
-                        );
-                        if find_nav_button(ui, "Next match ▶")
-                            && self.table_find_next_paged().is_none()
-                        {
-                            self.status = String::from("table find: no match");
-                        }
                         if ui.small_button("◀ Prev page").clicked() {
                             self.table_page_prev();
                         }
@@ -5265,6 +5388,63 @@ mod tests {
         app.table_page_next();
         app.table_page_prev();
         assert_eq!(app.table_pager.top, 0);
+    }
+
+    #[test]
+    fn table_find_bar_tracks_matches_and_badge() {
+        use crate::viewmodel::{TableModel, TableRow};
+        let rows = vec![
+            TableRow {
+                glyph: '=',
+                label: "   1".to_string(),
+                text: "apple".to_string(),
+                changed: false,
+            },
+            TableRow {
+                glyph: '!',
+                label: "   2".to_string(),
+                text: "banana".to_string(),
+                changed: true,
+            },
+            TableRow {
+                glyph: '!',
+                label: "   3".to_string(),
+                text: "Banana bread".to_string(),
+                changed: true,
+            },
+        ];
+        let mut app = App {
+            table_model: Some(TableModel {
+                rows,
+                truncated: false,
+            }),
+            ..Default::default()
+        };
+        app.table_find_set_needle("banana");
+        // Case-sensitive: sirf chhota "banana" milta hai.
+        assert_eq!(app.table_find_total(), 1);
+        assert_eq!(app.table_find_badge(), "1/1");
+        assert_eq!(app.table_find_next_row(), Some((1, 0)));
+        assert_eq!(app.table_find_badge(), "1/1");
+        assert_eq!(app.table_find_prev_row(), Some((1, 0)));
+        assert!(app.status.contains("(1/1)"));
+        // Ignore-case par dono banana rows milti hain, Next/Prev wrap karte hain.
+        app.table_view.ignore_case = true;
+        assert_eq!(app.table_find_total(), 2);
+        assert_eq!(app.table_find_badge(), "1/2");
+        assert_eq!(app.table_find_next_row(), Some((1, 0)));
+        assert_eq!(app.table_find_badge(), "2/2");
+        assert_eq!(app.table_find_next_row(), Some((2, 0)));
+        assert_eq!(app.table_find_badge(), "1/2");
+        assert_eq!(app.table_find_prev_row(), Some((2, 0)));
+        assert_eq!(app.table_find_badge(), "2/2");
+        // Khali needle: 0/0, koi navigation nahi.
+        app.table_find_set_needle("");
+        assert_eq!(app.table_find_total(), 0);
+        assert_eq!(app.table_find_badge(), "0/0");
+        assert_eq!(app.table_find_next_row(), None);
+        assert_eq!(app.table_find_prev_row(), None);
+        assert_eq!(app.status, String::from("table find: no match"));
     }
 
     #[test]
