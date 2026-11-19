@@ -294,3 +294,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave G launched colors + sessions
 - ses-color-exq: theme.rs+views.rs+checks/gui-color, typed palette WCAG, geometry/typo frozen.
 - ses-sess-exq: sessions/reports/vfs/evidence+checks/parity-sess, headless persistence+reports, no gui.
+
+## Wave G poll 01 reading
+- Both live 27695/27697 00:16. COLOR into theme/views, SESS into 4 crate manifests. No diff yet.
