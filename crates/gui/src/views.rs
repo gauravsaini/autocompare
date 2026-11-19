@@ -4544,6 +4544,48 @@ pub fn clamp_overlay_mix(mix: u8) -> u8 {
     mix.min(crate::app::PICTURE_OVERLAY_MAX)
 }
 
+/// Zoom presets for the step row: 25/50/100/200/400 all live inside
+/// the App-clamped paint range ([`clamp_zoom_pct`]) so every step is
+/// reachable via `set_zoom_pct`; the wider 8x headless math stays
+/// untouched. Pure data; unit-tested.
+pub const PICTURE_ZOOM_STEPS: [u32; 5] = [25, 50, 100, 200, 400];
+
+/// Fit-to-window zoom: the largest 25pp step (the
+/// `picture_zoom_in/out` ladder, [`viewmodel::PICTURE_ZOOM_STEP_PCT`])
+/// at which the natural frame still fits inside the viewport.
+/// Non-finite/non-positive sizes fall back to the reset zoom (100 =
+/// 1:1, honest instead of a fake 25); the result runs through
+/// [`clamp_zoom_pct`] so paint honors it through `set_zoom_pct`.
+/// Pure; unit-tested.
+pub fn picture_fit_zoom_pct(natural_w: f32, natural_h: f32, avail_w: f32, avail_h: f32) -> u32 {
+    if !natural_w.is_finite()
+        || !natural_h.is_finite()
+        || !avail_w.is_finite()
+        || !avail_h.is_finite()
+        || natural_w <= 0.0
+        || natural_h <= 0.0
+        || avail_w <= 0.0
+        || avail_h <= 0.0
+    {
+        return viewmodel::picture_zoom_reset();
+    }
+    let scale = (avail_w / natural_w).min(avail_h / natural_h);
+    let pct = (scale * 100.0).floor() as u32;
+    let stepped = pct.saturating_sub(pct % viewmodel::PICTURE_ZOOM_STEP_PCT);
+    clamp_zoom_pct(stepped)
+}
+
+/// Centering offset for one axis: half the leftover when the content
+/// is smaller than the viewport, else 0 (scroll takes over, never a
+/// negative margin). Non-finite input pins to 0 so paint never feeds
+/// NaN into layout. Pure; unit-tested.
+pub fn picture_center_offset(content: f32, avail: f32) -> f32 {
+    if !content.is_finite() || !avail.is_finite() {
+        return 0.0;
+    }
+    ((avail - content) / 2.0).max(0.0)
+}
+
 /// Clamped zoom percent paint honors (25..=400).
 pub fn clamp_zoom_pct(pct: u32) -> u32 {
     pct.clamp(crate::app::PICTURE_ZOOM_MIN, crate::app::PICTURE_ZOOM_MAX)
@@ -4716,6 +4758,39 @@ pub fn paint_picture_compare(
             view.set_zoom_pct(zoom);
         }
     });
+    // Zoom-step row: Fit plus the preset ladder, mapping each step to
+    // its zoom pct (selectable row, exact-hit highlight). Fit derives
+    // from the remaining viewport below this row (heatmap + summary
+    // area) and the heatmap natural size; without a heatmap it stays
+    // disabled instead of guessing. Geometry helpers above, no new
+    // token/typography/color here.
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("steps:").small().weak());
+        let fit = heatmap.map(|handle| {
+            let natural = handle.size_vec2();
+            picture_fit_zoom_pct(
+                natural.x,
+                natural.y,
+                ui.available_width(),
+                ui.available_height(),
+            )
+        });
+        if ui
+            .add_enabled(fit.is_some(), egui::Button::new("Fit"))
+            .on_hover_text("fit image to window")
+            .clicked()
+            && let Some(pct) = fit
+        {
+            view.set_zoom_pct(pct);
+        }
+        let mut zoom = clamp_zoom_pct(view.zoom_pct);
+        for step in PICTURE_ZOOM_STEPS {
+            ui.selectable_value(&mut zoom, step, format!("{step}%"));
+        }
+        if zoom != view.zoom_pct {
+            view.set_zoom_pct(zoom);
+        }
+    });
     ui.horizontal(|ui| {
         ui.label(
             RichText::new(pan_label(view.pan_x, view.pan_y))
@@ -4751,6 +4826,9 @@ pub fn paint_picture_compare(
             let limit = crate::app::PICTURE_PAN_LIMIT;
             let (cx, cy) = viewmodel::clamp_picture_pan(view.pan_x, view.pan_y, dw, dh, limit);
             view.nudge_pan(cx.saturating_sub(view.pan_x), cy.saturating_sub(view.pan_y));
+            // Viewport captured before the scroll area fills it: the
+            // centering offsets below are measured against this frame.
+            let viewport = ui.available_size();
             let output = egui::ScrollArea::both()
                 .auto_shrink([false, false])
                 .scroll_offset(egui::vec2(
@@ -4758,11 +4836,31 @@ pub fn paint_picture_compare(
                     view.pan_y.max(0) as f32,
                 ))
                 .show(ui, |ui| {
-                    ui.add(
-                        egui::Image::new((handle.id(), handle.size_vec2()))
-                            .fit_to_exact_size(egui::vec2(dw, dh))
-                            .sense(egui::Sense::click_and_drag()),
-                    )
+                    let ox = picture_center_offset(dw, viewport.x);
+                    let oy = picture_center_offset(dh, viewport.y);
+                    if ox > 0.0 || oy > 0.0 {
+                        // Centered frame: the zoomed image is smaller
+                        // than the viewport on at least one axis, so
+                        // equal margins center it (BC fit-to-window
+                        // geometry); scroll stays dormant because
+                        // content plus margins still fit. Wide/tall
+                        // content keeps the plain top-left path below.
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(oy);
+                            ui.add(
+                                egui::Image::new((handle.id(), handle.size_vec2()))
+                                    .fit_to_exact_size(egui::vec2(dw, dh))
+                                    .sense(egui::Sense::click_and_drag()),
+                            )
+                        })
+                        .inner
+                    } else {
+                        ui.add(
+                            egui::Image::new((handle.id(), handle.size_vec2()))
+                                .fit_to_exact_size(egui::vec2(dw, dh))
+                                .sense(egui::Sense::click_and_drag()),
+                        )
+                    }
                 });
             // Drag to pan: the image follows the cursor (grabbing right
             // scrolls left), clamped to the content bounds. The forced
@@ -5945,6 +6043,44 @@ mod tests {
         let (left, right) = split_picture_widths(800.0, 0.50);
         assert_eq!(left + right, 800.0 - SECTION_GAP);
         assert_eq!((left, right), (396.0, 396.0));
+    }
+
+    #[test]
+    fn picture_fit_zoom_snaps_down_to_steps() {
+        // Exact fit: 800x600 in 400x300 -> 50%.
+        assert_eq!(picture_fit_zoom_pct(800.0, 600.0, 400.0, 300.0), 50);
+        // 62.5% floors to the 25pp ladder -> 50.
+        assert_eq!(picture_fit_zoom_pct(800.0, 600.0, 500.0, 500.0), 50);
+        // Narrow axis wins: min(2.0, 1.0) -> 100%.
+        assert_eq!(picture_fit_zoom_pct(200.0, 100.0, 400.0, 100.0), 100);
+        // Huge viewport caps at the paint-honored range.
+        assert_eq!(picture_fit_zoom_pct(100.0, 100.0, 10_000.0, 10_000.0), 400);
+        // Tiny viewport floors at 25, never 0.
+        assert_eq!(picture_fit_zoom_pct(100.0, 100.0, 10.0, 10.0), 25);
+        // Guards fall back to 1:1 instead of a fake zoom.
+        assert_eq!(picture_fit_zoom_pct(0.0, 100.0, 400.0, 300.0), 100);
+        assert_eq!(picture_fit_zoom_pct(f32::NAN, 100.0, 400.0, 300.0), 100);
+        assert_eq!(
+            picture_fit_zoom_pct(100.0, 100.0, 400.0, f32::INFINITY),
+            100
+        );
+    }
+
+    #[test]
+    fn picture_center_offset_halves_leftover() {
+        assert_eq!(picture_center_offset(100.0, 400.0), 150.0);
+        assert_eq!(picture_center_offset(400.0, 400.0), 0.0);
+        assert_eq!(picture_center_offset(500.0, 400.0), 0.0);
+        assert_eq!(picture_center_offset(f32::NAN, 400.0), 0.0);
+        assert_eq!(picture_center_offset(100.0, f32::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn picture_zoom_steps_live_in_paint_range() {
+        assert_eq!(PICTURE_ZOOM_STEPS, [25, 50, 100, 200, 400]);
+        for step in PICTURE_ZOOM_STEPS {
+            assert_eq!(clamp_zoom_pct(step), step);
+        }
     }
 
     #[test]
