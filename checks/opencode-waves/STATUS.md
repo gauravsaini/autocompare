@@ -130,3 +130,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 06
 - Diff +794/-22: screenshot +291 (folder fixture expanding), views +123 (paint hook), app +315, viewmodel +69, gutter +18. Scan clean. Both alive.
+
+## Wave D poll 07
+- Diff +944/-22: screenshot +334, views +230, app +315. Scan clean. CI still queued.
