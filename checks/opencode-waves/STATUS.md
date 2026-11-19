@@ -1146,3 +1146,11 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AU-LOCALRUN `sess-localrun-au`: OWNS checks/localrun-au only, NO source edits (run app locally, fresh screenshots for early feedback).
 - AU-BINARY `sess-binary-au`: OWNS checks/binary-au only, NO source edits (release build + install/binary story for early feedback).
 - Dev agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AU complete (2 dev + localrun + binary)
+- TABLEFIND `2dc8705` table find match spans current-vs-other parity — OWNS views_table.rs.
+- FILTERPAINT `9ba596d` wired folder filters adopted in folder paint — OWNS views.rs.
+- LOCALRUN `700669d` early feedback 5 screenshots + gap notes — checks only, pushed.
+- BINARY `e7562c3` INSTALL draft + distribution readiness — checks only, pushed.
+- Verify combined: 515 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AV (picture zoom parity, text wrap nav, home geometry polish).
