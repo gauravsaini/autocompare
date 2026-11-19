@@ -20,6 +20,8 @@ pub use folder::{FolderCompare, compare_folders_cancellable};
 pub use folder_merge::FolderMerge;
 pub use jobs::{JobHandle, JobProgress, JobRunner};
 pub use sync::{SyncMode, SyncPlanner};
+pub use table::{TableKeyFileComparison, TableKeyOptions};
+pub use autocompare_diff::hex::HexAlignment;
 
 use std::fmt;
 use std::path::Path;
@@ -139,6 +141,19 @@ pub fn compare_table_files(
     opts: &TableOptions,
 ) -> Result<TableComparison> {
     table::compare_table_files(left, right, opts)
+}
+
+/// Compares two delimited files aligned by key columns with tolerant
+/// cell comparison (numeric tolerance, case folding, space trimming
+/// via `key_opts`). Headers are still exposed separately and take no
+/// part in the row alignment.
+pub fn compare_table_files_by_key(
+    left: &Path,
+    right: &Path,
+    opts: &TableOptions,
+    key_opts: &TableKeyOptions,
+) -> Result<TableKeyFileComparison> {
+    table::compare_table_files_by_key(left, right, opts, key_opts)
 }
 
 /// Metadata for one side of a compared node.
@@ -272,6 +287,24 @@ pub fn compare_binary_files(
     max_hunks: usize,
 ) -> Result<BinaryComparison> {
     binary::compare_binary_files(left, right, max_hunks)
+}
+
+/// Compares two files with a hex alignment strategy (`None`, `Fast`
+/// or `Complete`; see [`HexAlignment`).
+///
+/// Unlike [`compare_binary_files`], both files are read whole (up to
+/// 16 MiB each — larger files are [`Error::Unsupported`]) and
+/// aligned: `Complete` finds the minimal edit script so an insertion
+/// shows as a gap, while `None` compares strictly positionally.
+/// Differing runs are chunked into hunks of at most 64 bytes; gap
+/// hunks carry bytes on one side only.
+pub fn compare_binary_files_aligned(
+    left: &Path,
+    right: &Path,
+    max_hunks: usize,
+    alignment: HexAlignment,
+) -> Result<BinaryComparison> {
+    binary::compare_binary_files_aligned(left, right, max_hunks, alignment)
 }
 
 /// Direction of a folder sync.

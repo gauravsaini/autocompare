@@ -22,7 +22,12 @@ pub use audio::{
     AudioDiff, MAX_SAMPLES, PcmAudio, decode_audio, decode_mp3, decode_wav, diff_audio,
 };
 pub use image::{PictureDiff, RgbaImage, decode_png, diff_pictures, encode_png, picture_heatmap};
-pub use table::{Table, diff_cells, diff_rows, parse_delimited};
+pub use table::{
+    KeyRowDiff, Sheet, SheetDiff, SheetDiffStatus, Table, TableCompareOptions, TableKeyDiff,
+    Workbook, WorkbookDiff, cells_equal_with_options, cells_equal_with_tolerance,
+    detect_key_columns, diff_cells, diff_cells_with_options, diff_rows, diff_table_by_key,
+    diff_table_by_key_with_options, diff_workbooks, parse_delimited, sort_table_rows,
+};
 
 /// One edit operation over two sequences of lines.
 #[derive(Debug, Clone, PartialEq, Eq)]

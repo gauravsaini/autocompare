@@ -4,7 +4,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use autocompare_diff::{DiffScript, Op, Table, diff_cells, diff_rows, parse_delimited};
+use autocompare_diff::{
+    DiffScript, Op, Table, TableCompareOptions, cells_equal_with_tolerance,
+    detect_key_columns, diff_cells, diff_cells_with_options, diff_rows,
+    diff_table_by_key, diff_table_by_key_with_options, parse_delimited, sort_table_rows,
+};
 
 /// Shorthand for expected cells: `cells(&["a", "b"])`.
 fn cells(spec: &[&str]) -> Vec<String> {
@@ -336,4 +340,125 @@ fn parse_then_diff_rows_across_tables() {
         script.ops,
         vec![Op::Equal { len: 2 }, Op::Insert { len: 1 }]
     );
+}
+
+// ---------------------------------------------------------------------
+// Key-column alignment (Beyond Compare table parity)
+// ---------------------------------------------------------------------
+
+#[test]
+fn key_alignment_matches_rows_despite_reorder() {
+    let a = parse_delimited("id,name\n1,alice\n2,bob\n3,carol\n", ',', true);
+    let b = parse_delimited("id,name\n3,carol\n1,alice\n2,bobby\n", ',', true);
+    let diff = diff_table_by_key(&a, &b, &[0]);
+    assert_eq!(diff.key_columns, vec![0]);
+    assert_eq!(diff.matching_rows, 2);
+    assert_eq!(diff.modified_rows, 1);
+    assert_eq!(diff.left_only_rows, 0);
+    assert_eq!(diff.right_only_rows, 0);
+    // Total rows accounted for on the left side.
+    let accounted = diff.matching_rows + diff.modified_rows + diff.left_only_rows;
+    assert_eq!(accounted, a.rows.len());
+}
+
+#[test]
+fn key_alignment_reports_one_sided_rows() {
+    let a = parse_delimited("id,v\n1,a\n2,b\n", ',', true);
+    let b = parse_delimited("id,v\n2,b\n3,c\n", ',', true);
+    let diff = diff_table_by_key(&a, &b, &[0]);
+    assert_eq!(diff.matching_rows, 1);
+    assert_eq!(diff.left_only_rows, 1);
+    assert_eq!(diff.right_only_rows, 1);
+}
+
+#[test]
+fn detect_key_columns_finds_unique_and_composite() {
+    let t = parse_delimited("id,city\n1,paris\n2,paris\n", ',', true);
+    assert_eq!(detect_key_columns(&t), vec![0]);
+    // No single column is unique, but the pair is.
+    let t = parse_delimited("a,b\n1,x\n1,y\n2,x\n", ',', false);
+    assert_eq!(detect_key_columns(&t), vec![0, 1]);
+    // Nothing unique: empty.
+    let t = parse_delimited("a,b\n1,x\n1,x\n", ',', false);
+    assert!(detect_key_columns(&t).is_empty());
+}
+
+// ---------------------------------------------------------------------
+// Numeric tolerance (Beyond Compare table parity)
+// ---------------------------------------------------------------------
+
+#[test]
+fn tolerance_matrix() {
+    assert!(cells_equal_with_tolerance("1.001", "1.002", Some(0.01)));
+    assert!(!cells_equal_with_tolerance("1.001", "1.02", Some(0.01)));
+    assert!(cells_equal_with_tolerance("1.0", "1", Some(0.0)));
+    assert!(!cells_equal_with_tolerance("1.0", "2", Some(0.0)));
+    assert!(!cells_equal_with_tolerance("abc", "abd", Some(99.0)));
+    assert!(!cells_equal_with_tolerance("NaN", "nan", Some(1.0)));
+}
+
+#[test]
+fn tolerance_key_diff_counts_match() {
+    let a = parse_delimited("id,price\n1,9.99\n2,5.00\n", ',', true);
+    let b = parse_delimited("id,price\n1,10.04\n2,7.50\n", ',', true);
+    let tolerant = TableCompareOptions {
+        key_columns: vec![0],
+        numeric_tolerance: Some(0.1),
+        ignore_case: false,
+        trim_space: false,
+    };
+    let diff = diff_table_by_key_with_options(&a, &b, &tolerant);
+    assert_eq!(diff.matching_rows, 1, "9.99 vs 10.04 is within 0.1");
+    assert_eq!(diff.modified_rows, 1, "5.00 vs 7.50 is outside 0.1");
+
+    let strict = TableCompareOptions {
+        key_columns: vec![0],
+        ..TableCompareOptions::default()
+    };
+    let diff = diff_table_by_key_with_options(&a, &b, &strict);
+    assert_eq!(diff.matching_rows, 0);
+    assert_eq!(diff.modified_rows, 2);
+}
+
+#[test]
+fn tolerant_options_ignore_case_and_space() {
+    let a = parse_delimited("id,name\n1,  Ready \n", ',', true);
+    let b = parse_delimited("id,name\n1,ready\n", ',', true);
+    let folding = TableCompareOptions {
+        key_columns: vec![0],
+        numeric_tolerance: None,
+        ignore_case: true,
+        trim_space: true,
+    };
+    let diff = diff_table_by_key_with_options(&a, &b, &folding);
+    assert_eq!(diff.matching_rows, 1);
+    assert_eq!(diff.modified_rows, 0);
+
+    let strict = TableCompareOptions {
+        key_columns: vec![0],
+        ..TableCompareOptions::default()
+    };
+    let diff = diff_table_by_key_with_options(&a, &b, &strict);
+    assert_eq!(diff.modified_rows, 1);
+}
+
+#[test]
+fn sorted_and_diff_cells_with_options_agree() {
+    let mut t = parse_delimited("age,name\n30,bob\n5,alice\n", ',', true);
+    sort_table_rows(&mut t, &[0], true);
+    let first = t.rows.first().expect("sorted rows exist");
+    assert_eq!(first.first().map(String::as_str), Some("5"));
+
+    let opts = TableCompareOptions {
+        key_columns: Vec::new(),
+        numeric_tolerance: Some(0.5),
+        ignore_case: false,
+        trim_space: false,
+    };
+    let d = diff_cells_with_options(
+        &cells(&["5", "x"]),
+        &cells(&["5.2", "x"]),
+        &opts,
+    );
+    assert!(d.is_empty(), "5 vs 5.2 is within 0.5");
 }

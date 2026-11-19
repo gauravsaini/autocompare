@@ -4,7 +4,7 @@
 
 mod common;
 
-use autocompare_compare::{Error, compare_binary_files};
+use autocompare_compare::{Error, HexAlignment, compare_binary_files, compare_binary_files_aligned};
 use common::{cleanup, temp_root, write_bytes};
 use std::path::PathBuf;
 
@@ -177,5 +177,132 @@ fn compare_binary_missing_file_is_missing_error() {
         compare_binary_files(&base.join("nope.bin"), &file, 4).expect_err("missing file must fail");
     assert!(matches!(err, Error::Missing { .. }));
     assert!(err.to_string().contains("nope.bin"));
+    cleanup(&base);
+}
+
+#[test]
+fn aligned_none_matches_positional_scan() {
+    let base = temp_root();
+    let left_path = base.join("l.bin");
+    let right_path = base.join("r.bin");
+    write_bytes(&left_path, b"abcdef");
+    write_bytes(&right_path, b"abcXef");
+    let cmp = compare_binary_files_aligned(&left_path, &right_path, 4, HexAlignment::None)
+        .expect("files must compare");
+    assert_eq!(cmp.first_diff, Some(3));
+    assert_eq!(cmp.hunks.len(), 1);
+    assert!(!cmp.truncated);
+    cleanup(&base);
+}
+
+#[test]
+fn aligned_complete_finds_insertion_as_gap() {
+    let base = temp_root();
+    let left_path = base.join("l.bin");
+    let right_path = base.join("r.bin");
+    write_bytes(&left_path, b"AAAA12345678BBBB");
+    write_bytes(&right_path, b"AAAA____12345678BBBB");
+    // Complete alignment resynchronises: the 4 inserted bytes are a
+    // right-only gap hunk, not a wall of positional differences.
+    let cmp = compare_binary_files_aligned(&left_path, &right_path, 4, HexAlignment::Complete)
+        .expect("files must compare");
+    assert_eq!(cmp.first_diff, Some(4));
+    assert!(
+        cmp.hunks.iter().any(|h| h.left.is_empty()
+            && h.right == b"____".to_vec()
+            && h.offset == 4),
+        "inserted bytes must surface as one right-only hunk, got {:?}",
+        cmp.hunks
+    );
+    assert!(!cmp.truncated);
+    // None alignment sees the same pair as shifted positional noise
+    // plus a tail gap (the right file is 4 bytes longer).
+    let flat = compare_binary_files_aligned(&left_path, &right_path, 4, HexAlignment::None)
+        .expect("files must compare");
+    assert_eq!(flat.first_diff, Some(4));
+    assert!(
+        flat.hunks
+            .iter()
+            .any(|h| !h.left.is_empty() && !h.right.is_empty() && h.offset == 4),
+        "None mode must show a positional Different hunk at 4, got {:?}",
+        flat.hunks
+    );
+    assert!(
+        flat.hunks
+            .iter()
+            .filter(|h| h.left.is_empty())
+            .all(|h| h.offset == 16),
+        "None mode gaps are tail-only, got {:?}",
+        flat.hunks
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn aligned_fast_resyncs_on_anchor() {
+    let base = temp_root();
+    let left_path = base.join("l.bin");
+    let right_path = base.join("r.bin");
+    write_bytes(&left_path, b"AAAA12345678BBBB");
+    write_bytes(&right_path, b"AAAA____12345678BBBB");
+    let cmp = compare_binary_files_aligned(&left_path, &right_path, 8, HexAlignment::Fast)
+        .expect("files must compare");
+    assert_eq!(cmp.first_diff, Some(4));
+    assert!(
+        cmp.hunks.iter().any(|h| h.left.is_empty()),
+        "Fast mode must resync into a right-only gap, got {:?}",
+        cmp.hunks
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn aligned_identical_and_truncation() {
+    let base = temp_root();
+    let left_path = base.join("l.bin");
+    let right_path = base.join("r.bin");
+    let data = corpus(300, &[]);
+    write_bytes(&left_path, &data);
+    write_bytes(&right_path, &data);
+    for mode in [
+        HexAlignment::None,
+        HexAlignment::Fast,
+        HexAlignment::Complete,
+    ] {
+        let cmp = compare_binary_files_aligned(&left_path, &right_path, 4, mode)
+            .expect("identical files must compare");
+        assert_eq!(cmp.first_diff, None);
+        assert!(cmp.hunks.is_empty());
+        assert!(!cmp.truncated);
+    }
+    // Zero hunk budget with a difference is truncated in every mode.
+    write_bytes(&right_path, &corpus(300, &[50]));
+    for mode in [
+        HexAlignment::None,
+        HexAlignment::Fast,
+        HexAlignment::Complete,
+    ] {
+        let cmp = compare_binary_files_aligned(&left_path, &right_path, 0, mode)
+            .expect("files must compare");
+        assert_eq!(cmp.first_diff, Some(50));
+        assert!(cmp.hunks.is_empty());
+        assert!(cmp.truncated);
+    }
+    cleanup(&base);
+}
+
+#[test]
+fn aligned_missing_file_is_missing_error() {
+    let base = temp_root();
+    let file = base.join("exists.bin");
+    write_bytes(&file, b"x");
+    let err = compare_binary_files_aligned(
+        &base.join("nope.bin"),
+        &file,
+        4,
+        HexAlignment::Complete,
+    )
+    .expect_err("missing file must fail");
+    assert!(matches!(err, Error::Missing { .. }));
     cleanup(&base);
 }

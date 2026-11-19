@@ -25,7 +25,6 @@ pub struct Table {
 
 impl Table {
     /// Returns a new table with rows sorted by the given columns.
-    #[allow(dead_code)]
     pub fn sorted(&self, columns: &[usize], ascending: bool) -> Self {
         let mut cloned = self.clone();
         sort_table_rows(&mut cloned, columns, ascending);
@@ -51,13 +50,11 @@ pub struct Workbook {
 
 impl Workbook {
     /// Looks up a sheet by name.
-    #[allow(dead_code)]
     pub fn sheet(&self, name: &str) -> Option<&Sheet> {
         self.sheets.iter().find(|s| s.name == name)
     }
 
     /// Looks up a mutable sheet by name.
-    #[allow(dead_code)]
     pub fn sheet_mut(&mut self, name: &str) -> Option<&mut Sheet> {
         self.sheets.iter_mut().find(|s| s.name == name)
     }
@@ -92,7 +89,6 @@ pub struct WorkbookDiff {
 }
 
 /// Compares two workbooks by matching sheets on name.
-#[allow(dead_code)]
 pub fn diff_workbooks(a: &Workbook, b: &Workbook) -> WorkbookDiff {
     let mut sheet_diffs = Vec::new();
     let mut identical = true;
@@ -214,7 +210,6 @@ pub struct TableKeyDiff {
 ///
 /// A primary key column must have non-empty, unique values for every row.
 /// Checks single columns first, then two-column pairs if no single column is unique.
-#[allow(dead_code)]
 pub fn detect_key_columns(table: &Table) -> Vec<usize> {
     if table.rows.is_empty() {
         return Vec::new();
@@ -277,7 +272,9 @@ pub fn detect_key_columns(table: &Table) -> Vec<usize> {
 }
 
 /// Compares two tables aligned by key columns.
-#[allow(dead_code)]
+///
+/// Exact text equality on every cell. For numeric tolerance, case
+/// folding or space trimming see [`diff_table_by_key_with_options`].
 pub fn diff_table_by_key(a: &Table, b: &Table, key_columns: &[usize]) -> TableKeyDiff {
     if key_columns.is_empty() {
         // Fall back to sequential row diff
@@ -395,9 +392,268 @@ pub fn diff_table_by_key(a: &Table, b: &Table, key_columns: &[usize]) -> TableKe
     }
 }
 
+/// Options for tolerant table comparison (Beyond Compare parity:
+/// key-column alignment plus numeric tolerance, case folding and
+/// space trimming). All comparisons are pure and total.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TableCompareOptions {
+    /// Columns used as the alignment key (empty = no key alignment).
+    pub key_columns: Vec<usize>,
+    /// When set to a finite value `>= 0`, two cells that both parse
+    /// as numbers (after trimming surrounding whitespace) compare
+    /// equal when their absolute difference is within the tolerance.
+    /// `None`, negative, infinite or NaN tolerance means exact text.
+    pub numeric_tolerance: Option<f64>,
+    /// Fold ASCII/Unicode case before comparing text.
+    pub ignore_case: bool,
+    /// Trim surrounding whitespace before comparing text.
+    pub trim_space: bool,
+}
+
+/// Compares two cells for equality under a numeric tolerance.
+///
+/// Exact match wins first. Otherwise, when `tolerance` is finite and
+/// `>= 0` and both cells parse as finite `f64` (surrounding
+/// whitespace ignored), they are equal when `|a - b| <= tolerance`.
+/// Anything else (non-numeric text, NaN/infinite values, invalid
+/// tolerance) is unequal unless the raw strings match.
+///
+/// Limitation: numbers go through `f64`, so integers beyond 2^53 may
+/// conflate (e.g. `9007199254740993` vs `9007199254740992`).
+pub fn cells_equal_with_tolerance(a: &str, b: &str, tolerance: Option<f64>) -> bool {
+    if a == b {
+        return true;
+    }
+    let tol = match tolerance {
+        Some(t) if t.is_finite() && t >= 0.0 => t,
+        _ => return false,
+    };
+    numeric_equal(a, b, tol)
+}
+
+/// Compares two cells under the full [`TableCompareOptions`].
+///
+/// Order: trimmed-or-raw exact match, then case-folded match when
+/// `ignore_case`, then numeric tolerance. Numeric parsing always
+/// ignores surrounding whitespace; text equality honours
+/// `trim_space` (without it, `" 1"` and `"1"` differ as text but can
+/// still match numerically when a tolerance is set).
+pub fn cells_equal_with_options(a: &str, b: &str, opts: &TableCompareOptions) -> bool {
+    let (left, right) = if opts.trim_space {
+        (a.trim(), b.trim())
+    } else {
+        (a, b)
+    };
+    if left == right {
+        return true;
+    }
+    if opts.ignore_case && left.to_lowercase() == right.to_lowercase() {
+        return true;
+    }
+    let tol = match opts.numeric_tolerance {
+        Some(t) if t.is_finite() && t >= 0.0 => t,
+        _ => return false,
+    };
+    numeric_equal(a, b, tol)
+}
+
+/// Indices of columns whose cells differ between two rows under
+/// [`TableCompareOptions`]. A cell missing on one side is compared as
+/// `""`. Sorted, no duplicates.
+pub fn diff_cells_with_options(
+    a: &[String],
+    b: &[String],
+    opts: &TableCompareOptions,
+) -> Vec<usize> {
+    let len = a.len().max(b.len());
+    let mut out = Vec::new();
+    for i in 0..len {
+        let left = a.get(i).map(String::as_str).unwrap_or("");
+        let right = b.get(i).map(String::as_str).unwrap_or("");
+        if !cells_equal_with_options(left, right, opts) {
+            out.push(i);
+        }
+    }
+    out
+}
+
+/// Compares two tables aligned by the key columns in `opts`, with
+/// tolerant cell comparison.
+///
+/// Key matching normalises keys with `trim_space`/`ignore_case` but
+/// never applies the numeric tolerance (keys `"1"` and `"1.0"` are
+/// different keys). Data cells compare with
+/// [`cells_equal_with_options`].
+///
+/// When `key_columns` is empty the rows compare positionally
+/// (row `i` vs row `i`, tails are one-sided); unlike the Myers
+/// fallback in [`diff_table_by_key`] this is positional rather than
+/// minimal-edit, which keeps tolerance semantics predictable.
+pub fn diff_table_by_key_with_options(
+    a: &Table,
+    b: &Table,
+    opts: &TableCompareOptions,
+) -> TableKeyDiff {
+    if opts.numeric_tolerance.is_none() && !opts.ignore_case && !opts.trim_space {
+        return diff_table_by_key(a, b, &opts.key_columns);
+    }
+    if opts.key_columns.is_empty() {
+        return diff_tables_positional(a, b, opts);
+    }
+
+    let mut right_key_map: HashMap<Vec<String>, Vec<usize>> = HashMap::new();
+    for (idx, row) in b.rows.iter().enumerate() {
+        let key = normalised_key(row, &opts.key_columns, opts);
+        right_key_map.entry(key).or_default().push(idx);
+    }
+
+    let mut row_diffs = Vec::new();
+    let mut matching_rows = 0usize;
+    let mut modified_rows = 0usize;
+    let mut left_only_rows = 0usize;
+    let mut right_only_rows = 0usize;
+    let mut used_right = HashSet::new();
+
+    for (l_idx, row_a) in a.rows.iter().enumerate() {
+        let key = normalised_key(row_a, &opts.key_columns, opts);
+        let hit = right_key_map
+            .get_mut(&key)
+            .and_then(|indices| {
+                indices
+                    .iter()
+                    .copied()
+                    .find(|i| !used_right.contains(i))
+            });
+        if let Some(r_idx) = hit {
+            used_right.insert(r_idx);
+            let row_b = b.rows.get(r_idx).cloned().unwrap_or_default();
+            let differing_columns = diff_cells_with_options(row_a, &row_b, opts);
+            // Key columns normalised equal but raw text may differ in
+            // case/space: those columns still count as differing so the
+            // report stays honest about the raw bytes.
+            if differing_columns.is_empty() {
+                matching_rows = matching_rows.saturating_add(1);
+                row_diffs.push(KeyRowDiff::Unchanged {
+                    left_row: l_idx,
+                    right_row: r_idx,
+                });
+            } else {
+                modified_rows = modified_rows.saturating_add(1);
+                row_diffs.push(KeyRowDiff::Modified {
+                    left_row: l_idx,
+                    right_row: r_idx,
+                    differing_columns,
+                });
+            }
+        } else {
+            left_only_rows = left_only_rows.saturating_add(1);
+            row_diffs.push(KeyRowDiff::LeftOnly { left_row: l_idx });
+        }
+    }
+
+    for (r_idx, _) in b.rows.iter().enumerate() {
+        if !used_right.contains(&r_idx) {
+            right_only_rows = right_only_rows.saturating_add(1);
+            row_diffs.push(KeyRowDiff::RightOnly { right_row: r_idx });
+        }
+    }
+
+    TableKeyDiff {
+        key_columns: opts.key_columns.clone(),
+        row_diffs,
+        matching_rows,
+        modified_rows,
+        left_only_rows,
+        right_only_rows,
+    }
+}
+
+/// Numeric equality of two cells: both must parse as finite `f64`
+/// after trimming, with `|a - b| <= tolerance`.
+fn numeric_equal(a: &str, b: &str, tolerance: f64) -> bool {
+    let left: f64 = match a.trim().parse() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let right: f64 = match b.trim().parse() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if !left.is_finite() || !right.is_finite() {
+        return false;
+    }
+    (left - right).abs() <= tolerance
+}
+
+/// Key projection of one row under the key columns, normalised for
+/// matching with `trim_space`/`ignore_case`.
+fn normalised_key(
+    row: &[String],
+    key_columns: &[usize],
+    opts: &TableCompareOptions,
+) -> Vec<String> {
+    key_columns
+        .iter()
+        .map(|&c| {
+            let raw = row.get(c).map(String::as_str).unwrap_or("");
+            let trimmed = if opts.trim_space { raw.trim() } else { raw };
+            if opts.ignore_case {
+                trimmed.to_lowercase()
+            } else {
+                trimmed.to_string()
+            }
+        })
+        .collect()
+}
+
+/// Positional tolerant comparison used when no key columns are set:
+/// row `i` vs row `i`, length tails are one-sided.
+fn diff_tables_positional(a: &Table, b: &Table, opts: &TableCompareOptions) -> TableKeyDiff {
+    let mut row_diffs = Vec::new();
+    let mut matching_rows = 0usize;
+    let mut modified_rows = 0usize;
+    let mut left_only_rows = 0usize;
+    let mut right_only_rows = 0usize;
+    let common = a.rows.len().min(b.rows.len());
+    for i in 0..common {
+        let row_a = a.rows.get(i).cloned().unwrap_or_default();
+        let row_b = b.rows.get(i).cloned().unwrap_or_default();
+        let differing_columns = diff_cells_with_options(&row_a, &row_b, opts);
+        if differing_columns.is_empty() {
+            matching_rows = matching_rows.saturating_add(1);
+            row_diffs.push(KeyRowDiff::Unchanged {
+                left_row: i,
+                right_row: i,
+            });
+        } else {
+            modified_rows = modified_rows.saturating_add(1);
+            row_diffs.push(KeyRowDiff::Modified {
+                left_row: i,
+                right_row: i,
+                differing_columns,
+            });
+        }
+    }
+    for l_idx in common..a.rows.len() {
+        left_only_rows = left_only_rows.saturating_add(1);
+        row_diffs.push(KeyRowDiff::LeftOnly { left_row: l_idx });
+    }
+    for r_idx in common..b.rows.len() {
+        right_only_rows = right_only_rows.saturating_add(1);
+        row_diffs.push(KeyRowDiff::RightOnly { right_row: r_idx });
+    }
+    TableKeyDiff {
+        key_columns: Vec::new(),
+        row_diffs,
+        matching_rows,
+        modified_rows,
+        left_only_rows,
+        right_only_rows,
+    }
+}
+
 /// Sorts the data rows of a table in-place across specified columns.
 /// Numerical values are compared as numbers (integer/float); otherwise compared lexicographically.
-#[allow(dead_code)]
 pub fn sort_table_rows(table: &mut Table, columns: &[usize], ascending: bool) {
     if columns.is_empty() || table.rows.len() <= 1 {
         return;
@@ -827,8 +1083,7 @@ mod tests {
     }
 
     #[test]
-    fn test_workbook_diff() {
-        let wb1 = Workbook {
+    fn test_workbook_diff() {        let wb1 = Workbook {
             sheets: vec![Sheet {
                 name: "Sheet1".into(),
                 table: Table {
@@ -849,5 +1104,111 @@ mod tests {
         let diff = diff_workbooks(&wb1, &wb2);
         assert!(!diff.identical);
         assert_eq!(diff.sheet_diffs.len(), 1);
+    }
+
+    #[test]
+    fn test_cells_equal_with_tolerance_exact_and_numeric() {
+        assert!(cells_equal_with_tolerance("abc", "abc", None));
+        assert!(!cells_equal_with_tolerance("abc", "abd", None));
+        // Tolerance only helps numbers.
+        assert!(!cells_equal_with_tolerance("abc", "abd", Some(100.0)));
+        // Within and outside tolerance.
+        assert!(cells_equal_with_tolerance("1.001", "1.002", Some(0.01)));
+        assert!(!cells_equal_with_tolerance("1.001", "1.02", Some(0.01)));
+        // Zero tolerance still unifies text spellings of the same number.
+        assert!(cells_equal_with_tolerance("1.0", "1", Some(0.0)));
+        // Surrounding spaces never block numeric comparison.
+        assert!(cells_equal_with_tolerance("  2.5 ", "2.5", Some(0.0)));
+        // One side non-numeric stays different.
+        assert!(!cells_equal_with_tolerance("2.5", "n/a", Some(1.0)));
+        // NaN / infinite values never match numerically (spellings
+        // that differ as text stay different).
+        assert!(!cells_equal_with_tolerance("NaN", "nan", Some(1.0)));
+        assert!(!cells_equal_with_tolerance("inf", "Infinity", Some(1.0)));
+        // Invalid tolerances fall back to exact text.
+        assert!(!cells_equal_with_tolerance("1.0", "1", Some(f64::NAN)));
+        assert!(!cells_equal_with_tolerance("1.0", "1", Some(f64::INFINITY)));
+        assert!(!cells_equal_with_tolerance("1.0", "1", Some(-0.5)));
+        assert!(cells_equal_with_tolerance("same", "same", Some(f64::NAN)));
+    }
+
+    #[test]
+    fn test_diff_cells_with_options_tolerance_and_flags() {
+        let opts = TableCompareOptions {
+            key_columns: Vec::new(),
+            numeric_tolerance: Some(0.1),
+            ignore_case: true,
+            trim_space: true,
+        };
+        let a = vec!["ID".to_string(), "9.99".to_string(), "  Ready ".to_string()];
+        let b = vec!["id".to_string(), "10.05".to_string(), "ready".to_string()];
+        assert!(diff_cells_with_options(&a, &b, &opts).is_empty());
+
+        let strict = TableCompareOptions::default();
+        assert_eq!(diff_cells_with_options(&a, &b, &strict), vec![0, 1, 2]);
+
+        // Missing tail cells still count as differing.
+        let short = vec!["ID".to_string()];
+        assert_eq!(diff_cells_with_options(&short, &b, &opts), vec![1, 2]);
+    }
+
+    #[test]
+    fn test_key_diff_with_options_tolerance() {
+        let mk = |rows: Vec<Vec<&str>>| Table {
+            header: vec!["ID".into(), "Price".into()],
+            rows: rows
+                .into_iter()
+                .map(|r| r.into_iter().map(|c| c.to_string()).collect())
+                .collect(),
+        };
+        let t1 = mk(vec![vec!["1", "9.99"], vec!["2", "5.00"]]);
+        let t2 = mk(vec![vec!["1", "10.04"], vec!["2", "7.50"]]);
+        let opts = TableCompareOptions {
+            key_columns: vec![0],
+            numeric_tolerance: Some(0.1),
+            ignore_case: false,
+            trim_space: false,
+        };
+        let diff = diff_table_by_key_with_options(&t1, &t2, &opts);
+        assert_eq!(diff.matching_rows, 1);
+        assert_eq!(diff.modified_rows, 1);
+        assert_eq!(diff.left_only_rows, 0);
+        assert_eq!(diff.right_only_rows, 0);
+
+        // Exact path delegates: same tables compare fully unchanged.
+        let exact = diff_table_by_key_with_options(
+            &t1,
+            &t1,
+            &TableCompareOptions {
+                key_columns: vec![0],
+                ..TableCompareOptions::default()
+            },
+        );
+        assert_eq!(exact.matching_rows, 2);
+        assert_eq!(exact.modified_rows, 0);
+    }
+
+    #[test]
+    fn test_key_diff_with_options_positional_fallback() {
+        let mk = |rows: Vec<Vec<&str>>| Table {
+            header: Vec::new(),
+            rows: rows
+                .into_iter()
+                .map(|r| r.into_iter().map(|c| c.to_string()).collect())
+                .collect(),
+        };
+        let t1 = mk(vec![vec!["a", "1.00"], vec!["b", "2.00"], vec!["gone", "3.00"]]);
+        let t2 = mk(vec![vec!["a", "1.05"], vec!["b", "9.99"]]);
+        let opts = TableCompareOptions {
+            key_columns: Vec::new(),
+            numeric_tolerance: Some(0.1),
+            ignore_case: false,
+            trim_space: false,
+        };
+        let diff = diff_table_by_key_with_options(&t1, &t2, &opts);
+        assert_eq!(diff.matching_rows, 1);
+        assert_eq!(diff.modified_rows, 1);
+        assert_eq!(diff.left_only_rows, 1);
+        assert_eq!(diff.right_only_rows, 0);
     }
 }

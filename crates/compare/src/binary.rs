@@ -19,6 +19,8 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use autocompare_diff::hex::{HexAlignment, HexOp, diff_hex};
+
 use crate::{BinaryComparison, BinaryHunk, Error, Result};
 
 /// Streaming chunk size for the byte scan.
@@ -219,4 +221,190 @@ fn io_error(path: &Path, source: std::io::Error) -> Error {
         path: path.display().to_string(),
         source,
     }
+}
+
+/// Maximum bytes read per file for alignment-aware hex comparison.
+///
+/// Aligned modes need the whole input in memory (`Complete` runs the
+/// Myers engine, `Fast` looks ahead in a window), so files beyond
+/// this cap report [`Error::Unsupported`] instead of comparing.
+/// Unbounded files stay on [`compare_binary_files`].
+pub const ALIGNED_HEX_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+/// Compares two files with the requested hex alignment strategy
+/// ([`HexAlignment::None`], [`HexAlignment::Fast`] or
+/// [`HexAlignment::Complete`]).
+///
+/// Both files are read whole up to [`ALIGNED_HEX_MAX_BYTES`] and
+/// aligned by `autocompare_diff::hex::diff_hex`. Differing runs are
+/// chunked into hunks of at most 64 bytes like [`compare_binary_files`];
+/// gap runs carry bytes on one side only (the other side is empty).
+/// A gap's hunk offset is its left offset when it has left bytes,
+/// otherwise its right offset.
+///
+/// `first_diff` is the alignment's first difference; `truncated` is
+/// true when more differing 64-byte chunks exist than `max_hunks`
+/// allows (in particular `max_hunks == 0` with any difference).
+pub(crate) fn compare_binary_files_aligned(
+    left: &Path,
+    right: &Path,
+    max_hunks: usize,
+    alignment: HexAlignment,
+) -> Result<BinaryComparison> {
+    let left_bytes = read_capped(left)?;
+    let right_bytes = read_capped(right)?;
+    let left_size = left_bytes.len() as u64;
+    let right_size = right_bytes.len() as u64;
+    let diff = diff_hex(&left_bytes, &right_bytes, alignment);
+
+    let mut hunks: Vec<BinaryHunk> = Vec::new();
+    let mut needed: usize = 0;
+    for op in &diff.ops {
+        match op {
+            HexOp::Equal { .. } => {}
+            HexOp::Different {
+                left_offset,
+                right_offset,
+                len,
+            } => {
+                push_hunk_run(
+                    &left_bytes,
+                    &right_bytes,
+                    *left_offset,
+                    *right_offset,
+                    *len,
+                    true,
+                    true,
+                    max_hunks,
+                    &mut hunks,
+                    &mut needed,
+                );
+            }
+            HexOp::LeftOnly { left_offset, len } => {
+                push_hunk_run(
+                    &left_bytes,
+                    &right_bytes,
+                    *left_offset,
+                    0,
+                    *len,
+                    true,
+                    false,
+                    max_hunks,
+                    &mut hunks,
+                    &mut needed,
+                );
+            }
+            HexOp::RightOnly { right_offset, len } => {
+                push_hunk_run(
+                    &left_bytes,
+                    &right_bytes,
+                    0,
+                    *right_offset,
+                    *len,
+                    false,
+                    true,
+                    max_hunks,
+                    &mut hunks,
+                    &mut needed,
+                );
+            }
+        }
+    }
+
+    Ok(BinaryComparison {
+        left_size,
+        right_size,
+        first_diff: diff.first_diff,
+        hunks,
+        truncated: needed > max_hunks,
+    })
+}
+
+/// Reads a whole file capped at [`ALIGNED_HEX_MAX_BYTES`].
+///
+/// Missing paths map to [`Error::Missing`], oversized files to
+/// [`Error::Unsupported`], anything else to [`Error::Io`].
+/// Directories fail on the read with [`Error::Io`], matching
+/// [`compare_binary_files`].
+fn read_capped(path: &Path) -> Result<Vec<u8>> {
+    let size = file_size(path)?;
+    if size > ALIGNED_HEX_MAX_BYTES as u64 {
+        return Err(Error::Unsupported {
+            path: path.display().to_string(),
+            what: "file too large for aligned hex compare (16 MiB cap)",
+        });
+    }
+    match std::fs::read(path) {
+        Ok(bytes) => {
+            if bytes.len() > ALIGNED_HEX_MAX_BYTES {
+                Err(Error::Unsupported {
+                    path: path.display().to_string(),
+                    what: "file too large for aligned hex compare (16 MiB cap)",
+                })
+            } else {
+                Ok(bytes)
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(Error::Missing {
+            path: path.display().to_string(),
+        }),
+        Err(e) => Err(io_error(path, e)),
+    }
+}
+
+/// Copies one aligned run into 64-byte hunks.
+///
+/// `take_left`/`take_right` select which sides carry bytes; the hunk
+/// offset is the left offset when the left side is present, otherwise
+/// the right offset. `needed` counts every chunk the run requires so
+/// the caller can mark truncation honestly.
+#[allow(clippy::too_many_arguments)]
+fn push_hunk_run(
+    left_bytes: &[u8],
+    right_bytes: &[u8],
+    left_offset: u64,
+    right_offset: u64,
+    len: usize,
+    take_left: bool,
+    take_right: bool,
+    max_hunks: usize,
+    hunks: &mut Vec<BinaryHunk>,
+    needed: &mut usize,
+) {
+    let mut done = 0usize;
+    while done < len {
+        let take = (len.saturating_sub(done)).min(HUNK);
+        *needed = needed.saturating_add(1);
+        if hunks.len() < max_hunks {
+            let left_at = left_offset.saturating_add(done as u64);
+            let right_at = right_offset.saturating_add(done as u64);
+            let left = if take_left {
+                slice_at(left_bytes, left_at, take)
+            } else {
+                Vec::new()
+            };
+            let right = if take_right {
+                slice_at(right_bytes, right_at, take)
+            } else {
+                Vec::new()
+            };
+            let offset = if take_left { left_at } else { right_at };
+            hunks.push(BinaryHunk {
+                offset,
+                left,
+                right,
+            });
+        }
+        done = done.saturating_add(take);
+        if take == 0 {
+            break;
+        }
+    }
+}
+
+/// Copies up to `len` bytes at `offset`; short reads clip, never panic.
+fn slice_at(bytes: &[u8], offset: u64, len: usize) -> Vec<u8> {
+    let start = (offset as usize).min(bytes.len());
+    let end = start.saturating_add(len).min(bytes.len());
+    bytes.get(start..end).unwrap_or(&[]).to_vec()
 }
