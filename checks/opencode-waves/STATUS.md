@@ -333,3 +333,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 13 color editing
 - COLOR theme.rs +22/-9 typed palette same hues, docs frozen geo/typo. Tests 117 green. Views wiring + commit pending. PCOMP live reading.
+
+## Wave G poll 14 color red duplicates
+- COLOR theme 234 ins, test red E0255 8 errors duplicate ACCENT/CHANGED/DELETED names vs views.rs palette. Live fixing (namespace or drop old). PCOMP reading diff/compare.
