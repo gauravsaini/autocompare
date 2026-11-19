@@ -638,3 +638,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 15 188 green
 - Worktree tests 188 green (B fixed last fail). B near commit (REPORT+gates next). A2 still scoping.
 - No commits. Wait for lands.
+
+## Wave J poll 16 A2 landed B paint
+- A2 10c8928 verified+pushed: OWNS clean (views_hex only), tests 189 green. Remaining clippy 7 in viewmodel (landed Wave I) + views (B mid-edit) — not A2 scope. REPORT deferred to slice 2 (A2 live).
+- B live (app/views paint). Wait for B land + A2 slice 2.
