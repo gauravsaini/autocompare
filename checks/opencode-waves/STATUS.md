@@ -97,3 +97,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Poll 16
 - Text probing TextViewState block (assert miss — likely renamed during dead-code fix) + 4 collapsible-if warnings. Still working, no land. CI still queued.
+
+## Poll 17
+- Text build finished green (dev profile 1.50s), land still pending. CI still queued.
