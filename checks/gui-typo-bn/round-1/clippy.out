@@ -1,0 +1,13 @@
+    Checking autocompare-gui v0.5.0 (/Users/ektasaini/autocompare/crates/gui)
+error: unnecessary trailing semicolon
+   --> crates/gui/src/views.rs:372:103
+    |
+372 |         ui.label(chrome_status_role().rich(header_note_line("drag & drop or browse | pure engines")));;
+    |                                                                                                       ^ help: remove this semicolon
+    |
+    = note: `-D redundant-semicolons` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(redundant_semicolons)]`
+
+error: could not compile `autocompare-gui` (bin "autocompare-gui") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `autocompare-gui` (bin "autocompare-gui" test) due to 1 previous error

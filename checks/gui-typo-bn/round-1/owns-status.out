@@ -1,0 +1,8 @@
+ M crates/gui/src/theme.rs
+ M crates/gui/src/views.rs
+?? checks/gui-geo-bn/
+?? checks/gui-typo-bn/
+?? checks/localrun-bo/
+ crates/gui/src/theme.rs | 88 ++++++++++++++++++++++++++++++++++++++++++++++---
+ crates/gui/src/views.rs | 57 +++++++++++++++-----------------
+ 2 files changed, 110 insertions(+), 35 deletions(-)

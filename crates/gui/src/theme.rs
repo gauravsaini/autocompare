@@ -113,10 +113,15 @@ pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 // alias reuses an existing TYPO_* token so the geometry/typography waves
 // never drift; only the names plus the role mapping are new. Colors
 // untouched (weak tone stays, family mono->proportional on status only).
-// Ladder (proportional chrome steps down, mono content sits between):
-// Heading 18 (app title, section headers) > HomeTitle 14 (card titles)
-// > Body 13 (tab bar, card buttons) > Mono 12 (diff/table content only)
-// > Small 11 (status lines, counts, hints).
+// Ramp (4 poles, BC-dense ladder; mono content sits between chrome steps):
+// header Heading 18 strong-large (app title, section headers) >
+// card-title HomeTitle 14 (card titles) > tab Body 13 medium-step
+// (tab bar, card buttons) > grid Mono 12 fixed (folder grid, hex/table
+// cells, paths, gutter — via content_grid()) > hint Small 11 (status
+// lines, counts, hints, captions — via caption()). Only the alias names
+// are new; every size reuses an existing TYPO_* token so the
+// geometry/typography waves never drift. Colors untouched (weak tone
+// stays, family mono->proportional on status only).
 // ----------------------------------------------------------------------------
 
 /// Tab bar size in px: Body scale, default weight, proportional family.
@@ -366,6 +371,25 @@ impl TypoRole {
     /// Counts stay tabular (`is_tabular`); family leaves mono so status
     /// stops reading as code. Weak tone keeps the frozen dim, no hue move.
     pub const fn chrome_status() -> Self {
+        Self::Small
+    }
+
+    /// Grid/data-cell role: Mono (12 regular monospace, tabular). Folder
+    /// grid, hex/table cells, paths and gutter-adjacent rows all paint as
+    /// Mono content, never chrome; the size stays fixed at
+    /// [`TYPO_MONO_SIZE`] so dense rows align. Paint adoption is a later
+    /// wave; this alias is the single named target (today paint still uses
+    /// direct `.monospace()` at the call sites REPORT lists).
+    pub const fn content_grid() -> Self {
+        Self::Mono
+    }
+
+    /// Hint/caption role: Small (11 weak proportional, tabular intent).
+    /// Hints, subtitles, captions and counts share the bottom chrome step;
+    /// caption-strong (folder headers) stays a paint-side composition for
+    /// a later wave, never a new size. Defines the `Caption` precedent the
+    /// folder columns reference; caption-regular is Small exactly.
+    pub const fn caption() -> Self {
         Self::Small
     }
 
@@ -1234,6 +1258,62 @@ mod tests {
         assert!(
             TypoRole::chrome_tab().line_height_px() > TypoRole::chrome_status().line_height_px()
         );
+    }
+
+    #[test]
+    fn content_grid_and_caption_aliases_carry_ramp() {
+        // Aliases reuse existing roles: no new point sizes this wave.
+        assert_eq!(TypoRole::content_grid(), TypoRole::Mono);
+        assert_eq!(TypoRole::caption(), TypoRole::Small);
+        // Grid: fixed mono 12, tabular, regular-mono, mono line-height.
+        assert_eq!(TypoRole::content_grid().size(), TYPO_MONO_SIZE);
+        assert_eq!(TypoRole::content_grid().size(), 12.0);
+        assert!(TypoRole::content_grid().is_mono());
+        assert!(!TypoRole::content_grid().is_chrome());
+        assert!(TypoRole::content_grid().is_tabular());
+        assert_eq!(TypoRole::content_grid().weight(), "regular-mono");
+        assert_eq!(TypoRole::content_grid().family(), "monospace");
+        assert_eq!(
+            TypoRole::content_grid().line_height(),
+            TYPO_LINE_HEIGHT_MONO
+        );
+        assert_eq!(
+            TypoRole::content_grid().font_id(),
+            egui::FontId::monospace(12.0)
+        );
+        // Hint/caption: small weak proportional, tabular counts, chrome LH.
+        assert_eq!(TypoRole::caption().size(), TYPO_SMALL_SIZE);
+        assert_eq!(TypoRole::caption().size(), 11.0);
+        assert!(TypoRole::caption().is_small());
+        assert!(TypoRole::caption().is_weak());
+        assert!(TypoRole::caption().is_chrome());
+        assert!(TypoRole::caption().is_tabular());
+        assert_eq!(TypoRole::caption().weight(), "weak");
+        assert_eq!(TypoRole::caption().family(), "proportional");
+        assert_eq!(TypoRole::caption().line_height(), TYPO_LINE_HEIGHT_CHROME);
+        // Single-source delegation through spec().
+        assert_eq!(
+            TypoRole::content_grid().spec().size,
+            TypoRole::Mono.spec().size
+        );
+        assert_eq!(TypoRole::caption().spec().size, TypoRole::Small.spec().size);
+        assert_eq!(
+            TypoRole::content_grid().spec().font_id,
+            TypoRole::Mono.font_id()
+        );
+        assert_eq!(
+            TypoRole::caption().spec().font_id,
+            TypoRole::Small.font_id()
+        );
+        // Ramp order: hint 11 < grid 12 < tab 13 < card-title 14 < section 18.
+        assert!(TypoRole::caption().size() < TypoRole::content_grid().size());
+        assert!(TypoRole::content_grid().size() < TypoRole::chrome_tab().size());
+        assert!(TypoRole::chrome_tab().size() < TypoRole::HomeTitle.size());
+        assert!(TypoRole::HomeTitle.size() < TypoRole::chrome_section().size());
+        const {
+            assert!(TYPO_SMALL_SIZE < TYPO_MONO_SIZE);
+            assert!(TYPO_MONO_SIZE < TYPO_BODY_SIZE);
+        }
     }
 
     #[test]
