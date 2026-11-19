@@ -1976,11 +1976,14 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     };
     if let Some(cells) = header.as_ref() {
         let line = format_table_bordered_row(cells, &widths);
-        egui::Grid::new("table_header_grid")
+        egui::Grid::new(views_table::TABLE_CELL_HEADER_GRID_ID)
             .num_columns(table_grid_columns(&widths))
-            .spacing([SECTION_GAP, TIGHT_GAP])
+            .spacing([
+                views_table::TABLE_GRID_COL_GAP,
+                views_table::TABLE_GRID_ROW_GAP,
+            ])
             .show(ui, |ui| {
-                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                ui.label(RichText::new(views_table::TABLE_CELL_GLYPH_PAD).monospace());
                 for cell in views_table::pad_table_row(cells, &widths) {
                     ui.label(RichText::new(cell).monospace().strong());
                 }
@@ -7481,6 +7484,21 @@ mod tests {
         assert_eq!(table_grid_columns(&[]), 1);
         assert_eq!(table_grid_columns(&[3]), 2);
         assert_eq!(table_grid_columns(&[3, 5]), 3);
+    }
+
+    #[test]
+    fn tablep234_header_grid_tokens_single_source() {
+        // P2 header-grid tokens: paint `views_table::` single-source rakhta
+        // hai (same values, koi naya rhythm/text nahi). Values yahan lock
+        // hain taaki future drift pakda jaye.
+        assert_eq!(
+            views_table::TABLE_CELL_HEADER_GRID_ID,
+            "table_cell_header_grid"
+        );
+        assert_eq!(views_table::TABLE_GRID_COL_GAP, SECTION_GAP);
+        assert_eq!(views_table::TABLE_GRID_ROW_GAP, TIGHT_GAP);
+        assert_eq!(views_table::TABLE_CELL_GLYPH_PAD, CONTENT_LEAD);
+        assert_eq!(views_table::TABLE_CELL_GLYPH_PAD, "  ");
     }
 
     #[test]
