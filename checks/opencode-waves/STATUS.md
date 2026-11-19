@@ -303,3 +303,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 03 mapping
 - COLOR mapping dark/light visuals in app.rs, SESS test-running headless crates. No diff yet, exploration progress.
+
+## Wave G poll 04 no diff yet
+- Both live 00:56, tree clean 117 green. Exploration advancing, edits pending.
