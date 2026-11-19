@@ -5160,7 +5160,7 @@ impl eframe::App for App {
                         let table_fraction = self.split_fraction();
                         self.clamp_scroll_after_layout();
                         if let Some(model) = self.table_model.clone() {
-                            let (view, pager) = (&self.table_view, &mut self.table_pager);
+                            let (view, pager) = (&mut self.table_view, &mut self.table_pager);
                             show_split_content(ui, table_fraction, |ui| {
                                 views::paint_table_keyed(ui, view, &model, pager);
                             });

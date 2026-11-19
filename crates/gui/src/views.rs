@@ -1392,16 +1392,20 @@ pub fn table_grid_columns(widths: &[usize]) -> usize {
     widths.len().saturating_add(1)
 }
 
-/// The model-driven table view: keyed summary line, the positional
-/// note when no key columns are selected, pager-driven row window,
-/// then the legacy row paint.
+/// The model-driven table view: keyed summary line, the key-column
+/// bar when a header row exists, the positional note when no key
+/// columns are selected, pager-driven row window, then the legacy
+/// row paint.
 pub fn paint_table_keyed(
     ui: &mut Ui,
-    view: &views_table::TableKeyView,
+    view: &mut views_table::TableKeyView,
     model: &TableModel,
     pager: &mut views_table::TablePager,
 ) {
     ui.label(chrome_status_role().rich(view.status_line()));
+    if let Some(cells) = table_header_cells(model).as_ref() {
+        views_table::paint_table_key_bar(ui, view, cells);
+    }
     if let Some(note) = view.positional_note() {
         paint_note(ui, note);
     }
