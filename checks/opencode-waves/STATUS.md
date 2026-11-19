@@ -716,3 +716,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - GEO first edit in views.rs (owned), TYPO first edits in theme.rs (doc-scale + egui import, no color touches, owned). PARITY +551 across 3 owned files. Disjoint holds (5 M files map 1:1 to owners).
 - Banned-pattern scan CLEAN (only forbid(unsafe_code) hit). LOCALBIN2 probing BCompare windows via osascript (missing value = no open windows, adapting, report-only). K-B at 26KB writing REPORT.
 - No commits yet. Wait for gates + lands.
+
+## Wave L poll 07 localbin + K-B landed
+- LOCALBIN2 REPORT landed (via orch STATUS-commit sweep, benign): release 1m09s 11022272B, PNG 9914B 960x600 magic ok distinct 256, tests 189 green, harness PASS, BC outside-observation gap table (own words) with severities + owner waves. checks/local-run-l/** complete.
+- K-B c8d390b landed+pushed (own commit): final verify REPORT with metrics + gap table.
+- LESSON: orch STATUS commits must use `git commit --only` to avoid sweeping staged agent files (this sweep was benign, files correct dir, message mismatch only).
+- Remaining live: GEO (views.rs), TYPO (theme.rs), PARITY (hex/table/tree). Disjoint holds. Wait for gates + lands.
