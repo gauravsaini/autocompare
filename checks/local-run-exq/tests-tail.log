@@ -1,0 +1,5 @@
+test screenshot::tests::folder_fixture_renders_valid_png ... ok
+test screenshot::tests::dispatcher_routes_by_file_name ... ok
+
+test result: ok. 123 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+

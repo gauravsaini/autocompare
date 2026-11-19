@@ -1,0 +1,10 @@
+build start 2026-11-19T15:10:11Z
+   Compiling autocompare-diff v0.5.0 (/Users/ektasaini/autocompare/crates/diff)
+   Compiling autocompare-compare v0.5.0 (/Users/ektasaini/autocompare/crates/compare)
+   Compiling autocompare-gui v0.5.0 (/Users/ektasaini/autocompare/crates/gui)
+    Finished `release` profile [optimized] target(s) in 52.25s
+real 52.29
+user 49.83
+sys 1.77
+exit=0 elapsed=52s
+-rwxr-xr-x@ 1 ektasaini  staff  10851744 Nov 20 02:11 target/release/autocompare-gui
