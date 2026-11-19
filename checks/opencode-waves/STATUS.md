@@ -847,3 +847,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - V-MINI sess-mini-v (opencode default): OWNS views.rs+checks/gui-mini-v/**. Overview strip width + bigger click/drag hits (RUN delta #2), hex minimap mapping exact, gutter uniformity green. Commit NO push.
 - V-GLYPH sess-glyph-v (opencode default): OWNS theme.rs+checks/gui-glyph-v/**. Glyph/row feel via theme knobs only (RUN delta #3): line-heights, tracking, zoom interplay. No geometry/color. Commit NO push.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, disjoint OWNS, STATUS orch-only.
+
+## Wave V poll GLYPH landed (1/3)
+- GLYPH 149bb2c verified+pushed: OWNS clean (theme 76 + glyph-v GATES/REPORT/round-V-1). Line-height intent retune + zoom row-feel, PNG bit-identical paint-neutral. 249 green (+4), theme fmt clean, banned 0. Full-tree clippy red noted as siblings in-progress (re-verify at wave end).
+- TOOLBAR/MINI live, app.rs + views.rs uncommitted edits in tree.
