@@ -1402,3 +1402,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BS-LOCALRUN landed (early feedback, pushed)
 - bc033d8 verify ok: OWNS checks/gui-localrun-bs only, zero .rs, STATUS untouched, 7/7 PNG magic+size+distinct PASS, REPORT Hinglish-Roman (shot map + BC gap table), 611 green. Pushed.
 - Findings: Home live solid; BC gaps fresh (session tabs, meta row, selective highlight, 3-zone status bar, mono-heavy UI note). Baaki in-flight: BR-FOLDERGRID, BS-TYPO, BS-TABLEWIRE, BS-BIN.
+
+## 2026-11-20 - BS-BIN landed (binary rebuild, pushed)
+- 4a6335e verify ok: OWNS checks/bin-bs only, zero crates/scripts/STATUS edits (script+README already correct), sh -n OK, fresh tarball 5MB dist/ (gitignored) + smoke PNG ok, REPORT Hinglish-Roman. Pushed.
+- Note: --help hangs (SIGTERM 143), --screenshot is the smoke path. Baaki in-flight: BR-FOLDERGRID (views.rs dirty), BS-TYPO (gutter.rs dirty), BS-TABLEWIRE.
