@@ -1170,3 +1170,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AW-WRAPNAV `sess-wrapnav-aw`: OWNS views.rs+checks/gui-wrapnav-aw (wrap-continuation navigation + match carryover).
 - AW-GUTTER `sess-gutter-aw`: OWNS gutter.rs+checks/gui-gutter-aw (overview ruler width/click-target parity from localrun feedback).
 - Agents commit locally, NO push. Orchestrator verifies then pushes. Fresh localrun after both land.
+
+## 2026-11-20 — Wave AW complete (2 parallel: text wrap nav + gutter ruler parity)
+- WRAPNAV `58bfb67` wrap-continuation navigation parity for text find jumps — OWNS views.rs.
+- GUTTER `ae79a1a` widen overview ruler with min-height segments + slop hit-test — OWNS gutter.rs.
+- Verify combined: 537 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: fresh localrun feedback on AW state + Wave AX (merge view geometry, sync view).
