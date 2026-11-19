@@ -1246,3 +1246,14 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BD-FOLDERHOME `sess-folderhome-bd`: OWNS views.rs+app.rs+checks/gui-folderhome-bd (P0-1 AllSame wiring per BB-FOLDER3 REPORT patch spec 1/2+2/2, THEN P1-3 home CARD_H single-token adoption; tree.rs FROZEN).
 - BD-HEXPURE `sess-hexpure-bd`: OWNS views_hex.rs+checks/gui-hexpure-bd (P1-2 minimap 24px + nibble pure geometry; views.rs CALLSITE TOUCH MANA — exact callsite spec REPORT me likho).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BD complete (2 parallel: folder+home paint + hex pure)
+- FOLDERHOME `4a48528` AllSame paint wiring per folder3 spec 1/2+2/2 (views.rs+app.rs); CARD_H verified already at 99.6 via max() — OWNS views.rs+app.rs.
+- HEXPURE `cb3543c` minimap 24px hit-rect + nibble accent pure rects + callsite spec §4 — OWNS views_hex.rs.
+- Verify combined: 578 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok x2. Stray unreferenced .outs removed (tree clean).
+- Pushed. Next: Wave BE (intra-line + hex callsite + toolbar paint; pixel-font protocol).
+
+## 2026-11-20 — Wave BE plan (2 parallel: paint bundle + font protocol)
+- BE-PAINT `sess-paint-be`: OWNS views.rs+app.rs+screenshot.rs+checks/gui-paint-be (P0-2 intra-line word spans + fixture scene proof, THEN hex callsite per hexpure REPORT §4, THEN toolbar chrome; sequential same owner).
+- BE-FONT `sess-font-be`: OWNS checks/gui-pixelfont-be ONLY (P2 pixel-font ceiling: harness-verifiable vs live-only roles + live-verification protocol; zero .rs edits).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
