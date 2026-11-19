@@ -177,3 +177,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 18
 - Hooks on dead-code warning (folder_columns in views.rs, its OWNS) — fixing. No land. Both alive.
+
+## Wave D poll 19
+- Hooks FMT-CLEAN on owned files, land imminent. Both alive.
