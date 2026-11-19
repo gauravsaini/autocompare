@@ -21,7 +21,7 @@ use crate::app::{
     AudioCheckKind, AudioChecklist, FolderMergeChecklist, PictureCompareModel, PictureMode,
     PictureViewState, SyncChecklist,
 };
-use crate::gutter::gutter_bar_width_for_font;
+use crate::gutter::{gutter_bar_width_for_font, gutter_jump_target, gutter_y_for_row};
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
 use crate::theme::{
     ACCENT_FG, CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
@@ -582,6 +582,29 @@ pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64>
 /// unit-tested.
 pub fn hex_minimap_seg_end(y0: f32, y1: f32) -> f32 {
     y1.max(y0 + ROW_PAD)
+}
+
+/// Text-gutter click contract: local `y` (px) ko nearest-diff model
+/// row me badalta hai ([`gutter_jump_target`]: diff par stay, equal
+/// par nearest diff snap, bahar/empty par `None`). Paint click/drag
+/// isi ko selection + pending scroll deta hai. Hex side ka analog
+/// [`hex_minimap_jump_to_row`] hai (wahi fraction→row→jump pattern).
+/// Pure (no egui); unit-tested.
+pub fn text_gutter_click_select(
+    rows: &[TextRow],
+    total_rows: usize,
+    height: f32,
+    y: f32,
+) -> Option<usize> {
+    gutter_jump_target(rows, total_rows, height, y)
+}
+
+/// Next-frame scroll key: gutter click list ke baad paint hota hai,
+/// isliye jump target ek frame ke liye temp store me rehta hai taaki
+/// agli frame list us row par scroll kare. Struct change bina (KEVL
+/// `viewmodel.rs` untouched). Pure id; unit-tested.
+pub fn text_gutter_pending_id() -> egui::Id {
+    egui::Id::unique("text_gutter_pending_scroll")
 }
 
 /// Minimap/grid row-click jump: `row` ko offset banakar covering hunk
@@ -1177,6 +1200,18 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
         viewmodel::select_prev_diff(&model.rows, &mut model.selected);
         scroll_to = model.selected;
     }
+    // Gutter-click pending (pichhli frame ka jump): gutter list ke
+    // baad paint hota hai, isliye target temp store se aata hai aur
+    // is frame list us row par scroll karti hai. Nav frames ko
+    // overwrite nahi karta (scroll_to pehle se set hai to skip).
+    if scroll_to.is_none() {
+        let pending: Option<usize> = ui
+            .ctx()
+            .data_mut(|data| data.remove_temp(text_gutter_pending_id()));
+        if pending.is_some() {
+            scroll_to = pending;
+        }
+    }
 
     let counts = viewmodel::filter_counts(&model.rows, model.filter);
     let visible = viewmodel::filtered_indices(&model.rows, model.filter);
@@ -1355,11 +1390,15 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
 
         // Thumbnail overview gutter on the right; narrows when line
         // numbers hide so chrome stays in sync while counts stay honest.
+        // Click/drag jumps: fraction se nearest-diff row select hoti hai
+        // (wahi snap jo hex minimap `hex_minimap_jump_to_row` me hai),
+        // selection marker synced rehta hai, list agli frame scroll karti
+        // hai (pending key, struct change bina).
         let avail_h = ui.available_height().max(100.0);
         let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
         let bar_w = text_gutter_paint_width(prefs.show_line_numbers);
-        let (rect, _resp) =
-            ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::hover());
+        let (rect, resp) =
+            ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::click_and_drag());
         ui.painter().rect_filled(rect, 0.0, track_for(dark));
 
         for seg in geom.segments {
@@ -1374,6 +1413,32 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                 TextRowKind::Changed => CHANGED_BG,
             };
             ui.painter().rect_filled(seg_rect, 0.0, color);
+        }
+        // Selection/viewport marker: selected row ki band par theme
+        // text tone me ek pad-height tick (GEO token `ROW_PAD`, koi
+        // naya color nahi), taaki jump ke baad indicator synced dikhe.
+        if let Some(sel) = model.selected
+            && let Some(y) = gutter_y_for_row(sel, model.rows.len(), avail_h)
+        {
+            let marker = egui::Rect::from_min_max(
+                egui::pos2(rect.min.x, rect.min.y + y),
+                egui::pos2(rect.max.x, (rect.min.y + y + ROW_PAD).min(rect.max.y)),
+            );
+            ui.painter()
+                .rect_filled(marker, 0.0, ui.visuals().text_color());
+        }
+        // Click/drag jump: pointer y se nearest-diff row, selection set
+        // + next-frame scroll pending (list isi frame pehle paint ho
+        // chuki hai, isliye scroll agli frame hota hai).
+        if (resp.clicked() || resp.dragged())
+            && let Some(pos) = resp.interact_pointer_pos()
+            && let Some(idx) =
+                text_gutter_click_select(&model.rows, model.rows.len(), avail_h, pos.y - rect.min.y)
+        {
+            model.selected = Some(idx);
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(text_gutter_pending_id(), idx);
+            });
         }
     });
 
@@ -3226,6 +3291,36 @@ mod tests {
         assert_eq!(start, 0);
         assert!(end > 0);
         assert!(!hex_minimap_jump_to_row(&mut view, &mut pager, 0));
+    }
+
+    #[test]
+    fn text_gutter_click_selects_nearest_diff() {
+        let row = |kind| TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        let rows = vec![
+            row(TextRowKind::Equal),
+            row(TextRowKind::Deleted),
+            row(TextRowKind::Equal),
+            row(TextRowKind::Inserted),
+        ];
+        // Diff row par click wahi rehta hai (hex jump jaisa stay).
+        assert_eq!(text_gutter_click_select(&rows, 4, 400.0, 150.0), Some(1));
+        // Equal row 0 par click aage row 1 par snap hota hai.
+        assert_eq!(text_gutter_click_select(&rows, 4, 400.0, 50.0), Some(1));
+        // Equal row 2 par click aage row 3 par snap hota hai.
+        assert_eq!(text_gutter_click_select(&rows, 4, 400.0, 250.0), Some(3));
+        // Bahar ya khali par koi jump nahi.
+        assert_eq!(text_gutter_click_select(&rows, 4, 400.0, 999.0), None);
+        assert_eq!(text_gutter_click_select(&[], 0, 400.0, 50.0), None);
+        // Pending-scroll key stable hai (dono frame ek hi id dekhte hain).
+        assert_eq!(text_gutter_pending_id(), text_gutter_pending_id());
     }
 
     #[test]

@@ -211,6 +211,28 @@ pub fn gutter_jump_target(
     None
 }
 
+/// Maps a model row index back to its gutter-local y (px).
+///
+/// Inverse of [`gutter_row_at_y`]: `(row / total_rows) * height`.
+/// `None` for empty totals, non-positive or non-finite heights, or
+/// out-of-range rows. Paint uses it for the selection/viewport
+/// marker so the indicator sits exactly on the clicked row's band.
+/// Pure; unit-tested.
+pub fn gutter_y_for_row(row: usize, total_rows: usize, height: f32) -> Option<f32> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if row >= total_rows {
+        return None;
+    }
+    let y = (row as f32 / total_rows as f32) * height;
+    if y.is_finite() && y >= 0.0 && y < height {
+        Some(y)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,5 +406,27 @@ mod tests {
         // Out-of-range click: no target.
         assert_eq!(gutter_jump_target(&rows, 4, 400.0, 999.0), None);
         assert_eq!(gutter_jump_target(&[], 0, 400.0, 50.0), None);
+    }
+
+    #[test]
+    fn y_for_row_inverts_row_at_y() {
+        // 4 rows over 400px: each row owns a 100px band.
+        assert_eq!(gutter_y_for_row(0, 4, 400.0), Some(0.0));
+        assert_eq!(gutter_y_for_row(1, 4, 400.0), Some(100.0));
+        assert_eq!(gutter_y_for_row(3, 4, 400.0), Some(300.0));
+        // Bad input maps nothing.
+        assert_eq!(gutter_y_for_row(4, 4, 400.0), None);
+        assert_eq!(gutter_y_for_row(0, 0, 400.0), None);
+        assert_eq!(gutter_y_for_row(1, 4, 0.0), None);
+        assert_eq!(gutter_y_for_row(1, 4, -50.0), None);
+        assert_eq!(gutter_y_for_row(1, 4, f32::NAN), None);
+        // Round-trip: marker y falls back inside the same row band.
+        let mut row = 0usize;
+        while row < 4 {
+            if let Some(y) = gutter_y_for_row(row, 4, 400.0) {
+                assert_eq!(gutter_row_at_y(y + 0.5, 4, 400.0), Some(row));
+            }
+            row = row.saturating_add(1);
+        }
     }
 }
