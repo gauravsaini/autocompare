@@ -825,3 +825,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - U-LAYOUT sess-layout-u (opencode default): OWNS app.rs+checks/gui-layout-u/**. Layout wiring: split fraction in all paint paths, min widths, find-bar rects, narrow-window, scroll clamps. No token/color changes. Commit NO push.
 - U-RUN sess-run-u (opencode default, report-only): OWNS checks/gui-run-u/**, zero source edits. Release rebuild + screenshot + harness + workspace tests + local-run smoke + top-3 BC deltas. Commit NO push.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, STATUS orch-only.
+
+## Wave U poll TYPO landed (1/4)
+- TYPO 3235a14 verified+pushed: OWNS clean (theme 175 + typo-u GATES/REPORT/run-typo-u.sh + round-U-1). Intent tokens (family/weight/line-height/tracking/tabul) + zoom-clamp regression. 233 green (+2), clippy zero, fmt clean, banned 0.
+- GEO/LAYOUT/RUN live. GEO quiet since 03:42 — next poll still quiet to nudge karunga.
