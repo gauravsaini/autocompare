@@ -1030,3 +1030,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AK-WIREFIND `sess-wirefind-ak`: OWNS views.rs+checks/gui-wirefind-ak (Gap #12 hex+table find bar caller wiring; models read-only).
 - AK-FOLDER `sess-folder-ak`: OWNS tree.rs+checks/gui-folder-ak (Gap #6 folder cols paint geometry+typo).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AK complete (2 parallel: find caller wiring + folder cols paint)
+- FOLDER `0bdf54f` folder column paint geometry + typography — OWNS tree.rs (Gap #6).
+- WIREFIND `e16214b` hex + table find bars wired into views callers — OWNS views.rs (Gap #12 wiring done).
+- Wirefind stall par nudge bheja, resume karke harness PASS + commit kiya.
+- Verify combined: 378 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AL (per-hunk decision App wiring, 3-pane/apply wiring, text intra-line spans).
