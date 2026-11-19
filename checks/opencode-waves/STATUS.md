@@ -857,3 +857,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - MINI 437bd49 verified+pushed: OWNS clean (views.rs 47 + mini-v GATES/REPORT/round-V-1). Wider minimap strip + floored segment hits, mapping exact, 3 minimap tests green.
 - Wave verify on clean tree: 249 green (245 + toolbar1 + mini3; glyph paint-neutral retune, existing theme tests green), clippy zero, fmt clean, banned 0.
 - Wave V complete: 3/3 landed. All V feedback deltas done.
+
+## Wave W plan open gaps pic+prog (2 parallel, disjoint)
+- W-PIC sess-pic-w (opencode default): OWNS views.rs+viewmodel.rs+checks/gui-pic-w/**. Gap #4 picture zoom/pan: zoom 0.25..=8 +/-, drag-pan clamped, dbl-click reset, both PictureModes, split widths authority kept. Commit NO push.
+- W-PROG sess-prog-w (opencode default): OWNS app.rs+checks/gui-prog-w/**. Gap #15: wire 8 JobRunner spawn sites (cancel/progress today ignored) into status-bar progress + cancel path, throttled repaints, no leaks. Commit NO push.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, disjoint OWNS, STATUS orch-only.
