@@ -1,18 +1,31 @@
 //! Color contrast calculations according to WCAG 2.1 specifications.
 //!
-//! Provides pure headless contrast checks for dark and light theme palettes.
+//! Provides headless contrast checks plus the typed design-token
+//! palette (Dark/Light) that `views.rs` paints with.
 //!
-//! Typography scale (family, weight, line-height only; colors out of
-//! scope): heading 18 strong, body 13, small 11 weak, mono diff 12
-//! (13 is the tolerated upper bound), Home card title strong 14.
-//! Line-height is always `text_style_height(Monospace)` at paint time
-//! (5 call sites in `views.rs`); egui has no letter-tracking so
-//! letter-spacing is a documented no-op ([`TYPO_LETTER_SPACING`]) with
-//! weight + line-height carrying hierarchy. No `Color32`/`Visuals`
-//! touches here.
+//! Geometry and typography stay frozen (see the scale below); this
+//! wave only types the colors.
+//!
+//! Typography scale (family, weight, line-height only): heading 18
+//! strong, body 13, small 11, mono diff 12 (13 is the tolerated upper
+//! bound), Home card title strong 14. Line-height is always
+//! `text_style_height(Monospace)` at paint time (5 call sites in
+//! `views.rs`); egui has no letter-tracking so letter-spacing is a
+//! documented no-op ([`TYPO_LETTER_SPACING`]) with weight +
+//! line-height carrying hierarchy.
+//!
+//! Color model: the diff accents are fixed (a deleted row reads the
+//! same in light and dark mode, so those colors carry their own
+//! contrast), while the chrome (base text, dim/glyph, red/green/blue
+//! markers, gutter track) is per-mode so both [`DARK_PALETTE`] and
+//! [`LIGHT_PALETTE`] satisfy WCAG AA via [`theme_contrast_ok`].
+//! Paint picks a side with [`palette`] / `*_for(dark)` using
+//! `ui.visuals().dark_mode`; no geometry/typo values move.
 
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
+
+use eframe::egui::Color32;
 
 // ----------------------------------------------------------------------------
 // Typography scale (headless, ponytail minimal)
@@ -134,11 +147,172 @@ pub fn theme_contrast_ok(fg: [u8; 3], bg: [u8; 3]) -> bool {
 pub fn theme_mode_contrast_ok(dark: bool) -> bool {
     if dark {
         // Dark theme: foreground text [230, 230, 230] on background [27, 27, 27]
-        theme_contrast_ok([230, 230, 230], [27, 27, 27])
+        theme_contrast_ok(DARK_FG_RGB, DARK_BG_RGB)
     } else {
         // Light theme: foreground text [20, 20, 20] on background [248, 248, 248]
-        theme_contrast_ok([20, 20, 20], [248, 248, 248])
+        theme_contrast_ok(LIGHT_FG_RGB, LIGHT_BG_RGB)
     }
+}
+
+// ----------------------------------------------------------------------------
+// Color tokens (typed design tokens, Dark/Light)
+// ----------------------------------------------------------------------------
+
+/// Dark base text (headless). Paint reads it through egui visuals.
+pub const DARK_FG_RGB: [u8; 3] = [230, 230, 230];
+/// Dark base background (headless).
+pub const DARK_BG_RGB: [u8; 3] = [27, 27, 27];
+/// Light base text (headless).
+pub const LIGHT_FG_RGB: [u8; 3] = [20, 20, 20];
+/// Light base background (headless).
+pub const LIGHT_BG_RGB: [u8; 3] = [248, 248, 248];
+
+/// Fixed diff deleted foreground (same both modes).
+pub const DELETED_FG_RGB: [u8; 3] = [255, 170, 170];
+/// Fixed diff deleted background (same both modes).
+pub const DELETED_BG_RGB: [u8; 3] = [120, 32, 32];
+/// Fixed diff inserted foreground (same both modes).
+pub const INSERTED_FG_RGB: [u8; 3] = [170, 240, 180];
+/// Fixed diff inserted background (same both modes).
+pub const INSERTED_BG_RGB: [u8; 3] = [24, 90, 46];
+/// Fixed diff changed foreground (same both modes).
+pub const CHANGED_FG_RGB: [u8; 3] = [255, 235, 160];
+/// Fixed diff changed background (same both modes).
+pub const CHANGED_BG_RGB: [u8; 3] = [122, 102, 20];
+/// Fixed accent for changed spans (same both modes).
+pub const ACCENT_FG_RGB: [u8; 3] = [255, 255, 210];
+/// Fixed error-panel fill (same both modes; text is [`DELETED_FG_RGB`]).
+pub const ERROR_BG_RGB: [u8; 3] = [60, 20, 20];
+
+/// Dark dim gray for gutters and `=` glyphs.
+pub const DARK_DIM_RGB: [u8; 3] = [150, 150, 150];
+/// Light dim gray for gutters and `=` glyphs (darkened so it passes AA on light).
+pub const LIGHT_DIM_RGB: [u8; 3] = [90, 90, 90];
+/// Dark red marker.
+pub const DARK_RED_RGB: [u8; 3] = [255, 100, 100];
+/// Light red marker (darkened so it passes AA on light).
+pub const LIGHT_RED_RGB: [u8; 3] = [180, 20, 20];
+/// Dark green marker.
+pub const DARK_GREEN_RGB: [u8; 3] = [120, 220, 130];
+/// Light green marker (darkened so it passes AA on light).
+pub const LIGHT_GREEN_RGB: [u8; 3] = [20, 110, 50];
+/// Dark newer-side blue.
+pub const DARK_BLUE_RGB: [u8; 3] = [130, 170, 255];
+/// Light newer-side blue (darkened so it passes AA on light).
+pub const LIGHT_BLUE_RGB: [u8; 3] = [30, 80, 180];
+/// Dark gutter track fill (decorative, not text).
+pub const DARK_TRACK_RGB: [u8; 3] = [32, 32, 32];
+/// Light gutter track fill (decorative, not text).
+pub const LIGHT_TRACK_RGB: [u8; 3] = [225, 225, 225];
+
+/// Fixed diff deleted foreground paint token.
+pub const DELETED_FG: Color32 = Color32::from_rgb(255, 170, 170);
+/// Fixed diff deleted background paint token.
+pub const DELETED_BG: Color32 = Color32::from_rgb(120, 32, 32);
+/// Fixed diff inserted foreground paint token.
+pub const INSERTED_FG: Color32 = Color32::from_rgb(170, 240, 180);
+/// Fixed diff inserted background paint token.
+pub const INSERTED_BG: Color32 = Color32::from_rgb(24, 90, 46);
+/// Fixed diff changed foreground paint token.
+pub const CHANGED_FG: Color32 = Color32::from_rgb(255, 235, 160);
+/// Fixed diff changed background paint token.
+pub const CHANGED_BG: Color32 = Color32::from_rgb(122, 102, 20);
+/// Fixed accent paint token for changed spans.
+pub const ACCENT_FG: Color32 = Color32::from_rgb(255, 255, 210);
+/// Fixed error-panel fill paint token.
+pub const ERROR_BG: Color32 = Color32::from_rgb(60, 20, 20);
+/// Dark dim paint token.
+pub const DARK_DIM: Color32 = Color32::from_rgb(150, 150, 150);
+/// Light dim paint token.
+pub const LIGHT_DIM: Color32 = Color32::from_rgb(90, 90, 90);
+/// Dark red marker paint token.
+pub const DARK_RED: Color32 = Color32::from_rgb(255, 100, 100);
+/// Light red marker paint token.
+pub const LIGHT_RED: Color32 = Color32::from_rgb(180, 20, 20);
+/// Dark green marker paint token.
+pub const DARK_GREEN: Color32 = Color32::from_rgb(120, 220, 130);
+/// Light green marker paint token.
+pub const LIGHT_GREEN: Color32 = Color32::from_rgb(20, 110, 50);
+/// Dark newer-side blue paint token.
+pub const DARK_BLUE: Color32 = Color32::from_rgb(130, 170, 255);
+/// Light newer-side blue paint token.
+pub const LIGHT_BLUE: Color32 = Color32::from_rgb(30, 80, 180);
+/// Dark gutter track paint token.
+pub const DARK_TRACK: Color32 = Color32::from_rgb(32, 32, 32);
+/// Light gutter track paint token.
+pub const LIGHT_TRACK: Color32 = Color32::from_rgb(225, 225, 225);
+
+/// Per-mode chrome: base pair plus the markers that paint on it.
+/// The diff accents stay fixed outside this struct so one deleted row
+/// reads the same in both modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Palette {
+    /// Base text on [`Palette::base_bg`].
+    pub base_fg: [u8; 3],
+    /// Base background.
+    pub base_bg: [u8; 3],
+    /// Dim gray (gutters, `=` glyphs) on [`Palette::base_bg`].
+    pub dim: [u8; 3],
+    /// Red marker on [`Palette::base_bg`].
+    pub red: [u8; 3],
+    /// Green marker on [`Palette::base_bg`].
+    pub green: [u8; 3],
+    /// Newer-side blue on [`Palette::base_bg`].
+    pub blue: [u8; 3],
+    /// Gutter track fill (decorative).
+    pub track: [u8; 3],
+}
+
+/// Dark chrome (same hues the paint has always used).
+pub const DARK_PALETTE: Palette = Palette {
+    base_fg: DARK_FG_RGB,
+    base_bg: DARK_BG_RGB,
+    dim: DARK_DIM_RGB,
+    red: DARK_RED_RGB,
+    green: DARK_GREEN_RGB,
+    blue: DARK_BLUE_RGB,
+    track: DARK_TRACK_RGB,
+};
+
+/// Light chrome (same hue families, darkened markers so AA holds on light).
+pub const LIGHT_PALETTE: Palette = Palette {
+    base_fg: LIGHT_FG_RGB,
+    base_bg: LIGHT_BG_RGB,
+    dim: LIGHT_DIM_RGB,
+    red: LIGHT_RED_RGB,
+    green: LIGHT_GREEN_RGB,
+    blue: LIGHT_BLUE_RGB,
+    track: LIGHT_TRACK_RGB,
+};
+
+/// Paint-side palette selector (mirrors `ui.visuals().dark_mode`).
+pub const fn palette(dark: bool) -> Palette {
+    if dark { DARK_PALETTE } else { LIGHT_PALETTE }
+}
+
+/// Dim paint token for the active mode.
+pub fn dim_for(dark: bool) -> Color32 {
+    if dark { DARK_DIM } else { LIGHT_DIM }
+}
+
+/// Red marker paint token for the active mode.
+pub fn red_for(dark: bool) -> Color32 {
+    if dark { DARK_RED } else { LIGHT_RED }
+}
+
+/// Green marker paint token for the active mode.
+pub fn green_for(dark: bool) -> Color32 {
+    if dark { DARK_GREEN } else { LIGHT_GREEN }
+}
+
+/// Newer-side blue paint token for the active mode.
+pub fn blue_for(dark: bool) -> Color32 {
+    if dark { DARK_BLUE } else { LIGHT_BLUE }
+}
+
+/// Gutter track paint token for the active mode.
+pub fn track_for(dark: bool) -> Color32 {
+    if dark { DARK_TRACK } else { LIGHT_TRACK }
 }
 
 #[cfg(test)]
@@ -205,5 +379,54 @@ mod tests {
             TypoRole::Heading.line_height_source(),
             "ui.text_style_height(Monospace)"
         );
+    }
+
+    #[test]
+    fn fixed_diff_pairs_satisfy_aa() {
+        assert!(theme_contrast_ok(DELETED_FG_RGB, DELETED_BG_RGB));
+        assert!(theme_contrast_ok(INSERTED_FG_RGB, INSERTED_BG_RGB));
+        assert!(theme_contrast_ok(CHANGED_FG_RGB, CHANGED_BG_RGB));
+        assert!(theme_contrast_ok(ACCENT_FG_RGB, CHANGED_BG_RGB));
+        assert!(theme_contrast_ok(ACCENT_FG_RGB, DELETED_BG_RGB));
+        assert!(theme_contrast_ok(ACCENT_FG_RGB, INSERTED_BG_RGB));
+        assert!(theme_contrast_ok(DELETED_FG_RGB, ERROR_BG_RGB));
+    }
+
+    #[test]
+    fn palettes_satisfy_aa_per_mode() {
+        for pal in [DARK_PALETTE, LIGHT_PALETTE] {
+            assert!(theme_contrast_ok(pal.base_fg, pal.base_bg));
+            assert!(theme_contrast_ok(pal.dim, pal.base_bg));
+            assert!(theme_contrast_ok(pal.red, pal.base_bg));
+            assert!(theme_contrast_ok(pal.green, pal.base_bg));
+            assert!(theme_contrast_ok(pal.blue, pal.base_bg));
+        }
+        assert!(theme_mode_contrast_ok(true));
+        assert!(theme_mode_contrast_ok(false));
+    }
+
+    #[test]
+    fn palette_selector_matches_mode() {
+        assert_eq!(palette(true), DARK_PALETTE);
+        assert_eq!(palette(false), LIGHT_PALETTE);
+        assert_eq!(palette(true).base_bg, DARK_BG_RGB);
+        assert_eq!(palette(false).base_bg, LIGHT_BG_RGB);
+    }
+
+    #[test]
+    fn tokens_keep_frozen_hues() {
+        assert_eq!(DELETED_FG_RGB, [255, 170, 170]);
+        assert_eq!(DELETED_BG_RGB, [120, 32, 32]);
+        assert_eq!(INSERTED_FG_RGB, [170, 240, 180]);
+        assert_eq!(INSERTED_BG_RGB, [24, 90, 46]);
+        assert_eq!(CHANGED_FG_RGB, [255, 235, 160]);
+        assert_eq!(CHANGED_BG_RGB, [122, 102, 20]);
+        assert_eq!(ACCENT_FG_RGB, [255, 255, 210]);
+        assert_eq!(ERROR_BG_RGB, [60, 20, 20]);
+        assert_eq!(DARK_DIM_RGB, [150, 150, 150]);
+        assert_eq!(DARK_RED_RGB, [255, 100, 100]);
+        assert_eq!(DARK_GREEN_RGB, [120, 220, 130]);
+        assert_eq!(DARK_BLUE_RGB, [130, 170, 255]);
+        assert_eq!(DARK_TRACK_RGB, [32, 32, 32]);
     }
 }

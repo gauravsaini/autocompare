@@ -360,3 +360,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 22 8 files nan red
 - 8 files 1074 ins. NaN 5th poll red. Both live 07:28/04:42.
+
+## Wave G poll 23 9 files
+- 9 files 1148 ins. GUI 122 green. Diff NaN 6th red. Both live 07:43/04:57.

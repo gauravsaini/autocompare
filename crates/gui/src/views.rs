@@ -19,31 +19,20 @@ use eframe::egui::{
 use crate::app::Tab;
 use crate::gutter::gutter_bar_width_for_font;
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
-use crate::theme::TYPO_MONO_SIZE;
+use crate::theme::{
+    ACCENT_FG, CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
+    TYPO_MONO_SIZE, blue_for, dim_for, green_for, red_for, track_for,
+};
 use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
 
-// The fixed diff palette (semantic colors, own contrast).
-const DELETED_FG: Color32 = Color32::from_rgb(255, 170, 170);
-const DELETED_BG: Color32 = Color32::from_rgb(120, 32, 32);
-const INSERTED_FG: Color32 = Color32::from_rgb(170, 240, 180);
-const INSERTED_BG: Color32 = Color32::from_rgb(24, 90, 46);
-const CHANGED_FG: Color32 = Color32::from_rgb(255, 235, 160);
-const CHANGED_BG: Color32 = Color32::from_rgb(122, 102, 20);
-/// Accent color for changed spans. egui ships no bold monospace face,
-/// so the CLI's "bold" half of the bold+underline accent becomes
-/// egui's own notion of strong: a brighter color, plus the underline.
-const ACCENT_FG: Color32 = Color32::from_rgb(255, 255, 210);
-const DIM: Color32 = Color32::from_rgb(150, 150, 150);
+// The fixed diff palette lives in `crate::theme` (same hues, own
+// contrast); per-mode chrome (dim/red/green/blue/track) is picked via
+// `theme::*_for(ui.visuals().dark_mode)` at each paint site below.
 // Kept for the pending App rewiring back to `views::paint_folder`
 // (the Folder tab currently paints inline in `app.rs`, read-only
 // here); the allow keeps the tree clippy-clean without deleting the
 // tested paint API.
-#[allow(dead_code)]
-const NEWER_BLUE: Color32 = Color32::from_rgb(130, 170, 255);
-const RED: Color32 = Color32::from_rgb(255, 100, 100);
-const GREEN: Color32 = Color32::from_rgb(120, 220, 130);
-const ERROR_BG: Color32 = Color32::from_rgb(60, 20, 20);
 
 // Geometry tokens (px): margins, gaps, alignment. Colors out of scope.
 pub const OUTER_MARGIN: i8 = 12;
@@ -328,6 +317,7 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
 /// The three-way merge output: conflict blocks highlighted, notes
 /// for conflicts and truncation first, with Take resolution actions.
 pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
+    let dark = ui.visuals().dark_mode;
     if model.conflicted {
         paint_note(ui, "the merge has conflicts; choose an action to resolve:");
         let mut resolve_choice = None;
@@ -374,7 +364,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
                     || line.starts_with(">>>>>>>");
                 let mut text = RichText::new(line.as_str()).monospace();
                 if marker {
-                    text = text.color(RED).strong();
+                    text = text.color(red_for(dark)).strong();
                 }
                 ui.label(text);
             }
@@ -384,6 +374,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
 /// The table comparison rows: changed rows highlighted, changed cells
 /// already marked `[old => new]` by the view model.
 pub fn paint_table(ui: &mut Ui, model: &TableModel) {
+    let dark = ui.visuals().dark_mode;
     if model.truncated {
         paint_note(ui, "showing the first rows only; the rest is cut off");
     }
@@ -402,10 +393,10 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel) {
                 ui.set_row_height(row_height);
                 let mut glyph = RichText::new(row.glyph.to_string()).monospace();
                 glyph = match row.glyph {
-                    '=' => glyph.color(DIM),
-                    '!' | 'L' => glyph.color(RED),
-                    'R' => glyph.color(GREEN),
-                    _ => glyph.color(DIM),
+                    '=' => glyph.color(dim_for(dark)),
+                    '!' | 'L' => glyph.color(red_for(dark)),
+                    'R' => glyph.color(green_for(dark)),
+                    _ => glyph.color(dim_for(dark)),
                 };
                 let mut body = RichText::new(format!("{} | {}", row.label, row.text)).monospace();
                 if row.changed {
@@ -611,6 +602,8 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
     let row_height = text_row_height(ui);
     let base_text = ui.style().visuals.text_color();
+    let dark = ui.visuals().dark_mode;
+    let gutter_dim = dim_for(dark);
     let mut copy_action = None;
     let mut select_action = None;
 
@@ -641,6 +634,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                 pane_chars,
                                 gutter_chars,
                                 prefs,
+                                dim: gutter_dim,
                             };
                             ui.label(side_job_with_prefs(
                                 Side::Left,
@@ -669,7 +663,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                         Some((orig, viewmodel::CopyDirection::RightToLeft));
                                 }
                             } else {
-                                ui.label(RichText::new(" | ").monospace().color(DIM));
+                                ui.label(RichText::new(" | ").monospace().color(gutter_dim));
                             }
 
                             ui.label(side_job_with_prefs(
@@ -695,8 +689,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
         let bar_w = text_gutter_paint_width(prefs.show_line_numbers);
         let (rect, _resp) =
             ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::hover());
-        ui.painter()
-            .rect_filled(rect, 0.0, Color32::from_rgb(32, 32, 32));
+        ui.painter().rect_filled(rect, 0.0, track_for(dark));
 
         for seg in geom.segments {
             let seg_rect = egui::Rect::from_min_max(
@@ -730,11 +723,11 @@ enum Side {
     Right,
 }
 
-/// Prefs-effective paint widths for one text pane: widths come from
-/// [`view_text_with_prefs`] (wrap caps `pane_chars` at 80, hidden
-/// numbers narrow `gutter_chars` to 1) while `prefs` drives the
-/// per-row hiding. Bundled so pane painters stay under the
-/// argument-count lint.
+/// Prefs-effective paint widths and gutter tone for one text pane:
+/// widths come from [`view_text_with_prefs`] (wrap caps `pane_chars`
+/// at 80, hidden numbers narrow `gutter_chars` to 1) while `prefs`
+/// drives the per-row hiding and `dim` carries the per-mode gutter
+/// tone. Bundled so pane painters stay under the argument-count lint.
 pub struct TextPaneLayout<'a> {
     /// Prefs-effective pane width.
     pub pane_chars: usize,
@@ -742,6 +735,8 @@ pub struct TextPaneLayout<'a> {
     pub gutter_chars: usize,
     /// Toggles the pane honors.
     pub prefs: &'a TextViewPrefs,
+    /// Per-mode gutter tone (`theme::dim_for(dark)` at the call site).
+    pub dim: Color32,
 }
 
 /// One pane of one row honoring `layout`: line numbers blank when off,
@@ -769,7 +764,7 @@ fn side_job_with_prefs(
         keep_trailing_whitespace: true,
         ..Default::default()
     };
-    let mut gutter = TextFormat::simple(font_id.clone(), DIM);
+    let mut gutter = TextFormat::simple(font_id.clone(), layout.dim);
     gutter.background = bg;
     job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
     for (segment, accented) in prefs_pane_segments(line, raw_spans, layout.pane_chars, layout.prefs)
@@ -858,7 +853,7 @@ fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(Stri
 /// The folder listing: the summary line (with its truncation note)
 /// above the monospace tree grid with expand/collapse drill-down.
 /// Rows are virtualized the same way as the text view.
-/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+/// Kept for the pending App rewiring (see the note on theme blues).
 #[allow(dead_code)]
 pub fn paint_folder(
     ui: &mut Ui,
@@ -899,7 +894,7 @@ pub fn paint_folder(
                     ui.label(
                         RichText::new(node.row.glyph)
                             .monospace()
-                            .color(glyph_color(&node.row)),
+                            .color(glyph_color(&node.row, ui.visuals().dark_mode)),
                     );
                     ui.label(RichText::new(folder_columns(&node.row)).monospace());
                 });
@@ -917,21 +912,21 @@ pub fn paint_folder(
 
 /// The glyph column color: same/dim, different and left-only/red,
 /// newer/blue, right-only/green, like the CLI's coloring.
-/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+/// Kept for the pending App rewiring (see the note on theme blues).
 #[allow(dead_code)]
-fn glyph_color(row: &FolderRow) -> Color32 {
+fn glyph_color(row: &FolderRow, dark: bool) -> Color32 {
     match row.glyph {
-        '=' => DIM,
-        '!' | 'L' => RED,
-        '>' | '<' => NEWER_BLUE,
-        'R' => GREEN,
-        _ => DIM,
+        '=' => dim_for(dark),
+        '!' | 'L' => red_for(dark),
+        '>' | '<' => blue_for(dark),
+        'R' => green_for(dark),
+        _ => dim_for(dark),
     }
 }
 
 /// The columns after the glyph, shaped like the CLI's row: sizes,
 /// times, then the path with the directory mark.
-/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+/// Kept for the pending App rewiring (see the note on theme blues).
 /// Covered by the `folder_columns_match_the_cli_shape` unit test.
 #[allow(dead_code)]
 fn folder_columns(row: &FolderRow) -> String {
@@ -1162,6 +1157,7 @@ mod tests {
             pane_chars: model.pane_chars,
             gutter_chars: model.gutter_chars,
             prefs: &shown,
+            dim: crate::theme::DARK_DIM,
         };
         let job = side_job_with_prefs(
             Side::Left,
@@ -1231,6 +1227,7 @@ mod tests {
             pane_chars: 4,
             gutter_chars: 4,
             prefs: &shown,
+            dim: crate::theme::DARK_DIM,
         };
         let with_numbers = side_job_with_prefs(
             Side::Left,
@@ -1248,6 +1245,7 @@ mod tests {
             pane_chars: 4,
             gutter_chars: 1,
             prefs: &hidden,
+            dim: crate::theme::LIGHT_DIM,
         };
         let without_numbers = side_job_with_prefs(
             Side::Left,
@@ -1352,5 +1350,23 @@ mod tests {
         assert_eq!(text_gutter_paint_width(false), 6.0);
         assert_eq!(text_gutter_paint_width(true), gutter_bar_width(true));
         assert_eq!(text_gutter_paint_width(false), gutter_bar_width(false));
+    }
+
+    #[test]
+    fn chrome_selectors_follow_dark_mode() {
+        use crate::theme::{
+            DARK_BLUE, DARK_DIM, DARK_GREEN, DARK_RED, DARK_TRACK, LIGHT_BLUE, LIGHT_DIM,
+            LIGHT_GREEN, LIGHT_RED, LIGHT_TRACK,
+        };
+        assert_eq!(dim_for(true), DARK_DIM);
+        assert_eq!(dim_for(false), LIGHT_DIM);
+        assert_eq!(red_for(true), DARK_RED);
+        assert_eq!(red_for(false), LIGHT_RED);
+        assert_eq!(green_for(true), DARK_GREEN);
+        assert_eq!(green_for(false), LIGHT_GREEN);
+        assert_eq!(blue_for(true), DARK_BLUE);
+        assert_eq!(blue_for(false), LIGHT_BLUE);
+        assert_eq!(track_for(true), DARK_TRACK);
+        assert_eq!(track_for(false), LIGHT_TRACK);
     }
 }
