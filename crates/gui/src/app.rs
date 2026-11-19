@@ -1871,7 +1871,7 @@ impl eframe::App for App {
                     self.set_syntax_highlight(syntax);
                 }
             });
-            ui.add_space(views::TIGHT_GAP);
+            ui.add_space(views::TAB_BOTTOM_GAP);
 
             let tab = self.tab;
             let mut compare_clicked = false;
@@ -1971,7 +1971,7 @@ impl eframe::App for App {
             if let Some(err) = self.error.clone() {
                 views::paint_error(ui, err.as_str());
             }
-            ui.add_space(views::TIGHT_GAP);
+            ui.add_space(views::TAB_BOTTOM_GAP);
 
             match tab {
                 Tab::Home => {}

@@ -120,7 +120,7 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
             .small()
             .weak(),
     );
-    ui.add_space(TIGHT_GAP);
+    ui.add_space(TAB_BOTTOM_GAP);
 }
 
 /// The Home View launcher screen displaying cards for all 9 comparison session types.
@@ -132,7 +132,7 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
 
     egui::Grid::new("home_sessions_grid")
         .num_columns(3)
-        .spacing([OUTER_MARGIN as f32, OUTER_MARGIN as f32])
+        .spacing([SECTION_GAP, SECTION_GAP])
         .show(ui, |ui| {
             for (i, item) in model.items.iter().enumerate() {
                 ui.group(|ui| {
@@ -231,7 +231,7 @@ pub fn paint_paths(
     if clicked {
         *compare = true;
     }
-    ui.add_space(TIGHT_GAP);
+    ui.add_space(TAB_BOTTOM_GAP);
 }
 
 /// Three path text fields with native dialog pickers for three-way tabs.
@@ -295,7 +295,7 @@ pub fn paint_triple_paths(
     if clicked {
         *compare = true;
     }
-    ui.add_space(TIGHT_GAP);
+    ui.add_space(TAB_BOTTOM_GAP);
 }
 
 /// Generic scrollable summary lines for the plan/stat tabs
