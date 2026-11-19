@@ -630,3 +630,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 13 B 2 errors A2 steady
 - B views 479, 2 errors (E0277 trait + E0503 borrow) fixing. A2 steady 71 analyzing chunk.
 - No commits. Wait.
+
+## Wave J poll 14 B 1 fail left
+- B 187 passed 1 failed (+16 tests, single failure left). A2 reading history for context.
+- No commits. Wait for B green.
