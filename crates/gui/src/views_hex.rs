@@ -72,7 +72,10 @@ impl HexCompareMode {
         }
     }
 
-    /// Parses a selector label back into a mode.
+    /// Parses a selector label back into a mode. Test-only: the binary
+    /// selector drives the typed [`HexCompareMode`] via [`Self::all`], so
+    /// no runtime path parses labels; unit tests guard the round-trip.
+    #[allow(dead_code)]
     pub fn from_label(label: &str) -> Option<HexCompareMode> {
         match label.trim() {
             "None" => Some(HexCompareMode::None),
@@ -169,7 +172,10 @@ impl HexCompareView {
     /// Headless compare over two byte slices with the view's mode,
     /// chunking exactly like `compare_binary_files_aligned`. Inputs
     /// beyond [`ALIGNED_HEX_MAX_BYTES`] yield an [`Self::over_cap`]
-    /// view with no hunks instead of comparing.
+    /// view with no hunks instead of comparing. Test-only: the binary
+    /// compares files via the engine plus [`Self::from_comparison`];
+    /// unit tests drive this pure slice path.
+    #[allow(dead_code)]
     pub fn build_from_slices(
         left: &[u8],
         right: &[u8],

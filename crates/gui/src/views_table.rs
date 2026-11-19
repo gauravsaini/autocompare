@@ -128,12 +128,18 @@ impl TableKeyView {
         self.key_columns = next;
     }
 
-    /// Refreshes [`Self::suggested_keys`] from the left table.
+    /// Refreshes [`Self::suggested_keys`] from the left table. Test-only:
+    /// the file-driven wiring never holds parsed tables (engine consumes
+    /// paths), so only unit tests drive the headless suggestion path.
+    #[allow(dead_code)]
     pub fn suggest_for(&mut self, left: &Table) {
         self.suggested_keys = detect_key_columns(left);
     }
 
-    /// Adopts the last suggestion as the selected key.
+    /// Adopts the last suggestion as the selected key. Test-only: see
+    /// [`Self::suggest_for`]; the file-driven wiring toggles key columns
+    /// manually via [`Self::toggle_key_column`].
+    #[allow(dead_code)]
     pub fn apply_suggestion(&mut self) {
         self.key_columns = self.suggested_keys.clone();
     }
@@ -152,7 +158,8 @@ impl TableKeyView {
         }
     }
 
-    /// Engine-tolerant options behind this view.
+    /// Engine-tolerant options behind this view. Single source for
+    /// [`Self::to_key_options`], so both mappings stay in sync.
     pub fn to_compare_options(&self) -> TableCompareOptions {
         TableCompareOptions {
             key_columns: self.key_columns.clone(),
@@ -162,23 +169,30 @@ impl TableKeyView {
         }
     }
 
-    /// File-compare key options behind this view.
+    /// File-compare key options behind this view. Built from
+    /// [`Self::to_compare_options`] so the two mappings never drift.
     pub fn to_key_options(&self) -> TableKeyOptions {
+        let opts = self.to_compare_options();
         TableKeyOptions {
-            key_columns: self.key_columns.clone(),
-            numeric_tolerance: Self::sanitize_tolerance(self.numeric_tolerance),
-            ignore_case: self.ignore_case,
-            trim_space: self.trim_space,
+            key_columns: opts.key_columns,
+            numeric_tolerance: opts.numeric_tolerance,
+            ignore_case: opts.ignore_case,
+            trim_space: opts.trim_space,
         }
     }
 
-    /// Compares two cells under this view's tolerant options.
+    /// Compares two cells under this view's tolerant options. Test-only:
+    /// runtime cell comparison runs inside the engine diff; unit tests
+    /// probe the view's tolerance folding through this wrapper.
+    #[allow(dead_code)]
     pub fn cells_equal(&self, left: &str, right: &str) -> bool {
         cells_equal_with_options(left, right, &self.to_compare_options())
     }
 
     /// Runs the key-aligned diff over two parsed tables and records
-    /// the summary. Pure and total.
+    /// the summary. Pure and total. Test-only: see [`Self::suggest_for`];
+    /// the file-driven wiring summarizes via [`summarize`] on engine output.
+    #[allow(dead_code)]
     pub fn refresh(&mut self, left: &Table, right: &Table) {
         let opts = self.to_compare_options();
         let diff = diff_table_by_key_with_options(left, right, &opts);
@@ -363,6 +377,20 @@ mod tests {
         assert_eq!(key_opts.numeric_tolerance, Some(0.25));
         assert!(key_opts.ignore_case);
         assert!(key_opts.trim_space);
+    }
+
+    #[test]
+    fn key_options_mirror_compare_options() {
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0, 2];
+        view.set_tolerance(Some(0.5));
+        view.ignore_case = true;
+        let cmp_opts = view.to_compare_options();
+        let key_opts = view.to_key_options();
+        assert_eq!(key_opts.key_columns, cmp_opts.key_columns);
+        assert_eq!(key_opts.numeric_tolerance, cmp_opts.numeric_tolerance);
+        assert_eq!(key_opts.ignore_case, cmp_opts.ignore_case);
+        assert_eq!(key_opts.trim_space, cmp_opts.trim_space);
     }
 
     #[test]
