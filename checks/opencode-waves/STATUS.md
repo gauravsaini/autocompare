@@ -306,3 +306,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 04 no diff yet
 - Both live 00:56, tree clean 117 green. Exploration advancing, edits pending.
+
+## Wave G poll 05 sess report staged
+- SESS REPORT.md 7714B written + staged, source edits next. COLOR contrast analysis done, edits pending. Both live.
