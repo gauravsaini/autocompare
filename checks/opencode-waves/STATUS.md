@@ -1225,3 +1225,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BB-TABLEP34TYPO `sess-tablep34typo-bb`: OWNS views.rs+checks/gui-tablep34typo-bb (AY spec P3 data-grid indexed loop + P4 painter overlays, THEN typotokens REPORT wiring spec sequential same file; colors FROZEN).
 - BB-FOLDER3 `sess-folder3-bb`: OWNS tree.rs+checks/gui-folder3-bb (folder empty-state 3rd variant unedited-identical case; AX2 REPORT §10.5 + emptyhint REPORT precedent; no paint-color changes).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BB complete (2 parallel: table P3P4+typo + folder 3rd variant)
+- TABLEP34TYPO `522c046` P3 indexed data-cell loop + find-source switch + P4 key boxes/find underlines + TypoRole paint adoption — OWNS views.rs.
+- FOLDER3 `9c9d930` identical-folders AllSame empty hint as third tree variant — OWNS tree.rs.
+- Verify combined: 569 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Note: 4 superseded helpers kept test-only via allow(dead_code) (table_model_text_rows + 3 home size fns) — cleanup candidate once paint fully adopted.
+- Pushed. Next: fresh localrun on BB state + Wave BC (toolbar chrome / intra-line accent per AX2 §10).
