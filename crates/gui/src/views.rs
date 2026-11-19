@@ -3301,6 +3301,296 @@ pub fn folder_grid_columns() -> usize {
 }
 
 // ----------------------------------------------------------------------------
+// Folder sync paint adoption (Wave AR-SYNCPAINT; AQ model precedent).
+// Per-row sync direction badges + selection highlight ka paint. Model
+// (direction/selection/preview/typo-tokens) `crate::tree` me hai
+// (read-only use); yahan sirf paint-side mapping + grid hai.
+// Geometry: sirf existing tokens + `tree::sync_badge_min_px` reuse;
+// typography: `tree::sync_badge_typo`/`sync_summary_typo` mapping;
+// colors frozen (koi naya hue nahi, highlight `selectable_label`
+// precedent par).
+// ----------------------------------------------------------------------------
+
+/// Sync badge column ka header text: fixed chhota label, badge width
+/// ([`crate::tree::SYNC_BADGE_CHARS`] = 2) me fit. Pure; unit-tested.
+pub fn sync_badge_header() -> &'static str {
+    "S"
+}
+
+/// Paint-side badge text: model ka faisla
+/// ([`crate::tree::sync_badge_for_row`]) taaki badge kabhi plan se
+/// alag na bole. Pure; unit-tested.
+pub fn sync_badge_for_paint(row: &FolderRow, mode: crate::tree::SyncModeChoice) -> &'static str {
+    crate::tree::sync_badge_for_row(row, mode)
+}
+
+/// Badge column ki paint width: model token ka reuse
+/// ([`crate::tree::sync_badge_min_px`]) taaki mono advance/pad badle
+/// to paint saath chale. Grid aaj text se auto-size hota hai, isliye
+/// ye width contract test-locked hai (fixed layout baad me).
+/// Pure; unit-tested.
+#[allow(dead_code)] // contract-only (half_field_width precedent); grid auto-sizes
+pub fn sync_badge_column_width() -> f32 {
+    crate::tree::sync_badge_min_px()
+}
+
+/// Badge text strong hai ya nahi: sirf delete (`X`) strong, baaki
+/// regular (colors frozen hain isliye weight se farak). Model typo
+/// ([`crate::tree::sync_badge_typo`]) ka paint mapping. Pure;
+/// unit-tested.
+pub fn sync_badge_is_strong(direction: crate::tree::SyncRowDirection) -> bool {
+    crate::tree::sync_badge_typo(direction).strong
+}
+
+/// Badge text size: model typo ([`crate::tree::sync_badge_typo`]) se,
+/// taaki paint hamesha caption scale par rahe. Pure; unit-tested.
+pub fn sync_badge_text_size(direction: crate::tree::SyncRowDirection) -> f32 {
+    crate::tree::sync_badge_typo(direction).size
+}
+
+/// Summary line text size: model typo
+/// ([`crate::tree::sync_summary_typo`]) se. Pure; unit-tested.
+pub fn sync_summary_text_size() -> f32 {
+    crate::tree::sync_summary_typo().size
+}
+
+/// Badge cell ka `RichText`: mono + model size, delete par strong.
+/// Colors frozen (koi `.color()` nahi). Paint-only.
+pub fn sync_badge_rich(badge: &str, direction: crate::tree::SyncRowDirection) -> RichText {
+    let styled = RichText::new(badge)
+        .monospace()
+        .size(sync_badge_text_size(direction));
+    if sync_badge_is_strong(direction) {
+        styled.strong()
+    } else {
+        styled
+    }
+}
+
+/// Summary line ka `RichText`: mono caption, weak tone (App preview
+/// precedent: `monospace().weak()`). Paint-only.
+pub fn sync_summary_rich(line: &str) -> RichText {
+    RichText::new(line)
+        .monospace()
+        .size(sync_summary_text_size())
+        .weak()
+}
+
+/// Row selected hai ya nahi: model set ka read-only probe
+/// ([`crate::tree::FolderSyncSelection::contains`]). Pure; unit-tested.
+pub fn folder_sync_row_selected(
+    selection: &crate::tree::FolderSyncSelection,
+    rel_path: &str,
+) -> bool {
+    selection.contains(rel_path)
+}
+
+/// Sync grid columns: glyph + badge + har data column. Pure;
+/// unit-tested.
+pub fn folder_grid_columns_with_sync() -> usize {
+    folder_grid_columns().saturating_add(1)
+}
+
+/// Sync grid header cells paint order me: glyph header khali, phir
+/// badge header ([`sync_badge_header`]), phir [`folder_header_cells`].
+/// Pure; unit-tested.
+pub fn folder_sync_header_cells() -> Vec<String> {
+    let mut out = Vec::with_capacity(folder_grid_columns_with_sync());
+    out.push(String::new());
+    out.push(sync_badge_header().to_string());
+    out.extend(folder_header_cells());
+    out
+}
+
+/// Selected summary line: `N selected: <dry-run line>`, wahi shape jo
+/// App (`folder_sync_selected_summary_line`) dikhata hai — real
+/// counts, khali par explicit zero line. Pure; unit-tested.
+pub fn folder_sync_selected_line(
+    rows: &[FolderRow],
+    mode: crate::tree::SyncModeChoice,
+    selection: &crate::tree::FolderSyncSelection,
+) -> String {
+    let preview = crate::tree::sync_preview_for_selection(rows, mode, selection);
+    let counts = crate::tree::summarize_sync_preview(&preview);
+    format!(
+        "{} selected: {}",
+        selection.len(),
+        crate::tree::format_sync_summary(counts)
+    )
+}
+
+/// Sync adoption grid: glyph + direction badge + path/sides, click se
+/// selection toggle, neeche selected summary line. [`paint_folder`] ka
+/// sync judvaan; purani signatures untouched (KEVL `app.rs` call sites
+/// na tooten — App rewiring orchestrator ke paas pending). Geometry:
+/// wahi header/page/grid rhythm; typography: badge/summary mono
+/// caption mapping; colors frozen.
+#[allow(dead_code)] // App rewiring baad me; tab tak pending painter (dual precedent)
+pub fn paint_folder_sync(
+    ui: &mut Ui,
+    rows: &[FolderRow],
+    summary: &str,
+    mode: crate::tree::SyncModeChoice,
+    selection: &mut crate::tree::FolderSyncSelection,
+    expanded: &mut std::collections::BTreeSet<String>,
+    pager: &mut crate::tree::RowPager,
+) {
+    ui.label(chrome_status_role().rich(summary));
+    ui.add_space(TIGHT_GAP);
+    if rows.is_empty() {
+        ui.label(RichText::new("(both folders are empty)").weak());
+        return;
+    }
+    let tree_nodes = viewmodel::folder_tree(rows, expanded);
+    pager.total_rows = tree_nodes.len();
+    pager.clamp_top();
+    let (page_up, page_down) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::PageUp),
+            input.key_pressed(egui::Key::PageDown),
+        )
+    });
+    if page_up {
+        pager.prev_page();
+    }
+    if page_down {
+        pager.next_page();
+    }
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        if ui.small_button("◀ Prev page").clicked() {
+            pager.prev_page();
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            pager.next_page();
+        }
+        ui.label(
+            RichText::new(format!(
+                "page {} of {}, showing {} row(s)",
+                pager.top / pager.rows_per_page.max(1) + 1,
+                pager.page_count().max(1),
+                pager
+                    .visible_range()
+                    .1
+                    .saturating_sub(pager.visible_range().0),
+            ))
+            .small()
+            .weak(),
+        );
+    });
+    ui.add_space(TIGHT_GAP);
+    // Header grid row: glyph khali + badge `S` + data headers, mono
+    // weak (existing single-line header ka grid-aligned roop taaki
+    // badge column header se na bhatke). Rule table header jaisi.
+    let headers = folder_sync_header_cells();
+    egui::Grid::new("folder_sync_header_grid")
+        .num_columns(folder_grid_columns_with_sync())
+        .spacing([SECTION_GAP, TIGHT_GAP])
+        .show(ui, |ui| {
+            for cell in &headers {
+                ui.label(RichText::new(cell.as_str()).monospace().weak());
+            }
+            ui.end_row();
+        });
+    ui.label(
+        RichText::new(indented_content(&format_table_header_rule(
+            headers.join(" ").len(),
+        )))
+        .monospace()
+        .weak(),
+    );
+    let row_height = row_height_for_line(text_row_height(ui));
+    let dark = ui.visuals().dark_mode;
+    let mut toggle_dir = None;
+    let mut toggle_select: Vec<String> = Vec::new();
+
+    let (wstart, wend) = pager.visible_range();
+    let wend = wend.min(tree_nodes.len());
+    let count = wend.saturating_sub(wstart);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, count, |ui, range| {
+            egui::Grid::new("folder_sync_data_grid")
+                .num_columns(folder_grid_columns_with_sync())
+                .spacing([SECTION_GAP, TIGHT_GAP])
+                .show(ui, |ui| {
+                    for pos in range {
+                        let i = wstart.saturating_add(pos);
+                        let Some(node) = tree_nodes.get(i) else {
+                            break;
+                        };
+                        // Glyph + sync badge: frozen palette,
+                        // mode-following dim/blue/red/green; badge mono
+                        // caption (delete strong).
+                        ui.label(
+                            RichText::new(node.row.glyph.to_string())
+                                .monospace()
+                                .color(glyph_color(&node.row, dark)),
+                        );
+                        let direction = crate::tree::sync_direction_for_row(&node.row, mode);
+                        ui.label(sync_badge_rich(
+                            sync_badge_for_paint(&node.row, mode),
+                            direction,
+                        ));
+                        // Path column (flex): depth indent +
+                        // expand/collapse + path (+ dir mark); click
+                        // selection toggle karta hai (dual painter
+                        // precedent), highlight `selectable_label` se.
+                        let cells = folder_row_cells(&node.row);
+                        let path_text = cells.first().cloned().unwrap_or_default();
+                        let selected =
+                            folder_sync_row_selected(selection, node.row.rel_path.as_str());
+                        ui.horizontal(|ui| {
+                            if node.depth > 0 {
+                                ui.add_space(tree_indent(node.depth));
+                            }
+                            if node.row.is_dir && node.has_children {
+                                let icon = if node.is_expanded { "▼" } else { "▶" };
+                                if ui.small_button(icon).clicked() {
+                                    toggle_dir = Some(node.row.rel_path.clone());
+                                }
+                            } else if node.row.is_dir {
+                                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                            }
+                            if ui
+                                .selectable_label(selected, RichText::new(path_text).monospace())
+                                .clicked()
+                            {
+                                toggle_select.push(node.row.rel_path.clone());
+                            }
+                        });
+                        let mut idx = 1usize;
+                        while idx < cells.len() {
+                            let mut cell = String::new();
+                            if let Some(text) = cells.get(idx) {
+                                cell = text.clone();
+                            }
+                            ui.label(RichText::new(cell).monospace());
+                            idx = idx.saturating_add(1);
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some(dir) = toggle_dir {
+        if expanded.contains(&dir) {
+            expanded.remove(&dir);
+        } else {
+            expanded.insert(dir);
+        }
+    }
+    for rel_path in toggle_select {
+        selection.toggle(rel_path.as_str());
+    }
+    // Selected summary: real counts, khali par explicit zero line.
+    ui.add_space(TIGHT_GAP);
+    ui.label(sync_summary_rich(
+        folder_sync_selected_line(rows, mode, selection).as_str(),
+    ));
+}
+
+// ----------------------------------------------------------------------------
 // Dual-tree folder panes (Gap #19 kadam 1; App wiring baad me).
 // Dono pane ek hi node list paint karte hain; select/scroll/action
 // `tree::DualTreeState` me shared hai taaki panes kabhi alag na hon.
@@ -5161,6 +5451,136 @@ mod tests {
             paths,
             vec!["src/lib.rs".to_string(), "README.md".to_string()]
         );
+    }
+
+    #[test]
+    fn sync_badge_for_paint_matches_model_across_glyphs_and_modes() {
+        use crate::tree::SyncModeChoice;
+        let glyphs = ['=', '!', '>', '<', 'L', 'R', '?'];
+        for glyph in glyphs {
+            for mode in [SyncModeChoice::UpdateBoth, SyncModeChoice::Mirror] {
+                let row = FolderRow {
+                    rel_path: "a.txt".to_string(),
+                    is_dir: false,
+                    glyph,
+                    left_size: None,
+                    right_size: None,
+                    left_time: None,
+                    right_time: None,
+                    changed: glyph != '=',
+                };
+                assert_eq!(
+                    sync_badge_for_paint(&row, mode),
+                    crate::tree::sync_badge_for_row(&row, mode),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sync_badge_for_paint_dirs_only_mirror_right_prunes() {
+        use crate::tree::{SyncModeChoice, SyncRowDirection};
+        let dir = |glyph: char| FolderRow {
+            rel_path: "sub".to_string(),
+            is_dir: true,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        };
+        assert_eq!(
+            sync_badge_for_paint(&dir('R'), SyncModeChoice::Mirror),
+            SyncRowDirection::DeleteRight.badge()
+        );
+        assert_eq!(
+            sync_badge_for_paint(&dir('R'), SyncModeChoice::UpdateBoth),
+            SyncRowDirection::None.badge()
+        );
+        assert_eq!(
+            sync_badge_for_paint(&dir('>'), SyncModeChoice::Mirror),
+            SyncRowDirection::None.badge()
+        );
+    }
+
+    #[test]
+    fn sync_badge_column_width_reuses_model_token() {
+        assert_eq!(sync_badge_column_width(), crate::tree::sync_badge_min_px());
+        assert!(sync_badge_column_width() > 0.0);
+    }
+
+    #[test]
+    fn sync_grid_adds_one_badge_column_with_aligned_header() {
+        assert_eq!(
+            folder_grid_columns_with_sync(),
+            folder_grid_columns().saturating_add(1)
+        );
+        let headers = folder_sync_header_cells();
+        assert_eq!(headers.len(), folder_grid_columns_with_sync());
+        assert_eq!(headers.first().map(String::as_str), Some(""));
+        assert_eq!(
+            headers.get(1).map(String::as_str),
+            Some(sync_badge_header())
+        );
+        assert!(sync_badge_header().len() <= crate::tree::SYNC_BADGE_CHARS);
+        let data = folder_header_cells();
+        assert_eq!(headers.get(2..), Some(data.as_slice()));
+    }
+
+    #[test]
+    fn sync_badge_only_delete_is_strong_at_caption_size() {
+        use crate::tree::SyncRowDirection;
+        let dirs = [
+            SyncRowDirection::None,
+            SyncRowDirection::CopyToRight,
+            SyncRowDirection::CopyToLeft,
+            SyncRowDirection::DeleteRight,
+            SyncRowDirection::Manual,
+        ];
+        for dir in dirs {
+            assert_eq!(
+                sync_badge_is_strong(dir),
+                dir == SyncRowDirection::DeleteRight
+            );
+            assert_eq!(sync_badge_text_size(dir), crate::tree::FOLDER_SIDE_SIZE);
+        }
+        assert_eq!(sync_summary_text_size(), crate::tree::FOLDER_SIDE_SIZE);
+    }
+
+    #[test]
+    fn folder_sync_row_selected_probes_model_set() {
+        let mut selection = crate::tree::FolderSyncSelection::new();
+        assert!(!folder_sync_row_selected(&selection, "a.txt"));
+        selection.select("a.txt");
+        assert!(folder_sync_row_selected(&selection, "a.txt"));
+        assert!(!folder_sync_row_selected(&selection, "b.txt"));
+    }
+
+    #[test]
+    fn folder_sync_selected_line_counts_only_selection() {
+        use crate::tree::SyncModeChoice;
+        let mk = |path: &str, glyph: char| FolderRow {
+            rel_path: path.to_string(),
+            is_dir: false,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        };
+        let rows = vec![mk("new.txt", '>'), mk("same.txt", '=')];
+        let empty = crate::tree::FolderSyncSelection::new();
+        assert_eq!(
+            folder_sync_selected_line(&rows, SyncModeChoice::UpdateBoth, &empty),
+            "0 selected: dry-run: 0 L->R, 0 R->L, 0 delete(s), 0 skipped"
+        );
+        let mut one = crate::tree::FolderSyncSelection::new();
+        one.select("new.txt");
+        let line = folder_sync_selected_line(&rows, SyncModeChoice::UpdateBoth, &one);
+        assert!(line.starts_with("1 selected: "), "{line}");
+        assert!(line.contains("1 L->R"), "{line}");
     }
 
     #[test]
