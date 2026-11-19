@@ -1083,3 +1083,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - SNAPSHOT `5a0cda0` snapshot dispatcher routed to all 6 tabs + geometry fixtures — OWNS screenshot.rs.
 - Verify combined: 431 green, clippy 0, fmt clean, banned 0, PNG magic-ok x8.
 - Pushed. Next: Wave AP (minimap-click, session restore, text wrap parity).
+
+## 2026-11-20 — Wave AP plan (2 parallel: minimap-click + session restore)
+- AP-MINIMAP `sess-minimap-ap`: OWNS views.rs+checks/gui-minimap-ap (Gap #5 minimap click-to-jump).
+- AP-SESSION `sess-session-ap`: OWNS home.rs+app.rs+checks/gui-session-ap (session restore).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
