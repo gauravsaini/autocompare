@@ -953,6 +953,99 @@ pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
     clamp_split_fraction(fraction + dx / avail)
 }
 
+/// Drag-handle hit width (px): mirrors `views::SPLIT_HIT_W` (8px grab
+/// strip with a centered 1px visual) so headless hit math stays in
+/// sync with paint without importing egui. Geometry only, no
+/// color/typo. Pure token; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) uses this hit width
+pub const SPLIT_HANDLE_HIT_W: f32 = 8.0;
+
+/// Cursor affordance id for the split handle: paint maps this to its
+/// resize-column cursor (`egui::CursorIcon::ResizeColumn`). Headless
+/// `&str` keeps this module egui-free. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) maps this to ResizeColumn
+pub fn split_cursor_affordance() -> &'static str {
+    "resize-column"
+}
+
+/// Absolute pointer position to split fraction: `x / avail`, clamped
+/// into the draggable range. Non-finite `x`, non-finite or
+/// non-positive `avail` fall back to [`SPLIT_DEFAULT_FRACTION`] so
+/// headless callers never divide by zero or feed NaN into paint.
+/// Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) uses absolute position mapping
+pub fn split_fraction_from_x(x: f32, avail: f32) -> f32 {
+    if !x.is_finite() || !avail.is_finite() || avail <= 0.0 {
+        return SPLIT_DEFAULT_FRACTION;
+    }
+    clamp_split_fraction(x / avail)
+}
+
+/// Drag delta to fraction delta: `dx / avail` before clamping.
+/// [`split_apply_drag`] adds this to the current fraction; this helper
+/// exposes the delta alone for handle-drag models. Non-finite `dx`,
+/// non-finite or non-positive `avail` yield `0.0` (no move). Pure;
+/// unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) uses the delta form
+pub fn split_drag_delta_fraction(dx: f32, avail: f32) -> f32 {
+    if !dx.is_finite() || !avail.is_finite() || avail <= 0.0 {
+        return 0.0;
+    }
+    dx / avail
+}
+
+/// Handle hit x-range for `fraction` over `avail` row pixels:
+/// `(x0, x1)` with `x0 <= x1`, clamped into `[0, avail]`. The center
+/// sits at `avail * clamped_fraction` with [`SPLIT_HANDLE_HIT_W`]
+/// spread around it; near the row edges the strip pins inside instead
+/// of spilling out. Degenerate (non-finite/non-positive) `avail`
+/// yields `(0.0, 0.0)`; non-finite `fraction` falls back to
+/// [`SPLIT_DEFAULT_FRACTION`]. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) hit-tests with this range
+pub fn split_handle_x_range(avail: f32, fraction: f32) -> (f32, f32) {
+    if !avail.is_finite() || avail <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let clamped = clamp_split_fraction(fraction);
+    let center_base = if clamped.is_finite() {
+        clamped
+    } else {
+        SPLIT_DEFAULT_FRACTION
+    };
+    let center = (avail * center_base).clamp(0.0, avail);
+    let half = (SPLIT_HANDLE_HIT_W / 2.0).clamp(0.0, avail);
+    let x0 = (center - half).clamp(0.0, avail);
+    let x1 = (center + half).clamp(0.0, avail);
+    if x0 <= x1 { (x0, x1) } else { (x1, x0) }
+}
+
+/// Hit test: `x` lies inside [`split_handle_x_range`]. Non-finite `x`
+/// or degenerate `avail` never hits. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) hit-tests pointer x with this
+pub fn split_handle_contains_x(x: f32, avail: f32, fraction: f32) -> bool {
+    if !x.is_finite() || !avail.is_finite() || avail <= 0.0 {
+        return false;
+    }
+    let (x0, x1) = split_handle_x_range(avail, fraction);
+    x >= x0 && x <= x1
+}
+
+/// Screen-reader/keyboard label for the split handle: honest left-pane
+/// percent plus the draggable bounds, so the drag target stays
+/// operable without a pointer. Non-finite input falls back to the
+/// default share. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (next wave) exposes this as the handle a11y label
+pub fn split_accessibility_label(fraction: f32) -> String {
+    let clamped = clamp_split_fraction(fraction);
+    let share = if clamped.is_finite() {
+        clamped
+    } else {
+        SPLIT_DEFAULT_FRACTION
+    };
+    let pct = (share * 100.0).round().clamp(0.0, 100.0) as u32;
+    format!("Splitter: left pane {pct} percent. Drag to resize between 20 and 80 percent.")
+}
+
 // ----------------------------------------------------------------------------
 // Hex
 // ----------------------------------------------------------------------------
@@ -3199,6 +3292,98 @@ mod tests {
         // Non-positive travel keeps the (clamped) current fraction.
         assert_eq!(split_apply_drag(0.50, 80.0, 0.0), 0.50);
         assert_eq!(split_apply_drag(9.9, 0.0, 0.0), SPLIT_MAX_FRACTION);
+    }
+
+    #[test]
+    fn split_handle_hit_width_matches_paint_strip() {
+        // Paint grab strip (`views::SPLIT_HIT_W`) 8px hai: model usi par
+        // bana taaki hit math paint se alag na ho. Visual 1px centered
+        // rehta hai, isliye inset dono taraf barabar banta hai.
+        assert_eq!(SPLIT_HANDLE_HIT_W, 8.0);
+        assert_eq!((SPLIT_HANDLE_HIT_W / 2.0) * 2.0, SPLIT_HANDLE_HIT_W);
+    }
+
+    #[test]
+    fn split_handle_x_range_centers_on_fraction() {
+        // 800px row, center split: 400 +/- 4px grab strip.
+        assert_eq!(split_handle_x_range(800.0, 0.50), (396.0, 404.0));
+        // Range hamesha ordered aur row ke andar rehta hai.
+        let (lo, hi) = split_handle_x_range(800.0, 0.30);
+        assert!(lo <= hi);
+        assert!(lo >= 0.0 && hi <= 800.0);
+        assert!((hi - lo - SPLIT_HANDLE_HIT_W).abs() < 0.001);
+        // Clamp: 0.0 fraction 0.20 par tikti hai (160 +/- 4).
+        let (clo, chi) = split_handle_x_range(800.0, 0.0);
+        assert!((clo - 156.0).abs() < 0.01);
+        assert!((chi - 164.0).abs() < 0.01);
+        // Degenerate avail kabhi NaN/negative range nahi deta.
+        assert_eq!(split_handle_x_range(0.0, 0.50), (0.0, 0.0));
+        assert_eq!(split_handle_x_range(-10.0, 0.50), (0.0, 0.0));
+        assert_eq!(split_handle_x_range(f32::NAN, 0.50), (0.0, 0.0));
+        // Non-finite fraction default share (50%) par girta hai.
+        assert_eq!(split_handle_x_range(800.0, f32::NAN), (396.0, 404.0));
+    }
+
+    #[test]
+    fn split_handle_contains_x_hits_only_strip() {
+        // Center hit, kinare miss.
+        assert!(split_handle_contains_x(400.0, 800.0, 0.50));
+        assert!(split_handle_contains_x(396.0, 800.0, 0.50));
+        assert!(split_handle_contains_x(404.0, 800.0, 0.50));
+        assert!(!split_handle_contains_x(395.9, 800.0, 0.50));
+        assert!(!split_handle_contains_x(404.1, 800.0, 0.50));
+        // NaN pointer kabhi hit nahi; degenerate row me koi hit nahi.
+        assert!(!split_handle_contains_x(f32::NAN, 800.0, 0.50));
+        assert!(!split_handle_contains_x(0.0, 0.0, 0.50));
+    }
+
+    #[test]
+    fn split_fraction_from_x_clamps_and_guards() {
+        assert_eq!(split_fraction_from_x(400.0, 800.0), 0.50);
+        assert_eq!(split_fraction_from_x(-50.0, 800.0), SPLIT_MIN_FRACTION);
+        assert_eq!(split_fraction_from_x(900.0, 800.0), SPLIT_MAX_FRACTION);
+        // Guard: kharab input default share deta hai, NaN kabhi bahar nahi.
+        assert_eq!(
+            split_fraction_from_x(f32::NAN, 800.0),
+            SPLIT_DEFAULT_FRACTION
+        );
+        assert_eq!(split_fraction_from_x(400.0, 0.0), SPLIT_DEFAULT_FRACTION);
+        assert_eq!(
+            split_fraction_from_x(400.0, f32::INFINITY),
+            SPLIT_DEFAULT_FRACTION
+        );
+        let guarded = split_fraction_from_x(f32::NAN, f32::NAN);
+        assert!(guarded.is_finite());
+    }
+
+    #[test]
+    fn split_drag_delta_fraction_guards_and_scales() {
+        // 80px / 800px travel = +0.10 share.
+        assert!((split_drag_delta_fraction(80.0, 800.0) - 0.10).abs() < 0.000_001);
+        assert!((split_drag_delta_fraction(-40.0, 800.0) + 0.05).abs() < 0.000_001);
+        // Authority ke saath consistency: fraction + delta == apply_drag.
+        let delta = split_drag_delta_fraction(80.0, 800.0);
+        assert_eq!(split_apply_drag(0.50, 80.0, 800.0), 0.50 + delta);
+        // Guard: zero/NaN travel par koi move nahi.
+        assert_eq!(split_drag_delta_fraction(80.0, 0.0), 0.0);
+        assert_eq!(split_drag_delta_fraction(f32::NAN, 800.0), 0.0);
+        assert_eq!(split_drag_delta_fraction(80.0, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn split_cursor_and_a11y_label_read_honestly() {
+        // Cursor affordance paint ke ResizeColumn se judta hai.
+        assert_eq!(split_cursor_affordance(), "resize-column");
+        // Label me honest percent + 20..80 bounds dono hote hain.
+        let label = split_accessibility_label(0.50);
+        assert!(label.contains("50"));
+        assert!(label.contains("20") && label.contains("80"));
+        let min_label = split_accessibility_label(0.0);
+        assert!(min_label.contains("20"));
+        let max_label = split_accessibility_label(9.9);
+        assert!(max_label.contains("80"));
+        // NaN label default 50% par girta hai, crash nahi.
+        assert!(split_accessibility_label(f32::NAN).contains("50"));
     }
 
     // ---- three-pane merge plan (Gap #7 model half) ----
