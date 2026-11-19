@@ -40,10 +40,9 @@ pub use crate::theme::{
 pub use crate::tree::{FolderTreeNode, folder_tree};
 
 use autocompare_compare::{
-    BinaryComparison, FolderComparison, FolderStatus, SyncAction, SyncPlan, TableComparison,
-    TextComparison, TreeMergeAction, TreeMergePlan,
+    BinaryComparison, FolderComparison, FolderStatus, TableComparison, TextComparison,
 };
-use autocompare_diff::{AudioDiff, Op, PictureDiff, RgbaImage, diff_cells, inline_diff};
+use autocompare_diff::{Op, PictureDiff, RgbaImage, diff_cells, inline_diff};
 
 /// Cap on modeled text rows. Comparisons longer than this stop early
 /// and set [`TextRows::truncated`]; painting virtualizes rows anyway,
@@ -1162,125 +1161,17 @@ pub fn build_table_rows(cmp: &TableComparison) -> TableModel {
 }
 
 // ----------------------------------------------------------------------------
-// Folder sync (dry-run plan view)
+// Retired builders (Wave K cleanup)
 // ----------------------------------------------------------------------------
-
-/// Summary lines for a sync plan, mirroring the CLI's `print_plan`
-/// wording without color codes. The GUI shows the dry-run plan only;
-/// applying stays a CLI operation.
-pub fn build_sync_summary(plan: &SyncPlan) -> Vec<String> {
-    let mut lines = Vec::new();
-    if plan.truncated {
-        lines.push(
-            "note: the walk stopped at the depth limit; deeper entries are not planned".to_string(),
-        );
-    }
-    if plan.steps.is_empty() && plan.skipped.is_empty() {
-        lines.push("nothing to do: the trees already match the plan".to_string());
-        return lines;
-    }
-    for step in &plan.steps {
-        let glyph = match step.action {
-            SyncAction::CopyToRight => ">",
-            SyncAction::CopyToLeft => "<",
-            SyncAction::DeleteRight | SyncAction::DeleteLeft => "x",
-        };
-        let dir_mark = if step.is_dir { "/" } else { "" };
-        lines.push(format!("{glyph} {}{dir_mark}", step.rel_path));
-    }
-    for (path, reason) in &plan.skipped {
-        lines.push(format!("~ {path} ({reason})"));
-    }
-    lines.push(format!(
-        "{} step(s) planned, {} skipped",
-        plan.steps.len(),
-        plan.skipped.len()
-    ));
-    lines
-}
-
-// ----------------------------------------------------------------------------
-// Folder merge (dry-run plan view)
-// ----------------------------------------------------------------------------
-
-/// Summary lines for a three-way folder-merge plan, mirroring the
-/// CLI's `print_plan` wording without color codes.
-pub fn build_folder_merge_summary(plan: &TreeMergePlan) -> Vec<String> {
-    let mut lines = Vec::new();
-    if plan.steps.is_empty() && plan.skipped.is_empty() {
-        lines.push("nothing to do: the merge plan is empty".to_string());
-        return lines;
-    }
-    for step in &plan.steps {
-        let glyph = match step.action {
-            TreeMergeAction::TakeLeft => "L",
-            TreeMergeAction::TakeRight => "R",
-            TreeMergeAction::MergedText => "M",
-            TreeMergeAction::Conflict => "C",
-            TreeMergeAction::MakeDir => "+",
-        };
-        let dir_mark = if matches!(step.action, TreeMergeAction::MakeDir) {
-            "/"
-        } else {
-            ""
-        };
-        lines.push(format!("{glyph} {}{dir_mark}", step.rel_path));
-    }
-    for (path, reason) in &plan.skipped {
-        lines.push(format!("~ {path} ({reason})"));
-    }
-    for path in &plan.conflicts {
-        lines.push(format!("! {path} (conflict)"));
-    }
-    lines.push(format!(
-        "{} step(s) planned, {} omitted, {} conflict(s)",
-        plan.steps.len(),
-        plan.skipped.len(),
-        plan.conflicts.len()
-    ));
-    lines
-}
-
-// ----------------------------------------------------------------------------
-// Audio (media compare)
-// ----------------------------------------------------------------------------
-
-/// Summary lines for an audio comparison, mirroring the CLI's
-/// `render_audio.rs` wording without color codes.
-pub fn build_audio_summary(d: &AudioDiff) -> Vec<String> {
-    let mut lines = Vec::new();
-    lines.push(format!(
-        "left:  {:.3}s, {} Hz, {} channel(s)",
-        d.duration_l, d.sample_rate_l, d.channels_l
-    ));
-    lines.push(format!(
-        "right: {:.3}s, {} Hz, {} channel(s)",
-        d.duration_r, d.sample_rate_r, d.channels_r
-    ));
-    if d.config_mismatch {
-        lines.push(
-            "note: stream configurations differ; sample comparison is not meaningful and was skipped"
-                .to_string(),
-        );
-    } else if d.identical {
-        lines.push("no differences".to_string());
-    } else {
-        match d.first_diff_at {
-            Some(at) => lines.push(format!("first difference at {at:.3}s")),
-            None => lines.push("first difference: -".to_string()),
-        }
-        let pct = if d.windows_total > 0 {
-            d.windows_differing as f64 / d.windows_total as f64 * 100.0
-        } else {
-            0.0
-        };
-        lines.push(format!(
-            "differing 10ms windows: {}/{} ({pct:.2}%)",
-            d.windows_differing, d.windows_total
-        ));
-    }
-    lines
-}
+//
+// `build_sync_summary`, `build_folder_merge_summary` aur `build_audio_summary`
+// hata diye gaye: inke callers repo me kahin nahi the (sirf yahin ke unit
+// tests). Replacement structured models `app.rs` me hain:
+// `SyncChecklist::from_plan`, `FolderMergeChecklist::from_plan`,
+// `AudioChecklist::from_diff` aur `PictureCompareModel::from_diff`
+// (picture wala `build_picture_summary` ab bhi `from_diff` ke andar use hota
+// hai, isliye wahi rakha hai). Caller migration: naya code seedha un
+// checklist/model types ko use kare, purani `Vec<String>` summary wapas na laye.
 
 // ----------------------------------------------------------------------------
 // Find box (headless; wiring owned by views.rs / agent A)
@@ -2180,140 +2071,13 @@ mod tests {
         assert!(changed.text.contains("[20 => 25]"));
     }
 
-    // ---- sync ----
-
-    #[test]
-    fn sync_empty_plan_models_nothing_to_do() {
-        use autocompare_compare::SyncPlan;
-        let plan = SyncPlan::default();
-        let lines = build_sync_summary(&plan);
-        assert!(lines.iter().any(|l| l.contains("nothing to do")));
-    }
-
-    #[test]
-    fn sync_plan_models_steps_skips_and_counts() {
-        use autocompare_compare::{SyncAction, SyncPlan, SyncStep};
-        let plan = SyncPlan {
-            steps: vec![SyncStep {
-                rel_path: "a.txt".to_string(),
-                is_dir: false,
-                action: SyncAction::CopyToRight,
-            }],
-            skipped: vec![("b.txt".to_string(), "destination is newer".to_string())],
-            truncated: true,
-        };
-        let lines = build_sync_summary(&plan);
-        assert!(lines.iter().any(|l| l.contains("depth limit")));
-        assert!(lines.iter().any(|l| l.contains("a.txt")));
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("1 step(s) planned, 1 skipped"))
-        );
-    }
-
-    // ---- folder merge ----
-
-    #[test]
-    fn folder_merge_empty_plan_models_nothing_to_do() {
-        use autocompare_compare::TreeMergePlan;
-        let plan = TreeMergePlan::default();
-        let lines = build_folder_merge_summary(&plan);
-        assert!(lines.iter().any(|l| l.contains("merge plan is empty")));
-    }
-
-    #[test]
-    fn folder_merge_conflict_models_markers_and_counts() {
-        use autocompare_compare::{TreeMergeAction, TreeMergePlan, TreeMergeStep};
-        let plan = TreeMergePlan {
-            steps: vec![TreeMergeStep {
-                rel_path: "m.txt".to_string(),
-                action: TreeMergeAction::Conflict,
-                merged: None,
-            }],
-            conflicts: vec!["m.txt".to_string()],
-            skipped: Vec::new(),
-        };
-        let lines = build_folder_merge_summary(&plan);
-        assert!(lines.iter().any(|l| l.contains("C m.txt")));
-        assert!(lines.iter().any(|l| l.contains("(conflict)")));
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("1 step(s) planned, 0 omitted, 1 conflict(s)"))
-        );
-    }
-
-    // ---- audio ----
-
-    #[test]
-    fn audio_identical_models_no_differences() {
-        use autocompare_diff::AudioDiff;
-        let d = AudioDiff {
-            sample_rate_l: 44_100,
-            sample_rate_r: 44_100,
-            channels_l: 1,
-            channels_r: 1,
-            duration_l: 1.0,
-            duration_r: 1.0,
-            config_mismatch: false,
-            first_diff_at: None,
-            windows_total: 100,
-            windows_differing: 0,
-            identical: true,
-        };
-        let lines = build_audio_summary(&d);
-        assert!(lines.iter().any(|l| l.contains("no differences")));
-    }
-
-    #[test]
-    fn audio_mismatch_models_not_comparable_note() {
-        use autocompare_diff::AudioDiff;
-        let d = AudioDiff {
-            sample_rate_l: 44_100,
-            sample_rate_r: 48_000,
-            channels_l: 1,
-            channels_r: 1,
-            duration_l: 1.0,
-            duration_r: 1.0,
-            config_mismatch: true,
-            first_diff_at: None,
-            windows_total: 0,
-            windows_differing: 0,
-            identical: false,
-        };
-        let lines = build_audio_summary(&d);
-        assert!(lines.iter().any(|l| l.contains("not meaningful")));
-    }
-
-    #[test]
-    fn audio_difference_models_windows_share() {
-        use autocompare_diff::AudioDiff;
-        let d = AudioDiff {
-            sample_rate_l: 44_100,
-            sample_rate_r: 44_100,
-            channels_l: 2,
-            channels_r: 2,
-            duration_l: 1.0,
-            duration_r: 1.0,
-            config_mismatch: false,
-            first_diff_at: Some(0.5),
-            windows_total: 100,
-            windows_differing: 1,
-            identical: false,
-        };
-        let lines = build_audio_summary(&d);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("first difference at 0.500s"))
-        );
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("differing 10ms windows: 1/100"))
-        );
-    }
+    // ---- retired builder tests (Wave K) ----
+    //
+    // `build_sync_summary`, `build_folder_merge_summary`, `build_audio_summary`
+    // ke 7 tests yahin hata diye gaye kyunki functions hi remove hue.
+    // Replacement coverage `app.rs` me barkarar hai (Wave J-B):
+    // `SyncChecklist::from_plan`, `FolderMergeChecklist::from_plan`,
+    // `AudioChecklist::from_diff`, `PictureCompareModel::from_diff`.
 
     // ---- text navigation / filter (P0) ----
 
