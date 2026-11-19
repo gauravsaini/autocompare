@@ -74,7 +74,8 @@ pub const MERGE_X2: u32 = 638;
 ///
 /// File name ke tukde se tab chunta hai (lowercase match):
 /// `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
-/// `merge` -> merge (foldermerge bhi), `folder` + `empty` -> folder filtered
+/// `merge` -> merge (foldermerge bhi), `allsame` -> folder identical
+/// (AllSame) scene, `folder` + `empty` -> folder filtered
 /// empty scene, `folder` -> folder, `home` -> home, `picture` -> picture,
 /// `wrap` -> wrap-on + find-active text scene, warna text.
 /// Har route same 960x600 canvas par tikta hai, colors frozen.
@@ -85,6 +86,9 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     };
     if lower.contains("accent") {
         return render_text_accent_fixture_png(out_path);
+    }
+    if lower.contains("allsame") {
+        return render_folder_allsame_fixture_png(out_path);
     }
     if lower.contains("hex") {
         return render_hex_fixture_png(out_path);
@@ -2076,6 +2080,218 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Renders the Folder identical (AllSame) scene: do same folders par
+/// diff-seeking status filter (`Different`) sab '=' rows prune karta hai,
+/// isliye ped khaali hai (`visible == 0`) par model sab-same hai. Panel
+/// live paint wiring (`views::folder_paint_empty_hint_full_rows`) se AllSame
+/// hint deta hai — idle/pruned wording nahi. Filter laga hai to live paint
+/// jaisa Clear affordance bhi dikhta hai; sync panel folder-empty precedent
+/// par hai. Colors frozen.
+pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> {
+    use crate::home::sync_consent_hint;
+    use crate::tree::{
+        FolderDisplay, FolderStatusFilter, SyncModeChoice, count_folder_rows, folder_tree_filtered,
+        sync_preview,
+    };
+    use crate::viewmodel::FolderRow;
+    use crate::views::folder_paint_empty_hint_full_rows;
+
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left-dir <--> fixtures/right-dir - Folder",
+        2,
+    );
+
+    // Identical folders: har row '=' (koi diff nahi).
+    let rows = vec![
+        FolderRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "src/a.txt".to_string(),
+            is_dir: false,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "src/b.txt".to_string(),
+            is_dir: false,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+    ];
+    // Diff-seeking filter: `Different` sirf '!' rakhta hai, sab '=' prune.
+    let display = FolderDisplay {
+        status: FolderStatusFilter::Different,
+        ..Default::default()
+    };
+    let expanded: std::collections::BTreeSet<String> = ["src".to_string()].into_iter().collect();
+    let nodes = folder_tree_filtered(&rows, &expanded, &display);
+    let shown = nodes.len();
+    let counts = count_folder_rows(&rows);
+    // Paint wiring se hint: identical + ped-khaali par AllSame.
+    let hint = folder_paint_empty_hint_full_rows(&rows, shown, &display);
+
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        122,
+        "[ ] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten  (Status: Different)",
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        138,
+        &format!("{} | {shown} shown (allsame)", counts.summary()),
+        FG_DIM,
+    );
+
+    let pane_top = 158u32;
+    let pane_height = 260u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, pane_top, 936, pane_height),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        pane_top.saturating_add(120),
+        hint,
+        FG_DIM,
+    );
+    // Filter laga hai to live `paint_folder` Clear button deta hai
+    // (khali view + active display); headless me wahi affordance.
+    if display.is_active() {
+        fill_rect(
+            &mut pixels,
+            dims,
+            (20, pane_top.saturating_add(140), 150, 24),
+            [60, 60, 60, 255],
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            32,
+            pane_top.saturating_add(146),
+            "Clear filters",
+            FG_TEXT,
+        );
+    }
+
+    // Sync preview folder-empty precedent par: filter display prune karta
+    // hai, sync plan nahi. Identical rows par steps khaali hain.
+    let preview = sync_preview(&rows, SyncModeChoice::UpdateBoth);
+    let consent = sync_consent_hint(false, preview.steps.len());
+    let panel_y = pane_top.saturating_add(pane_height).saturating_add(8);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, panel_y, 936, 116),
+        [28, 28, 28, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(6),
+        "Sync preview (dry-run)",
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(22),
+        &format!(
+            "({})  ({})",
+            SyncModeChoice::UpdateBoth.label(),
+            SyncModeChoice::Mirror.label()
+        ),
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(38),
+        &preview.summary(),
+        FG_DIM,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(54),
+        consent,
+        FG_DIM,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (20, panel_y.saturating_add(72), 150, 24),
+        [60, 60, 60, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        32,
+        panel_y.saturating_add(78),
+        "Apply sync plan",
+        FG_TEXT,
+    );
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "folder: 3 entries, 0 shown (allsame) | all same, nothing to sync",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Renders the Table key-col + find scene: live key bar (28px, per-col
 /// selected marker + badge) + live find bar (28px, 120px needle) over a
 /// subset grid; the needle hit carries a 1px underline (live
@@ -3172,6 +3388,100 @@ mod tests {
                 "folder: 4 entries, 0 shown (filter) | type both folder paths, press Compare"
             ) < 928
         );
+    }
+
+    #[test]
+    fn allsame_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-allsame-fixture.png");
+        assert!(render_folder_allsame_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn allsame_scene_matches_allsame_contract() {
+        use crate::tree::{FolderDisplay, FolderEmptyState, FolderStatusFilter, folder_empty_hint};
+        use crate::viewmodel::FolderRow;
+        fn same_row(path: &str, is_dir: bool) -> FolderRow {
+            FolderRow {
+                rel_path: path.to_string(),
+                is_dir,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            }
+        }
+        // Do same folders + diff-seeking filter: ped khaali, model sab-same.
+        let rows = vec![
+            same_row("src", true),
+            same_row("src/a.txt", false),
+            same_row("src/b.txt", false),
+        ];
+        let display = FolderDisplay {
+            status: FolderStatusFilter::Different,
+            ..Default::default()
+        };
+        assert!(display.is_active());
+        let expanded: std::collections::BTreeSet<String> =
+            ["src".to_string()].into_iter().collect();
+        let nodes = crate::tree::folder_tree_filtered(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 0);
+        assert_eq!(
+            crate::tree::folder_empty_state_full_rows(true, &rows, nodes.len(), &display),
+            Some(FolderEmptyState::AllSame)
+        );
+        // Paint wiring wahi hint deta hai jo fixture panel me hai.
+        let hint = crate::views::folder_paint_empty_hint_full_rows(&rows, nodes.len(), &display);
+        assert!(hint.contains("all same"));
+        assert!(hint.contains("nothing to sync"));
+        assert!(!hint.contains("clear filters"));
+        assert_ne!(hint, folder_empty_hint(Some(FolderEmptyState::NoResults)));
+        assert_ne!(
+            hint,
+            folder_empty_hint(Some(FolderEmptyState::FilterPruned))
+        );
+        // Fixture strings apne fields me fit honi chahiye.
+        assert!(text_width(hint) < 936);
+        assert!(
+            text_width(
+                "[ ] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten  (Status: Different)"
+            ) < 936
+        );
+        assert!(
+            text_width("folder: 3 entries, 0 shown (allsame) | all same, nothing to sync") < 928
+        );
+    }
+
+    #[test]
+    fn dispatcher_routes_allsame_scene() {
+        let dir = std::env::temp_dir();
+        let allsame_out = dir.join("vis-ax-dispatch-allsame.png");
+        assert!(render_fixture_png(&allsame_out).is_ok());
+        let allsame_bytes = std::fs::read(&allsame_out).unwrap_or_default();
+        assert!(!allsame_bytes.is_empty());
+        assert!(png_magic_ok(&allsame_bytes));
+        assert!(allsame_bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = allsame_bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+        // AllSame scene text/folder/folder-empty teeno se alag hona chahiye.
+        for name in [
+            "vis-ax-dispatch-text.png",
+            "vis-ax-dispatch-folder.png",
+            "vis-ax-dispatch-folder-empty.png",
+        ] {
+            let out = dir.join(name);
+            assert!(render_fixture_png(&out).is_ok());
+            let bytes = std::fs::read(&out).unwrap_or_default();
+            assert!(!bytes.is_empty());
+            assert_ne!(allsame_bytes, bytes);
+        }
     }
 
     #[test]
