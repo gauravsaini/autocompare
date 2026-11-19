@@ -210,6 +210,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn home_card_typo_matches_paint_contract() {
         use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
         // Title strong 14 = the single `.size(14.0)` in paint_home.

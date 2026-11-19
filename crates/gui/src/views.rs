@@ -17,7 +17,9 @@ use eframe::egui::{
 };
 
 use crate::app::Tab;
-use crate::gutter::gutter_bar_width;
+use crate::gutter::gutter_bar_width_for_font;
+use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
+use crate::theme::TYPO_MONO_SIZE;
 use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
 
@@ -76,6 +78,28 @@ pub fn text_row_height(ui: &Ui) -> f32 {
     ui.text_style_height(&egui::TextStyle::Monospace)
 }
 
+/// Paint-applied Home title size: routes through the home contract
+/// so paint stays in sync headlessly.
+pub fn home_title_paint_size() -> f32 {
+    home_card_title_size()
+}
+
+/// Whether the Home description paints small + weak.
+pub fn home_desc_paint_is_small_weak() -> bool {
+    home_card_desc_is_small_weak()
+}
+
+/// Paint-applied Home button size (body scale).
+pub fn home_button_paint_size() -> f32 {
+    home_card_button_size()
+}
+
+/// Paint-applied gutter width at the mono scale: reproduces 12/6 via
+/// [`gutter_bar_width_for_font`].
+pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
+    gutter_bar_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
+}
+
 /// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
 pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
@@ -121,10 +145,24 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
                     ui.set_width(CARD_W);
                     ui.set_height(CARD_H);
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new(item.title).strong().size(14.0));
-                        ui.label(RichText::new(item.description).small().weak());
+                        ui.label(
+                            RichText::new(item.title)
+                                .strong()
+                                .size(home_title_paint_size()),
+                        );
+                        let mut desc = RichText::new(item.description);
+                        if home_desc_paint_is_small_weak() {
+                            desc = desc.small().weak();
+                        }
+                        ui.label(desc);
                         ui.add_space(TIGHT_GAP);
-                        if ui.button(format!("Open {}", item.title)).clicked() {
+                        if ui
+                            .add(egui::Button::new(
+                                RichText::new(format!("Open {}", item.title))
+                                    .size(home_button_paint_size()),
+                            ))
+                            .clicked()
+                        {
                             *tab = item.tab;
                         }
                     });
@@ -654,7 +692,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
         // numbers hide so chrome stays in sync while counts stay honest.
         let avail_h = ui.available_height().max(100.0);
         let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
-        let bar_w = gutter_bar_width(prefs.show_line_numbers);
+        let bar_w = text_gutter_paint_width(prefs.show_line_numbers);
         let (rect, _resp) =
             ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::hover());
         ui.painter()
@@ -1229,7 +1267,7 @@ mod tests {
                 .all(|s| s.format.color == Color32::WHITE)
         );
         // Thumbnail chrome narrows in sync.
-        assert!(gutter_bar_width(false) < gutter_bar_width(true));
+        assert!(crate::gutter::gutter_bar_width(false) < crate::gutter::gutter_bar_width(true));
     }
 
     #[test]
@@ -1295,5 +1333,24 @@ mod tests {
         assert_eq!(tree_indent(0), 0.0);
         assert_eq!(tree_indent(1), 14.0);
         assert_eq!(tree_indent(2), 28.0);
+    }
+
+    #[test]
+    fn home_paint_mapping_uses_single_source_sizes() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_HOME_TITLE_SIZE};
+        assert_eq!(home_title_paint_size(), TYPO_HOME_TITLE_SIZE);
+        assert_eq!(home_title_paint_size(), 14.0);
+        assert!(home_desc_paint_is_small_weak());
+        assert_eq!(home_button_paint_size(), TYPO_BODY_SIZE);
+        assert_eq!(home_button_paint_size(), 13.0);
+    }
+
+    #[test]
+    fn gutter_paint_width_reproduces_unscaled_bar() {
+        use crate::gutter::gutter_bar_width;
+        assert_eq!(text_gutter_paint_width(true), 12.0);
+        assert_eq!(text_gutter_paint_width(false), 6.0);
+        assert_eq!(text_gutter_paint_width(true), gutter_bar_width(true));
+        assert_eq!(text_gutter_paint_width(false), gutter_bar_width(false));
     }
 }
