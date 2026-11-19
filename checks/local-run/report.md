@@ -1,172 +1,145 @@
-# Local-Run Verification Report (autocompare)
+# LOCAL-RUN REPORT — autocompare
 
-Tareekh: 2026-11-20  
-Workspace: `/Users/ektasaini/autocompare`  
-Agent Role: Local-run verification agent  
-Language: Hinglish Roman  
-Contract Scope: `checks/local-run/**` only (No code edits, no rebuild, no commit)
+Tareekh: 2026-11-19 14:01 UTC
+Workspace: /Users/ektasaini/autocompare
+Scope: sirf checks/local-run/** me likha, crates/** me zero edit, target/release/** ko touch nahi kiya
+Note: macOS FS case-insensitive hai isliye REPORT.md aur report.md ek hi file hai, yehi final report hai
 
----
+## 1. GUI debug build + screenshot proof
 
-## 1. Process Alive Verification & Accessibility Window Listing
+Command 1 — debug build:
+```
+cargo build -p autocompare-gui
+```
+Output tail:
+```
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+BUILD_EXIT:0
+```
+Dobara run par incremental cache se 0.18s me finish hua, matlab build pehle se fresh tha.
 
-Clean-room external observation ke through dono processes verify kiye gaye. Accessibility permission successfully active hai, koi permission error nahi aaya.
+Command 2 — binary size:
+```
+ls -lh target/debug/autocompare-gui
+stat -f "SIZE_BYTES:%z" target/debug/autocompare-gui
+```
+Output:
+```
+-rwxr-xr-x@ 1 ektasaini staff 70M Nov 20 00:53 target/debug/autocompare-gui
+SIZE_BYTES:73326288
+```
+Binary size 73326288 bytes (70M) hai, path target/debug/autocompare-gui hai.
 
-### A. autocompare-gui Process Proof
-- **Command:**
-  ```bash
-  ps aux | grep "[a]utocompare-gui"
-  ```
-- **Output:**
-  ```text
-  ektasaini        82970   0.0  0.1 489330448  12064   ??  S    12:44AM   0:00.80 /Users/ektasaini/autocompare/target/release/autocompare-gui --help
-  ```
-- **Process Status:** Running locally (PID: `82970`, binary: `/Users/ektasaini/autocompare/target/release/autocompare-gui`).
+Command 3 — screenshot run + startup time:
+```
+/usr/bin/time ./target/debug/autocompare-gui --screenshot checks/local-run/run.png
+echo "SCREENSHOT_EXIT:$?"
+```
+Output:
+```
+1.05 real 0.15 user 0.00 sys
+SCREENSHOT_EXIT:0
+```
+Startup time 1.05 sec real hai, exit code 0 hai. Pehle run me 1.44 sec real aaya tha, range 1.0-1.5 sec hai.
 
-### B. autocompare-gui Window Title & Properties (macOS Accessibility)
-- **Command:**
-  ```bash
-  osascript -e 'tell application "System Events" to tell process "autocompare-gui" to get properties of window 1'
-  ```
-- **Output:**
-  ```text
-  minimum value:missing value, orientation:missing value, position:320, 91, class:window, accessibility description:missing value, role description:standard window, focused:false, title:autocompare, size:800, 632, help:missing value, entire contents:, enabled:missing value, maximum value:missing value, role:AXWindow, value:missing value, subrole:AXStandardWindow, selected:missing value, name:autocompare, description:standard window
-  ```
-- **Window Details:**
-  - **Title:** `autocompare`
-  - **Position:** `(320, 91)`
-  - **Size:** `800 x 632`
-  - **Role:** `AXWindow` (`AXStandardWindow`)
+Command 4 — PNG magic + size verify:
+```
+file checks/local-run/run.png
+python3 -c "d=open('checks/local-run/run.png','rb').read(8); print('MAGIC_HEX:',d.hex()); print('MAGIC_OK:', d==bytes.fromhex('89504e470d0a1a0a'))"
+ls -l checks/local-run/run.png
+```
+Output:
+```
+checks/local-run/run.png: PNG image data, 960 x 600, 8-bit/color RGBA, non-interlaced
+MAGIC_HEX: 89504e470d0a1a0a
+MAGIC_OK: True
+-rw-r--r--@ 1 ektasaini staff 9174 Nov 20 01:00 checks/local-run/run.png
+```
+Screenshot path checks/local-run/run.png hai, PNG magic 89504e470d0a1a0a sahi hai, size 9174 bytes hai, dimension 960x600 RGBA 8-bit hai.
 
----
+## 2. CLI --help + text compare exit 0/1/2 proof
 
-## 2. Release CLI Demo (text / folder / picture)
+Command 5 — help:
+```
+cargo run -p autocompare-cli -- --help
+echo "HELP_EXIT:$?"
+```
+Output poora mila, summary:
+```
+Compare text, folders and bytes, and merge three ways
+Usage: autocompare [OPTIONS] [COMMAND]
+Commands:
+  text  Compare two text files line by line, side by side
+  folder  Compare two folder trees recursively by size and modified time
+  hex  Compare two files byte by byte
+  merge  Merge two files that share a common base version
+  table  Compare two delimited (CSV-style) tables cell by cell
+  sync  Plan (and optionally apply) a folder sync
+  picture  Compare two PNG images pixel by pixel
+  folder-merge  Plan (and optionally apply) a three-way folder merge
+  audio  Compare two audio files (WAV, MP3) sample by sample
+HELP_EXIT:0
+```
 
-Release binary `target/release/autocompare` ko `tools/parity-harness/fixtures` par execute kiya gaya. 
+Sample file setup, sirf checks/local-run ke andar:
+```
+printf 'alpha\nbeta\ngamma\n' > checks/local-run/sample_left.txt
+printf 'alpha\nbeta\ngamma\n' > checks/local-run/sample_same.txt
+printf 'alpha\nBETA\ngamma\n' > checks/local-run/sample_right.txt
+```
+Teeno file 17 byte ki hain.
 
-### A. Text Diff (`autocompare text`)
-- **Command:**
-  ```bash
-  target/release/autocompare text tools/parity-harness/fixtures/t_left.txt tools/parity-harness/fixtures/t_right.txt
-  echo "EXIT: $?"
-  ```
-- **Output:**
-  ```text
-     1 alpha                             |    1 alpha                            
-     2 beta                              |    2 BETA                             
-     3 gamma                             |    3 gamma                            
-  EXIT: 1
-  ```
-- **Result:** Exit code `1` (Differences detected, side-by-side gutter diff clean render).
+Command 6 — exit 0 proof, same files:
+```
+cargo run -q -p autocompare-cli -- text checks/local-run/sample_left.txt checks/local-run/sample_same.txt
+echo "EXIT:$?"
+```
+Output:
+```
+   1 alpha                             |    1 alpha
+   2 beta                              |    2 beta
+   3 gamma                             |    3 gamma
+EXIT:0
+```
 
-### B. Folder Diff (`autocompare folder`)
-- **Command:**
-  ```bash
-  target/release/autocompare folder tools/parity-harness/fixtures/folder/left tools/parity-harness/fixtures/folder/right
-  echo "EXIT: $?"
-  ```
-- **Output:**
-  ```text
-  R          -         11                 - 2026-11-19 10:31  extra.txt
-  <          5          5  2026-11-19 10:31 2026-11-19 10:31  f.txt
-  2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
-  EXIT: 1
-  ```
-- **Result:** Exit code `1` (Right-only aur mismatch entries detected).
+Command 7 — exit 1 proof, alag files:
+```
+cargo run -q -p autocompare-cli -- text checks/local-run/sample_left.txt checks/local-run/sample_right.txt
+echo "EXIT:$?"
+```
+Output:
+```
+   1 alpha                             |    1 alpha
+   2 beta                              |    2 BETA
+   3 gamma                             |    3 gamma
+EXIT:1
+```
 
-### C. Picture Diff (`autocompare picture`)
-- **Command:**
-  ```bash
-  target/release/autocompare picture tools/parity-harness/fixtures/pic_left.png tools/parity-harness/fixtures/pic_right.png
-  echo "EXIT: $?"
-  ```
-- **Output:**
-  ```text
-  left:  4x4
-  right: 4x4
-  overlap: 4x4 (16 pixels)
-  differing pixels: 1 (6.25%)
-  difference bounds: (1,1)..(1,1)
-  EXIT: 1
-  ```
-- **Result:** Exit code `1` (Pixel mismatch at `(1,1)` detected).
+Command 8 — exit 2 proof, missing file:
+```
+cargo run -q -p autocompare-cli -- text checks/local-run/sample_left.txt checks/local-run/does-not-exist.txt
+echo "EXIT:$?"
+```
+Output:
+```
+autocompare: path not found: checks/local-run/does-not-exist.txt
+EXIT:2
+```
 
-### Summary of CLI Exits
-- Text Exit: `1`
-- Folder Exit: `1`
-- Picture Exit: `1`
-- **Exits Status:** `1 / 1 / 1` (Expected requirement meet).
+Summary: --help exit 0, same text exit 0, diff text exit 1, missing path exit 2. Teenon code proof ho gaya.
 
----
+## 3. File list
 
-## 3. Offscreen Screenshot Rendering & Magic Verification
+- checks/local-run/REPORT.md = yehi file (FS case-insensitive, report.md ke naam se dikhti hai), 5163+ bytes
+- checks/local-run/run.png, 9174 bytes, PNG magic ok
+- checks/local-run/sample_left.txt, 17 bytes
+- checks/local-run/sample_same.txt, 17 bytes
+- checks/local-run/sample_right.txt, 17 bytes
+- checks/local-run/verify.png purana hai, usko touch nahi kiya
 
-### A. Screenshot Command
-- **Command:**
-  ```bash
-  target/release/autocompare-gui --screenshot checks/local-run/verify.png
-  echo "EXIT: $?"
-  ```
-- **Output:**
-  ```text
-  EXIT: 0
-  ```
+## 4. Rule follow proof
 
-### B. PNG Magic Bytes & Metadata Verification
-- **Command:**
-  ```bash
-  file checks/local-run/verify.png
-  xxd -p -l 8 checks/local-run/verify.png
-  stat -f "%z bytes" checks/local-run/verify.png
-  ```
-- **Output:**
-  ```text
-  checks/local-run/verify.png: PNG image data, 960 x 600, 8-bit/color RGBA, non-interlaced
-  89504e470d0a1a0a
-  9174 bytes
-  ```
-- **Confirmation:**
-  - **PNG Magic:** `89504e470d0a1a0a` (`\x89PNG\r\n\x1a\n` standard magic header verified).
-  - **Dimensions:** `960 x 600` (RGBA 8-bit).
-  - **Filesize:** `9,174 bytes` (~9.0 KB).
-
----
-
-## 4. Beyond Compare (Clean-Room Side-by-Side Observation)
-
-macOS System Events accessibility inspection ke through `/Applications/Beyond Compare.app` aur `autocompare-gui` dono screen par live observe kiye gaye:
-
-### A. Beyond Compare Process Evidence
-- **PID:** `23316` (`/Applications/Beyond Compare.app/Contents/MacOS/BCompare`)
-- **Command:**
-  ```bash
-  ps aux | grep -i "[B]Compare"
-  ```
-- **Output:**
-  ```text
-  ektasaini        23316  60.3  0.2 465293952  20960   ??  R     8:48PM   0:40.50 /Applications/Beyond Compare.app/Contents/MacOS/BCompare
-  ```
-
-### B. Side-by-Side Window Layout & Accessibility Properties
-- **Observation Script:**
-  ```applescript
-  tell application "System Events"
-      set bcWin to window 1 of (first process whose name contains "Beyond" or name contains "BCompare")
-      set acWin to window 1 of process "autocompare-gui"
-      return {name of bcWin, position of bcWin, size of bcWin, name of acWin, position of acWin, size of acWin}
-  end tell
-  ```
-- **Result:**
-  - **Beyond Compare Window:**
-    - **Title:** `t_left.txt <--> t_right.txt - Text Compare`
-    - **Position:** `(720, 31)`
-    - **Size:** `720 x 869` (Right half of the desktop workspace)
-    - **Menu Structure:** `Apple`, `Beyond Compare`, `Session`, `File`, `Edit`, `Search`, `View`, `Tools`, `Window`, `Help`
-  - **autocompare-gui Window:**
-    - **Title:** `autocompare`
-    - **Position:** `(320, 91)`
-    - **Size:** `800 x 632` (Left/Center desktop space)
-    - **Menu Structure:** `Apple`, `autocompare`
-
-### C. Clean-room Observation Note
-Dono windows system desktop par ek saath live run ho rahi hain bina kisi collision ke. Beyond Compare ne `t_left.txt <--> t_right.txt` comparison session open kiya hua hai, jabki hamara `autocompare-gui` native egui window `autocompare` title ke sath render ho raha hai aur release CLI bina kisi issue ke side-by-side 1/1/1 parity return kar rahi hai.
+- crates/** me koi edit nahi, git diff crates khaali hai
+- target/release/** ko touch nahi kiya, sirf target/debug binary use kiya
+- likha sirf checks/local-run/** me
+- koi code change nahi, sirf run + proof hai
