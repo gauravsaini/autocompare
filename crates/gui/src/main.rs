@@ -21,6 +21,8 @@ mod theme;
 mod tree;
 mod viewmodel;
 mod views;
+mod views_hex;
+mod views_table;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

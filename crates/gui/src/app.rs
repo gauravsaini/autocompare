@@ -19,14 +19,14 @@ use eframe::egui::{self, RichText, TextureHandle};
 use autocompare_compare::{FolderOptions, TextOptions};
 use autocompare_compare::{
     JobRunner, PictureOptions, SyncOptions, TableOptions, compare_audio_files,
-    compare_binary_files, compare_folders, compare_picture_files, compare_table_files,
-    compare_text_files, load_lines, plan_sync, plan_tree_merge,
+    compare_binary_files_aligned, compare_folders, compare_picture_files, compare_table_files,
+    compare_table_files_by_key, compare_text_files, load_lines, plan_sync, plan_tree_merge,
 };
 
 pub use crate::viewmodel::Tab;
 use crate::viewmodel::{self, FolderRow, MergeSummary, TableModel};
 use crate::views;
-use crate::{home, tree};
+use crate::{home, tree, views_hex, views_table};
 
 /// The two path strings of one tab, persisted across tab switches.
 #[derive(Debug, Default, Clone)]
@@ -46,9 +46,9 @@ struct TriplePaths {
 enum CompareResult {
     Text(Result<viewmodel::TextRows, String>),
     Folder(Result<(Vec<FolderRow>, String), String>),
-    Hex(Result<Vec<String>, String>),
+    Hex(Result<(Vec<String>, views_hex::HexCompareView), String>),
     Merge(Result<MergeSummary, String>),
-    Table(Result<TableModel, String>),
+    Table(Result<(TableModel, views_table::TableKeySummary), String>),
     Sync(Result<Vec<String>, String>),
     Picture(Result<Vec<String>, String>, Option<(Vec<u8>, u32, u32)>),
     FolderMerge(Result<Vec<String>, String>),
@@ -70,8 +70,11 @@ pub struct App {
     pub text_model: Option<viewmodel::TextRows>,
     pub folder_model: Option<(Vec<FolderRow>, String)>,
     pub hex_model: Option<Vec<String>>,
+    pub hex_view: views_hex::HexCompareView,
     pub merge_model: Option<MergeSummary>,
     pub table_model: Option<TableModel>,
+    pub table_view: views_table::TableKeyView,
+    pub table_tolerance_text: String,
     pub sync_model: Option<Vec<String>>,
     pub picture_model: Option<Vec<String>>,
     pub folder_merge_model: Option<Vec<String>>,
@@ -104,8 +107,14 @@ impl Default for App {
             text_model: None,
             folder_model: None,
             hex_model: None,
+            hex_view: views_hex::HexCompareView::empty(
+                views_hex::HexCompareMode::default(),
+                views_hex::HEX_DEFAULT_MAX_HUNKS,
+            ),
             merge_model: None,
             table_model: None,
+            table_view: views_table::TableKeyView::new(),
+            table_tolerance_text: String::new(),
             sync_model: None,
             picture_model: None,
             folder_merge_model: None,
@@ -276,6 +285,8 @@ impl App {
             Tab::Hex => {
                 std::mem::swap(&mut self.hex.left, &mut self.hex.right);
                 self.hex_model = None;
+                let max_hunks = self.hex_view.max_hunks;
+                self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
                 true
             }
             Tab::Merge => {
@@ -286,6 +297,7 @@ impl App {
             Tab::Table => {
                 std::mem::swap(&mut self.table.left, &mut self.table.right);
                 self.table_model = None;
+                self.table_view.summary = views_table::TableKeySummary::default();
                 true
             }
             Tab::Sync => {
@@ -404,6 +416,123 @@ impl App {
     /// Records user-visible status feedback.
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status = msg.into();
+    }
+
+    /// Sets the hex alignment mode, clearing stale hunks so the next
+    /// Compare runs with the new strategy.
+    pub fn set_hex_mode(&mut self, mode: views_hex::HexCompareMode) {
+        if self.hex_view.mode == mode {
+            return;
+        }
+        let max_hunks = self.hex_view.max_hunks;
+        self.hex_view = views_hex::HexCompareView::empty(mode, max_hunks);
+        self.hex_model = None;
+        self.status = format!("hex mode: {}", mode.label());
+    }
+
+    /// Moves the hex hunk selection forward, wrapping like a find loop.
+    pub fn hex_select_next(&mut self) {
+        self.hex_view.select_next_hunk();
+        self.status = format!("hex: {}", self.hex_view.status_line());
+    }
+
+    /// Moves the hex hunk selection backward, wrapping like a find loop.
+    pub fn hex_select_prev(&mut self) {
+        self.hex_view.select_prev_hunk();
+        self.status = format!("hex: {}", self.hex_view.status_line());
+    }
+
+    /// Selects the hunk at the first difference, if any compare ran.
+    pub fn hex_goto_first_diff(&mut self) -> bool {
+        match self.hex_view.first_diff {
+            Some(off) => self.hex_view.navigate_to_offset(off).is_some(),
+            None => false,
+        }
+    }
+
+    /// Toggles one table key column, clearing stale results.
+    pub fn toggle_table_key_column(&mut self, column: usize) {
+        self.table_view.toggle_key_column(column);
+        self.clear_table_results();
+        self.status = format!("table keys: {:?}", self.table_view.key_columns);
+    }
+
+    /// Clears every table key column back to positional compare.
+    pub fn clear_table_keys(&mut self) {
+        self.table_view.key_columns.clear();
+        self.clear_table_results();
+        self.status = String::from("table keys cleared: positional compare");
+    }
+
+    /// Sets the numeric tolerance, clearing stale results.
+    pub fn set_table_tolerance(&mut self, tolerance: Option<f64>) {
+        self.table_view.set_tolerance(tolerance);
+        self.clear_table_results();
+        self.status = match self.table_view.numeric_tolerance {
+            Some(tol) => format!("table tolerance: {tol}"),
+            None => String::from("table tolerance: exact text"),
+        };
+    }
+
+    /// Sets case folding, clearing stale results.
+    pub fn set_table_ignore_case(&mut self, on: bool) {
+        self.table_view.ignore_case = on;
+        self.clear_table_results();
+        self.status = if on {
+            String::from("table: ignore case on")
+        } else {
+            String::from("table: ignore case off")
+        };
+    }
+
+    /// Sets space trimming, clearing stale results.
+    pub fn set_table_trim_space(&mut self, on: bool) {
+        self.table_view.trim_space = on;
+        self.clear_table_results();
+        self.status = if on {
+            String::from("table: trim space on")
+        } else {
+            String::from("table: trim space off")
+        };
+    }
+
+    /// Clears table results after an option change.
+    fn clear_table_results(&mut self) {
+        self.table_model = None;
+        self.table_view.summary = views_table::TableKeySummary::default();
+    }
+
+    /// Honest over-cap view when an input exceeds the aligned hex cap.
+    /// `None` when both sides fit (or cannot be measured), so callers
+    /// only swap the view in for the genuinely skipped case.
+    fn hex_over_cap_view(&self) -> Option<views_hex::HexCompareView> {
+        let (left, right) = self.paths();
+        if left.is_empty() || right.is_empty() {
+            return None;
+        }
+        let left_len = std::fs::metadata(Path::new(&left))
+            .map(|meta| meta.len())
+            .unwrap_or(0);
+        let right_len = std::fs::metadata(Path::new(&right))
+            .map(|meta| meta.len())
+            .unwrap_or(0);
+        let left_fits = usize::try_from(left_len).unwrap_or(usize::MAX);
+        let right_fits = usize::try_from(right_len).unwrap_or(usize::MAX);
+        if views_hex::HexCompareView::is_over_cap(left_fits, right_fits) {
+            Some(views_hex::HexCompareView {
+                mode: self.hex_view.mode,
+                max_hunks: self.hex_view.max_hunks,
+                left_size: left_len,
+                right_size: right_len,
+                first_diff: None,
+                hunks: Vec::new(),
+                truncated: false,
+                over_cap: true,
+                selected: None,
+            })
+        } else {
+            None
+        }
     }
 
     /// Folder rows behind the active model, if compared.
@@ -556,10 +685,16 @@ impl App {
                 }
                 None => String::from("folder: no results yet"),
             },
-            Tab::Hex => match self.hex_model.as_ref() {
-                Some(lines) => format!("hex: {} line(s)", lines.len()),
-                None => String::from("hex: no results yet"),
-            },
+            Tab::Hex => {
+                if self.hex_view.over_cap {
+                    self.hex_view.status_line()
+                } else {
+                    match self.hex_model.as_ref() {
+                        Some(_) => self.hex_view.status_line(),
+                        None => String::from("hex: no results yet"),
+                    }
+                }
+            }
             Tab::Merge => match self.merge_model.as_ref() {
                 Some(m) => format!(
                     "merge: {} line(s){}",
@@ -569,7 +704,12 @@ impl App {
                 None => String::from("merge: no results yet"),
             },
             Tab::Table => match self.table_model.as_ref() {
-                Some(m) => format!("table: {} row(s)", m.rows.len()),
+                Some(m) => format!(
+                    "table: {} row(s), keyed {} | {}",
+                    m.rows.len(),
+                    self.table_view.summary.total(),
+                    self.table_view.status_line()
+                ),
                 None => String::from("table: no results yet"),
             },
             Tab::Sync => match self.sync_model.as_ref() {
@@ -717,14 +857,27 @@ impl App {
         let (left, right) = self.paths();
         if !self.require_paths(&left, &right, "file") {
             self.hex_model = None;
+            let max_hunks = self.hex_view.max_hunks;
+            self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
             return;
         }
         let (tx, rx) = channel();
         self.rx = Some(rx);
+        let mode = self.hex_view.mode;
+        let max_hunks = self.hex_view.max_hunks;
         let _ = JobRunner::spawn(move |_cancel, _progress| {
-            let res = compare_binary_files(Path::new(&left), Path::new(&right), 50)
-                .map(|cmp| viewmodel::build_hex_summary(&cmp))
-                .map_err(|err| err.to_string());
+            let res = compare_binary_files_aligned(
+                Path::new(&left),
+                Path::new(&right),
+                max_hunks,
+                mode.to_alignment(),
+            )
+            .map(|cmp| {
+                let view = views_hex::HexCompareView::from_comparison(&cmp, mode, max_hunks);
+                let lines = viewmodel::build_hex_summary(&cmp);
+                (lines, view)
+            })
+            .map_err(|err| err.to_string());
             let _ = tx.send(CompareResult::Hex(res));
             Ok(())
         });
@@ -774,19 +927,37 @@ impl App {
         let (left, right) = self.paths();
         if !self.require_paths(&left, &right, "table") {
             self.table_model = None;
+            self.table_view.summary = views_table::TableKeySummary::default();
             return;
         }
         let (tx, rx) = channel();
         self.rx = Some(rx);
+        let key_opts = self.table_view.to_key_options();
+        let positional = self.table_view.is_positional();
         let _ = JobRunner::spawn(move |_cancel, _progress| {
-            let res = compare_table_files(
+            let rows = compare_table_files(
                 Path::new(&left),
                 Path::new(&right),
                 &TableOptions::default(),
             )
             .map(|cmp| viewmodel::build_table_rows(&cmp))
             .map_err(|err| err.to_string());
-            let _ = tx.send(CompareResult::Table(res));
+            // Key-aligned tolerant summary over the same inputs; shares
+            // the plain loader, so a keyed-only failure is not expected.
+            let summary = compare_table_files_by_key(
+                Path::new(&left),
+                Path::new(&right),
+                &TableOptions::default(),
+                &key_opts,
+            )
+            .map(|cmp| views_table::summarize(&cmp.diff, positional))
+            .map_err(|err| err.to_string());
+            let combined = match (rows, summary) {
+                (Ok(model), Ok(sum)) => Ok((model, sum)),
+                (Ok(model), Err(_)) => Ok((model, views_table::TableKeySummary::default())),
+                (Err(err), _) => Err(err),
+            };
+            let _ = tx.send(CompareResult::Table(combined));
             Ok(())
         });
     }
@@ -942,15 +1113,24 @@ impl eframe::App for App {
                         }
                     },
                     CompareResult::Hex(res) => match res {
-                        Ok(model) => {
-                            let n = model.len();
-                            self.hex_model = Some(model);
+                        Ok((lines, view)) => {
+                            let n = view.hunks.len();
+                            self.hex_model = Some(lines);
+                            self.hex_view = view;
                             self.error = None;
-                            self.status = format!("hex compare done: {n} line(s)");
+                            self.status = format!("hex compare done: {n} hunk(s)");
                         }
                         Err(err) => {
                             self.hex_model = None;
-                            self.status = format!("hex compare failed: {err}");
+                            if let Some(view) = self.hex_over_cap_view() {
+                                self.hex_view = view;
+                                self.status = self.hex_view.status_line();
+                            } else {
+                                let max_hunks = self.hex_view.max_hunks;
+                                self.hex_view =
+                                    views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+                                self.status = format!("hex compare failed: {err}");
+                            }
                             self.error = Some(err);
                         }
                     },
@@ -972,14 +1152,16 @@ impl eframe::App for App {
                         }
                     },
                     CompareResult::Table(res) => match res {
-                        Ok(model) => {
+                        Ok((model, summary)) => {
                             let n = model.rows.len();
                             self.table_model = Some(model);
+                            self.table_view.summary = summary;
                             self.error = None;
                             self.status = format!("table compare done: {n} row(s)");
                         }
                         Err(err) => {
                             self.table_model = None;
+                            self.table_view.summary = views_table::TableKeySummary::default();
                             self.status = format!("table compare failed: {err}");
                             self.error = Some(err);
                         }
@@ -1418,8 +1600,26 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Hex => {
-                    if let Some(lines) = self.hex_model.as_ref() {
-                        views::paint_lines(ui, lines);
+                    let mut mode = self.hex_view.mode;
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Alignment:").small().weak());
+                        for candidate in views_hex::HexCompareMode::all() {
+                            ui.radio_value(&mut mode, candidate, candidate.label());
+                        }
+                    });
+                    if mode != self.hex_view.mode {
+                        let had_results = self.hex_model.is_some();
+                        self.set_hex_mode(mode);
+                        if had_results {
+                            self.run_hex();
+                        }
+                    }
+                    if self.hex_model.is_some() {
+                        if let Some(lines) = self.hex_model.as_ref() {
+                            views::paint_hex(ui, &mut self.hex_view, lines);
+                        }
+                    } else if self.hex_view.over_cap {
+                        views::paint_hex_over_cap(ui, &self.hex_view);
                     } else {
                         ui.label(
                             RichText::new("no hex results yet: type both file paths and Compare.")
@@ -1438,8 +1638,90 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Table => {
+                    let had_results = self.table_model.is_some();
+                    let mut rerun = false;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Keys:").small().weak());
+                        let mut toggled: Option<usize> = None;
+                        for col in 0..8usize {
+                            let selected = self.table_view.key_columns.contains(&col);
+                            if ui
+                                .selectable_label(selected, col.to_string())
+                                .on_hover_text("toggle key column")
+                                .clicked()
+                            {
+                                toggled = Some(col);
+                            }
+                        }
+                        if let Some(col) = toggled {
+                            self.toggle_table_key_column(col);
+                            rerun = had_results;
+                        }
+                        if ui.small_button("Clear keys").clicked()
+                            && !self.table_view.key_columns.is_empty()
+                        {
+                            self.clear_table_keys();
+                            rerun = had_results;
+                        }
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Tolerance:").small().weak());
+                        let mut tol = self.table_view.numeric_tolerance;
+                        ui.radio_value(&mut tol, None, "exact");
+                        ui.radio_value(&mut tol, Some(0.01), "0.01");
+                        ui.radio_value(&mut tol, Some(0.1), "0.10");
+                        ui.radio_value(&mut tol, Some(1.0), "1.00");
+                        if tol != self.table_view.numeric_tolerance {
+                            self.set_table_tolerance(tol);
+                            self.table_tolerance_text.clear();
+                            rerun = had_results;
+                        }
+                        ui.label(RichText::new("custom:").small().weak());
+                        let mut custom = self.table_tolerance_text.clone();
+                        let custom_resp = ui.add(
+                            egui::TextEdit::singleline(&mut custom)
+                                .desired_width(60.0)
+                                .hint_text("e.g. 0.05"),
+                        );
+                        if custom_resp.changed() {
+                            self.table_tolerance_text = custom;
+                        }
+                        if ui.small_button("Apply").clicked() {
+                            match views::parse_tolerance_text(&self.table_tolerance_text) {
+                                Some(value)
+                                    if Some(value) != self.table_view.numeric_tolerance =>
+                                {
+                                    self.set_table_tolerance(Some(value));
+                                    rerun = had_results;
+                                }
+                                Some(_) => {}
+                                None => {
+                                    self.status = String::from(
+                                        "table tolerance: type a finite number >= 0, or use exact",
+                                    );
+                                }
+                            }
+                        }
+                        let mut ignore_case = self.table_view.ignore_case;
+                        if ui.checkbox(&mut ignore_case, "Ignore case").changed()
+                            && ignore_case != self.table_view.ignore_case
+                        {
+                            self.set_table_ignore_case(ignore_case);
+                            rerun = had_results;
+                        }
+                        let mut trim_space = self.table_view.trim_space;
+                        if ui.checkbox(&mut trim_space, "Trim space").changed()
+                            && trim_space != self.table_view.trim_space
+                        {
+                            self.set_table_trim_space(trim_space);
+                            rerun = had_results;
+                        }
+                    });
+                    if rerun {
+                        self.run_table();
+                    }
                     if let Some(model) = self.table_model.as_ref() {
-                        views::paint_table(ui, model);
+                        views::paint_table_keyed(ui, &self.table_view, model);
                     } else {
                         ui.label(
                             RichText::new("no table results yet: type both table paths and Compare.")
@@ -1814,6 +2096,121 @@ mod tests {
         assert_eq!(app.stage_folder_double_click(&file_node), Tab::Text);
         assert_eq!(app.current_tab(), Tab::Text);
         assert!(app.status.contains("src/a.txt"));
+    }
+
+    #[test]
+    fn hex_mode_change_clears_stale_results() {
+        use crate::views_hex::HexCompareMode;
+        let mut app = App::default();
+        assert_eq!(app.hex_view.mode, HexCompareMode::Complete);
+        app.hex_model = Some(vec![String::from("left: 1 bytes")]);
+        app.set_hex_mode(HexCompareMode::Fast);
+        assert_eq!(app.hex_view.mode, HexCompareMode::Fast);
+        assert!(app.hex_model.is_none());
+        assert!(app.hex_view.hunks.is_empty());
+        assert!(app.status.contains("Fast"));
+        // Same mode again: no wipe, no-op.
+        app.hex_model = Some(vec![String::from("left: 1 bytes")]);
+        app.set_hex_mode(HexCompareMode::Fast);
+        assert!(app.hex_model.is_some());
+    }
+
+    #[test]
+    fn hex_status_line_uses_view_counts() {
+        let mut app = App::default();
+        app.set_tab(Tab::Hex);
+        assert!(app.status_line().contains("no results yet"));
+        app.hex_model = Some(vec![String::from("left: 2 bytes")]);
+        app.hex_view = crate::views_hex::HexCompareView::build_from_slices(
+            &[1u8, 2],
+            &[1u8, 3],
+            crate::views_hex::HexCompareMode::None,
+            8,
+        );
+        let line = app.status_line();
+        assert!(line.contains("1 hunk(s)"), "unexpected: {line}");
+        assert!(
+            line.contains("first difference at offset"),
+            "unexpected: {line}"
+        );
+    }
+
+    #[test]
+    fn hex_nav_helpers_move_selection() {
+        let mut app = App {
+            hex_view: crate::views_hex::HexCompareView::build_from_slices(
+                &[0u8; 200],
+                &[1u8; 200],
+                crate::views_hex::HexCompareMode::None,
+                8,
+            ),
+            ..Default::default()
+        };
+        app.hex_select_next();
+        assert_eq!(app.hex_view.selected, Some(0));
+        app.hex_select_prev();
+        assert_eq!(
+            app.hex_view.selected,
+            Some(app.hex_view.hunks.len().saturating_sub(1))
+        );
+        assert!(app.hex_goto_first_diff());
+        assert_eq!(app.hex_view.selected, Some(0));
+    }
+
+    #[test]
+    fn hex_over_cap_view_only_for_big_inputs() {
+        let mut app = App::default();
+        app.set_tab(Tab::Hex);
+        // Missing files measure as zero: no over-cap view.
+        assert!(app.hex_over_cap_view().is_none());
+    }
+
+    #[test]
+    fn table_option_changes_clear_stale_results() {
+        let mut app = App {
+            table_model: Some(crate::viewmodel::TableModel::default()),
+            ..Default::default()
+        };
+        app.toggle_table_key_column(0);
+        assert_eq!(app.table_view.key_columns, vec![0]);
+        assert!(app.table_model.is_none());
+        app.toggle_table_key_column(2);
+        assert_eq!(app.table_view.key_columns, vec![0, 2]);
+        app.clear_table_keys();
+        assert!(app.table_view.key_columns.is_empty());
+        assert!(app.table_view.is_positional());
+        app.set_table_tolerance(Some(0.1));
+        assert_eq!(app.table_view.numeric_tolerance, Some(0.1));
+        app.set_table_tolerance(Some(f64::NAN));
+        assert_eq!(app.table_view.numeric_tolerance, None);
+        assert!(app.status.contains("exact text"));
+        app.set_table_ignore_case(true);
+        assert!(app.table_view.ignore_case);
+        app.set_table_trim_space(true);
+        assert!(app.table_view.trim_space);
+    }
+
+    #[test]
+    fn swap_sides_resets_hex_and_table_views() {
+        let mut app = App::default();
+        app.set_tab(Tab::Hex);
+        app.hex_model = Some(vec![String::from("x")]);
+        app.hex_view.selected = Some(0);
+        assert!(app.swap_sides());
+        assert!(app.hex_model.is_none());
+        assert_eq!(app.hex_view.selected, None);
+        assert!(app.hex_view.hunks.is_empty());
+        app.set_tab(Tab::Table);
+        app.table_view.key_columns = vec![0];
+        app.table_model = Some(crate::viewmodel::TableModel::default());
+        assert!(app.swap_sides());
+        assert!(app.table_model.is_none());
+        // Options survive the swap; only the summary resets.
+        assert_eq!(app.table_view.key_columns, vec![0]);
+        assert_eq!(
+            app.table_view.summary,
+            crate::views_table::TableKeySummary::default()
+        );
     }
 
     #[test]

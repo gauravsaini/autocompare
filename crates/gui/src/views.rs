@@ -25,6 +25,7 @@ use crate::theme::{
 };
 use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
+use crate::{views_hex, views_table};
 
 // The fixed diff palette lives in `crate::theme` (same hues, own
 // contrast); per-mode chrome (dim/red/green/blue/track) is picked via
@@ -314,6 +315,91 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
         });
 }
 
+/// One model-driven hex hunk line: offset plus per-side byte counts,
+/// mirroring the engine summary wording.
+pub fn format_hex_hunk_line(hunk: &views_hex::HexHunkView) -> String {
+    format!(
+        "{:#010x}: {} vs {} byte(s)",
+        hunk.offset, hunk.left_len, hunk.right_len
+    )
+}
+
+/// Parses a tolerance text field the way the engine sanitizes: only
+/// finite values `>= 0` count; anything else means exact text. Pure;
+/// unit-tested.
+pub fn parse_tolerance_text(text: &str) -> Option<f64> {
+    match text.trim().parse::<f64>() {
+        Ok(value) if value.is_finite() && value >= 0.0 => Some(value),
+        _ => None,
+    }
+}
+
+/// The model-driven hex view: status line, hunk navigation (Prev /
+/// Next plus jump to first difference), the hunk grid with offsets,
+/// then the legacy engine summary lines for byte context.
+pub fn paint_hex(ui: &mut Ui, view: &mut views_hex::HexCompareView, lines: &[String]) {
+    ui.label(RichText::new(view.status_line()).monospace().weak());
+    if view.over_cap {
+        paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
+        return;
+    }
+    ui.horizontal(|ui| {
+        if ui.small_button("◀ Prev hunk").clicked() {
+            view.select_prev_hunk();
+        }
+        if ui.small_button("Next hunk ▶").clicked() {
+            view.select_next_hunk();
+        }
+        if ui.small_button("First diff").clicked()
+            && let Some(off) = view.first_diff
+        {
+            view.navigate_to_offset(off);
+        }
+    });
+    if view.hunks.is_empty() {
+        ui.label(RichText::new("(no differing hunks)").weak());
+    } else {
+        let row_height = text_row_height(ui);
+        let count = view.hunks.len();
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(220.0)
+            .show_rows(ui, row_height, count, |ui, range| {
+                for i in range {
+                    let Some(hunk) = view.hunks.get(i) else {
+                        break;
+                    };
+                    let line = format_hex_hunk_line(hunk);
+                    let selected = view.selected == Some(i);
+                    ui.set_row_height(row_height);
+                    if ui
+                        .selectable_label(selected, RichText::new(line).monospace())
+                        .clicked()
+                    {
+                        view.selected = Some(i);
+                    }
+                }
+            });
+    }
+    ui.add_space(TIGHT_GAP);
+    paint_lines(ui, lines);
+}
+
+/// Over-cap hex state: honest sizes plus the skip note, no hunk grid.
+pub fn paint_hex_over_cap(ui: &mut Ui, view: &views_hex::HexCompareView) {
+    ui.label(RichText::new(view.status_line()).monospace().weak());
+    paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
+}
+
+/// The model-driven table view: keyed summary line, the positional
+/// note when no key columns are selected, then the legacy row paint.
+pub fn paint_table_keyed(ui: &mut Ui, view: &views_table::TableKeyView, model: &TableModel) {
+    ui.label(RichText::new(view.status_line()).monospace().weak());
+    if let Some(note) = view.positional_note() {
+        paint_note(ui, note);
+    }
+    paint_table(ui, model);
+}
 /// The three-way merge output: conflict blocks highlighted, notes
 /// for conflicts and truncation first, with Take resolution actions.
 pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
@@ -1301,6 +1387,33 @@ mod tests {
         };
         assert_eq!(view_text_with_prefs(&model, &on).pane_chars, 80);
         assert_eq!(view_text_with_prefs(&model, &off).pane_chars, 200);
+    }
+
+    #[test]
+    fn hex_hunk_line_carries_offset_and_counts() {
+        let hunk = views_hex::HexHunkView {
+            offset: 3,
+            left_len: 1,
+            right_len: 2,
+        };
+        assert_eq!(format_hex_hunk_line(&hunk), "0x00000003: 1 vs 2 byte(s)");
+    }
+
+    #[test]
+    fn tolerance_text_parses_like_the_engine() {
+        assert_eq!(parse_tolerance_text("0.1"), Some(0.1));
+        assert_eq!(parse_tolerance_text("  1 "), Some(1.0));
+        assert_eq!(parse_tolerance_text("0"), Some(0.0));
+        assert_eq!(parse_tolerance_text(""), None);
+        assert_eq!(parse_tolerance_text("abc"), None);
+        assert_eq!(parse_tolerance_text("-0.5"), None);
+        assert_eq!(parse_tolerance_text("NaN"), None);
+        assert_eq!(parse_tolerance_text("inf"), None);
+        // Paint-level parsing agrees with the model sanitizer.
+        assert_eq!(
+            parse_tolerance_text("0.25"),
+            views_table::TableKeyView::sanitize_tolerance(Some(0.25))
+        );
     }
 
     #[test]
