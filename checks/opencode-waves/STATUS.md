@@ -874,3 +874,11 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - X-TREE `sess-tree-x`: OWNS tree.rs+views.rs+checks/gui-tree-x (Gap #19 dual-tree first step).
 - X-RUN `sess-run-x`: code READ-ONLY, OWNS checks/local-run-x only (local early-feedback run + exquisite-geometry findings).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave X complete (3 parallel: png + tree + run)
+- TREE `4e4a176` dual-tree folder panes synced select/scroll + stub action menu — OWNS tree.rs+views.rs+checks/gui-tree-x (Gap #19 step 1, App wiring next).
+- PNG `4527d70` tighten 5x7 screenshot glyphs with advance+kerning — OWNS screenshot.rs+checks/gui-png-x (Gap #10).
+- RUN `1716fb1` docs(report): local-run-x early feedback + 7-item gap list (READ-ONLY run, Hinglish-Roman rewrite by orchestrator).
+- Mid-wave self-heal: TREE ki views.rs half-edit ne PNG ka compile toda (E0599 close_menu); TREE ne fix kiya, PNG ko nudge karke re-verify karaya.
+- Verify combined: 271 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok 960x600.
+- Pushed. OPEN gaps ab: splitter, font-zoom, hex-grid, table-grid, 3-pane, apply-wiring, intra-spans, text-find+count, header/chrome. Next: Wave Y.
