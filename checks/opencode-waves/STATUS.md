@@ -348,3 +348,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 18 concrete reds
 - COLOR E0063 dim field 3 inits. PCOMP NaN tolerance 1 fail (51 pass). Both live fixing own files.
+
+## Wave G poll 19 gui green diff 1 left
+- GUI 122 green (dim fixed). Diff lib 51/1 NaN left. 7 files 744 ins. Both live.
