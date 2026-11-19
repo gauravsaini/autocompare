@@ -1,0 +1,7 @@
+ M crates/gui/src/views_table.rs
+?? checks/gui-tablecell-ay/
+ crates/gui/src/views_table.rs | 674 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 674 insertions(+)
+OWNS-CLEAN
+KEVL-CLEAN
+NO-COLOR-TYPO-ADD

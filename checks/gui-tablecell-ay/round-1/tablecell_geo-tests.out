@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/main.rs (target/debug/deps/autocompare_gui-bf7333b0df08e843)
+
+running 3 tests
+test views_table::tests::tablecell_geo_cell_rect_maps_col_row_with_gaps ... ok
+test views_table::tests::tablecell_geo_find_underline_clamps_to_cell ... ok
+test views_table::tests::tablecell_geo_key_box_covers_key_cols_only ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 556 filtered out; finished in 0.00s
+

@@ -883,6 +883,477 @@ pub fn table_find_cell_job(
 }
 
 // ----------------------------------------------------------------------------
+// Table cell grid (cell boxes + key highlight + find underline).
+// Gap AX2 §10.3: table tab pipe-string rows paint karta hai — `views.rs`
+// `paint_table` data grid `table_row_cells` se cell boxes me baant-ta hai,
+// par key-col highlight + find underline nahi dikhta. Ye section cell-level
+// paint adoption hai: key-col cells strong typo me, find hits
+// `table_find_cell_job` LayoutJob me (`TABLE_FIND_UNDERLINE_W` underline),
+// key bar `paint_table_key_bar` se live. Find bar caller ke paas rehta hai
+// (`paint_table_find_bar` pehle se live hai) — grid `TableCellFindCtx` se
+// needle/current leta hai. Geometry first: Grid columns glyph + ek per data
+// col (`table_cell_grid_columns`), spacing `SECTION_GAP`/`TIGHT_GAP` mirror
+// (`TABLE_GRID_COL_GAP`/`TABLE_GRID_ROW_GAP`, same values), glyph placeholder
+// `CONTENT_LEAD` mirror. Typography second: header `.monospace().strong()`
+// (existing header precedent), key data cells `.monospace().strong()`, plain
+// `.monospace()`, find hits job sections (same mono `FontId`, koi naya size
+// nahi). Colors frozen: caller ke `fg/bg` reuse, koi naya hue/token nahi;
+// key emphasis sirf `.strong()` role hai (header/key-bar precedent), hit
+// emphasis block-vs-line (`table_find_hit_format` reuse). Row-status glyph /
+// changed tint caller-side rehta hai (views.rs paint ownership) — grid me
+// glyph placeholder hai. No I/O. Paint fns test-only until wiring lands
+// (orchestrator owns paint); pure helpers unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Cell grid ka data Grid id (header grid alag id rakhta hai taaki dono
+/// Grids ek Compose me takrayen nahi).
+pub const TABLE_CELL_GRID_ID: &str = "table_cell_grid";
+/// Cell grid ka header Grid id.
+pub const TABLE_CELL_HEADER_GRID_ID: &str = "table_cell_header_grid";
+/// Grid column gap: `SECTION_GAP` mirror (same value, koi naya rhythm nahi).
+pub const TABLE_GRID_COL_GAP: f32 = 8.0;
+/// Grid row gap: `TIGHT_GAP` mirror (same value, koi naya rhythm nahi).
+pub const TABLE_GRID_ROW_GAP: f32 = 4.0;
+/// Glyph placeholder: `CONTENT_LEAD` mirror (same two spaces, koi naya text
+/// nahi) — header grid precedent jaisa neutral first column.
+pub const TABLE_CELL_GLYPH_PAD: &str = "  ";
+
+/// Grid columns: glyph column plus ek per data column. Khali widths par
+/// sirf glyph (views.rs `table_grid_columns` wahi shape — owned contract
+/// taaki cell-grid geometry cell paint ke saath rahe). Pure; unit-tested.
+pub fn table_cell_grid_columns(widths: &[usize]) -> usize {
+    widths.len().saturating_add(1)
+}
+
+/// Ek data cell ka paint faisla: key-col identity + find-hit state se ek
+/// format. Hit format jeetta hai taaki block/line signal saaf rahe (key
+/// identity key bar + badge se barkarar rehti hai). Pure; unit-tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableCellPaint {
+    /// Plain mono cell (na key, na hit).
+    Plain,
+    /// Key-col cell: mono + strong (header/key-bar precedent).
+    KeyStrong,
+    /// Current find hit: inverted block (no underline).
+    FindCurrent,
+    /// Other find hit: underline-only line (no block).
+    FindOther,
+}
+
+/// `TableCellPaint` ka pure faisla: hit ho to current/other, warna key ho
+/// to strong, warna plain. Pure; unit-tested.
+pub fn table_cell_paint_kind(is_key: bool, has_hit: bool, is_current: bool) -> TableCellPaint {
+    if has_hit {
+        if is_current {
+            TableCellPaint::FindCurrent
+        } else {
+            TableCellPaint::FindOther
+        }
+    } else if is_key {
+        TableCellPaint::KeyStrong
+    } else {
+        TableCellPaint::Plain
+    }
+}
+
+/// Cell grid ka find input: needle + case flag + resolved current cell.
+/// `views.rs FindPaintCtx` precedent (Copy taaki grid loop me cheap reuse
+/// ho). Caller find bar chalata hai; grid sirf highlight karta hai.
+#[derive(Debug, Clone, Copy)]
+pub struct TableCellFindCtx<'a> {
+    /// Needle text (khali par koi hit nahi).
+    pub needle: &'a str,
+    /// Case-insensitive match ho ya nahi.
+    pub ignore_case: bool,
+    /// Current match cell (`table_find_current_cell` se).
+    pub current: Option<(usize, usize)>,
+}
+
+/// Cell grid ka caller palette: same mono `FontId` + caller ke `fg/bg`
+/// (`table_find_hit_format` precedent — views_table.rs me koi naya hue
+/// nahi). Pure data; unit-tested decides nahi, paint use karta hai.
+#[derive(Debug, Clone)]
+pub struct TableCellStyle {
+    /// Same mono font (koi naya size nahi).
+    pub font: egui::FontId,
+    /// Caller ka text color.
+    pub fg: egui::Color32,
+    /// Caller ka cell background.
+    pub bg: egui::Color32,
+}
+
+/// Ek key-aware grid cell: mono hamesha, key col par strong (header +
+/// key-bar selected precedent, koi naya color nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_key_cell(ui: &mut egui::Ui, view: &TableKeyView, cell: &str, col: usize) {
+    let mut rich = egui::RichText::new(cell).monospace();
+    if is_key_column(view, col) {
+        rich = rich.strong();
+    }
+    ui.label(rich);
+}
+
+/// Ek find-aware grid cell: khali needle par plain mono, warna
+/// `table_find_cell_job` LayoutJob (current block, others
+/// `TABLE_FIND_UNDERLINE_W` line).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_find_cell(
+    ui: &mut egui::Ui,
+    cell: &str,
+    needle: &str,
+    ignore_case: bool,
+    is_current: bool,
+    style: &TableCellStyle,
+) {
+    if needle.is_empty() {
+        ui.label(egui::RichText::new(cell).monospace());
+    } else {
+        ui.label(table_find_cell_job(
+            cell,
+            needle,
+            ignore_case,
+            is_current,
+            style.font.clone(),
+            style.fg,
+            style.bg,
+        ));
+    }
+}
+
+/// Ek data cell box: key + find dono se (`table_cell_paint_kind`
+/// precedence — hit jeetta hai, key bar/badge identity rakhte hain).
+/// `row`/`col` grid coords hain (data-row index + column index).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_data_cell(
+    ui: &mut egui::Ui,
+    view: &TableKeyView,
+    cell: &str,
+    row: usize,
+    col: usize,
+    find: TableCellFindCtx<'_>,
+    style: &TableCellStyle,
+) {
+    let has_hit = !table_find_cell_spans(cell, find.needle, find.ignore_case).is_empty();
+    let is_current = table_find_is_current((row, col), find.current);
+    match table_cell_paint_kind(is_key_column(view, col), has_hit, is_current) {
+        TableCellPaint::Plain => {
+            ui.label(egui::RichText::new(cell).monospace());
+        }
+        TableCellPaint::KeyStrong => {
+            paint_table_key_cell(ui, view, cell, col);
+        }
+        TableCellPaint::FindCurrent => {
+            paint_table_find_cell(ui, cell, find.needle, find.ignore_case, true, style);
+        }
+        TableCellPaint::FindOther => {
+            paint_table_find_cell(ui, cell, find.needle, find.ignore_case, false, style);
+        }
+    }
+}
+
+/// Cell-level table grid: key bar (live `paint_table_key_bar`) + header
+/// Grid (strong mono cells) + data Grid (har cell box
+/// `paint_table_data_cell` se — key strong, find underline/block). Widths
+/// `table_column_widths` se, padding `pad_table_row` se (spans padded text
+/// par nahi hilte — trailing pad only). Khali grid par honest note
+/// (views.rs wording reuse, koi naya wording nahi); header-less widths par
+/// single-string fallback (views.rs fallback precedent — column geometry
+/// header ke bina undefined hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_cell_grid(
+    ui: &mut egui::Ui,
+    view: &mut TableKeyView,
+    header: &[String],
+    rows: &[Vec<String>],
+    find: TableCellFindCtx<'_>,
+    style: &TableCellStyle,
+) {
+    paint_table_key_bar(ui, view, header);
+    let widths = table_column_widths(header, rows);
+    if header.is_empty() && rows.is_empty() {
+        ui.label(egui::RichText::new("(both tables are empty)").weak());
+        return;
+    }
+    if widths.is_empty() {
+        for cells in rows.iter() {
+            ui.label(egui::RichText::new(cells.join(" | ")).monospace());
+        }
+        return;
+    }
+    let cols = table_cell_grid_columns(&widths);
+    if !header.is_empty() {
+        egui::Grid::new(TABLE_CELL_HEADER_GRID_ID)
+            .num_columns(cols)
+            .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new(TABLE_CELL_GLYPH_PAD).monospace());
+                for cell in format_table_header(header, &widths) {
+                    ui.label(egui::RichText::new(cell).monospace().strong());
+                }
+                ui.end_row();
+            });
+    }
+    egui::Grid::new(TABLE_CELL_GRID_ID)
+        .num_columns(cols)
+        .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
+        .show(ui, |ui| {
+            for (row_idx, cells) in rows.iter().enumerate() {
+                ui.label(egui::RichText::new(TABLE_CELL_GLYPH_PAD).monospace());
+                let padded = pad_table_row(cells, &widths);
+                for (col_idx, cell) in padded.iter().enumerate() {
+                    paint_table_data_cell(ui, view, cell, row_idx, col_idx, find, style);
+                }
+                ui.end_row();
+            }
+        });
+}
+
+// ----------------------------------------------------------------------------
+// Table cell geometry (pure rect math; paint wiring stays with the
+// orchestrator).
+// Gap AY re-scope: table body Grid paint `views.rs` me hai
+// (`paint_table_keyed:1398`, `paint_table:1866` — `table_grid_columns` +
+// `table_row_cells` se glyph + padded mono cells). Ye section us Grid ka
+// headless judvaan hai: padded-cell box, key-col vertical box, aur
+// find-underline strips — taaki agla views.rs wave `ui.painter()` se key
+// boxes + hit underlines draw kare bina yahan egui ctx laaye. Geometry
+// first: origin + px widths + row/gap rhythm se boxes; underline motai
+// `TABLE_FIND_UNDERLINE_W` reuse (koi naya size/token nahi). Typography
+// second: kuch nahi (rect math me font nahi — `char_w` caller measure
+// karke deta hai). Colors frozen (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. `.get()` + saturating ops only. Paint fns ki tarah test-only
+// until wiring lands (orchestrator owns paint); pure helpers unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Padded cell box px me: Grid origin + rhythm se ek data cell ka paint
+/// rect. `char_w` yahan nahi — `col_widths_px` caller px me deta hai
+/// (font measure paint-side rehta hai). Pure data; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableCellRect {
+    /// Left edge px.
+    pub x: f32,
+    /// Top edge px.
+    pub y: f32,
+    /// Width px (`col_widths_px[col]`).
+    pub w: f32,
+    /// Height px (`row_h`).
+    pub h: f32,
+}
+
+/// Cell Grid ka px rhythm: origin + row height + gaps. Paint
+/// `TABLE_GRID_COL_GAP`/`TABLE_GRID_ROW_GAP` precedent se banata hai;
+/// struct me bandhne se call-sites 4 args me rehte hain (clippy
+/// `too_many_arguments` bina `allow` ke clean). Pure data; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableCellGrid {
+    /// Grid top-left x px.
+    pub origin_x: f32,
+    /// Grid top-left y px.
+    pub origin_y: f32,
+    /// Ek row ki unchai px.
+    pub row_h: f32,
+    /// Data cols ke beech gap px.
+    pub col_gap: f32,
+    /// Data rows ke beech gap px.
+    pub row_gap: f32,
+}
+
+/// Ek data cell ka px box: `grid` origin + rhythm hai, `col_widths_px`
+/// har data col ki px chaudai (glyph column isme nahi — paint usko
+/// `CONTENT_LEAD` precedent se alag rakhta hai). Kharab input
+/// (non-finite, `row_h <= 0`, negative gap, range-bahar `col`) par
+/// `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_cell_rect(
+    grid: TableCellGrid,
+    col: usize,
+    row: usize,
+    col_widths_px: &[f32],
+) -> Option<TableCellRect> {
+    if !grid.origin_x.is_finite()
+        || !grid.origin_y.is_finite()
+        || !grid.row_h.is_finite()
+        || !grid.col_gap.is_finite()
+        || !grid.row_gap.is_finite()
+    {
+        return None;
+    }
+    if grid.row_h <= 0.0 || grid.col_gap < 0.0 || grid.row_gap < 0.0 {
+        return None;
+    }
+    let w = *col_widths_px.get(col)?;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    let mut x = grid.origin_x;
+    let mut idx = 0usize;
+    while idx < col {
+        let cw = col_widths_px.get(idx)?;
+        if !cw.is_finite() || *cw < 0.0 {
+            return None;
+        }
+        x += *cw + grid.col_gap;
+        idx = idx.saturating_add(1);
+    }
+    let stride = grid.row_h + grid.row_gap;
+    let y = grid.origin_y + row as f32 * stride;
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y,
+        w,
+        h: grid.row_h,
+    })
+}
+
+/// Ek key column ka vertical box: us col ki `x`/`w` se, `y = origin_y`
+/// se, unchai poore data window par (`total_rows * row_h` + gaps).
+/// Caller `is_key_column` se gate karta hai (geometry khud neutral hai).
+/// Khali grid ya range-bahar col par `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_key_col_box_rect(
+    grid: TableCellGrid,
+    col: usize,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Option<TableCellRect> {
+    if total_rows == 0 {
+        return None;
+    }
+    let head = table_cell_rect(grid, col, 0, col_widths_px)?;
+    let rows_f = total_rows as f32;
+    if !rows_f.is_finite() || rows_f <= 0.0 {
+        return None;
+    }
+    let gaps = (total_rows.saturating_sub(1)) as f32 * grid.row_gap;
+    let h = rows_f * grid.row_h + gaps;
+    if !h.is_finite() || h <= 0.0 {
+        return None;
+    }
+    Some(TableCellRect {
+        x: head.x,
+        y: grid.origin_y,
+        w: head.w,
+        h,
+    })
+}
+
+/// Sab key cols ke vertical boxes, `view.key_columns` order me.
+/// Range-bahar col skip hota hai (panic nahi); khali keys par khali vec.
+/// `is_key_column` ka box judvaan — paint isi list par key boxes draw
+/// karta hai. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    let mut out = Vec::new();
+    for col in view.key_columns.iter() {
+        if let Some(box_rect) = table_key_col_box_rect(grid, *col, col_widths_px, total_rows) {
+            out.push(box_rect);
+        }
+    }
+    out
+}
+
+/// Ek find-hit span ka underline strip: cell ke bottom par
+/// `TABLE_FIND_UNDERLINE_W` uncha box, `x`/`w` char offsets se
+/// (`x = cell.x + start * char_w`, `w = (end - start) * char_w`,
+/// cell right par clamp). Span clamp `table_find_span_in_padded` reuse
+/// (cap ke bahar/ulta par `None`). Kharab `char_w`/cell par `None`.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_underline_rect(
+    cell: TableCellRect,
+    span_start: usize,
+    span_end: usize,
+    width_chars: usize,
+    char_w: f32,
+) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.y.is_finite() || !cell.w.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= 0.0 || cell.h <= 0.0 {
+        return None;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    if !TABLE_FIND_UNDERLINE_W.is_finite() || TABLE_FIND_UNDERLINE_W <= 0.0 {
+        return None;
+    }
+    let (start, end) = table_find_span_in_padded(span_start, span_end, width_chars)?;
+    let x = cell.x + start as f32 * char_w;
+    let mut w = (end.saturating_sub(start)) as f32 * char_w;
+    let right = cell.x + cell.w;
+    if !x.is_finite() || !w.is_finite() {
+        return None;
+    }
+    if x < cell.x || x >= right {
+        return None;
+    }
+    if x + w > right {
+        w = right - x;
+    }
+    if w <= 0.0 {
+        return None;
+    }
+    let mut y = cell.y + cell.h - TABLE_FIND_UNDERLINE_W;
+    if y < cell.y {
+        y = cell.y;
+    }
+    Some(TableCellRect {
+        x,
+        y,
+        w,
+        h: TABLE_FIND_UNDERLINE_W,
+    })
+}
+
+/// Ek cell ke sab spans ke underline strips, span order me. Kharab
+/// `char_w` par khali vec (koi fake rect nahi); clamp-bahar spans skip
+/// hote hain. `table_find_row_spans`/`table_find_grid_spans` ke `(start,
+/// end)` isi me aate hain. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_underline_rects_for_cell(
+    cell: TableCellRect,
+    spans: &[(usize, usize)],
+    width_chars: usize,
+    char_w: f32,
+) -> Vec<TableCellRect> {
+    let mut out = Vec::new();
+    if spans.is_empty() {
+        return out;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return out;
+    }
+    for span in spans.iter() {
+        if let Some(rect) = table_find_underline_rect(cell, span.0, span.1, width_chars, char_w) {
+            out.push(rect);
+        }
+    }
+    out
+}
+
+// ----------------------------------------------------------------------------
 // Per-hunk merge (headless; paint wiring stays with the orchestrator).
 // Gap local-run-l #10: table tab me har modified/orphan row par
 // take-left/take-right. Ye pure row choice hai; file apply (I/O)
@@ -1618,5 +2089,208 @@ mod tests {
         // Overlap me pehla hit jeetta hai: job text cell ke barabar.
         let job = table_find_cell_job("aaa", "aa", false, false, font, fg, bg);
         assert_eq!(job.text, "aaa");
+    }
+
+    #[test]
+    fn tablecell_grid_columns_count_glyph_plus_data() {
+        // Glyph column + ek per data column; khali par sirf glyph.
+        assert_eq!(table_cell_grid_columns(&[]), 1);
+        assert_eq!(table_cell_grid_columns(&[3, 5]), 3);
+        assert_eq!(table_cell_grid_columns(&[4]), 2);
+        // Geometry mirrors: views.rs SECTION_GAP/TIGHT_GAP/CONTENT_LEAD values.
+        assert_eq!(TABLE_GRID_COL_GAP, 8.0);
+        assert_eq!(TABLE_GRID_ROW_GAP, 4.0);
+        assert_eq!(TABLE_CELL_GLYPH_PAD, "  ");
+        assert_ne!(TABLE_CELL_GRID_ID, TABLE_CELL_HEADER_GRID_ID);
+    }
+
+    #[test]
+    fn tablecell_paint_kind_precedence_hit_wins_over_key() {
+        assert_eq!(
+            table_cell_paint_kind(false, false, false),
+            TableCellPaint::Plain
+        );
+        assert_eq!(
+            table_cell_paint_kind(true, false, false),
+            TableCellPaint::KeyStrong
+        );
+        assert_eq!(
+            table_cell_paint_kind(false, true, false),
+            TableCellPaint::FindOther
+        );
+        assert_eq!(
+            table_cell_paint_kind(false, true, true),
+            TableCellPaint::FindCurrent
+        );
+        // Hit format jeetta hai taaki block/line signal saaf rahe; key
+        // identity key bar + badge se barkarar rehti hai.
+        assert_eq!(
+            table_cell_paint_kind(true, true, false),
+            TableCellPaint::FindOther
+        );
+        assert_eq!(
+            table_cell_paint_kind(true, true, true),
+            TableCellPaint::FindCurrent
+        );
+    }
+
+    #[test]
+    fn tablecell_find_ctx_resolves_current_cell_in_key_grid() {
+        let rows = vec![
+            vec!["1".to_string(), "anna".to_string()],
+            vec!["2".to_string(), "bob".to_string()],
+        ];
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let find = TableCellFindCtx {
+            needle: "bob",
+            ignore_case: false,
+            current: None,
+        };
+        let matches = table_find_match_rows(&rows, find.needle, find.ignore_case);
+        assert_eq!(matches, vec![(1, 1)]);
+        let current = table_find_current_cell(&matches, 0);
+        assert_eq!(current, Some((1, 1)));
+        assert!(table_find_is_current((1, 1), current));
+        assert!(!table_find_is_current((0, 0), current));
+        // Key-col hit ko wahi underline/block milta hai (koi alag color nahi).
+        assert!(table_find_hit_in_key_col(&view, 0));
+        assert!(!table_find_hit_in_key_col(&view, 1));
+        // Kind mapping grid coords par: key col plain cell strong, hit cell
+        // current-None par other (underline line).
+        assert_eq!(
+            table_cell_paint_kind(is_key_column(&view, 0), false, false),
+            TableCellPaint::KeyStrong
+        );
+        let spans = table_find_cell_spans("bob", find.needle, find.ignore_case);
+        assert_eq!(spans, vec![(0, 3)]);
+        assert_eq!(
+            table_cell_paint_kind(is_key_column(&view, 1), !spans.is_empty(), false),
+            TableCellPaint::FindOther
+        );
+    }
+
+    #[test]
+    fn tablecell_geo_cell_rect_maps_col_row_with_gaps() {
+        let widths = vec![100.0, 60.0];
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: 8.0,
+            row_gap: 4.0,
+        };
+        // (col 0, row 0) origin par; (col 1) pehle col + gap ke baad.
+        assert_eq!(
+            table_cell_rect(grid, 0, 0, &widths),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 20.0,
+                w: 100.0,
+                h: 18.0,
+            })
+        );
+        assert_eq!(
+            table_cell_rect(grid, 1, 2, &widths),
+            Some(TableCellRect {
+                x: 118.0,
+                y: 64.0,
+                w: 60.0,
+                h: 18.0,
+            })
+        );
+        // Range-bahar col / kharab rhythm par None (panic nahi).
+        assert_eq!(table_cell_rect(grid, 5, 0, &widths), None);
+        assert_eq!(table_cell_rect(grid, 0, 0, &[]), None);
+        let flat = TableCellGrid { row_h: 0.0, ..grid };
+        assert_eq!(table_cell_rect(flat, 0, 0, &widths), None);
+        let neg_gap = TableCellGrid {
+            col_gap: -1.0,
+            ..grid
+        };
+        assert_eq!(table_cell_rect(neg_gap, 0, 0, &widths), None);
+        let nan_origin = TableCellGrid {
+            origin_x: f32::NAN,
+            ..grid
+        };
+        assert_eq!(table_cell_rect(nan_origin, 0, 0, &widths), None);
+    }
+
+    #[test]
+    fn tablecell_geo_key_box_covers_key_cols_only() {
+        let widths = vec![100.0, 60.0];
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: 8.0,
+            row_gap: 4.0,
+        };
+        // Col 0 ka box poore 3 rows par: h = 3*18 + 2*4 = 62.
+        assert_eq!(
+            table_key_col_box_rect(grid, 0, &widths, 3),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 20.0,
+                w: 100.0,
+                h: 62.0,
+            })
+        );
+        // Khali grid / range-bahar col par None.
+        assert_eq!(table_key_col_box_rect(grid, 0, &widths, 0), None);
+        assert_eq!(table_key_col_box_rect(grid, 7, &widths, 3), None);
+        // View ke key cols hi boxes banate hain (order barkarar).
+        let mut view = TableKeyView::new();
+        assert!(table_key_box_rects(&view, grid, &widths, 3).is_empty());
+        view.toggle_key_column(1);
+        view.toggle_key_column(0);
+        let boxes = table_key_box_rects(&view, grid, &widths, 3);
+        assert_eq!(boxes.len(), 2);
+        assert_eq!(boxes.first().map(|b| b.x), Some(10.0));
+        assert_eq!(boxes.get(1).map(|b| b.x), Some(118.0));
+        for box_rect in boxes {
+            assert_eq!(box_rect.y, 20.0);
+            assert_eq!(box_rect.h, 62.0);
+        }
+    }
+
+    #[test]
+    fn tablecell_geo_find_underline_clamps_to_cell() {
+        let cell = TableCellRect {
+            x: 10.0,
+            y: 20.0,
+            w: 80.0,
+            h: 18.0,
+        };
+        // char_w 8: span (0,5) -> x=10, w=40, bottom strip 1px.
+        assert_eq!(
+            table_find_underline_rect(cell, 0, 5, 8, 8.0),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 37.0,
+                w: 40.0,
+                h: TABLE_FIND_UNDERLINE_W,
+            })
+        );
+        // Cap par clamp: span (6,99) width 8 par (6,8) me kat-ta hai.
+        let clamped = table_find_underline_rect(cell, 6, 99, 8, 8.0);
+        assert!(clamped.is_some());
+        if let Some(rect) = clamped {
+            assert!(rect.x + rect.w <= cell.x + cell.w + 0.001);
+            assert_eq!(rect.h, TABLE_FIND_UNDERLINE_W);
+        }
+        // Poora bahar / ulta span / kharab char_w par None.
+        assert_eq!(table_find_underline_rect(cell, 8, 10, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 5, 5, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 6, 3, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 0, 5, 8, 0.0), None);
+        // Cell list: order barkarar, bahar spans skip.
+        let spans = vec![(0, 2), (8, 10), (4, 6)];
+        let rects = table_find_underline_rects_for_cell(cell, &spans, 8, 8.0);
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects.first().map(|r| r.x), Some(10.0));
+        assert_eq!(rects.get(1).map(|r| r.x), Some(42.0));
+        assert!(table_find_underline_rects_for_cell(cell, &[], 8, 8.0).is_empty());
+        assert!(table_find_underline_rects_for_cell(cell, &spans, 8, 0.0).is_empty());
     }
 }
