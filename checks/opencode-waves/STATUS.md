@@ -737,3 +737,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - M-TYPO ses-typo-paint-M (opencode default): OWNS theme.rs+gutter.rs+home.rs+checks/gui-exq-typo2/**. Replace direct monospace/strong/small/.size(14.0) with TypoRole::rich per pane hierarchy + tests.
 - M-GAPS ses-gaps-m (opencode default): OWNS views_hex.rs+views_table.rs+tree.rs+checks/parity-m/**. Models for gutter-click jump, find-box, per-hunk merge, paging, folder size/time columns + tests; app/views wiring as INTEGRATION.patch for orchestrator (no app/views edits).
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room own-words, disjoint OWNS, STATUS orch-only.
+
+## Wave M poll 01 edits mapping clean
+- TYPO gutter 4 (role-routed size) + home 8, harness PASS. GEO views 8 (TIGHT_GAP->TAB_BOTTOM_GAP in triple paths). GAPS hex 120 (hex_row_to_hunk tests) + tree 107. Disjoint holds, no commits yet. Wait.
