@@ -148,3 +148,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 10
 - Hooks writing fixture-dispatch tests (text vs folder bytes differ assert). Diff +1014. Both alive.
+
+## Verify 03 (folder 06aaf24)
+- OWNS respected (app/screenshot + gui-folder-vis + round-D-1). 8/8 expects inside mod tests — clean.
+- round-D-1: console PASS + visual PASS (9914, magic ok, non-blank). Folder-visual doc describes wired UI.
+- Hooks agent still working (views/gutter/viewmodel uncommitted) — full green re-verify at its land.
