@@ -722,3 +722,11 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - K-B c8d390b landed+pushed (own commit): final verify REPORT with metrics + gap table.
 - LESSON: orch STATUS commits must use `git commit --only` to avoid sweeping staged agent files (this sweep was benign, files correct dir, message mismatch only).
 - Remaining live: GEO (views.rs), TYPO (theme.rs), PARITY (hex/table/tree). Disjoint holds. Wait for gates + lands.
+
+## Wave L poll 08 ALL LANDED wave complete
+- GEO 8d14171 (REPORT+proof) + df516a2 (views.rs TAB_BOTTOM_GAP 2->6, CARD_W 260->240, px-math proof, 0 color adds) verified+pushed. Banned clean, REPORT honest (fixture-PNG caveat stated).
+- PARITY 30e52ce verified+pushed: OWNS clean (hex/table/tree + cases + REPORT 86 lines), F1 hex-grid FIXED model slice (paint OPEN honest), craft-anything case loop, no unwrap/expect.
+- TYPO f8cef8e verified+pushed: TypoRole text_style + rich applicator, home/gutter passthroughs + tests, no geo/color edits. Message claims 193 green, worktree confirms 193/0.
+- Orchestrator verify post-land: tests 193 green, clippy -p gui zero, fmt clean. Pushed.
+- LOCALBIN early feedback + K-B final verify landed earlier. Wave L complete: exquisite-geo + exquisite-typo + localbin + parity all landed.
+- Next: Wave M paint wiring (GEO/TYPO tokens into views paint) + remaining gaps (gutter-click/find/merge-hunk/paging) + release rebuild + local re-run.
