@@ -1433,3 +1433,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BU-PATHMETA sess-pathmeta-bu: OWNS views.rs+app.rs+checks/gui-pathmeta-bu (P1-1 path meta row: timestamp/bytes/rules/flags/history).
 - BU-LOCALRUN2 sess-localrun2-bu: OWNS checks/gui-localrun-bu2 only (rebuild + recapture + gap delta vs round-1, zero crates edits).
 - All: unlazy GATES + ponytail + gui-polish harness + MS rust + colors FROZEN + pathspec-only commits (NEVER git add -A) + NO PUSH.
+
+## 2026-11-20 - BU-LOCALRUN2 landed (round-2 delta, pushed)
+- f210011 verify ok: OWNS checks/gui-localrun-bu2 only, zero rs, STATUS untouched, 6/6 PNG PASS, REPORT with round-1 vs round-2 byte delta + gap DELTA table, tests 629. Pushed (no concurrent landing, log checked pre-push).
+- Fixtures reflowed (glyph t 4->5px), P0-2 selective highlight fixture me abhi nahi — diff follow-up me. Baaki in-flight: BU-PLAN, BU-PATHMETA.
