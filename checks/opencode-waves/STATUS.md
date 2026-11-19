@@ -1154,3 +1154,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BINARY `e7562c3` INSTALL draft + distribution readiness — checks only, pushed.
 - Verify combined: 515 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AV (picture zoom parity, text wrap nav, home geometry polish).
+
+## 2026-11-20 — Wave AV plan (2 parallel: picture zoom parity + home geometry polish)
+- AV-PICTURE `sess-picture-av`: OWNS views.rs+checks/gui-picture-av (picture zoom/fit parity).
+- AV-HOMEGEO `sess-homegeo-av`: OWNS home.rs+checks/gui-homegeo-av (home geometry polish from localrun feedback).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
