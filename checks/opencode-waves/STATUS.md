@@ -594,3 +594,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 04 nudged B+C
 - 4 polls no edits, tails identical. Nudged B (start writing picture model+paint) and C (interim REPORT commit). A cleanup left (needs care).
 - Wait.
+
+## Wave J poll 05 nudge worked
+- B egui image/scroll APIs (zoom/pan impl starting). C tests 172 + harness exit 0, REPORT writing. A still planning.
+- No commits yet (C REPORT untracked). Wait.
