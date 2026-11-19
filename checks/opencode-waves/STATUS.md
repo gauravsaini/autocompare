@@ -286,3 +286,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 12 report pending
 - INT live 04:27, harness outputs present, REPORT.md pending. No commit yet.
+
+## Wave F COMPLETE int+release
+- 1c710e8 feat(gui-int) verified: OWNS home/views+gui-int, scan clean, 117 green clippy/fmt clean. Minor: no REPORT.md, harness+tests proof accepted.
+- 408b41d docs(release) already pushed. Both waves done.
