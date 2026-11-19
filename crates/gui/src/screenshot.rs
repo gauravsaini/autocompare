@@ -52,7 +52,7 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
         dims,
         80,
         14,
-        "autocompare - desktop client",
+        "fixtures/left.rs <--> fixtures/right.rs - Text",
         FG_TEXT,
     );
 
@@ -81,8 +81,18 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     fill_rect(&mut pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
     draw_string(&mut pixels, dims, 890, 82, "Browse...", FG_TEXT);
 
+    // Session toolbar: Swap Sides + Reload, session identity below tabs.
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        104,
+        "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
+        FG_TEXT,
+    );
+
     // Main diff pane borders
-    let pane_top = 110u32;
+    let pane_top = 124u32;
     let pane_bottom = 560u32;
     let pane_height = pane_bottom.saturating_sub(pane_top);
     let gutter_x = 940u32;
@@ -250,14 +260,14 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
-    // Status bar
+    // Status bar: honest counts plus last-action feedback.
     fill_rect(&mut pixels, dims, (0, 570, width, 30), [32, 32, 32, 255]);
     draw_string(
         &mut pixels,
         dims,
         16,
         578,
-        "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | Dark Theme (WCAG AA Contrast: OK)",
+        "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done",
         FG_DIM,
     );
 
