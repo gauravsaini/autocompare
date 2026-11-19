@@ -841,3 +841,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave U poll GEO landed (4/4) WAVE COMPLETE
 - GEO 8f87dde verified+pushed: OWNS clean (views.rs 155 + geo-u REPORT/round-U-1). Centralized geometry tokens (gutter/header/row-pad/split-hit/find-bar/badge), uniform baselines, splitter hit rect, badge-right, row rhythm. 245 green, clippy zero, fmt clean, banned 0.
 - Wave U complete: 4/4 landed. exquisite geometry (GEO) + typography (TYPO) + layout wiring (LAYOUT) + release/early-feedback (RUN). All pushed.
+
+## Wave V plan early-feedback deltas (3 parallel, disjoint)
+- V-TOOLBAR sess-toolbar-v (opencode default): OWNS app.rs+checks/gui-toolbar-v/**. Toolbar breathing room (RUN delta #1): spacing/padding around toolbar row reusing GEO consts, single aligned row, narrow-safe. Commit NO push.
+- V-MINI sess-mini-v (opencode default): OWNS views.rs+checks/gui-mini-v/**. Overview strip width + bigger click/drag hits (RUN delta #2), hex minimap mapping exact, gutter uniformity green. Commit NO push.
+- V-GLYPH sess-glyph-v (opencode default): OWNS theme.rs+checks/gui-glyph-v/**. Glyph/row feel via theme knobs only (RUN delta #3): line-heights, tracking, zoom interplay. No geometry/color. Commit NO push.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, disjoint OWNS, STATUS orch-only.
