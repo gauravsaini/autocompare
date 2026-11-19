@@ -984,3 +984,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AG-CHROME `sess-chrome-ag`: OWNS theme.rs+views.rs+checks/gui-chrome-ag (Gap #18 header/chrome/line-height).
 - AG-SPLITDRAG `sess-splitdrag-ag`: OWNS viewmodel.rs+checks/gui-splitdrag-ag (Gap #1 drag-handle geometry model; paint next).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AG complete (2 parallel: chrome hierarchy + splitter-drag model)
+- SPLITDRAG `c2d00b8` splitter drag-handle geometry model in viewmodel (Gap #1 model half; paint next).
+- CHROME `3f6529d` unify chrome hierarchy with TypoRole + align header bar — OWNS theme.rs+views.rs+checks/gui-chrome-ag (Gap #18).
+- Verify combined: 344 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
+- Pushed. Next: Wave AH (splitter-handle paint, audio action, table-find UI).
