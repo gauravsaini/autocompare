@@ -818,3 +818,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave T poll 01 ALL LANDED wave complete
 - CALL 410d7a6 verified+pushed: OWNS clean (app.rs +109, views.rs 8, paintcall-t REPORT 45 + round-T-1 proof). Find bar + N/M badge wired into text paint, dead_code removed, 231 green, clippy zero, fmt clean. Orchestrator verified + pushed (ahead 1 -> origin/main 410d7a6).
 - Gap #12 now FIXED (find bar painted, badge live). Remaining OPEN: #4 picture zoom/pan, #10 PNG glyphs, #15 progress/cancel, #19 dual-tree.
+
+## Wave U plan exquisite geometry+typography (4 parallel, disjoint)
+- U-GEO sess-geo-u (opencode default): OWNS views.rs+checks/gui-geo-u/**. Geometry-exquisite: centralized margin/padding consts, pane baseline alignment, splitter hit rect, find-bar/badge rects, uniform header/gutter rhythm. No color/typo changes. Commit NO push.
+- U-TYPO sess-typography-u: OWNS theme.rs+checks/gui-typo-u/**. Typo-exquisite: family stacks per role, weights, line-heights, letter-spacing + tabular numerals, zoom-clamp verify. No geometry/color. Commit NO push.
+- U-LAYOUT sess-layout-u (opencode default): OWNS app.rs+checks/gui-layout-u/**. Layout wiring: split fraction in all paint paths, min widths, find-bar rects, narrow-window, scroll clamps. No token/color changes. Commit NO push.
+- U-RUN sess-run-u (opencode default, report-only): OWNS checks/gui-run-u/**, zero source edits. Release rebuild + screenshot + harness + workspace tests + local-run smoke + top-3 BC deltas. Commit NO push.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, STATUS orch-only.
