@@ -1165,3 +1165,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - HOMEGEO `2c53373` home launcher geometry contract + typography hierarchy — OWNS home.rs.
 - Verify combined: 522 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AW (text wrap nav, merge view geometry, fresh localrun feedback).
+
+## 2026-11-20 — Wave AW plan (2 parallel: text wrap nav + gutter ruler parity)
+- AW-WRAPNAV `sess-wrapnav-aw`: OWNS views.rs+checks/gui-wrapnav-aw (wrap-continuation navigation + match carryover).
+- AW-GUTTER `sess-gutter-aw`: OWNS gutter.rs+checks/gui-gutter-aw (overview ruler width/click-target parity from localrun feedback).
+- Agents commit locally, NO push. Orchestrator verifies then pushes. Fresh localrun after both land.
