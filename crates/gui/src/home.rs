@@ -185,6 +185,49 @@ pub fn home_card_button_hit_area() -> f32 {
     HOME_CARD_BUTTON_MIN_W * HOME_CARD_BUTTON_MIN_H
 }
 
+/// Card CTA single-line width px: card inner width (`HOME_CARD_MIN_W` minus
+/// do taraf outer pad = 224). Purana `HOME_CARD_BUTTON_MIN_W` (120, card
+/// aadha) untouched hai taaki paint-lock tests green rahen; ye naya budget
+/// sabse lambe "Open Picture Compare" label (20 chars, body 13 ~7px advance
+/// plus 24px button frame pad ≈ 164, kind-column precedent) ko single line me
+/// deta hai. Font size change nahi (HomeButton body 13 reuse); paint adoption
+/// paint-owner wave (`views.rs` `paint_home` `add_sized`) ka hai; colors untouched.
+pub const HOME_CARD_CTA_W: f32 = HOME_CARD_MIN_W - HOME_CARD_PAD * 2.0;
+/// CTA label advance px/char: body 13 proportional estimate
+/// (kind-column precedent ~7, koi naya metric nahi).
+pub const HOME_CARD_CTA_ADVANCE_PX: f32 = 7.0;
+/// CTA button frame pad px: text pad + do taraf frame (16 + 8).
+pub const HOME_CARD_CTA_FRAME_PAD: f32 = 24.0;
+
+/// CTA width px (single source: [`HOME_CARD_CTA_W`]). Pure; headless-tested.
+pub fn home_card_cta_width() -> f32 {
+    HOME_CARD_CTA_W
+}
+
+/// CTA label text: hamesha "Open {title}" (paint parity — `views.rs`
+/// `paint_home` wahi format karta hai). Koi naya size/role nahi; pure.
+pub fn home_card_cta_text(title: &str) -> String {
+    format!("Open {title}")
+}
+
+/// CTA single-line budget theek hai: har 9 card ka label estimated need
+/// (chars × advance + frame pad) [`HOME_CARD_CTA_W`] me fit. Pure;
+/// headless-tested. Tang card par paint-owner wave width adopt karega.
+pub fn home_card_cta_single_line_ok() -> bool {
+    home_model().items.iter().all(|item| {
+        home_card_cta_text(item.title).chars().count() as f32 * HOME_CARD_CTA_ADVANCE_PX
+            + HOME_CARD_CTA_FRAME_PAD
+            <= HOME_CARD_CTA_W
+    })
+}
+
+/// Card CTA hit area px²: single-line width × hit floor (224×28 = 6272,
+/// purane 120×28 = 3360 se dugna — paint adoption ke baad milega).
+/// Pure; headless-tested.
+pub fn home_card_cta_hit_area() -> f32 {
+    HOME_CARD_CTA_W * HOME_CARD_BUTTON_MIN_H
+}
+
 /// Card title-vs-desc hierarchy theek hai: title desc se bada + strong,
 /// desc small + weak, weight gap kam se kam ek kadam (100), dono chrome
 /// proportional. Koi naya size nahi — sirf `TypoRole` ka antar pakka.
@@ -1259,6 +1302,35 @@ mod tests {
         assert!((super::home_card_button_hit_area() - 3_360.0).abs() < 0.001);
         assert!(super::home_card_button_hit_area() > 2_640.0);
         assert!(super::home_card_min_height() > 75.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homecta_single_line_budget_fits_all_nine_labels() {
+        // G-C2: CTA width full inner (240 - 2*8 = 224), purana 120 floor untouched.
+        assert_eq!(super::HOME_CARD_CTA_W, 224.0);
+        assert_eq!(
+            super::HOME_CARD_CTA_W,
+            super::HOME_CARD_MIN_W - super::HOME_CARD_PAD * 2.0
+        );
+        assert!(super::HOME_CARD_CTA_W > super::HOME_CARD_BUTTON_MIN_W);
+        assert_eq!(super::home_card_cta_width(), super::HOME_CARD_CTA_W);
+        assert_eq!(
+            super::home_card_cta_text("Text Compare"),
+            "Open Text Compare"
+        );
+        // Sabse lamba "Open Picture Compare" (20 chars): 20*7+24 = 164 <= 224.
+        assert!(super::home_card_cta_single_line_ok());
+        let longest = super::home_model()
+            .items
+            .iter()
+            .map(|item| super::home_card_cta_text(item.title).chars().count())
+            .max()
+            .unwrap_or(0);
+        assert_eq!(longest, 20);
+        // Hit area 224x28 = 6272, purane 3360 se dugna.
+        assert!((super::home_card_cta_hit_area() - 6_272.0).abs() < 0.001);
+        assert!(super::home_card_cta_hit_area() > super::home_card_button_hit_area());
     }
 
     #[test]
