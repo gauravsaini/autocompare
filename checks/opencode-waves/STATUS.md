@@ -100,3 +100,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Poll 17
 - Text build finished green (dev profile 1.50s), land still pending. CI still queued.
+
+## Poll 18
+- Text: 92 tests green + rustfmt clean on owned files. Land imminent. CI still queued.
