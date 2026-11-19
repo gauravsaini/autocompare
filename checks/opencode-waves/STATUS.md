@@ -1220,3 +1220,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TYPOTOKENS `45e0ffc` TypoRole->FontId resolution helpers + proportional stack + views.rs wiring spec — OWNS theme.rs.
 - Verify combined: 566 green, clippy 0, fmt clean, banned 0 (no new color tokens), PNG magic-ok x2.
 - Pushed. Next: Wave BB (table P3-P4 data-grid + painter overlays in views.rs + typo paint adoption) + fresh localrun.
+
+## 2026-11-20 — Wave BB plan (2 parallel: table P3P4+typo paint + folder 3rd variant)
+- BB-TABLEP34TYPO `sess-tablep34typo-bb`: OWNS views.rs+checks/gui-tablep34typo-bb (AY spec P3 data-grid indexed loop + P4 painter overlays, THEN typotokens REPORT wiring spec sequential same file; colors FROZEN).
+- BB-FOLDER3 `sess-folder3-bb`: OWNS tree.rs+checks/gui-folder3-bb (folder empty-state 3rd variant unedited-identical case; AX2 REPORT §10.5 + emptyhint REPORT precedent; no paint-color changes).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
