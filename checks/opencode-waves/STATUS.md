@@ -1037,3 +1037,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Wirefind stall par nudge bheja, resume karke harness PASS + commit kiya.
 - Verify combined: 378 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AL (per-hunk decision App wiring, 3-pane/apply wiring, text intra-line spans).
+
+## 2026-11-20 — Wave AL plan (2 parallel: merge App wiring + intra-line spans)
+- AL-MERGEAPP `sess-mergeapp-al`: OWNS app.rs+checks/gui-mergeapp-al (Gap #13 pick intent App decision state wiring).
+- AL-INTRA `sess-intra-al`: OWNS views.rs+checks/gui-intra-al (Gap #11 intra-line changed spans paint).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
