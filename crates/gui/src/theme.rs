@@ -160,10 +160,24 @@ pub fn zoomed_line_height_px(role: TypoRole, level: i8) -> f32 {
     zoomed_size(role, level) * role.line_height()
 }
 
+/// Zoom scale factor for `role` at `level`: zoomed size over the base
+/// [`TypoRole::size`]. Level 0 gives exactly 1.0; every role x every
+/// [`ZOOM_LEVELS`] step stays inside 0.8..=2.0 so code text (Mono)
+/// zoom hota hai par chrome (Small) se hierarchy toot-ti nahi. Pure;
+/// unit-tested. Paint adoption baad ki wave me; yeh headless contract hai.
+pub fn zoom_scale_factor(role: TypoRole, level: i8) -> f32 {
+    zoomed_size(role, level) / role.size()
+}
+
 impl TypoRole {
     /// Zoomed point size for this role at `level` (see [`zoomed_size`]).
     pub fn zoomed_point_size(self, level: i8) -> f32 {
         zoomed_size(self, level)
+    }
+
+    /// Zoom scale factor for this role at `level` (see [`zoom_scale_factor`]).
+    pub fn zoomed_scale_factor(self, level: i8) -> f32 {
+        zoom_scale_factor(self, level)
     }
 
     /// Zoom-aware text builder: same family, weight and style as
@@ -981,6 +995,48 @@ mod tests {
             assert_eq!(
                 role.zoomed_point_size(100),
                 role.zoomed_point_size(ZOOM_MAX_LEVEL)
+            );
+        }
+    }
+
+    #[test]
+    fn zoom_scale_stays_in_factor_band_and_keeps_hierarchy() {
+        let roles = [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ];
+        for role in roles {
+            // Level 0 par factor exactly 1.0 (passthrough invariant).
+            assert!((zoom_scale_factor(role, 0) - 1.0).abs() < 0.001);
+            assert!((role.zoomed_scale_factor(0) - 1.0).abs() < 0.001);
+            assert!((role.zoomed_scale_factor(ZOOM_DEFAULT_LEVEL) - 1.0).abs() < 0.001);
+        }
+        for level in ZOOM_LEVELS {
+            // Har role ka factor 0.8..=2.0 band me (Gap #9 contract).
+            for role in roles {
+                let factor = zoom_scale_factor(role, level);
+                assert!(factor >= 0.8, "{role:?} lv{level}: {factor}");
+                assert!(factor <= 2.0, "{role:?} lv{level}: {factor}");
+            }
+            // Uniform 1px steps se order barkarar: mono code vs small chrome.
+            assert!(zoomed_size(TypoRole::Small, level) < zoomed_size(TypoRole::Body, level));
+            assert!(zoomed_size(TypoRole::Mono, level) < zoomed_size(TypoRole::Body, level));
+            assert!(zoomed_size(TypoRole::Body, level) < zoomed_size(TypoRole::HomeTitle, level));
+            assert!(
+                zoomed_size(TypoRole::HomeTitle, level) < zoomed_size(TypoRole::Heading, level)
+            );
+            assert_eq!(
+                zoomed_size(TypoRole::HomeDesc, level),
+                zoomed_size(TypoRole::Small, level)
+            );
+            assert_eq!(
+                zoomed_size(TypoRole::HomeButton, level),
+                zoomed_size(TypoRole::Body, level)
             );
         }
     }

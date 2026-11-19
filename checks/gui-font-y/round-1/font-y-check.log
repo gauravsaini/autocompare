@@ -1,0 +1,17 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+# Font-Y report (round-1)
+- theme zoom_scale_factor: ok
+- theme zoomed_scale_factor: ok
+- theme hierarchy test: ok
+- app ZoomKey: ok
+- app resolve_zoom_key: ok
+- app apply_zoom_key: ok
+- app key test: ok
+- ui feeds resolver: ok
+- paint-neutral rich()/rich_zoomed() 0.0 tracking x2: ok
+- frozen removals in OWNS: 0 ok
+- banned in non-test OWNS code: 0 ok
+- cargo test: 275 passed, 0 failed (expect >=273/0)
+- PNG: 9624 bytes (min 8192: ok), magic ok, distinct 256 (ok)
+
+RESULT: PASS

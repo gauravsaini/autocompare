@@ -191,7 +191,58 @@ impl Default for App {
     }
 }
 
+/// Font-zoom key decision behind Cmd/Ctrl + `=`/`-`/`0` (headless,
+/// unit-tested). Reset wins jab `0` +/- ke saath chorded ho; kuch na
+/// dabane par [`ZoomKey::None`]. `eframe::App::ui` isko `ui.input` se
+/// feed karta hai; paint yahi se chalta hai.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZoomKey {
+    /// Zoom in (Cmd/Ctrl + `=` / `+`).
+    In,
+    /// Zoom out (Cmd/Ctrl + `-`).
+    Out,
+    /// Reset to default (Cmd/Ctrl + `0`).
+    Reset,
+    /// No zoom key pressed.
+    None,
+}
+
 impl App {
+    /// Resolves one zoom-key frame: reset sabse pehle, phir in, phir out.
+    /// Pure; headless-tested.
+    pub fn resolve_zoom_key(zoom_in: bool, zoom_out: bool, zoom_reset: bool) -> ZoomKey {
+        if zoom_reset {
+            ZoomKey::Reset
+        } else if zoom_in {
+            ZoomKey::In
+        } else if zoom_out {
+            ZoomKey::Out
+        } else {
+            ZoomKey::None
+        }
+    }
+
+    /// Applies one resolved zoom key. Returns true jab level badla ho
+    /// (In/Out/Reset), false par [`ZoomKey::None`]. Headless-testable
+    /// core behind the paint-time Cmd/Ctrl + +/-/0 binding.
+    pub fn apply_zoom_key(&mut self, action: ZoomKey) -> bool {
+        match action {
+            ZoomKey::In => {
+                self.zoom_in();
+                true
+            }
+            ZoomKey::Out => {
+                self.zoom_out();
+                true
+            }
+            ZoomKey::Reset => {
+                self.zoom_reset();
+                true
+            }
+            ZoomKey::None => false,
+        }
+    }
+
     /// Both path strings of the active two-path tab, trimmed.
     fn paths(&self) -> (String, String) {
         let (left, right) = match &self.tab {
@@ -2562,16 +2613,8 @@ impl eframe::App for App {
                 cmd && i.key_pressed(egui::Key::Num0),
             )
         });
-        if zoom_reset {
-            self.zoom_reset();
-        } else {
-            if zoom_in {
-                self.zoom_in();
-            }
-            if zoom_out {
-                self.zoom_out();
-            }
-        }
+        let zoom_action = Self::resolve_zoom_key(zoom_in, zoom_out, zoom_reset);
+        self.apply_zoom_key(zoom_action);
         // Drag and drop handling
         let dropped_files = ui.input(|i| i.raw.dropped_files.clone());
         if !dropped_files.is_empty() {
@@ -4490,6 +4533,35 @@ mod tests {
         assert_eq!(app.zoom_level(), crate::theme::ZOOM_MIN_LEVEL);
         app.zoom_reset();
         assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+    }
+
+    #[test]
+    fn font_zoom_keys_resolve_and_apply() {
+        // Cmd/Ctrl + +/-/0 binding ka headless core: resolve priority,
+        // phir apply se level badalta hai.
+        assert_eq!(App::resolve_zoom_key(true, false, false), ZoomKey::In);
+        assert_eq!(App::resolve_zoom_key(false, true, false), ZoomKey::Out);
+        assert_eq!(App::resolve_zoom_key(false, false, true), ZoomKey::Reset);
+        assert_eq!(App::resolve_zoom_key(false, false, false), ZoomKey::None);
+        // Reset wins jab 0 +/- ke saath chorded ho; In Out se pehle.
+        assert_eq!(App::resolve_zoom_key(true, true, true), ZoomKey::Reset);
+        assert_eq!(App::resolve_zoom_key(true, false, true), ZoomKey::Reset);
+        assert_eq!(App::resolve_zoom_key(true, true, false), ZoomKey::In);
+
+        let mut app = App::default();
+        assert!(app.apply_zoom_key(ZoomKey::In));
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL + 1);
+        assert!(app.status.contains("font zoom"));
+        assert!(app.apply_zoom_key(ZoomKey::Out));
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+        // Reset door se wapas laata hai.
+        app.set_zoom_level(crate::theme::ZOOM_MAX_LEVEL);
+        assert!(app.apply_zoom_key(ZoomKey::Reset));
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+        // None no-op: level + status dono untouched.
+        let level = app.zoom_level();
+        assert!(!app.apply_zoom_key(ZoomKey::None));
+        assert_eq!(app.zoom_level(), level);
     }
 
     #[test]
