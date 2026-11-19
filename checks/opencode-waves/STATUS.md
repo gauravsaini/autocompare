@@ -1232,3 +1232,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Verify combined: 569 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Note: 4 superseded helpers kept test-only via allow(dead_code) (table_model_text_rows + 3 home size fns) — cleanup candidate once paint fully adopted.
 - Pushed. Next: fresh localrun on BB state + Wave BC (toolbar chrome / intra-line accent per AX2 §10).
+
+## 2026-11-20 — Wave BC plan (1 agent: fresh localrun on BB state)
+- BC-LOCALRUN `sess-localrun-bb`: OWNS checks/localrun-bb (harness run + app screenshots + gap re-rank vs AX2 §10; all .rs READ-ONLY).
+- Agent commits locally, NO PUSH (push MANA hai). REPORT se Wave BD (toolbar/intra-line) plan banega.
