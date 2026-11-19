@@ -906,3 +906,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Shared-worktree note: FIND ke dauraan HEX ka views.rs:485 dead-code clippy red tha, wait+retry se green (OWNS respect).
 - Verify combined: 278 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok.
 - Pushed. Next: Wave AA (table-grid paint, find paint wiring, 3-pane/apply next steps).
+
+## 2026-11-20 — Wave AA plan (2 parallel: table-grid + merge-model)
+- AA-TABLE `sess-table-aa`: OWNS views_table.rs+views.rs+checks/gui-table-aa (Gap #3 header bar + cell grid paint).
+- AA-MERGE `sess-merge-aa`: OWNS tree.rs+viewmodel.rs+checks/gui-merge-aa (Gap #7 model half; views paint next wave).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
