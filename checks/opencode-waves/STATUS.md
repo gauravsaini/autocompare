@@ -370,3 +370,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 25 NaN fixed COLOR done
 - COLOR terminal done (landed 71fab3a). PCOMP live 05:56: diff 52 green (NaN fixed), gui 122 green, clippy clean, fmt RED 5 files, proof dir pending, commit pending.
+
+## Wave G poll 26 workspace checks
+- PCOMP live 06:22 compiling full workspace (cli+gui) pre-commit. Diff 8 files, fmt 10 left, proof pending.
