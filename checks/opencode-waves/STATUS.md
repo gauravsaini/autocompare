@@ -672,3 +672,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave K poll 02 working no edits
 - K-A grepping structured models in viewmodel (31 matches, removal plan). K-B release+metrics next. A2 tracing total() uses (app live use found).
 - Tree clean. Wait.
+
+## Wave K poll 03 K-A removing
+- K-A M viewmodel (-121/+12, obsolete builders removal). K-B release build running. A2 tracing.
+- No commits. Wait.
