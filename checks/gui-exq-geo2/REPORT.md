@@ -38,7 +38,7 @@ edit nahi).
 
 ## 3. Proof
 
-- `cargo test -p autocompare-gui`: 195 passed, 0 failed.
+- `cargo test -p autocompare-gui`: 198 passed, 0 failed.
 - Harness `tools/gui-polish/run-geo-typo.sh checks/gui-exq-geo2/round-M-1`: PASS.
 - PNG `round-M-1/after.png`: 9914 bytes, magic `89504e470d0a1a0a` ok,
   distinct 256 (>64 ok). Fixture raster hai, egui token se bytes

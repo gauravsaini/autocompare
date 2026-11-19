@@ -1,7 +1,19 @@
+warning: variant `Right` is never constructed
+   --> crates/gui/src/views_hex.rs:711:5
+    |
+706 | pub enum HunkSide {
+    |          -------- variant in this enum
+...
+711 |     Right,
+    |     ^^^^^
+    |
+    = note: `HunkSide` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
 
-running 195 tests
-....................................................................................... 87/195
-....................................................................................... 174/195
-.....................
-test result: ok. 195 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+running 198 tests
+....................................................................................... 87/198
+....................................................................................... 174/198
+........................
+test result: ok. 198 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
 
