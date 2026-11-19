@@ -120,6 +120,10 @@ pub struct App {
     pub text_find_needle: String,
     pub text_find_cursor: usize,
     pub text_find_ignore_case: bool,
+    /// Find-box state behind the Text tab paint (`views::paint_text_with_find`).
+    /// Legacy `text_find_needle` fields compat ke liye rehte hain; paint ka
+    /// source of truth ye hai (N/M badge `count_label` se aata hai).
+    pub text_find: viewmodel::FindState,
     pub hex_find_needle: String,
     pub hex_find_cursor: u64,
     pub word_wrap: bool,
@@ -199,6 +203,7 @@ impl Default for App {
             text_find_needle: String::new(),
             text_find_cursor: 0,
             text_find_ignore_case: true,
+            text_find: viewmodel::FindState::default(),
             hex_find_needle: String::new(),
             hex_find_cursor: 0,
             word_wrap: false,
@@ -1172,13 +1177,11 @@ impl App {
         Some(at.saturating_add(1))
     }
 
-    /// N/M badge text: "2/5", koi match nahi par "0/0".
+    /// N/M badge text: "2/5", koi match nahi par "0/0". Paint-side
+    /// `views::text_find_badge_label` ka App-side judvaan (badge parity
+    /// tested); FindState paint badge isi format me dikhata hai.
     pub fn text_find_badge(&self) -> String {
-        let total = self.text_find_total();
-        match self.text_find_position() {
-            Some(pos) => format!("{pos}/{total}"),
-            None => format!("0/{total}"),
-        }
+        views::text_find_badge_label(self.text_find_position(), self.text_find_total())
     }
 
     /// Needle badalne par cursor pehle match par; khali par 0 rehta hai.
@@ -1231,6 +1234,59 @@ impl App {
         let pos = at.saturating_add(1);
         self.status = format!("text find: row {} ({pos}/{})", row.saturating_add(1), len);
         Some(row)
+    }
+
+    /// Text paint prefs behind `views::paint_text_with_find`: App toggles
+    /// se ek `TextViewPrefs`. Pure; headless-tested.
+    pub fn text_find_prefs(&self) -> viewmodel::TextViewPrefs {
+        viewmodel::TextViewPrefs {
+            word_wrap: self.word_wrap,
+            show_line_numbers: self.show_line_numbers,
+            syntax_highlight: self.syntax_highlight,
+        }
+    }
+
+    /// Legacy needle/flag ko `FindState` me seed karta hai: query ya flag
+    /// badla ho to `set_query_cased` se recompute (cursor first hit par),
+    /// warna stale model par `refresh_if_stale` (naya compare honest counts).
+    /// Returns true jab FindState recompute/refresh hua. Pure-headless core
+    /// (paint isi ko frame-start par chalata hai).
+    pub fn sync_text_find_state(&mut self) -> bool {
+        let needle = self.text_find_needle.clone();
+        let flag = self.text_find_ignore_case;
+        let stale = self.text_find.query() != needle || self.text_find.ignore_case() != flag;
+        if stale {
+            let rows_len = self.text_model.as_ref().map_or(0, |model| model.rows.len());
+            if rows_len == 0 {
+                self.text_find.set_query_cased(&[], &needle, flag);
+            } else if let Some(model) = self.text_model.as_ref() {
+                let rows = model.rows.clone();
+                self.text_find.set_query_cased(&rows, &needle, flag);
+            }
+            return true;
+        }
+        match self.text_model.as_ref() {
+            Some(model) => {
+                let rows = model.rows.clone();
+                self.text_find.refresh_if_stale(&rows)
+            }
+            None => self.text_find.refresh_if_stale(&[]),
+        }
+    }
+
+    /// Paint ke baad legacy needle/flag ko `FindState` se mirror karta hai
+    /// taaki purane compat helpers (badge/tests) stale na rahen. Cursor
+    /// untouched rehta hai (legacy Next/Prev apna cursor chalate hain).
+    pub fn mirror_legacy_from_text_find(&mut self) {
+        let query = self.text_find.query().to_string();
+        let flag = self.text_find.ignore_case();
+        self.text_find_needle = query;
+        self.text_find_ignore_case = flag;
+    }
+
+    /// `FindState` N/M badge text jo Text tab paint dikhata hai.
+    pub fn text_find_state_badge(&self) -> String {
+        self.text_find.count_label()
     }
 
     /// Hex needle text se bytes: separators hatakar hex jode decode hota
@@ -3294,65 +3350,69 @@ impl eframe::App for App {
             match tab {
                 Tab::Home => {}
                 Tab::Text => {
-                    // Find bar + N/M badge (LAYOUT-EXQUISITE wiring):
-                    // docked top full-width via the bar geometry, paint
-                    // itself stays views-owned (U-GEO rects). Cursor and
-                    // badge advance in the App model (Wave Q state).
-                    let badge = views::text_find_badge_label(
-                        self.text_find_position(),
-                        self.text_find_total(),
-                    );
-                    let old_needle = self.text_find_needle.clone();
+                    // Find box FINAL wiring (Gap #12): `FindState`-owned bar +
+                    // N/M badge `views::paint_text_with_find` se aata hai.
+                    // Bar geometry dock full-width rehti hai (U-GEO rects),
+                    // prefs App toggles se bante hain, selection/filter/copy
+                    // real model par hote hain (koi view-clone nahi). Legacy
+                    // `text_find_needle` fields compat ke liye seed + mirror
+                    // hote hain (Wave Q/S/T tests unhi par hain).
                     let bar_geo = find_bar_geometry(ui.available_width());
                     ui.set_min_width(bar_geo.bar_w);
-                    let (find_prev, find_next) = views::paint_text_find_bar(
-                        ui,
-                        &mut self.text_find_needle,
-                        &mut self.text_find_ignore_case,
-                        &badge,
-                    );
-                    if self.text_find_needle != old_needle {
-                        self.text_find_cursor = 0;
-                    }
-                    if find_prev
-                        && self.text_find_prev_row().is_none()
-                        && !self.text_find_needle.trim().is_empty()
-                    {
-                        self.status = String::from("text find: no match");
-                    }
-                    if find_next
-                        && self.text_find_next_row().is_none()
-                        && !self.text_find_needle.trim().is_empty()
-                    {
-                        self.status = String::from("text find: no match");
-                    }
-                    if let Some(snapshot) = self.text_model.clone() {
-                        ui.style_mut().wrap_mode = Some(if self.word_wrap {
-                            egui::TextWrapMode::Wrap
-                        } else {
-                            egui::TextWrapMode::Extend
-                        });
-                        let mut view = self.view_text_for_paint(&snapshot);
-                        // Split-aware panes: row keeps the split
-                        // min-widths and h-scrolls instead of crushing.
-                        let text_fraction = self.split_fraction();
-                        self.clamp_scroll_after_layout();
+                    self.sync_text_find_state();
+                    let prefs = self.text_find_prefs();
+                    let snapshot = self.text_model.clone();
+                    let text_fraction = self.split_fraction();
+                    self.clamp_scroll_after_layout();
+                    if let Some(model) = self.text_model.as_mut() {
+                        let find = &mut self.text_find;
                         show_split_content(ui, text_fraction, |ui| {
-                            views::paint_text(ui, &mut view);
+                            views::paint_text_with_find(ui, model, &prefs, find);
                         });
-                        // paint_text works on the view clone (toggles are
-                        // view-only): propagate navigation selection and
-                        // display-filter choices back so they stick.
-                        if view.selected != snapshot.selected
-                            && let Some(real) = self.text_model.as_mut()
-                        {
-                            real.selected = view.selected;
+                    } else {
+                        // No results: halka legacy bar live rehta hai (same
+                        // GEO tokens, same labels, N/M badge) taaki needle
+                        // compare se pehle type ho sake; frame-start sync
+                        // usko FindState me push karta hai. Panes khali hain
+                        // isliye `paint_text` empty note dikhata hai.
+                        let badge = self.text_find_badge();
+                        let old_needle = self.text_find_needle.clone();
+                        let (find_prev, find_next) = views::paint_text_find_bar(
+                            ui,
+                            &mut self.text_find_needle,
+                            &mut self.text_find_ignore_case,
+                            &badge,
+                        );
+                        if self.text_find_needle != old_needle {
+                            self.text_find_cursor = 0;
                         }
-                        if view.filter != snapshot.filter {
-                            if let Some(real) = self.text_model.as_mut() {
-                                real.filter = view.filter;
-                            }
-                            let name = match view.filter {
+                        if find_prev
+                            && self.text_find_prev_row().is_none()
+                            && !self.text_find_needle.trim().is_empty()
+                        {
+                            self.status = String::from("text find: no match");
+                        }
+                        if find_next
+                            && self.text_find_next_row().is_none()
+                            && !self.text_find_needle.trim().is_empty()
+                        {
+                            self.status = String::from("text find: no match");
+                        }
+                        let mut empty = viewmodel::TextRows::default();
+                        show_split_content(ui, text_fraction, |ui| {
+                            views::paint_text(ui, &mut empty);
+                        });
+                        ui.label(
+                            RichText::new("no text results yet: type both file paths and Compare.")
+                                .weak(),
+                        );
+                    }
+                    self.mirror_legacy_from_text_find();
+                    if let (Some(before), Some(real)) =
+                        (snapshot.as_ref(), self.text_model.as_ref())
+                    {
+                        if real.filter != before.filter {
+                            let name = match real.filter {
                                 viewmodel::TextFilter::All => "all rows",
                                 viewmodel::TextFilter::Differences => "differences only",
                                 viewmodel::TextFilter::Same => "same rows only",
@@ -3360,37 +3420,31 @@ impl eframe::App for App {
                             };
                             self.status = format!("text filter: {name}");
                         }
-                        // The copy buttons inside paint_text mutate the
-                        // view clone; propagate one copy back to the real
-                        // model so the buttons work under any toggle
-                        // combination, and report it in the status bar.
                         let mut copied = None;
-                        if let Some(real) = self.text_model.as_ref() {
-                            for (idx, view_row) in view.rows.iter().enumerate() {
-                                let Some(real_row) = real.rows.get(idx) else {
-                                    break;
-                                };
-                                if real_row.kind != viewmodel::TextRowKind::Equal
-                                    && view_row.kind == viewmodel::TextRowKind::Equal
+                        for (idx, after_row) in real.rows.iter().enumerate() {
+                            let Some(before_row) = before.rows.get(idx) else {
+                                break;
+                            };
+                            if before_row.kind != viewmodel::TextRowKind::Equal
+                                && after_row.kind == viewmodel::TextRowKind::Equal
+                            {
+                                if after_row.right == before_row.left
+                                    && after_row.left == before_row.left
                                 {
-                                    if view_row.right == real_row.left
-                                        && view_row.left == real_row.left
-                                    {
-                                        copied = Some((
-                                            idx,
-                                            viewmodel::CopyDirection::LeftToRight,
-                                        ));
-                                        break;
-                                    }
-                                    if view_row.left == real_row.right
-                                        && view_row.right == real_row.right
-                                    {
-                                        copied = Some((
-                                            idx,
-                                            viewmodel::CopyDirection::RightToLeft,
-                                        ));
-                                        break;
-                                    }
+                                    copied = Some((
+                                        idx,
+                                        viewmodel::CopyDirection::LeftToRight,
+                                    ));
+                                    break;
+                                }
+                                if after_row.left == before_row.right
+                                    && after_row.right == before_row.right
+                                {
+                                    copied = Some((
+                                        idx,
+                                        viewmodel::CopyDirection::RightToLeft,
+                                    ));
+                                    break;
                                 }
                             }
                         }
@@ -3405,11 +3459,6 @@ impl eframe::App for App {
                             self.status =
                                 format!("copied row {} {arrow}", idx.saturating_add(1));
                         }
-                    } else {
-                        ui.label(
-                            RichText::new("no text results yet: type both file paths and Compare.")
-                                .weak(),
-                        );
                     }
                 }
                 Tab::Folder => {
@@ -5172,6 +5221,120 @@ mod tests {
         app.text_find_set_needle("NEEDLE");
         assert_eq!(app.text_find_total(), 0);
         assert_eq!(app.text_find_badge(), "0/0");
+    }
+
+    #[test]
+    fn text_find_state_prefs_follow_toggles() {
+        // Paint prefs App toggles se bante hain (paint_text_with_find ko
+        // milte hain): default full-width + numbers + accents.
+        let app = App::default();
+        let prefs = app.text_find_prefs();
+        assert_eq!(
+            prefs,
+            crate::viewmodel::TextViewPrefs {
+                word_wrap: false,
+                show_line_numbers: true,
+                syntax_highlight: true,
+            }
+        );
+        let mut wrapped = App::default();
+        wrapped.set_word_wrap(true);
+        wrapped.set_line_numbers(false);
+        wrapped.set_syntax_highlight(false);
+        let prefs = wrapped.text_find_prefs();
+        assert!(prefs.word_wrap);
+        assert!(!prefs.show_line_numbers);
+        assert!(!prefs.syntax_highlight);
+    }
+
+    #[test]
+    fn text_find_state_seeds_from_legacy_needle() {
+        // Legacy needle/flag (Wave Q compat) FindState me seed hota hai taaki
+        // purane setters se paint tak needle pahunche; cursor first hit par.
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let mut app = App {
+            text_model: Some(TextRows {
+                rows: vec![
+                    TextRow {
+                        kind: TextRowKind::Changed,
+                        left: String::from("apple"),
+                        right: String::new(),
+                        ..Default::default()
+                    },
+                    TextRow {
+                        kind: TextRowKind::Changed,
+                        left: String::from("banana"),
+                        right: String::new(),
+                        ..Default::default()
+                    },
+                ],
+                truncated: false,
+                coarse: false,
+                pane_chars: 12,
+                gutter_chars: 4,
+                selected: None,
+                filter: TextFilter::All,
+            }),
+            ..Default::default()
+        };
+        app.text_find_set_needle("banana");
+        assert!(app.sync_text_find_state());
+        assert_eq!(app.text_find.query(), "banana");
+        assert_eq!(app.text_find.match_rows(), &[1]);
+        assert_eq!(app.text_find_state_badge(), "1/1");
+        // Dobara sync bina change ke refresh nahi karta.
+        assert!(!app.sync_text_find_state());
+        // Case flag badalne par recompute hota hai.
+        app.text_find_ignore_case = false;
+        app.text_find_set_needle("BANANA");
+        assert!(app.sync_text_find_state());
+        assert_eq!(app.text_find_state_badge(), "0/0");
+    }
+
+    #[test]
+    fn text_find_state_badge_matches_legacy_badge() {
+        // N/M badge dono paths par same dikhta hai (FindState paint me,
+        // legacy compat helpers me).
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let mut app = App {
+            text_model: Some(TextRows {
+                rows: vec![
+                    TextRow {
+                        kind: TextRowKind::Changed,
+                        left: String::from("needle one"),
+                        right: String::new(),
+                        ..Default::default()
+                    },
+                    TextRow {
+                        kind: TextRowKind::Changed,
+                        left: String::from("plain"),
+                        right: String::new(),
+                        ..Default::default()
+                    },
+                    TextRow {
+                        kind: TextRowKind::Changed,
+                        left: String::from("needle two"),
+                        right: String::new(),
+                        ..Default::default()
+                    },
+                ],
+                truncated: false,
+                coarse: false,
+                pane_chars: 12,
+                gutter_chars: 4,
+                selected: None,
+                filter: TextFilter::All,
+            }),
+            ..Default::default()
+        };
+        app.text_find_set_needle("needle");
+        assert!(app.sync_text_find_state());
+        assert_eq!(app.text_find_state_badge(), app.text_find_badge());
+        assert_eq!(app.text_find_state_badge(), "1/2");
+        // Paint ke baad legacy needle mirror hota hai (stale nahi rehta).
+        app.mirror_legacy_from_text_find();
+        assert_eq!(app.text_find_needle, "needle");
+        assert!(app.text_find_ignore_case);
     }
 
     #[test]
