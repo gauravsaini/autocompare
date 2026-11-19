@@ -1054,3 +1054,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AM-APPLY `sess-apply-am`: OWNS app.rs+checks/gui-apply-am (Gap #7/#8 merge decisions file apply path).
 - AM-DIFFNAV `sess-diffnav-am`: OWNS views.rs+checks/gui-diffnav-am (text next/prev difference jump + count).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AM complete (2 parallel: apply wiring + diff nav)
+- DIFFNAV `c450f8e` text next/prev difference jump + N/M count + bring-into-view — OWNS views.rs.
+- APPLY `e417b9d` merge decisions headless file apply + dry-run/summary — OWNS app.rs (Gap #7/#8 apply half).
+- Verify combined: 404 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AN (3-pane layout, apply paint wiring, snapshot parity).
