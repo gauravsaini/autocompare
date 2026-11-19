@@ -250,3 +250,11 @@ Active dispatch (disjoint OWNS, isolated logs in /tmp):
 Probe strategy: no fixed timer. Detached agyx --print per agent, file-log
 polling via fresh short execs, rolling dispatch on green. Orchestrator owns
 PLAN.md, GATES-release.md, scripts/verify-*.mjs only.
+
+## Dispatch update (2026-11-20) — user: 2 agents dono ke liye
+- Wave-A DONE (report in /tmp/wave-A.log, commit 60409bd pushed).
+- Wave-C retired before producing output (no checks/gui-live/ notes existed);
+  superseded by two builder agents per user order.
+- GUI-T (text): OWNS views.rs, copy.rs, take.rs, gutter.rs, viewmodel.rs, checks/gui-text/**.
+- GUI-F (folder): OWNS tree.rs, home.rs, checks/gui-folder/** (viewmodel.rs read-only).
+- Wave-B + local-verify continue unchanged.
