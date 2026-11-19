@@ -1,0 +1,3 @@
+bytes 9914
+magic-ok True
+distinct 256

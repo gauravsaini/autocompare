@@ -1,0 +1,6 @@
+test app::tests::prog_cancel_path_without_job_reports_idle ... ok
+test app::tests::prog_cancel_signals_running_job_and_status_notes_it ... ok
+test app::tests::prog_throttle_gate_suppresses_byte_spam ... ok
+test app::tests::prog_fraction_needs_known_total ... ok
+test app::tests::prog_status_text_reuses_status_field ... ok
+test result: ok. 257 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s

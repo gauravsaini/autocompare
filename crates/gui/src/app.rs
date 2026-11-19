@@ -12,16 +12,17 @@
 
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Receiver, channel};
 
 use eframe::egui::{self, RichText, TextureHandle};
 
 use autocompare_compare::{FolderOptions, SyncAction, TextOptions};
 use autocompare_compare::{
-    JobRunner, PictureOptions, SyncOptions, SyncPlan, TableOptions, TreeMergeAction, TreeMergePlan,
-    compare_audio_files, compare_binary_files_aligned, compare_folders, compare_picture_files,
-    compare_table_files, compare_table_files_by_key, compare_text_files, load_lines, plan_sync,
-    plan_tree_merge,
+    JobHandle, JobProgress, JobRunner, PictureOptions, SyncOptions, SyncPlan, TableOptions,
+    TreeMergeAction, TreeMergePlan, compare_audio_files, compare_binary_files_aligned,
+    compare_folders_cancellable, compare_picture_files, compare_table_files,
+    compare_table_files_by_key, compare_text_files, load_lines, plan_sync, plan_tree_merge,
 };
 use autocompare_diff::{AudioDiff, PictureDiff};
 
@@ -112,6 +113,20 @@ pub struct App {
     /// Draggable pane split fraction (left share of the row).
     /// Clamped to 0.20..=0.80, default 0.50; per-run only.
     pub split_fraction: f32,
+    /// Running background job behind `rx` (cancel + progress poll).
+    /// `None` when idle; cleared when the result lands or is
+    /// cancelled. The thread always ends via the channel send, so
+    /// dropping the handle never leaks a live worker.
+    job: Option<JobHandle<()>>,
+    /// Last shown progress fraction 0.0..=1.0 (`None` = indeterminate
+    /// or idle). Painted in the status bar; updates pass the
+    /// [`App::progress_should_emit`] throttle so per-chunk worker
+    /// writes never become per-byte repaints.
+    pub progress_fraction: Option<f32>,
+    /// Last shown worker message behind [`App::progress_fraction`].
+    /// Display still reuses [`App::status`]; this only feeds the
+    /// throttle gate so a repeated message never repaints.
+    progress_message: Option<String>,
     rx: Option<Receiver<CompareResult>>,
 }
 
@@ -168,6 +183,9 @@ impl Default for App {
             zoom_level: crate::theme::ZOOM_DEFAULT_LEVEL,
             status: String::from("ready: pick a session to begin"),
             split_fraction: views::SPLIT_DEFAULT_FRACTION,
+            job: None,
+            progress_fraction: None,
+            progress_message: None,
             rx: None,
         }
     }
@@ -422,6 +440,110 @@ impl App {
             self.status = format!("comparing: {}", self.session_identity());
         }
         started
+    }
+
+    /// Fraction behind one worker update: `current/total` clamped to
+    /// 0.0..=1.0, `None` while the total is unknown. Pure;
+    /// headless-tested.
+    pub fn progress_fraction_of(update: &JobProgress) -> Option<f32> {
+        match update.total {
+            Some(total) if total > 0 => {
+                let done = update.current.min(total) as f32;
+                Some((done / total as f32).clamp(0.0, 1.0))
+            }
+            _ => None,
+        }
+    }
+
+    /// Throttle gate: repaint only when the message changed, the
+    /// fraction first appears/disappears, jumps by >= 0.05, or hits
+    /// done. Pure; headless-tested. This is what keeps per-chunk
+    /// worker writes from becoming per-byte repaints.
+    pub fn progress_should_emit(
+        last_frac: Option<f32>,
+        next_frac: Option<f32>,
+        last_msg: Option<&str>,
+        next_msg: &str,
+    ) -> bool {
+        if last_msg != Some(next_msg) {
+            return true;
+        }
+        match (last_frac, next_frac) {
+            (None, None) => false,
+            (None, Some(_)) | (Some(_), None) => true,
+            (Some(prev), Some(next)) => (next - prev).abs() >= 0.05 || next >= 1.0 || prev >= 1.0,
+        }
+    }
+
+    /// Status-bar text behind one throttled update. Reuses the
+    /// existing `status` field; no new paint state. Pure;
+    /// headless-tested.
+    pub fn progress_status_text(base: &str, fraction: Option<f32>, message: &str) -> String {
+        match fraction {
+            Some(frac) => {
+                let pct = (frac * 100.0).round().clamp(0.0, 100.0) as u32;
+                format!("{base} {pct}% ({message})")
+            }
+            None => format!("{base} ({message})"),
+        }
+    }
+
+    /// Whether a background compare is still running.
+    pub fn is_job_running(&self) -> bool {
+        self.rx.is_some()
+    }
+
+    /// Requests cancellation of the running job, if any. The worker
+    /// checks the flag at chunk boundaries and reports back through
+    /// the channel, so the thread always joins via the normal result
+    /// path and never leaks. Returns true when a job was signalled.
+    pub fn cancel_active_job(&mut self) -> bool {
+        match self.job.as_ref() {
+            Some(handle) => {
+                handle.cancel();
+                self.status = format!("cancel requested: {}", self.session_identity());
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Polls the worker's latest progress and folds it into `status`
+    /// through the throttle gate. Returns true when the status bar
+    /// changed and needs a repaint. Headless-safe: no `ctx` use.
+    pub fn poll_job_progress(&mut self) -> bool {
+        let snapshot = match self.job.as_ref() {
+            Some(handle) => handle.progress(),
+            None => None,
+        };
+        let Some(update) = snapshot else {
+            return false;
+        };
+        let next_frac = Self::progress_fraction_of(&update);
+        if !Self::progress_should_emit(
+            self.progress_fraction,
+            next_frac,
+            self.progress_message.as_deref(),
+            update.message.as_str(),
+        ) {
+            return false;
+        }
+        let base = format!("comparing: {}", self.session_identity());
+        self.status = Self::progress_status_text(base.as_str(), next_frac, update.message.as_str());
+        self.progress_fraction = next_frac;
+        self.progress_message = Some(update.message);
+        true
+    }
+
+    /// Records a freshly spawned job: channel, handle, and the
+    /// initial progress state behind one call so all nine `run_*`
+    /// paths stay identical. Smallest-diff helper, not paint.
+    fn note_job_started(&mut self, rx: Receiver<CompareResult>, handle: JobHandle<()>) {
+        self.rx = Some(rx);
+        self.job = Some(handle);
+        self.progress_fraction = Some(0.0);
+        self.progress_message = Some(String::new());
+        self.status = format!("comparing: {}", self.session_identity());
     }
 
     /// View toggle setters. Each persists in app state and notes status.
@@ -1354,15 +1476,29 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "starting text compare"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Text(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let res =
                 compare_text_files(Path::new(&left), Path::new(&right), &TextOptions::default())
                     .map(|cmp| viewmodel::build_text_rows(&cmp))
                     .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Text(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "text compare complete"));
             let _ = tx.send(CompareResult::Text(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_folder(&mut self) {
@@ -1372,18 +1508,27 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
-            let res = compare_folders(
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "starting folder compare"));
+            let res = compare_folders_cancellable(
                 Path::new(&left),
                 Path::new(&right),
                 &FolderOptions::default(),
+                &cancel,
             )
             .map(|cmp| viewmodel::build_folder_rows(&cmp, cmp.truncated))
             .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Folder(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "folder compare complete"));
             let _ = tx.send(CompareResult::Folder(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_hex(&mut self) {
@@ -1395,10 +1540,14 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
         let mode = self.hex_view.mode;
         let max_hunks = self.hex_view.max_hunks;
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "starting hex compare"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Hex(Err(String::from("operation cancelled"))));
+                return Ok(());
+            }
             let res = compare_binary_files_aligned(
                 Path::new(&left),
                 Path::new(&right),
@@ -1411,9 +1560,15 @@ impl App {
                 (lines, view)
             })
             .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Hex(Err(String::from("operation cancelled"))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "hex compare complete"));
             let _ = tx.send(CompareResult::Hex(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_merge(&mut self) {
@@ -1423,8 +1578,14 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, Some(3), "loading base file"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Merge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let base_lines = match load_lines(Path::new(&base)) {
                 Ok(lines) => lines,
                 Err(err) => {
@@ -1432,6 +1593,13 @@ impl App {
                     return Ok(());
                 }
             };
+            progress(JobProgress::new(1, Some(3), "loading left file"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Merge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let left_lines = match load_lines(Path::new(&left)) {
                 Ok(lines) => lines,
                 Err(err) => {
@@ -1439,6 +1607,13 @@ impl App {
                     return Ok(());
                 }
             };
+            progress(JobProgress::new(2, Some(3), "loading right file"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Merge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let right_lines = match load_lines(Path::new(&right)) {
                 Ok(lines) => lines,
                 Err(err) => {
@@ -1450,10 +1625,18 @@ impl App {
             let left_refs: Vec<&str> = left_lines.iter().map(String::as_str).collect();
             let right_refs: Vec<&str> = right_lines.iter().map(String::as_str).collect();
             let merged = autocompare_diff::merge3(&base_refs, &left_refs, &right_refs);
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Merge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let summary = viewmodel::build_merge_summary(&merged);
+            progress(JobProgress::new(3, Some(3), "merge complete"));
             let _ = tx.send(CompareResult::Merge(Ok(summary)));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_table(&mut self) {
@@ -1464,10 +1647,16 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
         let key_opts = self.table_view.to_key_options();
         let positional = self.table_view.is_positional();
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, Some(2), "comparing table rows"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Table(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let rows = compare_table_files(
                 Path::new(&left),
                 Path::new(&right),
@@ -1475,6 +1664,13 @@ impl App {
             )
             .map(|cmp| viewmodel::build_table_rows(&cmp))
             .map_err(|err| err.to_string());
+            progress(JobProgress::new(1, Some(2), "summarizing keyed columns"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Table(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             // Key-aligned tolerant summary over the same inputs; shares
             // the plain loader, so a keyed-only failure is not expected.
             let summary = compare_table_files_by_key(
@@ -1490,9 +1686,11 @@ impl App {
                 (Ok(model), Err(_)) => Ok((model, views_table::TableKeySummary::default())),
                 (Err(err), _) => Err(err),
             };
+            progress(JobProgress::new(2, Some(2), "table compare complete"));
             let _ = tx.send(CompareResult::Table(combined));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_sync(&mut self) {
@@ -1502,14 +1700,28 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "planning sync"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Sync(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let res = plan_sync(Path::new(&left), Path::new(&right), &SyncOptions::default())
                 .map(|plan| SyncChecklist::from_plan(&plan))
                 .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Sync(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "sync plan complete"));
             let _ = tx.send(CompareResult::Sync(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_picture(&mut self) {
@@ -1520,16 +1732,33 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, Some(2), "comparing pictures"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Picture(
+                    Err(String::from("operation cancelled")),
+                    None,
+                ));
+                return Ok(());
+            }
             let opts = PictureOptions::default();
             let res = compare_picture_files(Path::new(&left), Path::new(&right), &opts)
                 .map(|cmp| PictureCompareModel::from_diff(&cmp.diff))
                 .map_err(|err| err.to_string());
+            progress(JobProgress::new(1, Some(2), "building heatmap"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Picture(
+                    Err(String::from("operation cancelled")),
+                    None,
+                ));
+                return Ok(());
+            }
             let hm = load_heatmap_rgba(Path::new(&left), Path::new(&right)).ok();
+            progress(JobProgress::new(2, Some(2), "picture compare complete"));
             let _ = tx.send(CompareResult::Picture(res, hm));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_folder_merge(&mut self) {
@@ -1539,14 +1768,28 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "planning folder merge"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::FolderMerge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let res = plan_tree_merge(Path::new(&base), Path::new(&left), Path::new(&right))
                 .map(|plan| FolderMergeChecklist::from_plan(&plan))
                 .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::FolderMerge(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "folder merge plan complete"));
             let _ = tx.send(CompareResult::FolderMerge(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 
     fn run_audio(&mut self) {
@@ -1556,14 +1799,28 @@ impl App {
             return;
         }
         let (tx, rx) = channel();
-        self.rx = Some(rx);
-        let _ = JobRunner::spawn(move |_cancel, _progress| {
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "starting audio compare"));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Audio(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
             let res = compare_audio_files(Path::new(&left), Path::new(&right))
                 .map(|cmp| AudioChecklist::from_diff(&cmp.diff))
                 .map_err(|err| err.to_string());
+            if cancel.load(Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Audio(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(1, Some(1), "audio compare complete"));
             let _ = tx.send(CompareResult::Audio(res));
             Ok(())
         });
+        self.note_job_started(rx, handle);
     }
 }
 
@@ -2479,7 +2736,11 @@ impl eframe::App for App {
                     },
                 }
                 self.rx = None;
+                self.job = None;
+                self.progress_fraction = None;
+                self.progress_message = None;
             } else {
+                self.poll_job_progress();
                 ui.ctx().request_repaint();
             }
         }
@@ -2628,11 +2889,25 @@ impl eframe::App for App {
                 ),
             }
 
-            if self.rx.is_some() {
+            let job_running = self.rx.is_some();
+            let shown_fraction = self.progress_fraction;
+            let mut cancel_clicked = false;
+            if job_running {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     ui.label(RichText::new("Comparing on background thread...").weak());
+                    if let Some(frac) = shown_fraction {
+                        ui.add(
+                            egui::ProgressBar::new(frac.clamp(0.0, 1.0)).show_percentage(),
+                        );
+                    }
+                    if ui.small_button("Cancel").clicked() {
+                        cancel_clicked = true;
+                    }
                 });
+            }
+            if cancel_clicked {
+                self.cancel_active_job();
             }
 
             if compare_clicked {
@@ -4346,5 +4621,131 @@ mod tests {
         app.table_pager.top = 99;
         app.drag_split_by(40.0, 800.0);
         assert_eq!(app.table_pager.top, 0);
+    }
+
+    #[test]
+    fn prog_fraction_needs_known_total() {
+        use autocompare_compare::JobProgress;
+        assert_eq!(
+            App::progress_fraction_of(&JobProgress::new(1, Some(4), "x")),
+            Some(0.25)
+        );
+        assert_eq!(
+            App::progress_fraction_of(&JobProgress::new(9, Some(4), "x")),
+            Some(1.0)
+        );
+        assert_eq!(
+            App::progress_fraction_of(&JobProgress::new(1, None, "x")),
+            None
+        );
+        assert_eq!(
+            App::progress_fraction_of(&JobProgress::new(0, Some(0), "x")),
+            None
+        );
+    }
+
+    #[test]
+    fn prog_throttle_gate_suppresses_byte_spam() {
+        // Same message + same fraction: no repaint.
+        assert!(!App::progress_should_emit(
+            Some(0.10),
+            Some(0.10),
+            Some("loading left file"),
+            "loading left file",
+        ));
+        // Same message + tiny drift: still no repaint.
+        assert!(!App::progress_should_emit(
+            Some(0.10),
+            Some(0.12),
+            Some("loading left file"),
+            "loading left file",
+        ));
+        // Jump >= 0.05 repaints; message change always repaints.
+        assert!(App::progress_should_emit(
+            Some(0.10),
+            Some(0.20),
+            Some("loading left file"),
+            "loading left file",
+        ));
+        assert!(App::progress_should_emit(
+            Some(0.50),
+            Some(0.51),
+            Some("loading left file"),
+            "loading right file",
+        ));
+        // First fraction and completion always repaint.
+        assert!(App::progress_should_emit(
+            None,
+            Some(0.0),
+            Some(""),
+            "starting"
+        ));
+        assert!(App::progress_should_emit(
+            Some(0.97),
+            Some(1.0),
+            Some("finishing"),
+            "finishing",
+        ));
+        // Indeterminate with no change stays quiet.
+        assert!(!App::progress_should_emit(
+            None,
+            None,
+            Some("planning"),
+            "planning"
+        ));
+    }
+
+    #[test]
+    fn prog_status_text_reuses_status_field() {
+        let line =
+            App::progress_status_text("comparing: a <--> b - Text Compare", Some(0.5), "half");
+        assert!(line.contains("comparing: a <--> b - Text Compare"));
+        assert!(line.contains("50%"));
+        assert!(line.contains("half"));
+        let open = App::progress_status_text("comparing: x", None, "planning sync");
+        assert!(open.contains("planning sync"));
+        assert!(!open.contains('%'));
+    }
+
+    #[test]
+    fn prog_cancel_path_without_job_reports_idle() {
+        let mut app = App::default();
+        assert!(!app.is_job_running());
+        assert!(!app.cancel_active_job());
+        assert!(!app.poll_job_progress());
+        assert_eq!(app.progress_fraction, None);
+    }
+
+    #[test]
+    fn prog_cancel_signals_running_job_and_status_notes_it() {
+        use autocompare_compare::JobRunner;
+        let mut app = App::default();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let handle: JobHandle<()> = JobRunner::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, Some(2), "probe half"));
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = tx.send(CompareResult::Text(Err(String::from(
+                    "operation cancelled",
+                ))));
+                return Ok(());
+            }
+            progress(JobProgress::new(2, Some(2), "probe done"));
+            let _ = tx.send(CompareResult::Text(Err(String::from("probe done"))));
+            Ok(())
+        });
+        app.note_job_started(rx, handle);
+        assert!(app.is_job_running());
+        assert!(app.cancel_active_job());
+        assert!(app.status.contains("cancel requested"));
+        assert_eq!(app.progress_fraction, Some(0.0));
+        // Poll folds the worker's latest progress into the reused
+        // status field; either the cancel note or a throttled
+        // comparing line is honest while the worker drains.
+        let _ = app.poll_job_progress();
+        assert!(
+            app.status.contains("cancel requested") || app.status.contains("comparing:"),
+            "unexpected status: {}",
+            app.status
+        );
     }
 }
