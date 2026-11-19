@@ -271,3 +271,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 07 one import left
 - INT live 22935 02:43, views 66 lines, tests 117 green, fmt 0 fixed, clippy 1 unused gutter_bar_width left. Progress ongoing, no interrupt.
+
+## Wave F poll 08 test red new
+- Bin clippy green (import swap done), test red E0425 2 errors views.rs:1270 gutter_bar_width not in scope (tests need gutter:: prefix). INT live fixing. Tests were 117, now test-build red.
