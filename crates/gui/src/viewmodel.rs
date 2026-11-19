@@ -1283,6 +1283,342 @@ pub fn build_audio_summary(d: &AudioDiff) -> Vec<String> {
 }
 
 // ----------------------------------------------------------------------------
+// Find box (headless; wiring owned by views.rs / agent A)
+// ----------------------------------------------------------------------------
+//
+// WIRING (agent A / orchestrator): the text paint keeps one `FindState`
+// per text view. The find box writes `set_query(&rows, &query)` on each
+// edit; Enter / Shift+Enter call `next()` / `prev()` and scroll the
+// returned model row into view with the same highlight the F3 path
+// uses. `match_count()` feeds the "n of m" label. No egui code here.
+
+/// Case-insensitive substring matches of `query` over both panes.
+///
+/// Returns original-model row indices in order. Empty or
+/// whitespace-only queries match nothing. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (agent A) calls this via FindState
+pub fn find_match_indices(rows: &[TextRow], query: &str) -> Vec<usize> {
+    if query.trim().is_empty() {
+        return Vec::new();
+    }
+    let needle = query.to_lowercase();
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    for row in rows {
+        let hit =
+            row.left.to_lowercase().contains(&needle) || row.right.to_lowercase().contains(&needle);
+        if hit {
+            out.push(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Headless find-box state: current query, its matches, cursor into them.
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // wiring-pending: paint (agent A) owns one per text view
+pub struct FindState {
+    query: String,
+    matches: Vec<usize>,
+    cursor: Option<usize>,
+}
+
+#[allow(dead_code)] // wiring-pending: see struct
+impl FindState {
+    /// Recomputes matches for a new query; cursor rests on the first hit.
+    pub fn set_query(&mut self, rows: &[TextRow], query: &str) {
+        self.query = query.to_string();
+        self.matches = find_match_indices(rows, query);
+        self.cursor = if self.matches.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
+    }
+
+    /// Current query text.
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// Number of matched rows ("m" in "n of m").
+    pub fn match_count(&self) -> usize {
+        self.matches.len()
+    }
+
+    /// All matched model row indices, in order.
+    pub fn match_rows(&self) -> &[usize] {
+        &self.matches
+    }
+
+    /// 1-based position of the cursor ("n" in "n of m"), if any match.
+    pub fn position(&self) -> Option<usize> {
+        self.cursor
+            .and_then(|c| self.matches.get(c).map(|_| c.saturating_add(1)))
+    }
+
+    /// Currently selected match as a model row index.
+    pub fn current_row(&self) -> Option<usize> {
+        self.cursor.and_then(|c| self.matches.get(c).copied())
+    }
+
+    /// Advances with wrap; `None` when there are no matches.
+    pub fn next(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        let next = match self.cursor {
+            Some(c) => (c.saturating_add(1)) % self.matches.len().max(1),
+            None => 0,
+        };
+        self.cursor = Some(next);
+        self.matches.get(next).copied()
+    }
+
+    /// Steps back with wrap; `None` when there are no matches.
+    pub fn prev(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        let len = self.matches.len();
+        let prev = match self.cursor {
+            Some(0) | None => len.saturating_sub(1),
+            Some(c) => c.saturating_sub(1),
+        };
+        self.cursor = Some(prev);
+        self.matches.get(prev).copied()
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Merge per-hunk pick (headless; wiring owned by views.rs / agent A)
+// ----------------------------------------------------------------------------
+//
+// WIRING (agent A / orchestrator): the merge paint lists
+// `merge_conflict_hunks(&lines)` as one card per hunk, each with
+// Left/Right/Base/Both buttons staging a `MergeHunkPick`. Apply-all
+// calls `apply_merge_picks(&lines, &picks)`; the summary line reads
+// `merge_pick_summary(&lines, &picks)`. Single-hunk resolve stays on
+// `resolve_take`. No egui code here.
+
+/// One conflict block in a merged line stream: half-open line span
+/// plus its conflict index for [`crate::take::resolve_take`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (agent A) lists one card per hunk
+pub struct MergeHunk {
+    /// Conflict index (0-based among well-formed blocks).
+    pub conflict_index: usize,
+    /// First line of the `<<<<<<<` marker.
+    pub start: usize,
+    /// One past the `>>>>>>>` marker.
+    pub end: usize,
+}
+
+/// Well-formed conflict blocks in scan order. Malformed blocks (no
+/// closing marker) are skipped so paint never offers an unresolvable
+/// hunk. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (agent A) lists hunk cards
+pub fn merge_conflict_hunks(lines: &[String]) -> Vec<MergeHunk> {
+    let mut hunks = Vec::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        let is_open = lines.get(i).is_some_and(|l| l.starts_with("<<<<<<<"));
+        if !is_open {
+            i = i.saturating_add(1);
+            continue;
+        }
+        let start = i;
+        let mut j = i.saturating_add(1);
+        let mut closed = false;
+        while j < lines.len() {
+            if lines.get(j).is_some_and(|l| l.starts_with(">>>>>>>")) {
+                closed = true;
+                j = j.saturating_add(1);
+                break;
+            }
+            j = j.saturating_add(1);
+        }
+        if closed {
+            hunks.push(MergeHunk {
+                conflict_index: hunks.len(),
+                start,
+                end: j,
+            });
+            i = j;
+        } else {
+            break;
+        }
+    }
+    hunks
+}
+
+/// One staged per-hunk choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (agent A) stages button picks
+pub struct MergeHunkPick {
+    /// Which conflict block this pick resolves.
+    pub conflict_index: usize,
+    /// Which side to take for that block.
+    pub choice: TakeChoice,
+}
+
+/// Applies staged per-hunk picks, highest index first so earlier spans
+/// stay valid. Duplicate picks for one hunk keep the last staged
+/// choice. Errors when a pick names no real conflict. Pure.
+#[allow(dead_code)] // wiring-pending: paint (agent A) Apply-all calls this
+pub fn apply_merge_picks(
+    lines: &[String],
+    picks: &[MergeHunkPick],
+) -> Result<Vec<String>, TakeError> {
+    let mut dedup: Vec<(usize, TakeChoice)> = Vec::new();
+    for pick in picks {
+        let mut found = false;
+        for slot in dedup.iter_mut() {
+            if slot.0 == pick.conflict_index {
+                slot.1 = pick.choice;
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            dedup.push((pick.conflict_index, pick.choice));
+        }
+    }
+    dedup.sort_by_key(|item| std::cmp::Reverse(item.0));
+    let mut current: Vec<String> = lines.to_vec();
+    for (index, choice) in dedup {
+        current = resolve_take(&current, index, choice)?;
+    }
+    Ok(current)
+}
+
+/// Honest per-hunk progress over the live merged lines.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (agent A) summary line
+pub struct MergePickSummary {
+    /// Well-formed conflict blocks in the lines.
+    pub total: usize,
+    /// Distinct staged picks naming a real block.
+    pub resolved: usize,
+    /// Blocks still awaiting a pick.
+    pub pending: usize,
+    /// Whether any block is still unresolved.
+    pub conflicted: bool,
+}
+
+/// Summarizes staged picks against the current lines. Picks naming no
+/// real block do not count as resolved. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (agent A) summary line
+pub fn merge_pick_summary(lines: &[String], picks: &[MergeHunkPick]) -> MergePickSummary {
+    let total = merge_conflict_hunks(lines).len();
+    let mut seen: Vec<usize> = Vec::new();
+    for pick in picks {
+        if pick.conflict_index < total && !seen.contains(&pick.conflict_index) {
+            seen.push(pick.conflict_index);
+        }
+    }
+    let resolved = seen.len();
+    MergePickSummary {
+        total,
+        resolved,
+        pending: total.saturating_sub(resolved),
+        conflicted: resolved < total,
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Truncation paging (headless; wiring owned by views.rs / agent A)
+// ----------------------------------------------------------------------------
+//
+// WIRING (agent A / orchestrator): where paint shows the "showing first
+// N" note (`MAX_ROWS` cap), keep one `PageCursor` per view. Page
+// buttons call `page_window`, the load-more button calls `load_more()`.
+// The paint window itself still slices `model.rows`; this only tracks
+// the honest `(start, end)` window. No egui code here.
+
+/// Default page step for load-more paging over truncated models.
+#[allow(dead_code)] // wiring-pending: paint (agent A) load-more step
+pub const PAGE_SIZE: usize = 5_000;
+
+/// A load-more cursor over a truncated row list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[allow(dead_code)] // wiring-pending: paint (agent A) keeps one per view
+pub struct PageCursor {
+    /// Full model length the window views.
+    pub total: usize,
+    /// Rows currently shown (window end).
+    pub shown: usize,
+    /// Rows each load-more step adds.
+    pub page_size: usize,
+}
+
+/// Clamped `(start, end)` window for `page` (0-based) over `total`
+/// rows with `page_size` rows per page. Zero page size shows nothing.
+/// Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (agent A) page buttons
+pub fn page_window(total: usize, page: usize, page_size: usize) -> (usize, usize) {
+    if page_size == 0 || total == 0 {
+        return (0, 0);
+    }
+    let start = page.saturating_mul(page_size).min(total);
+    let end = start.saturating_add(page_size).min(total);
+    (start, end)
+}
+
+#[allow(dead_code)] // wiring-pending: see struct
+impl PageCursor {
+    /// New cursor showing the first page over `total` rows.
+    pub fn new(total: usize, page_size: usize) -> Self {
+        let size = if page_size == 0 { PAGE_SIZE } else { page_size };
+        Self {
+            total,
+            shown: total.min(size),
+            page_size: size,
+        }
+    }
+
+    /// Number of pages covering `total` at this page size (min 1).
+    pub fn page_count(&self) -> usize {
+        if self.total == 0 {
+            return 1;
+        }
+        let pages = self.total.div_ceil(self.page_size.max(1));
+        pages.max(1)
+    }
+
+    /// Whether more rows wait beyond the current window.
+    pub fn has_more(&self) -> bool {
+        self.shown < self.total
+    }
+
+    /// Rows still hidden beyond the window.
+    pub fn remaining(&self) -> usize {
+        self.total.saturating_sub(self.shown)
+    }
+
+    /// Current `(0, shown)` window.
+    pub fn window(&self) -> (usize, usize) {
+        (0, self.shown.min(self.total))
+    }
+
+    /// Grows the window by one page; returns the new window.
+    pub fn load_more(&mut self) -> (usize, usize) {
+        self.shown = self.shown.saturating_add(self.page_size).min(self.total);
+        self.window()
+    }
+
+    /// Retargets the cursor at a new model length, keeping the page size.
+    pub fn retarget(&mut self, total: usize) {
+        self.total = total;
+        self.shown = self.shown.min(total);
+        if self.shown == 0 {
+            self.shown = total.min(self.page_size);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Civil date
 // ----------------------------------------------------------------------------
 
@@ -2169,5 +2505,280 @@ mod tests {
         };
         assert_eq!(kept.left_no, Some(3));
         assert_eq!(kept.accent_a, vec![(4, 5)]);
+    }
+
+    fn find_rows() -> Vec<TextRow> {
+        vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: "alpha beta".to_string(),
+                right: "alpha beta".to_string(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "gamma delta".to_string(),
+                right: "gamma DELTA".to_string(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                left: String::new(),
+                right: "GAMMA rays".to_string(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: "plain line".to_string(),
+                right: "plain line".to_string(),
+                ..TextRow::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn find_matches_case_insensitive_over_both_panes() {
+        let rows = find_rows();
+        assert_eq!(find_match_indices(&rows, "gamma"), vec![1, 2]);
+        assert_eq!(find_match_indices(&rows, "GAMMA"), vec![1, 2]);
+        assert_eq!(find_match_indices(&rows, "delta"), vec![1]);
+        assert_eq!(find_match_indices(&rows, "absent"), Vec::<usize>::new());
+        assert_eq!(find_match_indices(&rows, ""), Vec::<usize>::new());
+        assert_eq!(find_match_indices(&rows, "   "), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn find_state_cycles_next_prev_with_wrap() {
+        let rows = find_rows();
+        let mut state = FindState::default();
+        state.set_query(&rows, "gamma");
+        assert_eq!(state.query(), "gamma");
+        assert_eq!(state.match_count(), 2);
+        assert_eq!(state.current_row(), Some(1));
+        assert_eq!(state.position(), Some(1));
+        assert_eq!(state.next(), Some(2));
+        assert_eq!(state.position(), Some(2));
+        // Wrap forward to the first hit.
+        assert_eq!(state.next(), Some(1));
+        // Wrap backward from the first hit to the last.
+        assert_eq!(state.prev(), Some(2));
+        assert_eq!(state.prev(), Some(1));
+    }
+
+    #[test]
+    fn find_state_empty_query_has_no_position() {
+        let rows = find_rows();
+        let mut state = FindState::default();
+        state.set_query(&rows, "absent");
+        assert_eq!(state.match_count(), 0);
+        assert_eq!(state.current_row(), None);
+        assert_eq!(state.position(), None);
+        assert_eq!(state.next(), None);
+        assert_eq!(state.prev(), None);
+        // Re-query replaces old matches instead of accumulating.
+        state.set_query(&rows, "alpha");
+        assert_eq!(state.match_rows(), &[1 - 1]);
+        assert_eq!(state.current_row(), Some(0));
+    }
+
+    fn merged_two_conflicts() -> Vec<String> {
+        vec![
+            "clean header".to_string(),
+            "<<<<<<< left".to_string(),
+            "L1".to_string(),
+            "||||||| base".to_string(),
+            "B1".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>> right".to_string(),
+            "middle".to_string(),
+            "<<<<<<< left".to_string(),
+            "L2".to_string(),
+            "=======".to_string(),
+            "R2".to_string(),
+            ">>>>>>> right".to_string(),
+            "footer".to_string(),
+        ]
+    }
+
+    #[test]
+    fn merge_hunks_list_well_formed_blocks_in_order() {
+        let lines = merged_two_conflicts();
+        let hunks = merge_conflict_hunks(&lines);
+        assert_eq!(hunks.len(), 2);
+        let Some(first) = hunks.first() else {
+            return;
+        };
+        assert_eq!(first.conflict_index, 0);
+        assert_eq!(first.start, 1);
+        assert_eq!(first.end, 8);
+        let Some(second) = hunks.get(1) else {
+            return;
+        };
+        assert_eq!(second.conflict_index, 1);
+        assert_eq!(second.start, 9);
+        assert_eq!(second.end, 14);
+        // Malformed tail block is skipped, never offered as a hunk.
+        let mut bad = lines.clone();
+        bad.push("<<<<<<< dangling".to_string());
+        assert_eq!(merge_conflict_hunks(&bad).len(), 2);
+        assert!(merge_conflict_hunks(&["clean".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn merge_picks_apply_per_hunk_independently() {
+        let lines = merged_two_conflicts();
+        let picks = vec![
+            MergeHunkPick {
+                conflict_index: 0,
+                choice: TakeChoice::Left,
+            },
+            MergeHunkPick {
+                conflict_index: 1,
+                choice: TakeChoice::Right,
+            },
+        ];
+        let out = apply_merge_picks(&lines, &picks).unwrap_or_default();
+        assert_eq!(
+            out,
+            vec![
+                "clean header".to_string(),
+                "L1".to_string(),
+                "middle".to_string(),
+                "R2".to_string(),
+                "footer".to_string(),
+            ]
+        );
+        // Single-hunk pick leaves the other block conflicted.
+        let one = apply_merge_picks(
+            &lines,
+            &[MergeHunkPick {
+                conflict_index: 1,
+                choice: TakeChoice::Both,
+            }],
+        )
+        .unwrap_or_default();
+        assert!(one.iter().any(|l| l.starts_with("<<<<<<<")));
+        assert!(one.contains(&"L2".to_string()));
+        assert!(one.contains(&"R2".to_string()));
+    }
+
+    #[test]
+    fn merge_picks_dedup_and_reject_unknown() {
+        let lines = merged_two_conflicts();
+        // Last staged choice wins for a repeated hunk.
+        let dup = vec![
+            MergeHunkPick {
+                conflict_index: 0,
+                choice: TakeChoice::Left,
+            },
+            MergeHunkPick {
+                conflict_index: 0,
+                choice: TakeChoice::Right,
+            },
+            MergeHunkPick {
+                conflict_index: 1,
+                choice: TakeChoice::Base,
+            },
+        ];
+        let out = apply_merge_picks(&lines, &dup).unwrap_or_default();
+        assert!(out.contains(&"R1".to_string()));
+        assert!(!out.contains(&"L1".to_string()));
+        // Unknown conflict index errors instead of guessing.
+        let bad = apply_merge_picks(
+            &lines,
+            &[MergeHunkPick {
+                conflict_index: 7,
+                choice: TakeChoice::Left,
+            }],
+        );
+        assert!(bad.is_err());
+    }
+
+    #[test]
+    fn merge_pick_summary_counts_progress_honestly() {
+        let lines = merged_two_conflicts();
+        let none = merge_pick_summary(&lines, &[]);
+        assert_eq!(none.total, 2);
+        assert_eq!(none.resolved, 0);
+        assert_eq!(none.pending, 2);
+        assert!(none.conflicted);
+        let one = merge_pick_summary(
+            &lines,
+            &[MergeHunkPick {
+                conflict_index: 0,
+                choice: TakeChoice::Left,
+            }],
+        );
+        assert_eq!((one.resolved, one.pending), (1, 1));
+        assert!(one.conflicted);
+        // Unknown picks never inflate resolved.
+        let unknown = merge_pick_summary(
+            &lines,
+            &[MergeHunkPick {
+                conflict_index: 9,
+                choice: TakeChoice::Left,
+            }],
+        );
+        assert_eq!(unknown.resolved, 0);
+        let full = merge_pick_summary(
+            &lines,
+            &[
+                MergeHunkPick {
+                    conflict_index: 0,
+                    choice: TakeChoice::Left,
+                },
+                MergeHunkPick {
+                    conflict_index: 1,
+                    choice: TakeChoice::Right,
+                },
+            ],
+        );
+        assert_eq!((full.resolved, full.pending), (2, 0));
+        assert!(!full.conflicted);
+    }
+
+    #[test]
+    fn page_window_clamps_to_model_bounds() {
+        assert_eq!(page_window(10_000, 0, 5_000), (0, 5_000));
+        assert_eq!(page_window(10_000, 1, 5_000), (5_000, 10_000));
+        assert_eq!(page_window(10_000, 2, 5_000), (10_000, 10_000));
+        assert_eq!(page_window(7_000, 1, 5_000), (5_000, 7_000));
+        assert_eq!(page_window(0, 0, 5_000), (0, 0));
+        assert_eq!(page_window(10_000, 0, 0), (0, 0));
+    }
+
+    #[test]
+    fn page_cursor_load_more_grows_to_total() {
+        let mut cursor = PageCursor::new(12_000, 5_000);
+        assert_eq!(cursor.window(), (0, 5_000));
+        assert!(cursor.has_more());
+        assert_eq!(cursor.remaining(), 7_000);
+        assert_eq!(cursor.page_count(), 3);
+        assert_eq!(cursor.load_more(), (0, 10_000));
+        assert!(cursor.has_more());
+        assert_eq!(cursor.load_more(), (0, 12_000));
+        assert!(!cursor.has_more());
+        assert_eq!(cursor.remaining(), 0);
+        // Extra load-more never overshoots.
+        assert_eq!(cursor.load_more(), (0, 12_000));
+    }
+
+    #[test]
+    fn page_cursor_retarget_tracks_new_models() {
+        let mut cursor = PageCursor::new(12_000, 5_000);
+        cursor.load_more();
+        cursor.retarget(3_000);
+        assert_eq!(cursor.window(), (0, 3_000));
+        assert!(!cursor.has_more());
+        // Empty model shows an empty window on a single page.
+        cursor.retarget(0);
+        assert_eq!(cursor.window(), (0, 0));
+        assert_eq!(cursor.page_count(), 1);
+        assert!(!cursor.has_more());
+        // Zero page size falls back to the default step.
+        let fallback = PageCursor::new(9_000, 0);
+        assert_eq!(fallback.page_size, PAGE_SIZE);
+        assert_eq!(fallback.window(), (0, PAGE_SIZE.min(9_000)));
     }
 }

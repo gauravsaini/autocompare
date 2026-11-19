@@ -406,6 +406,95 @@ pub fn can_apply(preview: &SyncPreview, consented: bool) -> bool {
     consented && !preview.steps.is_empty()
 }
 
+// ----------------------------------------------------------------------------
+// Folder columns (headless; wiring owned by views.rs / agent A)
+// ----------------------------------------------------------------------------
+//
+// Gap 6: the folder view paints names only; size/time need side-by-side
+// columns. This section is the pure column spec: header labels, fixed
+// char widths, and cell text per row. Paint (agent A) lays these out as
+// columns; indent keeps the frozen [`tree_indent_step`] (12.0, one
+// MD spacing step) and colors stay frozen — this file changes no hues.
+// WIRING: for each visible `FolderTreeNode`, paint one row with
+// `folder_cell_text(&node.row, col)` per `folder_column_defs()` entry;
+// the Path cell is offset by `tree_indent_for_depth(node.depth)`.
+
+/// One folder column: header plus fixed width in characters
+/// (`0` means flex: the path takes the remaining width).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FolderColumnDef {
+    /// Which cell this column shows.
+    pub column: FolderColumn,
+    /// Header label paint shows above the column.
+    pub header: &'static str,
+    /// Fixed width in characters; `0` flexes.
+    pub width_chars: usize,
+}
+
+/// Folder view columns: path plus per-side size and modified time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderColumn {
+    /// Relative path (flex width, indented by tree depth).
+    Path,
+    /// Left size bytes, `None` renders as `-`.
+    LeftSize,
+    /// Right size bytes, `None` renders as `-`.
+    RightSize,
+    /// Left modified time, `None` renders as `-`.
+    LeftTime,
+    /// Right modified time, `None` renders as `-`.
+    RightTime,
+}
+
+/// Fixed width of each size column: largest byte counts stay readable.
+pub const FOLDER_SIZE_CHARS: usize = 10;
+/// Fixed width of each time column: fits `format_time` output exactly
+/// (`"YYYY-MM-DD HH:MM"` is 16 characters).
+pub const FOLDER_TIME_CHARS: usize = 16;
+
+/// Column spec in paint order: flex path, sizes, times.
+pub fn folder_column_defs() -> [FolderColumnDef; 5] {
+    [
+        FolderColumnDef {
+            column: FolderColumn::Path,
+            header: "Path",
+            width_chars: 0,
+        },
+        FolderColumnDef {
+            column: FolderColumn::LeftSize,
+            header: "L size",
+            width_chars: FOLDER_SIZE_CHARS,
+        },
+        FolderColumnDef {
+            column: FolderColumn::RightSize,
+            header: "R size",
+            width_chars: FOLDER_SIZE_CHARS,
+        },
+        FolderColumnDef {
+            column: FolderColumn::LeftTime,
+            header: "L modified",
+            width_chars: FOLDER_TIME_CHARS,
+        },
+        FolderColumnDef {
+            column: FolderColumn::RightTime,
+            header: "R modified",
+            width_chars: FOLDER_TIME_CHARS,
+        },
+    ]
+}
+
+/// Cell text for one folder row and column. Missing sides render as
+/// `"-"` so columns stay aligned for orphan rows. Pure; unit-tested.
+pub fn folder_cell_text(row: &FolderRow, column: FolderColumn) -> String {
+    match column {
+        FolderColumn::Path => row.rel_path.clone(),
+        FolderColumn::LeftSize => row.left_size.clone().unwrap_or_else(|| "-".to_string()),
+        FolderColumn::RightSize => row.right_size.clone().unwrap_or_else(|| "-".to_string()),
+        FolderColumn::LeftTime => row.left_time.clone().unwrap_or_else(|| "-".to_string()),
+        FolderColumn::RightTime => row.right_time.clone().unwrap_or_else(|| "-".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -737,6 +826,55 @@ mod tests {
         };
         assert_eq!(step.rel_path, "gone");
         assert!(step.is_dir);
+    }
+
+    #[test]
+    fn column_defs_keep_path_flex_and_fixed_side_widths() {
+        let defs = folder_column_defs();
+        assert_eq!(defs.len(), 5);
+        let Some(path) = defs.first() else {
+            return;
+        };
+        assert_eq!(path.column, FolderColumn::Path);
+        assert_eq!(path.header, "Path");
+        assert_eq!(path.width_chars, 0);
+        for def in defs.iter().skip(1) {
+            assert!(def.width_chars > 0);
+        }
+        assert_eq!(FOLDER_SIZE_CHARS, 10);
+        assert_eq!(FOLDER_TIME_CHARS, 16);
+        // Time columns fit the formatted timestamp exactly.
+        let stamp = crate::viewmodel::format_time(std::time::UNIX_EPOCH);
+        assert_eq!(stamp.chars().count(), FOLDER_TIME_CHARS);
+    }
+
+    #[test]
+    fn indent_token_stays_on_spacing_scale_with_columns() {
+        use crate::theme::{GEO_TREE_INDENT_STEP, SPACE_MD};
+        assert_eq!(tree_indent_step(), GEO_TREE_INDENT_STEP);
+        assert_eq!(tree_indent_step(), SPACE_MD);
+        assert_eq!(tree_indent_step(), 12.0);
+        assert_eq!(tree_indent_for_depth(2), 24.0);
+        assert_eq!(folder_column_defs().len(), 5);
+    }
+
+    #[test]
+    fn cell_text_renders_missing_sides_as_dash() {
+        let row = make_glyph_row("only-left.txt", false, 'L');
+        assert_eq!(folder_cell_text(&row, FolderColumn::Path), "only-left.txt");
+        // Left-only fixture rows carry no sizes/times: dashes keep columns aligned.
+        assert_eq!(folder_cell_text(&row, FolderColumn::LeftSize), "-");
+        assert_eq!(folder_cell_text(&row, FolderColumn::RightTime), "-");
+        let mut both = make_glyph_row("both.txt", false, '=');
+        both.left_size = Some("12".to_string());
+        both.right_time = Some("2026-01-02 03:04".to_string());
+        assert_eq!(folder_cell_text(&both, FolderColumn::Path), "both.txt");
+        assert_eq!(folder_cell_text(&both, FolderColumn::LeftSize), "12");
+        assert_eq!(
+            folder_cell_text(&both, FolderColumn::RightTime),
+            "2026-01-02 03:04"
+        );
+        assert_eq!(folder_cell_text(&both, FolderColumn::RightSize), "-");
     }
 }
 

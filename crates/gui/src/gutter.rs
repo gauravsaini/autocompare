@@ -109,6 +109,91 @@ pub fn gutter_bar_width_for_font(font_size: f32, show_line_numbers: bool) -> f32
     }
 }
 
+// ----------------------------------------------------------------------------
+// Click-to-jump pure mapping (headless; wiring owned by views.rs / agent A)
+// ----------------------------------------------------------------------------
+//
+// WIRING (agent A / orchestrator): in `views.rs` gutter paint, on a click
+// at local y within a gutter rect of `height` px over `total_rows` model
+// rows, call `gutter_jump_target(&rows, total_rows, height, y)` and move
+// the text selection / scroll to the returned model row. No egui code
+// lives here so this file stays disjoint from paint.
+
+/// Maps a gutter-local y (px) to a model row index.
+///
+/// `None` when there is nothing to map: zero rows, non-positive or
+/// non-finite height, non-finite y, or y outside `[0.0, height)`.
+/// Otherwise the fraction `y / height` scales to `[0, total_rows)`.
+/// Pure; unit-tested.
+pub fn gutter_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if !y.is_finite() || y < 0.0 || y >= height {
+        return None;
+    }
+    let row = ((y / height) * total_rows as f32).floor() as usize;
+    if row < total_rows { Some(row) } else { None }
+}
+
+/// Hit-tests a gutter-local y against already-computed `segments`.
+///
+/// Returns the first segment with `y_start <= y < y_end` (the final
+/// segment is inclusive of its end so clicks on its bottom edge land).
+/// `None` for non-finite y or no containing segment. Pure; unit-tested.
+pub fn gutter_segment_at_y(segments: &[GutterSegment], y: f32) -> Option<usize> {
+    if !y.is_finite() {
+        return None;
+    }
+    let mut idx = 0usize;
+    for seg in segments {
+        let last = idx.saturating_add(1) >= segments.len();
+        let inside = if last {
+            y >= seg.y_start && y <= seg.y_end
+        } else {
+            y >= seg.y_start && y < seg.y_end
+        };
+        if inside {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    None
+}
+
+/// Click-to-jump target for a gutter click at y.
+///
+/// Maps y to a row with [`gutter_row_at_y`]; when that row is an equal
+/// row (or the click lands on no segment), walks forward to the next
+/// difference, else falls back to the previous difference before the
+/// mapped row. `None` means "no diff to jump to". Pure; unit-tested.
+pub fn gutter_jump_target(
+    rows: &[TextRow],
+    total_rows: usize,
+    height: f32,
+    y: f32,
+) -> Option<usize> {
+    let row = gutter_row_at_y(y, total_rows, height)?;
+    if rows.get(row).is_some_and(|r| r.kind != TextRowKind::Equal) {
+        return Some(row);
+    }
+    let mut i = row.saturating_add(1);
+    while i < rows.len() {
+        if rows.get(i).is_some_and(|r| r.kind != TextRowKind::Equal) {
+            return Some(i);
+        }
+        i = i.saturating_add(1);
+    }
+    let mut j = row.min(rows.len());
+    while j > 0 {
+        j = j.saturating_sub(1);
+        if rows.get(j).is_some_and(|r| r.kind != TextRowKind::Equal) {
+            return Some(j);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +285,76 @@ mod tests {
         assert_eq!(gutter_bar_width_for_font(-4.0, false), 6.0);
         assert_eq!(gutter_bar_width_for_font(f32::NAN, true), 12.0);
         assert_eq!(gutter_bar_width_for_font(f32::INFINITY, false), 6.0);
+    }
+
+    #[test]
+    fn row_at_y_maps_fraction_to_row_index() {
+        // 4 rows over 400px: each row owns a 100px band.
+        assert_eq!(gutter_row_at_y(0.0, 4, 400.0), Some(0));
+        assert_eq!(gutter_row_at_y(99.9, 4, 400.0), Some(0));
+        assert_eq!(gutter_row_at_y(100.0, 4, 400.0), Some(1));
+        assert_eq!(gutter_row_at_y(250.0, 4, 400.0), Some(2));
+        assert_eq!(gutter_row_at_y(399.9, 4, 400.0), Some(3));
+    }
+
+    #[test]
+    fn row_at_y_rejects_empty_and_out_of_range() {
+        assert_eq!(gutter_row_at_y(10.0, 0, 400.0), None);
+        assert_eq!(gutter_row_at_y(10.0, 4, 0.0), None);
+        assert_eq!(gutter_row_at_y(10.0, 4, -50.0), None);
+        assert_eq!(gutter_row_at_y(-1.0, 4, 400.0), None);
+        assert_eq!(gutter_row_at_y(400.0, 4, 400.0), None);
+        assert_eq!(gutter_row_at_y(999.0, 4, 400.0), None);
+        assert_eq!(gutter_row_at_y(f32::NAN, 4, 400.0), None);
+        assert_eq!(gutter_row_at_y(10.0, 4, f32::NAN), None);
+        assert_eq!(gutter_row_at_y(f32::INFINITY, 4, 400.0), None);
+    }
+
+    #[test]
+    fn segment_hit_test_finds_containing_segment() {
+        let rows = vec![
+            make_test_row(TextRowKind::Equal),
+            make_test_row(TextRowKind::Deleted),
+            make_test_row(TextRowKind::Deleted),
+            make_test_row(TextRowKind::Inserted),
+        ];
+        let geom = gutter_geometry(4, 400.0, &rows);
+        assert_eq!(geom.segments.len(), 2);
+        // First segment covers rows 1..3 -> y 100..300.
+        assert_eq!(gutter_segment_at_y(&geom.segments, 150.0), Some(0));
+        assert_eq!(gutter_segment_at_y(&geom.segments, 100.0), Some(0));
+        // Second segment covers row 3 -> y 300..400.
+        assert_eq!(gutter_segment_at_y(&geom.segments, 350.0), Some(1));
+        assert_eq!(gutter_segment_at_y(&geom.segments, 400.0), Some(1));
+        // Equal-run gap and outside hit nothing.
+        assert_eq!(gutter_segment_at_y(&geom.segments, 50.0), None);
+        assert_eq!(gutter_segment_at_y(&geom.segments, 500.0), None);
+        assert_eq!(gutter_segment_at_y(&geom.segments, f32::NAN), None);
+        assert_eq!(gutter_segment_at_y(&[], 150.0), None);
+    }
+
+    #[test]
+    fn jump_target_snaps_equal_clicks_to_nearest_diff() {
+        let rows = vec![
+            make_test_row(TextRowKind::Equal),
+            make_test_row(TextRowKind::Deleted),
+            make_test_row(TextRowKind::Equal),
+            make_test_row(TextRowKind::Inserted),
+        ];
+        // Click on the diff row itself stays.
+        assert_eq!(gutter_jump_target(&rows, 4, 400.0, 150.0), Some(1));
+        // Click on equal row 0 walks forward to row 1.
+        assert_eq!(gutter_jump_target(&rows, 4, 400.0, 50.0), Some(1));
+        // Click on equal row 2 walks forward to row 3.
+        assert_eq!(gutter_jump_target(&rows, 4, 400.0, 250.0), Some(3));
+        // No diffs at all: no target.
+        let equals = vec![
+            make_test_row(TextRowKind::Equal),
+            make_test_row(TextRowKind::Equal),
+        ];
+        assert_eq!(gutter_jump_target(&equals, 2, 200.0, 50.0), None);
+        // Out-of-range click: no target.
+        assert_eq!(gutter_jump_target(&rows, 4, 400.0, 999.0), None);
+        assert_eq!(gutter_jump_target(&[], 0, 400.0, 50.0), None);
     }
 }
