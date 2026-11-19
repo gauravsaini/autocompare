@@ -2523,33 +2523,32 @@ impl eframe::App for App {
             match tab {
                 Tab::Home => {}
                 Tab::Text => {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Find:").small().weak());
-                        let needle_changed = ui
-                            .add(
-                                egui::TextEdit::singleline(&mut self.text_find_needle)
-                                    .desired_width(120.0)
-                                    .hint_text("needle"),
-                            )
-                            .changed();
-                        if needle_changed {
-                            self.text_find_cursor = 0;
-                        }
-                        ui.checkbox(&mut self.text_find_ignore_case, "Ignore case");
-                        if ui.small_button("◀ Prev").clicked()
-                            && self.text_find_prev_row().is_none()
-                            && !self.text_find_needle.trim().is_empty()
-                        {
-                            self.status = String::from("text find: no match");
-                        }
-                        if ui.small_button("Next ▶").clicked()
-                            && self.text_find_next_row().is_none()
-                            && !self.text_find_needle.trim().is_empty()
-                        {
-                            self.status = String::from("text find: no match");
-                        }
-                        ui.label(RichText::new(self.text_find_badge()).small().weak());
-                    });
+                    // Find bar + N/M badge: paint views me, cursor/badge
+                    // advance App model me (Wave Q state, Wave T wiring).
+                    let badge =
+                        views::text_find_badge_label(self.text_find_position(), self.text_find_total());
+                    let old_needle = self.text_find_needle.clone();
+                    let (find_prev, find_next) = views::paint_text_find_bar(
+                        ui,
+                        &mut self.text_find_needle,
+                        &mut self.text_find_ignore_case,
+                        &badge,
+                    );
+                    if self.text_find_needle != old_needle {
+                        self.text_find_cursor = 0;
+                    }
+                    if find_prev
+                        && self.text_find_prev_row().is_none()
+                        && !self.text_find_needle.trim().is_empty()
+                    {
+                        self.status = String::from("text find: no match");
+                    }
+                    if find_next
+                        && self.text_find_next_row().is_none()
+                        && !self.text_find_needle.trim().is_empty()
+                    {
+                        self.status = String::from("text find: no match");
+                    }
                     if let Some(snapshot) = self.text_model.clone() {
                         ui.style_mut().wrap_mode = Some(if self.word_wrap {
                             egui::TextWrapMode::Wrap
@@ -4042,5 +4041,61 @@ mod tests {
         assert_eq!(app.hex_find_retreat(&hay), Some(1));
         app.hex_find_needle = String::from("");
         assert_eq!(app.hex_find_advance(&hay), None);
+    }
+
+    #[test]
+    fn font_zoom_steps_clamp_and_reset() {
+        // Wave R model live hai (app.rs ui me Cmd +/-/0): helper yahi
+        // steps chalate hain, paint me koi change nahi.
+        let mut app = App::default();
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+        app.zoom_in();
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL + 1);
+        assert!(app.status.contains("font zoom"));
+        app.zoom_out();
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+        app.set_zoom_level(100);
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_MAX_LEVEL);
+        app.set_zoom_level(-100);
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_MIN_LEVEL);
+        app.zoom_reset();
+        assert_eq!(app.zoom_level(), crate::theme::ZOOM_DEFAULT_LEVEL);
+    }
+
+    #[test]
+    fn text_find_badge_label_matches_app_badge() {
+        // Paint badge views helper se aata hai; App model se parity.
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let mut app = App {
+            text_model: Some(TextRows {
+                rows: vec![TextRow {
+                    kind: TextRowKind::Changed,
+                    left: String::from("needle here"),
+                    right: String::new(),
+                    ..Default::default()
+                }],
+                truncated: false,
+                coarse: false,
+                pane_chars: 11,
+                gutter_chars: 4,
+                selected: None,
+                filter: TextFilter::All,
+            }),
+            ..Default::default()
+        };
+        app.text_find_set_needle("needle");
+        assert_eq!(
+            crate::views::text_find_badge_label(app.text_find_position(), app.text_find_total()),
+            app.text_find_badge(),
+        );
+        assert_eq!(
+            crate::views::text_find_badge_label(app.text_find_position(), app.text_find_total()),
+            "1/1",
+        );
+        app.text_find_set_needle("");
+        assert_eq!(
+            crate::views::text_find_badge_label(app.text_find_position(), app.text_find_total()),
+            "0/0",
+        );
     }
 }

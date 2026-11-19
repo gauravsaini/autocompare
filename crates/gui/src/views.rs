@@ -1983,13 +1983,12 @@ pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
 }
 
 // ----------------------------------------------------------------------------
-// Text find bar (orchestrator-applied hook; not yet called from paint).
+// Text find bar (Wave T wiring: App text tab se called).
 // ----------------------------------------------------------------------------
 
 /// N/M badge text for the text find bar: "2/5", no hit par "0/0".
 /// Pure; App badge model ko paint bina App borrow ke dikhata hai.
-/// Test-only until paint wiring calls it (Wave Q follow-up).
-#[allow(dead_code)]
+/// App text tab se called (Wave T wiring).
 pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -2000,8 +1999,7 @@ pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
 /// Text find bar: needle field + case flag + Prev/Next + badge label.
 /// Returns `(prev_clicked, next_clicked)`; cursor/badge advance App
 /// ke `text_find_next_row` / `text_find_prev_row` me hota hai.
-/// Test-only until paint wiring calls it (Wave Q follow-up).
-#[allow(dead_code)]
+/// App text tab se called (Wave T wiring).
 pub fn paint_text_find_bar(
     ui: &mut Ui,
     needle: &mut String,
