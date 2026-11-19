@@ -837,3 +837,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave U poll LAYOUT landed (3/4)
 - LAYOUT fd1d60b verified+pushed: OWNS clean (app.rs 383 + layout-u GATES/REPORT/round-U-1). Split fraction in all content paths, min-width floors + h-scroll, docked find-bar + badge-right, 24px nav hits, <900 min-scroll, scroll clamps. 245 green, clippy zero, fmt clean, banned 0 (app.rs non-test).
 - GEO last one live, clippy/fmt/banned green on its side, commit pending. Its const-assertion error resolved itself after restructure.
+
+## Wave U poll GEO landed (4/4) WAVE COMPLETE
+- GEO 8f87dde verified+pushed: OWNS clean (views.rs 155 + geo-u REPORT/round-U-1). Centralized geometry tokens (gutter/header/row-pad/split-hit/find-bar/badge), uniform baselines, splitter hit rect, badge-right, row rhythm. 245 green, clippy zero, fmt clean, banned 0.
+- Wave U complete: 4/4 landed. exquisite geometry (GEO) + typography (TYPO) + layout wiring (LAYOUT) + release/early-feedback (RUN). All pushed.
