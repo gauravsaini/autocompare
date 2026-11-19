@@ -471,6 +471,10 @@ pub enum FolderEmptyState {
     /// par hain); yeh filter-specific wording ke liye hai, paint
     /// `folder_empty_state_full` se aata hai.
     FilterPruned,
+    /// Compare hua, model me rows hain, sab '=' (do identical folders,
+    /// koi diff nahi). Filter-pruned aur never-compared se alag wording
+    /// paata hai; paint `folder_empty_state_full_rows` se aata hai.
+    AllSame,
 }
 
 /// Khali view ka kaaran chuno: `total` model rows, `visible` filtered
@@ -516,6 +520,43 @@ pub fn folder_empty_state_full(
     None
 }
 
+/// Kya model ki har row '=' hai (do identical folders, koi diff nahi).
+/// Khaali slice par `false` taaki kabhi-compare-nahi aur compare-hua-par
+/// khaali kabhi same na bole. Pure; unit-tested.
+pub fn folder_all_same(rows: &[FolderRow]) -> bool {
+    !rows.is_empty() && rows.iter().all(|row| row.glyph == '=')
+}
+
+/// Khali view ka kaaran rows dekhkar: `folder_empty_state_full` ka
+/// rows-aware uttaradhikari (wahi has_model/total/visible/display chain,
+/// teesra arm joda). `!has_model` → `NoResults`; khaali model →
+/// `NoResults`; ped khaali aur sab rows '=' → `AllSame` (identical
+/// folders — filter chahe laga ho, honest kaaran same-pan hai);
+/// ped khaali aur filters lage → `FilterPruned`; warna `None`.
+/// Legacy `folder_empty_state_full` frozen hai (glyph-blind hai, uske
+/// tests us par hain); paint adopt kare to identical aur pruned alag
+/// wording paate hain.
+pub fn folder_empty_state_full_rows(
+    has_model: bool,
+    rows: &[FolderRow],
+    visible_rows: usize,
+    display: &FolderDisplay,
+) -> Option<FolderEmptyState> {
+    if !has_model {
+        return Some(FolderEmptyState::NoResults);
+    }
+    if rows.is_empty() {
+        return Some(FolderEmptyState::NoResults);
+    }
+    if visible_rows == 0 && folder_all_same(rows) {
+        return Some(FolderEmptyState::AllSame);
+    }
+    if visible_rows == 0 && display.is_active() {
+        return Some(FolderEmptyState::FilterPruned);
+    }
+    None
+}
+
 /// Khali view ka paint-stable English hint. `None` par khaali string
 /// (paint kuch nahi dikhata); dono khali states ke shabd tay hain
 /// taaki snapshots stable rahen.
@@ -525,6 +566,7 @@ pub fn folder_empty_hint(state: Option<FolderEmptyState>) -> &'static str {
         Some(FolderEmptyState::NoResults) => "folder: no results yet — compare first",
         Some(FolderEmptyState::NoMatch) => "folder: no rows match filters — clear filters",
         Some(FolderEmptyState::FilterPruned) => "folder: filters hide every row — clear filters",
+        Some(FolderEmptyState::AllSame) => "folder: folders match — all same, nothing to sync",
     }
 }
 
@@ -3565,6 +3607,94 @@ mod folderfilter_tests {
         assert_eq!(folder_empty_state_full(true, total, 2, &active), None);
         assert_eq!(
             folder_empty_state_full(true, total, total, &FolderDisplay::default()),
+            None
+        );
+    }
+
+    #[test]
+    fn identical_wording_differs_from_pruned_and_never_compared() {
+        // Never-compared (legacy line, frozen): compare-first guidance.
+        let idle = folder_empty_hint(Some(FolderEmptyState::NoResults));
+        assert!(idle.contains("no results yet"));
+        // Filter-pruned: prune-specific wording.
+        let pruned = folder_empty_hint(Some(FolderEmptyState::FilterPruned));
+        assert!(pruned.contains("hide every row"));
+        // Identical folders (naya variant): same-specific wording.
+        let same = folder_empty_hint(Some(FolderEmptyState::AllSame));
+        assert!(same.contains("same"));
+        assert!(same.contains("nothing to sync"));
+        // Teenon alag hain — koi shared idle hint nahi.
+        assert_ne!(idle, pruned);
+        assert_ne!(idle, same);
+        assert_ne!(pruned, same);
+        // Identical line filter guidance nahi deta, idle line same nahi bolti.
+        assert!(!same.contains("clear filters"));
+        assert!(!same.contains("no results yet"));
+        assert!(!idle.contains("identical"));
+        // Legacy generic barkarar (dusri waves ke tests us par hain).
+        assert!(
+            folder_empty_hint(Some(FolderEmptyState::NoMatch)).contains("no rows match filters")
+        );
+    }
+
+    #[test]
+    fn empty_state_full_rows_routes_identical_vs_pruned_vs_never_compared() {
+        let mixed = sample_rows();
+        let total = mixed.len();
+        let active = FolderDisplay {
+            name_query: String::from("zzz-no-such-file"),
+            ..FolderDisplay::default()
+        };
+        assert!(active.is_active());
+        let calm = FolderDisplay::default();
+        // Never-compared: model hi nahi — legacy line.
+        assert_eq!(
+            folder_empty_state_full_rows(false, &mixed, 0, &active),
+            Some(FolderEmptyState::NoResults)
+        );
+        // Model hai par zero rows — legacy line.
+        let no_rows: Vec<FolderRow> = Vec::new();
+        assert_eq!(
+            folder_empty_state_full_rows(true, &no_rows, 0, &calm),
+            Some(FolderEmptyState::NoResults)
+        );
+        // Identical folders (sab '='): diff-seeking filter par ped khaali
+        // to honest kaaran same-pan hai, prune nahi.
+        let identical = vec![
+            glyph_row("a.txt", false, '='),
+            glyph_row("src", true, '='),
+            glyph_row("src/b.txt", false, '='),
+        ];
+        let changed_only = FolderDisplay {
+            status: FolderStatusFilter::Changed,
+            ..FolderDisplay::default()
+        };
+        assert!(changed_only.is_active());
+        assert!(folder_all_same(&identical));
+        assert!(!folder_all_same(&mixed));
+        assert!(!folder_all_same(&no_rows));
+        assert_eq!(
+            folder_empty_state_full_rows(true, &identical, 0, &changed_only),
+            Some(FolderEmptyState::AllSame)
+        );
+        // Naam filter par bhi identical hi jeetta hai (clear karne par bhi
+        // kuch karne ko nahi milega).
+        assert_eq!(
+            folder_empty_state_full_rows(true, &identical, 0, &active),
+            Some(FolderEmptyState::AllSame)
+        );
+        // Mixed rows par wahi filter prune deta hai (legacy chain barkarar).
+        assert_eq!(
+            folder_empty_state_full_rows(true, &mixed, 0, &active),
+            Some(FolderEmptyState::FilterPruned)
+        );
+        // Kuch dikh raha — khaali nahi (identical browse par bhi None).
+        assert_eq!(
+            folder_empty_state_full_rows(true, &identical, identical.len(), &calm),
+            None
+        );
+        assert_eq!(
+            folder_empty_state_full_rows(true, &mixed, total, &calm),
             None
         );
     }
