@@ -83,3 +83,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Early-feedback run (3 waves in tree)
 - cargo build green, cargo test 92 passed (text fixed views.rs init).
 - Fresh screenshot checks/early-feedback/after-3-waves.png: 9846 bytes, PNG magic OK, exit 0. Toolbar (Swap/Reload/toggles), session-identity title, honest status counts visible.
+
+## Poll 13
+- app.rs +108 uncommitted = shell post-commit follow-ups (shell log shows 8 app.rs edits, text log shows 0 app.rs edits — no OWNS violation). Left untouched; integrate at text land after tests green.
+- Text alive, editing copy/views/viewmodel only, retrying failed matches.
+- CI: 3 latest runs still queued (runners backed up); release refresh waits for green + text land.
