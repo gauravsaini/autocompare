@@ -1599,6 +1599,20 @@ pub fn layout_needs_hscroll(avail: f32, min_width: f32) -> bool {
     avail < min_width
 }
 
+/// Gap between adjacent toolbar controls (px). Reuses the shared
+/// [`views::TIGHT_GAP`] token so the toolbar breathes on the same
+/// beat as every other tight row. Pure; unit-tested.
+pub fn toolbar_item_gap() -> f32 {
+    views::TIGHT_GAP
+}
+
+/// Gap around the toolbar group separator (px). Reuses the shared
+/// [`views::SECTION_GAP`] token so actions vs view-toggles read as
+/// two groups with section rhythm. Pure; unit-tested.
+pub fn toolbar_group_gap() -> f32 {
+    views::SECTION_GAP
+}
+
 /// Docked find-bar geometry: the bar spans the full width, the badge
 /// pins at the right end, prev/next hit rects keep the 24px floor.
 /// Pure; unit-tested.
@@ -2482,6 +2496,7 @@ impl eframe::App for App {
             // Single aligned toolbar row: actions + view toggles.
             let toolbar_active = self.tab != Tab::Home;
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = toolbar_item_gap();
                 let swap_resp = ui.add_enabled(
                     toolbar_active,
                     egui::Button::new("Swap Sides"),
@@ -2500,7 +2515,9 @@ impl eframe::App for App {
                 if reload_resp.clicked() {
                     self.run_active_tab();
                 }
+                ui.add_space(toolbar_group_gap());
                 ui.separator();
+                ui.add_space(toolbar_group_gap());
                 let mut wrap = self.word_wrap;
                 if ui.checkbox(&mut wrap, "Word Wrap").changed() {
                     self.set_word_wrap(wrap);
@@ -4285,6 +4302,15 @@ mod tests {
         assert!(geo.next_hit >= 24.0);
         let zero = find_bar_geometry(-5.0);
         assert_eq!((zero.bar_w, zero.badge_x), (0.0, 0.0));
+    }
+
+    #[test]
+    fn toolbar_gaps_reuse_geo_tokens_with_group_hierarchy() {
+        assert_eq!(toolbar_item_gap(), crate::views::TIGHT_GAP);
+        assert_eq!(toolbar_group_gap(), crate::views::SECTION_GAP);
+        assert!(toolbar_item_gap().is_finite() && toolbar_item_gap() > 0.0);
+        assert!(toolbar_group_gap().is_finite() && toolbar_group_gap() > 0.0);
+        assert!(toolbar_group_gap() > toolbar_item_gap());
     }
 
     #[test]
