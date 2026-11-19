@@ -207,3 +207,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave E poll 03
 - Combined tree: tests 109 green, fmt clean, clippy RED 9 dead-code (GEO helpers defined not yet wired: FOOTER_GAP TREE_INDENT BROWSE_RESERVE MIN_HALF MIN_THIRD half/third/tree_indent/text_row_height). Expected mid-loop, GEO live editing views.rs to wire them.
 - GEO diff +33 tokens + centered cards, TYPO +138 scale, BIN report +57 PNG 960x600 valid. OWNS respected, no color touch. No interrupt, agents fix own files.
+
+## Wave E poll 04
+- BIN DONE terminal (PID gone, commit d1b6a41 pushed with early PNG 9914B + report, OWNS respected, no source edits). Verified PNG magic ok 960x600.
+- Combined: tests 110 green, clippy down 9->4->1 (only text_row_height unused left), fmt clean. GEO wiring FOOTER_GAP done, TYPO gutter+home helpers + tests landed.
+- GEO+TYPO still live PIDs 17032/17049, disjoint OWNS, no colors touch. GEO to wire text_row_height next.
