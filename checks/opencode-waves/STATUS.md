@@ -408,3 +408,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - All 3 live. C M crates/gui/src/theme.rs +66/-4: geometry scale 4/8/12/16/24 tokens + line-height source, docs say colors frozen. Looks aligned, verify at commit time (tests/clippy/fmt + no hue change).
 - B writing both view-model files. A still waiting release build (build.log 475B).
 - No agent commits yet. Wait.
+
+## Wave H poll 07 A build pass C gutter
+- All 3 live. A release PASS 10851744B (52s), harness bg running, REPORT next. C M gutter+theme (110+/10): spacing tokens applied, paint aligned. B writing view-models.
+- No agent commits yet. Wait.
