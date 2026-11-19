@@ -626,3 +626,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 12 picture paint 370
 - B views 370 lines picture paint (status line, checklists). A2 chunk_run/HEX_HUNK_LEN analysis. Diff 1328.
 - No commits. Wait.
+
+## Wave J poll 13 B 2 errors A2 steady
+- B views 479, 2 errors (E0277 trait + E0503 borrow) fixing. A2 steady 71 analyzing chunk.
+- No commits. Wait.
