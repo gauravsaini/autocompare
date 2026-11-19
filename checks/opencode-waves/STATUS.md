@@ -403,3 +403,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 05 waiting on builds
 - All 3 PIDs live. A waiting release build (read-only survey done: screenshot/main/views/app/theme/gutter/home/tree). B still reading main/viewmodel, pure models next. C hit 4 clippy assertions_on_constants warnings (pre-existing, owned files must stay clean), geometry edits next.
 - No agent commits yet. Wait.
+
+## Wave H poll 06 C editing B writing A waiting
+- All 3 live. C M crates/gui/src/theme.rs +66/-4: geometry scale 4/8/12/16/24 tokens + line-height source, docs say colors frozen. Looks aligned, verify at commit time (tests/clippy/fmt + no hue change).
+- B writing both view-model files. A still waiting release build (build.log 475B).
+- No agent commits yet. Wait.
