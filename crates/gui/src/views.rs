@@ -43,6 +43,39 @@ const RED: Color32 = Color32::from_rgb(255, 100, 100);
 const GREEN: Color32 = Color32::from_rgb(120, 220, 130);
 const ERROR_BG: Color32 = Color32::from_rgb(60, 20, 20);
 
+// Geometry tokens (px): margins, gaps, alignment. Colors out of scope.
+pub const OUTER_MARGIN: i8 = 12;
+pub const SECTION_GAP: f32 = 8.0;
+pub const TIGHT_GAP: f32 = 4.0;
+pub const FOOTER_GAP: f32 = 6.0;
+pub const TAB_BOTTOM_GAP: f32 = 2.0;
+pub const TREE_INDENT: f32 = 14.0;
+pub const CARD_W: f32 = 260.0;
+pub const CARD_H: f32 = 75.0;
+const BROWSE_RESERVE: f32 = 75.0;
+const MIN_HALF: f32 = 180.0;
+const MIN_THIRD: f32 = 130.0;
+
+/// Equal half width for two path fields sharing one row.
+pub fn half_field_width(avail: f32) -> f32 {
+    (avail / 2.0).max(MIN_HALF) - BROWSE_RESERVE
+}
+
+/// Equal third width for three path fields sharing one row.
+pub fn third_field_width(avail: f32) -> f32 {
+    (avail / 3.0).max(MIN_THIRD) - BROWSE_RESERVE
+}
+
+/// Consistent tree indent for one depth level.
+pub fn tree_indent(depth: usize) -> f32 {
+    depth as f32 * TREE_INDENT
+}
+
+/// Shared monospace row height so text panes stay equal.
+pub fn text_row_height(ui: &Ui) -> f32 {
+    ui.text_style_height(&egui::TextStyle::Monospace)
+}
+
 /// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
 pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
@@ -69,7 +102,7 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
             .small()
             .weak(),
     );
-    ui.add_space(4.0);
+    ui.add_space(TIGHT_GAP);
 }
 
 /// The Home View launcher screen displaying cards for all 9 comparison session types.
@@ -77,20 +110,20 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
     let model = viewmodel::home_model();
     ui.heading("Comparison Sessions");
     ui.label(RichText::new("Select a session type or use the tabs above:").weak());
-    ui.add_space(8.0);
+    ui.add_space(SECTION_GAP);
 
     egui::Grid::new("home_sessions_grid")
         .num_columns(3)
-        .spacing([12.0, 12.0])
+        .spacing([OUTER_MARGIN as f32, OUTER_MARGIN as f32])
         .show(ui, |ui| {
             for (i, item) in model.items.iter().enumerate() {
                 ui.group(|ui| {
-                    ui.set_width(260.0);
-                    ui.set_height(75.0);
-                    ui.vertical(|ui| {
+                    ui.set_width(CARD_W);
+                    ui.set_height(CARD_H);
+                    ui.vertical_centered(|ui| {
                         ui.label(RichText::new(item.title).strong().size(14.0));
                         ui.label(RichText::new(item.description).small().weak());
-                        ui.add_space(4.0);
+                        ui.add_space(TIGHT_GAP);
                         if ui.button(format!("Open {}", item.title)).clicked() {
                             *tab = item.tab;
                         }
@@ -117,7 +150,7 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
         ui.selectable_value(tab, Tab::FolderMerge, "FolderMerge");
         ui.selectable_value(tab, Tab::Audio, "Audio");
     });
-    ui.add_space(2.0);
+    ui.add_space(TAB_BOTTOM_GAP);
 }
 
 /// Two path text fields with native file/folder picker buttons plus Compare.
@@ -130,7 +163,7 @@ pub fn paint_paths(
     compare: &mut bool,
 ) {
     ui.horizontal(|ui| {
-        let half = (ui.available_width() / 2.0).max(180.0) - 75.0;
+        let half = half_field_width(ui.available_width());
         ui.add(
             TextEdit::singleline(left)
                 .desired_width(half)
@@ -166,7 +199,7 @@ pub fn paint_paths(
     if clicked {
         *compare = true;
     }
-    ui.add_space(4.0);
+    ui.add_space(TIGHT_GAP);
 }
 
 /// Three path text fields with native dialog pickers for three-way tabs.
@@ -180,7 +213,7 @@ pub fn paint_triple_paths(
     compare: &mut bool,
 ) {
     ui.horizontal(|ui| {
-        let third = (ui.available_width() / 3.0).max(130.0) - 75.0;
+        let third = third_field_width(ui.available_width());
         ui.add(
             TextEdit::singleline(base)
                 .desired_width(third)
@@ -230,7 +263,7 @@ pub fn paint_triple_paths(
     if clicked {
         *compare = true;
     }
-    ui.add_space(4.0);
+    ui.add_space(TIGHT_GAP);
 }
 
 /// Generic scrollable summary lines for the plan/stat tabs
@@ -240,7 +273,7 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
         ui.label(RichText::new("(no output)").weak());
         return;
     }
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let row_height = text_row_height(ui);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, lines.len(), |ui, range| {
@@ -280,7 +313,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
             model.conflicted = resolved.iter().any(|l| l.starts_with("<<<<<<<"));
             model.lines = resolved;
         }
-        ui.add_space(4.0);
+        ui.add_space(TIGHT_GAP);
     }
     if model.truncated {
         paint_note(ui, "showing the first lines only; the rest is cut off");
@@ -289,7 +322,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
         ui.label(RichText::new("(merged output is empty)").weak());
         return;
     }
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let row_height = text_row_height(ui);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, model.lines.len(), |ui, range| {
@@ -320,7 +353,7 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel) {
         ui.label(RichText::new("(both tables are empty)").weak());
         return;
     }
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let row_height = text_row_height(ui);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, model.rows.len(), |ui, range| {
@@ -538,7 +571,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     );
 
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let row_height = text_row_height(ui);
     let base_text = ui.style().visuals.text_color();
     let mut copy_action = None;
     let mut select_action = None;
@@ -796,13 +829,13 @@ pub fn paint_folder(
     expanded: &mut std::collections::BTreeSet<String>,
 ) {
     ui.label(RichText::new(summary).monospace().weak());
-    ui.add_space(4.0);
+    ui.add_space(TIGHT_GAP);
     if rows.is_empty() {
         ui.label(RichText::new("(both folders are empty)").weak());
         return;
     }
     let tree_nodes = viewmodel::folder_tree(rows, expanded);
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let row_height = text_row_height(ui);
     let mut toggle_dir = None;
 
     egui::ScrollArea::vertical()
@@ -815,7 +848,7 @@ pub fn paint_folder(
                 ui.set_row_height(row_height);
                 ui.horizontal(|ui| {
                     if node.depth > 0 {
-                        ui.add_space((node.depth as f32) * 14.0);
+                        ui.add_space(tree_indent(node.depth));
                     }
                     if node.row.is_dir && node.has_children {
                         let icon = if node.is_expanded { "▼" } else { "▶" };
@@ -885,7 +918,7 @@ pub fn paint_picture(ui: &mut Ui, lines: &[String], heatmap: Option<&TextureHand
     }
     match heatmap {
         Some(handle) => {
-            ui.add_space(6.0);
+            ui.add_space(FOOTER_GAP);
             ui.add(
                 egui::Image::new((handle.id(), handle.size_vec2())).max_width(ui.available_width()),
             );
@@ -1232,5 +1265,35 @@ mod tests {
         };
         assert_eq!(view_text_with_prefs(&model, &on).pane_chars, 80);
         assert_eq!(view_text_with_prefs(&model, &off).pane_chars, 200);
+    }
+
+    #[test]
+    fn geometry_tokens_match_targets() {
+        assert_eq!(OUTER_MARGIN, 12);
+        assert_eq!(SECTION_GAP, 8.0);
+        assert_eq!(TIGHT_GAP, 4.0);
+        assert_eq!(FOOTER_GAP, 6.0);
+        assert_eq!(TAB_BOTTOM_GAP, 2.0);
+        assert_eq!(TREE_INDENT, 14.0);
+        assert_eq!((CARD_W, CARD_H), (260.0, 75.0));
+    }
+
+    #[test]
+    fn half_fields_share_equal_width() {
+        assert_eq!(half_field_width(800.0), 325.0);
+        assert_eq!(half_field_width(0.0), 105.0);
+    }
+
+    #[test]
+    fn third_fields_share_equal_width() {
+        assert_eq!(third_field_width(900.0), 225.0);
+        assert_eq!(third_field_width(0.0), 55.0);
+    }
+
+    #[test]
+    fn tree_indent_scales_with_depth() {
+        assert_eq!(tree_indent(0), 0.0);
+        assert_eq!(tree_indent(1), 14.0);
+        assert_eq!(tree_indent(2), 28.0);
     }
 }

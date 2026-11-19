@@ -1058,14 +1058,16 @@ impl eframe::App for App {
             }
         }
 
-        // Central panel
-        egui::Frame::central_panel(ui.style()).show(ui, |ui| {
+        // Central panel with unified outer margin.
+        egui::Frame::central_panel(ui.style())
+            .inner_margin(egui::Margin::same(views::OUTER_MARGIN))
+            .show(ui, |ui| {
             views::paint_header(ui, &mut self.dark_mode);
             views::paint_tabs(ui, &mut self.tab);
             ui.label(RichText::new(self.session_identity()).small().weak());
-            ui.add_space(2.0);
+            ui.add_space(views::TAB_BOTTOM_GAP);
 
-            // Session toolbar: Swap Sides + Reload/Recompare.
+            // Single aligned toolbar row: actions + view toggles.
             let toolbar_active = self.tab != Tab::Home;
             ui.horizontal(|ui| {
                 let swap_resp = ui.add_enabled(
@@ -1086,9 +1088,7 @@ impl eframe::App for App {
                 if reload_resp.clicked() {
                     self.run_active_tab();
                 }
-            });
-            // View toggles: persist in app state, affect text panes.
-            ui.horizontal(|ui| {
+                ui.separator();
                 let mut wrap = self.word_wrap;
                 if ui.checkbox(&mut wrap, "Word Wrap").changed() {
                     self.set_word_wrap(wrap);
@@ -1102,14 +1102,14 @@ impl eframe::App for App {
                     self.set_syntax_highlight(syntax);
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(views::TIGHT_GAP);
 
             let tab = self.tab;
             let mut compare_clicked = false;
             match tab {
                 Tab::Home => {
                     views::paint_home(ui, &mut self.tab);
-                    ui.add_space(8.0);
+                    ui.add_space(views::SECTION_GAP);
                     ui.label(RichText::new("Start here: open Text or Folder above, type both paths, then Compare. Swap Sides flips inputs; Reload reruns the same compare.").weak());
                 }
                 Tab::Text => views::paint_paths(
@@ -1202,7 +1202,7 @@ impl eframe::App for App {
             if let Some(err) = self.error.clone() {
                 views::paint_error(ui, err.as_str());
             }
-            ui.add_space(4.0);
+            ui.add_space(views::TIGHT_GAP);
 
             match tab {
                 Tab::Home => {}
@@ -1323,7 +1323,7 @@ impl eframe::App for App {
                             for node in &nodes {
                                 ui.horizontal(|ui| {
                                     if node.depth > 0 {
-                                        ui.add_space((node.depth as f32) * 14.0);
+                                        ui.add_space(views::tree_indent(node.depth));
                                     }
                                     if node.row.is_dir && node.has_children {
                                         let icon =
@@ -1355,7 +1355,7 @@ impl eframe::App for App {
                         }
                         // Sync preview: mode select, dry-run options,
                         // consent gate, Apply button.
-                        ui.add_space(4.0);
+                        ui.add_space(views::TIGHT_GAP);
                         ui.separator();
                         ui.label(RichText::new("Sync preview (dry-run)").strong());
                         let mode = self.folder_session.sync_mode;
@@ -1492,8 +1492,9 @@ impl eframe::App for App {
                     }
                 }
             }
-            ui.add_space(6.0);
+            ui.add_space(views::SECTION_GAP);
             ui.separator();
+            ui.add_space(views::FOOTER_GAP);
             ui.label(RichText::new(self.status_line()).small().weak());
         });
     }
