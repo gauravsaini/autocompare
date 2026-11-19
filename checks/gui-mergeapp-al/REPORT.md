@@ -11,7 +11,7 @@ observe only, apne shabdon me likha. Full suite 393 green, clippy zero, harness 
 
 ## Key Metrics
 
-- Tests: 378 (baseline pre-edit, `main@df1e1f1`) → 393 (9 naye App tests, 0 fail)
+- Tests: 378 (baseline pre-edit) → 393 (15 naye, 0 fail)
 - Clippy `-p autocompare-gui --all-targets`: 0 warnings
 - `rustfmt --edition 2024 --check crates/gui/src/app.rs`: clean (scoped `cargo fmt -- <file>` only)
 - Harness: `RESULT: PASS` (PNG 9624 bytes, magic ok `89504e470d0a1a0a`, distinct 256)
