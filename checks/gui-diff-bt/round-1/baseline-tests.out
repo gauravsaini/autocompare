@@ -1,0 +1,5 @@
+test screenshot::tests::dispatcher_routes_sync_scene ... ok
+test screenshot::tests::dispatcher_routes_threeway_scene ... ok
+
+test result: ok. 623 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.35s
+
