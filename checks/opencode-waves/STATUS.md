@@ -1077,3 +1077,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AO-APPLYUI `sess-applyui-ao`: OWNS views.rs+checks/gui-applyui-ao (Gap #8 Apply button + result paint).
 - AO-SNAPSHOT `sess-snapshot-ao`: OWNS screenshot.rs+checks/gui-snapshot-ao (per-tab headless PNG routes).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AO complete (2 parallel: apply paint adoption + snapshot parity)
+- APPLYUI `93c89b8` merge Apply paint wired to apply state machine + real summary — OWNS views.rs (Gap #8 paint done).
+- SNAPSHOT `5a0cda0` snapshot dispatcher routed to all 6 tabs + geometry fixtures — OWNS screenshot.rs.
+- Verify combined: 431 green, clippy 0, fmt clean, banned 0, PNG magic-ok x8.
+- Pushed. Next: Wave AP (minimap-click, session restore, text wrap parity).
