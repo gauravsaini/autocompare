@@ -26,8 +26,9 @@ use crate::app::{
 use crate::gutter::{gutter_bar_width_for_font, gutter_jump_target, gutter_y_for_row};
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
 use crate::theme::{
-    CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
-    TYPO_MONO_SIZE, blue_for, dim_for, green_for, red_for, track_for,
+    CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
+    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TypoRole,
+    blue_for, dim_for, green_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -170,8 +171,66 @@ pub fn tree_indent(depth: usize) -> f32 {
 }
 
 /// Shared monospace row height so text panes stay equal.
+/// Intent: paint measures the live `Monospace` text style height here;
+/// the per-role `TypoRole::line_height` multipliers stay headless
+/// intent (see [`text_row_height_intent`]) so every pane — text, table,
+/// folder — shares one measured beat plus [`ROW_PAD`].
 pub fn text_row_height(ui: &Ui) -> f32 {
+    // Intent lock: the measured style here must stay the documented
+    // line-height source (see [`text_row_height_intent`]).
+    debug_assert_eq!(text_row_height_intent(), TYPO_LINE_HEIGHT_SOURCE);
     ui.text_style_height(&egui::TextStyle::Monospace)
+}
+
+/// Line-height intent source: the shared measured monospace row height.
+/// Paint never takes a per-role line-height; the chrome/body/mono
+/// multipliers (`TypoRole::line_height_px`) record the target rhythm
+/// (chrome 1.2 / body 1.40 / mono 1.30) for a later paint pass. Pure;
+/// unit-tested.
+pub fn text_row_height_intent() -> &'static str {
+    TYPO_LINE_HEIGHT_SOURCE
+}
+
+/// App header bar height: the same [`HEADER_H`] the table/hex paging
+/// bars reserve, so the title row sits on the pane-split rhythm
+/// instead of floating offset above it. Pure; unit-tested.
+pub fn header_bar_height() -> f32 {
+    CHROME_HEADER_BAR_H
+}
+
+/// Header left-baseline lead: the same origin as table rules and folder
+/// placeholders ([`CONTENT_LEAD`]) so header notes start where pane
+/// content starts. Pure; unit-tested.
+pub fn header_content_lead() -> &'static str {
+    CHROME_HEADER_LEAD
+}
+
+/// One header note line on the shared left baseline: lead plus text,
+/// the same shape [`indented_content`] paints for rules/placeholders.
+/// Pure; unit-tested.
+pub fn header_note_line(text: &str) -> String {
+    format!("{}{}", header_content_lead(), text)
+}
+
+/// Tab bar role: Body (13 default proportional). Tab labels paint at
+/// this scale via [`TypoRole::rich`] so tabs never drift to mono.
+/// Pure; unit-tested.
+pub fn chrome_tab_role() -> TypoRole {
+    TypoRole::chrome_tab()
+}
+
+/// Section header role: Heading (18 strong proportional). App title
+/// plus section headers share the top chrome step; card titles step
+/// down to HomeTitle. Pure; unit-tested.
+pub fn chrome_section_role() -> TypoRole {
+    TypoRole::chrome_section()
+}
+
+/// Status line role: Small (11 weak proportional, tabular intent).
+/// Summary/count lines paint here instead of mono so status reads as
+/// chrome, not code; weak tone keeps the frozen dim. Pure; unit-tested.
+pub fn chrome_status_role() -> TypoRole {
+    TypoRole::chrome_status()
 }
 
 /// Paint-applied Home title size: routes through the home contract
@@ -197,9 +256,14 @@ pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
 }
 
 /// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
+/// Bar reserves [`header_bar_height`] (the paging-bar rhythm) so it sits
+/// on the pane-split grid; the note shares the [`header_content_lead`]
+/// baseline with table rules/placeholders. Type via [`TypoRole`] chrome
+/// (section title, status note); tones unchanged.
 pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
-        ui.heading("autocompare");
+        ui.set_min_size(egui::vec2(ui.available_width(), header_bar_height()));
+        ui.label(chrome_section_role().rich("autocompare"));
         ui.label(RichText::new("desktop client").weak());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let label = if *dark_mode {
@@ -217,18 +281,16 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
             }
         });
     });
-    ui.label(
-        RichText::new("drag & drop paths or browse via native dialogs | pure background engines")
-            .small()
-            .weak(),
-    );
+    ui.label(chrome_status_role().rich(header_note_line(
+        "drag & drop paths or browse via native dialogs | pure background engines",
+    )));
     ui.add_space(TAB_BOTTOM_GAP);
 }
 
 /// The Home View launcher screen displaying cards for all 9 comparison session types.
 pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
     let model = viewmodel::home_model();
-    ui.heading("Comparison Sessions");
+    ui.label(chrome_section_role().rich("Comparison Sessions"));
     ui.label(RichText::new("Select a session type or use the tabs above:").weak());
     ui.add_space(SECTION_GAP);
 
@@ -271,18 +333,20 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
 }
 
 /// The ten tabs: Home plus nine comparison session types.
+/// Labels paint at the tab chrome scale ([`chrome_tab_role`]: Body 13
+/// default proportional) so the tab bar reads as chrome, not code.
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
     ui.horizontal_wrapped(|ui| {
-        ui.selectable_value(tab, Tab::Home, "Home");
-        ui.selectable_value(tab, Tab::Text, "Text");
-        ui.selectable_value(tab, Tab::Folder, "Folder");
-        ui.selectable_value(tab, Tab::Hex, "Hex");
-        ui.selectable_value(tab, Tab::Merge, "Merge");
-        ui.selectable_value(tab, Tab::Table, "Table");
-        ui.selectable_value(tab, Tab::Sync, "Sync");
-        ui.selectable_value(tab, Tab::Picture, "Picture");
-        ui.selectable_value(tab, Tab::FolderMerge, "FolderMerge");
-        ui.selectable_value(tab, Tab::Audio, "Audio");
+        ui.selectable_value(tab, Tab::Home, chrome_tab_role().rich("Home"));
+        ui.selectable_value(tab, Tab::Text, chrome_tab_role().rich("Text"));
+        ui.selectable_value(tab, Tab::Folder, chrome_tab_role().rich("Folder"));
+        ui.selectable_value(tab, Tab::Hex, chrome_tab_role().rich("Hex"));
+        ui.selectable_value(tab, Tab::Merge, chrome_tab_role().rich("Merge"));
+        ui.selectable_value(tab, Tab::Table, chrome_tab_role().rich("Table"));
+        ui.selectable_value(tab, Tab::Sync, chrome_tab_role().rich("Sync"));
+        ui.selectable_value(tab, Tab::Picture, chrome_tab_role().rich("Picture"));
+        ui.selectable_value(tab, Tab::FolderMerge, chrome_tab_role().rich("FolderMerge"));
+        ui.selectable_value(tab, Tab::Audio, chrome_tab_role().rich("Audio"));
     });
     ui.add_space(TAB_BOTTOM_GAP);
 }
@@ -642,7 +706,7 @@ pub fn paint_hex(
     pager: &mut views_hex::HexPager,
     lines: &[String],
 ) {
-    ui.label(RichText::new(view.status_line()).monospace().weak());
+    ui.label(chrome_status_role().rich(view.status_line()));
     if view.over_cap {
         paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
         return;
@@ -829,7 +893,7 @@ pub fn paint_hex(
 
 /// Over-cap hex state: honest sizes plus the skip note, no hunk grid.
 pub fn paint_hex_over_cap(ui: &mut Ui, view: &views_hex::HexCompareView) {
-    ui.label(RichText::new(view.status_line()).monospace().weak());
+    ui.label(chrome_status_role().rich(view.status_line()));
     paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
 }
 
@@ -894,7 +958,7 @@ pub fn paint_table_keyed(
     model: &TableModel,
     pager: &mut views_table::TablePager,
 ) {
-    ui.label(RichText::new(view.status_line()).monospace().weak());
+    ui.label(chrome_status_role().rich(view.status_line()));
     if let Some(note) = view.positional_note() {
         paint_note(ui, note);
     }
@@ -1775,7 +1839,7 @@ pub fn paint_folder(
     expanded: &mut std::collections::BTreeSet<String>,
     pager: &mut crate::tree::RowPager,
 ) {
-    ui.label(RichText::new(summary).monospace().weak());
+    ui.label(chrome_status_role().rich(summary));
     ui.add_space(TIGHT_GAP);
     if rows.is_empty() {
         ui.label(RichText::new("(both folders are empty)").weak());
@@ -2042,7 +2106,7 @@ pub fn paint_folder_dual(
     state: &mut crate::tree::DualTreeState,
     split: &mut f32,
 ) {
-    ui.label(RichText::new(summary).monospace().weak());
+    ui.label(chrome_status_role().rich(summary));
     ui.label(
         RichText::new("dual-tree preview: per-row actions stub hain, koi file nahi badalti")
             .small()
@@ -2362,7 +2426,7 @@ pub fn paint_picture_compare(
     heatmap: Option<&TextureHandle>,
     split: &mut f32,
 ) {
-    ui.label(RichText::new(picture_status_line(model)).monospace().weak());
+    ui.label(chrome_status_role().rich(picture_status_line(model)));
     ui.add_space(TIGHT_GAP);
     ui.horizontal(|ui| {
         ui.label(RichText::new("Layout:").small().weak());
@@ -2586,7 +2650,7 @@ pub fn sync_row_color(action: autocompare_compare::SyncAction, dark: bool) -> eg
 /// them, Apply stays a CLI operation.
 pub fn paint_sync_checklist(ui: &mut Ui, list: &mut SyncChecklist) {
     let dark = ui.visuals().dark_mode;
-    ui.label(RichText::new(list.summary()).monospace().weak());
+    ui.label(chrome_status_role().rich(list.summary()));
     if list.truncated {
         paint_note(
             ui,
@@ -2654,7 +2718,7 @@ pub fn folder_merge_row_color(
 /// paths and the counts line. Dry-run only.
 pub fn paint_folder_merge_checklist(ui: &mut Ui, list: &mut FolderMergeChecklist) {
     let dark = ui.visuals().dark_mode;
-    ui.label(RichText::new(list.summary()).monospace().weak());
+    ui.label(chrome_status_role().rich(list.summary()));
     ui.add_space(TIGHT_GAP);
     if list.rows.is_empty() {
         ui.label(RichText::new("(nothing to do: the merge plan is empty)").weak());
@@ -2739,7 +2803,7 @@ pub fn audio_row_color(
 /// plus the verdict row, each with a checkbox, then the summary.
 pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
     let dark = ui.visuals().dark_mode;
-    ui.label(RichText::new(list.summary()).monospace().weak());
+    ui.label(chrome_status_role().rich(list.summary()));
     ui.add_space(TIGHT_GAP);
     if list.rows.is_empty() {
         ui.label(RichText::new("(no audio facts to show)").weak());
@@ -4268,5 +4332,54 @@ mod tests {
     #[test]
     fn merge_pane_count_is_three() {
         assert_eq!(merge_pane_count(), 3);
+    }
+
+    #[test]
+    fn header_bar_tokens_align_with_paging_bars() {
+        // Header bar reserves the paging-bar rhythm, not a fresh value.
+        assert_eq!(header_bar_height(), HEADER_H);
+        assert_eq!(header_bar_height(), CHROME_HEADER_BAR_H);
+        assert_eq!(CHROME_HEADER_BAR_H, 28.0);
+        // Header lead shares the pane-content origin with table rules.
+        assert_eq!(header_content_lead(), CONTENT_LEAD);
+        assert_eq!(header_content_lead(), CHROME_HEADER_LEAD);
+        assert_eq!(header_content_lead(), "  ");
+    }
+
+    #[test]
+    fn header_helpers_use_shared_tokens() {
+        // Note line is lead + text, the indented_content shape.
+        assert_eq!(header_note_line("x"), "  x".to_string());
+        assert_eq!(header_note_line("x"), indented_content("x"));
+        assert_eq!(header_note_line(""), indented_content(""));
+        // Chrome roles lock the documented ladder.
+        assert_eq!(chrome_tab_role(), TypoRole::Body);
+        assert_eq!(chrome_section_role(), TypoRole::Heading);
+        assert_eq!(chrome_status_role(), TypoRole::Small);
+        assert_eq!(chrome_tab_role().size(), 13.0);
+        assert_eq!(chrome_section_role().size(), 18.0);
+        assert_eq!(chrome_status_role().size(), 11.0);
+        // Section > tab > status ordering holds.
+        assert!(chrome_section_role().size() > chrome_tab_role().size());
+        assert!(chrome_tab_role().size() > chrome_status_role().size());
+        // Status stays tabular (counts) while leaving mono behind.
+        assert!(chrome_status_role().is_tabular());
+        assert!(!chrome_status_role().is_mono());
+        assert!(chrome_tab_role().is_chrome());
+    }
+
+    #[test]
+    fn text_row_height_intent_is_measured_mono() {
+        // Paint measures the mono row; multipliers stay headless intent.
+        assert_eq!(text_row_height_intent(), TYPO_LINE_HEIGHT_SOURCE);
+        assert_eq!(text_row_height_intent(), "ui.text_style_height(Monospace)");
+        assert_eq!(
+            chrome_status_role().line_height_source(),
+            text_row_height_intent()
+        );
+        assert_eq!(
+            chrome_tab_role().line_height_source(),
+            text_row_height_intent()
+        );
     }
 }

@@ -108,6 +108,32 @@ pub const TYPO_LINE_HEIGHT_MONO: f32 = 1.30;
 pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 
 // ----------------------------------------------------------------------------
+// Chrome hierarchy (headless): tab bar, section headers, home cards and
+// status lines share one documented scale. No new point sizes — every
+// alias reuses an existing TYPO_* token so the geometry/typography waves
+// never drift; only the names plus the role mapping are new. Colors
+// untouched (weak tone stays, family mono->proportional on status only).
+// Ladder (proportional chrome steps down, mono content sits between):
+// Heading 18 (app title, section headers) > HomeTitle 14 (card titles)
+// > Body 13 (tab bar, card buttons) > Mono 12 (diff/table content only)
+// > Small 11 (status lines, counts, hints).
+// ----------------------------------------------------------------------------
+
+/// Tab bar size in px: Body scale, default weight, proportional family.
+pub const CHROME_TAB_SIZE: f32 = TYPO_BODY_SIZE;
+/// Section header size in px: Heading scale, strong weight, proportional.
+pub const CHROME_SECTION_SIZE: f32 = TYPO_HEADING_SIZE;
+/// Status line size in px: Small scale, weak weight, proportional family.
+pub const CHROME_STATUS_SIZE: f32 = TYPO_SMALL_SIZE;
+/// Header bar height in px: matches the `views::HEADER_H` paging bars so
+/// the app header reserves the same vertical rhythm as the page bars
+/// below instead of floating offset above the pane split.
+pub const CHROME_HEADER_BAR_H: f32 = 28.0;
+/// Header left lead: same two-space origin as `views::CONTENT_LEAD` so the
+/// header note starts on the same baseline as table rules/placeholders.
+pub const CHROME_HEADER_LEAD: &str = "  ";
+
+// ----------------------------------------------------------------------------
 // Font zoom model (headless): step table over TypoRole sizes.
 // ----------------------------------------------------------------------------
 
@@ -283,6 +309,34 @@ impl TypoRole {
     /// Whether this role uses the monospace family.
     pub const fn is_mono(self) -> bool {
         matches!(self, Self::Mono)
+    }
+
+    /// Whether this role is chrome (proportional UI) rather than content.
+    /// Mono is the only content role (diff/table/folder rows); everything
+    /// else paints chrome (titles, tabs, buttons, hints, counts, status).
+    pub const fn is_chrome(self) -> bool {
+        !self.is_mono()
+    }
+
+    /// Tab bar role: Body (13 default proportional). The tab
+    /// `selectable_value` labels paint at Body scale; this alias locks
+    /// the contract so tabs never drift to mono.
+    pub const fn chrome_tab() -> Self {
+        Self::Body
+    }
+
+    /// Section header role: Heading (18 strong proportional). App title
+    /// plus section headers share the top chrome step; card titles step
+    /// down to HomeTitle so app > section > card reads top-down.
+    pub const fn chrome_section() -> Self {
+        Self::Heading
+    }
+
+    /// Status line role: Small (11 weak proportional, tabular intent).
+    /// Counts stay tabular (`is_tabular`); family leaves mono so status
+    /// stops reading as code. Weak tone keeps the frozen dim, no hue move.
+    pub const fn chrome_status() -> Self {
+        Self::Small
     }
 
     /// Line-height source: always the measured monospace row height.
@@ -1039,5 +1093,61 @@ mod tests {
                 zoomed_size(TypoRole::Body, level)
             );
         }
+    }
+
+    #[test]
+    fn chrome_sizes_match_typo_scale() {
+        // Aliases reuse existing tokens: no new point sizes this wave.
+        assert_eq!(CHROME_TAB_SIZE, TYPO_BODY_SIZE);
+        assert_eq!(CHROME_TAB_SIZE, 13.0);
+        assert_eq!(CHROME_SECTION_SIZE, TYPO_HEADING_SIZE);
+        assert_eq!(CHROME_SECTION_SIZE, 18.0);
+        assert_eq!(CHROME_STATUS_SIZE, TYPO_SMALL_SIZE);
+        assert_eq!(CHROME_STATUS_SIZE, 11.0);
+        // Header bar reserves the paging-bar rhythm; lead shares the
+        // pane-content origin (checked against views tokens downstream).
+        assert_eq!(CHROME_HEADER_BAR_H, 28.0);
+        assert_eq!(CHROME_HEADER_LEAD, "  ");
+        const {
+            assert!(CHROME_STATUS_SIZE < TYPO_MONO_SIZE);
+            assert!(TYPO_MONO_SIZE < CHROME_TAB_SIZE);
+            assert!(CHROME_TAB_SIZE < TYPO_HOME_TITLE_SIZE);
+            assert!(TYPO_HOME_TITLE_SIZE < CHROME_SECTION_SIZE);
+        }
+    }
+
+    #[test]
+    fn chrome_roles_carry_hierarchy() {
+        // Chrome mapping: tab Body, section Heading, status Small.
+        assert_eq!(TypoRole::chrome_tab(), TypoRole::Body);
+        assert_eq!(TypoRole::chrome_section(), TypoRole::Heading);
+        assert_eq!(TypoRole::chrome_status(), TypoRole::Small);
+        assert_eq!(TypoRole::chrome_tab().size(), CHROME_TAB_SIZE);
+        assert_eq!(TypoRole::chrome_section().size(), CHROME_SECTION_SIZE);
+        assert_eq!(TypoRole::chrome_status().size(), CHROME_STATUS_SIZE);
+        // Weights: section strong, tab default, status weak.
+        assert_eq!(TypoRole::chrome_section().weight(), "strong");
+        assert_eq!(TypoRole::chrome_tab().weight(), "default");
+        assert_eq!(TypoRole::chrome_status().weight(), "weak");
+        // Chrome flag: every role except Mono is chrome.
+        assert!(TypoRole::Heading.is_chrome());
+        assert!(TypoRole::Body.is_chrome());
+        assert!(TypoRole::Small.is_chrome());
+        assert!(TypoRole::HomeTitle.is_chrome());
+        assert!(TypoRole::HomeDesc.is_chrome());
+        assert!(TypoRole::HomeButton.is_chrome());
+        assert!(!TypoRole::Mono.is_chrome());
+        // Full ladder: Small < Mono < Body < HomeTitle < Heading.
+        assert!(TypoRole::Small.size() < TypoRole::Mono.size());
+        assert!(TypoRole::Mono.size() < TypoRole::Body.size());
+        assert!(TypoRole::Body.size() < TypoRole::HomeTitle.size());
+        assert!(TypoRole::HomeTitle.size() < TypoRole::Heading.size());
+        // Line-height px follows size * multiplier per role family.
+        assert!(
+            TypoRole::chrome_section().line_height_px() > TypoRole::chrome_tab().line_height_px()
+        );
+        assert!(
+            TypoRole::chrome_tab().line_height_px() > TypoRole::chrome_status().line_height_px()
+        );
     }
 }
