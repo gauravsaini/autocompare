@@ -82,6 +82,11 @@ pub struct App {
     pub hex_model: Option<Vec<String>>,
     pub hex_view: views_hex::HexCompareView,
     pub merge_model: Option<MergeSummary>,
+    /// App-owned per-hunk staged merge picks (Gap #13 App half).
+    /// AI-MERGEPICK temp-store intent ka App truth: `decide_merge_hunk`
+    /// yahi persist karta hai, summary yahi se ginta hai. Naya compare /
+    /// swap / error par clear hota hai; file apply (I/O) agle wave ka hai.
+    pub merge_picks: Vec<viewmodel::MergeHunkPick>,
     pub table_model: Option<TableModel>,
     pub table_view: views_table::TableKeyView,
     pub table_tolerance_text: String,
@@ -181,6 +186,7 @@ impl Default for App {
                 views_hex::HEX_DEFAULT_MAX_HUNKS,
             ),
             merge_model: None,
+            merge_picks: Vec::new(),
             table_model: None,
             table_view: views_table::TableKeyView::new(),
             table_tolerance_text: String::new(),
@@ -464,6 +470,7 @@ impl App {
             Tab::Merge => {
                 std::mem::swap(&mut self.merge.left, &mut self.merge.right);
                 self.merge_model = None;
+                self.merge_picks.clear();
                 true
             }
             Tab::Table => {
@@ -1071,6 +1078,131 @@ impl App {
         side: views_table::TableMergeSide,
     ) -> Vec<String> {
         views_table::table_resolve_row(left_row, right_row, side)
+    }
+
+    /// Live merge conflict hunks behind the current model.
+    /// No model par khali vec taaki callers kabhi jhooth na bolen.
+    pub fn merge_hunks(&self) -> Vec<viewmodel::MergeHunk> {
+        match self.merge_model.as_ref() {
+            Some(model) => viewmodel::merge_conflict_hunks(&model.lines),
+            None => Vec::new(),
+        }
+    }
+
+    /// Staged pick for one hunk, last-staged wins.
+    /// Unknown index ya khali picks par `None`.
+    pub fn merge_pick_for_hunk(&self, conflict_index: usize) -> Option<viewmodel::TakeChoice> {
+        self.merge_picks
+            .iter()
+            .rev()
+            .find(|pick| pick.conflict_index == conflict_index)
+            .map(|pick| pick.choice)
+    }
+
+    /// Stages one per-hunk take-side decision in App state (last-wins
+    /// upsert). Unknown hunk index chup-chaap ignore hota hai (false),
+    /// kabhi jhootha decided count nahi banata. File apply (I/O) agle
+    /// wave ka hai — ye sirf state wiring hai.
+    pub fn decide_merge_hunk(
+        &mut self,
+        conflict_index: usize,
+        side: viewmodel::TakeChoice,
+    ) -> bool {
+        let total = self.merge_hunks().len();
+        if conflict_index >= total {
+            return false;
+        }
+        for pick in self.merge_picks.iter_mut() {
+            if pick.conflict_index == conflict_index {
+                pick.choice = side;
+                return true;
+            }
+        }
+        self.merge_picks.push(viewmodel::MergeHunkPick {
+            conflict_index,
+            choice: side,
+        });
+        true
+    }
+
+    /// Clears staged merge picks (fresh compare / swap / failure par).
+    pub fn clear_merge_picks(&mut self) {
+        self.merge_picks.clear();
+    }
+
+    /// Paint bridge se staged picks adopt karta hai: dedup (aakhri staged
+    /// jeetta hai, [`viewmodel::apply_merge_picks`] rule) + unknown-index
+    /// prune (stale kabhi decided na gine). Silent hai (har frame chalta
+    /// hai, status nahi chherta). Headless-tested.
+    fn adopt_merge_picks(&mut self, lines: &[String], staged: Vec<viewmodel::MergeHunkPick>) {
+        let total = viewmodel::merge_conflict_hunks(lines).len();
+        let mut kept: Vec<viewmodel::MergeHunkPick> = Vec::new();
+        for pick in &staged {
+            if pick.conflict_index >= total {
+                continue;
+            }
+            let mut next: Vec<viewmodel::MergeHunkPick> = Vec::new();
+            for kept_pick in &kept {
+                if kept_pick.conflict_index != pick.conflict_index {
+                    next.push(*kept_pick);
+                }
+            }
+            next.push(*pick);
+            kept = next;
+        }
+        self.merge_picks = kept;
+    }
+
+    /// Paint ke baad App picks ka hisab: lines badli hon (global Take ne
+    /// conflict order badla) to staged indices purane hunks naam lenge,
+    /// isliye clear + status; nahi to staged adopt. Headless-tested.
+    fn reconcile_merge_picks(
+        &mut self,
+        before: &[String],
+        after: &[String],
+        staged: Vec<viewmodel::MergeHunkPick>,
+    ) {
+        if before != after {
+            self.clear_merge_picks();
+            self.status = String::from("merge changed: staged picks cleared");
+        } else {
+            self.adopt_merge_picks(after, staged);
+        }
+    }
+
+    /// Honest per-hunk progress over live lines + App-staged picks.
+    /// No model par zero summary taaki ginti kabhi jhooth na bole.
+    pub fn merge_pick_summary(&self) -> viewmodel::MergePickSummary {
+        match self.merge_model.as_ref() {
+            Some(model) => viewmodel::merge_pick_summary(&model.lines, &self.merge_picks),
+            None => {
+                let empty: Vec<String> = Vec::new();
+                viewmodel::merge_pick_summary(&empty, &self.merge_picks)
+            }
+        }
+    }
+
+    /// Merge counts line: real picks se gini decided/pending.
+    /// No model par purani `no results yet` wording rehti hai.
+    pub fn merge_summary_line(&self) -> String {
+        match self.merge_model.as_ref() {
+            Some(model) => {
+                let summary = self.merge_pick_summary();
+                format!(
+                    "merge: {} line(s), {}/{} decided, {} pending{}",
+                    model.lines.len(),
+                    summary.resolved,
+                    summary.total,
+                    summary.pending,
+                    if summary.conflicted {
+                        ", conflicted"
+                    } else {
+                        ""
+                    }
+                )
+            }
+            None => String::from("merge: no results yet"),
+        }
     }
 
     /// Honest over-cap view when an input exceeds the aligned hex cap.
@@ -1887,14 +2019,7 @@ impl App {
                     }
                 }
             }
-            Tab::Merge => match self.merge_model.as_ref() {
-                Some(m) => format!(
-                    "merge: {} line(s){}",
-                    m.lines.len(),
-                    if m.conflicted { ", conflicted" } else { "" }
-                ),
-                None => String::from("merge: no results yet"),
-            },
+            Tab::Merge => self.merge_summary_line(),
             Tab::Table => match self.table_model.as_ref() {
                 Some(m) => format!(
                     "table: {} row(s), keyed {} | {}",
@@ -2107,6 +2232,7 @@ impl App {
         let (base, left, right) = self.triple_paths();
         if !self.require_triple(&base, &left, &right, "file") {
             self.merge_model = None;
+            self.merge_picks.clear();
             return;
         }
         let (tx, rx) = channel();
@@ -3278,6 +3404,7 @@ impl eframe::App for App {
                             let n = model.lines.len();
                             let conflicted = model.conflicted;
                             self.merge_model = Some(model);
+                            self.merge_picks.clear();
                             self.error = None;
                             self.status = format!(
                                 "merge done: {n} line(s){}",
@@ -3286,6 +3413,7 @@ impl eframe::App for App {
                         }
                         Err(err) => {
                             self.merge_model = None;
+                            self.merge_picks.clear();
                             self.status = format!("merge failed: {err}");
                             self.error = Some(err);
                         }
@@ -3966,8 +4094,33 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Merge => {
-                    if let Some(model) = self.merge_model.as_mut() {
-                        views::paint_merge(ui, model);
+                    if self.merge_model.is_some() {
+                        let before: Vec<String> = match self.merge_model.as_ref() {
+                            Some(model) => model.lines.clone(),
+                            None => Vec::new(),
+                        };
+                        // Seed: App decisions paint temp store me, taaki cards
+                        // App truth dikhayen (KEVL paint signature unchanged).
+                        let seed = self.merge_picks.clone();
+                        ui.data_mut(|data| {
+                            data.insert_temp(views::merge_pick_id(&before), seed);
+                        });
+                        if let Some(model) = self.merge_model.as_mut() {
+                            views::paint_merge(ui, model);
+                        }
+                        let after: Vec<String> = match self.merge_model.as_ref() {
+                            Some(model) => model.lines.clone(),
+                            None => Vec::new(),
+                        };
+                        // Adopt: card clicks (temp) App state me wapas.
+                        let staged: Vec<viewmodel::MergeHunkPick> = ui
+                            .data_mut(|data| {
+                                data.get_temp::<Vec<viewmodel::MergeHunkPick>>(
+                                    views::merge_pick_id(&before),
+                                )
+                            })
+                            .unwrap_or_default();
+                        self.reconcile_merge_picks(&before, &after, staged);
                     } else {
                         ui.label(
                             RichText::new("no merge results yet: type base + both sides and Compare.")
@@ -4422,6 +4575,205 @@ mod tests {
         assert_eq!(app.current_tab(), Tab::Home);
         assert!(!app.swap_sides());
         assert!(app.status.contains("swap needs"));
+    }
+
+    fn merge_conflicted_fixture() -> MergeSummary {
+        viewmodel::build_merge_summary(&[
+            "base line".to_string(),
+            "<<<<<<< left".to_string(),
+            "left change".to_string(),
+            "||||||| base".to_string(),
+            "base change".to_string(),
+            "=======".to_string(),
+            "right change".to_string(),
+            ">>>>>>> right".to_string(),
+            "tail".to_string(),
+        ])
+    }
+
+    #[test]
+    fn merge_decide_persists_last_wins() {
+        let mut app = App {
+            merge_model: Some(merge_conflicted_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        assert_eq!(
+            app.merge_pick_for_hunk(0),
+            Some(viewmodel::TakeChoice::Left)
+        );
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Right));
+        assert_eq!(
+            app.merge_pick_for_hunk(0),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        assert_eq!(app.merge_picks.len(), 1);
+    }
+
+    #[test]
+    fn merge_decide_unknown_hunk_ignored() {
+        let mut app = App::default();
+        assert!(!app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        assert!(app.merge_picks.is_empty());
+        assert_eq!(app.merge_pick_for_hunk(0), None);
+        app.merge_model = Some(merge_conflicted_fixture());
+        assert!(!app.decide_merge_hunk(7, viewmodel::TakeChoice::Right));
+        assert!(app.merge_picks.is_empty());
+        assert_eq!(app.merge_pick_for_hunk(7), None);
+    }
+
+    #[test]
+    fn merge_pick_for_hunk_returns_last_staged() {
+        let mut app = App {
+            merge_model: Some(merge_conflicted_fixture()),
+            ..Default::default()
+        };
+        assert_eq!(app.merge_pick_for_hunk(0), None);
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Base));
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Both));
+        assert_eq!(
+            app.merge_pick_for_hunk(0),
+            Some(viewmodel::TakeChoice::Both)
+        );
+    }
+
+    #[test]
+    fn merge_pick_summary_reflects_app_picks() {
+        let mut app = App::default();
+        let empty = app.merge_pick_summary();
+        assert_eq!(empty.total, 0);
+        assert_eq!(empty.resolved, 0);
+        assert_eq!(empty.pending, 0);
+        app.merge_model = Some(merge_conflicted_fixture());
+        let pending = app.merge_pick_summary();
+        assert_eq!(pending.total, 1);
+        assert_eq!(pending.resolved, 0);
+        assert_eq!(pending.pending, 1);
+        assert!(pending.conflicted);
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        let decided = app.merge_pick_summary();
+        assert_eq!(decided.total, 1);
+        assert_eq!(decided.resolved, 1);
+        assert_eq!(decided.pending, 0);
+        assert!(!decided.conflicted);
+    }
+
+    #[test]
+    fn merge_summary_line_counts_real_picks() {
+        let mut app = App::default();
+        assert_eq!(app.merge_summary_line(), "merge: no results yet");
+        app.merge_model = Some(merge_conflicted_fixture());
+        let before = app.merge_summary_line();
+        assert!(before.contains("0/1 decided"));
+        assert!(before.contains("1 pending"));
+        assert!(before.contains("conflicted"));
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Right));
+        let after = app.merge_summary_line();
+        assert!(after.contains("1/1 decided"));
+        assert!(after.contains("0 pending"));
+        assert!(!after.contains("conflicted"));
+    }
+
+    #[test]
+    fn merge_swap_and_recompare_clear_picks() {
+        let mut app = App::default();
+        app.set_tab(Tab::Merge);
+        app.set_merge_paths("b.txt", "l.txt", "r.txt");
+        app.merge_model = Some(merge_conflicted_fixture());
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        assert_eq!(app.merge_picks.len(), 1);
+        assert!(app.swap_sides());
+        assert!(app.merge_picks.is_empty());
+        assert!(app.merge_model.is_none());
+        app.merge_model = Some(merge_conflicted_fixture());
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Right));
+        app.clear_merge_picks();
+        assert!(app.merge_picks.is_empty());
+        assert_eq!(app.merge_pick_summary().resolved, 0);
+    }
+
+    /// Paint bridge fixture: do well-formed conflict hunks.
+    fn merge_bridge_fixture_lines() -> Vec<String> {
+        vec![
+            "clean header".to_string(),
+            "<<<<<<< left".to_string(),
+            "left one".to_string(),
+            "=======".to_string(),
+            "right one".to_string(),
+            ">>>>>>> right".to_string(),
+            "clean middle".to_string(),
+            "<<<<<<< left".to_string(),
+            "left two".to_string(),
+            "=======".to_string(),
+            "right two".to_string(),
+            ">>>>>>> right".to_string(),
+            "clean footer".to_string(),
+        ]
+    }
+
+    #[test]
+    fn merge_adopt_dedups_and_prunes_unknown() {
+        let mut app = App::default();
+        let lines = merge_bridge_fixture_lines();
+        app.merge_model = Some(viewmodel::build_merge_summary(&lines));
+        let staged = vec![
+            viewmodel::MergeHunkPick {
+                conflict_index: 0,
+                choice: viewmodel::TakeChoice::Left,
+            },
+            viewmodel::MergeHunkPick {
+                conflict_index: 0,
+                choice: viewmodel::TakeChoice::Right,
+            },
+            viewmodel::MergeHunkPick {
+                conflict_index: 9,
+                choice: viewmodel::TakeChoice::Left,
+            },
+            viewmodel::MergeHunkPick {
+                conflict_index: 1,
+                choice: viewmodel::TakeChoice::Base,
+            },
+        ];
+        app.adopt_merge_picks(&lines, staged);
+        assert_eq!(app.merge_picks.len(), 2);
+        assert_eq!(
+            app.merge_pick_for_hunk(0),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        assert_eq!(
+            app.merge_pick_for_hunk(1),
+            Some(viewmodel::TakeChoice::Base)
+        );
+        assert_eq!(app.merge_pick_summary().resolved, 2);
+    }
+
+    #[test]
+    fn merge_reconcile_clears_on_lines_change() {
+        let mut app = App::default();
+        let lines = merge_bridge_fixture_lines();
+        app.merge_model = Some(viewmodel::build_merge_summary(&lines));
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        let staged = app.merge_picks.clone();
+        let mut changed = lines.clone();
+        changed.push("extra".to_string());
+        app.reconcile_merge_picks(&lines, &changed, staged);
+        assert!(app.merge_picks.is_empty());
+        assert!(app.status.contains("staged picks cleared"));
+    }
+
+    #[test]
+    fn merge_reconcile_keeps_picks_without_change() {
+        let mut app = App::default();
+        let lines = merge_bridge_fixture_lines();
+        app.merge_model = Some(viewmodel::build_merge_summary(&lines));
+        assert!(app.decide_merge_hunk(1, viewmodel::TakeChoice::Both));
+        let staged = app.merge_picks.clone();
+        app.reconcile_merge_picks(&lines, &lines, staged);
+        assert_eq!(app.merge_picks.len(), 1);
+        assert_eq!(
+            app.merge_pick_for_hunk(1),
+            Some(viewmodel::TakeChoice::Both)
+        );
     }
 
     #[test]
