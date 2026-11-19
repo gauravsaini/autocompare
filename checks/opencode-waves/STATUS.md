@@ -933,3 +933,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - MINI `0e85be8` text-gutter minimap click-to-jump with synced marker (Gap #5). Slow start par 2 nudges ke baad GATES-first discipline se land kiya; OWNS/KEVL checks clean.
 - Verify combined: 296 green, clippy 0, fmt clean, banned 0.
 - Pushed. Next: Wave AC (intra-spans, folder-cols paint, find-paint wiring, header/chrome).
+
+## 2026-11-20 — Wave AC plan (2 parallel: intra-spans + dual-tree filters)
+- AC-SPAN `sess-span-ac`: OWNS views.rs+checks/gui-span-ac (Gap #11 per-span bg/weight paint).
+- AC-FILTER `sess-filter-ac`: OWNS app.rs+tree.rs+checks/gui-filter-ac (Gap #19 dual display filters).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
