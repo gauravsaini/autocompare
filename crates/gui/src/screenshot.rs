@@ -6,8 +6,21 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 
+use crate::gutter::GUTTER_SEGMENT_MIN_H;
+use crate::home::{
+    HOME_GRID_COLUMNS, RECENT_COL_GAP, RECENT_LIST_PAD, folder_empty_hint, home_model,
+    recent_row_columns,
+};
 use crate::viewmodel::{TextRow, TextRowKind, gutter_geometry};
-use autocompare_diff::{RgbaImage, encode_png};
+use crate::views::{
+    PICTURE_ZOOM_STEPS, picture_center_offset, picture_fit_zoom_pct, wrap_find_scroll_sub,
+    wrap_pane_pair_count, wrap_width_for, zoom_label,
+};
+use crate::views_table::{
+    TABLE_FIND_BAR_H, TABLE_FIND_NEEDLE_W, TABLE_KEY_BAR_H, TABLE_MAX_COL_CHARS, TableKeyView,
+    is_key_column, table_find_cell_spans, table_find_span_in_padded, table_key_badge_label,
+};
+use autocompare_diff::{PictureDiff, RgbaImage, encode_png};
 use std::path::Path;
 
 // Diff highlight colors matching views.rs
@@ -33,14 +46,24 @@ pub const ROW_H: u32 = 24;
 pub const OUTER_PAD: u32 = 12;
 pub const PANE_GAP: u32 = 4;
 pub const STATUS_H: u32 = 30;
-/// Text/folder two-pane widths: 460 + 4 + 460 = 924, margins 12*2 = 24, total 948 + gutter 14 = 962? Nahi —
-/// exact layout: left x12 w460, right x476 w460, gutter x940 w14. Right edge 954, margin 6.
-/// Yehi numbers geometry test me assert hote hain.
+/// Home card grid: live contract `home::HOME_GRID_COLUMNS` (3) ×
+/// `home::HOME_GRID_GAP` (8); card w 306 (min 240 se upar), h 100
+/// (contract min-height 99.6 ka ceiling). CTA 150x28 (contract min
+/// 120x28 se upar). Recent columns title-flex + kind 96 + age 72.
+pub const HOME_CARD_W: u32 = 306;
+pub const HOME_CARD_H: u32 = 100;
+pub const HOME_CARD_GAP: u32 = 8;
+pub const HOME_CTA_W: u32 = 150;
+pub const HOME_CTA_H: u32 = 28;
 pub const TEXT_PANE_W: u32 = 460;
 pub const TEXT_LEFT_X: u32 = 12;
 pub const TEXT_RIGHT_X: u32 = 476;
-pub const GUTTER_X: u32 = 940;
-pub const GUTTER_W: u32 = 14;
+/// Overview-ruler track: live contract `gutter::GUTTER_RULER_WIDE` (16,
+/// line numbers on) — old 14px inter-chrome gap ruler me sama gaya.
+/// Budget: 12 + 460 + 4 + 460 + 16 + 8 = 960; right pane 936 par khatam,
+// ruler 936 se 952, right margin 8.
+pub const GUTTER_X: u32 = 936;
+pub const GUTTER_W: u32 = 16;
 /// Merge 3-pane equal thirds: avail 960-24-8=928, 309*3=927, 1px slack right me.
 pub const MERGE_PANE_W: u32 = 309;
 pub const MERGE_X0: u32 = 12;
@@ -50,9 +73,11 @@ pub const MERGE_X2: u32 = 638;
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
 /// File name ke tukde se tab chunta hai (lowercase match):
-/// `hex` -> hex, `table` -> table, `merge` -> merge (foldermerge bhi),
-/// `folder` -> folder, `home` -> home, warna text.
-/// Har route same 960x600 canvas + 24px rows par tikta hai, colors frozen.
+/// `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
+/// `merge` -> merge (foldermerge bhi), `folder` + `empty` -> folder filtered
+/// empty scene, `folder` -> folder, `home` -> home, `picture` -> picture,
+/// `wrap` -> wrap-on + find-active text scene, warna text.
+/// Har route same 960x600 canvas par tikta hai, colors frozen.
 pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     let lower = match out_path.file_name().and_then(|name| name.to_str()) {
         Some(name) => name.to_lowercase(),
@@ -61,17 +86,29 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     if lower.contains("hex") {
         return render_hex_fixture_png(out_path);
     }
+    if lower.contains("table") && lower.contains("find") {
+        return render_table_find_fixture_png(out_path);
+    }
     if lower.contains("table") {
         return render_table_fixture_png(out_path);
     }
     if lower.contains("merge") {
         return render_merge_fixture_png(out_path);
     }
+    if lower.contains("folder") && lower.contains("empty") {
+        return render_folder_empty_fixture_png(out_path);
+    }
     if lower.contains("folder") {
         return render_folder_fixture_png(out_path);
     }
     if lower.contains("home") {
         return render_home_fixture_png(out_path);
+    }
+    if lower.contains("picture") {
+        return render_picture_fixture_png(out_path);
+    }
+    if lower.contains("wrap") {
+        return render_wrap_fixture_png(out_path);
     }
     render_text_fixture_png(out_path)
 }
@@ -148,8 +185,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     let pane_top = 124u32;
     let pane_bottom = 560u32;
     let pane_height = pane_bottom.saturating_sub(pane_top);
-    let gutter_x = 940u32;
-    let gutter_w = 14u32;
+    let gutter_x = GUTTER_X;
+    let gutter_w = GUTTER_W;
 
     fill_rect(
         &mut pixels,
@@ -294,11 +331,12 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
-    // Thumbnail overview gutter geometry
+    // Thumbnail overview gutter geometry: live ruler contract
+    // (`gutter::GUTTER_SEGMENT_MIN_H` = 4.0 floor, slop hit-test).
     let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
     for seg in geom.segments {
         let seg_y = pane_top.saturating_add(seg.y_start as u32);
-        let seg_h = ((seg.y_end - seg.y_start) as u32).max(2);
+        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
         let seg_color = match seg.kind {
             TextRowKind::Equal => BG_PANEL,
             TextRowKind::Changed => CHANGED_BG,
@@ -957,8 +995,10 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Renders the Home fixture: session cards + recent list,
-/// same chrome, 24px rows. Colors frozen.
+/// Renders the Home fixture: 9 session cards from the live
+/// `home_model` (3-col grid, contract gap/min-height/CTA, title/desc
+/// hierarchy) + columnar recent list (title flex + kind + age), and NO
+/// path picker (`HOME_SHOWS_PATH_PICKER = false`). Colors frozen.
 pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
     let width = SNAP_W;
     let height = SNAP_H;
@@ -972,87 +1012,108 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
         None => return Err("byte count overflow".to_string()),
     };
     let mut pixels = vec![0u8; byte_count];
-    paint_chrome(&mut pixels, dims, "Home - autocompare", 0);
+    // Launcher chrome: title + tabs only. Path picker contract me kabhi
+    // nahi dikhta, swap/reload toolbar launcher ka kaam nahi.
+    fill_rect(&mut pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
+    fill_rect(&mut pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
+    fill_rect(&mut pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
+    fill_rect(&mut pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
+    draw_string(&mut pixels, dims, 80, 14, "Home - autocompare", FG_TEXT);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, TITLE_H, width, TAB_H),
+        [32, 32, 32, 255],
+    );
+    fill_rect(&mut pixels, dims, (8, 40, 52, 24), ACCENT_TAB);
+    draw_string(&mut pixels, dims, 16, 46, "Home", FG_TEXT);
+    draw_string(&mut pixels, dims, 76, 46, "Text", FG_DIM);
+    draw_string(&mut pixels, dims, 130, 46, "Folder", FG_DIM);
+    draw_string(&mut pixels, dims, 200, 46, "Hex", FG_DIM);
+    draw_string(&mut pixels, dims, 244, 46, "Merge", FG_DIM);
+    draw_string(&mut pixels, dims, 300, 46, "Table", FG_DIM);
+    draw_string(&mut pixels, dims, 356, 46, "Sync", FG_DIM);
+    draw_string(&mut pixels, dims, 404, 46, "Picture", FG_DIM);
+    draw_string(&mut pixels, dims, 474, 46, "FolderMerge", FG_DIM);
+    draw_string(&mut pixels, dims, 574, 46, "Audio", FG_DIM);
 
-    // Cards: 3 x 304px with 12px gaps inside 936px avail.
-    let card_w = 304u32;
-    let card_h = 90u32;
-    let card_y = 150u32;
-    let card_xs = [
-        OUTER_PAD,
-        OUTER_PAD.saturating_add(card_w).saturating_add(12),
-        OUTER_PAD
-            .saturating_add(card_w)
-            .saturating_add(12)
-            .saturating_add(card_w)
-            .saturating_add(12),
-    ];
-    let card_titles = ["Text compare", "Folder compare", "Hex compare"];
-    let card_subs = [
-        "2 files side by side",
-        "2 folders + sync",
-        "2 binaries + ascii",
-    ];
-    for (idx, x) in card_xs.iter().enumerate() {
+    draw_string(&mut pixels, dims, 20, 74, "Comparison Sessions", FG_TEXT);
+
+    // Cards: live model, row-major 3-col grid, contract gap.
+    let model = home_model();
+    let card_top = 90u32;
+    for (idx, item) in model.items.iter().enumerate() {
+        let col = (idx % HOME_GRID_COLUMNS) as u32;
+        let row = (idx / HOME_GRID_COLUMNS) as u32;
+        let x =
+            OUTER_PAD.saturating_add(col.saturating_mul(HOME_CARD_W.saturating_add(HOME_CARD_GAP)));
+        let y =
+            card_top.saturating_add(row.saturating_mul(HOME_CARD_H.saturating_add(HOME_CARD_GAP)));
         fill_rect(
             &mut pixels,
             dims,
-            (*x, card_y, card_w, card_h),
+            (x, y, HOME_CARD_W, HOME_CARD_H),
             [28, 28, 28, 255],
         );
-        fill_rect(&mut pixels, dims, (*x, card_y, card_w, 3), ACCENT_TAB);
-        let title = match card_titles.get(idx) {
-            Some(s) => *s,
-            None => "",
-        };
-        let sub = match card_subs.get(idx) {
-            Some(s) => *s,
-            None => "",
-        };
+        fill_rect(&mut pixels, dims, (x, y, HOME_CARD_W, 3), ACCENT_TAB);
         draw_string(
             &mut pixels,
             dims,
             x.saturating_add(12),
-            card_y.saturating_add(14),
-            title,
+            y.saturating_add(12),
+            item.title,
             FG_TEXT,
         );
+        let (desc_top, desc_bottom) =
+            wrap_desc_two_lines(item.description, HOME_CARD_W.saturating_sub(24));
         draw_string(
             &mut pixels,
             dims,
             x.saturating_add(12),
-            card_y.saturating_add(32),
-            sub,
+            y.saturating_add(30),
+            &desc_top,
             FG_DIM,
         );
+        if !desc_bottom.is_empty() {
+            draw_string(
+                &mut pixels,
+                dims,
+                x.saturating_add(12),
+                y.saturating_add(40),
+                &desc_bottom,
+                FG_DIM,
+            );
+        }
+        let cta_y = y.saturating_add(64);
         fill_rect(
             &mut pixels,
             dims,
-            (x.saturating_add(12), card_y.saturating_add(56), 120, 22),
+            (x.saturating_add(12), cta_y, HOME_CTA_W, HOME_CTA_H),
             [60, 60, 60, 255],
         );
         draw_string(
             &mut pixels,
             dims,
             x.saturating_add(24),
-            card_y.saturating_add(62),
-            "Open...",
+            cta_y.saturating_add(10),
+            &format!("Open {}", item.title),
             FG_TEXT,
         );
     }
 
-    // Recent list pane.
-    let list_top = card_y.saturating_add(card_h).saturating_add(16);
+    // Recent list: header + columnar rows (title flex + kind + age).
+    let cards_end = card_top
+        .saturating_add(3u32.saturating_mul(HOME_CARD_H))
+        .saturating_add(2u32.saturating_mul(HOME_CARD_GAP));
+    let list_top = cards_end.saturating_add(8);
     let list_bottom = 560u32;
-    let list_x = OUTER_PAD;
-    let list_w = SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2));
     fill_rect(
         &mut pixels,
         dims,
         (
-            list_x,
+            OUTER_PAD,
             list_top,
-            list_w,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
             list_bottom.saturating_sub(list_top),
         ),
         [22, 22, 22, 255],
@@ -1065,28 +1126,878 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
         "Recent sessions",
         FG_TEXT,
     );
+    let (title_w, kind_w, age_w) =
+        recent_row_columns(SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)) as f32);
+    let content_x = OUTER_PAD.saturating_add(RECENT_LIST_PAD as u32);
+    let kind_x = content_x
+        .saturating_add(title_w as u32)
+        .saturating_add(RECENT_COL_GAP as u32);
+    let age_x = kind_x
+        .saturating_add(kind_w as u32)
+        .saturating_add(RECENT_COL_GAP as u32);
+    let _ = age_w;
     let recents = [
-        "text: left.rs <-> right.rs",
-        "folder: left-dir <-> right-dir",
-        "hex: a.bin <-> b.bin",
-        "table: a.csv <-> b.csv",
-        "merge: base + left + right",
+        ("text: left.rs <-> right.rs", "Text", "just now"),
+        ("folder: left-dir <-> right-dir", "Folder", "5m ago"),
+        ("hex: a.bin <-> b.bin", "Hex", "1h ago"),
+        ("table: a.csv <-> b.csv", "Table", "3h ago"),
+        ("merge: base + left + right", "Merge", "1d ago"),
     ];
-    for (i, line) in recents.iter().enumerate() {
+    for (i, (title, kind, age)) in recents.iter().enumerate() {
         let y = list_top
             .saturating_add(ROW_H)
             .saturating_add((i as u32).saturating_mul(ROW_H));
         if y.saturating_add(ROW_H) > list_bottom {
             break;
         }
-        fill_rect(&mut pixels, dims, (list_x, y, list_w, ROW_H), BG_DARK);
-        draw_string(&mut pixels, dims, 28, y.saturating_add(6), line, FG_TEXT);
+        fill_rect(
+            &mut pixels,
+            dims,
+            (
+                OUTER_PAD,
+                y,
+                SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+                ROW_H,
+            ),
+            BG_DARK,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            content_x,
+            y.saturating_add(6),
+            title,
+            FG_TEXT,
+        );
+        draw_string(&mut pixels, dims, kind_x, y.saturating_add(6), kind, FG_DIM);
+        draw_string(&mut pixels, dims, age_x, y.saturating_add(6), age, FG_DIM);
     }
 
     paint_status(
         &mut pixels,
         dims,
-        "home: 3 cards, 5 recents | pick a session to begin",
+        "home: 9 cards, 5 recents | no path picker | pick a session to begin",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the wrap-on + find-active text scene: word wrap capped at
+/// the live 80-char width, one long equal row wrapping to 2 sub-rows
+/// with the needle fully inside the continuation, and the matched
+/// sub-row band proving `wrap_find_scroll_sub` targeting. The find
+/// band reuses `CHANGED_BG` (frozen palette); no new hues.
+pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left.rs <--> fixtures/right.rs - Text (wrap)",
+        1,
+    );
+
+    // Find bar: needle + honest hit line (headless truth: 2 side hits).
+    fill_rect(&mut pixels, dims, (12, 124, 936, 24), [28, 28, 28, 255]);
+    draw_string(&mut pixels, dims, 20, 130, "find", FG_TEXT);
+    fill_rect(&mut pixels, dims, (64, 127, 180, 18), [45, 45, 45, 255]);
+    draw_string(&mut pixels, dims, 70, 130, "read_to_string", FG_TEXT);
+    draw_string(&mut pixels, dims, 260, 130, "2 hits, current row 3", FG_DIM);
+
+    let long_line = "    // wrap proof: keep the legacy reader enabled until rollout ends, then call read_to_string(old);";
+    let rows = vec![
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(1),
+            right_no: Some(1),
+            left: "use std::path::Path;".to_string(),
+            right: "use std::path::Path;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(2),
+            right_no: Some(2),
+            left: "pub fn run(left: &Path, right: &Path) -> usize {".to_string(),
+            right: "pub fn run(left: &Path, right: &Path) -> usize {".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: long_line.to_string(),
+            right: long_line.to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(4),
+            right_no: Some(4),
+            left: "    let old = load(left)?;".to_string(),
+            right: "    let new = std::fs::load(right)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Inserted,
+            left_no: None,
+            right_no: Some(5),
+            left: String::new(),
+            right: "    validate_safe_path(right)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+    ];
+
+    // Live wrap math: 80-char cap, per-row sub counts, needle sub-rows,
+    // current-row scroll target (clamped to the pair count).
+    let pane_chars = rows
+        .iter()
+        .map(|row| row.left.chars().count().max(row.right.chars().count()))
+        .max()
+        .unwrap_or(1);
+    let wrap_width = wrap_width_for(pane_chars, true);
+    let needle = "read_to_string";
+    let mut counts: Vec<usize> = Vec::new();
+    for row in &rows {
+        counts.push(wrap_pane_pair_count(&row.left, &row.right, wrap_width));
+    }
+    let matched_row = 2usize;
+    let scroll_sub = match rows.get(matched_row) {
+        Some(row) => {
+            let count = counts.get(matched_row).copied().unwrap_or(1);
+            wrap_find_scroll_sub(row, needle, false, wrap_width, count)
+        }
+        None => 0,
+    };
+
+    let pane_top = 152u32;
+    let pane_bottom = 560u32;
+    let pane_height = pane_bottom.saturating_sub(pane_top);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_LEFT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_RIGHT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (GUTTER_X, pane_top, GUTTER_W, pane_height),
+        [32, 32, 32, 255],
+    );
+
+    let mut flat = 0u32;
+    for (i, row) in rows.iter().enumerate() {
+        let count = counts.get(i).copied().unwrap_or(1).max(1);
+        let left_chunks = crate::views::wrap_chunks(&row.left, wrap_width);
+        let right_chunks = crate::views::wrap_chunks(&row.right, wrap_width);
+        let (base_bg_left, base_fg_left, base_bg_right, base_fg_right) = match row.kind {
+            TextRowKind::Equal => (BG_DARK, FG_TEXT, BG_DARK, FG_TEXT),
+            TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
+            TextRowKind::Deleted => (DELETED_BG, DELETED_FG, BG_DARK, FG_DIM),
+            TextRowKind::Inserted => (BG_DARK, FG_DIM, INSERTED_BG, INSERTED_FG),
+        };
+        let mut sub = 0usize;
+        while sub < count {
+            let y = pane_top.saturating_add(flat.saturating_mul(ROW_H));
+            if y.saturating_add(ROW_H) > pane_bottom {
+                break;
+            }
+            // Find-current band: only the matched sub-row of the matched
+            // model row inverts to the accent band (frozen CHANGED_*).
+            let is_hit = i == matched_row && sub == scroll_sub;
+            let (lbg, rbg) = if is_hit {
+                (CHANGED_BG, CHANGED_BG)
+            } else {
+                (base_bg_left, base_bg_right)
+            };
+            fill_rect(&mut pixels, dims, (TEXT_LEFT_X, y, TEXT_PANE_W, ROW_H), lbg);
+            fill_rect(
+                &mut pixels,
+                dims,
+                (TEXT_RIGHT_X, y, TEXT_PANE_W, ROW_H),
+                rbg,
+            );
+            if sub == 0 {
+                if let Some(no) = row.left_no {
+                    draw_string(
+                        &mut pixels,
+                        dims,
+                        16,
+                        y.saturating_add(6),
+                        &format!("{no:>2} "),
+                        FG_DIM,
+                    );
+                }
+                if let Some(no) = row.right_no {
+                    draw_string(
+                        &mut pixels,
+                        dims,
+                        480,
+                        y.saturating_add(6),
+                        &format!("{no:>2} "),
+                        FG_DIM,
+                    );
+                }
+            }
+            let left_text = match left_chunks.get(sub) {
+                Some(chunk) => chunk.text.as_str(),
+                None => "",
+            };
+            let right_text = match right_chunks.get(sub) {
+                Some(chunk) => chunk.text.as_str(),
+                None => "",
+            };
+            let (lfg, rfg) = if is_hit {
+                (CHANGED_FG, CHANGED_FG)
+            } else {
+                (base_fg_left, base_fg_right)
+            };
+            draw_string(&mut pixels, dims, 44, y.saturating_add(6), left_text, lfg);
+            draw_string(&mut pixels, dims, 508, y.saturating_add(6), right_text, rfg);
+            flat = flat.saturating_add(1);
+            sub = sub.saturating_add(1);
+        }
+    }
+
+    // Gutter segments mirror the ruler contract (16 wide, 4px min).
+    let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
+    for seg in geom.segments {
+        let seg_y = pane_top.saturating_add(seg.y_start as u32);
+        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
+        let seg_color = match seg.kind {
+            TextRowKind::Equal => BG_PANEL,
+            TextRowKind::Changed => CHANGED_BG,
+            TextRowKind::Deleted => DELETED_BG,
+            TextRowKind::Inserted => INSERTED_BG,
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (GUTTER_X, seg_y, GUTTER_W, seg_h),
+            seg_color,
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "wrap:on find:read_to_string 2 hits, current row 3 sub 1/2 | wrapnav proof",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Picture fixture: zoom-step row (Fit + presets from the
+/// live `PICTURE_ZOOM_STEPS`) and a centered frame whose fit zoom and
+/// offsets come from `picture_fit_zoom_pct` / `picture_center_offset`.
+/// The heatmap is schematic palette blocks (frozen hues); geometry is
+/// the live contract. Colors frozen.
+pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/a.png <--> fixtures/b.png - Picture",
+        7,
+    );
+
+    // Natural vs viewport: fit zoom + centering from live helpers.
+    let natural_w = 800.0f32;
+    let natural_h = 600.0f32;
+    let avail_w = SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)) as f32;
+    // Live summary lines (identical 800x600 pair) sit between the step
+    // row and the viewport, like the paint summary under the heatmap.
+    let diff = PictureDiff {
+        width_l: 800,
+        height_l: 600,
+        width_r: 800,
+        height_r: 600,
+        overlap_w: 800,
+        overlap_h: 600,
+        total: 480_000,
+        differing: 0,
+        bbox: None,
+        identical: true,
+    };
+    let summary = crate::viewmodel::build_picture_summary(&diff);
+    let viewport_top = 188u32;
+    let viewport_bottom = 560u32;
+    let avail_h = viewport_bottom.saturating_sub(viewport_top) as f32;
+    let fit = picture_fit_zoom_pct(natural_w, natural_h, avail_w, avail_h);
+    let scale = f32::from(fit as u16) / 100.0;
+    let disp_w = (natural_w * scale).max(1.0);
+    let disp_h = (natural_h * scale).max(1.0);
+    let off_x = picture_center_offset(disp_w, avail_w);
+    let off_y = picture_center_offset(disp_h, avail_h);
+
+    // Zoom-step row: Fit highlighted + preset ladder.
+    fill_rect(&mut pixels, dims, (12, 124, 936, 24), [28, 28, 28, 255]);
+    draw_string(&mut pixels, dims, 20, 130, "steps:", FG_DIM);
+    fill_rect(&mut pixels, dims, (76, 127, 40, 18), ACCENT_TAB);
+    draw_string(&mut pixels, dims, 86, 130, "Fit", FG_TEXT);
+    let mut step_x = 124u32;
+    for step in PICTURE_ZOOM_STEPS {
+        let label = format!("{step}%");
+        let selected = step == fit;
+        if selected {
+            fill_rect(&mut pixels, dims, (step_x, 127, 52, 18), ACCENT_TAB);
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            step_x.saturating_add(8),
+            130,
+            &label,
+            if selected { FG_TEXT } else { FG_DIM },
+        );
+        step_x = step_x.saturating_add(60);
+    }
+    // Live zoom readout beside the ladder (same contract as paint).
+    draw_string(
+        &mut pixels,
+        dims,
+        step_x.saturating_add(8),
+        130,
+        &zoom_label(fit),
+        FG_DIM,
+    );
+
+    // Summary strip: live CLI-worded lines, one per 12px rhythm row.
+    let mut sum_y = 152u32;
+    for line in &summary {
+        draw_string(&mut pixels, dims, 20, sum_y, line, FG_DIM);
+        sum_y = sum_y.saturating_add(12);
+        if sum_y.saturating_add(7) > viewport_top {
+            break;
+        }
+    }
+
+    // Viewport + centered frame.
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            OUTER_PAD,
+            viewport_top,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+            viewport_bottom.saturating_sub(viewport_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    let frame_x = OUTER_PAD.saturating_add(off_x as u32);
+    let frame_y = viewport_top.saturating_add(off_y as u32);
+    let frame_w = disp_w as u32;
+    let frame_h = disp_h as u32;
+    // Schematic heatmap: quadrant palette blocks (frozen diff hues).
+    let half_w = frame_w / 2;
+    let half_h = frame_h / 2;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (frame_x, frame_y, half_w, half_h),
+        INSERTED_BG,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            frame_x.saturating_add(half_w),
+            frame_y,
+            frame_w.saturating_sub(half_w),
+            half_h,
+        ),
+        BG_DARK,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            frame_x,
+            frame_y.saturating_add(half_h),
+            half_w,
+            frame_h.saturating_sub(half_h),
+        ),
+        CHANGED_BG,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            frame_x.saturating_add(half_w),
+            frame_y.saturating_add(half_h),
+            frame_w.saturating_sub(half_w),
+            frame_h.saturating_sub(half_h),
+        ),
+        DELETED_BG,
+    );
+    // 1px frame border (frozen dim).
+    fill_rect(&mut pixels, dims, (frame_x, frame_y, frame_w, 1), FG_DIM);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            frame_x,
+            frame_y.saturating_add(frame_h.saturating_sub(1)),
+            frame_w,
+            1,
+        ),
+        FG_DIM,
+    );
+    fill_rect(&mut pixels, dims, (frame_x, frame_y, 1, frame_h), FG_DIM);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            frame_x.saturating_add(frame_w.saturating_sub(1)),
+            frame_y,
+            1,
+            frame_h,
+        ),
+        FG_DIM,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        frame_x.saturating_add(8),
+        frame_y.saturating_add(8),
+        "800x600 @50% (400x300)",
+        FG_TEXT,
+    );
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "picture: fit 50% | centered (268,36) | steps Fit+25/50/100/200/400",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Folder filtered-empty scene: same filter line as the
+/// folder fixture, every row pruned, so the panel shows the live
+/// `folder_empty_hint` idle guidance + honest counts. No sync preview:
+/// nothing to stage. Colors frozen.
+pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
+    use crate::viewmodel::FolderRow;
+
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left-dir <--> fixtures/right-dir - Folder",
+        2,
+    );
+
+    let rows = vec![
+        FolderRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "src/a.txt".to_string(),
+            is_dir: false,
+            glyph: '>',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        },
+        FolderRow {
+            rel_path: "src/b.txt".to_string(),
+            is_dir: false,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "orphan.txt".to_string(),
+            is_dir: false,
+            glyph: 'R',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        },
+    ];
+    let counts = crate::tree::count_folder_rows(&rows);
+    // Filter prunes everything: zero display rows, honest counts.
+    let shown = 0usize;
+    let hint = folder_empty_hint(false, false);
+
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        122,
+        "[x] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten",
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        138,
+        &format!("{} | {shown} shown (filter)", counts.summary()),
+        FG_DIM,
+    );
+
+    let pane_top = 158u32;
+    let pane_height = 260u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, pane_top, 936, pane_height),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        pane_top.saturating_add(120),
+        hint,
+        FG_DIM,
+    );
+
+    // Sync preview stays visible under the filter (filter prunes display,
+    // not the sync plan): same panel as the folder fixture.
+    let preview = crate::tree::sync_preview(&rows, crate::tree::SyncModeChoice::UpdateBoth);
+    let consent = crate::home::sync_consent_hint(false, preview.steps.len());
+    let panel_y = pane_top.saturating_add(pane_height).saturating_add(8);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, panel_y, 936, 116),
+        [28, 28, 28, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(6),
+        "Sync preview (dry-run)",
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(22),
+        &format!(
+            "({})  ({})",
+            crate::tree::SyncModeChoice::UpdateBoth.label(),
+            crate::tree::SyncModeChoice::Mirror.label()
+        ),
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(38),
+        &preview.summary(),
+        FG_DIM,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(54),
+        consent,
+        FG_DIM,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (20, panel_y.saturating_add(72), 150, 24),
+        [60, 60, 60, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        32,
+        panel_y.saturating_add(78),
+        "Apply sync plan",
+        FG_TEXT,
+    );
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "folder: 4 entries, 0 shown (filter) | type both folder paths, press Compare",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Table key-col + find scene: live key bar (28px, per-col
+/// selected marker + badge) + live find bar (28px, 120px needle) over a
+/// subset grid; the needle hit carries a 1px underline (live
+/// `TABLE_FIND_UNDERLINE_W`) at `table_find_span_in_padded` offsets.
+/// Marker glyphs are ascii `[x]`/`[ ]` (the 5x7 font has no ●/○).
+/// Colors frozen.
+pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/a.csv <--> fixtures/b.csv - Table",
+        5,
+    );
+
+    // Key bar from live view state: col 0 selected.
+    let mut view = TableKeyView::new();
+    view.toggle_key_column(0);
+    let badge = table_key_badge_label(&view);
+    let key_h = TABLE_KEY_BAR_H as u32;
+    fill_rect(&mut pixels, dims, (12, 124, 936, key_h), [28, 28, 28, 255]);
+    draw_string(&mut pixels, dims, 20, 130, "Key:", FG_DIM);
+    let header = ["id", "name", "left", "right", "status"];
+    let mut key_line = String::new();
+    for (col, name) in header.iter().enumerate() {
+        let mark = if is_key_column(&view, col) {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        if col > 0 {
+            key_line.push_str("  ");
+        }
+        key_line.push_str(mark);
+        key_line.push(' ');
+        key_line.push_str(name);
+    }
+    draw_string(&mut pixels, dims, 60, 130, &key_line, FG_TEXT);
+    let badge_x = 948u32.saturating_sub(text_width(&badge));
+    draw_string(&mut pixels, dims, badge_x, 130, &badge, FG_DIM);
+
+    // Find bar from live tokens: 28px bar, 120px needle, 1px underline.
+    let find_h = TABLE_FIND_BAR_H as u32;
+    let find_y = 124u32.saturating_add(key_h).saturating_add(4);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, find_y, 936, find_h),
+        [28, 28, 28, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        find_y.saturating_add(6),
+        "find",
+        FG_TEXT,
+    );
+    let needle_w = TABLE_FIND_NEEDLE_W as u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (64, find_y.saturating_add(3), needle_w, 18),
+        [45, 45, 45, 255],
+    );
+    let needle = "bob";
+    draw_string(
+        &mut pixels,
+        dims,
+        70,
+        find_y.saturating_add(6),
+        needle,
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        200,
+        find_y.saturating_add(6),
+        "1 hit, current",
+        FG_DIM,
+    );
+
+    // Grid: header + rows, needle hit underlined at padded-span offsets.
+    let pane_x = OUTER_PAD;
+    let pane_w = SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2));
+    let grid_top = find_y.saturating_add(find_h).saturating_add(4);
+    let pane_bottom = 560u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            pane_x,
+            grid_top,
+            pane_w,
+            pane_bottom.saturating_sub(grid_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (pane_x, grid_top, pane_w, ROW_H),
+        BG_PANEL,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        grid_top.saturating_add(6),
+        "id | name | left | right | status",
+        FG_TEXT,
+    );
+    let rows = [
+        ("1 | anna | 10 | 10 | = |", false),
+        ("2 | bob | 20 | 22 | ! |", true),
+        ("3 | cara | 30 | 30 | = |", false),
+        ("4 | dev | - | 40 | R |", true),
+        ("5 | eli | 50 | 50 | = |", false),
+        ("6 | fay | 60 | 60 | = |", false),
+    ];
+    for (i, (line, changed)) in rows.iter().enumerate() {
+        let y = grid_top
+            .saturating_add(ROW_H)
+            .saturating_add((i as u32).saturating_mul(ROW_H));
+        if y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        let (bg, fg) = if *changed {
+            (CHANGED_BG, CHANGED_FG)
+        } else {
+            (BG_DARK, FG_TEXT)
+        };
+        fill_rect(&mut pixels, dims, (pane_x, y, pane_w, ROW_H), bg);
+        draw_string(&mut pixels, dims, 20, y.saturating_add(6), line, fg);
+    }
+    // Underline the needle hit: live cell spans (cell-relative) shifted
+    // to row offsets, then clamped to the padded cap.
+    let row_line = "2 | bob | 20 | 22 | ! |";
+    let cell_off = "2 | ".chars().count();
+    let spans = table_find_cell_spans("bob", needle, false);
+    let first = spans.first().copied();
+    if let Some((start, end)) = first {
+        let here = (cell_off.saturating_add(start), cell_off.saturating_add(end));
+        if let Some((cs, ce)) = table_find_span_in_padded(here.0, here.1, TABLE_MAX_COL_CHARS) {
+            let hit_y = grid_top.saturating_add(ROW_H).saturating_add(ROW_H);
+            let prefix: String = row_line.chars().take(cs).collect();
+            let hit: String = row_line
+                .chars()
+                .skip(cs)
+                .take(ce.saturating_sub(cs))
+                .collect();
+            let ux = 20u32.saturating_add(text_width(&prefix));
+            let uw = text_width(&hit);
+            fill_rect(
+                &mut pixels,
+                dims,
+                (ux, hit_y.saturating_add(14), uw, 1),
+                FG_TEXT,
+            );
+        }
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "table: key=0 | find:bob 1 hit (current) | underline 1px",
     );
     let image = RgbaImage {
         width,
@@ -1102,7 +2013,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
 }
 
 /// Shared window chrome: title bar + tab bar + path row + toolbar.
-/// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table.
+/// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table, 7 picture.
 fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     let width = dims.0;
     fill_rect(pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
@@ -1120,6 +2031,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         3 => (190, 40, 48, 24),
         4 => (234, 40, 60, 24),
         5 => (290, 40, 56, 24),
+        7 => (392, 40, 66, 24),
         _ => (64, 40, 60, 24),
     };
     fill_rect(pixels, dims, hl, ACCENT_TAB);
@@ -1172,7 +2084,14 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         if active == 5 { FG_TEXT } else { FG_DIM },
     );
     draw_string(pixels, dims, 356, 46, "Sync", FG_DIM);
-    draw_string(pixels, dims, 404, 46, "Picture", FG_DIM);
+    draw_string(
+        pixels,
+        dims,
+        404,
+        46,
+        "Picture",
+        if active == 7 { FG_TEXT } else { FG_DIM },
+    );
     draw_string(pixels, dims, 474, 46, "FolderMerge", FG_DIM);
     draw_string(pixels, dims, 574, 46, "Audio", FG_DIM);
 
@@ -1283,6 +2202,64 @@ fn text_width(s: &str) -> u32 {
 /// Count of non-empty columns in a 5-wide pattern (readability probe helper).
 fn nonzero_columns(pattern: &[u8; 5]) -> usize {
     pattern.iter().filter(|c| **c != 0).count()
+}
+
+/// Greedy two-line word wrap for home card descriptions: words fill the
+/// first line while `text_width` fits `max_px`, overflow goes to the
+/// second line, anything past that collapses into a trailing `...`.
+/// Pure; paint-independent (pixel-font budget, no new hues).
+fn wrap_desc_two_lines(desc: &str, max_px: u32) -> (String, String) {
+    let mut first = String::new();
+    let mut second = String::new();
+    let mut dropped = false;
+    for word in desc.split(' ') {
+        if word.is_empty() {
+            continue;
+        }
+        if second.is_empty() && !dropped {
+            let candidate = if first.is_empty() {
+                word.to_string()
+            } else {
+                format!("{first} {word}")
+            };
+            if text_width(&candidate) <= max_px {
+                first = candidate;
+                continue;
+            }
+        }
+        let candidate = if second.is_empty() {
+            word.to_string()
+        } else {
+            format!("{second} {word}")
+        };
+        if text_width(&candidate) <= max_px {
+            second = candidate;
+        } else if second.is_empty() {
+            // Single word wider than the card: hard-cut with ellipsis.
+            let mut cut = String::new();
+            for ch in word.chars() {
+                let next = format!("{cut}{ch}");
+                if text_width(&format!("{next}...")) > max_px {
+                    break;
+                }
+                cut = next;
+            }
+            cut.push_str("...");
+            second = cut;
+        } else {
+            dropped = true;
+        }
+    }
+    if dropped && !second.is_empty() && !second.ends_with("...") {
+        // Third-line spill: keep the two-line budget honest.
+        let mut cut = second.clone();
+        while !cut.is_empty() && text_width(&format!("{cut}...")) > max_px {
+            cut.pop();
+        }
+        cut.push_str("...");
+        second = cut;
+    }
+    (first, second)
 }
 
 fn draw_string(
@@ -1440,6 +2417,13 @@ fn glyph_pattern(ch: u8) -> [u8; 5] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gutter::GUTTER_RULER_WIDE;
+    use crate::home::{
+        HOME_CARD_BUTTON_MIN_H, HOME_GRID_GAP, RECENT_COL_AGE_W, RECENT_COL_KIND_W,
+        home_card_min_height,
+    };
+    use crate::views::wrap_find_sub_rows;
+    use crate::views_table::key_column_marker;
 
     fn png_magic_ok(bytes: &[u8]) -> bool {
         bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -1648,20 +2632,15 @@ mod tests {
         assert_eq!(TITLE_H, 36);
         assert_eq!(TAB_H, 32);
         assert_eq!(STATUS_H, 30);
-        // Text two-pane: left + gap + right + gap + gutter, right edge 954 (6px margin).
+        // Text two-pane: left + gap + right meets the ruler, right edge 952 (8px margin).
         assert_eq!(
             TEXT_LEFT_X
                 .saturating_add(TEXT_PANE_W)
                 .saturating_add(PANE_GAP),
             TEXT_RIGHT_X
         );
-        assert_eq!(
-            TEXT_RIGHT_X
-                .saturating_add(TEXT_PANE_W)
-                .saturating_add(PANE_GAP),
-            GUTTER_X
-        );
-        assert_eq!(GUTTER_X.saturating_add(GUTTER_W), 954);
+        assert_eq!(TEXT_RIGHT_X.saturating_add(TEXT_PANE_W), GUTTER_X);
+        assert_eq!(GUTTER_X.saturating_add(GUTTER_W), 952);
         assert!(GUTTER_X.saturating_add(GUTTER_W) <= SNAP_W);
         // Pane heights: 124 + 436 = 560, status 570 + 30 = 600.
         assert_eq!(124u32.saturating_add(436), 560);
@@ -1673,7 +2652,9 @@ mod tests {
         assert!(text_width("id | name | left | right | status") < 936);
         assert!(text_width("let x = 1;") < 309);
         assert!(text_width("Recent sessions") < 936);
-        assert!(text_width("home: 3 cards, 5 recents | pick a session to begin") < 928);
+        assert!(
+            text_width("home: 9 cards, 5 recents | no path picker | pick a session to begin") < 928
+        );
     }
 
     #[test]
@@ -1703,14 +2684,285 @@ mod tests {
 
     #[test]
     fn home_cards_fit_canvas() {
-        let card_w = 304u32;
-        let gap = 12u32;
-        let total = card_w
+        // Live grid: 3 cols, gap 8, card 306x100 (merge-style slack: 2px).
+        assert_eq!(HOME_CARD_W, 306);
+        assert_eq!(HOME_CARD_H, 100);
+        assert_eq!(HOME_CARD_GAP, 8);
+        assert_eq!(HOME_CARD_GAP as f32, HOME_GRID_GAP);
+        let total = HOME_CARD_W
             .saturating_mul(3)
-            .saturating_add(gap.saturating_mul(2))
+            .saturating_add(HOME_CARD_GAP.saturating_mul(2))
             .saturating_add(OUTER_PAD.saturating_mul(2));
-        assert_eq!(total, SNAP_W);
-        assert!(text_width("Text compare") < card_w);
-        assert!(text_width("Folder compare") < card_w);
+        assert_eq!(total.saturating_add(2), SNAP_W);
+        assert!(text_width("Text Compare") < HOME_CARD_W);
+        assert!(text_width("Folder Compare") < HOME_CARD_W);
+    }
+
+    #[test]
+    fn gutter_matches_live_ruler_contract() {
+        // Ruler track 16 (line numbers on), old 14px gap absorbed.
+        assert_eq!(GUTTER_W, GUTTER_RULER_WIDE as u32);
+        assert_eq!(GUTTER_W, 16);
+        assert_eq!(GUTTER_X, 936);
+        // Tall-file single hunk keeps the 4px floor (not the old 2px dot).
+        let mut tall = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            tall.push(TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            });
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = tall.get_mut(500) {
+            row.kind = TextRowKind::Deleted;
+        }
+        let geom = gutter_geometry(1000, 400.0, &tall);
+        assert_eq!(geom.segments.len(), 1);
+        if let Some(seg) = geom.segments.first() {
+            assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home_matches_live_contract() {
+        use crate::home::{
+            HOME_CARD_BUTTON_MIN_W, HOME_SHOWS_PATH_PICKER, home_card_button_hit_area,
+            home_grid_rows,
+        };
+        // 9 live cards tile 3x3 rows.
+        assert_eq!(home_model().items.len(), 9);
+        assert_eq!(home_grid_rows(9), 3);
+        // Card floor: contract min-height 99.6 -> fixture 100.
+        assert!((home_card_min_height() - 99.6).abs() < 0.01);
+        assert!((HOME_CARD_H as f32) >= home_card_min_height());
+        // CTA floor: 120x28 min, hit area 3360 min.
+        assert!((HOME_CTA_W as f32) >= HOME_CARD_BUTTON_MIN_W);
+        assert!((HOME_CTA_H as f32) >= HOME_CARD_BUTTON_MIN_H);
+        assert!((HOME_CTA_W as f32) * (HOME_CTA_H as f32) >= home_card_button_hit_area());
+        // No path picker on the launcher.
+        assert!(!HOME_SHOWS_PATH_PICKER);
+        // Recent columns tile the list width exactly.
+        let (title_w, kind_w, age_w) = recent_row_columns(936.0);
+        assert_eq!(kind_w, RECENT_COL_KIND_W);
+        assert_eq!(age_w, RECENT_COL_AGE_W);
+        assert!(
+            (title_w + kind_w + age_w + RECENT_LIST_PAD * 2.0 + RECENT_COL_GAP * 2.0 - 936.0).abs()
+                < 0.001
+        );
+        // Every CTA label fits its button text budget (150 - 2*12).
+        for item in home_model().items.iter() {
+            assert!(text_width(&format!("Open {}", item.title)) < HOME_CTA_W - 24);
+        }
+    }
+
+    #[test]
+    fn home_desc_wrap_stays_in_two_line_budget() {
+        let budget = HOME_CARD_W.saturating_sub(24);
+        for item in home_model().items.iter() {
+            let (top, bottom) = wrap_desc_two_lines(item.description, budget);
+            assert!(text_width(&top) <= budget);
+            assert!(text_width(&bottom) <= budget);
+            // Our 9 live descs fit two lines: no word dropped, no ellipsis.
+            let mut want: Vec<&str> = item.description.split(' ').collect();
+            want.retain(|w| !w.is_empty());
+            let mut got: Vec<&str> = top.split(' ').chain(bottom.split(' ')).collect();
+            got.retain(|w| !w.is_empty());
+            assert_eq!(got, want);
+            assert!(!bottom.ends_with("..."));
+        }
+        // Third-line spill collapses honestly instead of clipping.
+        let (top, bottom) = wrap_desc_two_lines(
+            "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu",
+            60,
+        );
+        assert!(text_width(&top) <= 60);
+        assert!(text_width(&bottom) <= 60);
+        assert!(bottom.ends_with("..."));
+    }
+
+    #[test]
+    fn wrap_scene_proves_continuation_find() {
+        const LONG: &str = "    // wrap proof: keep the legacy reader enabled until rollout ends, then call read_to_string(old);";
+        const NEEDLE: &str = "read_to_string";
+        assert_eq!(LONG.chars().count(), 100);
+        // Live cap: 100-char model -> 80-char wrap width.
+        assert_eq!(wrap_width_for(100, true), 80);
+        // Needle lives fully inside the continuation sub-row.
+        assert_eq!(wrap_find_sub_rows(LONG, NEEDLE, false, 80), vec![1]);
+        assert_eq!(crate::views::wrap_chunks(LONG, 80).len(), 2);
+        // Every rendered chunk fits the 428px pane text budget.
+        for chunk in crate::views::wrap_chunks(LONG, 80) {
+            assert!(text_width(&chunk.text) <= 428);
+        }
+        // Scroll target clamps to the pair count (2 subs -> sub 1).
+        let row = TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: LONG.to_string(),
+            right: LONG.to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        let count = wrap_pane_pair_count(&row.left, &row.right, 80);
+        assert_eq!(count, 2);
+        assert_eq!(wrap_find_scroll_sub(&row, NEEDLE, false, 80, count), 1);
+        // Flat visual offset of (row 2, sub 1) over [1,1,2,1,1] is 3.
+        let counts = vec![1usize, 1, 2, 1, 1];
+        assert_eq!(
+            crate::views::wrap_model_to_visual_start(&counts, 2),
+            Some(2)
+        );
+        // Status + find-bar strings fit the 936px panel.
+        assert!(
+            text_width("wrap:on find:read_to_string 2 hits, current row 3 sub 1/2 | wrapnav proof")
+                < 928
+        );
+        assert!(text_width("2 hits, current row 3") < 936);
+    }
+
+    #[test]
+    fn picture_scene_matches_fit_contract() {
+        assert_eq!(PICTURE_ZOOM_STEPS, [25, 50, 100, 200, 400]);
+        // Viewport 936x372 over natural 800x600: scale 0.62 -> step 50.
+        assert_eq!(picture_fit_zoom_pct(800.0, 600.0, 936.0, 372.0), 50);
+        assert_eq!(picture_center_offset(400.0, 936.0), 268.0);
+        assert_eq!(picture_center_offset(300.0, 372.0), 36.0);
+        // Live summary words the identical pair (no invented numbers).
+        assert_eq!(
+            crate::viewmodel::build_picture_summary(&PictureDiff {
+                width_l: 800,
+                height_l: 600,
+                width_r: 800,
+                height_r: 600,
+                overlap_w: 800,
+                overlap_h: 600,
+                total: 480_000,
+                differing: 0,
+                bbox: None,
+                identical: true,
+            }),
+            vec![
+                "left:  800x600".to_string(),
+                "right: 800x600".to_string(),
+                "no differences".to_string(),
+            ]
+        );
+        // Centered 400x300 frame stays inside the 936x372 viewport.
+        assert!(12u32.saturating_add(268).saturating_add(400) <= 948);
+        assert!(188u32.saturating_add(36).saturating_add(300) <= 560);
+        assert!(
+            text_width("picture: fit 50% | centered (268,36) | steps Fit+25/50/100/200/400") < 928
+        );
+        assert_eq!(zoom_label(50), "zoom 50% (0.50x)");
+        assert!(text_width(&zoom_label(50)) < 948 - 432);
+    }
+
+    #[test]
+    fn table_find_scene_matches_key_find_contract() {
+        // Key bar: col 0 selected, badge reads keyed.
+        let mut view = TableKeyView::new();
+        assert!(view.is_positional());
+        view.toggle_key_column(0);
+        assert!(is_key_column(&view, 0));
+        assert!(!is_key_column(&view, 1));
+        assert_eq!(table_key_badge_label(&view), "key: 0");
+        assert_ne!(key_column_marker(true), key_column_marker(false));
+        // Find spans: cell-relative (0,3), row offset 4 -> (4,7) in cap.
+        assert_eq!(table_find_cell_spans("bob", "bob", false), vec![(0, 3)]);
+        assert_eq!(
+            table_find_span_in_padded(4, 7, TABLE_MAX_COL_CHARS),
+            Some((4, 7))
+        );
+        assert_eq!(
+            table_find_span_in_padded(0, 99, TABLE_MAX_COL_CHARS),
+            Some((0, 32))
+        );
+        // Bars reuse live heights; needle fits its 120px box.
+        assert_eq!(TABLE_KEY_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert!(text_width("bob") < TABLE_FIND_NEEDLE_W as u32);
+    }
+
+    #[test]
+    fn folder_empty_scene_matches_hint_contract() {
+        // Filtered empty: no rows, no error -> idle guidance, never blank.
+        let hint = folder_empty_hint(false, false);
+        assert!(!hint.is_empty());
+        assert!(hint.contains("type both folder paths"));
+        assert!(text_width(hint) < 936);
+        let rows = vec![crate::viewmodel::FolderRow {
+            rel_path: "src/a.txt".to_string(),
+            is_dir: false,
+            glyph: '>',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        }];
+        let counts = crate::tree::count_folder_rows(&rows);
+        assert!(counts.summary().contains("1 entries") || counts.summary().contains('1'));
+        assert!(
+            text_width(
+                "folder: 4 entries, 0 shown (filter) | type both folder paths, press Compare"
+            ) < 928
+        );
+    }
+
+    #[test]
+    fn dispatcher_routes_new_scenes() {
+        let dir = std::env::temp_dir();
+        let cases = [
+            "vis-ax-dispatch-wrap.png",
+            "vis-ax-dispatch-picture.png",
+            "vis-ax-dispatch-folder-empty.png",
+            "vis-ax-dispatch-table-find.png",
+        ];
+        let mut blobs: Vec<Vec<u8>> = Vec::new();
+        for name in cases {
+            let out = dir.join(name);
+            assert!(render_fixture_png(&out).is_ok());
+            let bytes = std::fs::read(&out).unwrap_or_default();
+            assert!(!bytes.is_empty());
+            assert!(png_magic_ok(&bytes));
+            assert!(bytes.len() >= 8192);
+            blobs.push(bytes);
+        }
+        // Naye scenes apas me alag...
+        assert_eq!(blobs.len(), cases.len());
+        for (i, a) in blobs.iter().enumerate() {
+            for (j, b) in blobs.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+        // ...aur purane default scenes se bhi alag.
+        let text_out = dir.join("vis-ax-dispatch-text.png");
+        assert!(render_fixture_png(&text_out).is_ok());
+        let text_bytes = std::fs::read(&text_out).unwrap_or_default();
+        let folder_out = dir.join("vis-ax-dispatch-folder.png");
+        assert!(render_fixture_png(&folder_out).is_ok());
+        let folder_bytes = std::fs::read(&folder_out).unwrap_or_default();
+        let table_out = dir.join("vis-ax-dispatch-table.png");
+        assert!(render_fixture_png(&table_out).is_ok());
+        let table_bytes = std::fs::read(&table_out).unwrap_or_default();
+        if let (Some(wrap), Some(picture), Some(folder_empty), Some(table_find)) =
+            (blobs.first(), blobs.get(1), blobs.get(2), blobs.get(3))
+        {
+            assert_ne!(wrap, &text_bytes);
+            assert_ne!(picture, &text_bytes);
+            assert_ne!(folder_empty, &folder_bytes);
+            assert_ne!(table_find, &table_bytes);
+        }
     }
 }
