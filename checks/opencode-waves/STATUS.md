@@ -145,3 +145,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 09
 - Hooks own test red (gutter narrow 3 vs 4), self-debugging. Folder new code has dead-code warnings (paint_folder, glyph_color) to fix before land. Both alive, normal fix loop.
+
+## Wave D poll 10
+- Hooks writing fixture-dispatch tests (text vs folder bytes differ assert). Diff +1014. Both alive.
