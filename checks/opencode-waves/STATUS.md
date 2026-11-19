@@ -1139,3 +1139,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - FOLDERFILTER `06880d4` folder name/type/status filters with honest counts — OWNS tree.rs+app.rs.
 - Verify combined: 498 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AU (filter paint adoption, picture zoom parity, table find highlight).
+
+## 2026-11-20 — Wave AU plan (2 dev parallel + localrun + binary for early feedback)
+- AU-TABLEFIND `sess-tablefind-au`: OWNS views_table.rs+checks/gui-tablefind-au (table find match highlight parity).
+- AU-FILTERPAINT `sess-filterpaint-au`: OWNS views.rs+checks/gui-filterpaint-au (folder filter paint adoption).
+- AU-LOCALRUN `sess-localrun-au`: OWNS checks/localrun-au only, NO source edits (run app locally, fresh screenshots for early feedback).
+- AU-BINARY `sess-binary-au`: OWNS checks/binary-au only, NO source edits (release build + install/binary story for early feedback).
+- Dev agents commit locally, NO push. Orchestrator verifies then pushes.
