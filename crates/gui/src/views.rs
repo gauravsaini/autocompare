@@ -44,9 +44,9 @@ pub const OUTER_MARGIN: i8 = 12;
 pub const SECTION_GAP: f32 = 8.0;
 pub const TIGHT_GAP: f32 = 4.0;
 pub const FOOTER_GAP: f32 = 6.0;
-pub const TAB_BOTTOM_GAP: f32 = 2.0;
+pub const TAB_BOTTOM_GAP: f32 = 6.0;
 pub const TREE_INDENT: f32 = 14.0;
-pub const CARD_W: f32 = 260.0;
+pub const CARD_W: f32 = 240.0;
 pub const CARD_H: f32 = 75.0;
 const BROWSE_RESERVE: f32 = 75.0;
 const MIN_HALF: f32 = 180.0;
@@ -1083,10 +1083,10 @@ fn premul(channel: u8, alpha: u8) -> u8 {
 // ----------------------------------------------------------------------------
 
 /// Width of one picture column: half the available width minus one
-/// tight gap, floored at [`MIN_HALF`] so narrow panels scroll instead
+/// section gap, floored at [`MIN_HALF`] so narrow panels scroll instead
 /// of crushing the image.
 pub fn picture_column_width(avail: f32) -> f32 {
-    ((avail - TIGHT_GAP) / 2.0).max(MIN_HALF)
+    ((avail - SECTION_GAP) / 2.0).max(MIN_HALF)
 }
 
 /// Clamped overlay mix paint honors (0 = full left, 100 = full right).
@@ -1806,9 +1806,9 @@ mod tests {
         assert_eq!(SECTION_GAP, 8.0);
         assert_eq!(TIGHT_GAP, 4.0);
         assert_eq!(FOOTER_GAP, 6.0);
-        assert_eq!(TAB_BOTTOM_GAP, 2.0);
+        assert_eq!(TAB_BOTTOM_GAP, 6.0);
         assert_eq!(TREE_INDENT, 14.0);
-        assert_eq!((CARD_W, CARD_H), (260.0, 75.0));
+        assert_eq!((CARD_W, CARD_H), (240.0, 75.0));
     }
 
     #[test]
@@ -1884,7 +1884,7 @@ mod tests {
 
     #[test]
     fn picture_columns_split_avail_with_floor() {
-        assert_eq!(picture_column_width(800.0), (800.0 - TIGHT_GAP) / 2.0);
+        assert_eq!(picture_column_width(800.0), (800.0 - SECTION_GAP) / 2.0);
         assert_eq!(picture_column_width(0.0), MIN_HALF);
         assert_eq!(picture_column_width(100.0), MIN_HALF);
     }
