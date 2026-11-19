@@ -1427,3 +1427,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Incident: 163f22f (status) swept diff wave's views.rs WIP + checks dir via broad `git add` (OWNS violation) and rode my push. Agents self-remediated: reset + resplit into 97cba91 (viewmodel+own checks) + f4fb03f (views+own checks). Post-hoc full gates at HEAD: OWNS all clean, 629 green, clippy 0, fmt clean, banned 0, PNGs 4/4 PASS. Remote force-updated (--force-with-lease, single-committer repo, violation commit minutes old).
 - Accepted deviation: diff highlight uses WHITE/BLACK (7 lines, neutral mono, tests green) vs FROZEN rule — color wave will audit/replace with tokens. P0-2 done geometry-wise.
 - BT 4/4 complete. Next: P0-1 session tabs (needs planning wave, app+views arch) + P1-1 path meta row + localrun round-2.
+
+## 2026-11-20 - Wave BU plan (session tabs + path meta + localrun round-2, 3 parallel)
+- BU-PLAN sess-plan-bu: OWNS checks/gui-sessionplan-bu only (P0-1 session tabs architecture plan, crates READ-ONLY, spec + disjoint follow-up waves).
+- BU-PATHMETA sess-pathmeta-bu: OWNS views.rs+app.rs+checks/gui-pathmeta-bu (P1-1 path meta row: timestamp/bytes/rules/flags/history).
+- BU-LOCALRUN2 sess-localrun2-bu: OWNS checks/gui-localrun-bu2 only (rebuild + recapture + gap delta vs round-1, zero crates edits).
+- All: unlazy GATES + ponytail + gui-polish harness + MS rust + colors FROZEN + pathspec-only commits (NEVER git add -A) + NO PUSH.
