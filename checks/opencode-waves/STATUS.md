@@ -217,3 +217,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Combined tree GREEN: tests 111, clippy -D warnings clean (1 left fixed), fmt clean, harness gui-geo RESULT PASS (PNG 9914B, spaces 4-value set shrunk to 2 values, mono x19).
 - GEO: app.rs central inner_margin OUTER_MARGIN + single toolbar row + gaps tokens, views.rs 75 lines tokens wiring. TYPO: theme 138 + gutter 37 + home 47 + viewmodel 7 typography scale. OWNS respected, colors untouched (scan only pre-existing consts).
 - Agents still live 17032/17049 to commit NO push, orchestrator to verify commits then push + binary refresh.
+
+## Wave E poll 06 correction
+- fmt RED in gutter.rs 169/179 (multiline assert collapse). Tests 111 green, clippy green, harness PASS. TYPO live to run cargo fmt on own files.
