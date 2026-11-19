@@ -31,3 +31,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - ses-gui-folder3 alive: tree.rs rewritten (+568) with headless filter/flatten/staging/sync-preview.
 - ses-gui-shell3 alive: app.rs +289. Uncommitted diff scanned CLEAN (only hit is forbid(unsafe_code) attribute).
 - No verification run yet (cargo busy with builders); rerun tests/clippy/screenshots at land time.
+
+## Poll 03
+- All 3 builders alive, all logs growing (shell log un-stuck, now wiring toolbar + status bar).
+- Diff now +1291/-96: viewmodel +264 (nav/filter), tree +568, app +312, copy +37, home +23. Banned-pattern scan CLEAN.
+- No land commits yet; verify at land time.
