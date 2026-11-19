@@ -846,6 +846,20 @@ pub fn format_table_header_rule(line_len: usize) -> String {
     "-".repeat(line_len.max(1))
 }
 
+/// Grid cells: `text` ko split karke widths tak pad karta hai
+/// ([`views_table::pad_table_row`] reuse, missing cell `-`).
+/// `format_table_bordered_row` ki inner cells ke barabar hai —
+/// Grid paint isi ko cells me baant-ta hai. Pure; unit-tested.
+pub fn table_row_cells(text: &str, widths: &[usize]) -> Vec<String> {
+    views_table::pad_table_row(&split_table_cells(text), widths)
+}
+
+/// Grid columns: glyph column plus ek per data column. Khali widths
+/// par sirf glyph (fallback single-string path). Pure; unit-tested.
+pub fn table_grid_columns(widths: &[usize]) -> usize {
+    widths.len().saturating_add(1)
+}
+
 /// The model-driven table view: keyed summary line, the positional
 /// note when no key columns are selected, pager-driven row window,
 /// then the legacy row paint.
@@ -969,9 +983,11 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
         );
     });
     ui.add_space(TIGHT_GAP);
-    // Header bar + cell grid: `hdr` row header banta hai, data rows
-    // bordered cells me (padding/borders via existing TablePager
-    // window; widths views_table spec se, koi naya color/token nahi).
+    // Header bar + cell grid: `hdr` row header banta hai (glyph
+    // placeholder + strong cells, phir `-` rule), data rows Grid me
+    // (glyph + padded mono cells). Padding/borders
+    // `views_table::pad_table_row` se, window existing TablePager se,
+    // spacing GEO tokens se; koi naya color/token nahi.
     let header = table_header_cells(model);
     let data_cells: Vec<Vec<String>> = model
         .rows
@@ -985,7 +1001,16 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     };
     if let Some(cells) = header.as_ref() {
         let line = format_table_bordered_row(cells, &widths);
-        ui.label(RichText::new(indented_content(&line)).monospace().strong());
+        egui::Grid::new("table_header_grid")
+            .num_columns(table_grid_columns(&widths))
+            .spacing([SECTION_GAP, TIGHT_GAP])
+            .show(ui, |ui| {
+                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                for cell in views_table::pad_table_row(cells, &widths) {
+                    ui.label(RichText::new(cell).monospace().strong());
+                }
+                ui.end_row();
+            });
         ui.label(
             RichText::new(indented_content(&format_table_header_rule(line.len())))
                 .monospace()
@@ -996,36 +1021,63 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     let (wstart, wend) = pager.visible_range();
     let wend = wend.min(model.rows.len());
     let count = wend.saturating_sub(wstart);
+    if widths.is_empty() {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show_rows(ui, row_height, count, |ui, range| {
+                for pos in range {
+                    let i = wstart.saturating_add(pos);
+                    let Some(row) = model.rows.get(i) else {
+                        break;
+                    };
+                    ui.set_row_height(row_height);
+                    let mut glyph = RichText::new(row.glyph.to_string()).monospace();
+                    glyph = match row.glyph {
+                        '=' => glyph.color(dim_for(dark)),
+                        '!' | 'L' => glyph.color(red_for(dark)),
+                        'R' => glyph.color(green_for(dark)),
+                        _ => glyph.color(dim_for(dark)),
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(glyph);
+                        ui.label(
+                            RichText::new(format!("{} | {}", row.label, row.text)).monospace(),
+                        );
+                    });
+                }
+            });
+        return;
+    }
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
-            for pos in range {
-                let i = wstart.saturating_add(pos);
-                let Some(row) = model.rows.get(i) else {
-                    break;
-                };
-                ui.set_row_height(row_height);
-                let mut glyph = RichText::new(row.glyph.to_string()).monospace();
-                glyph = match row.glyph {
-                    '=' => glyph.color(dim_for(dark)),
-                    '!' | 'L' => glyph.color(red_for(dark)),
-                    'R' => glyph.color(green_for(dark)),
-                    _ => glyph.color(dim_for(dark)),
-                };
-                let body_text = if widths.is_empty() {
-                    format!("{} | {}", row.label, row.text)
-                } else {
-                    format_table_bordered_row(&split_table_cells(&row.text), &widths)
-                };
-                let mut body = RichText::new(body_text).monospace();
-                if row.changed {
-                    body = body.color(CHANGED_FG);
-                }
-                ui.horizontal(|ui| {
-                    ui.label(glyph);
-                    ui.label(body);
+            egui::Grid::new("table_data_grid")
+                .num_columns(table_grid_columns(&widths))
+                .spacing([SECTION_GAP, TIGHT_GAP])
+                .show(ui, |ui| {
+                    for pos in range {
+                        let i = wstart.saturating_add(pos);
+                        let Some(row) = model.rows.get(i) else {
+                            break;
+                        };
+                        let mut glyph = RichText::new(row.glyph.to_string()).monospace();
+                        glyph = match row.glyph {
+                            '=' => glyph.color(dim_for(dark)),
+                            '!' | 'L' => glyph.color(red_for(dark)),
+                            'R' => glyph.color(green_for(dark)),
+                            _ => glyph.color(dim_for(dark)),
+                        };
+                        ui.label(glyph);
+                        for cell in table_row_cells(&row.text, &widths) {
+                            let mut body = RichText::new(cell).monospace();
+                            if row.changed {
+                                body = body.color(CHANGED_FG);
+                            }
+                            ui.label(body);
+                        }
+                        ui.end_row();
+                    }
                 });
-            }
         });
 }
 
@@ -3234,6 +3286,38 @@ mod tests {
         let rule = format_table_header_rule(line.len());
         assert_eq!(rule.len(), line.len());
         assert!(rule.chars().all(|ch| ch == '-'));
+    }
+
+    #[test]
+    fn table_row_cells_pad_to_widths_for_grid() {
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let data = vec![split_table_cells("1 | 9.99")];
+        let widths = crate::views_table::table_column_widths(&header, &data);
+        // Grid cells bordered line ki padded cells ke barabar hain
+        // (bina `|` borders ke — separation Grid spacing deta hai).
+        let cells = table_row_cells("1 | 9.99", &widths);
+        assert_eq!(cells.len(), widths.len());
+        for (cell, width) in cells.iter().zip(widths.iter()) {
+            assert_eq!(cell.chars().count(), *width);
+        }
+        assert_eq!(
+            cells,
+            crate::views_table::pad_table_row(&split_table_cells("1 | 9.99"), &widths)
+        );
+        // Ragged row me missing cell `-` se pad hota hai.
+        let ragged = table_row_cells("only", &widths);
+        assert_eq!(ragged.len(), widths.len());
+        assert!(ragged.iter().any(|cell| cell.trim() == "-"));
+        // Header cells bhi same widths par pad hote hain.
+        let head = table_row_cells("ID | Price", &widths);
+        assert_eq!(head.len(), widths.len());
+    }
+
+    #[test]
+    fn table_grid_columns_counts_glyph_plus_cells() {
+        assert_eq!(table_grid_columns(&[]), 1);
+        assert_eq!(table_grid_columns(&[3]), 2);
+        assert_eq!(table_grid_columns(&[3, 5]), 3);
     }
 
     #[test]

@@ -347,6 +347,19 @@ pub fn pad_table_cell(text: &str, width: usize) -> String {
     }
 }
 
+/// Ek row ki padded cells Grid paint ke liye: har width tak
+/// `pad_table_cell`, missing cell `-` taaki ragged rows me bhi
+/// columns align rahen. `table_column_widths` ke saath jodta hai.
+/// Pure; unit-tested.
+pub fn pad_table_row(cells: &[String], widths: &[usize]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (idx, width) in widths.iter().enumerate() {
+        let cell = cells.get(idx).map(String::as_str).unwrap_or("-");
+        out.push(pad_table_cell(cell, *width));
+    }
+    out
+}
+
 /// Header row ka display text, widths ke hisab se padded.
 /// Test-only until paint wiring lands (orchestrator owns paint).
 #[allow(dead_code)]
@@ -911,5 +924,23 @@ mod tests {
             table_cell_display(&rows, TableCellCursor { row: 9, col: 0 }),
             None
         );
+    }
+
+    #[test]
+    fn pad_table_row_pads_and_marks_missing() {
+        let widths = vec![3, 5];
+        let cells = vec!["1".to_string(), "9.99".to_string()];
+        assert_eq!(pad_table_row(&cells, &widths), vec!["1  ", "9.99 "]);
+        // Ragged row: missing cell `-` se bharta hai.
+        let ragged = vec!["only".to_string()];
+        assert_eq!(pad_table_row(&ragged, &widths), vec!["onl", "-    "]);
+        // Lamba text cap par kat-ta hai, widths barkarar.
+        let long = vec!["x".repeat(TABLE_MAX_COL_CHARS + 10)];
+        let wide = vec![TABLE_MAX_COL_CHARS];
+        let padded = pad_table_row(&long, &wide);
+        assert_eq!(padded.len(), 1);
+        assert_eq!(padded.first().map(String::len), Some(TABLE_MAX_COL_CHARS));
+        // Khali widths: khali row.
+        assert!(pad_table_row(&cells, &[]).is_empty());
     }
 }
