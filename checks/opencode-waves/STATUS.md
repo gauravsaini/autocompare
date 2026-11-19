@@ -882,3 +882,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Mid-wave self-heal: TREE ki views.rs half-edit ne PNG ka compile toda (E0599 close_menu); TREE ne fix kiya, PNG ko nudge karke re-verify karaya.
 - Verify combined: 271 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok 960x600.
 - Pushed. OPEN gaps ab: splitter, font-zoom, hex-grid, table-grid, 3-pane, apply-wiring, intra-spans, text-find+count, header/chrome. Next: Wave Y.
+
+## 2026-11-20 — Wave Y plan (2 parallel: splitter + font-zoom)
+- Y-SPLIT `sess-split-y`: OWNS views.rs+viewmodel.rs+checks/gui-split-y (Gap #1 draggable splitter 0.20..=0.80).
+- Y-FONT `sess-font-y`: OWNS theme.rs+app.rs+checks/gui-font-y (Gap #9 font zoom Cmd+/-).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
