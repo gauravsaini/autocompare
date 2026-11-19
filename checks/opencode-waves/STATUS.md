@@ -258,3 +258,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 03 still implementing
 - Both live 22935/22936 01:13, no diff, tests 115 green. INT cautious on views.rs, REL report phase. Not a blocker yet.
+
+## Wave F poll 04 INT editing
+- INT views.rs +4 imports (gutter_for_font, home consts, TYPO_MONO_SIZE), uses pending. Tests 115 green, fmt 0, clippy RED 3 unused (mid-edit). Live 22935, no interrupt.
