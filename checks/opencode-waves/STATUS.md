@@ -658,3 +658,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 20 B landed wave complete
 - B 9d6dd17 verified+pushed: OWNS clean (3 files 1524+), tests 189 green, fmt clean, owned clippy zero. 3 dead-code in viewmodel (old summary builders, Wave I file) — Wave K cleanup.
 - Wave J complete: cleanup slices + picture/media + reverify all landed. Next: Wave K viewmodel dead-code + local-run final + release.
+
+## Wave K plan final-cleanup+final-verify (2 new + A2 slice3 = 3 parallel)
+- K-A ses-finalclean-k OWNS viewmodel+checks/parity-final-cleanup: remove obsolete summary builders, clippy zero goal.
+- K-B ses-finalverify-k OWNS checks/wave-k-final: release+harness+PNG+gap recheck report-only.
+- A2 slice 3 continues views_table (disjoint).
+- Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
