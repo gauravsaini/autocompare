@@ -1346,3 +1346,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TABWIRE 586394d FolderMerge tab -> paint_three_way_tree wiring - verify ok: 606 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok. Pushed to origin main.
 - LIVECOMP sess-livecomp-bm running: live PNGs captured home/text/folder/table + BC folder, REPORT pending. Untracked checks/gui-livecomp-bm/ untouched by orchestrator.
 - Next: Wave BN exquisite geometry+typo (2 parallel) + Wave BO binary+localrun (2 parallel) = 4 parallel via opencode default + agyx. Probe strategy: no tight timer, one-shot screencapture after osascript + outer recurring harness loop.
+
+## 2026-11-20 - Wave BM complete (tabwire + livecompare pushed)
+- TABWIRE 586394d + LIVECOMP 980e71d verify ok: 16 PNG magic-ok, 0 .rs edits, STATUS untouched, 606 green. Pushed.
+- LIVECOMP gaps: P0 text single-row vs dual-pane+gutter, folder ScrollArea debug overlay, folder no columns, table header-is-datarow; exact specs REPORT me (views.rs paint_text_body/paint_folder, theme.rs TypoRole).
+- Next: Wave BN exquisite (geo views.rs+views_table.rs, typo theme.rs+gutter.rs+home.rs) + Wave BO (bin scripts+packaging, localrun checks-only) in-flight, 4 parallel opencode default.
