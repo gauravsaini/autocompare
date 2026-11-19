@@ -79,3 +79,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - PNG magic OK all 4 (before 9174, after 9846, differ).
 - Banned-pattern scan CLEAN on both commits.
 - 90-test claims plausible (folder log showed 90 green pre-commit); current crate red = 3 errors ALL in views.rs (text mid-edit: TextRows missing filter/selected init). Attributed to text WIP, no revert. Full green re-verify at text land.
+
+## Early-feedback run (3 waves in tree)
+- cargo build green, cargo test 92 passed (text fixed views.rs init).
+- Fresh screenshot checks/early-feedback/after-3-waves.png: 9846 bytes, PNG magic OK, exit 0. Toolbar (Swap/Reload/toggles), session-identity title, honest status counts visible.
