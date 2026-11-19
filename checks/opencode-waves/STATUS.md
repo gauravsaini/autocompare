@@ -18,3 +18,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - MS rust guidelines URL live (HTTP 200, 2026-10-26): forbid unsafe, no unwrap/expect/panic/todo in non-test code, headless-first — already baked into all 4 agent prompts.
 - Orchestrator-verified PNG: checks/local-run/run.png exists, 9174 bytes, magic 89504e470d0a1a0a OK (independent of agent claim).
 - All 4 sessions alive, correct scope reads in logs; no agent commits yet.
+
+## Poll 01:12 AEDT
+- ses-gui-text3 alive, owned-file reads done, implementing.
+- ses-gui-folder3 alive: baseline 57 tests green (agent-claimed, rerun at verify time), clippy/fmt clean claimed, now writing tree.rs headless logic.
+- ses-gui-shell3 alive: app.rs +4 state fields (word_wrap, show_line_numbers, syntax_highlight, status) + defaults; orchestrator-scanned diff CLEAN (no unwrap/expect/panic/todo/unsafe).
+- ses-local-run3 alive: report expanded with exit 0/1/2 proofs; PNG re-verified by orchestrator earlier.
