@@ -280,3 +280,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 10 home edit added
 - INT live 03:53, diff now home.rs 1 + views 69. No gui-int proof yet. Tests green check next.
+
+## Wave F poll 11 proof pass
+- checks/gui-int harness PASS 9914B, tests 117 green. INT live final commit pending.
