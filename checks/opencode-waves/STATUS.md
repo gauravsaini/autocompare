@@ -115,3 +115,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 01
 - Both alive. Folder registered sibling scopes, reading REPORT hooks. Hooks grepping paint prefs (39 matches in app.rs), reading run-visual.sh. Tree clean. CI still queued.
+
+## Wave D poll 02
+- Both alive, reading phase (folder 610B unchanged, hooks into app.rs tail/main/theme). Tree clean. CI backlog persists (all queued).
