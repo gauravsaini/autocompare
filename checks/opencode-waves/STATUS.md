@@ -967,3 +967,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - FINDPAINT `ae79e22` FindState text find box with count badge in paint — OWNS viewmodel.rs+views.rs+checks/gui-findpaint-ae (Gap #12 text paint; App text-tab wiring next wave, allow(dead_code) precedent-noted).
 - Verify combined: 324 green, clippy 0, fmt clean, banned 0.
 - Pushed. Next: Wave AF (App text-tab find wiring, 3-pane paint, header/chrome).
+
+## 2026-11-20 — Wave AF plan (2 parallel: App find wiring + 3-pane paint)
+- AF-APPFIND `sess-appfind-af`: OWNS app.rs+checks/gui-appfind-af (Gap #12 final: Text tab find wiring, allow(dead_code) removal).
+- AF-MERGEPAINT `sess-mergepaint-af`: OWNS views.rs+checks/gui-mergepaint-af (Gap #7 3-pane merge paint; model read-only).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
