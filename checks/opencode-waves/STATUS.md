@@ -676,3 +676,15 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave K poll 03 K-A removing
 - K-A M viewmodel (-121/+12, obsolete builders removal). K-B release build running. A2 tracing.
 - No commits. Wait.
+
+## Wave K poll 04 K-A landed+pushed
+- K-A 1b27760 verified+pushed: OWNS clean (viewmodel + parity-final-cleanup REPORT 4759B). Tests 182 green (189-7 removed, 0 fail), clippy -p autocompare-gui zero, fmt -p gui clean. Workspace fmt has pre-existing compare/lib.rs +line (out of scope, next wave).
+- K-B ses-finalverify-k live (PID 57742): release 11022272B pre-K-A, tests 182 + full workspace green, round-K-1 artifacts (after.png, geo-typo-report, screenshot/tests outs). REPORT writing, commit pending. Re-verify after its land (release size stale post-K-A).
+- Tree: HEAD 1b27760 pushed, only ?? checks/wave-k-final/ (K-B OWNS). Ready for Wave L exquisite.
+
+## Wave L plan exquisite-geo+typo+localbin+parity (4 parallel, disjoint)
+- GEO ses-exq-geo-L (opencode default): OWNS views.rs+app.rs+checks/gui-exq-geo/**. Geometry only (width/height/margins/padding/alignment/positioning), colors untouched. Harness tools/gui-polish/run-geo-typo.sh loop, px-measured proof.
+- TYPO ses-exq-typo-L (opencode default): OWNS theme.rs+gutter.rs+home.rs+checks/gui-exq-typo/**. Typography only (family/weight/line-height/letter-spacing), colors untouched.
+- LOCALBIN ses-localbin-L (agyx print single-shot): OWNS checks/local-run-l/** only, zero source edits. Local run + release binary early feedback vs running Beyond Compare (PID 23316, outside observation, own words): geometry/typo gaps, horrible-UI deltas, feature/usability far-from-parity list.
+- PARITY ses-parity-l (opencode default): OWNS views_hex.rs+views_table.rs+tree.rs+checks/parity-l/**. Craft-anything per-feature replicate+validate loop: cases/ pairs, test, fix, repeat (max 6 rounds), headless-first.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, harness PASS required, STATUS orchestrator-only.
