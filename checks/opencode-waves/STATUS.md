@@ -1159,3 +1159,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AV-PICTURE `sess-picture-av`: OWNS views.rs+checks/gui-picture-av (picture zoom/fit parity).
 - AV-HOMEGEO `sess-homegeo-av`: OWNS home.rs+checks/gui-homegeo-av (home geometry polish from localrun feedback).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AV complete (2 parallel: picture zoom parity + home geometry polish)
+- PICTURE `f1a800a` picture zoom-fit parity with centered frame — OWNS views.rs.
+- HOMEGEO `2c53373` home launcher geometry contract + typography hierarchy — OWNS home.rs.
+- Verify combined: 522 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AW (text wrap nav, merge view geometry, fresh localrun feedback).
