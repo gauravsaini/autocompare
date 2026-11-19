@@ -255,3 +255,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 02 implementing
 - Both live 22935/22936. INT into harness/reports, edits next. REL release build EXIT 0 cached (no source changes), screenshot+report next. No diff yet.
+
+## Wave F poll 03 still implementing
+- Both live 22935/22936 01:13, no diff, tests 115 green. INT cautious on views.rs, REL report phase. Not a blocker yet.
