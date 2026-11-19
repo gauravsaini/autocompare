@@ -1,0 +1,377 @@
+//! Table key-compare view model: headless-first pure state over
+//! the key-aligned tolerant table engine.
+//!
+//! Observed behavior parity (clean-room, no copied strings): a table
+//! session parses two delimited files, suggests key columns whose
+//! cells are non-empty and unique, aligns rows by the selected key,
+//! and compares data cells with numeric tolerance, case folding and
+//! space trimming. With no key columns the rows compare positionally
+//! and the view says so honestly. This module holds that state without
+//! egui or I/O so it stays unit-testable; painting and engine driving
+//! stay the orchestrator's wiring job.
+//!
+//! Engine mapping: [`TableKeyView::to_compare_options`] builds the
+//! [`autocompare_diff::TableCompareOptions`] that
+//! `diff_table_by_key_with_options` consumes, and
+//! [`TableKeyView::to_key_options`] builds the
+//! [`autocompare_compare::TableKeyOptions`] that
+//! `compare_table_files_by_key` consumes.
+
+#![forbid(unsafe_code)]
+
+use autocompare_compare::TableKeyOptions;
+use autocompare_diff::{
+    Table, TableCompareOptions, TableKeyDiff, cells_equal_with_options, detect_key_columns,
+    diff_table_by_key_with_options,
+};
+
+/// Note shown when no key columns are selected: rows compare
+/// positionally, so reordered rows read as deletes plus inserts.
+pub const POSITIONAL_NOTE: &str = "no key columns: rows compare positionally";
+
+/// Honest summary counts of one key-aligned table diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableKeySummary {
+    /// Rows whose key matched and every data cell matched.
+    pub matching: usize,
+    /// Rows whose key matched but at least one data cell differed.
+    pub modified: usize,
+    /// Rows present only on the left.
+    pub left_only: usize,
+    /// Rows present only on the right.
+    pub right_only: usize,
+    /// Whether rows aligned by key (false when positional fallback).
+    pub keyed: bool,
+    /// Whether the positional fallback note applies.
+    pub positional_note: bool,
+}
+
+impl TableKeySummary {
+    /// Total aligned rows behind this summary.
+    pub fn total(&self) -> usize {
+        self.matching
+            .saturating_add(self.modified)
+            .saturating_add(self.left_only)
+            .saturating_add(self.right_only)
+    }
+
+    /// One-line counts mirroring the CLI's honest wording.
+    pub fn line(&self) -> String {
+        format!(
+            "{} matching, {} modified, {} left-only, {} right-only{}",
+            self.matching,
+            self.modified,
+            self.left_only,
+            self.right_only,
+            if self.keyed {
+                " (keyed)"
+            } else {
+                " (positional)"
+            }
+        )
+    }
+}
+
+/// Headless table key-compare state: selector plus tolerant options.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TableKeyView {
+    /// Selected alignment key columns (empty = positional compare).
+    pub key_columns: Vec<usize>,
+    /// Numeric tolerance; invalid values sanitize to [`None`].
+    pub numeric_tolerance: Option<f64>,
+    /// Fold case before comparing text and keys.
+    pub ignore_case: bool,
+    /// Trim surrounding space before comparing text and keys.
+    pub trim_space: bool,
+    /// Last key suggestion from [`detect_key_columns`].
+    pub suggested_keys: Vec<usize>,
+    /// Summary of the last diff run.
+    pub summary: TableKeySummary,
+}
+
+impl TableKeyView {
+    /// Fresh view: positional compare with exact text equality.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sanitizes a tolerance the way the engine does: only finite
+    /// values `>= 0` compare numerically, anything else (including
+    /// `NaN`, infinite and negative) means exact text equality.
+    pub fn sanitize_tolerance(tolerance: Option<f64>) -> Option<f64> {
+        match tolerance {
+            Some(t) if t.is_finite() && t >= 0.0 => Some(t),
+            _ => None,
+        }
+    }
+
+    /// Sets the numeric tolerance after sanitizing it.
+    pub fn set_tolerance(&mut self, tolerance: Option<f64>) {
+        self.numeric_tolerance = Self::sanitize_tolerance(tolerance);
+    }
+
+    /// Toggles one column in the key selector, keeping it sorted.
+    pub fn toggle_key_column(&mut self, column: usize) {
+        let mut next: Vec<usize> = Vec::new();
+        let mut removed = false;
+        for existing in self.key_columns.iter() {
+            if *existing == column {
+                removed = true;
+            } else {
+                next.push(*existing);
+            }
+        }
+        if !removed {
+            next.push(column);
+            next.sort();
+        }
+        self.key_columns = next;
+    }
+
+    /// Refreshes [`Self::suggested_keys`] from the left table.
+    pub fn suggest_for(&mut self, left: &Table) {
+        self.suggested_keys = detect_key_columns(left);
+    }
+
+    /// Adopts the last suggestion as the selected key.
+    pub fn apply_suggestion(&mut self) {
+        self.key_columns = self.suggested_keys.clone();
+    }
+
+    /// Whether rows align positionally (no key selected).
+    pub fn is_positional(&self) -> bool {
+        self.key_columns.is_empty()
+    }
+
+    /// Positional note for the view, if it applies.
+    pub fn positional_note(&self) -> Option<&'static str> {
+        if self.is_positional() {
+            Some(POSITIONAL_NOTE)
+        } else {
+            None
+        }
+    }
+
+    /// Engine-tolerant options behind this view.
+    pub fn to_compare_options(&self) -> TableCompareOptions {
+        TableCompareOptions {
+            key_columns: self.key_columns.clone(),
+            numeric_tolerance: Self::sanitize_tolerance(self.numeric_tolerance),
+            ignore_case: self.ignore_case,
+            trim_space: self.trim_space,
+        }
+    }
+
+    /// File-compare key options behind this view.
+    pub fn to_key_options(&self) -> TableKeyOptions {
+        TableKeyOptions {
+            key_columns: self.key_columns.clone(),
+            numeric_tolerance: Self::sanitize_tolerance(self.numeric_tolerance),
+            ignore_case: self.ignore_case,
+            trim_space: self.trim_space,
+        }
+    }
+
+    /// Compares two cells under this view's tolerant options.
+    pub fn cells_equal(&self, left: &str, right: &str) -> bool {
+        cells_equal_with_options(left, right, &self.to_compare_options())
+    }
+
+    /// Runs the key-aligned diff over two parsed tables and records
+    /// the summary. Pure and total.
+    pub fn refresh(&mut self, left: &Table, right: &Table) {
+        let opts = self.to_compare_options();
+        let diff = diff_table_by_key_with_options(left, right, &opts);
+        self.summary = summarize(&diff, self.is_positional());
+    }
+
+    /// Honest one-line status for the status bar.
+    pub fn status_line(&self) -> String {
+        let mut line = format!("table keyed: {}", self.summary.line());
+        if let Some(note) = self.positional_note() {
+            line.push_str(&format!(" | note: {note}"));
+        }
+        line
+    }
+}
+
+/// Builds a [`TableKeySummary`] from an engine diff. `positional` is
+/// true when the diff ran without key columns.
+pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
+    TableKeySummary {
+        matching: diff.matching_rows,
+        modified: diff.modified_rows,
+        left_only: diff.left_only_rows,
+        right_only: diff.right_only_rows,
+        keyed: !positional,
+        positional_note: positional,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_tables() -> (Table, Table) {
+        let left = Table {
+            header: vec!["ID".to_string(), "Price".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "9.99".to_string()],
+                vec!["2".to_string(), "5.00".to_string()],
+                vec!["3".to_string(), "7.50".to_string()],
+            ],
+        };
+        let right = Table {
+            header: vec!["ID".to_string(), "Price".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "10.04".to_string()],
+                vec!["2".to_string(), "5.00".to_string()],
+                vec!["4".to_string(), "1.00".to_string()],
+            ],
+        };
+        (left, right)
+    }
+
+    #[test]
+    fn key_suggestion_finds_unique_id_column() {
+        let (left, _) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.suggest_for(&left);
+        assert_eq!(view.suggested_keys, vec![0]);
+        view.apply_suggestion();
+        assert_eq!(view.key_columns, vec![0]);
+        assert!(!view.is_positional());
+    }
+
+    #[test]
+    fn keyed_diff_counts_match_modify_and_orphans() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0];
+        view.refresh(&left, &right);
+        assert_eq!(view.summary.matching, 1);
+        assert_eq!(view.summary.modified, 1);
+        assert_eq!(view.summary.left_only, 1);
+        assert_eq!(view.summary.right_only, 1);
+        assert!(view.summary.keyed);
+        assert!(!view.summary.positional_note);
+        assert!(view.summary.line().contains("(keyed)"));
+    }
+
+    #[test]
+    fn empty_keys_fall_back_to_positional_with_note() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        assert!(view.is_positional());
+        assert_eq!(view.positional_note(), Some(POSITIONAL_NOTE));
+        view.refresh(&left, &right);
+        assert!(!view.summary.keyed);
+        assert!(view.summary.positional_note);
+        assert_eq!(
+            view.summary.total(),
+            view.summary
+                .matching
+                .saturating_add(view.summary.modified)
+                .saturating_add(view.summary.left_only)
+                .saturating_add(view.summary.right_only)
+        );
+        assert!(view.summary.line().contains("(positional)"));
+        assert!(view.status_line().contains(POSITIONAL_NOTE));
+    }
+
+    #[test]
+    fn tolerance_bridges_small_numeric_gaps() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0];
+        view.set_tolerance(Some(0.1));
+        view.refresh(&left, &right);
+        // 9.99 vs 10.04 is within 0.1: only the missing-key rows differ.
+        assert_eq!(view.summary.matching, 2);
+        assert_eq!(view.summary.modified, 0);
+        assert_eq!(view.summary.left_only, 1);
+        assert_eq!(view.summary.right_only, 1);
+    }
+
+    #[test]
+    fn invalid_tolerances_sanitize_to_exact_text() {
+        assert_eq!(TableKeyView::sanitize_tolerance(None), None);
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(0.0)), Some(0.0));
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(1.5)), Some(1.5));
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(f64::NAN)), None);
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(f64::INFINITY)), None);
+        assert_eq!(
+            TableKeyView::sanitize_tolerance(Some(f64::NEG_INFINITY)),
+            None
+        );
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(-0.5)), None);
+        let mut view = TableKeyView::new();
+        view.set_tolerance(Some(f64::NAN));
+        assert_eq!(view.numeric_tolerance, None);
+    }
+
+    #[test]
+    fn nan_cells_never_match_numerically() {
+        let mut view = TableKeyView::new();
+        view.set_tolerance(Some(0.01));
+        // "NaN" vs "nan" differ as text and never match numerically.
+        assert!(!view.cells_equal("NaN", "nan"));
+        assert!(!view.cells_equal("inf", "Infinity"));
+        assert!(view.cells_equal("abc", "abc"));
+        assert!(view.cells_equal("1.001", "1.002"));
+        assert!(!view.cells_equal("1.001", "1.02"));
+    }
+
+    #[test]
+    fn case_and_trim_flags_fold_text() {
+        let mut view = TableKeyView::new();
+        assert!(!view.cells_equal("Ready", "ready"));
+        assert!(!view.cells_equal("  x", "x"));
+        view.ignore_case = true;
+        view.trim_space = true;
+        assert!(view.cells_equal("Ready", "ready"));
+        assert!(view.cells_equal("  x ", "X"));
+    }
+
+    #[test]
+    fn key_selector_toggles_columns_sorted() {
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(2);
+        view.toggle_key_column(0);
+        assert_eq!(view.key_columns, vec![0, 2]);
+        view.toggle_key_column(0);
+        assert_eq!(view.key_columns, vec![2]);
+        view.toggle_key_column(2);
+        assert!(view.key_columns.is_empty());
+        assert!(view.is_positional());
+    }
+
+    #[test]
+    fn options_mapping_carries_all_flags() {
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0, 1];
+        view.set_tolerance(Some(0.25));
+        view.ignore_case = true;
+        view.trim_space = true;
+        let cmp_opts = view.to_compare_options();
+        assert_eq!(cmp_opts.key_columns, vec![0, 1]);
+        assert_eq!(cmp_opts.numeric_tolerance, Some(0.25));
+        assert!(cmp_opts.ignore_case);
+        assert!(cmp_opts.trim_space);
+        let key_opts = view.to_key_options();
+        assert_eq!(key_opts.key_columns, vec![0, 1]);
+        assert_eq!(key_opts.numeric_tolerance, Some(0.25));
+        assert!(key_opts.ignore_case);
+        assert!(key_opts.trim_space);
+    }
+
+    #[test]
+    fn empty_tables_suggest_no_key() {
+        let empty = Table::default();
+        let mut view = TableKeyView::new();
+        view.suggest_for(&empty);
+        assert!(view.suggested_keys.is_empty());
+        view.refresh(&empty, &empty);
+        assert_eq!(view.summary.total(), 0);
+    }
+}
