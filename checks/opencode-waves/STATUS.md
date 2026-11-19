@@ -1351,3 +1351,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TABWIRE 586394d + LIVECOMP 980e71d verify ok: 16 PNG magic-ok, 0 .rs edits, STATUS untouched, 606 green. Pushed.
 - LIVECOMP gaps: P0 text single-row vs dual-pane+gutter, folder ScrollArea debug overlay, folder no columns, table header-is-datarow; exact specs REPORT me (views.rs paint_text_body/paint_folder, theme.rs TypoRole).
 - Next: Wave BN exquisite (geo views.rs+views_table.rs, typo theme.rs+gutter.rs+home.rs) + Wave BO (bin scripts+packaging, localrun checks-only) in-flight, 4 parallel opencode default.
+
+## 2026-11-20 - BN+BO in-flight note (orchestrator)
+- Baseline 606 green with uncommitted bin-agent files present (README/.gitignore + untracked install script).
+- BO-BIN OWNS scope clarify: scripts/ + tools/packaging/ + checks/bin-bo/ + README.md (install section per task) + .gitignore (/dist artifact dir). crates/** still NO-TOUCH.
+- GEO agent ScrollArea P0 par hai (views.rs show_rows + egui 0.37 probe), TYPO theme tokens padh raha hai, LOCALRUN setup/build verify kar raha hai. Koi landing nahi, push nahi.
