@@ -1267,3 +1267,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave BF plan (1 agent: fresh localrun on BE state)
 - BF-LOCALRUN `sess-localrun-bf`: OWNS checks/localrun-bf (harness + app screenshots incl. accent scene + gap re-rank vs AX2 §10; all .rs READ-ONLY).
 - Agent commits locally, NO PUSH (push MANA hai). REPORT se Wave BG plan banega.
+
+## 2026-11-20 — Wave BF complete (localrun on BE state)
+- LOCALRUN `3614868` 6 scenes (naya accent scene sahit), 581 green read-only, BB S4 re-rank: P0-1/P0-2/P1-1/P1-2-callsite/P1-3 CLOSE; nibble-content + AllSame-scene + live-gates baaki.
+- Verify: OWNS clean (checks only), PNG magic-ok x6, STATUS untouched, no code edits. Stray .outs removed.
+- Pushed. Next: Wave BG (hex nibble data threading + AllSame fixture scene).
+
+## 2026-11-20 — Wave BG plan (2 parallel: nibble threading + allsame scene)
+- BG-NIBBLE `sess-nibble-bg`: OWNS views.rs+app.rs+checks/gui-nibble-bg (hex_diff_nibble_cells callsite par App/engine se real byte slices thread karo taaki ?? hatten; views_hex.rs FROZEN, screenshot.rs read-only).
+- BG-ALLSAME `sess-allsame-bg`: OWNS screenshot.rs+checks/gui-allsame-bg (AllSame headless fixture scene, accent-scene precedent; paint files NO-TOUCH).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
