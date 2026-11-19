@@ -93,6 +93,24 @@ pub const HEX_MINIMAP_H: f32 = 220.0;
 /// same token (`2 * GUTTER_W`); hit rect grows with it. Pure token.
 pub const HEX_MINIMAP_W: f32 = 2.0 * GUTTER_W;
 pub const CONTENT_LEAD: &str = "  ";
+/// Text center gutter width (px): do independent panes ke beech patli
+/// fixed-width gutter jisme per-diff copy arrows rehte hain (BC pattern).
+/// Ponytail reuse: `HEADER_H + GUTTER_W + 2 * TIGHT_GAP` = 48.0 — do
+/// chhote `→/←` buttons side-by-side fit hote hain, equal rows par blank
+/// click-to-select rehta hai. Koi naya magic nahi; pure token.
+pub const TEXT_CENTER_GUTTER_W: f32 = HEADER_H + GUTTER_W + TIGHT_GAP + TIGHT_GAP;
+
+/// Center gutter width accessor (paint fixed column isi se banta hai).
+/// Pure; unit-tested.
+pub fn text_center_gutter_width() -> f32 {
+    TEXT_CENTER_GUTTER_W
+}
+
+/// Center gutter me copy arrows hain ya blank: diff kinds par haan,
+/// Equal par nahi (blank click-to-select). Pure; unit-tested.
+pub fn text_gutter_has_copy(kind: TextRowKind) -> bool {
+    kind != TextRowKind::Equal
+}
 
 /// Centered 1px visual inside the split grab strip: equal inset on
 /// both sides so the line stays centered. Pure; unit-tested.
@@ -2673,36 +2691,51 @@ fn paint_text_body(
                                 ui.set_row_height(wrap_reserved_height(1, row_height));
                                 if sub == 0 {
                                     ui.horizontal(|ui| {
-                                        if is_selected {
-                                            ui.label(TypoRole::Mono.rich("▶").strong());
-                                        } else if ui.small_button("·").clicked() {
-                                            select_action = Some(orig);
-                                        }
+                                        // Dual-pane: left pane column + fixed-width center
+                                        // gutter (copy arrows) + right pane column. Number
+                                        // gutter `gutter_text` me right-aligned fixed width
+                                        // hai; leading `·/▶` dot column hata di (selection
+                                        // bg + gutter click se rehti hai).
                                         ui.label(left_job);
-                                        if row.kind != TextRowKind::Equal {
-                                            if ui
-                                                .small_button("→")
-                                                .on_hover_text("Copy Left to Right")
-                                                .clicked()
-                                            {
-                                                copy_action = Some((
-                                                    orig,
-                                                    viewmodel::CopyDirection::LeftToRight,
-                                                ));
+                                        ui.vertical(|ui| {
+                                            ui.set_width(text_center_gutter_width());
+                                            if text_gutter_has_copy(row.kind) {
+                                                ui.horizontal(|ui| {
+                                                    ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                                                    if ui
+                                                        .small_button("→")
+                                                        .on_hover_text("Copy Left to Right")
+                                                        .clicked()
+                                                    {
+                                                        copy_action = Some((
+                                                            orig,
+                                                            viewmodel::CopyDirection::LeftToRight,
+                                                        ));
+                                                    }
+                                                    if ui
+                                                        .small_button("←")
+                                                        .on_hover_text("Copy Right to Left")
+                                                        .clicked()
+                                                    {
+                                                        copy_action = Some((
+                                                            orig,
+                                                            viewmodel::CopyDirection::RightToLeft,
+                                                        ));
+                                                    }
+                                                });
+                                            } else {
+                                                let (_, resp) = ui.allocate_exact_size(
+                                                    egui::vec2(
+                                                        text_center_gutter_width(),
+                                                        row_height,
+                                                    ),
+                                                    egui::Sense::click(),
+                                                );
+                                                if resp.clicked() {
+                                                    select_action = Some(orig);
+                                                }
                                             }
-                                            if ui
-                                                .small_button("←")
-                                                .on_hover_text("Copy Right to Left")
-                                                .clicked()
-                                            {
-                                                copy_action = Some((
-                                                    orig,
-                                                    viewmodel::CopyDirection::RightToLeft,
-                                                ));
-                                            }
-                                        } else {
-                                            ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
-                                        }
+                                        });
                                         ui.label(right_job);
                                         let do_scroll = want_scroll && sub == scroll_sub;
                                         if do_scroll {
@@ -2714,11 +2747,16 @@ fn paint_text_body(
                                     });
                                 } else {
                                     ui.horizontal(|ui| {
-                                        ui.label(
-                                            TypoRole::Mono.rich(CONTENT_LEAD).color(gutter_dim),
-                                        );
+                                        // Continuation: same dual-pane columns, center
+                                        // gutter blank fixed width (copy sirf head par).
                                         ui.label(left_job);
-                                        ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
+                                        ui.vertical(|ui| {
+                                            ui.set_width(text_center_gutter_width());
+                                            ui.allocate_exact_size(
+                                                egui::vec2(text_center_gutter_width(), row_height),
+                                                egui::Sense::hover(),
+                                            );
+                                        });
                                         ui.label(right_job);
                                         if want_scroll && sub == scroll_sub {
                                             ui.scroll_to_rect(
@@ -2748,11 +2786,10 @@ fn paint_text_body(
                             ui.set_row_height(row_height);
                             let is_selected = model.selected == Some(orig);
                             ui.horizontal(|ui| {
-                                if is_selected {
-                                    ui.label(TypoRole::Mono.rich("▶").strong());
-                                } else if ui.small_button("·").clicked() {
-                                    select_action = Some(orig);
-                                }
+                                // Dual-pane: left pane + fixed center gutter + right
+                                // pane. Leading `·/▶` hata; selection bg se + blank
+                                // gutter click se. Number gutter `gutter_text`
+                                // right-aligned fixed width (unchanged shape).
                                 let (fg, bg) = kind_palette(row.kind, base_text);
                                 let bg = if is_selected { CHANGED_BG } else { bg };
                                 let layout = TextPaneLayout {
@@ -2788,26 +2825,42 @@ fn paint_text_body(
                                 };
                                 ui.label(left_job);
 
-                                if row.kind != TextRowKind::Equal {
-                                    if ui
-                                        .small_button("→")
-                                        .on_hover_text("Copy Left to Right")
-                                        .clicked()
-                                    {
-                                        copy_action =
-                                            Some((orig, viewmodel::CopyDirection::LeftToRight));
+                                ui.vertical(|ui| {
+                                    ui.set_width(text_center_gutter_width());
+                                    if text_gutter_has_copy(row.kind) {
+                                        ui.horizontal(|ui| {
+                                            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                                            if ui
+                                                .small_button("→")
+                                                .on_hover_text("Copy Left to Right")
+                                                .clicked()
+                                            {
+                                                copy_action = Some((
+                                                    orig,
+                                                    viewmodel::CopyDirection::LeftToRight,
+                                                ));
+                                            }
+                                            if ui
+                                                .small_button("←")
+                                                .on_hover_text("Copy Right to Left")
+                                                .clicked()
+                                            {
+                                                copy_action = Some((
+                                                    orig,
+                                                    viewmodel::CopyDirection::RightToLeft,
+                                                ));
+                                            }
+                                        });
+                                    } else {
+                                        let (_, resp) = ui.allocate_exact_size(
+                                            egui::vec2(text_center_gutter_width(), row_height),
+                                            egui::Sense::click(),
+                                        );
+                                        if resp.clicked() {
+                                            select_action = Some(orig);
+                                        }
                                     }
-                                    if ui
-                                        .small_button("←")
-                                        .on_hover_text("Copy Right to Left")
-                                        .clicked()
-                                    {
-                                        copy_action =
-                                            Some((orig, viewmodel::CopyDirection::RightToLeft));
-                                    }
-                                } else {
-                                    ui.label(TypoRole::Mono.rich(" | ").color(gutter_dim));
-                                }
+                                });
 
                                 let right_job = if let Some(fr) = find_row {
                                     side_job_with_prefs_and_find_current(
@@ -6093,6 +6146,19 @@ mod tests {
         assert_eq!(gutter_text(Some(12), 4), "  12 ".to_string());
         assert_eq!(gutter_text(None, 4), "     ".to_string());
         assert_eq!(gutter_text(Some(123456), 4), "123456 ".to_string());
+    }
+
+    #[test]
+    fn text_center_gutter_reuses_tokens_and_gates_copy() {
+        assert_eq!(
+            TEXT_CENTER_GUTTER_W,
+            HEADER_H + GUTTER_W + TIGHT_GAP + TIGHT_GAP
+        );
+        assert_eq!(text_center_gutter_width(), 48.0);
+        assert!(text_gutter_has_copy(TextRowKind::Changed));
+        assert!(text_gutter_has_copy(TextRowKind::Deleted));
+        assert!(text_gutter_has_copy(TextRowKind::Inserted));
+        assert!(!text_gutter_has_copy(TextRowKind::Equal));
     }
 
     #[test]
