@@ -938,3 +938,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AC-SPAN `sess-span-ac`: OWNS views.rs+checks/gui-span-ac (Gap #11 per-span bg/weight paint).
 - AC-FILTER `sess-filter-ac`: OWNS app.rs+tree.rs+checks/gui-filter-ac (Gap #19 dual display filters).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AC complete (2 parallel: intra-spans + dual-filters)
+- FILTER `cbb267d` apply display filters to dual-tree panes with filtered counts — OWNS app.rs+tree.rs+checks/gui-filter-ac (Gap #19 limitation fixed).
+- SPAN `cf1106f` intra-line accent spans as inverted blocks over row strip — OWNS views.rs+checks/gui-span-ac (Gap #11 paint). Purani sess-span-ac frozen (1-line import cleanup se 2 dangling ACCENT_FG); sess-span-ac2 respawn ne GATES padhke continue kiya, dangling fix + forbid(unsafe_code) + 2 tests.
+- Duplicate-filter lesson: stuck session ko nudge do, jaldi respawn mat karo — purana FILTER khud jaagke land hua, duplicate ac2 ko STOP karaya (no edits).
+- Verify combined: 301 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
+- Pushed. Next: Wave AD (folder-cols paint, find-paint wiring, header/chrome).
