@@ -784,6 +784,58 @@ pub fn text_gutter_pending_id() -> egui::Id {
     egui::Id::unique("text_gutter_pending_scroll")
 }
 
+// ----------------------------------------------------------------------------
+// Text diff navigation: Next/Prev jump + N/M count (find-bar precedent).
+// Model moves `viewmodel::select_next/prev_diff` me hain (KEVL untouched);
+// yahan sirf paint-side position/count hai taaki nav row N/M badge dikha
+// sake aur list `scroll_to` se bring-into-view kare. Geometry/typo find-bar
+// reuse (nav row 28px, badge right-end small weak + 4px pad), koi naya
+// token/color nahi. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Diff rows ki kul sankhya (model order me `is_diff_row` count).
+/// Khali ya equal-only par 0. Pure; unit-tested.
+pub fn diff_nav_total(rows: &[TextRow]) -> usize {
+    let mut total = 0usize;
+    let mut idx = 0usize;
+    while idx < rows.len() {
+        if rows.get(idx).is_some_and(viewmodel::is_diff_row) {
+            total = total.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    total
+}
+
+/// Selected row ki diffs me 1-based position: selected diff hai to
+/// `Some(pos)`, nahi to `None` (koi selection/equal/out-of-range par koi
+/// fake count nahi). Pure; unit-tested.
+pub fn diff_nav_position(rows: &[TextRow], selected: Option<usize>) -> Option<usize> {
+    let sel = selected?;
+    if !rows.get(sel).is_some_and(viewmodel::is_diff_row) {
+        return None;
+    }
+    let mut pos = 0usize;
+    let mut idx = 0usize;
+    while idx <= sel && idx < rows.len() {
+        if rows.get(idx).is_some_and(viewmodel::is_diff_row) {
+            pos = pos.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    if pos == 0 { None } else { Some(pos) }
+}
+
+/// N/M badge text for the diff-nav row: "2/5", no hit par "0/0".
+/// Find/tablefind badge precedent mirror (`find_count_label` shape).
+/// Pure; unit-tested.
+pub fn diff_nav_count_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
+
 /// Minimap/grid row-click jump: `row` ko offset banakar covering hunk
 /// select karta hai aur pager window me lata hai — wahi steps jo
 /// `App::hex_gutter_jump_to_row` (app.rs, read-only) chalata hai:
@@ -1756,12 +1808,21 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
 
     let counts = viewmodel::filter_counts(&model.rows, model.filter);
     let visible = viewmodel::filtered_indices(&model.rows, model.filter);
+    // Diff-nav N/M badge: selected diff ki 1-based position + kul diffs
+    // (find-bar `count_label` precedent; har frame recompute, koi state nahi).
+    let nav_total = diff_nav_total(&model.rows);
+    let nav_badge = diff_nav_count_label(diff_nav_position(&model.rows, model.selected), nav_total);
 
-    // Toolbar: diff navigation + display filter + copy actions.
+    // Toolbar: diff navigation (Next/Prev jump + N/M bring-into-view) +
+    // display filter + copy actions. Geometry/typo find-bar reuse:
+    // full-width row (`avail x HEADER_H`), Prev/Next small buttons, badge
+    // right-end small weak + one pad; koi naya token/color nahi.
     let mut nav_action: Option<bool> = None;
     let mut copy_section_action = None;
     let mut copy_line_action = None;
-    ui.horizontal(|ui| {
+    let nav_avail = ui.available_width();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(nav_avail, HEADER_H));
         if ui.small_button("◀ Prev").clicked() {
             nav_action = Some(false);
         }
@@ -1791,6 +1852,12 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
         if ui.small_button("← Line").clicked() {
             copy_line_action = Some(viewmodel::CopyDirection::RightToLeft);
         }
+        // Badge right-end dock (find-bar precedent): N/M count list se
+        // alag na lage, row ke end par ek pad ke saath chipka rehta hai.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(BADGE_PAD);
+            ui.label(RichText::new(nav_badge.as_str()).small().weak());
+        });
     });
 
     if let Some(next) = nav_action {
@@ -4493,6 +4560,70 @@ mod tests {
         assert_eq!(text_gutter_click_select(&[], 0, 400.0, 50.0), None);
         // Pending-scroll key stable hai (dono frame ek hi id dekhte hain).
         assert_eq!(text_gutter_pending_id(), text_gutter_pending_id());
+    }
+
+    #[test]
+    fn diff_nav_total_counts_only_diffs() {
+        let row = |kind| TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        assert_eq!(diff_nav_total(&[]), 0);
+        assert_eq!(
+            diff_nav_total(&[row(TextRowKind::Equal), row(TextRowKind::Equal)]),
+            0
+        );
+        let rows = vec![
+            row(TextRowKind::Equal),
+            row(TextRowKind::Deleted),
+            row(TextRowKind::Inserted),
+            row(TextRowKind::Equal),
+            row(TextRowKind::Changed),
+        ];
+        assert_eq!(diff_nav_total(&rows), 3);
+    }
+
+    #[test]
+    fn diff_nav_position_tracks_selected_among_diffs() {
+        let row = |kind| TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        let rows = vec![
+            row(TextRowKind::Equal),
+            row(TextRowKind::Deleted),
+            row(TextRowKind::Equal),
+            row(TextRowKind::Inserted),
+        ];
+        assert_eq!(diff_nav_position(&rows, None), None);
+        assert_eq!(diff_nav_position(&rows, Some(0)), None);
+        assert_eq!(diff_nav_position(&rows, Some(2)), None);
+        assert_eq!(diff_nav_position(&[], Some(0)), None);
+        assert_eq!(diff_nav_position(&rows, Some(99)), None);
+        assert_eq!(diff_nav_position(&rows, Some(1)), Some(1));
+        assert_eq!(diff_nav_position(&rows, Some(3)), Some(2));
+    }
+
+    #[test]
+    fn diff_nav_count_labels_position_over_total() {
+        assert_eq!(diff_nav_count_label(Some(2), 5), "2/5");
+        assert_eq!(diff_nav_count_label(Some(1), 1), "1/1");
+        assert_eq!(diff_nav_count_label(None, 5), "0/5");
+        assert_eq!(diff_nav_count_label(None, 0), "0/0");
+        assert_eq!(
+            diff_nav_count_label(Some(1), 2),
+            viewmodel::find_count_label(Some(1), 2)
+        );
     }
 
     #[test]
