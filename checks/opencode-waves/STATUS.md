@@ -437,3 +437,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 13 C landed B last mile
 - C a2c0380 verified+pushed: OWNS clean (7 files), tests 125 green, clippy clean, fmt clean, no hue change. Geometry 4/8/12/16/24 + typo weights headless.
 - B live, checks/parity-hex-table/ written, REPORT+patch+gates next. Wait.
+
+## Wave H poll 14 B landed wave complete
+- B 6349ca7 verified+pushed: OWNS clean (4 files, 995+), tests 125 green, clippy clean, fmt clean, patch apply --check ok. New models unwired (mod wiring via patch, orchestrator wave next).
+- Wave H complete: A local-run + B hex/table + C exquisite all landed. Next: Wave I wiring + picture/media + gutter-click/find/merge-hunk gaps from A REPORT.
