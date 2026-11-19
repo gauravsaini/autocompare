@@ -142,3 +142,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 08
 - Diff +1000/-22. checks/gui-folder-vis/ appeared (folder proof incoming). Hooks retrying views.rs edit after oldString miss. Both alive.
+
+## Wave D poll 09
+- Hooks own test red (gutter narrow 3 vs 4), self-debugging. Folder new code has dead-code warnings (paint_folder, glyph_color) to fix before land. Both alive, normal fix loop.
