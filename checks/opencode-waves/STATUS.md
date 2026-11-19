@@ -704,3 +704,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - agyx single-shot 0B after ~10 min (startup stall, PID 59748 killed). LOCALBIN respawned as ses-localbin-L2 via opencode default model (PID 60692), same OWNS checks/local-run-l/** report-only, now scoping (BC app + tools + gui dirs). Agyx attempt documented, no work lost (report-only).
 - PARITY M all 3 owned files (views_hex + views_table + tree), log 38KB writing. GEO/TYPO growing (9.5/9.8KB), K-B steady. 5 live total (GEO/TYPO/PARITY/LOCALBIN2/K-B).
 - Disjoint holds: M files map 1:1 to PARITY OWNS, untracked dirs per-agent. No commits yet. Wait.
+
+## Wave L poll 04 parity +511 tests 189
+- PARITY diff +511 (hex 238 + table 198 + tree 75, all owned), tests 189 green (182+7 new). K-B release rebuilt post-K-A: 7 warnings now (was 3, investigating which are new vs pre-existing) + mac ls-flag hiccup (adapting).
+- GEO reading views gap constants (TAB_BOTTOM_GAP/FOOTER_GAP), TYPO steady, LOCALBIN2 scoping. No lands yet. Wait.
