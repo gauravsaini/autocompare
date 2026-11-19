@@ -60,6 +60,48 @@ pub const SPLIT_MAX_FRACTION: f32 = 0.80;
 pub const SPLIT_DEFAULT_FRACTION: f32 = 0.50;
 const SPLIT_HANDLE_W: f32 = 8.0;
 
+// Exquisite geometry tokens (px): every magic offset lives here so
+// text/table/folder painters share one rhythm. Colors out of scope.
+// Values reuse existing consts first (ponytail): wide gutter, tight
+// gap and handle width alias their single sources below; only the
+// genuinely new bars (header/find/visual/needle/minimap/lead) carry
+// fresh literals, each locked by a headless test.
+pub const GUTTER_W: f32 = crate::theme::GUTTER_BAR_WIDE;
+pub const HEADER_H: f32 = 28.0;
+pub const ROW_PAD: f32 = crate::theme::GUTTER_MIN_SEGMENT_H;
+pub const SPLIT_HIT_W: f32 = SPLIT_HANDLE_W;
+pub const SPLIT_VISUAL_W: f32 = 1.0;
+pub const FIND_BAR_H: f32 = HEADER_H;
+pub const BADGE_PAD: f32 = TIGHT_GAP;
+pub const FIND_NEEDLE_W: f32 = 120.0;
+pub const HEX_MINIMAP_H: f32 = 220.0;
+pub const CONTENT_LEAD: &str = "  ";
+
+/// Centered 1px visual inside the split grab strip: equal inset on
+/// both sides so the line stays centered. Pure; unit-tested.
+pub fn split_visual_inset() -> f32 {
+    (SPLIT_HIT_W - SPLIT_VISUAL_W) / 2.0
+}
+
+/// Uniform row rhythm: measured line height plus one fixed pad, so
+/// text/table/folder rows share the same beat. Non-finite or
+/// non-positive input passes through so paint never feeds NaN into
+/// layout. Pure; unit-tested.
+pub fn row_height_for_line(line_h: f32) -> f32 {
+    if line_h.is_finite() && line_h > 0.0 {
+        line_h + ROW_PAD
+    } else {
+        line_h
+    }
+}
+
+/// One shared left-baseline lead for header/rule/placeholder lines:
+/// table header + rule and the folder dir placeholder all start from
+/// the same two-space origin as the text gutter. Pure; unit-tested.
+pub fn indented_content(line: &str) -> String {
+    format!("{CONTENT_LEAD}{line}")
+}
+
 /// Equal half width for two path fields sharing one row.
 /// Kept as the centered wrapper over [`split_field_widths`]; new
 /// paint code goes through the draggable split instead.
@@ -114,10 +156,9 @@ pub fn split_picture_widths(avail: f32, fraction: f32) -> (f32, f32) {
 /// [`split_apply_drag`]. Returns true while the divider moves.
 pub fn paint_split_handle(ui: &mut Ui, fraction: &mut f32, avail: f32) -> bool {
     let height = ui.available_height().max(20.0);
-    let (rect, resp) =
-        ui.allocate_exact_size(egui::vec2(SPLIT_HANDLE_W, height), egui::Sense::drag());
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(SPLIT_HIT_W, height), egui::Sense::drag());
     ui.painter().rect_filled(
-        rect.shrink(2.0),
+        rect.shrink(split_visual_inset()),
         2.0,
         ui.visuals().widgets.noninteractive.bg_fill,
     );
@@ -380,7 +421,7 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
         ui.label(RichText::new("(no output)").weak());
         return;
     }
-    let row_height = text_row_height(ui);
+    let row_height = row_height_for_line(text_row_height(ui));
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, lines.len(), |ui, range| {
@@ -582,6 +623,7 @@ pub fn paint_hex(
         pager.next_page();
     }
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         if ui.small_button("◀ Prev hunk").clicked() {
             view.select_prev_hunk();
             if let Some(idx) = view.selected {
@@ -624,7 +666,7 @@ pub fn paint_hex(
     if view.hunks.is_empty() {
         ui.label(RichText::new("(no differing hunks)").weak());
     } else {
-        let row_height = text_row_height(ui);
+        let row_height = row_height_for_line(text_row_height(ui));
         let (wstart, wend) = pager.visible_range();
         let wstart = wstart as usize;
         let wend = (wend as usize).min(view.hunks.len());
@@ -633,7 +675,7 @@ pub fn paint_hex(
             ui.vertical(|ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
-                    .max_height(220.0)
+                    .max_height(HEX_MINIMAP_H)
                     .show_rows(ui, row_height, count, |ui, range| {
                         for pos in range {
                             let i = wstart.saturating_add(pos);
@@ -663,9 +705,14 @@ pub fn paint_hex(
             let total = views_hex::hex_row_count(view.left_size.max(view.right_size));
             if total > 0 {
                 let dark = ui.visuals().dark_mode;
-                let bar_w = text_gutter_paint_width(true);
-                let (rect, resp) =
-                    ui.allocate_exact_size(egui::vec2(bar_w, 220.0), egui::Sense::click_and_drag());
+                // Wide gutter bar by token: equals
+                // `text_gutter_paint_width(true)` (locked by
+                // `gutter_widths_stay_uniform`); the minimap never narrows.
+                let bar_w = GUTTER_W;
+                let (rect, resp) = ui.allocate_exact_size(
+                    egui::vec2(bar_w, HEX_MINIMAP_H),
+                    egui::Sense::click_and_drag(),
+                );
                 ui.painter().rect_filled(rect, 0.0, track_for(dark));
                 let step = views_hex::HEX_BYTES_PER_ROW as u64;
                 for hunk in view.hunks.iter() {
@@ -823,7 +870,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
         ui.label(RichText::new("(merged output is empty)").weak());
         return;
     }
-    let row_height = text_row_height(ui);
+    let row_height = row_height_for_line(text_row_height(ui));
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, model.lines.len(), |ui, range| {
@@ -873,6 +920,7 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
         pager.next_page();
     }
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         if ui.small_button("◀ Prev page").clicked() {
             pager.prev_page();
         }
@@ -910,14 +958,14 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
     };
     if let Some(cells) = header.as_ref() {
         let line = format_table_bordered_row(cells, &widths);
-        ui.label(RichText::new(format!("  {line}")).monospace().strong());
+        ui.label(RichText::new(indented_content(&line)).monospace().strong());
         ui.label(
-            RichText::new(format!("  {}", format_table_header_rule(line.len())))
+            RichText::new(indented_content(&format_table_header_rule(line.len())))
                 .monospace()
                 .weak(),
         );
     }
-    let row_height = text_row_height(ui);
+    let row_height = row_height_for_line(text_row_height(ui));
     let (wstart, wend) = pager.visible_range();
     let wend = wend.min(model.rows.len());
     let count = wend.saturating_sub(wstart);
@@ -1144,7 +1192,7 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     );
 
     let font_id = egui::TextStyle::Monospace.resolve(ui.style());
-    let row_height = text_row_height(ui);
+    let row_height = row_height_for_line(text_row_height(ui));
     let base_text = ui.style().visuals.text_color();
     let dark = ui.visuals().dark_mode;
     let gutter_dim = dim_for(dark);
@@ -1429,6 +1477,7 @@ pub fn paint_folder(
         pager.next_page();
     }
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         if ui.small_button("◀ Prev page").clicked() {
             pager.prev_page();
         }
@@ -1450,7 +1499,7 @@ pub fn paint_folder(
         );
     });
     ui.add_space(TIGHT_GAP);
-    let row_height = text_row_height(ui);
+    let row_height = row_height_for_line(text_row_height(ui));
     let mut toggle_dir = None;
 
     let (wstart, wend) = pager.visible_range();
@@ -1475,7 +1524,7 @@ pub fn paint_folder(
                             toggle_dir = Some(node.row.rel_path.clone());
                         }
                     } else if node.row.is_dir {
-                        ui.label(RichText::new("  ").monospace());
+                        ui.label(RichText::new(CONTENT_LEAD).monospace());
                     }
                     ui.label(
                         RichText::new(node.row.glyph)
@@ -2008,11 +2057,13 @@ pub fn paint_text_find_bar(
 ) -> (bool, bool) {
     let mut prev = false;
     let mut next = false;
+    let avail = ui.available_width();
     ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
         ui.label(RichText::new("Find:").small().weak());
         ui.add(
             egui::TextEdit::singleline(needle)
-                .desired_width(120.0)
+                .desired_width(FIND_NEEDLE_W)
                 .hint_text("needle"),
         );
         ui.checkbox(ignore_case, "Ignore case");
@@ -2022,7 +2073,10 @@ pub fn paint_text_find_bar(
         if ui.small_button("Next ▶").clicked() {
             next = true;
         }
-        ui.label(RichText::new(badge).small().weak());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(BADGE_PAD);
+            ui.label(RichText::new(badge).small().weak());
+        });
     });
     (prev, next)
 }
@@ -2795,5 +2849,70 @@ mod tests {
         assert_eq!(folder_pager.top, 10);
         folder_pager.prev_page();
         assert_eq!(folder_pager.top, 0);
+    }
+
+    #[test]
+    fn exquisite_geometry_tokens_reuse_scale() {
+        use crate::theme::{GUTTER_BAR_WIDE, GUTTER_MIN_SEGMENT_H};
+        assert_eq!(GUTTER_W, 12.0);
+        assert_eq!(GUTTER_W, GUTTER_BAR_WIDE);
+        assert_eq!(GUTTER_W, text_gutter_paint_width(true));
+        assert_eq!(HEADER_H, 28.0);
+        assert_eq!(FIND_BAR_H, HEADER_H);
+        assert_eq!(ROW_PAD, 2.0);
+        assert_eq!(ROW_PAD, GUTTER_MIN_SEGMENT_H);
+        assert_eq!(SPLIT_HIT_W, 8.0);
+        assert_eq!(SPLIT_HIT_W, SPLIT_HANDLE_W);
+        assert_eq!(SPLIT_VISUAL_W, 1.0);
+        assert_eq!(BADGE_PAD, 4.0);
+        assert_eq!(BADGE_PAD, TIGHT_GAP);
+        assert_eq!(FIND_NEEDLE_W, 120.0);
+        assert_eq!(HEX_MINIMAP_H, 220.0);
+        assert_eq!(CONTENT_LEAD, "  ");
+    }
+
+    #[test]
+    fn split_hit_centers_one_px_visual() {
+        assert_eq!(SPLIT_VISUAL_W, 1.0);
+        assert_eq!(split_visual_inset(), 3.5);
+        assert_eq!(split_visual_inset() * 2.0 + SPLIT_VISUAL_W, SPLIT_HIT_W);
+        // Grab width meets the 5px floor via the centering identity.
+        assert!(split_visual_inset() * 2.0 + SPLIT_VISUAL_W >= 5.0);
+    }
+
+    #[test]
+    fn row_height_adds_fixed_pad() {
+        assert_eq!(row_height_for_line(14.0), 16.0);
+        assert_eq!(row_height_for_line(20.0), 20.0 + ROW_PAD);
+        assert_eq!(row_height_for_line(0.0), 0.0);
+        assert!(row_height_for_line(f32::NAN).is_nan());
+    }
+
+    #[test]
+    fn content_lead_gives_shared_left_baseline() {
+        assert_eq!(indented_content("x"), "  x");
+        assert_eq!(indented_content(""), CONTENT_LEAD);
+        assert!(indented_content("| a |").starts_with(CONTENT_LEAD));
+        assert_eq!(CONTENT_LEAD.len(), 2);
+    }
+
+    #[test]
+    fn find_bar_docks_top_with_right_badge_air() {
+        // Full-width dock shares the uniform bar height; the badge keeps
+        // one pad of air (paint right-aligns it, so no overlap by
+        // construction).
+        assert_eq!(FIND_BAR_H, HEADER_H);
+        assert_eq!(FIND_NEEDLE_W, 120.0);
+        assert_eq!(BADGE_PAD, TIGHT_GAP);
+    }
+
+    #[test]
+    fn gutter_widths_stay_uniform() {
+        assert_eq!(text_gutter_paint_width(true), GUTTER_W);
+        assert_eq!(
+            text_gutter_paint_width(false),
+            crate::gutter::gutter_bar_width(false)
+        );
+        assert!(text_gutter_paint_width(false) < GUTTER_W);
     }
 }
