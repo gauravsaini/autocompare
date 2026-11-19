@@ -327,3 +327,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 11 color long-analysis pcomp table tests
 - COLOR 03:14 no diff (lints re-read), PCOMP 00:28 table tests reading. Both live.
+
+## Wave G poll 12 pcomp clippy color waiting
+- PCOMP clippy-checking vfs/compare, COLOR 03:32 no diff. Both live.
