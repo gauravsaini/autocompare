@@ -1410,3 +1410,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BR-FOLDERGRID landed (folder grid columns, pushed)
 - 6aa3362 verify ok (isolated worktree): OWNS views.rs+own checks, 614 green, clippy 0, fmt clean, banned 0, colors 0, PNG PASS, STATUS untouched. Pushed.
 - G-F2 done: folder dual-pane rows ab Name/Size/Modified grids hain. Baaki in-flight: BS-TYPO, BS-TABLEWIRE.
+
+## 2026-11-20 - BS-TYPO + BS-TABLEWIRE landed (concurrent, post-hoc verified, pushed)
+- de9ca8e (typo) + 4798d56 (tablewire) mere foldergrid-push ke saath concurrently land hue aur same push me chale gaye — protocol deviation, isliye post-hoc full gates HEAD par: OWNS dono clean (typo: gutter+home, tablewire: app+views_table, views.rs collision nahi hua), 616 green, clippy 0, fmt clean, banned 0, colors 0, PNGs 2/2 PASS, STATUS untouched. Pushed.
+- Is wave-batch ki 5/5 waves complete (localrun, bin, foldergrid, typo, tablewire). Age: TypoRole paint adoption baaki surfaces par + localrun REPORT ke BC gaps (session tabs, meta row, 3-zone status) P0 follow-ups.
