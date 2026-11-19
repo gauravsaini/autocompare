@@ -1065,3 +1065,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AN-THREE `sess-three-an`: OWNS views.rs+checks/gui-three-an (Gap #7 3-way left/base/right pane layout).
 - AN-APPLYPAINT `sess-applypaint-an`: OWNS app.rs+checks/gui-applypaint-an (Gap #8 apply action state machine).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AN complete (2 parallel: 3-pane layout + apply paint-state)
+- APPLYPAINT `cf97f7c` merge apply intent + result state machine with real summary — OWNS app.rs (Gap #8 state half).
+- THREE `e9db31a` merge 3-pane row equal-third widths — OWNS views.rs (Gap #7 layout half).
+- Three-an ne bahar sandbox copy banayi thi — nudge par turant `rm -rf` se delete, final verify in-tree; sibling discipline kept.
+- Verify combined: 416 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AO (apply paint adoption, snapshot parity, minimap-click).
