@@ -429,3 +429,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 11 C proof B edges
 - A done (proc gone, landed). B+C live. B tolerance edges (inf sanitized). C checks/gui-exquisite/ proof written, before/after 9914 identical (tokens only, paint adoption pending as designed — verify REPORT honesty at land).
 - No agent commits yet for B/C. Wait.
+
+## Wave H poll 12 B wiring C selfcheck
+- B+C live. B 22 green, wiring refs extraction for REPORT + INTEGRATION.patch, commit next. C OWNS selfcheck clean (no forbidden touches), gates next.
+- No B/C commits yet. Wait.
