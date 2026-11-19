@@ -654,3 +654,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 19 B report written
 - B REPORT written (+14 tests honest delta HEAD 175→189), commit next. A2 done (may slice-more, proc live).
 - Wait for B land.
+
+## Wave J poll 20 B landed wave complete
+- B 9d6dd17 verified+pushed: OWNS clean (3 files 1524+), tests 189 green, fmt clean, owned clippy zero. 3 dead-code in viewmodel (old summary builders, Wave I file) — Wave K cleanup.
+- Wave J complete: cleanup slices + picture/media + reverify all landed. Next: Wave K viewmodel dead-code + local-run final + release.
