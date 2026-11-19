@@ -1111,3 +1111,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AR-SYNCPAINT `sess-syncpaint-ar`: OWNS views.rs+checks/gui-syncpaint-ar (sync badges/selection paint).
 - AR-HOMERECENT `sess-homerecent-ar`: OWNS home.rs+app.rs+checks/gui-homerecent-ar (recent list refinement).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AR complete (2 parallel: folder sync paint + home recent polish)
+- HOMERECENT `4f85bd4` home recent list two-line rows + timestamps + honest states — OWNS home.rs+app.rs.
+- SYNCPAINT `4387fd1` folder sync badge + selection paint adoption — OWNS views.rs (+290 paint, +130 tests).
+- Verify combined: 473 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AS (hex gutter parity, table key-col UX, text find highlight polish).
