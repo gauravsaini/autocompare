@@ -634,3 +634,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 14 B 1 fail left
 - B 187 passed 1 failed (+16 tests, single failure left). A2 reading history for context.
 - No commits. Wait for B green.
+
+## Wave J poll 15 188 green
+- Worktree tests 188 green (B fixed last fail). B near commit (REPORT+gates next). A2 still scoping.
+- No commits. Wait for lands.
