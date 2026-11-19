@@ -139,15 +139,19 @@ impl HexCompareView {
     /// total; a stale selection is cleared.
     pub fn from_comparison(cmp: &BinaryComparison, mode: HexCompareMode, max_hunks: usize) -> Self {
         let mut hunks = Vec::new();
+        // Engine hunks already arrive chunked, but run them through the
+        // same 64-byte chunker the slice path uses so an over-long or
+        // over-budget engine hunk still reports honestly.
+        let mut needed: usize = 0;
         for hunk in cmp.hunks.iter() {
-            if hunks.len() >= max_hunks {
-                break;
-            }
-            hunks.push(HexHunkView {
-                offset: hunk.offset,
-                left_len: hunk.left.len(),
-                right_len: hunk.right.len(),
-            });
+            chunk_run(
+                hunk.offset,
+                hunk.left.len(),
+                hunk.right.len(),
+                max_hunks,
+                &mut hunks,
+                &mut needed,
+            );
         }
         Self {
             mode,
@@ -156,7 +160,7 @@ impl HexCompareView {
             right_size: cmp.right_size,
             first_diff: cmp.first_diff,
             hunks,
-            truncated: cmp.truncated,
+            truncated: cmp.truncated || needed > max_hunks,
             over_cap: false,
             selected: None,
         }
@@ -172,7 +176,7 @@ impl HexCompareView {
         mode: HexCompareMode,
         max_hunks: usize,
     ) -> Self {
-        if left.len() > ALIGNED_HEX_MAX_BYTES || right.len() > ALIGNED_HEX_MAX_BYTES {
+        if Self::is_over_cap(left.len(), right.len()) {
             return Self {
                 mode,
                 max_hunks,
@@ -311,14 +315,12 @@ impl HexCompareView {
             line.push_str(" (more runs exist, hunk limit reached)");
         }
         match self.selected {
-            Some(idx) => {
-                if self.hunks.get(idx).is_some() {
-                    line.push_str(&format!(" | selected hunk {}", idx.saturating_add(1)));
-                } else {
-                    line.push_str(" | no selection");
-                }
+            // Validity goes through the single accessor so a stale index
+            // reads as no selection everywhere the status line paints.
+            Some(idx) if self.selected_hunk().is_some() => {
+                line.push_str(&format!(" | selected hunk {}", idx.saturating_add(1)));
             }
-            None => line.push_str(" | no selection"),
+            _ => line.push_str(" | no selection"),
         }
         line
     }
@@ -326,7 +328,8 @@ impl HexCompareView {
 
 /// Copies one aligned run into at most 64-byte hunk views, counting
 /// every chunk the run needs so the caller can mark truncation
-/// honestly. Mirrors the engine's `push_hunk_run`.
+/// honestly. Shared by the slice path and [`HexCompareView::from_comparison`];
+/// mirrors the engine's `push_hunk_run`.
 fn chunk_run(
     offset: u64,
     left_len: usize,
@@ -536,5 +539,37 @@ mod tests {
         );
         assert!(view.truncated);
         assert!(view.status_line().contains("Fast"));
+    }
+
+    #[test]
+    fn from_comparison_chunks_overlong_engine_hunks() {
+        let cmp = BinaryComparison {
+            left_size: 200,
+            right_size: 200,
+            first_diff: Some(0),
+            hunks: vec![autocompare_compare::BinaryHunk {
+                offset: 0,
+                left: vec![0u8; 200],
+                right: vec![1u8; 200],
+            }],
+            truncated: false,
+        };
+        let full = HexCompareView::from_comparison(&cmp, HexCompareMode::None, 8);
+        assert_eq!(full.hunks.len(), 4);
+        assert!(full.hunks.iter().all(|h| h.left_len <= HEX_HUNK_LEN));
+        assert!(!full.truncated);
+        let clipped = HexCompareView::from_comparison(&cmp, HexCompareMode::None, 1);
+        assert_eq!(clipped.hunks.len(), 1);
+        assert!(clipped.truncated);
+    }
+
+    #[test]
+    fn stale_selection_reads_as_no_selection() {
+        let left = vec![0u8, 1, 2, 3, 4];
+        let right = vec![0u8, 1, 2, 9, 4];
+        let mut view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        view.selected = Some(99);
+        assert_eq!(view.selected_hunk(), None);
+        assert!(view.status_line().contains("no selection"));
     }
 }
