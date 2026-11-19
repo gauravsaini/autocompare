@@ -20,8 +20,8 @@ use eframe::egui::{
 
 use crate::app::Tab;
 use crate::app::{
-    AudioCheckKind, AudioChecklist, FolderMergeChecklist, PictureCompareModel, PictureMode,
-    PictureViewState, SyncChecklist,
+    AudioCheckKind, AudioChecklist, FolderMergeChecklist, MergeApplyState, MergeApplySummary,
+    PictureCompareModel, PictureMode, PictureViewState, SyncChecklist,
 };
 use crate::gutter::{gutter_bar_width_for_font, gutter_jump_target, gutter_y_for_row};
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
@@ -1524,6 +1524,121 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
                 ui.label(text);
             }
         });
+}
+
+// ----------------------------------------------------------------------------
+// Merge Apply adoption (Gap #8 paint half): Apply button + progress/result
+// display wired to the App apply state machine (AN precedent
+// `MergeApplyState` / `MergeApplySummary` / `run_merge_apply`).
+// State + summary App ka truth hai (read-only in); picks/decision display
+// `paint_merge_three_pane` wala hi rehta hai. Geometry/typo existing tokens
+// me hai (HEADER_H row, TIGHT_GAP spacing, small-strong title + status role),
+// koi naya token/color nahi.
+// ----------------------------------------------------------------------------
+
+/// Apply section title: hunk-card title precedent (small-strong paint).
+/// Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn merge_apply_section_title() -> &'static str {
+    "Apply"
+}
+
+/// Output path field hint: dry-run par honest "not written" note, real run
+/// par seedha label. Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn merge_apply_path_hint(dry_run: bool) -> &'static str {
+    if dry_run {
+        "output path (dry-run: not written)"
+    } else {
+        "output path"
+    }
+}
+
+/// Progress display ke liye state label: har `MergeApplyState` variant ka
+/// honest ek-shabd sthiti, sab distinct, koi fake percent nahi. Pure;
+/// unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn merge_apply_state_label(state: MergeApplyState) -> &'static str {
+    match state {
+        MergeApplyState::Idle => "idle",
+        MergeApplyState::DryRunReported => "dry-run reported",
+        MergeApplyState::Wrote => "written",
+        MergeApplyState::NeedsPath => "needs output path",
+        MergeApplyState::NoModel => "compare first",
+        MergeApplyState::Failed => "failed",
+    }
+}
+
+/// Structured summary se real counts line: dry-run par resolved + decided
+/// counts (no writes), real write par wrote count + out path, path-khali
+/// par honest no-path note. `None` jab koi report nahi (Idle fresh).
+/// Caller `summary_line` (App real line) ke saath ise dikhata hai. Pure;
+/// unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn format_merge_apply_result(summary: Option<&MergeApplySummary>) -> Option<String> {
+    let s = summary?;
+    if s.dry_run {
+        Some(format!(
+            "dry-run: {} line(s), {}/{} decided, {} pending (no writes)",
+            s.resolved_lines, s.decided, s.total, s.pending
+        ))
+    } else if s.out.is_empty() {
+        Some(format!(
+            "{} line(s), {}/{} decided, {} pending (no output path)",
+            s.resolved_lines, s.decided, s.total, s.pending
+        ))
+    } else {
+        Some(format!(
+            "wrote {} line(s) -> {} ({}/{} decided, {} pending)",
+            s.wrote_lines, s.out, s.decided, s.total, s.pending
+        ))
+    }
+}
+
+/// Merge Apply section: dry-run checkbox + output path field + Apply button
+/// ek [`HEADER_H`] row me, neeche progress/result display (state label +
+/// App real `summary_line` + structured counts jab report ho).
+/// `enabled` App ke `merge_apply_enabled()` se aata hai (model maujood =
+/// dabane layak); `dry_run`/`out_path` App fields se bind hote hain;
+/// `state`/`summary`/`summary_line` App truth ke read-only view hain.
+/// Returns true jab Apply daba (caller `request_merge_apply` phir
+/// `run_merge_apply` chalata hai; button disabled par kabhi true nahi).
+/// Geometry/typo callee tokens me (28/4 reuse), koi naya token/color nahi.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai (merge tab); tab tak tests live rakhte hain
+pub fn paint_merge_apply(
+    ui: &mut Ui,
+    enabled: bool,
+    dry_run: &mut bool,
+    out_path: &mut String,
+    state: MergeApplyState,
+    summary: Option<&MergeApplySummary>,
+    summary_line: &str,
+) -> bool {
+    ui.label(RichText::new(merge_apply_section_title()).small().strong());
+    let mut apply_clicked = false;
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.checkbox(dry_run, "Dry-run");
+        let field_w = (ui.available_width() - BROWSE_RESERVE).max(MIN_HALF);
+        ui.add(
+            TextEdit::singleline(out_path)
+                .desired_width(field_w)
+                .hint_text(merge_apply_path_hint(*dry_run)),
+        );
+        let clicked = ui
+            .add_enabled(enabled, egui::Button::new("Apply"))
+            .clicked();
+        if clicked {
+            apply_clicked = true;
+        }
+    });
+    ui.label(chrome_status_role().rich(format!("apply state: {}", merge_apply_state_label(state))));
+    ui.label(chrome_status_role().rich(summary_line));
+    if let Some(line) = format_merge_apply_result(summary) {
+        ui.label(chrome_status_role().rich(line));
+    }
+    ui.add_space(TIGHT_GAP);
+    apply_clicked
 }
 
 /// The table comparison rows: changed rows highlighted, changed cells
@@ -5358,6 +5473,84 @@ mod tests {
         assert_eq!(
             chrome_tab_role().line_height_source(),
             text_row_height_intent()
+        );
+    }
+
+    #[test]
+    fn merge_apply_section_title_is_apply() {
+        assert_eq!(merge_apply_section_title(), "Apply");
+    }
+
+    #[test]
+    fn merge_apply_path_hint_names_output_path() {
+        // Dono modes me output path shabd rehta hai; dry-run honest note jodta hai.
+        assert!(merge_apply_path_hint(true).contains("output path"));
+        assert!(merge_apply_path_hint(true).contains("not written"));
+        assert_eq!(merge_apply_path_hint(false), "output path");
+    }
+
+    #[test]
+    fn merge_apply_state_labels_cover_all_states() {
+        // Har variant distinct honest label; khali ya duplicate nahi.
+        let labels = [
+            merge_apply_state_label(MergeApplyState::Idle),
+            merge_apply_state_label(MergeApplyState::DryRunReported),
+            merge_apply_state_label(MergeApplyState::Wrote),
+            merge_apply_state_label(MergeApplyState::NeedsPath),
+            merge_apply_state_label(MergeApplyState::NoModel),
+            merge_apply_state_label(MergeApplyState::Failed),
+        ];
+        assert_eq!(labels[0], "idle");
+        assert_eq!(labels[4], "compare first");
+        for (i, a) in labels.iter().enumerate() {
+            assert!(!a.is_empty());
+            for b in labels.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    fn merge_apply_test_summary(dry_run: bool, out: &str) -> MergeApplySummary {
+        MergeApplySummary {
+            dry_run,
+            resolved_lines: 3,
+            decided: 1,
+            total: 2,
+            pending: 1,
+            wrote_lines: 4,
+            out: out.to_string(),
+        }
+    }
+
+    #[test]
+    fn merge_apply_result_none_when_no_report() {
+        assert_eq!(format_merge_apply_result(None), None);
+    }
+
+    #[test]
+    fn merge_apply_result_dry_run_shows_counts_no_writes() {
+        let line = format_merge_apply_result(Some(&merge_apply_test_summary(true, "")));
+        assert_eq!(
+            line,
+            Some("dry-run: 3 line(s), 1/2 decided, 1 pending (no writes)".to_string())
+        );
+    }
+
+    #[test]
+    fn merge_apply_result_needs_path_is_honest() {
+        let line = format_merge_apply_result(Some(&merge_apply_test_summary(false, "")));
+        assert_eq!(
+            line,
+            Some("3 line(s), 1/2 decided, 1 pending (no output path)".to_string())
+        );
+    }
+
+    #[test]
+    fn merge_apply_result_wrote_shows_path_and_counts() {
+        let line = format_merge_apply_result(Some(&merge_apply_test_summary(false, "out.txt")));
+        assert_eq!(
+            line,
+            Some("wrote 4 line(s) -> out.txt (1/2 decided, 1 pending)".to_string())
         );
     }
 }
