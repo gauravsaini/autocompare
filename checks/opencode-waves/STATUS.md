@@ -127,3 +127,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 05
 - Diff +461/-12: app +315 (folder wiring), views +54 (paint prefs hook), screenshot +17 (folder fixture starting), gutter +18, viewmodel +69. Both alive. Folder log silent but edits prove work. Scan clean.
+
+## Wave D poll 06
+- Diff +794/-22: screenshot +291 (folder fixture expanding), views +123 (paint hook), app +315, viewmodel +69, gutter +18. Scan clean. Both alive.
