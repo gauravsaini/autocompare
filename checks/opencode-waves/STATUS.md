@@ -1394,3 +1394,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
   - BS-BIN sess-bin-bs: OWNS scripts/+tools/packaging/+checks/bin-bs (rebuild tarball + install proof, zero crates edits).
 - All: unlazy GATES.md first + ponytail laziest + gui-polish skill harness loop (max 6 rounds) + MS rust (forbid unsafe, no unwrap/expect/panic/todo non-test) + colors FROZEN.
 - Probe: no tight timer, one-shot --screenshot + outer harness recurring loop (craft-anything replicate+validate per feature).
+
+## 2026-11-20 - Wave BS/BR relaunch (daemonized, interrupt fix)
+- 5/5 sessions `interrupted` mile (launch wala exec turn-end par kill hua tha). Fix: python double-fork + setsid daemon (/tmp/relaunch.py), same session IDs continue (partial work preserved, localrun fixtures intact).
+- 5 run processes alive verified (ps count 5, localrun tokens 2394 -> 3194). Landing par isolated-verify + push.
