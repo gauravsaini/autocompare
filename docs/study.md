@@ -70,7 +70,7 @@ MEDIUM pending a visual pass (see "Verification status"):
 | Folder merge | `autocompare folder-merge` | three-way tree merge, plan/apply, conflict markers |
 | Picture compare | `autocompare picture` | PNG pixel diff with bounds, share and heatmap |
 | Media compare | `autocompare audio` | WAV + MP3 sample comparison with 10ms window share; other codecs on the roadmap |
-| GUI | `cargo run -p autocompare-gui` | thin desktop client over the same engine; text, folder and picture views |
+| GUI | `cargo run -p autocompare-gui` | thin desktop client over the same engine; nine tabs (Text, Folder, Hex, Merge, Table, Sync, Picture, FolderMerge, Audio) covering all nine session types; Sync/FolderMerge show the dry-run plan, applying stays CLI |
 | Names, icons, wording | deliberately original | clean-room rule |
 
 ## Design decisions where the clone differs on purpose

@@ -1,5 +1,13 @@
 # TIMELINE
 
+## UPDATED ON : 2026-11-19
+
+### Feature (2026-11-19) — v0.5.0: desktop GUI covers all nine session types
+
+1. **Scope**: `autocompare-gui` grows from 3 tabs to 9 (Text, Folder, Hex, Merge, Table, Sync, Picture, FolderMerge, Audio), matching the nine CLI commands and the original's nine observed session types. Merge/FolderMerge take base/left/right paths; Sync/FolderMerge show the dry-run plan (apply stays CLI). No engine changes: thin GUI over `autocompare-compare` / `autocompare-diff`, pure headless view-model builders, safe Rust, never panics.
+2. **Tests** (before → after): 251 → 264 workspace tests (+13 headless GUI view-model: hex, merge conflict, table cells, sync plan, folder-merge plan, audio), `clippy -D warnings` clean; live CLI sanity verified text/folder/table exit codes and rendering.
+3. **Files changed**: `crates/gui/src/{app,viewmodel,views}.rs`, `Cargo.toml` (0.4.0 → 0.5.0), README, docs/study.md, docs/plan-v0.5.0.md.
+
 ## UPDATED ON : 2026-11-18
 
 ### Feature (2026-11-18) — v0.4.0: audio compare and the desktop GUI client

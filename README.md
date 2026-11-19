@@ -245,11 +245,17 @@ honestly as not comparable instead of guessed.
 cargo run -p autocompare-gui
 ```
 
-A thin desktop client (eframe/egui) with Text, Folder and Picture
-tabs over the same engine libraries the CLI uses: side-by-side rows
-with accent highlights, folder listings with status colors, and the
-difference heatmap rendered in-app. Errors appear as panels; the
-window never crashes on bad input (all engine errors are values).
+A thin desktop client (eframe/egui) with nine tabs over the same
+engine libraries the CLI uses — Text, Folder, Hex, Merge, Table,
+Sync, Picture, FolderMerge and Audio, matching the nine session
+types of the original: side-by-side rows with accent highlights,
+folder listings with status colors, hex/plan/stat summaries, the
+three-way merge output with conflict highlighting, `[old => new]`
+table cells, and the difference heatmap rendered in-app. Merge and
+FolderMerge take base/left/right paths; Sync and FolderMerge show
+the dry-run plan (applying stays a CLI operation). Errors appear as
+panels; the window never crashes on bad input (all engine errors
+are values).
 
 On Linux, the windowing system development packages are needed first
 (the CI workflow installs exactly this set):
@@ -282,13 +288,13 @@ sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 \
 
 ## Tests
 
-246 workspace tests: replay validity for every diff case, brute-force
+264 workspace tests: replay validity for every diff case, brute-force
 minimality on random pairs, budget fallback, symlink-safe folder
 fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
 sync plan and apply semantics, three-way tree merge rules, PNG and
 audio decode totality sweeps (every prefix truncation of a valid WAV,
-random buffers, hostile headers), plus 30 headless GUI view-model
-tests. Five exhaustive sweeps (~430k pairs, each checked for replay,
+random buffers, hostile headers), plus 43 headless GUI view-model
+tests covering all nine tabs. Five exhaustive sweeps (~430k pairs, each checked for replay,
 canonical form and minimal edit count) run separately in release
 mode:
 
@@ -299,7 +305,7 @@ cargo test -p autocompare-diff --release -- --ignored
 ## Roadmap
 
 - More audio codecs (FLAC, OGG)
-- Merge view and sync actions in the GUI
+- Sync / folder-merge apply actions in the GUI (plan views exist; `--apply` stays CLI)
 - In-place editing (the original's panes are editors)
 
 ## License
