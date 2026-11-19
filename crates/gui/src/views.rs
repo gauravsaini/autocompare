@@ -29,7 +29,7 @@ use crate::theme::{
     CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
     TYPO_MONO_SIZE, blue_for, dim_for, green_for, red_for, track_for,
 };
-use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
+use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
 use crate::{views_hex, views_table};
 
@@ -2641,6 +2641,97 @@ pub fn paint_text_find_bar(
     });
     (prev, next)
 }
+
+/// Headless find-nav step: Prev/Next clicks ko `FindState` advance me
+/// badalta hai. Click na ho to `None` (selection untouched rehta hai,
+/// taaki F3 diff-nav selection se ladai na ho). Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this via paint
+pub fn advance_text_find(
+    find: &mut FindState,
+    prev_clicked: bool,
+    next_clicked: bool,
+) -> Option<usize> {
+    if next_clicked {
+        find.next()
+    } else if prev_clicked {
+        find.prev()
+    } else {
+        None
+    }
+}
+
+/// `FindState`-owned text find bar: needle field, case flag, Prev/Next
+/// aur N/M count badge. Table/folder find precedent ka paint reuse: wahi
+/// needle width ([`FIND_NEEDLE_W`]), wahi button labels, badge right me
+/// ek pad ([`BADGE_PAD`]) ke saath small weak typo me. Query edit par
+/// `set_query_cased` recompute karta hai (cursor first hit par), case
+/// toggle par `set_ignore_case`. Badge [`FindState::count_label`] se
+/// aata hai. Returns `(prev_clicked, next_clicked)`; cursor advance
+/// [`advance_text_find`] me hota hai. Purana App-wired
+/// [`paint_text_find_bar`] compat ke liye untouched hai.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this
+pub fn paint_text_find_state_bar(
+    ui: &mut Ui,
+    find: &mut FindState,
+    rows: &[TextRow],
+) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    let avail = ui.available_width();
+    // TextEdit ko `&mut String` chahiye, query `FindState` ke andar hai:
+    // local copy edit karke change par wapas likho (App `old_needle`
+    // precedent).
+    let mut needle = find.query().to_string();
+    let mut ignore_case = find.ignore_case();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
+        ui.label(RichText::new("Find:").small().weak());
+        let edit = ui.add(
+            egui::TextEdit::singleline(&mut needle)
+                .desired_width(FIND_NEEDLE_W)
+                .hint_text("needle"),
+        );
+        if edit.changed() {
+            let flag = find.ignore_case();
+            find.set_query_cased(rows, &needle, flag);
+        }
+        if ui.checkbox(&mut ignore_case, "Ignore case").changed() {
+            find.set_ignore_case(rows, ignore_case);
+        }
+        if ui.small_button("◀ Prev").clicked() {
+            prev = true;
+        }
+        if ui.small_button("Next ▶").clicked() {
+            next = true;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(BADGE_PAD);
+            ui.label(RichText::new(find.count_label()).small().weak());
+        });
+    });
+    (prev, next)
+}
+
+/// Find-box wired text view: `FindState` bar upar, neeche existing
+/// [`paint_text_with_prefs`]. Har frame `refresh_if_stale` chalata hai
+/// taaki naya compare stale counts na dikhaye; Prev/Next clicks
+/// [`advance_text_find`] se `model.selected` sync karte hain (wahi
+/// highlight jo F3 diff-nav use karta hai). Prefs/counts behavior
+/// `paint_text_with_prefs` jaisa hi hai.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this
+pub fn paint_text_with_find(
+    ui: &mut Ui,
+    model: &mut TextRows,
+    prefs: &TextViewPrefs,
+    find: &mut FindState,
+) {
+    find.refresh_if_stale(&model.rows);
+    let (find_prev, find_next) = paint_text_find_state_bar(ui, find, &model.rows);
+    if let Some(row) = advance_text_find(find, find_prev, find_next) {
+        model.selected = Some(row);
+    }
+    paint_text_with_prefs(ui, model, prefs);
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3659,6 +3750,82 @@ mod tests {
         assert_eq!(FIND_BAR_H, HEADER_H);
         assert_eq!(FIND_NEEDLE_W, 120.0);
         assert_eq!(BADGE_PAD, TIGHT_GAP);
+    }
+
+    #[test]
+    fn find_state_badge_matches_model_label() {
+        // Paint badge aur model label ek hi string: badge parity.
+        assert_eq!(
+            text_find_badge_label(Some(2), 5),
+            viewmodel::find_count_label(Some(2), 5)
+        );
+        assert_eq!(text_find_badge_label(Some(2), 5), "2/5");
+        assert_eq!(
+            text_find_badge_label(None, 0),
+            viewmodel::find_count_label(None, 0)
+        );
+        assert_eq!(text_find_badge_label(None, 0), "0/0");
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: "alpha beta".to_string(),
+                right: String::new(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "gamma delta".to_string(),
+                right: String::new(),
+                ..TextRow::default()
+            },
+        ];
+        let mut find = FindState::default();
+        find.set_query(&rows, "gamma");
+        assert_eq!(find.count_label(), "1/1");
+        assert_eq!(
+            text_find_badge_label(find.position(), find.match_count()),
+            "1/1"
+        );
+    }
+
+    #[test]
+    fn advance_text_find_moves_only_on_click() {
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: "alpha".to_string(),
+                right: String::new(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "gamma one".to_string(),
+                right: String::new(),
+                ..TextRow::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: "gamma two".to_string(),
+                right: String::new(),
+                ..TextRow::default()
+            },
+        ];
+        let mut find = FindState::default();
+        find.set_query(&rows, "gamma");
+        // Bina click selection untouched (None = koi change nahi).
+        assert_eq!(advance_text_find(&mut find, false, false), None);
+        assert_eq!(find.count_label(), "1/2");
+        // Next advance karta hai, wrap ke saath.
+        assert_eq!(advance_text_find(&mut find, false, true), Some(2));
+        assert_eq!(find.count_label(), "2/2");
+        assert_eq!(advance_text_find(&mut find, false, true), Some(1));
+        // Prev peeche jata hai, wrap ke saath.
+        assert_eq!(advance_text_find(&mut find, true, false), Some(2));
+        // Khali find par clicks bhi None.
+        let mut empty = FindState::default();
+        empty.set_query(&rows, "absent");
+        assert_eq!(advance_text_find(&mut empty, false, true), None);
+        assert_eq!(advance_text_find(&mut empty, true, false), None);
     }
 
     #[test]

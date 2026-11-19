@@ -1297,21 +1297,24 @@ pub fn build_table_rows(cmp: &TableComparison) -> TableModel {
 // checklist/model types ko use kare, purani `Vec<String>` summary wapas na laye.
 
 // ----------------------------------------------------------------------------
-// Find box (headless; wiring owned by views.rs / agent A)
+// Find box (headless; paint wiring: `views::paint_text_with_find`)
 // ----------------------------------------------------------------------------
 //
-// WIRING (agent A / orchestrator): the text paint keeps one `FindState`
-// per text view. The find box writes `set_query(&rows, &query)` on each
-// edit; Enter / Shift+Enter call `next()` / `prev()` and scroll the
-// returned model row into view with the same highlight the F3 path
-// uses. `count_label()` feeds the "N/M" badge (agla paint wave). No
-// egui code here.
+// WIRING (Wave AE-FINDPAINT): the text paint keeps one `FindState`
+// per text view (`views::paint_text_with_find`). The find bar writes
+// `set_query_cased(&rows, &query, ignore_case)` on each edit, the
+// ignore-case checkbox calls `set_ignore_case`, and each frame calls
+// `refresh_if_stale` so a fresh compare never shows stale counts.
+// Prev/Next call `prev()` / `next()` and paint syncs the returned
+// model row into `selected` with the same highlight the F3 path uses.
+// `count_label()` feeds the "N/M" badge. No egui code here.
 
 /// N/M badge text for the text find bar: "2/5", no hit par "0/0".
 ///
-/// Pure; paint-side `views::text_find_badge_label` ke model-side judvaan —
-/// agla paint wave isko badge label ke liye use karega. Unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (agla wave) calls this via FindState
+/// Pure; paint-side `views::text_find_badge_label` ka model-side judvaan —
+/// `FindState::count_label` badge label ke liye isko use karta hai.
+/// Unit-tested.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) wires FindState paint
 pub fn find_count_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -1319,21 +1322,35 @@ pub fn find_count_label(position: Option<usize>, total: usize) -> String {
     }
 }
 
-/// Case-insensitive substring matches of `query` over both panes.
+/// One pane text me needle hai ya nahi: khali needle kabhi hit nahi.
+/// Table (`views_table`) / folder (`tree`) find precedent jaisa case flag.
+#[allow(dead_code)] // wiring-pending: see find_match_indices_cased
+fn find_text_contains(hay: &str, needle: &str, ignore_case: bool) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if ignore_case {
+        hay.to_lowercase().contains(&needle.to_lowercase())
+    } else {
+        hay.contains(needle)
+    }
+}
+
+/// Case-flag substring matches of `query` over both panes.
 ///
 /// Returns original-model row indices in order. Empty or
-/// whitespace-only queries match nothing. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (agent A) calls this via FindState
-pub fn find_match_indices(rows: &[TextRow], query: &str) -> Vec<usize> {
+/// whitespace-only queries match nothing (table/folder precedent).
+/// Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: FindState + paint (orchestrator) call this
+pub fn find_match_indices_cased(rows: &[TextRow], query: &str, ignore_case: bool) -> Vec<usize> {
     if query.trim().is_empty() {
         return Vec::new();
     }
-    let needle = query.to_lowercase();
     let mut out = Vec::new();
     let mut idx = 0usize;
     for row in rows {
-        let hit =
-            row.left.to_lowercase().contains(&needle) || row.right.to_lowercase().contains(&needle);
+        let hit = find_text_contains(&row.left, query, ignore_case)
+            || find_text_contains(&row.right, query, ignore_case);
         if hit {
             out.push(idx);
         }
@@ -1342,21 +1359,42 @@ pub fn find_match_indices(rows: &[TextRow], query: &str) -> Vec<usize> {
     out
 }
 
+/// Case-insensitive substring matches of `query` over both panes.
+///
+/// [`find_match_indices_cased`] ka `ignore_case = true` wrapper (App
+/// default `true` se match; purane callers/tests unchanged). Pure;
+/// unit-tested.
+#[allow(dead_code)] // wiring-pending: FindState::set_query calls this
+pub fn find_match_indices(rows: &[TextRow], query: &str) -> Vec<usize> {
+    find_match_indices_cased(rows, query, true)
+}
+
 /// Headless find-box state: current query, its matches, cursor into them.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // wiring-pending: paint (agent A) owns one per text view
+#[allow(dead_code)] // wiring-pending: views::paint_text_with_find owns one per text view
 pub struct FindState {
     query: String,
     matches: Vec<usize>,
     cursor: Option<usize>,
+    ignore_case: bool,
+    rows_len: usize,
 }
 
-#[allow(dead_code)] // wiring-pending: see struct
+#[allow(dead_code)] // wiring-pending: views::paint_text_with_find calls these
 impl FindState {
     /// Recomputes matches for a new query; cursor rests on the first hit.
+    /// Case-insensitive (App default `true` se match; purane callers unchanged).
     pub fn set_query(&mut self, rows: &[TextRow], query: &str) {
+        self.set_query_cased(rows, query, true);
+    }
+
+    /// Recomputes matches for a new query + case flag; cursor rests on
+    /// the first hit. Table/folder find precedent jaisa flag.
+    pub fn set_query_cased(&mut self, rows: &[TextRow], query: &str, ignore_case: bool) {
         self.query = query.to_string();
-        self.matches = find_match_indices(rows, query);
+        self.ignore_case = ignore_case;
+        self.rows_len = rows.len();
+        self.matches = find_match_indices_cased(rows, query, ignore_case);
         self.cursor = if self.matches.is_empty() {
             None
         } else {
@@ -1364,9 +1402,40 @@ impl FindState {
         };
     }
 
+    /// Case flag badalne par same query se recompute; cursor first hit par.
+    /// Flag same ho to kuch nahi badalta.
+    pub fn set_ignore_case(&mut self, rows: &[TextRow], ignore_case: bool) {
+        if self.ignore_case != ignore_case {
+            let query = self.query.clone();
+            self.set_query_cased(rows, &query, ignore_case);
+        }
+    }
+
+    /// Model badalne (naya compare) par stale matches refresh karta hai:
+    /// row count badla to same query + flag se recompute, cursor first
+    /// hit par; count same ho to cursor untouched rehta hai. Returns true
+    /// jab recompute hua. Paint har frame call karta hai (ek usize
+    /// compare; O(n) sirf stale hone par).
+    pub fn refresh_if_stale(&mut self, rows: &[TextRow]) -> bool {
+        if self.rows_len != rows.len() {
+            let query = self.query.clone();
+            let flag = self.ignore_case;
+            self.set_query_cased(rows, &query, flag);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Current query text.
     pub fn query(&self) -> &str {
         &self.query
+    }
+
+    /// Case flag (App default `true`; naye `FindState::default()` me
+    /// `set_query` turant `true` set karta hai).
+    pub fn ignore_case(&self) -> bool {
+        self.ignore_case
     }
 
     /// Number of matched rows ("m" in "n of m").
@@ -1386,7 +1455,8 @@ impl FindState {
     }
 
     /// N/M badge text ("n of m" label): `position()` over `match_count()`,
-    /// no match par "0/0". Pure; agla paint wave badge ke liye use karega.
+    /// no match par "0/0". Pure; paint bar badge ke liye use karta hai
+    /// (`views::paint_text_find_state_bar`).
     pub fn count_label(&self) -> String {
         find_count_label(self.position(), self.match_count())
     }
@@ -2787,6 +2857,78 @@ mod tests {
         assert_eq!(state.count_label(), "0/0");
         assert_eq!(state.next(), None);
         assert_eq!(state.count_label(), "0/0");
+    }
+
+    #[test]
+    fn find_match_indices_cased_honors_the_case_flag() {
+        let rows = find_rows();
+        assert_eq!(find_match_indices_cased(&rows, "gamma", true), vec![1, 2]);
+        assert_eq!(find_match_indices_cased(&rows, "GAMMA", true), vec![1, 2]);
+        // Case-sensitive: sirf exact-case pane hit hota hai.
+        assert_eq!(find_match_indices_cased(&rows, "gamma", false), vec![1]);
+        assert_eq!(find_match_indices_cased(&rows, "GAMMA", false), vec![2]);
+        assert_eq!(find_match_indices_cased(&rows, "DELTA", false), vec![1]);
+        assert_eq!(
+            find_match_indices_cased(&rows, "Delta", false),
+            Vec::<usize>::new()
+        );
+        // Khali/whitespace needle kabhi match nahi (table/folder precedent).
+        assert_eq!(
+            find_match_indices_cased(&rows, "", true),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            find_match_indices_cased(&rows, "   ", false),
+            Vec::<usize>::new()
+        );
+        // Wrapper hamesha case-insensitive hai.
+        assert_eq!(find_match_indices(&rows, "GAMMA"), vec![1, 2]);
+    }
+
+    #[test]
+    fn find_state_case_flag_recomputes_with_cursor_on_first_hit() {
+        let rows = find_rows();
+        let mut state = FindState::default();
+        state.set_query_cased(&rows, "gamma", false);
+        assert!(!state.ignore_case());
+        assert_eq!(state.match_rows(), &[1]);
+        assert_eq!(state.count_label(), "1/1");
+        state.set_ignore_case(&rows, true);
+        assert!(state.ignore_case());
+        assert_eq!(state.match_rows(), &[1, 2]);
+        assert_eq!(state.count_label(), "1/2");
+        // Same flag dobara: cursor untouched rehta hai.
+        state.next();
+        assert_eq!(state.count_label(), "2/2");
+        state.set_ignore_case(&rows, true);
+        assert_eq!(state.count_label(), "2/2");
+        // Purana set_query hamesha case-insensitive hai.
+        state.set_query(&rows, "GAMMA");
+        assert!(state.ignore_case());
+        assert_eq!(state.match_rows(), &[1, 2]);
+    }
+
+    #[test]
+    fn find_state_refresh_resets_only_on_new_model() {
+        let rows = find_rows();
+        let mut state = FindState::default();
+        state.set_query(&rows, "gamma");
+        state.next();
+        assert_eq!(state.count_label(), "2/2");
+        // Same row count: no recompute, cursor untouched.
+        assert!(!state.refresh_if_stale(&rows));
+        assert_eq!(state.count_label(), "2/2");
+        // Naya compare (count badla): recompute, cursor first hit par.
+        let mut longer = rows.clone();
+        longer.push(TextRow {
+            kind: TextRowKind::Equal,
+            left: "gamma again".to_string(),
+            right: String::new(),
+            ..TextRow::default()
+        });
+        assert!(state.refresh_if_stale(&longer));
+        assert_eq!(state.match_count(), 3);
+        assert_eq!(state.count_label(), "1/3");
     }
 
     fn merged_two_conflicts() -> Vec<String> {
