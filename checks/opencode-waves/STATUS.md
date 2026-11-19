@@ -198,3 +198,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - All 3 live verified via ps: ses-geo-exq PID 17032, ses-typo-exq PID 17049, ses-local-bin PID 17073. Logs growing 2893/1258/1879B.
 - GEO in egui 0.37 Frame/Margin API research (Margin::same, inner_margin), TYPO in type-signal counts, BIN produced checks/local-run/early-geo-typo.png 9914B magic ok distinct 256.
 - No source diff yet, reading phase per unlazy, no OWNS violation. Harness baseline still PASS.
+
+## Wave E poll 02
+- TYPO implemented theme.rs +94 TypoRole scale, tests 109 green (was 107), clippy/fmt clean, no colors touch. Uncommitted, agent loop ongoing.
+- GEO started edits: Write checks/gui-geo/GATES.md + Edit views.rs seen in log, diff pending. Still live PID 17032.
+- BIN early report drafted in log, PNG 9914B valid, no source edits. All 3 live, OWNS respected.
