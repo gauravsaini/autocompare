@@ -144,6 +144,22 @@ pub fn split_picture_widths(avail: f32, fraction: f32) -> (f32, f32) {
     (left, total - left)
 }
 
+/// Pane widths for the merge left/base/right row: equal thirds of the
+/// row minus two [`SECTION_GAP`]s (one per divider), each kept at the
+/// [`MIN_THIRD`] floor so narrow windows scroll instead of crushing a
+/// pane; the leftover goes to the right pane so the triple always
+/// fills the row. Two-pane [`split_picture_widths`] precedent (floors
+/// plus leftover fill), one gap per divider instead of one. Pure;
+/// unit-tested.
+pub fn three_pane_widths(avail: f32) -> (f32, f32, f32) {
+    let total = (avail - 2.0 * SECTION_GAP).max(3.0 * MIN_THIRD);
+    let third = total / 3.0;
+    let left = third.max(MIN_THIRD);
+    let base = third.max(MIN_THIRD);
+    let right = (total - left - base).max(MIN_THIRD);
+    (left, base, right)
+}
+
 /// Drag handle cursor: the model affordance id (`"resize-column"`,
 /// see [`viewmodel::split_cursor_affordance`]) mapped to paint.
 /// Panics never; unknown ids fall back to the column resize cursor.
@@ -1385,8 +1401,14 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
                 .weak(),
             );
             ui.add_space(TIGHT_GAP);
+            // Aligned 3-pane row: equal thirds from [`three_pane_widths`]
+            // (same interior width for every card, so left/base/right
+            // columns line up card to card); dividers stay the thin
+            // separators, typo stays small-strong headers + mono lines.
+            let (left_w, base_w, right_w) = three_pane_widths(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
+                    ui.set_width(left_w);
                     ui.label(RichText::new("Left").small().strong());
                     if left.is_empty() {
                         ui.label(RichText::new("(empty)").small().weak());
@@ -1397,6 +1419,7 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
                 });
                 ui.separator();
                 ui.vertical(|ui| {
+                    ui.set_width(base_w);
                     ui.label(RichText::new("Base").small().strong());
                     if base.is_empty() {
                         ui.label(RichText::new("(empty)").small().weak());
@@ -1407,6 +1430,7 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
                 });
                 ui.separator();
                 ui.vertical(|ui| {
+                    ui.set_width(right_w);
                     ui.label(RichText::new("Right").small().strong());
                     if right.is_empty() {
                         ui.label(RichText::new("(empty)").small().weak());
@@ -5141,6 +5165,28 @@ mod tests {
     #[test]
     fn merge_pane_count_is_three() {
         assert_eq!(merge_pane_count(), 3);
+    }
+
+    #[test]
+    fn three_pane_widths_split_equal_thirds() {
+        let (left, base, right) = three_pane_widths(600.0);
+        let total = 600.0 - 2.0 * SECTION_GAP;
+        assert!((left - total / 3.0).abs() < 0.001);
+        assert!((base - total / 3.0).abs() < 0.001);
+        assert!((right - total / 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn three_pane_widths_floor_narrow_panes() {
+        let (left, base, right) = three_pane_widths(100.0);
+        assert_eq!((left, base, right), (MIN_THIRD, MIN_THIRD, MIN_THIRD));
+    }
+
+    #[test]
+    fn three_pane_widths_cover_full_row() {
+        let avail = 900.0;
+        let (left, base, right) = three_pane_widths(avail);
+        assert!((left + base + right + 2.0 * SECTION_GAP - avail).abs() < 0.001);
     }
 
     #[test]
