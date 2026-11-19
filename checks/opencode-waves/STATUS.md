@@ -618,3 +618,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 10 both writing disjoint holds
 - A2 views_hex 22 lines (first cleanup edits). B app 947 lines (picture/media section). M app(B)+hex(A2), no overlap. Both mid-red transitional (bin-only learnings).
 - No commits. Wait.
+
+## Wave J poll 11 disjoint holds 962
+- A2 views_hex 71 lines, B app 947 + views 4 (theme imports). M files map 1:1 to owners (hex=A2, app+views=B). No overlap.
+- No commits. Wait.
