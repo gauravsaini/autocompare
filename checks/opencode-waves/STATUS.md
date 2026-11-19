@@ -887,3 +887,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Y-SPLIT `sess-split-y`: OWNS views.rs+viewmodel.rs+checks/gui-split-y (Gap #1 draggable splitter 0.20..=0.80).
 - Y-FONT `sess-font-y`: OWNS theme.rs+app.rs+checks/gui-font-y (Gap #9 font zoom Cmd+/-).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave Y complete (2 parallel: splitter + font-zoom)
+- FONT `95dbbf7` close font-zoom gap: zoom_scale_factor + TypoRole contract 0.8..=2.0 + ZoomKey resolver/applier Cmd/Ctrl +/-/0 — OWNS theme.rs+app.rs+checks/gui-font-y (Gap #9).
+- SPLIT `ee5a18a` single-source split fraction math in viewmodel (SPLIT 0.20..=0.80 clamp/drag, views re-export) — OWNS viewmodel.rs+views.rs+checks/gui-split-y (Gap #1 math core; drag-handle paint next).
+- Shared-worktree note: FONT ka bare `cargo fmt` ne SPLIT ki views.rs hunks format kiye — fmt-only, SPLIT commit me samahit, koi conflict nahi.
+- Verify combined: 275 green, clippy zero, fmt clean, banned 0.
+- Pushed. Next: Wave Z (hex-grid, table-grid, text-find+count drying gaps).
