@@ -1406,3 +1406,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BS-BIN landed (binary rebuild, pushed)
 - 4a6335e verify ok: OWNS checks/bin-bs only, zero crates/scripts/STATUS edits (script+README already correct), sh -n OK, fresh tarball 5MB dist/ (gitignored) + smoke PNG ok, REPORT Hinglish-Roman. Pushed.
 - Note: --help hangs (SIGTERM 143), --screenshot is the smoke path. Baaki in-flight: BR-FOLDERGRID (views.rs dirty), BS-TYPO (gutter.rs dirty), BS-TABLEWIRE.
+
+## 2026-11-20 - BR-FOLDERGRID landed (folder grid columns, pushed)
+- 6aa3362 verify ok (isolated worktree): OWNS views.rs+own checks, 614 green, clippy 0, fmt clean, banned 0, colors 0, PNG PASS, STATUS untouched. Pushed.
+- G-F2 done: folder dual-pane rows ab Name/Size/Modified grids hain. Baaki in-flight: BS-TYPO, BS-TABLEWIRE.
