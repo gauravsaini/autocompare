@@ -420,3 +420,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 09 both views written
 - All 3 live. B both files untracked (views_hex + views_table), REPORT + INTEGRATION.patch + gates next. C M tree too (14 lines), total 151+/15- across theme/gutter/tree, OWNS ok. A tests 123 green, REPORT + commit next.
 - No agent commits yet. Wait.
+
+## Wave H poll 10 A landed B fixing C gating
+- A 58e143c landed+pushed: OWNS clean (9 files checks/local-run-exq only), release 10851744B 52s, harness PASS, 123 green, PNG 9914B, 15 gaps (hex grid/table grid/gutter-click/find/merge-hunk/paging).
+- B tolerance fixed (NaN never match), scratch parity-check 22 green; repo gates + REPORT + patch pending. C gates running (theme/gutter/tree 162+/15-).
+- B+C live, no OWNS overlap with A. Wait.
