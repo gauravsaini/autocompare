@@ -525,3 +525,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 20 B landed A paint
 - B 442d124 verified+pushed: OWNS clean (4 files 974+), REPORT honest (owned clippy/fmt clean, wiring points). Tests 172 green. Worktree clippy red is A-side transitional (views_hex/table dead-code + app field_reassign, A mid-wiring).
 - A live (app 414 + views 116). Wait for A green.
+
+## Wave I poll 21 A fixing 2 errors
+- A live (B/C done). M app/main/views only (disjoint holds). 2 errors left (field_reassign 2138 + 1), fixing.
+- No A commit yet. Wait.
