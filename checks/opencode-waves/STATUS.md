@@ -602,3 +602,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 06 B editing A nudged slice
 - B M app.rs (19+/12-), mid-edit red (AudioChecklist E0425, fixing). C gates catching (expected). A 6 polls planning — nudged to land first small slice + commit.
 - Wait.
+
+## Wave J poll 07 B rewriting audio
+- B app.rs 105 lines (audio path rewrite). A nudge sent, effect pending. C fmt notes, interim commit pending.
+- No commits. Wait.
