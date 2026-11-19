@@ -1,6 +1,9 @@
 //! Thumbnail gutter geometry calculations.
 //!
-//! Provides pure mapping of diff row ranges to vertical gutter bar segments.
+//! Pure mapping of diff row ranges to vertical gutter bar segments.
+//! Bar widths, minimum segment height and merge gap come from
+//! `crate::theme` spacing tokens (4/8/12/16/24 scale) so markers,
+//! separator and text rows stay aligned.
 
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
@@ -52,13 +55,15 @@ pub fn gutter_geometry(total_rows: usize, height: f32, rows: &[TextRow]) -> Gutt
 
         let y_start = (idx as f32 / total_f) * height;
         let mut y_end = ((idx + 1) as f32 / total_f) * height;
-        if y_end < y_start + 1.5 {
-            y_end = (y_start + 1.5).min(height);
+        if y_end < y_start + crate::theme::GUTTER_MIN_SEGMENT_H {
+            y_end = (y_start + crate::theme::GUTTER_MIN_SEGMENT_H).min(height);
         }
 
         if let Some(last) = segments.last_mut() {
             let last_seg: &mut GutterSegment = last;
-            if last_seg.kind == row.kind && y_start <= last_seg.y_end + 1.0 {
+            if last_seg.kind == row.kind
+                && y_start <= last_seg.y_end + crate::theme::GUTTER_MERGE_GAP
+            {
                 last_seg.y_end = last_seg.y_end.max(y_end);
                 continue;
             }
@@ -78,10 +83,15 @@ pub fn gutter_geometry(total_rows: usize, height: f32, rows: &[TextRow]) -> Gutt
 }
 
 /// Width of the thumbnail gutter bar in logical pixels. Hiding line
-/// numbers narrows the chrome (12.0 to 6.0) while row counts stay
+/// numbers narrows the chrome ([`crate::theme::GUTTER_BAR_WIDE`] to
+/// [`crate::theme::GUTTER_BAR_NARROW`]) while row counts stay
 /// honest; the geometry itself still comes from `gutter_geometry`.
 pub fn gutter_bar_width(show_line_numbers: bool) -> f32 {
-    if show_line_numbers { 12.0 } else { 6.0 }
+    if show_line_numbers {
+        crate::theme::GUTTER_BAR_WIDE
+    } else {
+        crate::theme::GUTTER_BAR_NARROW
+    }
 }
 
 /// Gutter width scaled from the mono font size. Calibrated so
@@ -157,9 +167,23 @@ mod tests {
 
     #[test]
     fn bar_width_narrows_when_line_numbers_hide() {
+        use crate::theme::{GUTTER_BAR_NARROW, GUTTER_BAR_WIDE};
+        assert_eq!(gutter_bar_width(true), GUTTER_BAR_WIDE);
+        assert_eq!(gutter_bar_width(false), GUTTER_BAR_NARROW);
         assert_eq!(gutter_bar_width(true), 12.0);
         assert_eq!(gutter_bar_width(false), 6.0);
         assert!(gutter_bar_width(false) < gutter_bar_width(true));
+    }
+
+    #[test]
+    fn gutter_tokens_match_spacing_scale() {
+        use crate::theme::{
+            GUTTER_BAR_NARROW, GUTTER_BAR_WIDE, GUTTER_MERGE_GAP, GUTTER_MIN_SEGMENT_H, SPACE_MD,
+        };
+        assert_eq!(GUTTER_BAR_WIDE, SPACE_MD);
+        assert_eq!(GUTTER_BAR_NARROW, 6.0);
+        assert_eq!(GUTTER_MIN_SEGMENT_H, 2.0);
+        assert_eq!(GUTTER_MERGE_GAP, 2.0);
     }
 
     #[test]

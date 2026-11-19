@@ -77,6 +77,20 @@ pub fn folder_tree(rows: &[FolderRow], expanded_dirs: &BTreeSet<String>) -> Vec<
     nodes
 }
 
+/// Canonical indent step for one tree depth level: one MD spacing
+/// step from `crate::theme` (12.0 on the 4/8/12/16/24 scale), so
+/// gutter / markers / separator stay aligned. Pure; paint in
+/// `views.rs` keeps its legacy 14.0 until the owning agent adopts
+/// this token (disjoint ownership: this file must not touch paint).
+pub fn tree_indent_step() -> f32 {
+    crate::theme::GEO_TREE_INDENT_STEP
+}
+
+/// Indent in px for a tree depth: `depth * step`, saturating on overflow.
+pub fn tree_indent_for_depth(depth: usize) -> f32 {
+    (depth as f32) * tree_indent_step()
+}
+
 /// Toggles one directory in the expanded set.
 pub fn toggle_expanded(expanded_dirs: &mut BTreeSet<String>, dir: &str) {
     if expanded_dirs.contains(dir) {
@@ -493,6 +507,17 @@ mod tests {
         assert!(expanded.contains("b"));
         collapse_all(&mut expanded);
         assert!(expanded.is_empty());
+    }
+
+    #[test]
+    fn indent_step_matches_spacing_scale() {
+        use crate::theme::{GEO_TREE_INDENT_STEP, SPACE_MD};
+        assert_eq!(tree_indent_step(), GEO_TREE_INDENT_STEP);
+        assert_eq!(tree_indent_step(), SPACE_MD);
+        assert_eq!(tree_indent_step(), 12.0);
+        assert_eq!(tree_indent_for_depth(0), 0.0);
+        assert_eq!(tree_indent_for_depth(1), 12.0);
+        assert_eq!(tree_indent_for_depth(2), 24.0);
     }
 
     #[test]

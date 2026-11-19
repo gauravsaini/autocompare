@@ -3,8 +3,13 @@
 //! Provides headless contrast checks plus the typed design-token
 //! palette (Dark/Light) that `views.rs` paints with.
 //!
-//! Geometry and typography stay frozen (see the scale below); this
-//! wave only types the colors.
+//! Geometry and typography live here as headless tokens (this wave);
+//! colors below are FROZEN from the COLOR wave — no hue changes.
+//!
+//! Geometry scale (px): canonical spacing 4/8/12/16/24. Panel
+//! gutters, tree indent and gutter bars all snap to this scale;
+//! `gutter.rs` / `tree.rs` apply the tokens purely so paint stays
+//! aligned without touching `views.rs`.
 //!
 //! Typography scale (family, weight, line-height only): heading 18
 //! strong, body 13, small 11, mono diff 12 (13 is the tolerated upper
@@ -20,7 +25,7 @@
 //! markers, gutter track) is per-mode so both [`DARK_PALETTE`] and
 //! [`LIGHT_PALETTE`] satisfy WCAG AA via [`theme_contrast_ok`].
 //! Paint picks a side with [`palette`] / `*_for(dark)` using
-//! `ui.visuals().dark_mode`; no geometry/typo values move.
+//! `ui.visuals().dark_mode`; no color values move in this wave.
 
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
@@ -51,6 +56,44 @@ pub const TYPO_FULL_PANE_CHARS: usize = 200;
 /// Letter-spacing in px: egui has no tracking support, always 0.0.
 /// Hierarchy comes from size + weight + line-height instead. No dep added.
 pub const TYPO_LETTER_SPACING: f32 = 0.0;
+/// Line-height source: always the measured monospace row height.
+/// Every [`TypoRole`] paints with this; no per-role override.
+pub const TYPO_LINE_HEIGHT_SOURCE: &str = "ui.text_style_height(Monospace)";
+
+// ----------------------------------------------------------------------------
+// Geometry scale (headless, px): canonical spacing 4/8/12/16/24.
+// ----------------------------------------------------------------------------
+
+/// XS step: tight gaps, marker padding.
+pub const SPACE_XS: f32 = 4.0;
+/// SM step: section gaps.
+pub const SPACE_SM: f32 = 8.0;
+/// MD step: outer margin, panel gutter, gutter wide bar, tree indent.
+pub const SPACE_MD: f32 = 12.0;
+/// LG step: large panel gutter.
+pub const SPACE_LG: f32 = 16.0;
+/// XL step: card / large section gap.
+pub const SPACE_XL: f32 = 24.0;
+/// Tight gap (one XS step).
+pub const GEO_TIGHT_GAP: f32 = SPACE_XS;
+/// Section gap (one SM step).
+pub const GEO_SECTION_GAP: f32 = SPACE_SM;
+/// Outer margin / panel gutter (one MD step).
+pub const GEO_OUTER_MARGIN: f32 = SPACE_MD;
+/// Large panel gutter (one LG step).
+pub const GEO_PANEL_GUTTER: f32 = SPACE_LG;
+/// Card / large section gap (one XL step).
+pub const GEO_CARD_GAP: f32 = SPACE_XL;
+/// Gutter bar wide: one MD step, reproduces the 12.0 chrome.
+pub const GUTTER_BAR_WIDE: f32 = SPACE_MD;
+/// Gutter bar narrow: half MD step, reproduces the 6.0 chrome.
+pub const GUTTER_BAR_NARROW: f32 = 6.0;
+/// Minimum gutter segment height so 1px hunks stay visible.
+pub const GUTTER_MIN_SEGMENT_H: f32 = 2.0;
+/// Merge gap: same-kind gutter segments within this fuse into one.
+pub const GUTTER_MERGE_GAP: f32 = 2.0;
+/// Canonical tree indent step: one MD step on the scale.
+pub const GEO_TREE_INDENT_STEP: f32 = SPACE_MD;
 
 /// One typographic role: size + family + weight, line-height shared.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -108,7 +151,26 @@ impl TypoRole {
 
     /// Line-height source: always the measured monospace row height.
     pub const fn line_height_source(self) -> &'static str {
-        "ui.text_style_height(Monospace)"
+        TYPO_LINE_HEIGHT_SOURCE
+    }
+
+    /// Paint weight for this role: strong / default / weak / regular-mono.
+    /// Hierarchy carrier next to size since egui has no tracking.
+    pub const fn weight(self) -> &'static str {
+        match self {
+            Self::Heading | Self::HomeTitle => "strong",
+            Self::Small | Self::HomeDesc => "weak",
+            Self::Mono => "regular-mono",
+            Self::Body | Self::HomeButton => "default",
+        }
+    }
+
+    /// Font family for this role: monospace diffs, proportional rest.
+    pub const fn family(self) -> &'static str {
+        match self {
+            Self::Mono => "monospace",
+            _ => "proportional",
+        }
     }
 }
 
@@ -348,10 +410,12 @@ mod tests {
         assert_eq!(TYPO_WRAP_PANE_CHARS, 80);
         assert_eq!(TYPO_FULL_PANE_CHARS, 200);
         assert_eq!(TYPO_LETTER_SPACING, 0.0);
-        assert!(TYPO_MONO_SIZE <= TYPO_MONO_SIZE_MAX);
-        assert!(TYPO_SMALL_SIZE < TYPO_BODY_SIZE);
-        assert!(TYPO_BODY_SIZE < TYPO_HOME_TITLE_SIZE);
-        assert!(TYPO_HOME_TITLE_SIZE < TYPO_HEADING_SIZE);
+        const {
+            assert!(TYPO_MONO_SIZE <= TYPO_MONO_SIZE_MAX);
+            assert!(TYPO_SMALL_SIZE < TYPO_BODY_SIZE);
+            assert!(TYPO_BODY_SIZE < TYPO_HOME_TITLE_SIZE);
+            assert!(TYPO_HOME_TITLE_SIZE < TYPO_HEADING_SIZE);
+        }
     }
 
     #[test]
@@ -371,14 +435,44 @@ mod tests {
         assert_eq!(TypoRole::HomeButton.size(), TYPO_BODY_SIZE);
         assert_eq!(TypoRole::HomeDesc.size(), TYPO_SMALL_SIZE);
         // Line-height is the measured mono row height everywhere.
-        assert_eq!(
-            TypoRole::Mono.line_height_source(),
-            "ui.text_style_height(Monospace)"
-        );
+        assert_eq!(TypoRole::Mono.line_height_source(), TYPO_LINE_HEIGHT_SOURCE);
         assert_eq!(
             TypoRole::Heading.line_height_source(),
             "ui.text_style_height(Monospace)"
         );
+        // Weight + family carry hierarchy (no letter-tracking in egui).
+        assert_eq!(TypoRole::Heading.weight(), "strong");
+        assert_eq!(TypoRole::HomeTitle.weight(), "strong");
+        assert_eq!(TypoRole::Small.weight(), "weak");
+        assert_eq!(TypoRole::HomeDesc.weight(), "weak");
+        assert_eq!(TypoRole::Mono.weight(), "regular-mono");
+        assert_eq!(TypoRole::Body.weight(), "default");
+        assert_eq!(TypoRole::Mono.family(), "monospace");
+        assert_eq!(TypoRole::Body.family(), "proportional");
+        assert_eq!(TypoRole::Heading.family(), "proportional");
+    }
+
+    #[test]
+    fn geometry_scale_unifies_spacing() {
+        assert_eq!(SPACE_XS, 4.0);
+        assert_eq!(SPACE_SM, 8.0);
+        assert_eq!(SPACE_MD, 12.0);
+        assert_eq!(SPACE_LG, 16.0);
+        assert_eq!(SPACE_XL, 24.0);
+        assert_eq!(GEO_TIGHT_GAP, SPACE_XS);
+        assert_eq!(GEO_SECTION_GAP, SPACE_SM);
+        assert_eq!(GEO_OUTER_MARGIN, SPACE_MD);
+        assert_eq!(GEO_PANEL_GUTTER, SPACE_LG);
+        assert_eq!(GEO_CARD_GAP, SPACE_XL);
+        assert_eq!(GUTTER_BAR_WIDE, 12.0);
+        assert_eq!(GUTTER_BAR_NARROW, 6.0);
+        assert_eq!(GEO_TREE_INDENT_STEP, SPACE_MD);
+        const {
+            assert!(SPACE_XS < SPACE_SM);
+            assert!(SPACE_SM < SPACE_MD);
+            assert!(SPACE_MD < SPACE_LG);
+            assert!(SPACE_LG < SPACE_XL);
+        }
     }
 
     #[test]
