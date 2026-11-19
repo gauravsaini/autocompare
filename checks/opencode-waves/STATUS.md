@@ -481,3 +481,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 09 B clippy A same
 - A+B live, diff 894 steady. A tail unchanged (engine grep, wiring complex). B clippy warnings viewmodel 1319/1299 fixing.
 - No commits. If A still same next poll, nudge via session follow-up. Wait.
+
+## Wave I poll 10 patch green 151
+- A+B live. A patch green 151 (125+22+4), Error variants check for wiring. B MergeHunk wiring-pending note (A wires paint), viewmodel 602.
+- Diff 898+. No commits. Wait.
