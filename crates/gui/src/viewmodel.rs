@@ -627,6 +627,171 @@ pub fn filter_counts(rows: &[TextRow], filter: TextFilter) -> FilterCounts {
 }
 
 // ----------------------------------------------------------------------------
+// Status bar + cursor (BT-STATUS P1-2/P1-3; paint owned by BT-DIFF/views.rs)
+// ----------------------------------------------------------------------------
+//
+// BC text tab ke neeche 3-zone status bar hai (left flags, mid Same,
+// right hints) plus cursor strip (`1:1` + focused-line preview). Ye section
+// sirf headless model hai: paint (`views.rs`, BT-DIFF wave) isko padhega,
+// yahan koi egui code nahi.
+
+/// 3-zone status bar model: left flags, mid verdict, right hints.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StatusZones {
+    /// Left zone: filter label plus honest counts.
+    pub left: String,
+    /// Mid zone: focused row ka verdict label.
+    pub mid: String,
+    /// Right zone: diff-nav badge plus key hints.
+    pub right: String,
+}
+
+/// 1-based cursor position; column hamesha 1 (row cursor only, col cursor nahi).
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CursorPos {
+    /// 1-based model row.
+    pub row: usize,
+    /// 1-based column; hamesha 1.
+    pub col: usize,
+}
+
+/// Focused-line preview strip model: focused row ke dono panes ka text.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FocusedLinePreview {
+    /// Line-number label: dono taraf barabar hon to `3`, alag hon to
+    /// `L3 / R5`, ek taraf hon to `L7` / `R7`, numbers na hon to `-`.
+    pub line_no: String,
+    /// Row verdict: `Same`, `Changed`, `Deleted`, `Inserted`.
+    pub kind: String,
+    /// Left pane text, [`STATUS_PREVIEW_MAX_CHARS`] par cut.
+    pub left: String,
+    /// Right pane text, same cap.
+    pub right: String,
+}
+
+/// Preview text cap (chars); lambi lines `...` suffix se cut.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
+pub const STATUS_PREVIEW_MAX_CHARS: usize = 120;
+
+/// Display label of a text filter (status left zone).
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub fn text_filter_label(filter: TextFilter) -> &'static str {
+    match filter {
+        TextFilter::All => "All",
+        TextFilter::Differences => "Differences",
+        TextFilter::Same => "Same",
+        TextFilter::Context => "Context",
+    }
+}
+
+/// Verdict label of one text row kind.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub fn text_row_kind_label(kind: TextRowKind) -> &'static str {
+    match kind {
+        TextRowKind::Equal => "Same",
+        TextRowKind::Changed => "Changed",
+        TextRowKind::Deleted => "Deleted",
+        TextRowKind::Inserted => "Inserted",
+    }
+}
+
+/// Focused row ka verdict label (status mid zone): no selection ya OOB
+/// index par `no selection`, kabhi jhootha verdict nahi.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub fn focused_kind_label(rows: &[TextRow], selected: Option<usize>) -> &'static str {
+    selected
+        .and_then(|idx| rows.get(idx).map(|row| text_row_kind_label(row.kind)))
+        .unwrap_or("no selection")
+}
+
+/// 0-based model selection se 1-based cursor; column hamesha 1.
+/// `None` ka matlab koi cursor nahi (paint `-` dikhaye).
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
+pub fn cursor_pos_for(selected: Option<usize>) -> Option<CursorPos> {
+    selected.map(|idx| CursorPos {
+        row: idx.saturating_add(1),
+        col: 1,
+    })
+}
+
+/// Cursor strip label: `row:col` (`3:1`), koi cursor na ho to `-`.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
+pub fn cursor_label(pos: Option<CursorPos>) -> String {
+    match pos {
+        Some(at) => format!("{}:{}", at.row, at.col),
+        None => "-".to_string(),
+    }
+}
+
+/// Long preview text ko cap par cut; chhoti text jaisi hai waisi.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
+fn preview_cut(text: &str) -> String {
+    if text.chars().count() <= STATUS_PREVIEW_MAX_CHARS {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut count = 0usize;
+    for ch in text.chars() {
+        if count >= STATUS_PREVIEW_MAX_CHARS {
+            break;
+        }
+        out.push(ch);
+        count = count.saturating_add(1);
+    }
+    out.push_str("...");
+    out
+}
+
+/// Focused row ka preview strip model; no selection ya OOB par `None`.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
+pub fn focused_line_preview_for(
+    rows: &[TextRow],
+    selected: Option<usize>,
+) -> Option<FocusedLinePreview> {
+    let idx = selected?;
+    let row = rows.get(idx)?;
+    let line_no = match (row.left_no, row.right_no) {
+        (Some(l), Some(r)) if l == r => format!("{l}"),
+        (Some(l), Some(r)) => format!("L{l} / R{r}"),
+        (Some(l), None) => format!("L{l}"),
+        (None, Some(r)) => format!("R{r}"),
+        (None, None) => "-".to_string(),
+    };
+    Some(FocusedLinePreview {
+        line_no,
+        kind: text_row_kind_label(row.kind).to_string(),
+        left: preview_cut(&row.left),
+        right: preview_cut(&row.right),
+    })
+}
+
+/// Teenon zones ek saath: left me filter + honest counts, mid me focused
+/// verdict, right me nav badge + key hints. `mid` aur `nav_badge` paint
+/// [`focused_kind_label`] aur diff-nav badge se banakar deta hai taaki nav
+/// math ek jagah rahe.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub fn status_zones_for(
+    counts: &FilterCounts,
+    filter: TextFilter,
+    mid: &str,
+    nav_badge: &str,
+) -> StatusZones {
+    StatusZones {
+        left: format!(
+            "{}: {} rows ({} shown)",
+            text_filter_label(filter),
+            counts.total,
+            counts.shown
+        ),
+        mid: mid.to_string(),
+        right: format!("{nav_badge} | F3 next/prev"),
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Text view prefs (paint-side hook, headless)
 // ----------------------------------------------------------------------------
 
@@ -3544,5 +3709,138 @@ mod tests {
         assert_eq!(unknown.decided, 0);
         assert_eq!(unknown.pending, 2);
         assert!(unknown.conflicted);
+    }
+
+    // ---- status bar + cursor (BT-STATUS P1-2/P1-3) ----
+
+    #[test]
+    fn status_filter_labels_cover_every_filter() {
+        assert_eq!(text_filter_label(TextFilter::All), "All");
+        assert_eq!(text_filter_label(TextFilter::Differences), "Differences");
+        assert_eq!(text_filter_label(TextFilter::Same), "Same");
+        assert_eq!(text_filter_label(TextFilter::Context), "Context");
+    }
+
+    #[test]
+    fn status_kind_labels_match_verdicts() {
+        assert_eq!(text_row_kind_label(TextRowKind::Equal), "Same");
+        assert_eq!(text_row_kind_label(TextRowKind::Changed), "Changed");
+        assert_eq!(text_row_kind_label(TextRowKind::Deleted), "Deleted");
+        assert_eq!(text_row_kind_label(TextRowKind::Inserted), "Inserted");
+    }
+
+    #[test]
+    fn status_focused_kind_is_honest_on_empty_selection() {
+        let rows = nav_rows();
+        assert_eq!(focused_kind_label(&rows, None), "no selection");
+        assert_eq!(focused_kind_label(&rows, Some(99)), "no selection");
+        assert_eq!(focused_kind_label(&rows, Some(0)), "Same");
+        assert_eq!(focused_kind_label(&rows, Some(1)), "Changed");
+        assert_eq!(focused_kind_label(&rows, Some(4)), "Deleted");
+    }
+
+    #[test]
+    fn status_cursor_labels_row_col_one_based() {
+        assert_eq!(cursor_pos_for(None), None);
+        assert_eq!(cursor_pos_for(Some(0)), Some(CursorPos { row: 1, col: 1 }));
+        assert_eq!(cursor_pos_for(Some(2)), Some(CursorPos { row: 3, col: 1 }));
+        assert_eq!(cursor_label(cursor_pos_for(Some(2))), "3:1");
+        assert_eq!(cursor_label(None), "-");
+    }
+
+    #[test]
+    fn status_zones_compose_left_mid_right() {
+        let rows = nav_rows();
+        let counts = filter_counts(&rows, TextFilter::Differences);
+        let zones = status_zones_for(&counts, TextFilter::Differences, "Changed", "2/3");
+        assert_eq!(zones.left, "Differences: 5 rows (3 shown)");
+        assert_eq!(zones.mid, "Changed");
+        assert!(zones.right.contains("2/3"));
+        assert!(zones.right.contains("F3"));
+    }
+
+    #[test]
+    fn status_preview_covers_number_shapes() {
+        let rows = nav_rows();
+        assert_eq!(focused_line_preview_for(&rows, None), None);
+        assert_eq!(focused_line_preview_for(&rows, Some(99)), None);
+        // Bina numbers wali equal row: line_no "-" hota hai.
+        let plain = focused_line_preview_for(&rows, Some(0)).unwrap_or_default();
+        assert_eq!(plain.line_no, "-");
+        assert_eq!(plain.kind, "Same");
+        // Dono taraf alag numbers: "L3 / R5".
+        let both = vec![TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(3),
+            right_no: Some(5),
+            left: "aaa".to_string(),
+            right: "bbb".to_string(),
+            ..Default::default()
+        }];
+        let preview = focused_line_preview_for(&both, Some(0)).unwrap_or_default();
+        assert_eq!(preview.line_no, "L3 / R5");
+        assert_eq!(preview.kind, "Changed");
+        assert_eq!(preview.left, "aaa");
+        // Dono taraf barabar: sirf number.
+        let same_no = vec![TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(3),
+            right_no: Some(3),
+            ..Default::default()
+        }];
+        assert_eq!(
+            focused_line_preview_for(&same_no, Some(0))
+                .unwrap_or_default()
+                .line_no,
+            "3"
+        );
+        // Sirf ek taraf: "L7" / "R7".
+        let left_only = vec![TextRow {
+            kind: TextRowKind::Deleted,
+            left_no: Some(7),
+            ..Default::default()
+        }];
+        assert_eq!(
+            focused_line_preview_for(&left_only, Some(0))
+                .unwrap_or_default()
+                .line_no,
+            "L7"
+        );
+        let right_only = vec![TextRow {
+            kind: TextRowKind::Inserted,
+            right_no: Some(7),
+            right: "new".to_string(),
+            ..Default::default()
+        }];
+        assert_eq!(
+            focused_line_preview_for(&right_only, Some(0))
+                .unwrap_or_default()
+                .line_no,
+            "R7"
+        );
+    }
+
+    #[test]
+    fn status_preview_cuts_long_lines_at_cap() {
+        let long: String = "x".repeat(STATUS_PREVIEW_MAX_CHARS + 10);
+        let rows = vec![TextRow {
+            kind: TextRowKind::Equal,
+            left: long,
+            right: "ok".to_string(),
+            ..Default::default()
+        }];
+        let cut = focused_line_preview_for(&rows, Some(0)).unwrap_or_default();
+        assert!(cut.left.ends_with("..."));
+        assert_eq!(cut.left.chars().count(), STATUS_PREVIEW_MAX_CHARS + 3);
+        assert_eq!(cut.right, "ok");
+        // Exact cap par koi suffix nahi.
+        let exact: String = "y".repeat(STATUS_PREVIEW_MAX_CHARS);
+        let exact_rows = vec![TextRow {
+            kind: TextRowKind::Equal,
+            left: exact.clone(),
+            ..Default::default()
+        }];
+        let kept = focused_line_preview_for(&exact_rows, Some(0)).unwrap_or_default();
+        assert_eq!(kept.left, exact);
     }
 }
