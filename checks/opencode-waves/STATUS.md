@@ -606,3 +606,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 07 B rewriting audio
 - B app.rs 105 lines (audio path rewrite). A nudge sent, effect pending. C fmt notes, interim commit pending.
 - No commits. Wait.
+
+## Wave J poll 08 B models C report
+- B pure models section adding. C REPORT written, commit next. A still scoping.
+- No commits. Wait.
