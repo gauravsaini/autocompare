@@ -462,3 +462,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 04 B 85 lines C green
 - All 3 live. B gutter +85 (click-jump pure mapping, OWNS ok). A reading/wiring prep. C rolling 125 green.
 - No commits yet. Wait.
+
+## Wave I poll 05 wiring 151 green
+- All 3 live. A main.rs +2 (mods), tests 151 green (125+26: hex/table wired + gutter tests?), dead-code warnings (summarize/total/line) being fixed. B gutter 153 + viewmodel 323 pure models. C REPORT written, commit next.
+- No commits yet. Wait.
