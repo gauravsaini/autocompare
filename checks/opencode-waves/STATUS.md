@@ -646,3 +646,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 17 slice2 + clippy 3
 - A2 slice 2 (views_table 48 + REPORT untracked + hex 10). B clippy down to 3. Diff 1429.
 - No commits. Wait for lands.
+
+## Wave J poll 18 A2 done B fmt clean
+- A2 7dbd5f0 verified+pushed: OWNS clean (hex+table+REPORT), tests 189 green, honest sibling-blocked note.
+- B fmt clean + 189 green, clippy/commit next. A2 may continue slices (proc live).
