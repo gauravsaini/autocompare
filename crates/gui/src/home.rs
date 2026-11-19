@@ -253,7 +253,9 @@ impl RecentSessions {
 // ----------------------------------------------------------------------------
 
 /// Ek saved session ka last state: kaun sa tab, dono (ya teenon) paths,
-/// aur us tab ka find cursor. `base` two-path tabs par khali rehta hai.
+/// us tab ka find cursor, aur save hone ka waqt (secs, 0 = unknown).
+/// `base` two-path tabs par khali rehta hai. Paint isi se row + timestamp
+/// dikhata hai; unknown waqt par timestamp chhupta hai, jhooth kabhi nahi.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionSnapshot {
     /// Kaun sa session tab tha.
@@ -267,10 +269,14 @@ pub struct SessionSnapshot {
     /// Us tab ka cursor (text/table find cursor, folder cursor, hex offset
     /// cursor ka `usize` roop; baaki tabs par 0).
     pub cursor: usize,
+    /// Save hone ka waqt (caller ke secs, 0 = unknown). Dedupe isko
+    /// ignore karta hai taaki purana waqt naya record na roke.
+    pub saved_at_secs: u64,
 }
 
 impl SessionSnapshot {
     /// Snapshot banata hai; paths trim hote hain, cursor jaisa hai waisa.
+    /// Waqt unknown (0) rehta hai; stamp ke liye `with_saved_at` lagao.
     pub fn new(
         tab: Tab,
         left: impl Into<String>,
@@ -284,7 +290,28 @@ impl SessionSnapshot {
             right: right.into().trim().to_string(),
             base: base.into().trim().to_string(),
             cursor,
+            saved_at_secs: 0,
         }
+    }
+
+    /// Save waqt lagakar wapas deta hai (builder; purana nahi badalta).
+    pub fn with_saved_at(mut self, now_secs: u64) -> Self {
+        self.saved_at_secs = now_secs;
+        self
+    }
+
+    /// Save ke baad guzra waqt (secs). Unknown waqt ya ulta clock par `None`,
+    /// taaki paint jhootha "just now" kabhi na dikhaye.
+    pub fn age_secs(&self, now_secs: u64) -> Option<u64> {
+        if self.saved_at_secs == 0 || now_secs < self.saved_at_secs {
+            return None;
+        }
+        Some(now_secs - self.saved_at_secs)
+    }
+
+    /// Row timestamp text: guzra waqt ka relative label, unknown par `None`.
+    pub fn age_label(&self, now_secs: u64) -> Option<String> {
+        self.age_secs(now_secs).map(recent_age_label)
     }
 
     /// Three-way session hai ya nahi (Merge / FolderMerge).
@@ -323,6 +350,7 @@ impl SessionHistory {
 
     /// Snapshot sabse upar rakhta hai: Home tab kabhi record nahi hota,
     /// same (tab, paths) dedupe hokar upar aata hai, cap se zyada girta hai.
+    /// Waqt/cursor dedupe ko nahi rokta (sirf tab + paths compare hota hai).
     pub fn push(&mut self, snapshot: SessionSnapshot) {
         if snapshot.tab == Tab::Home {
             return;
@@ -335,6 +363,12 @@ impl SessionHistory {
         });
         self.entries.insert(0, snapshot);
         self.entries.truncate(HOME_RECENT_MAX);
+    }
+
+    /// Waqt lagakar push karta hai: `now_secs` stamp hokar naya sabse upar.
+    /// Home tab tab bhi skip hota hai. Pure state; kabhi fail nahi hota.
+    pub fn push_stamped(&mut self, snapshot: SessionSnapshot, now_secs: u64) {
+        self.push(snapshot.with_saved_at(now_secs));
     }
 
     /// Naya-sabse-pehle order me snapshots.
@@ -397,6 +431,71 @@ pub fn recent_row_top(index: usize) -> f32 {
 }
 
 // ----------------------------------------------------------------------------
+// Recent timestamps (second): relative labels, pure, koi clock call nahi.
+// Caller guzra waqt deta hai; paint sirf label dikhata hai. Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Guzre waqt ka relative row label: 60s se kam "just now", phir minute,
+/// phir ghante, phir din. Pure; paint timestamp isi se likhta hai.
+pub fn recent_age_label(elapsed_secs: u64) -> String {
+    if elapsed_secs < 60 {
+        String::from("just now")
+    } else if elapsed_secs < 3_600 {
+        format!("{}m ago", elapsed_secs / 60)
+    } else if elapsed_secs < 86_400 {
+        format!("{}h ago", elapsed_secs / 3_600)
+    } else {
+        format!("{}d ago", elapsed_secs / 86_400)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Recent two-line row geometry (first): title + timestamp/meta stack.
+// Single-line helpers upar paint-compat ke liye untouched rehte hain; nayi
+// polish do-line row par banti hai. Sab rhythm tokens se derive.
+// ----------------------------------------------------------------------------
+
+/// Title/meta beech gap px: card inner gap (4) reuse, koi naya number nahi.
+pub const RECENT_ROW_TITLE_META_GAP: f32 = HOME_CARD_INNER_GAP;
+
+/// Do-line row min height px: title line (body) + meta line (desc) + beech
+/// gap + row pad. Single-line row se uncha, button floor (24px) se upar.
+pub fn recent_row_two_line_height() -> f32 {
+    use crate::theme::TypoRole;
+    TypoRole::HomeButton.line_height_px()
+        + TypoRole::HomeDesc.line_height_px()
+        + RECENT_ROW_TITLE_META_GAP
+        + RECENT_LIST_PAD
+}
+
+/// `count` rows wali do-line recent list ki kul height px: rows + beech
+/// gaps + upar-neeche pad. Khali par 0 (paint khali list chhupata hai).
+pub fn recent_list_height_two_line(count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    let rows = count as f32 * recent_row_two_line_height();
+    let gaps = count.saturating_sub(1) as f32 * RECENT_ROW_GAP;
+    rows + gaps + RECENT_LIST_PAD * 2.0
+}
+
+/// Do-line row `index` ka top offset px (list pad ke andar). Pure.
+pub fn recent_row_top_two_line(index: usize) -> f32 {
+    RECENT_LIST_PAD + index as f32 * (recent_row_two_line_height() + RECENT_ROW_GAP)
+}
+
+/// Do-line list ki capped height px: sirf `max_visible` rows tak jagah,
+/// baaki paint scroll karta hai. `max_visible` 0 par 0.
+pub fn recent_list_height_capped(count: usize, max_visible: usize) -> f32 {
+    recent_list_height_two_line(count.min(max_visible))
+}
+
+/// List ko scroll chahiye ya nahi: rows visible budget se zyada par true.
+pub fn recent_list_needs_scroll(count: usize, max_visible: usize) -> bool {
+    count > max_visible
+}
+
+// ----------------------------------------------------------------------------
 // Recent list typography (second): row text role reuse, koi naya size nahi.
 // ----------------------------------------------------------------------------
 
@@ -423,6 +522,111 @@ pub fn recent_row_text_tracking_em() -> f32 {
 /// Recent row text numeric weight (regular 400).
 pub fn recent_row_text_weight_value() -> u16 {
     crate::theme::TypoRole::HomeDesc.weight_value()
+}
+
+// ----------------------------------------------------------------------------
+// Recent two-line row typography (second): title ek kadam upar (body),
+// meta chhota kamzor (desc). Dono `TypoRole` reuse, koi naya size nahi.
+// ----------------------------------------------------------------------------
+
+/// Row title role: primary session naam (body scale, medium).
+pub const fn recent_row_title_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeButton
+}
+
+/// Row meta/timestamp role: secondary line (small weak proportional).
+/// Single-line legacy row text ke barabar, taaki purana paint na jhoothe.
+pub const fn recent_row_meta_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeDesc
+}
+
+/// Row title size px (single source: body role).
+pub fn recent_row_title_size() -> f32 {
+    crate::theme::TypoRole::HomeButton.size()
+}
+
+/// Row title line-height px: do-line stack ki pehli line isi se.
+pub fn recent_row_title_line_height_px() -> f32 {
+    crate::theme::TypoRole::HomeButton.line_height_px()
+}
+
+/// Row title tracking em (body par zero).
+pub fn recent_row_title_tracking_em() -> f32 {
+    crate::theme::TypoRole::HomeButton.letter_spacing_em()
+}
+
+/// Row title numeric weight (medium 500).
+pub fn recent_row_title_weight_value() -> u16 {
+    crate::theme::TypoRole::HomeButton.weight_value()
+}
+
+/// Row meta size px (single source: desc role, legacy row text barabar).
+pub fn recent_row_meta_size() -> f32 {
+    crate::theme::TypoRole::HomeDesc.size()
+}
+
+/// Row meta line-height px: do-line stack ki dusri line isi se.
+pub fn recent_row_meta_line_height_px() -> f32 {
+    crate::theme::TypoRole::HomeDesc.line_height_px()
+}
+
+/// Row meta tracking em (zero).
+pub fn recent_row_meta_tracking_em() -> f32 {
+    crate::theme::TypoRole::HomeDesc.letter_spacing_em()
+}
+
+/// Row meta numeric weight (regular 400).
+pub fn recent_row_meta_weight_value() -> u16 {
+    crate::theme::TypoRole::HomeDesc.weight_value()
+}
+
+/// Title/meta hierarchy theek hai: title meta se bada, meta small + weak,
+/// dono chrome proportional. Pure; headless-tested.
+pub fn recent_row_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    let title = TypoRole::HomeButton;
+    let meta = TypoRole::HomeDesc;
+    title.size() > meta.size()
+        && meta.is_small()
+        && meta.is_weak()
+        && title.is_chrome()
+        && meta.is_chrome()
+        && title.family() == "proportional"
+        && meta.family() == "proportional"
+}
+
+// ----------------------------------------------------------------------------
+// Recent empty/missing states (honest): view kabhi blank na lage, row kabhi
+// stale paths par "ready" ka jhooth na bole. Sab pure `&str`/`String`.
+// ----------------------------------------------------------------------------
+
+/// Khali recent list ka guidance: fresh start vs cleared. Rows win nahi
+/// (list hi khali hai), isliye hamesha ek imaandaar hint milta hai.
+pub const fn recent_list_empty_hint(was_cleared: bool) -> &'static str {
+    if was_cleared {
+        "recent cleared: open any compare above to pin it here"
+    } else {
+        "no recent sessions yet: open any compare above to pin it here"
+    }
+}
+
+/// Row status label: missing paths par graceful, warna refresh reminder.
+pub const fn recent_row_status_label(has_empty_paths: bool) -> &'static str {
+    if has_empty_paths {
+        "paths missing: type both paths then Compare"
+    } else {
+        "paths restored: Compare to refresh"
+    }
+}
+
+/// Row meta line: status + timestamp, dono imaandaar. Unknown waqt par
+/// timestamp chhupta hai (koi "just now" ka jhooth nahi).
+pub fn recent_row_meta_text(snapshot: &SessionSnapshot, now_secs: u64) -> String {
+    let status = recent_row_status_label(snapshot.has_empty_paths());
+    match snapshot.age_label(now_secs) {
+        Some(age) => format!("{status} \u{2022} {age}"),
+        None => String::from(status),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -768,5 +972,138 @@ mod tests {
         assert!(super::recent_row_text_role().is_small());
         assert!(super::recent_row_text_role().is_weak());
         assert_eq!(super::recent_row_text_role().family(), "proportional");
+    }
+
+    #[test]
+    fn homerecent_age_label_buckets_are_honest() {
+        assert_eq!(super::recent_age_label(0), "just now");
+        assert_eq!(super::recent_age_label(59), "just now");
+        assert_eq!(super::recent_age_label(60), "1m ago");
+        assert_eq!(super::recent_age_label(3_599), "59m ago");
+        assert_eq!(super::recent_age_label(3_600), "1h ago");
+        assert_eq!(super::recent_age_label(86_399), "23h ago");
+        assert_eq!(super::recent_age_label(86_400), "1d ago");
+        assert_eq!(super::recent_age_label(172_800), "2d ago");
+    }
+
+    #[test]
+    fn homerecent_snapshot_stamp_and_age_stay_graceful() {
+        let plain = super::SessionSnapshot::new(super::Tab::Text, "l", "r", "", 0);
+        assert_eq!(plain.saved_at_secs, 0);
+        assert!(plain.age_secs(1_000).is_none());
+        assert!(plain.age_label(1_000).is_none());
+        let stamped = plain.with_saved_at(1_000);
+        assert_eq!(stamped.saved_at_secs, 1_000);
+        assert_eq!(stamped.age_secs(999), None);
+        assert_eq!(stamped.age_secs(1_000), Some(0));
+        assert_eq!(stamped.age_secs(1_059), Some(59));
+        assert_eq!(stamped.age_label(1_000), Some(String::from("just now")));
+        assert_eq!(stamped.age_label(4_600), Some(String::from("1h ago")));
+    }
+
+    #[test]
+    fn homerecent_history_push_stamped_dedupes_ignoring_time() {
+        let mut history = super::SessionHistory::new();
+        history.push_stamped(
+            super::SessionSnapshot::new(super::Tab::Text, "l", "r", "", 1),
+            100,
+        );
+        history.push_stamped(
+            super::SessionSnapshot::new(super::Tab::Folder, "a", "b", "", 0),
+            200,
+        );
+        assert_eq!(history.len(), 2);
+        history.push_stamped(
+            super::SessionSnapshot::new(super::Tab::Text, "l", "r", "", 9),
+            9_999,
+        );
+        assert_eq!(history.len(), 2);
+        let first = history.list().first().map(|s| (s.cursor, s.saved_at_secs));
+        assert_eq!(first, Some((9, 9_999)));
+        for idx in 0..10 {
+            history.push_stamped(
+                super::SessionSnapshot::new(super::Tab::Table, format!("l{idx}"), "r", "", idx),
+                50_000 + idx as u64,
+            );
+        }
+        assert_eq!(history.len(), super::HOME_RECENT_MAX);
+    }
+
+    #[test]
+    fn homerecent_two_line_geometry_stacks_with_rhythm() {
+        use crate::theme::TypoRole;
+        assert_eq!(super::RECENT_ROW_TITLE_META_GAP, super::HOME_CARD_INNER_GAP);
+        let two = super::recent_row_two_line_height();
+        let expected = TypoRole::HomeButton.line_height_px()
+            + TypoRole::HomeDesc.line_height_px()
+            + super::RECENT_ROW_TITLE_META_GAP
+            + super::RECENT_LIST_PAD;
+        assert!((two - expected).abs() < 0.001);
+        assert!(two > super::recent_row_min_height());
+        assert_eq!(super::recent_list_height_two_line(0), 0.0);
+        let one = super::recent_list_height_two_line(1);
+        assert!((one - (two + super::RECENT_LIST_PAD * 2.0)).abs() < 0.001);
+        assert_eq!(super::recent_row_top_two_line(0), super::RECENT_LIST_PAD);
+        assert!(
+            (super::recent_row_top_two_line(1)
+                - (super::RECENT_LIST_PAD + two + super::RECENT_ROW_GAP))
+                .abs()
+                < 0.001
+        );
+        assert_eq!(super::recent_list_height_capped(0, 5), 0.0);
+        assert_eq!(
+            super::recent_list_height_capped(3, 5),
+            super::recent_list_height_two_line(3)
+        );
+        assert_eq!(
+            super::recent_list_height_capped(9, 5),
+            super::recent_list_height_two_line(5)
+        );
+        assert!(!super::recent_list_needs_scroll(5, 5));
+        assert!(super::recent_list_needs_scroll(6, 5));
+    }
+
+    #[test]
+    fn homerecent_title_meta_typo_reuses_roles() {
+        use crate::theme::TypoRole;
+        assert_eq!(super::recent_row_title_role(), TypoRole::HomeButton);
+        assert_eq!(super::recent_row_meta_role(), TypoRole::HomeDesc);
+        assert_eq!(super::recent_row_title_size(), TypoRole::HomeButton.size());
+        assert_eq!(
+            super::recent_row_title_line_height_px(),
+            TypoRole::HomeButton.line_height_px()
+        );
+        assert_eq!(
+            super::recent_row_meta_line_height_px(),
+            TypoRole::HomeDesc.line_height_px()
+        );
+        assert_eq!(
+            super::recent_row_title_weight_value(),
+            TypoRole::HomeButton.weight_value()
+        );
+        assert_eq!(
+            super::recent_row_meta_weight_value(),
+            TypoRole::HomeDesc.weight_value()
+        );
+        assert!(super::recent_row_hierarchy_ok());
+    }
+
+    #[test]
+    fn homerecent_empty_and_missing_states_stay_honest() {
+        assert!(super::recent_list_empty_hint(false).contains("no recent sessions yet"));
+        assert!(super::recent_list_empty_hint(true).contains("recent cleared"));
+        assert!(super::recent_row_status_label(true).contains("paths missing"));
+        assert!(super::recent_row_status_label(false).contains("Compare to refresh"));
+        let missing = super::SessionSnapshot::new(super::Tab::Text, "", "r", "", 0);
+        let meta_unknown = super::recent_row_meta_text(&missing, 5_000);
+        assert!(meta_unknown.contains("paths missing"));
+        assert!(!meta_unknown.contains("ago"));
+        assert!(!meta_unknown.contains("just now"));
+        let ready =
+            super::SessionSnapshot::new(super::Tab::Text, "l", "r", "", 0).with_saved_at(1_000);
+        let meta_ready = super::recent_row_meta_text(&ready, 1_060);
+        assert!(meta_ready.contains("Compare to refresh"));
+        assert!(meta_ready.contains("1m ago"));
+        assert!(meta_ready.contains('\u{2022}'));
     }
 }

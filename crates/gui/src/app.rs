@@ -114,6 +114,10 @@ pub struct App {
     /// naya sabse upar. `home_recent` titles paint-compat ke liye rehta hai;
     /// ye reopen ke liye full state deta hai. Empty/missing paths graceful.
     pub session_history: home::SessionHistory,
+    /// Kya recent list clear hui hai (fresh start nahi). Dono clear actions
+    /// ise true karte hain, naya record false karta hai. Paint isi se khali
+    /// list ka sahi hint dikhata hai.
+    pub recent_cleared: bool,
     text: Paths,
     folder: Paths,
     hex: Paths,
@@ -242,6 +246,7 @@ impl Default for App {
             tab: Tab::Home,
             home_recent: home::RecentSessions::new(),
             session_history: home::SessionHistory::new(),
+            recent_cleared: false,
             text: Paths::default(),
             folder: Paths::default(),
             hex: Paths::default(),
@@ -464,6 +469,22 @@ impl App {
         self.home_recent.push(tab.title());
         let snapshot = self.current_snapshot();
         self.session_history.push(snapshot);
+        self.recent_cleared = false;
+        self.status = format!("opened {}", tab.title());
+        true
+    }
+
+    /// Waqt-stamped open: snapshot `now_secs` ke saath record hota hai taaki
+    /// row timestamp dikhe. Pure state; headless-tested.
+    pub fn open_home_session_at(&mut self, tab: Tab, now_secs: u64) -> bool {
+        if tab == Tab::Home {
+            return false;
+        }
+        self.tab = tab;
+        self.home_recent.push(tab.title());
+        let snapshot = self.current_snapshot();
+        self.session_history.push_stamped(snapshot, now_secs);
+        self.recent_cleared = false;
         self.status = format!("opened {}", tab.title());
         true
     }
@@ -473,9 +494,15 @@ impl App {
         self.home_recent.list()
     }
 
-    /// Recent list saaf karta hai.
+    /// Recent list saaf karta hai (cleared flag lagta hai taaki hint honest rahe).
     pub fn clear_recent_sessions(&mut self) {
         self.home_recent.clear();
+        self.recent_cleared = true;
+    }
+
+    /// Khali recent list ka guidance: fresh start vs cleared.
+    pub fn recent_empty_hint(&self) -> &'static str {
+        home::recent_list_empty_hint(self.recent_cleared)
     }
 
     /// Current viewmodel tab ka home-tab roop (snapshot mapping).
@@ -577,6 +604,20 @@ impl App {
         self.home_recent.push(self.tab.title());
         let snapshot = self.current_snapshot();
         self.session_history.push(snapshot);
+        self.recent_cleared = false;
+        true
+    }
+
+    /// Waqt-stamped record: snapshot `now_secs` ke saath history me jata hai.
+    /// Home par false. Pure state; headless-tested.
+    pub fn record_current_session_at(&mut self, now_secs: u64) -> bool {
+        if self.tab == Tab::Home {
+            return false;
+        }
+        self.home_recent.push(self.tab.title());
+        let snapshot = self.current_snapshot();
+        self.session_history.push_stamped(snapshot, now_secs);
+        self.recent_cleared = false;
         true
     }
 
@@ -590,9 +631,30 @@ impl App {
         self.session_history.len()
     }
 
-    /// Restore history saaf karta hai (titles untouched rehte hain).
+    /// Restore history saaf karta hai (cleared flag lagta hai).
     pub fn clear_session_history(&mut self) {
         self.session_history.clear();
+        self.recent_cleared = true;
+    }
+
+    /// Row timestamp label: `index` wale snapshot ka relative waqt, unknown
+    /// ya out-of-range par `None` (paint timestamp chhupata hai). Koi panic nahi.
+    pub fn session_age_label(&self, index: usize, now_secs: u64) -> Option<String> {
+        self.session_history.get(index)?.age_label(now_secs)
+    }
+
+    /// Row meta line (status + timestamp): out-of-range par `None`.
+    pub fn session_row_meta(&self, index: usize, now_secs: u64) -> Option<String> {
+        self.session_history
+            .get(index)
+            .map(|snapshot| home::recent_row_meta_text(snapshot, now_secs))
+    }
+
+    /// Row status label (missing vs ready): out-of-range par `None`.
+    pub fn session_row_status(&self, index: usize) -> Option<&'static str> {
+        self.session_history
+            .get(index)
+            .map(|snapshot| home::recent_row_status_label(snapshot.has_empty_paths()))
     }
 
     /// Restore history se purana session reopen: tab + paths + cursor wapas.
@@ -5238,6 +5300,70 @@ mod tests {
             )
         );
         assert!(app.merge_model.is_none());
+    }
+
+    #[test]
+    fn homerecent_stamped_record_carries_timestamp_and_meta() {
+        let mut app = App::default();
+        assert_eq!(
+            app.recent_empty_hint(),
+            "no recent sessions yet: open any compare above to pin it here"
+        );
+        app.set_tab(Tab::Text);
+        app.set_text_paths("left.txt", "right.txt");
+        assert!(app.record_current_session_at(1_000));
+        assert_eq!(app.session_count(), 1);
+        assert_eq!(
+            app.session_age_label(0, 1_060),
+            Some(String::from("1m ago"))
+        );
+        assert!(app.session_age_label(7, 1_060).is_none());
+        let meta = app.session_row_meta(0, 1_060).unwrap_or_default();
+        assert!(meta.contains("Compare to refresh"));
+        assert!(meta.contains("1m ago"));
+        assert_eq!(
+            app.session_row_status(0),
+            Some("paths restored: Compare to refresh")
+        );
+        assert!(app.session_row_status(7).is_none());
+        assert_eq!(
+            app.recent_empty_hint(),
+            "no recent sessions yet: open any compare above to pin it here"
+        );
+        app.clear_session_history();
+        assert_eq!(app.session_count(), 0);
+        assert_eq!(
+            app.recent_empty_hint(),
+            "recent cleared: open any compare above to pin it here"
+        );
+        assert!(app.session_age_label(0, 2_000).is_none());
+    }
+
+    #[test]
+    fn homerecent_unknown_time_hides_timestamp_but_keeps_status() {
+        let mut app = App::default();
+        app.set_tab(Tab::Folder);
+        app.set_folder_paths("", "");
+        assert!(app.record_current_session());
+        assert!(app.session_age_label(0, 9_999).is_none());
+        let meta = app.session_row_meta(0, 9_999).unwrap_or_default();
+        assert!(meta.contains("paths missing"));
+        assert!(!meta.contains("ago"));
+        assert!(!meta.contains("just now"));
+        assert_eq!(
+            app.session_row_status(0),
+            Some("paths missing: type both paths then Compare")
+        );
+        app.clear_recent_sessions();
+        assert!(app.recent_sessions().is_empty());
+        assert!(app.recent_empty_hint().contains("recent cleared"));
+        app.set_tab(Tab::Text);
+        assert!(app.open_home_session_at(Tab::Text, 5_000));
+        assert!(app.recent_empty_hint().contains("no recent sessions yet"));
+        assert_eq!(
+            app.session_age_label(0, 5_030),
+            Some(String::from("just now"))
+        );
     }
 
     #[test]
