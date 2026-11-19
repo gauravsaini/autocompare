@@ -312,3 +312,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 06 SESS report-only done
 - 745f7db report only (no source), 46 tests baseline green across 4 crates. Gap implementation still open, next wave to build persistence+reports. COLOR live 01:35 no diff yet.
+
+## Wave G poll 07 color measuring
+- COLOR live 01:58, DIM_LIGHT fails dark (1.2/1.23/2.5) OK light (6.49). Token fix pending, no diff yet.
