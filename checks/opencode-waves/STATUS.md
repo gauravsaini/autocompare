@@ -541,3 +541,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 24 172 green clippy pending
 - A live, tests 172 green verified in worktree. App 418 lines, clippy fixes in progress.
 - No commit. Wait.
+
+## Wave I poll 25 hex plumbing
+- A live, app 422 (hex mode/hunks/size plumbing). Tests 172 green, clippy pending.
+- No commit. Wait.
