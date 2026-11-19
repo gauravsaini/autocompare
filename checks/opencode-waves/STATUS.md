@@ -1025,3 +1025,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Hexfind stall par nudge bheja, session ne resume karke verify+commit kiya.
 - Verify combined: 373 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AK (hex/table find caller wiring, per-hunk decision App wiring, folder cols paint).
+
+## 2026-11-20 — Wave AK plan (2 parallel: find caller wiring + folder cols paint)
+- AK-WIREFIND `sess-wirefind-ak`: OWNS views.rs+checks/gui-wirefind-ak (Gap #12 hex+table find bar caller wiring; models read-only).
+- AK-FOLDER `sess-folder-ak`: OWNS tree.rs+checks/gui-folder-ak (Gap #6 folder cols paint geometry+typo).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
