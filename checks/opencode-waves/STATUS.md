@@ -923,3 +923,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AB-MINI `sess-mini-ab`: OWNS views.rs+gutter.rs+checks/gui-mini-ab (Gap #5 minimap click-to-jump).
 - AB-DUALAPP `sess-dualapp-ab`: OWNS app.rs+checks/gui-dualapp-ab (Gap #19 step 2: dual-tree App wiring).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AB partial: DUALAPP landed+pushed, MINI in flight
+- DUALAPP `6e0f83b` wire dual-tree folder panes to App state — OWNS app.rs+checks/gui-dualapp-ab (Gap #19 step 2). Note: dual paint abhi unfiltered tree (display filters next). Verify: 294 green, clippy 0, fmt clean, banned 0. Pushed.
+- MINI `sess-mini-ab` slow start (2 nudges), ab jaaga hai, views.rs+gutter.rs par kaam me. Landing par verify+push+STATUS.
