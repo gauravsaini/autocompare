@@ -345,3 +345,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 17 pcomp editing color refs remain
 - PCOMP table.rs 10 lines started. COLOR E0425 DIM/RED/NEWER_BLUE/GREEN left. Both live.
+
+## Wave G poll 18 concrete reds
+- COLOR E0063 dim field 3 inits. PCOMP NaN tolerance 1 fail (51 pass). Both live fixing own files.
