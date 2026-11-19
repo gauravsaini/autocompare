@@ -497,3 +497,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 13 folder cols app 82
 - A+B live. A app.rs 82 lines wiring. B tree folder columns (column defs + cell text). Diff 974.
 - No commits. Wait.
+
+## Wave I poll 14 integration red paint pending
+- A+B live. Diff 1110 (app 224 wiring, B pure models). Full-crate red: app returns tuples, views paint still Vec — A owns views paint, fix is A side. B must NOT cross OWNS, gate owned pure tests + note wiring-pending.
+- No commits. Wait for A paint + B owned-gates.
