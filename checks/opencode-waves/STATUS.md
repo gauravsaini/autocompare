@@ -474,3 +474,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 07 both writing disjoint holds
 - A+B live. M main(A) + gutter/tree/viewmodel(B), no overlap. Diff 894+ lines. A wiring, B pure models.
 - No commits yet. Wait.
+
+## Wave I poll 08 steady 894
+- A+B live, diff steady 894 (main+3 B files). A engine error refs, B MergeHunk model. No commits. Wait.
