@@ -610,3 +610,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 08 B models C report
 - B pure models section adding. C REPORT written, commit next. A still scoping.
 - No commits. Wait.
+
+## Wave J poll 09 C landed A respawned
+- C b96a414 verified+pushed (OWNS clean, honest mid-flight FAIL notes). B live (app 105, models adding).
+- A ses-cleanup-j 8 polls no edits (954 out tokens) — respawned ses-cleanup-j2 with slice-1 micro-scope (2 items + commit). Old session abandoned (no files touched, no conflict).
