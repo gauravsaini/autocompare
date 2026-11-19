@@ -180,3 +180,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 19
 - Hooks FMT-CLEAN on owned files, land imminent. Both alive.
+
+## Wave D poll 20
+- Hooks 107 tests green, writing report + commit. Land imminent.
