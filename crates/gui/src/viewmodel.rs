@@ -1304,7 +1304,20 @@ pub fn build_table_rows(cmp: &TableComparison) -> TableModel {
 // per text view. The find box writes `set_query(&rows, &query)` on each
 // edit; Enter / Shift+Enter call `next()` / `prev()` and scroll the
 // returned model row into view with the same highlight the F3 path
-// uses. `match_count()` feeds the "n of m" label. No egui code here.
+// uses. `count_label()` feeds the "N/M" badge (agla paint wave). No
+// egui code here.
+
+/// N/M badge text for the text find bar: "2/5", no hit par "0/0".
+///
+/// Pure; paint-side `views::text_find_badge_label` ke model-side judvaan —
+/// agla paint wave isko badge label ke liye use karega. Unit-tested.
+#[allow(dead_code)] // wiring-pending: paint (agla wave) calls this via FindState
+pub fn find_count_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
 
 /// Case-insensitive substring matches of `query` over both panes.
 ///
@@ -1370,6 +1383,12 @@ impl FindState {
     pub fn position(&self) -> Option<usize> {
         self.cursor
             .and_then(|c| self.matches.get(c).map(|_| c.saturating_add(1)))
+    }
+
+    /// N/M badge text ("n of m" label): `position()` over `match_count()`,
+    /// no match par "0/0". Pure; agla paint wave badge ke liye use karega.
+    pub fn count_label(&self) -> String {
+        find_count_label(self.position(), self.match_count())
     }
 
     /// Currently selected match as a model row index.
@@ -2466,6 +2485,32 @@ mod tests {
         state.set_query(&rows, "alpha");
         assert_eq!(state.match_rows(), &[1 - 1]);
         assert_eq!(state.current_row(), Some(0));
+    }
+
+    #[test]
+    fn find_count_label_formats_n_of_m() {
+        assert_eq!(find_count_label(Some(2), 5), "2/5");
+        assert_eq!(find_count_label(Some(1), 1), "1/1");
+        assert_eq!(find_count_label(None, 5), "0/5");
+        assert_eq!(find_count_label(None, 0), "0/0");
+    }
+
+    #[test]
+    fn find_state_count_label_tracks_cursor() {
+        let rows = find_rows();
+        let mut state = FindState::default();
+        state.set_query(&rows, "gamma");
+        assert_eq!(state.count_label(), "1/2");
+        state.next();
+        assert_eq!(state.count_label(), "2/2");
+        // Wrap forward to the first hit.
+        state.next();
+        assert_eq!(state.count_label(), "1/2");
+        // Empty query reports 0/0 and no navigation.
+        state.set_query(&rows, "absent");
+        assert_eq!(state.count_label(), "0/0");
+        assert_eq!(state.next(), None);
+        assert_eq!(state.count_label(), "0/0");
     }
 
     fn merged_two_conflicts() -> Vec<String> {
