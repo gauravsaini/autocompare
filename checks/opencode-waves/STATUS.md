@@ -450,3 +450,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave I poll 01 all live baselines green
 - PIDs 41851/41852/41853 live. A baseline 125 green, patch apply + wiring next (147 target). B gap mapping done, pure models next. C baseline 125 green, rolling loop.
+
+## Wave I poll 02 mapping phase
+- All 3 live, tree clean. A reading engine APIs (viewmodel/binary/diff). B mapping viewmodel structs. C rolling gates (fmt clean).
+- No edits yet. Wait.
