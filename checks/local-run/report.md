@@ -200,3 +200,73 @@ Baseline tulna (shabdon me, geometry par, color par nahi):
 - koi naya alignment gap nahi dikha, pane width cap aur line spacing me antar nahi hai
 - color ya theme par koi tippani nahi, sirf geometry dekhi hai
 - matlab early exquisite baseline GEO/TYPO ke liye saaf starting point hai
+
+## 6. Release binary section (2026-11-19 14:51 UTC)
+
+Command 12 — release build:
+```
+cargo build --release -p autocompare-gui
+```
+Output tail:
+```
+Finished `release` profile [optimized] target(s) in 0.47s
+BUILD_EXIT:0
+```
+Cache hit se 0.47s me finish hua, matlab binary pehle se fresh tha.
+
+Command 13 — release binary bytes + mtime:
+```
+ls -lh target/release/autocompare-gui
+stat -f "SIZE_BYTES:%z MTIME:%Sm" target/release/autocompare-gui
+```
+Output:
+```
+-rwxr-xr-x@ 1 ektasaini staff 10M Nov 20 01:48 target/release/autocompare-gui
+SIZE_BYTES:10851744 MTIME:2026-11-20 01:48:50 UTC
+```
+Binary path target/release/autocompare-gui hai, size 10851744 bytes (10M) hai, mtime 2026-11-20 01:48:50 UTC hai.
+
+Command 14 — release screenshot run:
+```
+./target/release/autocompare-gui --screenshot checks/release-smoke/gui-smoke.png
+echo "SCREENSHOT_EXIT:$?"
+```
+Output:
+```
+SCREENSHOT_EXIT:0
+```
+Release binary se headless launch me koi panic nahi, exit 0 hai.
+
+Command 15 — PNG magic + size + blank verify:
+```
+file checks/release-smoke/gui-smoke.png
+ls -l checks/release-smoke/gui-smoke.png
+python3 -c "magic/size/uniq check"
+```
+Output:
+```
+checks/release-smoke/gui-smoke.png: PNG image data, 960 x 600, 8-bit/color RGBA, non-interlaced
+MAGIC_HEX: 89504e470d0a1a0a
+MAGIC_OK: True
+BYTES:9914
+DIMS:960x600
+UNIQ_BYTES:256
+NONBLANK:True
+```
+Screenshot path checks/release-smoke/gui-smoke.png hai, PNG magic sahi hai, size 9914 bytes hai, dims 960x600 hai, blank nahi hai.
+
+Command 16 — gui test quick:
+```
+cargo test -p autocompare-gui
+```
+Output:
+```
+test result: ok. 115 passed; 0 failed; 0 ignored
+TEST_EXIT:0
+```
+Test count 115 pass, 0 fail hai. Pehle 107 tha, ab 115 hai, matlab 8 naye test jud gaye hain.
+
+Rule follow proof:
+- crates/** me maine koi edit nahi kiya, git diff crates wala change pehle se tha, maine touch nahi kiya
+- likha sirf checks/local-run/report.md me (yeh section) aur screenshot checks/release-smoke/gui-smoke.png me
+- target/release binary ko rebuild ke alawa touch nahi kiya
