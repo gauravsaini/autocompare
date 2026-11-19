@@ -321,3 +321,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 09 pcompare added
 - COLOR live 02:38 no diff yet (lints reading). Added ses-pcomp disjoint (diff/compare headless) to keep momentum, no OWNS overlap.
+
+## Wave G poll 10 color still analyzing pcomp reading
+- COLOR 02:58 no diff, PCOMP 00:12 reading. Both live, tree clean.
