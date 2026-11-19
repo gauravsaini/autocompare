@@ -91,3 +91,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Poll 14
 - Text in clippy-polish phase (collapsible-if in views.rs), land near. CI still queued (4 runs backed up).
+
+## Poll 15
+- Text fixing clippy hits in views.rs (495/500/604), still landing. CI still queued.
