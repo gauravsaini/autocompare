@@ -220,12 +220,19 @@ pub fn folder_tree_filtered(
         }
         return nodes;
     }
-    let kept: Vec<FolderRow> = rows
-        .iter()
+    let kept: Vec<FolderRow> = filtered_folder_rows(rows, display);
+    folder_tree(&kept, expanded_dirs)
+}
+
+/// Display filter lagakar rows ko order me rakhta hai (flatten se pehle
+/// ka step). Dual-tree paint (`views::paint_folder_dual`) unfiltered
+/// `viewmodel::folder_tree` se tree banata hai, isliye App isko dekar
+/// filtered dual tree pata hai — paint API same rehta hai. Pure, no I/O.
+pub fn filtered_folder_rows(rows: &[FolderRow], display: &FolderDisplay) -> Vec<FolderRow> {
+    rows.iter()
         .filter(|row| filter_pass(row, display))
         .cloned()
-        .collect();
-    folder_tree(&kept, expanded_dirs)
+        .collect()
 }
 
 /// Stages a double-clicked file node as compare intent. Directories
@@ -1371,6 +1378,23 @@ impl FolderSessionState {
         count_folder_rows(rows)
     }
 
+    /// Active display filter lagakar rakhi hui rows (order same).
+    /// Dual-tree paint isi ko deta hai taaki dual panes filtered
+    /// dikhen; paint API same rehta hai.
+    pub fn filtered_rows(&self, rows: &[FolderRow]) -> Vec<FolderRow> {
+        filtered_folder_rows(rows, &self.display)
+    }
+
+    /// Honest counts over the filtered rows (dual summary isi par).
+    pub fn filtered_counts(&self, rows: &[FolderRow]) -> FolderCounts {
+        count_folder_rows(&self.filtered_rows(rows))
+    }
+
+    /// One-line honest summary over the filtered rows.
+    pub fn filtered_counts_summary(&self, rows: &[FolderRow]) -> String {
+        self.filtered_counts(rows).summary()
+    }
+
     /// Stages a double-clicked node; returns whether intent was staged.
     /// Directory clicks stage nothing and keep a previous staging.
     pub fn stage_double_click(&mut self, node: &FolderTreeNode) -> bool {
@@ -1464,6 +1488,59 @@ mod session_tests {
         let flat = session.visible_tree(&rows);
         assert_eq!(flat.len(), 2);
         assert!(flat.iter().all(|n| n.depth == 0));
+    }
+
+    #[test]
+    fn session_filtered_rows_keep_order_for_dual_paint() {
+        let rows = vec![
+            glyph_row("same.txt", false, '='),
+            glyph_row("left.txt", false, 'L'),
+            glyph_row("newer.txt", false, '>'),
+        ];
+        let mut session = FolderSessionState::default();
+        // Bina filter: sab rows, order same.
+        let kept = session.filtered_rows(&rows);
+        assert_eq!(kept.len(), 3);
+        let Some(middle) = kept.get(1) else {
+            return;
+        };
+        assert_eq!(middle.rel_path, "left.txt");
+        // Hide orphans: dual paint ko orphan-free list milta hai.
+        session.display.hide_orphans = true;
+        let kept = session.filtered_rows(&rows);
+        assert_eq!(kept.len(), 2);
+        assert!(kept.iter().all(|r| r.glyph != 'L' && r.glyph != 'R'));
+        // Left-newer only: sirf '>' glyph.
+        session.display.hide_orphans = false;
+        session.display.left_newer_only = true;
+        let kept = session.filtered_rows(&rows);
+        assert_eq!(kept.len(), 1);
+        let Some(first) = kept.first() else {
+            return;
+        };
+        assert_eq!(first.glyph, '>');
+    }
+
+    #[test]
+    fn session_filtered_counts_match_filtered_tree() {
+        let rows = vec![
+            glyph_row("same.txt", false, '='),
+            glyph_row("left.txt", false, 'L'),
+            glyph_row("right.txt", false, 'R'),
+            glyph_row("newer.txt", false, '>'),
+        ];
+        let mut session = FolderSessionState::default();
+        // Bina filter: poori ginti.
+        assert_eq!(session.filtered_counts(&rows).total, 4);
+        assert!(session.filtered_counts_summary(&rows).contains("4 entries"));
+        // Hide orphans: ginti filtered tree par.
+        session.display.hide_orphans = true;
+        let counts = session.filtered_counts(&rows);
+        assert_eq!(counts.total, 2);
+        assert_eq!(counts.orphans(), 0);
+        assert!(session.filtered_counts_summary(&rows).contains("2 entries"));
+        // Purana unfiltered counts untouched rehta hai.
+        assert_eq!(session.counts(&rows).total, 4);
     }
 
     #[test]

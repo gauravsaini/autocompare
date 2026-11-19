@@ -943,11 +943,13 @@ impl App {
         self.folder_model.as_ref().map(|(rows, _)| rows)
     }
 
-    /// Honest counts line for the Folder tab via [`tree::FolderCounts`].
-    /// Empty model reports no results yet so the view never lies.
+    /// Honest counts line for the Folder tab, filtered tree par.
+    /// Display filter ke baad jo rows dual panes me dikhti hain, ginti
+    /// unhi par aati hai taaki summary kabhi jhooth na bole. Empty model
+    /// reports no results yet so the view never lies.
     pub fn folder_counts_summary(&self) -> String {
         match self.folder_rows() {
-            Some(rows) => self.folder_session.counts(rows).summary(),
+            Some(rows) => self.folder_session.filtered_counts(rows).summary(),
             None => String::from("folder: no results yet"),
         }
     }
@@ -963,6 +965,16 @@ impl App {
     pub fn folder_visible_tree(&self) -> Vec<tree::FolderTreeNode> {
         match self.folder_rows() {
             Some(rows) => self.folder_session.visible_tree(rows),
+            None => Vec::new(),
+        }
+    }
+
+    /// Rows the dual panes paint: display filter lagakar, order same.
+    /// Paint (`views::paint_folder_dual`) inhi se tree banata hai, isliye
+    /// dual panes filtered dikhte hain; paint API same rehta hai.
+    pub fn folder_dual_rows(&self) -> Vec<FolderRow> {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.filtered_rows(rows),
             None => Vec::new(),
         }
     }
@@ -3240,14 +3252,16 @@ impl eframe::App for App {
                                 }
                             }
                         });
-                        // Dual-tree panes (Gap #19 kadam 2): same rows,
-                        // counts summary, shared select/scroll/action.
+                        // Dual-tree panes (Gap #19 kadam 3): filtered rows +
+                        // filtered summary, shared select/scroll/action.
+                        // Paint API same hai; filter App side se aata hai.
                         // Single-list paint upar untouched hai.
-                        if let Some((rows, _)) = self.folder_model.clone() {
+                        if self.folder_model.is_some() {
+                            let dual_rows = self.folder_dual_rows();
                             let summary = self.folder_counts_summary();
                             views::paint_folder_dual(
                                 ui,
-                                &rows,
+                                &dual_rows,
                                 summary.as_str(),
                                 &mut self.folder_session.expanded,
                                 &mut self.folder_dual,
@@ -3903,6 +3917,33 @@ mod tests {
         assert_eq!(app.folder_visible_tree().len(), 2);
         app.folder_session.display.left_newer_only = true;
         assert_eq!(app.folder_visible_tree().len(), 1);
+    }
+
+    #[test]
+    fn folder_dual_rows_apply_display_filters() {
+        let mut app = folder_app_with_rows();
+        // Bina filter: dual ko teeno rows milti hain, order same.
+        let dual = app.folder_dual_rows();
+        assert_eq!(dual.len(), 3);
+        let Some(last) = dual.get(2) else {
+            return;
+        };
+        assert_eq!(last.rel_path, "orphan.txt");
+        // Hide orphans: dual panes se orphan gayab.
+        app.folder_session.display.hide_orphans = true;
+        let dual = app.folder_dual_rows();
+        assert_eq!(dual.len(), 2);
+        assert!(dual.iter().all(|r| r.glyph != 'R'));
+        // Summary filtered tree par: orphans chhupne par ginti 2.
+        let summary = app.folder_counts_summary();
+        assert!(summary.contains("2 entries"));
+        assert!(summary.contains("0 right-only"));
+        // Sync total dual rows se milta hai.
+        app.sync_folder_dual();
+        assert_eq!(
+            app.folder_dual.pager.total_rows,
+            app.folder_visible_tree().len()
+        );
     }
 
     #[test]
