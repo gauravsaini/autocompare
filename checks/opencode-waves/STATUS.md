@@ -193,3 +193,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
   ses-local-bin (PID 17073): checks/local-run only, local run + binary early feedback, no source edits.
 - Probe strategy: no timer, event-driven headless loop (tests + --screenshot PNG + grep px). Poll only agent liveness.
 - Rules: Hinglish Roman, clean-room, MS rust (forbid unsafe, no unwrap/expect/panic/todo non-test), conventional commit NO push by agents.
+
+## Wave E poll 01
+- All 3 live verified via ps: ses-geo-exq PID 17032, ses-typo-exq PID 17049, ses-local-bin PID 17073. Logs growing 2893/1258/1879B.
+- GEO in egui 0.37 Frame/Margin API research (Margin::same, inner_margin), TYPO in type-signal counts, BIN produced checks/local-run/early-geo-typo.png 9914B magic ok distinct 256.
+- No source diff yet, reading phase per unlazy, no OWNS violation. Harness baseline still PASS.
