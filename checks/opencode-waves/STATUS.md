@@ -809,3 +809,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - ZOOM patch (77 lines) + FIND patch (56 lines) both apply-check OK, applied by orchestrator. FIND hunk truncated on apply (file tail cut) -> reverted views.rs hunk, appended complete block from patch, moved before mod tests, added allow(dead_code) per Wave H precedent, repaired header/attribute fallout.
 - Verify: 229 green, clippy zero, fmt clean, release 11074624B (+0.16%), PNG 9914B magic ok 256, harness round-S-1 PASS.
 - Committed feat + proof. Wave S complete. Gaps #9/#12 now PARTIAL+ (state+helpers live, paint call wiring remains).
+
+## Wave T plan find-bar paint calls (single agent, disjoint)
+- T-CALL ses-paintcall-t (opencode default): OWNS views.rs+app.rs+checks/gui-paintcall-t/**. Wire paint_text_find_bar + text_find_badge_label into text-view paint (near views.rs:712 F3 loop; App text find state from Wave Q f2a41a9: needle/cursor/N-M badge model). Remove allow(dead_code) once called (keep if partial with note). No color/geometry/token changes.
+- Zoom Cmd +/-/0 already live in app.rs:2183-2210 (verified in worktree) — no work needed, agent confirms + tests.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
