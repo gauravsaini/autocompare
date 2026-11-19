@@ -1192,3 +1192,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AY-TABLECELL `sess-tablecell-ay`: OWNS views_table.rs+checks/gui-tablecell-ay (cell-level key-col highlight + find underline in Grid paint; AX2 §10.3).
 - AY-HEXMINI `sess-hexmini-ay`: OWNS views_hex.rs+checks/gui-hexmini-ay (24px minimap hit-rect + nibble-level geometry in paint; AX2 §10.3/10.4).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AY complete (2 parallel: table cell geometry + hex minimap paint)
+- HEXMINI `2449f1b` hex minimap hit-rect + nibble-parity geometry — OWNS views_hex.rs.
+- TABLECELL `02c7a65` pure cell-geometry rects + key boxes + find underlines + wiring spec P1-P4 — OWNS views_table.rs.
+- Verify combined: 559 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AZ (table Grid paint wiring in views.rs per P1-P4 + folder empty-hint variant).
