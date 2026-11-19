@@ -1982,6 +1982,52 @@ pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Text find bar (orchestrator-applied hook; not yet called from paint).
+// ----------------------------------------------------------------------------
+
+/// N/M badge text for the text find bar: "2/5", no hit par "0/0".
+/// Pure; App badge model ko paint bina App borrow ke dikhata hai.
+/// Test-only until paint wiring calls it (Wave Q follow-up).
+#[allow(dead_code)]
+pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
+
+/// Text find bar: needle field + case flag + Prev/Next + badge label.
+/// Returns `(prev_clicked, next_clicked)`; cursor/badge advance App
+/// ke `text_find_next_row` / `text_find_prev_row` me hota hai.
+/// Test-only until paint wiring calls it (Wave Q follow-up).
+#[allow(dead_code)]
+pub fn paint_text_find_bar(
+    ui: &mut Ui,
+    needle: &mut String,
+    ignore_case: &mut bool,
+    badge: &str,
+) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new("Find:").small().weak());
+        ui.add(
+            egui::TextEdit::singleline(needle)
+                .desired_width(120.0)
+                .hint_text("needle"),
+        );
+        ui.checkbox(ignore_case, "Ignore case");
+        if ui.small_button("◀ Prev").clicked() {
+            prev = true;
+        }
+        if ui.small_button("Next ▶").clicked() {
+            next = true;
+        }
+        ui.label(RichText::new(badge).small().weak());
+    });
+    (prev, next)
+}
 #[cfg(test)]
 mod tests {
     use super::*;

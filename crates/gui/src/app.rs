@@ -106,6 +106,8 @@ pub struct App {
     pub word_wrap: bool,
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
+    /// Font zoom step into `crate::theme::ZOOM_LEVELS` (per-run only).
+    pub zoom_level: i8,
     pub status: String,
     /// Draggable pane split fraction (left share of the row).
     /// Clamped to 0.20..=0.80, default 0.50; per-run only.
@@ -163,6 +165,7 @@ impl Default for App {
             word_wrap: false,
             show_line_numbers: true,
             syntax_highlight: true,
+            zoom_level: crate::theme::ZOOM_DEFAULT_LEVEL,
             status: String::from("ready: pick a session to begin"),
             split_fraction: views::SPLIT_DEFAULT_FRACTION,
             rx: None,
@@ -449,6 +452,32 @@ impl App {
         } else {
             String::from("syntax highlighting off")
         };
+    }
+
+    /// Current font zoom step (clamped to `crate::theme::ZOOM_LEVELS`).
+    pub fn zoom_level(&self) -> i8 {
+        crate::theme::clamp_zoom_level(self.zoom_level)
+    }
+
+    /// Sets the font zoom step, clamped to MIN..=MAX.
+    pub fn set_zoom_level(&mut self, level: i8) {
+        self.zoom_level = crate::theme::clamp_zoom_level(level);
+        self.status = format!("font zoom: {}", self.zoom_level());
+    }
+
+    /// Steps font zoom up one level (clamped at MAX).
+    pub fn zoom_in(&mut self) {
+        self.set_zoom_level(self.zoom_level().saturating_add(1));
+    }
+
+    /// Steps font zoom down one level (clamped at MIN).
+    pub fn zoom_out(&mut self) {
+        self.set_zoom_level(self.zoom_level().saturating_sub(1));
+    }
+
+    /// Resets font zoom to the default step.
+    pub fn zoom_reset(&mut self) {
+        self.set_zoom_level(crate::theme::ZOOM_DEFAULT_LEVEL);
     }
 
     /// Records user-visible status feedback.
@@ -2149,6 +2178,26 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         ui.ctx()
             .send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
+        // Font zoom keys (Wave R zoom model): Cmd/Ctrl + +/-/0 over
+        // `crate::theme::ZOOM_LEVELS`; theme owns sizes, App owns level.
+        let (zoom_in, zoom_out, zoom_reset) = ui.input(|i| {
+            let cmd = i.modifiers.command;
+            (
+                cmd && (i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)),
+                cmd && i.key_pressed(egui::Key::Minus),
+                cmd && i.key_pressed(egui::Key::Num0),
+            )
+        });
+        if zoom_reset {
+            self.zoom_reset();
+        } else {
+            if zoom_in {
+                self.zoom_in();
+            }
+            if zoom_out {
+                self.zoom_out();
+            }
+        }
         // Drag and drop handling
         let dropped_files = ui.input(|i| i.raw.dropped_files.clone());
         if !dropped_files.is_empty() {
