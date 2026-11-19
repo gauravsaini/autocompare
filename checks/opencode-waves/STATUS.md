@@ -318,3 +318,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 08 color matrix
 - COLOR live 02:13, DIM_DARK matrix done (DARK_BG 5.82 OK others fail). Measuring before editing, no diff yet.
+
+## Wave G poll 09 pcompare added
+- COLOR live 02:38 no diff yet (lints reading). Added ses-pcomp disjoint (diff/compare headless) to keep momentum, no OWNS overlap.
