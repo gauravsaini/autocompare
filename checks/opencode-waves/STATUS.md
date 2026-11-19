@@ -300,3 +300,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 02 implementing
 - Both live 00:28, tree clean, gui 117 green. Edits next.
+
+## Wave G poll 03 mapping
+- COLOR mapping dark/light visuals in app.rs, SESS test-running headless crates. No diff yet, exploration progress.
