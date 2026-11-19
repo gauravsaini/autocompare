@@ -357,3 +357,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 21 expanding nan still red
 - 7 files 948 ins (was 744). GUI 122 green. Diff 51/1 NaN 4th poll. Both live 07:07/04:21.
+
+## Wave G poll 22 8 files nan red
+- 8 files 1074 ins. NaN 5th poll red. Both live 07:28/04:42.
