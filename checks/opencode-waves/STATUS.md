@@ -829,3 +829,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave U poll TYPO landed (1/4)
 - TYPO 3235a14 verified+pushed: OWNS clean (theme 175 + typo-u GATES/REPORT/run-typo-u.sh + round-U-1). Intent tokens (family/weight/line-height/tracking/tabul) + zoom-clamp regression. 233 green (+2), clippy zero, fmt clean, banned 0.
 - GEO/LAYOUT/RUN live. GEO quiet since 03:42 — next poll still quiet to nudge karunga.
+
+## Wave U poll RUN landed (2/4)
+- RUN ab24114 verified+pushed: OWNS clean (checks/gui-run-u 13 files, zero source edits). Release 11074592B (-32B), PNG 9914 exact + folder 10300 magic-ok, harness PASS, workspace 601 passed, gui 245, top-3 BC deltas documented (toolbar density, minimap width, glyph smoothing). Dead_code warnings + fmt diffs flagged as in-flight GEO/LAYOUT uncommitted work, honestly scoped.
+- GEO/LAYOUT live, both source files modified uncommitted, tree 245 green.
