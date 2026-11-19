@@ -1042,3 +1042,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AL-MERGEAPP `sess-mergeapp-al`: OWNS app.rs+checks/gui-mergeapp-al (Gap #13 pick intent App decision state wiring).
 - AL-INTRA `sess-intra-al`: OWNS views.rs+checks/gui-intra-al (Gap #11 intra-line changed spans paint).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AL complete (2 parallel: merge App wiring + intra-line spans)
+- INTRA `fbc25a5` intra-line spans refined (normalized rects + locked typo) — OWNS views.rs (Gap #11); follow-up `1aba1d0` gate test-name fix.
+- MERGEAPP `62ac185` per-hunk merge picks wired into App state + real summary — OWNS app.rs (Gap #13 App wiring).
+- Original AL sessions frozen the (zero output) — fresh AL2/AL3 se lossless resume; purani session ko STOP bheja, koi collision nahi.
+- Verify combined: 393 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AM (3-pane/apply wiring, text diff nav, snapshot parity).
