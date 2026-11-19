@@ -1330,3 +1330,14 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BL-SYNC `sess-sync-bl`: OWNS views.rs+app.rs+checks/gui-sync-bl (BI-S2 mode radio wiring + BI-S3 consent-gate unify can_apply_now; sequential same owner).
 - BL-MERGEFIX3 `sess-mergefix3-bl`: OWNS screenshot.rs+checks/gui-mergefix3-bl (three-way tree fixture scene + dispatcher route per mergemulti REPORT §4 spec; paint files NO-TOUCH).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BL complete (2 parallel: sync mode+gate + three-way fixture)
+- SYNC `b2cca03` sync mode radio in folder paint + unified apply gates — OWNS views.rs+app.rs.
+- MERGEFIX3 `c1946c3` three-way tree fixture scene + Take buttons — OWNS screenshot.rs.
+- Verify combined: 604 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok x5 (after-threeway sahit). Tree clean.
+- Pushed. Next: Wave BM (FolderMerge tab wiring + LIVE visual compare vs BC).
+
+## 2026-11-20 — Wave BM plan (2 parallel: tab wiring + live screenshots)
+- BM-TABWIRE `sess-tabwire-bm`: OWNS app.rs+checks/gui-tabwire-bm (FolderMerge tab checklist -> paint_three_way_tree wiring per mergemulti REPORT §4 callsite spec; views.rs NO-TOUCH).
+- BM-LIVECOMP `sess-livecomp-bm`: OWNS checks/gui-livecomp-bm ONLY (running app + BC ke `screencapture` screenshots, side-by-side visual gap REPORT + exact follow-up specs; zero .rs edits, koi window automate-manipulate nahi — sirf capture + observe).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
