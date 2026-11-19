@@ -1,0 +1,35 @@
+warning: use of deprecated associated function `eframe::egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/gui/src/views.rs:675:15
+    |
+675 |     egui::Id::new("wirefind_hex_needle")
+    |               ^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `eframe::egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/gui/src/views.rs:680:15
+    |
+680 |     egui::Id::new("wirefind_hex_cursor")
+    |               ^^^
+
+warning: use of deprecated associated function `eframe::egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/gui/src/views.rs:686:15
+    |
+686 |     egui::Id::new("wirefind_table_needle")
+    |               ^^^
+
+warning: use of deprecated associated function `eframe::egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/gui/src/views.rs:691:15
+    |
+691 |     egui::Id::new("wirefind_table_cursor")
+    |               ^^^
+
+
+running 378 tests
+....................................................................................... 87/378
+....................................................................................... 174/378
+....................................................................................... 261/378
+....................................................................................... 348/378
+..............................
+test result: ok. 378 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+

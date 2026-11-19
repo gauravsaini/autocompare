@@ -549,6 +549,144 @@ pub fn folder_format_row(row: &FolderRow) -> String {
     parts.join(" | ")
 }
 
+// ----------------------------------------------------------------------------
+// Gap #6 polish: folder column paint geometry + typography (headless).
+// ----------------------------------------------------------------------------
+//
+// Bahar se dekhe folder compare me har row ek hi baseline par rehti hai:
+// naam wali column flex hoti hai, size/time wali fixed. Ye section us
+// layout ka headless spec hai taaki paint (dusre agent ke paas) har frame
+// same numbers use kare. Geometry first: row heights, padding, col gap,
+// alignment, min widths. Typography second: mono + size + weight per
+// column, `TypoRole` precedent ke naam se (Body/Caption), bina theme
+// import ke taaki ownership disjoint rahe. Colors frozen: yahan koi hue
+// nahi, sirf shape aur type.
+//
+// WIRING (paint, agent A): header `folder_header_height()` par
+// `folder_header_typo()` me, har row `folder_row_height()` par
+// `folder_typo_for_column(col)` me; Path cell x me
+// `tree_indent_for_depth(depth)` ka offset jodo, phir flex width me
+// paint karo; fixed cols `folder_column_min_px(col)` se kam nahi,
+// `folder_column_align(col)` se align karo, cell padding
+// `folder_cell_pad_x()` dono taraf. Headless text helpers
+// (`pad_folder_cell`, `folder_format_row`) left-pad rehte hain taaki
+// snapshots stable rahen; right-align sirf paint ka numeric polish hai.
+
+/// Ek folder column cell ka horizontal alignment (paint ke liye).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderCellAlign {
+    /// Naam/dates: left se padho.
+    Left,
+    /// Byte counts: right se milao taaki ankde ek line me aayen.
+    Right,
+}
+
+/// Folder row ki height (px): 24.0, MD spacing scale par.
+pub const FOLDER_ROW_HEIGHT: f32 = 24.0;
+/// Folder header ki height (px): rows jaisi, ek baseline.
+pub const FOLDER_HEADER_HEIGHT: f32 = 24.0;
+/// Cell ka ek taraf ka horizontal padding (px): 8.0, MD scale par.
+pub const FOLDER_CELL_PAD_X: f32 = 8.0;
+/// Fixed columns ke beech ka gap (px): 8.0, MD scale par.
+pub const FOLDER_COL_GAP: f32 = 8.0;
+/// Nominal mono advance (px per char): min-px math ke liye.
+pub const FOLDER_MONO_ADVANCE: f32 = 7.0;
+/// Path flex column ki min readable width (chars me).
+pub const FOLDER_PATH_MIN_CHARS: usize = 24;
+/// Path/body text size (pt): `TypoRole::Body` precedent.
+pub const FOLDER_BODY_SIZE: f32 = 13.0;
+/// Side columns text size (pt): `TypoRole::Caption` precedent.
+pub const FOLDER_SIDE_SIZE: f32 = 12.0;
+/// Header text size (pt): caption-strong precedent.
+pub const FOLDER_HEADER_SIZE: f32 = 12.0;
+
+/// Paint row height (px). Header se alag function taaki paint dono ko
+/// ek saath na badle.
+pub fn folder_row_height() -> f32 {
+    FOLDER_ROW_HEIGHT
+}
+
+/// Paint header height (px).
+pub fn folder_header_height() -> f32 {
+    FOLDER_HEADER_HEIGHT
+}
+
+/// Cell ka ek taraf ka horizontal padding (px).
+pub fn folder_cell_pad_x() -> f32 {
+    FOLDER_CELL_PAD_X
+}
+
+/// Fixed columns ke beech ka gap (px).
+pub fn folder_col_gap() -> f32 {
+    FOLDER_COL_GAP
+}
+
+/// Ek column ka paint alignment: Path aur times left, sizes right.
+/// Sizes right isliye taaki byte counts ka ikai column seedha rahe;
+/// times fixed-width mono hain isliye left padhne me aasan.
+pub fn folder_column_align(column: FolderColumn) -> FolderCellAlign {
+    match column {
+        FolderColumn::Path => FolderCellAlign::Left,
+        FolderColumn::LeftSize | FolderColumn::RightSize => FolderCellAlign::Right,
+        FolderColumn::LeftTime | FolderColumn::RightTime => FolderCellAlign::Left,
+    }
+}
+
+/// Ek column ki min paint width (px): fixed cols ke liye
+/// `chars * advance + 2 * pad`, Path ke liye flex-min
+/// (`FOLDER_PATH_MIN_CHARS` se). Non-finite risk nahi: sab const
+/// positive hain, `width_chars` saturating cast hai.
+pub fn folder_column_min_px(column: FolderColumn) -> f32 {
+    let chars: f32 = match column {
+        FolderColumn::Path => FOLDER_PATH_MIN_CHARS as f32,
+        FolderColumn::LeftSize | FolderColumn::RightSize => FOLDER_SIZE_CHARS as f32,
+        FolderColumn::LeftTime | FolderColumn::RightTime => FOLDER_TIME_CHARS as f32,
+    };
+    chars * FOLDER_MONO_ADVANCE + FOLDER_CELL_PAD_X * 2.0
+}
+
+/// Ek folder column ki typography: mono + size + weight.
+/// Paint isko `TypoRole` se map kare: Path body-regular, sides
+/// caption-regular, header caption-strong. Colors yahan nahi.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FolderTypo {
+    /// Mono font me paint karo (sizes/times/paths sab mono).
+    pub mono: bool,
+    /// Text size (pt).
+    pub size: f32,
+    /// Bold/strong weight.
+    pub strong: bool,
+}
+
+/// Body/side cell ki typo: Path body-regular mono, baaki
+/// caption-regular mono.
+pub fn folder_typo_for_column(column: FolderColumn) -> FolderTypo {
+    match column {
+        FolderColumn::Path => FolderTypo {
+            mono: true,
+            size: FOLDER_BODY_SIZE,
+            strong: false,
+        },
+        FolderColumn::LeftSize
+        | FolderColumn::RightSize
+        | FolderColumn::LeftTime
+        | FolderColumn::RightTime => FolderTypo {
+            mono: true,
+            size: FOLDER_SIDE_SIZE,
+            strong: false,
+        },
+    }
+}
+
+/// Header ki typo: caption-strong mono (column labels ek nazar me).
+pub fn folder_header_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_HEADER_SIZE,
+        strong: true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1060,6 +1198,82 @@ mod tests {
         // Pad helper lamba text kaat-ta hai, chhota pad karta hai.
         assert_eq!(pad_folder_cell("ab", 4), "ab  ");
         assert_eq!(pad_folder_cell("abcdef", 4), "abcd");
+    }
+
+    #[test]
+    fn folder_col_geometry_tokens_stay_on_scale() {
+        // Geometry first: heights/padding/gap spacing scale (4/8/12/16/24) par.
+        assert_eq!(folder_row_height(), 24.0);
+        assert_eq!(folder_row_height(), FOLDER_ROW_HEIGHT);
+        assert_eq!(folder_header_height(), 24.0);
+        assert_eq!(folder_header_height(), FOLDER_HEADER_HEIGHT);
+        assert_eq!(folder_cell_pad_x(), 8.0);
+        assert_eq!(folder_col_gap(), 8.0);
+        // Indent frozen rehta hai: columns usko hilate nahi.
+        assert_eq!(tree_indent_step(), 12.0);
+        // Alignment: path left, numeric sizes right, fixed-width times left.
+        assert_eq!(
+            folder_column_align(FolderColumn::Path),
+            FolderCellAlign::Left
+        );
+        assert_eq!(
+            folder_column_align(FolderColumn::LeftSize),
+            FolderCellAlign::Right
+        );
+        assert_eq!(
+            folder_column_align(FolderColumn::RightSize),
+            FolderCellAlign::Right
+        );
+        assert_eq!(
+            folder_column_align(FolderColumn::LeftTime),
+            FolderCellAlign::Left
+        );
+        assert_eq!(
+            folder_column_align(FolderColumn::RightTime),
+            FolderCellAlign::Left
+        );
+        // Min widths: time > size (16 chars vs 10), path flex-min sabse bada.
+        let size_px = folder_column_min_px(FolderColumn::LeftSize);
+        let time_px = folder_column_min_px(FolderColumn::LeftTime);
+        let path_px = folder_column_min_px(FolderColumn::Path);
+        assert!(time_px > size_px);
+        assert!(path_px > time_px);
+        assert_eq!(size_px, 10.0 * FOLDER_MONO_ADVANCE + 16.0);
+        assert_eq!(time_px, 16.0 * FOLDER_MONO_ADVANCE + 16.0);
+        // Dono sides same width: columns kabhi misalign na hon.
+        assert_eq!(size_px, folder_column_min_px(FolderColumn::RightSize));
+        assert_eq!(time_px, folder_column_min_px(FolderColumn::RightTime));
+    }
+
+    #[test]
+    fn folder_col_typo_mono_sizes_with_header_strong() {
+        // Typography second: sab mono, header strong, baaki regular.
+        let path = folder_typo_for_column(FolderColumn::Path);
+        assert!(path.mono);
+        assert_eq!(path.size, FOLDER_BODY_SIZE);
+        assert!(!path.strong);
+        for col in [
+            FolderColumn::LeftSize,
+            FolderColumn::RightSize,
+            FolderColumn::LeftTime,
+            FolderColumn::RightTime,
+        ] {
+            let typo = folder_typo_for_column(col);
+            assert!(typo.mono);
+            assert_eq!(typo.size, FOLDER_SIDE_SIZE);
+            assert!(!typo.strong);
+        }
+        let header = folder_header_typo();
+        assert!(header.mono);
+        assert_eq!(header.size, FOLDER_HEADER_SIZE);
+        assert!(header.strong);
+        // Body bada, sides/header caption: TypoRole Body/Caption precedent.
+        // Function outputs se compare (const assert se clippy bachta hai).
+        assert!(path.size > folder_typo_for_column(FolderColumn::LeftSize).size);
+        assert_eq!(
+            folder_typo_for_column(FolderColumn::LeftSize).size,
+            header.size
+        );
     }
 }
 
