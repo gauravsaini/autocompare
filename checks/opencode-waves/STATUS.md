@@ -183,3 +183,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 20
 - Hooks 107 tests green, writing report + commit. Land imminent.
+
+
+## Wave E exquisite (geo first, typo second, colors out) — launched 2026-11-20
+- Harness first: tools/gui-polish/run-geo-typo.sh + skills/gui-polish/SKILL.md (baseline gui-geo PASS 9914B, spaces 2/4/6/8, Grid 1, mono x17 strong x5 small x10 size 14.0). Committed 5a26fba, pushed.
+- 3 parallel default-model waves (no --model flag, opencode-go/muse-spark-1.3-contributor):
+  ses-geo-exq (PID 17032): app.rs+views.rs+checks/gui-geo, geometry only, no colors.
+  ses-typo-exq (PID 17049): theme.rs+gutter.rs+viewmodel.rs+home.rs+checks/gui-typo, typography only, no views/app edits.
+  ses-local-bin (PID 17073): checks/local-run only, local run + binary early feedback, no source edits.
+- Probe strategy: no timer, event-driven headless loop (tests + --screenshot PNG + grep px). Poll only agent liveness.
+- Rules: Hinglish Roman, clean-room, MS rust (forbid unsafe, no unwrap/expect/panic/todo non-test), conventional commit NO push by agents.
