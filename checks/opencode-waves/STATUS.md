@@ -513,3 +513,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 17 error churn
 - A+B live, diff steady 1409. A 3 clippy field_reassign errors fixing. B same 2 E0308 (integration, A paint side resolving).
 - No commits. Wait for green.
+
+## Wave I poll 18 fix loop no new lines
+- A+B live, diff steady 1409 3rd poll. A clippy app refs, B 2 E0308 same. Iterating, no new lines.
+- No commits. One more poll, then nudge if still red.
