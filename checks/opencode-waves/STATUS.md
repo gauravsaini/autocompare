@@ -376,3 +376,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 27 pcomp report ready
 - REPORT.md claims 291 green. Verified diff/compare tests green in log. fmt 10 RED left, commit pending. Live.
+
+## Wave H plan exquisite + parity (3 parallel, disjoint)
+- A ses-local-exq2 OWNS ONLY checks/local-run-exq/** (no source edits): release build, headless smoke, PNG + early-feedback gaps vs BeyondCompare. Report-only.
+- B ses-hex-table-exq OWNS ONLY crates/gui/src/views_hex.rs crates/gui/src/views_table.rs checks/parity-hex-table/** (NEW files only, no app.rs/views.rs edits; integration as .patch in checks dir for orchestrator): hex editor UI + table key alignment UI headless-first, craft-anything validate per feature.
+- C ses-exq-geo-typo2 OWNS ONLY crates/gui/src/theme.rs crates/gui/src/gutter.rs crates/gui/src/tree.rs checks/gui-exquisite/**: geometry-first (width/height/margins/padding/alignment) + typography (family/weight/line-height/letter-spacing), colors frozen from COLOR wave. Harness tools/gui-polish/run-geo-typo.sh + gui tests 122 baseline.
+- Rules: commit locally NO push, English conventional commits, Hinglish Roman logs, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room outside observation.
