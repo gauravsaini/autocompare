@@ -24,3 +24,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - ses-gui-folder3 alive: baseline 57 tests green (agent-claimed, rerun at verify time), clippy/fmt clean claimed, now writing tree.rs headless logic.
 - ses-gui-shell3 alive: app.rs +4 state fields (word_wrap, show_line_numbers, syntax_highlight, status) + defaults; orchestrator-scanned diff CLEAN (no unwrap/expect/panic/todo/unsafe).
 - ses-local-run3 alive: report expanded with exit 0/1/2 proofs; PNG re-verified by orchestrator earlier.
+
+## Poll 02
+- ses-local-run3 DONE (local commit fdd5e97, already pushed inside 359335c): report.md 317 lines with exit 0/1/2 proofs. Follow-up report.md edits still uncommitted, left for agent.
+- ses-gui-text3 alive: viewmodel.rs +39 implementing nav/filter.
+- ses-gui-folder3 alive: tree.rs rewritten (+568) with headless filter/flatten/staging/sync-preview.
+- ses-gui-shell3 alive: app.rs +289. Uncommitted diff scanned CLEAN (only hit is forbid(unsafe_code) attribute).
+- No verification run yet (cargo busy with builders); rerun tests/clippy/screenshots at land time.
