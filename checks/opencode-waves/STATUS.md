@@ -537,3 +537,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 23 tests green clippy left
 - A live. Tests 172 green (E0308 fixed). Clippy: 3 owned errors (struct-update fix in progress, app.rs reading) + Wave H dead warnings untouched (disjoint respected).
 - No commit. Wait for clippy green.
+
+## Wave I poll 24 172 green clippy pending
+- A live, tests 172 green verified in worktree. App 418 lines, clippy fixes in progress.
+- No commit. Wait.
