@@ -144,21 +144,54 @@ pub fn split_picture_widths(avail: f32, fraction: f32) -> (f32, f32) {
     (left, total - left)
 }
 
+/// Drag handle cursor: the model affordance id (`"resize-column"`,
+/// see [`viewmodel::split_cursor_affordance`]) mapped to paint.
+/// Panics never; unknown ids fall back to the column resize cursor.
+/// Pure; unit-tested.
+pub fn split_handle_cursor() -> egui::CursorIcon {
+    debug_assert_eq!(viewmodel::split_cursor_affordance(), "resize-column");
+    egui::CursorIcon::ResizeColumn
+}
+
+/// Drag handle hover label: the model a11y text (honest left-pane
+/// percent plus the 20..=80 drag bounds), so the target stays
+/// operable without a pointer. Pure; unit-tested.
+pub fn split_handle_label(fraction: f32) -> String {
+    viewmodel::split_accessibility_label(fraction)
+}
+
+/// Drag delta folded into a split fraction the way paint does: model
+/// delta ([`viewmodel::split_drag_delta_fraction`]) plus the shared
+/// clamp ([`clamp_split_fraction`]). Guards mirror
+/// [`split_apply_drag`]. Pure; unit-tested.
+pub fn split_handle_drag_fraction(fraction: f32, dx: f32, avail: f32) -> f32 {
+    clamp_split_fraction(fraction + viewmodel::split_drag_delta_fraction(dx, avail))
+}
+
 /// Draggable divider between two panes. Paints a narrow grab strip
-/// and folds horizontal drag deltas back into `fraction` via
-/// [`split_apply_drag`]. Returns true while the divider moves.
+/// (hit width == model [`viewmodel::SPLIT_HANDLE_HIT_W`], centered
+/// 1px visual) and folds horizontal drag deltas back into `fraction`
+/// via [`split_handle_drag_fraction`]. Hover shows the resize-column
+/// cursor plus the model a11y label. Returns true while the divider
+/// moves. Used by the text path row, the picture side-by-side panes
+/// and the dual-tree panes — one handle for all three.
 pub fn paint_split_handle(ui: &mut Ui, fraction: &mut f32, avail: f32) -> bool {
+    debug_assert_eq!(SPLIT_HIT_W, viewmodel::SPLIT_HANDLE_HIT_W);
     let height = ui.available_height().max(20.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(SPLIT_HIT_W, height), egui::Sense::drag());
+    debug_assert_eq!(rect.width(), SPLIT_HIT_W);
     ui.painter().rect_filled(
         rect.shrink(split_visual_inset()),
         2.0,
         ui.visuals().widgets.noninteractive.bg_fill,
     );
+    let resp = resp
+        .on_hover_cursor(split_handle_cursor())
+        .on_hover_text(split_handle_label(*fraction));
     if resp.dragged() {
         let dx = resp.drag_delta().x;
         if dx != 0.0 {
-            *fraction = split_apply_drag(*fraction, dx, avail);
+            *fraction = split_handle_drag_fraction(*fraction, dx, avail);
             return true;
         }
     }
@@ -3415,6 +3448,60 @@ mod tests {
         );
         assert_eq!(split_apply_drag(0.50, 10.0, 0.0), 0.50);
         assert_eq!(split_apply_drag(0.50, 10.0, -4.0), 0.50);
+    }
+
+    #[test]
+    fn split_handle_strip_matches_model_hit_width() {
+        // Paint grab strip model hit width par hai: 8px strip, centered
+        // 1px visual, barabar inset dono taraf.
+        assert_eq!(SPLIT_HIT_W, viewmodel::SPLIT_HANDLE_HIT_W);
+        assert_eq!(SPLIT_HIT_W, 8.0);
+        assert_eq!(SPLIT_VISUAL_W, 1.0);
+        assert_eq!(split_visual_inset(), 3.5);
+    }
+
+    #[test]
+    fn split_handle_drag_uses_delta_and_clamp() {
+        // Paint drag wahi delta+clamp hai jo model deta hai.
+        assert_eq!(split_handle_drag_fraction(0.50, 80.0, 800.0), 0.60);
+        assert_eq!(split_handle_drag_fraction(0.50, -80.0, 800.0), 0.40);
+        assert_eq!(
+            split_handle_drag_fraction(0.50, 800.0, 800.0),
+            viewmodel::SPLIT_MAX_FRACTION
+        );
+        assert_eq!(
+            split_handle_drag_fraction(0.50, -800.0, 800.0),
+            viewmodel::SPLIT_MIN_FRACTION
+        );
+        assert_eq!(split_handle_drag_fraction(0.50, 10.0, 0.0), 0.50);
+        assert_eq!(split_handle_drag_fraction(0.50, f32::NAN, 800.0), 0.50);
+    }
+
+    #[test]
+    fn split_handle_label_reports_percent_and_bounds() {
+        // Hover label honest percent + 20..80 bounds batata hai.
+        let label = split_handle_label(0.50);
+        assert!(label.contains("50"), "unexpected label: {label}");
+        assert!(label.contains("20"), "unexpected label: {label}");
+        assert!(label.contains("80"), "unexpected label: {label}");
+        assert_eq!(label, viewmodel::split_accessibility_label(0.50));
+    }
+
+    #[test]
+    fn split_handle_cursor_is_resize_column() {
+        // Model affordance id paint cursor me map hota hai.
+        assert_eq!(viewmodel::split_cursor_affordance(), "resize-column");
+        assert_eq!(split_handle_cursor(), egui::CursorIcon::ResizeColumn);
+    }
+
+    #[test]
+    fn split_handle_hit_range_centers_on_fraction() {
+        // Paint strip center wahi hai jahan model hit rect hai.
+        assert_eq!(viewmodel::split_handle_x_range(800.0, 0.50), (396.0, 404.0));
+        let (x0, x1) = viewmodel::split_handle_x_range(800.0, 0.50);
+        assert_eq!(x1 - x0, SPLIT_HIT_W);
+        assert!(viewmodel::split_handle_contains_x(400.0, 800.0, 0.50));
+        assert!(!viewmodel::split_handle_contains_x(395.9, 800.0, 0.50));
     }
 
     #[test]
