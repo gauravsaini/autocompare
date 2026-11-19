@@ -495,6 +495,53 @@ pub fn folder_cell_text(row: &FolderRow, column: FolderColumn) -> String {
     }
 }
 
+/// Pads `text` to exactly `width` chars with spaces, cutting longer
+/// text so side-by-side columns kabhi misalign na hon. Char-based hai
+/// taaki multibyte paths par bhi width stable rahe.
+pub fn pad_folder_cell(text: &str, width: usize) -> String {
+    let capped: String = text.chars().take(width.max(1)).collect();
+    let len = capped.chars().count();
+    if len >= width {
+        capped
+    } else {
+        let mut out = capped;
+        for _ in len..width {
+            out.push(' ');
+        }
+        out
+    }
+}
+
+/// Header line for the folder column grid: `Path | L size | ...`.
+/// Path flex hai (no pad), baaki fixed widths par padded hain.
+pub fn folder_header_line() -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for def in folder_column_defs() {
+        if def.width_chars == 0 {
+            parts.push(def.header.to_string());
+        } else {
+            parts.push(pad_folder_cell(def.header, def.width_chars));
+        }
+    }
+    parts.join(" | ")
+}
+
+/// One folder row as an aligned column line. Glyph prefix ke saath
+/// path, phir fixed side columns. Missing sides `-` dikhte hain
+/// (via [`folder_cell_text`]), isliye orphan rows bhi align rahte hain.
+pub fn folder_format_row(row: &FolderRow) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for def in folder_column_defs() {
+        let text = folder_cell_text(row, def.column);
+        if def.width_chars == 0 {
+            parts.push(format!("{} {}", row.glyph, text));
+        } else {
+            parts.push(pad_folder_cell(&text, def.width_chars));
+        }
+    }
+    parts.join(" | ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -875,6 +922,34 @@ mod tests {
             "2026-01-02 03:04"
         );
         assert_eq!(folder_cell_text(&both, FolderColumn::RightSize), "-");
+    }
+
+    #[test]
+    fn folder_lines_keep_side_columns_aligned() {
+        let header = folder_header_line();
+        assert!(header.contains("Path"));
+        assert!(header.contains("L size"));
+        assert!(header.contains("R size"));
+        assert!(header.contains("L modified"));
+        // Fixed parts padded hain: separator count defs-1 hai.
+        assert_eq!(header.split(" | ").count(), 5);
+        let orphan = make_glyph_row("only-left.txt", false, 'L');
+        let line = folder_format_row(&orphan);
+        assert!(line.starts_with("L only-left.txt"));
+        assert_eq!(line.split(" | ").count(), 5);
+        // Dono sides wali row me values dikhti hain.
+        let mut both = make_glyph_row("both.txt", false, '=');
+        both.left_size = Some("12".to_string());
+        both.right_size = Some("34".to_string());
+        both.left_time = Some("2026-01-02 03:04".to_string());
+        both.right_time = Some("2026-01-03 04:05".to_string());
+        let full = folder_format_row(&both);
+        assert!(full.contains("both.txt"));
+        assert!(full.contains("12"));
+        assert!(full.contains("34"));
+        // Pad helper lamba text kaat-ta hai, chhota pad karta hai.
+        assert_eq!(pad_folder_cell("ab", 4), "ab  ");
+        assert_eq!(pad_folder_cell("abcdef", 4), "abcd");
     }
 }
 

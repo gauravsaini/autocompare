@@ -1,0 +1,23 @@
+
+running 191 tests
+......................................................... 57/191
+theme::tests::typo_rich_carries_size_and_weight_per_role --- FAILED
+....................................................................................... 145/191
+..............................................
+failures:
+
+---- theme::tests::typo_rich_carries_size_and_weight_per_role stdout ----
+
+thread 'theme::tests::typo_rich_carries_size_and_weight_per_role' (809707) panicked at crates/gui/src/theme.rs:522:9:
+assertion `left == right` failed
+  left: "Small::RichText { text: \"x\", size: Some(11.0), extra_letter_spacing: 0.0, line_height: None, family: None, text_style: Some(Small), background_color: #00_00_00_00, expand_bg: 1.0, text_color: None, coords: VariationCoords([]), code: false, strong: false, weak: true, strikethrough: false, underline: false, italics: false, raised: false }"
+ right: "HomeDesc::RichText { text: \"x\", size: Some(11.0), extra_letter_spacing: 0.0, line_height: None, family: None, text_style: Some(Small), background_color: #00_00_00_00, expand_bg: 1.0, text_color: None, coords: VariationCoords([]), code: false, strong: false, weak: true, strikethrough: false, underline: false, italics: false, raised: false }"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    theme::tests::typo_rich_carries_size_and_weight_per_role
+
+test result: FAILED. 190 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+error: test failed, to rerun pass `-p autocompare-gui --bin autocompare-gui`

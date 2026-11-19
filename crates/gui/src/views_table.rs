@@ -222,6 +222,157 @@ pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Table grid (headless; paint wiring stays with the orchestrator).
+// Gap 3: the table tab paints har row ko ek hi monospace string me.
+// Ye section pure grid spec hai: header labels, char-width se column
+// widths, padded cell text, aur per-cell cursor. No egui, no I/O;
+// paint har visible row ko `table_column_widths` + `pad_table_cell`
+// se columns me lay out kare aur `TableCellCursor` se nav kare.
+// ----------------------------------------------------------------------------
+
+/// Upper bound for ek column ki char width, taaki ek lambi cell poori
+/// grid ko faila na de. Paint isse aage ka text kaat kar dikhaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const TABLE_MAX_COL_CHARS: usize = 32;
+
+/// Minimum column width taaki header kabhi dab na jaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const TABLE_MIN_COL_CHARS: usize = 3;
+
+/// Ek cell ka grid position: data-row index plus column index.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableCellCursor {
+    /// Data row (header ko count nahi karta).
+    pub row: usize,
+    /// Column index.
+    pub col: usize,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+impl TableCellCursor {
+    /// Grid dimensions ke andar cursor, warna `None`.
+    pub fn clamp(self, row_count: usize, col_count: usize) -> Option<Self> {
+        if self.row < row_count && self.col < col_count {
+            Some(self)
+        } else {
+            None
+        }
+    }
+
+    /// Ek row upar, top par clamp.
+    pub fn move_up(self) -> Self {
+        Self {
+            row: self.row.saturating_sub(1),
+            col: self.col,
+        }
+    }
+
+    /// Ek row neeche, caller `clamp` se bound kare.
+    pub fn move_down(self) -> Self {
+        Self {
+            row: self.row.saturating_add(1),
+            col: self.col,
+        }
+    }
+
+    /// Ek column left, first par clamp.
+    pub fn move_left(self) -> Self {
+        Self {
+            row: self.row,
+            col: self.col.saturating_sub(1),
+        }
+    }
+
+    /// Ek column right, caller `clamp` se bound kare.
+    pub fn move_right(self) -> Self {
+        Self {
+            row: self.row,
+            col: self.col.saturating_add(1),
+        }
+    }
+}
+
+/// Column widths chars me: har column ka max(header, cells), min par
+/// floor aur max par cap. Kabhi khali nahi jab header khali nahi.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_column_widths(header: &[String], rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths: Vec<usize> = Vec::new();
+    for cell in header.iter() {
+        widths.push(
+            cell.chars()
+                .count()
+                .clamp(TABLE_MIN_COL_CHARS, TABLE_MAX_COL_CHARS),
+        );
+    }
+    for row in rows.iter() {
+        for (idx, cell) in row.iter().enumerate() {
+            let Some(slot) = widths.get_mut(idx) else {
+                continue;
+            };
+            let want = cell
+                .chars()
+                .count()
+                .clamp(TABLE_MIN_COL_CHARS, TABLE_MAX_COL_CHARS);
+            if want > *slot {
+                *slot = want;
+            }
+        }
+    }
+    widths
+}
+
+/// Ek cell ko width tak spaces se pad karta hai. Lamba text cap par
+/// kat-ta hai taaki columns align rahen. Char-based hai taaki
+/// multibyte text par bhi column na tute.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn pad_table_cell(text: &str, width: usize) -> String {
+    let capped: String = text.chars().take(width.max(1)).collect();
+    let len = capped.chars().count();
+    if len >= width {
+        capped
+    } else {
+        let mut out = capped;
+        for _ in len..width {
+            out.push(' ');
+        }
+        out
+    }
+}
+
+/// Header row ka display text, widths ke hisab se padded.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn format_table_header(header: &[String], widths: &[usize]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (idx, cell) in header.iter().enumerate() {
+        let width = widths.get(idx).copied().unwrap_or(TABLE_MIN_COL_CHARS);
+        out.push(pad_table_cell(cell, width));
+    }
+    out
+}
+
+/// Data cell ka display text: missing cell `-` dikhta hai taaki ragged
+/// rows me bhi columns align rahen.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_cell_display(rows: &[Vec<String>], pos: TableCellCursor) -> Option<String> {
+    let row = rows.get(pos.row)?;
+    let width_hint = row.len().max(1);
+    let _ = width_hint;
+    match row.get(pos.col) {
+        Some(cell) => Some(cell.clone()),
+        None => Some(String::from("-")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,5 +552,78 @@ mod tests {
         assert!(view.suggested_keys.is_empty());
         view.refresh(&empty, &empty);
         assert_eq!(view.summary.total(), 0);
+    }
+
+    #[test]
+    fn column_widths_span_header_and_cells_with_cap() {
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "9.99".to_string()],
+            vec!["222".to_string(), "5".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths.len(), 2);
+        // "ID"(2) floor 3 par, cells me 3 max.
+        assert_eq!(widths.first().copied(), Some(3));
+        // "Price"(5) sabse chauda header hai.
+        assert_eq!(widths.get(1).copied(), Some(5));
+        for width in widths.iter() {
+            assert!(*width >= TABLE_MIN_COL_CHARS);
+            assert!(*width <= TABLE_MAX_COL_CHARS);
+        }
+        // Lambi cell cap par rukti hai.
+        let long = "x".repeat(TABLE_MAX_COL_CHARS + 20);
+        let wide_rows = vec![vec![long]];
+        let wide = table_column_widths(&["c".to_string()], &wide_rows);
+        assert_eq!(wide.first().copied(), Some(TABLE_MAX_COL_CHARS));
+        // Extra cells header ke bahar widths nahi badhate.
+        let ragged = vec![vec!["a".to_string(), "b".to_string(), "c".to_string()]];
+        let narrow = table_column_widths(&["h".to_string()], &ragged);
+        assert_eq!(narrow.len(), 1);
+    }
+
+    #[test]
+    fn padded_cells_keep_columns_aligned() {
+        assert_eq!(pad_table_cell("ID", 5), "ID   ");
+        assert_eq!(pad_table_cell("Price", 5), "Price");
+        // Cap se lamba text kat-ta hai.
+        assert_eq!(pad_table_cell("abcdef", 4), "abcd");
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let widths = table_column_widths(&header, &[]);
+        let line = format_table_header(&header, &widths);
+        assert_eq!(line.len(), 2);
+        assert_eq!(line.first().map(String::len), widths.first().copied());
+        assert_eq!(line.get(1).map(String::len), widths.get(1).copied());
+    }
+
+    #[test]
+    fn cell_cursor_nav_stays_inside_grid() {
+        let rows = vec![
+            vec!["1".to_string(), "9.99".to_string()],
+            vec!["2".to_string(), "5.00".to_string()],
+        ];
+        let start = TableCellCursor { row: 0, col: 0 };
+        assert!(start.clamp(2, 2).is_some());
+        assert!(TableCellCursor { row: 5, col: 0 }.clamp(2, 2).is_none());
+        assert!(TableCellCursor { row: 0, col: 9 }.clamp(2, 2).is_none());
+        assert_eq!(start.move_left(), start);
+        assert_eq!(start.move_up(), start);
+        let right = start.move_right();
+        assert_eq!(right.col, 1);
+        let down = right.move_down();
+        assert_eq!((down.row, down.col), (1, 1));
+        // Missing cell `-` dikhta hai, maujood cell waisa ka waisa.
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 0, col: 0 }),
+            Some("1".to_string())
+        );
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 1, col: 5 }),
+            Some("-".to_string())
+        );
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 9, col: 0 }),
+            None
+        );
     }
 }

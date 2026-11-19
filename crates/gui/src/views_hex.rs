@@ -365,6 +365,186 @@ fn chunk_run(
     }
 }
 
+// ----------------------------------------------------------------------------
+// Hex grid (headless; paint wiring stays with the orchestrator).
+// Gap 2: the hex tab paints hunk summary lines only. This section is
+// the pure grid spec behind a future byte grid: 16 bytes per row,
+// an offset ruler, a per-byte cursor with nibble position, and a
+// hunk-aware row flag. No egui, no I/O; paint lays out one row per
+// 16-byte slice with `format_hex_offset` as the ruler label.
+// ----------------------------------------------------------------------------
+
+/// Bytes per hex grid row: the classic 16-byte ruler step.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const HEX_BYTES_PER_ROW: usize = 16;
+
+/// Per-byte cursor over one side's byte length: absolute offset plus
+/// which nibble the next keystroke edits. `total_len` bounds every
+/// move so the cursor never leaves the input.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HexCursor {
+    /// Absolute byte offset of the cursor.
+    pub offset: u64,
+    /// True for the high nibble, false for the low nibble.
+    pub high_nibble: bool,
+    /// Length of the side the cursor roams over.
+    pub total_len: u64,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+impl HexCursor {
+    /// Cursor at offset 0 (or nowhere when `total_len` is 0).
+    pub fn at_start(total_len: u64) -> Self {
+        Self {
+            offset: 0,
+            high_nibble: true,
+            total_len,
+        }
+    }
+
+    /// Whether the cursor names a real byte.
+    pub fn is_valid(self) -> bool {
+        self.offset < self.total_len
+    }
+
+    /// Grid row of the cursor (0-based).
+    pub fn row(self) -> u64 {
+        self.offset / (HEX_BYTES_PER_ROW as u64)
+    }
+
+    /// Grid column of the cursor (0..16).
+    pub fn col(self) -> u64 {
+        self.offset % (HEX_BYTES_PER_ROW as u64)
+    }
+
+    /// Builds a cursor from a grid position. Returns `None` when the
+    /// position names no byte (past the end or empty input).
+    pub fn from_row_col(row: u64, col: u64, total_len: u64) -> Option<Self> {
+        if col >= HEX_BYTES_PER_ROW as u64 {
+            return None;
+        }
+        let offset = row
+            .saturating_mul(HEX_BYTES_PER_ROW as u64)
+            .saturating_add(col);
+        if offset < total_len {
+            Some(Self {
+                offset,
+                high_nibble: true,
+                total_len,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Clamps the cursor into the input after the length changed.
+    pub fn clamp_len(&mut self) {
+        if self.total_len == 0 {
+            self.offset = 0;
+            self.high_nibble = true;
+            return;
+        }
+        let last = self.total_len.saturating_sub(1);
+        if self.offset > last {
+            self.offset = last;
+        }
+    }
+
+    /// Steps one byte toward the start, crossing rows honestly.
+    pub fn move_left(&mut self) {
+        if self.offset > 0 && self.offset <= self.total_len {
+            self.offset = self.offset.saturating_sub(1);
+        }
+        self.high_nibble = true;
+        self.clamp_len();
+    }
+
+    /// Steps one byte toward the end, stopping on the last byte.
+    pub fn move_right(&mut self) {
+        if self.total_len == 0 {
+            return;
+        }
+        let last = self.total_len.saturating_sub(1);
+        if self.offset < last {
+            self.offset = self.offset.saturating_add(1);
+        }
+        self.high_nibble = true;
+    }
+
+    /// Steps one grid row up (16 bytes), stopping at row 0.
+    pub fn move_up(&mut self) {
+        self.offset = self.offset.saturating_sub(HEX_BYTES_PER_ROW as u64);
+        self.high_nibble = true;
+        self.clamp_len();
+    }
+
+    /// Steps one grid row down (16 bytes), stopping on the last byte.
+    pub fn move_down(&mut self) {
+        if self.total_len == 0 {
+            return;
+        }
+        let next = self.offset.saturating_add(HEX_BYTES_PER_ROW as u64);
+        let last = self.total_len.saturating_sub(1);
+        self.offset = if next > last { last } else { next };
+        self.high_nibble = true;
+    }
+
+    /// Flips between the high and low nibble of the current byte.
+    pub fn toggle_nibble(&mut self) {
+        self.high_nibble = !self.high_nibble;
+    }
+}
+
+/// Offset ruler label for one grid row, e.g. `0x00000010`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn format_hex_offset(offset: u64) -> String {
+    format!("{offset:#010x}")
+}
+
+/// Grid row count for `total_len` bytes (partial tail counts as one row).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_count(total_len: u64) -> u64 {
+    if total_len == 0 {
+        return 0;
+    }
+    total_len
+        .saturating_sub(1)
+        .saturating_div(HEX_BYTES_PER_ROW as u64)
+        .saturating_add(1)
+}
+
+/// Start offset of grid row `row`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_start(row: u64) -> u64 {
+    row.saturating_mul(HEX_BYTES_PER_ROW as u64)
+}
+
+/// Whether any displayed hunk touches the 16-byte row at `row_start`.
+/// Hunk ranges are `[offset, offset + max(left_len, right_len))`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_has_diff(row_start: u64, hunks: &[HexHunkView]) -> bool {
+    let row_end = row_start.saturating_add(HEX_BYTES_PER_ROW as u64);
+    for hunk in hunks {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let end = hunk.offset.saturating_add(run as u64);
+        if hunk.offset < row_end && end > row_start {
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -577,5 +757,75 @@ mod tests {
         view.selected = Some(99);
         assert_eq!(view.selected_hunk(), None);
         assert!(view.status_line().contains("no selection"));
+    }
+
+    #[test]
+    fn hex_grid_ruler_and_row_math() {
+        assert_eq!(HEX_BYTES_PER_ROW, 16);
+        assert_eq!(format_hex_offset(0), "0x00000000");
+        assert_eq!(format_hex_offset(16), "0x00000010");
+        assert_eq!(hex_row_count(0), 0);
+        assert_eq!(hex_row_count(1), 1);
+        assert_eq!(hex_row_count(16), 1);
+        assert_eq!(hex_row_count(17), 2);
+        assert_eq!(hex_row_count(32), 2);
+        assert_eq!(hex_row_start(0), 0);
+        assert_eq!(hex_row_start(1), 16);
+        assert_eq!(hex_row_start(2), 32);
+    }
+
+    #[test]
+    fn hex_cursor_moves_over_grid() {
+        let mut cursor = HexCursor::at_start(32);
+        assert!(cursor.is_valid());
+        assert_eq!((cursor.row(), cursor.col()), (0, 0));
+        cursor.move_right();
+        assert_eq!(cursor.offset, 1);
+        cursor.move_down();
+        assert_eq!(cursor.offset, 17);
+        assert_eq!((cursor.row(), cursor.col()), (1, 1));
+        cursor.move_up();
+        assert_eq!(cursor.offset, 1);
+        cursor.move_left();
+        assert_eq!(cursor.offset, 0);
+        // Left at zero stays, right at end clamps.
+        cursor.move_left();
+        assert_eq!(cursor.offset, 0);
+        let mut end = HexCursor::at_start(32);
+        end.offset = 31;
+        end.move_right();
+        assert_eq!(end.offset, 31);
+        end.move_down();
+        assert_eq!(end.offset, 31);
+        // Nibble toggle flips only the nibble flag.
+        let mut nib = HexCursor::at_start(8);
+        assert!(nib.high_nibble);
+        nib.toggle_nibble();
+        assert!(!nib.high_nibble);
+        nib.toggle_nibble();
+        assert!(nib.high_nibble);
+        // Row/col round-trip.
+        let placed = HexCursor::from_row_col(1, 1, 32);
+        assert_eq!(placed.map(|c| c.offset), Some(17));
+        assert_eq!(HexCursor::from_row_col(0, 16, 32), None);
+        assert_eq!(HexCursor::from_row_col(5, 0, 32), None);
+        // Empty input has no valid cursor.
+        let empty = HexCursor::at_start(0);
+        assert!(!empty.is_valid());
+    }
+
+    #[test]
+    fn hex_row_diff_flag_follows_hunks() {
+        let left = vec![0u8; 48];
+        let mut right = vec![0u8; 48];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(!view.hunks.is_empty());
+        assert!(!hex_row_has_diff(0, &view.hunks));
+        assert!(hex_row_has_diff(16, &view.hunks));
+        assert!(!hex_row_has_diff(32, &view.hunks));
+        assert!(!hex_row_has_diff(0, &[]));
     }
 }
