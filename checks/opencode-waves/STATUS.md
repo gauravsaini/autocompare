@@ -1214,3 +1214,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BA-TABLEP234 `sess-tablep234-ba`: OWNS views.rs+checks/gui-tablep234-ba (apply AY spec P2-P4: header/data grid IDs, spacing, indexed data-cell loop, painter overlays).
 - BA-TYPOTOKENS `sess-typotokens-ba`: OWNS theme.rs+checks/gui-typotokens-ba (TypoRole→FontId resolution helpers + proportional stack for non-diff UI + tests + views.rs wiring spec; no paint edits).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BA complete (2 parallel: table P2 header-grid + typography tokens)
+- TABLEP234 `1e7ebf1` P2 header-grid swap via views_table single-source (Grid ID, spacing, glyph pad) — OWNS views.rs.
+- TYPOTOKENS `45e0ffc` TypoRole->FontId resolution helpers + proportional stack + views.rs wiring spec — OWNS theme.rs.
+- Verify combined: 566 green, clippy 0, fmt clean, banned 0 (no new color tokens), PNG magic-ok x2.
+- Pushed. Next: Wave BB (table P3-P4 data-grid + painter overlays in views.rs + typo paint adoption) + fresh localrun.
