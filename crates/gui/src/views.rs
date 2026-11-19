@@ -23,7 +23,7 @@ use crate::app::{
     AudioCheckKind, AudioChecklist, FolderMergeChecklist, MergeApplyState, MergeApplySummary,
     PictureCompareModel, PictureMode, PictureViewState, SyncChecklist,
 };
-use crate::gutter::{gutter_bar_width_for_font, gutter_jump_target, gutter_y_for_row};
+use crate::gutter::{gutter_bar_width_for_font, gutter_row_at_y, gutter_y_for_row};
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
@@ -778,8 +778,8 @@ pub fn hex_minimap_seg_end(y0: f32, y1: f32) -> f32 {
 }
 
 /// Text-gutter click contract: local `y` (px) ko nearest-diff model
-/// row me badalta hai ([`gutter_jump_target`]: diff par stay, equal
-/// par nearest diff snap, bahar/empty par `None`). Paint click/drag
+/// row me badalta hai ([`text_minimap_row_at_y`] se row, diff par stay,
+/// equal par nearest diff snap, bahar/empty par `None`). Paint click/drag
 /// isi ko selection + pending scroll deta hai. Hex side ka analog
 /// [`hex_minimap_jump_to_row`] hai (wahi fraction→row→jump pattern).
 /// Pure (no egui); unit-tested.
@@ -789,7 +789,25 @@ pub fn text_gutter_click_select(
     height: f32,
     y: f32,
 ) -> Option<usize> {
-    gutter_jump_target(rows, total_rows, height, y)
+    let row = text_minimap_row_at_y(y, height, total_rows)?;
+    if rows.get(row).is_some_and(|r| r.kind != TextRowKind::Equal) {
+        return Some(row);
+    }
+    let mut i = row.saturating_add(1);
+    while i < rows.len() {
+        if rows.get(i).is_some_and(|r| r.kind != TextRowKind::Equal) {
+            return Some(i);
+        }
+        i = i.saturating_add(1);
+    }
+    let mut j = row.min(rows.len());
+    while j > 0 {
+        j = j.saturating_sub(1);
+        if rows.get(j).is_some_and(|r| r.kind != TextRowKind::Equal) {
+            return Some(j);
+        }
+    }
+    None
 }
 
 /// Next-frame scroll key: gutter click list ke baad paint hota hai,
@@ -798,6 +816,65 @@ pub fn text_gutter_click_select(
 /// `viewmodel.rs` untouched). Pure id; unit-tested.
 pub fn text_gutter_pending_id() -> egui::Id {
     egui::Id::unique("text_gutter_pending_scroll")
+}
+
+/// Text overview-ruler click-target width: ruler rect ka chaudha hissa.
+/// [`text_gutter_paint_width`] ka alias taaki ruler hamesha chrome ke
+/// saath sync rahe (12.0 numbers ke saath, 6.0 bina). Single source;
+/// paint rect isi se banta hai. Pure; unit-tested.
+pub fn text_minimap_ruler_width(show_line_numbers: bool) -> f32 {
+    text_gutter_paint_width(show_line_numbers)
+}
+
+/// Overview-ruler row mapping: local `y` (px) ko model row me badalta
+/// hai. Fraction `y / height` se `[0, total_rows)`; kharab input par
+/// `None`. [`crate::gutter::gutter_row_at_y`] semantics, arg order hex
+/// [`hex_minimap_row_at_y`] jaisa (`y, height, total`) taaki dono ruler
+/// ek pattern par rahen. Pure (no egui); unit-tested.
+pub fn text_minimap_row_at_y(y: f32, height: f32, total_rows: usize) -> Option<usize> {
+    gutter_row_at_y(y, total_rows, height)
+}
+
+/// Text overview-ruler accessibility label: khali par honest empty, bina
+/// selection par row-ginati ke saath no-selection, selection par 1-based
+/// `row N of M` plus click-to-jump hint. Paint `on_hover_text` me jata
+/// hai taaki ruler bina pointer ke bhi operable lage. Pure; unit-tested.
+pub fn text_minimap_accessibility_label(selected: Option<usize>, total_rows: usize) -> String {
+    if total_rows == 0 {
+        return "overview ruler: empty".to_string();
+    }
+    match selected {
+        Some(idx) if idx < total_rows => format!(
+            "overview ruler: row {} of {}, click to jump to nearest difference",
+            idx.saturating_add(1),
+            total_rows
+        ),
+        _ => format!(
+            "overview ruler: no selection, {} rows, click to jump to nearest difference",
+            total_rows
+        ),
+    }
+}
+
+/// Hex minimap accessibility label: text ruler label ka hunk analog.
+/// Khali par honest empty, bina/out-of-range selection par hunk-ginati
+/// ke saath no-selection, selection par 1-based `hunk N of M` plus
+/// click-to-jump hint. Pure; unit-tested.
+pub fn hex_minimap_accessibility_label(selected: Option<usize>, total_hunks: usize) -> String {
+    if total_hunks == 0 {
+        return "minimap: empty".to_string();
+    }
+    match selected {
+        Some(idx) if idx < total_hunks => format!(
+            "minimap: hunk {} of {}, click to jump",
+            idx.saturating_add(1),
+            total_hunks
+        ),
+        _ => format!(
+            "minimap: no selection, {} hunks, click to jump",
+            total_hunks
+        ),
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1041,6 +1118,11 @@ pub fn paint_hex(
                     egui::vec2(bar_w, HEX_MINIMAP_H),
                     egui::Sense::click_and_drag(),
                 );
+                debug_assert_eq!(rect.width(), HEX_MINIMAP_W);
+                let resp = resp.on_hover_text(hex_minimap_accessibility_label(
+                    view.selected,
+                    view.hunks.len(),
+                ));
                 ui.painter().rect_filled(rect, 0.0, track_for(dark));
                 let step = views_hex::HEX_BYTES_PER_ROW as u64;
                 for hunk in view.hunks.iter() {
@@ -2143,9 +2225,14 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
         // hai (pending key, struct change bina).
         let avail_h = ui.available_height().max(100.0);
         let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
-        let bar_w = text_gutter_paint_width(prefs.show_line_numbers);
+        let bar_w = text_minimap_ruler_width(prefs.show_line_numbers);
         let (rect, resp) =
             ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::click_and_drag());
+        debug_assert_eq!(rect.width(), bar_w);
+        let resp = resp.on_hover_text(text_minimap_accessibility_label(
+            model.selected,
+            model.rows.len(),
+        ));
         ui.painter().rect_filled(rect, 0.0, track_for(dark));
 
         for seg in geom.segments {
@@ -4699,6 +4786,90 @@ mod tests {
         assert_eq!(text_gutter_click_select(&[], 0, 400.0, 50.0), None);
         // Pending-scroll key stable hai (dono frame ek hi id dekhte hain).
         assert_eq!(text_gutter_pending_id(), text_gutter_pending_id());
+    }
+
+    #[test]
+    fn text_minimap_ruler_geometry_and_row_mapping() {
+        // Click-target chaudhai chrome ke saath sync: numbers ke saath
+        // 12.0, bina 6.0 (wahi `text_gutter_paint_width` single source).
+        assert_eq!(
+            text_minimap_ruler_width(true),
+            text_gutter_paint_width(true)
+        );
+        assert_eq!(
+            text_minimap_ruler_width(false),
+            text_gutter_paint_width(false)
+        );
+        assert_eq!(text_minimap_ruler_width(true), 12.0);
+        assert_eq!(text_minimap_ruler_width(false), 6.0);
+        // Row mapping: 4 rows over 400px, har band 100px (hex order
+        // `y, height, total` me).
+        assert_eq!(text_minimap_row_at_y(0.0, 400.0, 4), Some(0));
+        assert_eq!(text_minimap_row_at_y(99.9, 400.0, 4), Some(0));
+        assert_eq!(text_minimap_row_at_y(100.0, 400.0, 4), Some(1));
+        assert_eq!(text_minimap_row_at_y(399.9, 400.0, 4), Some(3));
+        // Kharab input par koi jump nahi.
+        assert_eq!(text_minimap_row_at_y(400.0, 400.0, 4), None);
+        assert_eq!(text_minimap_row_at_y(-1.0, 400.0, 4), None);
+        assert_eq!(text_minimap_row_at_y(10.0, 0.0, 4), None);
+        assert_eq!(text_minimap_row_at_y(10.0, 400.0, 0), None);
+        assert_eq!(text_minimap_row_at_y(f32::NAN, 400.0, 4), None);
+        assert_eq!(text_minimap_row_at_y(10.0, f32::NAN, 4), None);
+        // Round-trip: marker y wapas usi row band me girta hai.
+        let mut row = 0usize;
+        while row < 4 {
+            if let Some(y) = gutter_y_for_row(row, 4, 400.0) {
+                assert_eq!(text_minimap_row_at_y(y + 0.5, 400.0, 4), Some(row));
+            }
+            row = row.saturating_add(1);
+        }
+    }
+
+    #[test]
+    fn minimap_click_labels_stay_honest() {
+        // Text ruler: empty/selection-hape honest, koi fake count nahi.
+        assert_eq!(
+            text_minimap_accessibility_label(None, 0),
+            "overview ruler: empty"
+        );
+        assert_eq!(
+            text_minimap_accessibility_label(Some(0), 0),
+            "overview ruler: empty"
+        );
+        assert_eq!(
+            text_minimap_accessibility_label(None, 4),
+            "overview ruler: no selection, 4 rows, click to jump to nearest difference"
+        );
+        assert_eq!(
+            text_minimap_accessibility_label(Some(9), 4),
+            "overview ruler: no selection, 4 rows, click to jump to nearest difference"
+        );
+        assert_eq!(
+            text_minimap_accessibility_label(Some(1), 4),
+            "overview ruler: row 2 of 4, click to jump to nearest difference"
+        );
+        assert_eq!(
+            text_minimap_accessibility_label(Some(0), 1),
+            "overview ruler: row 1 of 1, click to jump to nearest difference"
+        );
+        // Hex minimap: wahi shape, hunk ginati par.
+        assert_eq!(hex_minimap_accessibility_label(None, 0), "minimap: empty");
+        assert_eq!(
+            hex_minimap_accessibility_label(None, 3),
+            "minimap: no selection, 3 hunks, click to jump"
+        );
+        assert_eq!(
+            hex_minimap_accessibility_label(Some(9), 3),
+            "minimap: no selection, 3 hunks, click to jump"
+        );
+        assert_eq!(
+            hex_minimap_accessibility_label(Some(0), 3),
+            "minimap: hunk 1 of 3, click to jump"
+        );
+        assert_eq!(
+            hex_minimap_accessibility_label(Some(2), 3),
+            "minimap: hunk 3 of 3, click to jump"
+        );
     }
 
     #[test]
