@@ -297,3 +297,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 01 reading
 - Both live 27695/27697 00:16. COLOR into theme/views, SESS into 4 crate manifests. No diff yet.
+
+## Wave G poll 02 implementing
+- Both live 00:28, tree clean, gui 117 green. Edits next.
