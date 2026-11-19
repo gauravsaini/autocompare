@@ -650,3 +650,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 18 A2 done B fmt clean
 - A2 7dbd5f0 verified+pushed: OWNS clean (hex+table+REPORT), tests 189 green, honest sibling-blocked note.
 - B fmt clean + 189 green, clippy/commit next. A2 may continue slices (proc live).
+
+## Wave J poll 19 B report written
+- B REPORT written (+14 tests honest delta HEAD 175→189), commit next. A2 done (may slice-more, proc live).
+- Wait for B land.
