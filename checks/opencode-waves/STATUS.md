@@ -1236,3 +1236,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave BC plan (1 agent: fresh localrun on BB state)
 - BC-LOCALRUN `sess-localrun-bb`: OWNS checks/localrun-bb (harness run + app screenshots + gap re-rank vs AX2 §10; all .rs READ-ONLY).
 - Agent commits locally, NO PUSH (push MANA hai). REPORT se Wave BD (toolbar/intra-line) plan banega.
+
+## 2026-11-20 — Wave BC complete (localrun on BB state)
+- LOCALRUN `599308b` 5 scenes headless (byte-identical AX2 by design — fixtures untouched), 569 green read-only, gaps re-ranked — OWNS checks/localrun-bb.
+- Verify: OWNS clean (checks only), PNG magic-ok x5, STATUS untouched, no code edits.
+- Pushed. Next: Wave BD (folder AllSame paint wiring + home CARD_H in views.rs/app.rs; hex minimap pure in views_hex.rs).
+
+## 2026-11-20 — Wave BD plan (2 parallel: folder+home paint + hex pure)
+- BD-FOLDERHOME `sess-folderhome-bd`: OWNS views.rs+app.rs+checks/gui-folderhome-bd (P0-1 AllSame wiring per BB-FOLDER3 REPORT patch spec 1/2+2/2, THEN P1-3 home CARD_H single-token adoption; tree.rs FROZEN).
+- BD-HEXPURE `sess-hexpure-bd`: OWNS views_hex.rs+checks/gui-hexpure-bd (P1-2 minimap 24px + nibble pure geometry; views.rs CALLSITE TOUCH MANA — exact callsite spec REPORT me likho).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
