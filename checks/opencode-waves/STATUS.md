@@ -1375,3 +1375,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BQ-GUTTER sess-gutter-bq: OWNS views.rs+checks/gui-gutter-bq (G-T1 dual-pane+gutter, G-T3 number gutter).
 - BQ-TABLE sess-table-bq: OWNS views_table.rs+checks/gui-table-bq (G-B1 header row, G-B2 toolbar dedup, G-B3 grid).
 - Agents commit locally, NO PUSH. Orchestrator verifies then pushes.
+
+## 2026-11-20 - Wave BQ complete (gutter + table pushed)
+- TABLE d0a1881 isolated-verify ok: 610 green + clippy 0 + fmt clean + banned 0 + colors 0 + PNG magic-ok, OWNS views_table.rs+own checks. TABLE session done.
+- GUTTER 9fb01be combined-verify ok: 611 green + clippy 0 + fmt clean + banned 0 + colors 0 + harness PASS in-commit, OWNS views.rs+own checks. Gutter session done.
+- Pushed. Next: folder grid columns G-F2 + table wiring follow-up (paint_table dedup via paint_table_toolbar, dashed rule removal) + TypoRole paint adoption.
