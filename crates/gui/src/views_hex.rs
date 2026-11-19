@@ -1642,6 +1642,129 @@ pub fn hex_row_nibble_accent_rects(
     out
 }
 
+// ----------------------------------------------------------------------------
+// Hex grid text with real byte content (headless; paint wiring stays with
+// the orchestrator).
+// Gap localrun-bh P1-1: `views::format_hex_grid_cells` sirf offset/len se
+// `??` marks banata hai; accent-rect plumbing + callsite slices pehle se
+// live hain (BG-nibble), sirf grid text baaki tha. Ye section uska pure
+// judvaan hai — wahi 3-cell shape (ruler address, 16-byte hex, 16-char
+// ASCII), wahi midline gap, par covered byte par real hex digits (lowercase,
+// fixture style) aur real ASCII (printable char, warna `.`). Caller slices
+// App-owned snap se aayengi; model me byte values nahi, isliye left byte
+// prefer hota hai, missing par right fallback, dono missing par blank.
+// Uncovered slot blank rehta hai taaki `hex.len()` purane shape se barabar
+// rahe (Grid chaudai stable). No egui, no I/O; colors frozen (koi palette
+// change nahi). Paint wave `views::format_hex_grid_cells` call ko
+// isi se replace karega (views.rs callsite is wave me FROZEN — yahan sirf
+// pure helper + tests).
+// ----------------------------------------------------------------------------
+
+/// Kya koi displayed hunk `offset` byte ko cover karta hai.
+/// Hunk range `[offset, offset + max(left_len, right_len))` hai —
+/// `views::hunk_covers_offset` ka views_hex-local judvaan (views_hex views
+/// par depend nahi kar sakta, isliye same semantics yahin).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+fn hex_grid_covers_offset(offset: u64, hunks: &[HexHunkView]) -> bool {
+    for hunk in hunks {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let end = hunk.offset.saturating_add(run as u64);
+        if hunk.offset <= offset && offset < end {
+            return true;
+        }
+    }
+    false
+}
+
+/// Ek covered offset ka byte: left prefer, missing par right fallback,
+/// dono missing par `None`. Insertion hunk (ek side khali) isi se honest
+/// rehta hai — jo side maujood hai uske digits dikhte hain.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+fn hex_grid_cell_byte(offset: u64, left: &[u8], right: &[u8]) -> Option<u8> {
+    let idx = offset.min(usize::MAX as u64) as usize;
+    if let Some(byte) = left.get(idx).copied() {
+        return Some(byte);
+    }
+    right.get(idx).copied()
+}
+
+/// Ek covered byte ka ASCII mark: printable `0x20..=0x7E` wahi char,
+/// warna `.` (fixture style). Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_grid_ascii_mark(byte: u8) -> char {
+    if (0x20..=0x7Eu8).contains(&byte) {
+        byte as char
+    } else {
+        '.'
+    }
+}
+
+/// One grid row split into three paint cells with REAL byte content:
+/// ruler address, 16-byte hex digits, 16-char ASCII. Shape
+/// `views::format_hex_grid_cells` jaisa (wahi midline gap, wahi trailing
+/// space, wahi blank uncovered slots) — sirf covered `??` ki jagah real
+/// digits aur covered `?` ki jagah real ASCII. `left` prefer, `right`
+/// fallback; dono missing par blank (Grid chaudai stable). Pure;
+/// unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn format_hex_grid_cells_with_bytes(
+    row_start: u64,
+    left: &[u8],
+    right: &[u8],
+    hunks: &[HexHunkView],
+) -> (String, String, String) {
+    let addr = format_hex_offset(row_start);
+    let mut hex = String::new();
+    let mut ascii = String::with_capacity(HEX_BYTES_PER_ROW);
+    for col in 0..HEX_BYTES_PER_ROW {
+        if col == HEX_BYTES_PER_ROW / 2 {
+            hex.push(' ');
+        }
+        let off = row_start.saturating_add(col as u64);
+        if hex_grid_covers_offset(off, hunks) {
+            match hex_grid_cell_byte(off, left, right) {
+                Some(byte) => {
+                    hex.push_str(&format!("{byte:02x}"));
+                    ascii.push(hex_grid_ascii_mark(byte));
+                }
+                None => {
+                    hex.push_str("  ");
+                    ascii.push(' ');
+                }
+            }
+        } else {
+            hex.push_str("  ");
+            ascii.push(' ');
+        }
+        hex.push(' ');
+    }
+    (addr, hex, ascii)
+}
+
+/// One grid row of the hex byte view with real content: ruler offset plus
+/// per-byte hex/ASCII for the 16-byte row at `row_start`. Shape
+/// `views::format_hex_grid_row` jaisa join; Grid paint isi ko cells me
+/// baant-ta hai. Back-compat join (logs/tests); Grid cells use karenge.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn format_hex_grid_row_with_bytes(
+    row_start: u64,
+    left: &[u8],
+    right: &[u8],
+    hunks: &[HexHunkView],
+) -> String {
+    let (addr, hex, ascii) = format_hex_grid_cells_with_bytes(row_start, left, right, hunks);
+    format!("{addr}  {hex} |{ascii}|")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2720,5 +2843,75 @@ mod tests {
         let same_cells = hex_diff_nibble_cells(16, &big_left, &big_right);
         assert!(hex_row_nibble_accent_rects(row, &same_cells).is_empty());
         assert!(hex_row_nibble_accent_rects(row, &[]).is_empty());
+    }
+
+    #[test]
+    fn hex_grid_cells_with_bytes_show_real_digits() {
+        // Row 0-15 cover: left bytes 0..16 ki real lowercase digits.
+        let left: Vec<u8> = (0..16).collect();
+        let right: Vec<u8> = (0..16).collect();
+        let hunks = vec![HexHunkView {
+            offset: 0,
+            left_len: 16,
+            right_len: 16,
+        }];
+        let (addr, hex, ascii) = format_hex_grid_cells_with_bytes(0, &left, &right, &hunks);
+        assert_eq!(addr, format_hex_offset(0));
+        assert!(hex.contains("00"));
+        assert!(hex.contains("0f"));
+        assert!(!hex.contains("??"));
+        // "Hello wo" jaisa printable ASCII seedha dikhta hai.
+        let text_left = b"Hello wo!!!!!!!!".to_vec();
+        let (.., text_ascii) = format_hex_grid_cells_with_bytes(0, &text_left, &text_left, &hunks);
+        assert!(text_ascii.contains("Hello wo"));
+        // Non-printable par `.` (fixture style), `?` nahi.
+        assert!(!ascii.contains('?'));
+        assert_eq!(ascii.chars().next(), Some('.'));
+        // Single-string join wahi shape hai jo Grid paint karta hai.
+        assert_eq!(
+            format_hex_grid_row_with_bytes(0, &left, &right, &hunks),
+            format!("{addr}  {hex} |{ascii}|")
+        );
+    }
+
+    #[test]
+    fn hex_grid_cells_with_bytes_fallback_and_shape_parity() {
+        // Insertion hunk: left khali, right se digits (right fallback).
+        let left: Vec<u8> = Vec::new();
+        let right: Vec<u8> = (0..16).collect();
+        let hunks = vec![HexHunkView {
+            offset: 0,
+            left_len: 0,
+            right_len: 16,
+        }];
+        let (.., hex, ascii) = format_hex_grid_cells_with_bytes(0, &left, &right, &hunks);
+        assert!(hex.contains("00"));
+        assert!(!hex.contains("??"));
+        assert_eq!(ascii.len(), 16);
+        // Shape parity: purane offset-only cells jitni hi chaudai.
+        let (old_addr, old_hex, old_ascii) = crate::views::format_hex_grid_cells(0, &hunks);
+        let (addr, _, _) = format_hex_grid_cells_with_bytes(0, &left, &right, &hunks);
+        assert_eq!(addr, old_addr);
+        assert_eq!(hex.len(), old_hex.len());
+        assert_eq!(ascii.len(), old_ascii.len());
+        // Uncovered row blank: koi digit nahi, ASCII 16 spaces.
+        let (.., e_hex, e_ascii) = format_hex_grid_cells_with_bytes(32, &left, &right, &hunks);
+        assert!(!e_hex.contains("??"));
+        assert_eq!(e_hex.trim().len(), 0);
+        assert_eq!(e_ascii, "                ");
+        // Dono missing par blank (stale bytes kabhi nahi).
+        let past = vec![HexHunkView {
+            offset: 10_000,
+            left_len: 4,
+            right_len: 4,
+        }];
+        let (.., p_hex, p_ascii) = format_hex_grid_cells_with_bytes(10_000, &left, &[], &past);
+        assert_eq!(p_hex.trim().len(), 0);
+        assert_eq!(p_ascii, "                ");
+        // ASCII mark contract: printable wahi char, control/DEL par `.`.
+        assert_eq!(hex_grid_ascii_mark(b'A'), 'A');
+        assert_eq!(hex_grid_ascii_mark(0x20), ' ');
+        assert_eq!(hex_grid_ascii_mark(0x00), '.');
+        assert_eq!(hex_grid_ascii_mark(0x7F), '.');
     }
 }
