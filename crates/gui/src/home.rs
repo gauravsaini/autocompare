@@ -106,6 +106,40 @@ pub fn home_model() -> HomeModel {
     }
 }
 
+/// Empty-state guidance for the Folder tab so the view never looks
+/// blank: rows win, then errors, then the idle hint.
+pub const fn folder_empty_hint(has_rows: bool, has_error: bool) -> &'static str {
+    if has_rows {
+        ""
+    } else if has_error {
+        "compare failed: fix the message above, then Compare again"
+    } else {
+        "type both folder paths, press Compare, then expand a folder"
+    }
+}
+
+/// Routes a staged folder double-click to the tab that opens it. A
+/// staged file path always lands in the Text session; with no staging
+/// the host stays on Folder.
+pub fn resolve_compare_tab(staged: &Option<String>) -> Tab {
+    if staged.is_some() {
+        Tab::Text
+    } else {
+        Tab::Folder
+    }
+}
+
+/// Consent hint for the sync Apply gate.
+pub const fn sync_consent_hint(consented: bool, steps: usize) -> &'static str {
+    if steps == 0 {
+        "nothing to apply: the preview is empty"
+    } else if consented {
+        "consented: Apply will run the planned steps"
+    } else {
+        "preview only: tick consent to enable Apply"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +157,28 @@ mod tests {
         assert!(model.items.iter().any(|i| i.tab == Tab::Picture));
         assert!(model.items.iter().any(|i| i.tab == Tab::FolderMerge));
         assert!(model.items.iter().any(|i| i.tab == Tab::Audio));
+    }
+
+    #[test]
+    fn folder_empty_hint_never_leaves_view_blank() {
+        assert_eq!(folder_empty_hint(true, false), "");
+        assert!(folder_empty_hint(false, true).contains("Compare again"));
+        assert!(folder_empty_hint(false, false).contains("type both folder paths"));
+    }
+
+    #[test]
+    fn sync_consent_hint_tracks_gate() {
+        assert!(sync_consent_hint(false, 0).contains("nothing to apply"));
+        assert!(sync_consent_hint(false, 3).contains("preview only"));
+        assert!(sync_consent_hint(true, 3).contains("consented"));
+    }
+
+    #[test]
+    fn staged_file_routes_to_text_otherwise_folder() {
+        assert_eq!(
+            resolve_compare_tab(&Some("src/a.txt".to_string())),
+            Tab::Text
+        );
+        assert_eq!(resolve_compare_tab(&None), Tab::Folder);
     }
 }
