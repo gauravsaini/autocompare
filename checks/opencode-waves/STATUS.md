@@ -927,3 +927,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave AB partial: DUALAPP landed+pushed, MINI in flight
 - DUALAPP `6e0f83b` wire dual-tree folder panes to App state — OWNS app.rs+checks/gui-dualapp-ab (Gap #19 step 2). Note: dual paint abhi unfiltered tree (display filters next). Verify: 294 green, clippy 0, fmt clean, banned 0. Pushed.
 - MINI `sess-mini-ab` slow start (2 nudges), ab jaaga hai, views.rs+gutter.rs par kaam me. Landing par verify+push+STATUS.
+
+## 2026-11-20 — Wave AB complete (2 parallel: minimap-click + dualtree-app)
+- DUALAPP `6e0f83b` wire dual-tree folder panes to App state (Gap #19 step 2). Limitation REPORT me: dual paint abhi unfiltered tree.
+- MINI `0e85be8` text-gutter minimap click-to-jump with synced marker (Gap #5). Slow start par 2 nudges ke baad GATES-first discipline se land kiya; OWNS/KEVL checks clean.
+- Verify combined: 296 green, clippy 0, fmt clean, banned 0.
+- Pushed. Next: Wave AC (intra-spans, folder-cols paint, find-paint wiring, header/chrome).
