@@ -227,3 +227,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave E poll 08 transient red self-healed
 - Mid-edit test red E0599 seen once, next run green 115 passed (was 111, +4 tree_indent). Clippy clean, fmt 0, diff 331 lines. Agents live 17032/17049 fixing own files, no interrupt needed.
+
+## Wave E poll 09 reports emerging
+- TYPO REPORT.md 3399B ready in checks/gui-typo with harness PASS. GEO GATES.md 1469B, REPORT pending, gates G4 fmt + clippy-owned in progress. Tests 115 green.
+- Both live 17032/17049, diff 332 lines uncommitted, transient ECONNRESET retried, no interrupt.
