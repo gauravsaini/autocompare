@@ -164,11 +164,45 @@ pub const HOME_CARD_MIN_W: f32 = 240.0;
 pub const HOME_CARD_PAD: f32 = 8.0;
 /// Card inner gap px: tight rhythm (`views::TIGHT_GAP` = 4, title/desc/button beech).
 pub const HOME_CARD_INNER_GAP: f32 = 4.0;
-/// Card button min hit height px: find-nav 24px floor precedent
-/// (`app::LAYOUT_FIND_HIT_MIN`), taaki "Open …" dabane layak rahe.
-pub const HOME_CARD_BUTTON_MIN_H: f32 = 24.0;
+/// Card button min hit height px: standard hit row (`views::HEADER_H` /
+/// `FIND_BAR_H` = 28 rhythm parity — paging bars/find bar wala dabane layak
+/// row; purana 24px find-nav floor is primary CTA ke liye chhota tha —
+/// taaki "Open …" report wale 120x22 dabav se bache).
+pub const HOME_CARD_BUTTON_MIN_H: f32 = 28.0;
 /// Description wrap budget: do lines tak sab cards ek jaisi height rakhen.
 pub const HOME_CARD_DESC_LINES: usize = 2;
+/// Session-card grid gap px: section rhythm (`views::SECTION_GAP` = 8
+/// parity) — cards aur rows dono isi beat par, koi naya gap nahi.
+pub const HOME_GRID_GAP: f32 = 8.0;
+/// Card button min hit width px: card aadha (report ka 120-wide "Open …"
+/// label budget; `HOME_CARD_MIN_W` se derive, koi magic number nahi).
+pub const HOME_CARD_BUTTON_MIN_W: f32 = HOME_CARD_MIN_W * 0.5;
+/// Card action ka hit area px²: width floor × height floor. Report ka
+/// dabaa 120x22 (= 2640) isse chhota hai; polish isko upar rakhta hai.
+pub fn home_card_button_hit_area() -> f32 {
+    HOME_CARD_BUTTON_MIN_W * HOME_CARD_BUTTON_MIN_H
+}
+
+/// Card title-vs-desc hierarchy theek hai: title desc se bada + strong,
+/// desc small + weak, weight gap kam se kam ek kadam (100), dono chrome
+/// proportional. Koi naya size nahi — sirf `TypoRole` ka antar pakka.
+/// Pure; headless-tested.
+pub fn home_card_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    let title = TypoRole::HomeTitle;
+    let desc = TypoRole::HomeDesc;
+    title.size() > desc.size()
+        && title.is_strong()
+        && !desc.is_strong()
+        && desc.is_small()
+        && desc.is_weak()
+        && title.weight_value() >= desc.weight_value() + 100
+        && title.is_chrome()
+        && desc.is_chrome()
+        && title.family() == "proportional"
+        && desc.family() == "proportional"
+}
+
 /// Session-start recent list cap: 8 entries, naya sabse upar.
 pub const HOME_RECENT_MAX: usize = 8;
 
@@ -496,6 +530,87 @@ pub fn recent_list_needs_scroll(count: usize, max_visible: usize) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Recent list columnar alignment (first): title flex + kind fixed + age
+// fixed. Single-line legacy helpers upar untouched; ye teen-column row ka
+// headless column math hai (paint adoption paint-owner wave ka). Sab rhythm
+// tokens se derive; fixed widths me derivation comment hai. Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Column beech gap px: card inner gap (4) reuse, koi naya number nahi.
+pub const RECENT_COL_GAP: f32 = HOME_CARD_INNER_GAP;
+/// Kind column width px: sabse lamba kind "FolderMerge" (11 chars, body 13
+/// ~7px advance = 77 + 16 pad = 93) ka wrap budget, 96 par goal.
+pub const RECENT_COL_KIND_W: f32 = 96.0;
+/// Age column width px: "just now" / "23h ago" (desc 11 + bullet + pad)
+/// ka wrap budget, 72 par goal.
+pub const RECENT_COL_AGE_W: f32 = 72.0;
+
+/// `total_w` me title column ki flex width px: kul me se list pad (do taraf),
+/// kind + age columns aur do column gaps ghatao; tang par 0 (clip ka jhooth
+/// nahi). Non-finite input passthrough taaki paint kabhi NaN na khaye.
+/// Pure; headless-tested.
+pub fn recent_row_title_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - RECENT_LIST_PAD * 2.0 - RECENT_COL_KIND_W - RECENT_COL_AGE_W - RECENT_COL_GAP * 2.0)
+        .max(0.0)
+}
+
+/// `total_w` ke teen column (title, kind, age) widths px: title flex, kind
+/// aur age fixed. Chaudi list par teeno + pad + gap kul ke barabar; tang
+/// par title 0, kind/age apne budget par. Pure; headless-tested.
+pub fn recent_row_columns(total_w: f32) -> (f32, f32, f32) {
+    (
+        recent_row_title_width(total_w),
+        RECENT_COL_KIND_W,
+        RECENT_COL_AGE_W,
+    )
+}
+
+// ----------------------------------------------------------------------------
+// Home chrome vertical rhythm (first): launcher par path picker nahi —
+// Compare tabs apne picker khud rakhte hain. Ye contract batata hai kitna
+// chrome bachta hai aur section kahan se shuru hota hai. Sab maujooda
+// rhythm tokens se derive; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Home launcher path picker dikhata hai ya nahi: kabhi nahi (false).
+/// Report section 2: Home par path row 82px chrome waste karta hai.
+pub const HOME_SHOWS_PATH_PICKER: bool = false;
+/// Path row height px: standard hit row (`views::HEADER_H` = 28 parity).
+pub const HOME_PATH_ROW_H: f32 = 28.0;
+/// Path row neeche gap px: tight rhythm (`views::TIGHT_GAP` = 4 parity).
+pub const HOME_PATH_ROW_GAP: f32 = 4.0;
+/// Section beech gap px: section rhythm (`views::SECTION_GAP` = 8 parity) —
+/// card grid aur recent list isi beat par alag hote hain.
+pub const HOME_SECTION_GAP: f32 = 8.0;
+
+/// Path picker chhupane se bachta chrome px: row + uska gap = 32.
+pub fn home_saved_chrome_height() -> f32 {
+    HOME_PATH_ROW_H + HOME_PATH_ROW_GAP
+}
+
+/// Content ka top offset px: picker dikhe to row + gap, Home par 0.
+/// Pure; paint section isi se lagaye.
+pub fn home_content_top_offset(shows_picker: bool) -> f32 {
+    if shows_picker {
+        home_saved_chrome_height()
+    } else {
+        0.0
+    }
+}
+
+/// Card grid (`cards_h` px) ke baad recent section ka top offset px:
+/// grid + section gap. Pure; paint recent list isi se lagaye.
+pub fn home_recent_section_top(cards_h: f32) -> f32 {
+    if !cards_h.is_finite() {
+        return cards_h;
+    }
+    (cards_h + HOME_SECTION_GAP).max(0.0)
+}
+
+// ----------------------------------------------------------------------------
 // Recent list typography (second): row text role reuse, koi naya size nahi.
 // ----------------------------------------------------------------------------
 
@@ -802,9 +917,9 @@ mod tests {
             + super::HOME_CARD_INNER_GAP * 2.0
             + super::HOME_CARD_PAD * 2.0;
         assert!((height - expected).abs() < 0.001);
-        // 14*1.2 + 2*11*1.40 + 24 + 8 + 16 = 95.6: button floor se upar,
+        // 14*1.2 + 2*11*1.40 + 28 + 8 + 16 = 99.6: hit-row floor se upar,
         // purane 75px clip se mehfooz.
-        assert!((height - 95.6).abs() < 0.01);
+        assert!((height - 99.6).abs() < 0.01);
         assert!(height > super::HOME_CARD_BUTTON_MIN_H);
         assert_eq!(super::HOME_CARD_MIN_W, 240.0);
     }
@@ -935,7 +1050,9 @@ mod tests {
         assert_eq!(super::RECENT_ROW_GAP, super::HOME_CARD_INNER_GAP);
         assert_eq!(super::RECENT_LIST_PAD, super::HOME_CARD_PAD);
         let row = super::recent_row_min_height();
-        assert!(row > super::HOME_CARD_BUTTON_MIN_H);
+        // Text row: desc line kabhi clip na ho (button floor ka daava nahi —
+        // row me button nahi, text hai; hit floor sirf card CTA par hai).
+        assert!(row > crate::theme::TypoRole::HomeDesc.line_height_px());
         assert_eq!(super::recent_list_height(0), 0.0);
         let one = super::recent_list_height(1);
         assert!((one - (row + super::RECENT_LIST_PAD * 2.0)).abs() < 0.001);
@@ -1105,5 +1222,55 @@ mod tests {
         assert!(meta_ready.contains("Compare to refresh"));
         assert!(meta_ready.contains("1m ago"));
         assert!(meta_ready.contains('\u{2022}'));
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homegeo_card_hit_target_beats_cramped_button() {
+        assert_eq!(super::HOME_CARD_BUTTON_MIN_H, 28.0);
+        assert_eq!(super::HOME_GRID_GAP, 8.0);
+        assert_eq!(super::HOME_CARD_BUTTON_MIN_W, 120.0);
+        // Report ka dabaa 120x22 = 2640; naya floor 120x28 = 3360.
+        assert!((super::home_card_button_hit_area() - 3_360.0).abs() < 0.001);
+        assert!(super::home_card_button_hit_area() > 2_640.0);
+        assert!(super::home_card_min_height() > 75.0);
+    }
+
+    #[test]
+    fn homegeo_card_title_desc_contrast_reads_title_first() {
+        assert!(super::home_card_hierarchy_ok());
+        assert!(
+            super::home_card_title_weight_value() >= super::home_card_desc_weight_value() + 100
+        );
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homegeo_recent_columns_tile_without_clip_lies() {
+        assert_eq!(super::RECENT_COL_GAP, super::HOME_CARD_INNER_GAP);
+        let total = 460.0;
+        let (title, kind, age) = super::recent_row_columns(total);
+        assert_eq!(kind, super::RECENT_COL_KIND_W);
+        assert_eq!(age, super::RECENT_COL_AGE_W);
+        assert!(
+            (title + kind + age + super::RECENT_LIST_PAD * 2.0 + super::RECENT_COL_GAP * 2.0
+                - total)
+                .abs()
+                < 0.001
+        );
+        assert_eq!(super::recent_row_title_width(100.0), 0.0);
+        assert!(super::recent_row_title_width(f32::NAN).is_nan());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homegeo_home_hides_picker_and_keeps_section_rhythm() {
+        assert!(!super::HOME_SHOWS_PATH_PICKER);
+        assert_eq!(super::home_saved_chrome_height(), 32.0);
+        assert_eq!(super::home_content_top_offset(false), 0.0);
+        assert_eq!(super::home_content_top_offset(true), 32.0);
+        assert_eq!(super::HOME_SECTION_GAP, 8.0);
+        assert!((super::home_recent_section_top(200.0) - 208.0).abs() < 0.001);
+        assert!(super::home_recent_section_top(f32::NAN).is_nan());
     }
 }
