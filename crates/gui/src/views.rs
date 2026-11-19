@@ -319,6 +319,80 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
         });
 }
 
+/// Whether koi displayed hunk `offset` byte ko cover karta hai.
+/// Hunk range `[offset, offset + max(left_len, right_len))` hai.
+/// [`views_hex::hex_hunk_at_offset`] jaisa, par paint-grid ke liye
+/// `views.rs` me taaki grid formatter ek jagah rahe. Pure; unit-tested.
+pub fn hunk_covers_offset(offset: u64, hunks: &[views_hex::HexHunkView]) -> bool {
+    for hunk in hunks {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let end = hunk.offset.saturating_add(run as u64);
+        if hunk.offset <= offset && offset < end {
+            return true;
+        }
+    }
+    false
+}
+
+/// One grid row of the hex byte view: ruler offset plus per-byte
+/// marks for the 16-byte row starting at `row_start`. Model me byte
+/// values nahi (sirf offset/len), isliye covered byte `??` dikhta hai
+/// aur uncovered slot blank rehta hai; ASCII column me covered `?`
+/// aur bahar blank. 8 ke baad midline gap (extra space) taaki 8+8
+/// aadhe alag dikhen. Pure; unit-tested.
+pub fn format_hex_grid_row(row_start: u64, hunks: &[views_hex::HexHunkView]) -> String {
+    use views_hex::{HEX_BYTES_PER_ROW, format_hex_offset};
+    let mut out = format_hex_offset(row_start);
+    out.push_str("  ");
+    let mut ascii = String::with_capacity(HEX_BYTES_PER_ROW);
+    for col in 0..HEX_BYTES_PER_ROW {
+        if col == HEX_BYTES_PER_ROW / 2 {
+            out.push(' ');
+        }
+        let off = row_start.saturating_add(col as u64);
+        let inside = hunk_covers_offset(off, hunks);
+        if inside {
+            out.push_str("??");
+        } else {
+            out.push_str("  ");
+        }
+        out.push(' ');
+        ascii.push(if inside { '?' } else { ' ' });
+    }
+    out.push_str(" |");
+    out.push_str(&ascii);
+    out.push('|');
+    out
+}
+
+/// Grid rows (row-start offsets) jo `hunk` ko cover karte hain:
+/// row-aligned start se run-end tak, 16-byte kadam par. Paint visible
+/// hunk window se inhe nikal kar grid lines banata hai; pager/window
+/// wahi rehta hai. Pure; unit-tested.
+pub fn hex_grid_rows_for_hunk(hunk: &views_hex::HexHunkView) -> Vec<u64> {
+    use views_hex::HEX_BYTES_PER_ROW;
+    let run = (hunk.left_len).max(hunk.right_len);
+    if run == 0 {
+        return Vec::new();
+    }
+    let step = HEX_BYTES_PER_ROW as u64;
+    let aligned = hunk.offset.saturating_div(step).saturating_mul(step);
+    let end = hunk.offset.saturating_add(run as u64);
+    let mut rows = Vec::new();
+    let mut row = aligned;
+    loop {
+        rows.push(row);
+        row = row.saturating_add(step);
+        if row >= end || rows.len() > 8 {
+            break;
+        }
+    }
+    rows
+}
+
 /// One model-driven hex hunk line: offset plus per-side byte counts,
 /// mirroring the engine summary wording.
 pub fn format_hex_hunk_line(hunk: &views_hex::HexHunkView) -> String {
@@ -364,6 +438,42 @@ pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
 #[allow(dead_code)]
 pub fn folder_path_rows(rows: &[FolderRow]) -> Vec<String> {
     rows.iter().map(|row| row.rel_path.clone()).collect()
+}
+
+/// Hex minimap click/drag mapping: local `y` (px) ko grid row me
+/// badalta hai. Fraction `y / height` se `[0, total_rows)`; kharab
+/// input par `None`. [`crate::gutter::gutter_row_at_y`] jaisa, par u64
+/// hex grid rows ke liye. Pure; unit-tested.
+pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if !y.is_finite() || y < 0.0 || y >= height {
+        return None;
+    }
+    let row = ((y / height) * total_rows as f32).floor() as u64;
+    if row < total_rows { Some(row) } else { None }
+}
+
+/// Minimap/grid row-click jump: `row` ko offset banakar covering hunk
+/// select karta hai aur pager window me lata hai — wahi steps jo
+/// `App::hex_gutter_jump_to_row` (app.rs, read-only) chalata hai:
+/// `hex_row_to_hunk` -> selected -> set_total -> bring_into_view.
+/// Paint click/drag isi ko deta hai. Pure (no egui); unit-tested.
+pub fn hex_minimap_jump_to_row(
+    view: &mut views_hex::HexCompareView,
+    pager: &mut views_hex::HexPager,
+    row: u64,
+) -> bool {
+    match views_hex::hex_row_to_hunk(row, &view.hunks) {
+        Some(idx) => {
+            view.selected = Some(idx);
+            pager.set_total(view.hunks.len() as u64);
+            pager.bring_into_view(idx as u64);
+            true
+        }
+        None => false,
+    }
 }
 
 /// The model-driven hex view: status line, hunk navigation (Prev /
@@ -444,30 +554,100 @@ pub fn paint_hex(
         let wstart = wstart as usize;
         let wend = (wend as usize).min(view.hunks.len());
         let count = wend.saturating_sub(wstart);
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .max_height(220.0)
-            .show_rows(ui, row_height, count, |ui, range| {
-                for pos in range {
-                    let i = wstart.saturating_add(pos);
-                    let Some(hunk) = view.hunks.get(i) else {
-                        break;
-                    };
-                    let line = format_hex_hunk_line(hunk);
-                    let selected = view.selected == Some(i);
-                    ui.set_row_height(row_height);
-                    if ui
-                        .selectable_label(selected, RichText::new(line).monospace())
-                        .clicked()
-                    {
-                        view.selected = Some(i);
-                        pager.bring_into_view(i as u64);
-                    }
-                    if Some(i) == view.selected {
-                        ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
-                    }
-                }
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(220.0)
+                    .show_rows(ui, row_height, count, |ui, range| {
+                        for pos in range {
+                            let i = wstart.saturating_add(pos);
+                            let Some(hunk) = view.hunks.get(i) else {
+                                break;
+                            };
+                            let line = format_hex_hunk_line(hunk);
+                            let selected = view.selected == Some(i);
+                            ui.set_row_height(row_height);
+                            if ui
+                                .selectable_label(selected, RichText::new(line).monospace())
+                                .clicked()
+                            {
+                                view.selected = Some(i);
+                                pager.bring_into_view(i as u64);
+                            }
+                            if Some(i) == view.selected {
+                                ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
+                            }
+                        }
+                    });
             });
+            // Byte-grid minimap: hunk rows ka thumbnail; click/drag
+            // fraction se grid row nikal kar covering hunk par jump
+            // karta hai (wahi `hex_row_to_hunk` path). Sirf existing
+            // palette/tokens: track + CHANGED_BG, gutter bar width.
+            let total = views_hex::hex_row_count(view.left_size.max(view.right_size));
+            if total > 0 {
+                let dark = ui.visuals().dark_mode;
+                let bar_w = text_gutter_paint_width(true);
+                let (rect, resp) =
+                    ui.allocate_exact_size(egui::vec2(bar_w, 220.0), egui::Sense::click_and_drag());
+                ui.painter().rect_filled(rect, 0.0, track_for(dark));
+                let step = views_hex::HEX_BYTES_PER_ROW as u64;
+                for hunk in view.hunks.iter() {
+                    let run = (hunk.left_len).max(hunk.right_len) as u64;
+                    if run == 0 {
+                        continue;
+                    }
+                    let first = hunk.offset.saturating_div(step);
+                    let last = hunk
+                        .offset
+                        .saturating_add(run.saturating_sub(1))
+                        .saturating_div(step);
+                    let y0 = rect.min.y + (first as f32 / total as f32) * rect.height();
+                    let y1 = rect.min.y
+                        + ((last.saturating_add(1)) as f32 / total as f32) * rect.height();
+                    let seg = egui::Rect::from_min_max(
+                        egui::pos2(rect.min.x, y0),
+                        egui::pos2(rect.max.x, y1.min(rect.max.y)),
+                    );
+                    ui.painter().rect_filled(seg, 0.0, CHANGED_BG);
+                }
+                let minimap_pressed = resp.clicked() || resp.dragged();
+                if minimap_pressed
+                    && let Some(pos) = resp.interact_pointer_pos()
+                    && let Some(row) =
+                        hex_minimap_row_at_y(pos.y - rect.min.y, rect.height(), total)
+                {
+                    hex_minimap_jump_to_row(view, pager, row);
+                }
+            }
+        });
+        // Byte grid: visible hunk window ki 16-byte rows — address +
+        // 8+8 hex marks + ASCII column, 8 ke baad midline gap. Model me
+        // byte values nahi, isliye `??` = diff byte (offset/len se).
+        ui.add_space(TIGHT_GAP);
+        ui.label(
+            RichText::new("byte grid (offsets only: ?? = diff byte)")
+                .small()
+                .weak(),
+        );
+        let mut grid_rows: Vec<u64> = Vec::new();
+        for hunk in view.hunks.get(wstart..wend).unwrap_or(&[]) {
+            for row in hex_grid_rows_for_hunk(hunk) {
+                if grid_rows.last() != Some(&row) {
+                    grid_rows.push(row);
+                }
+                if grid_rows.len() >= 64 {
+                    break;
+                }
+            }
+            if grid_rows.len() >= 64 {
+                break;
+            }
+        }
+        for row in grid_rows {
+            ui.label(RichText::new(format_hex_grid_row(row, &view.hunks)).monospace());
+        }
     }
     ui.add_space(TIGHT_GAP);
     paint_lines(ui, lines);
@@ -477,6 +657,44 @@ pub fn paint_hex(
 pub fn paint_hex_over_cap(ui: &mut Ui, view: &views_hex::HexCompareView) {
     ui.label(RichText::new(view.status_line()).monospace().weak());
     paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
+}
+
+/// Table painted text ko cells me todta hai: paint ` | ` se jodta hai
+/// (viewmodel `table_cells`/`table_plain`), to split inverse hai.
+/// Pure; unit-tested.
+pub fn split_table_cells(text: &str) -> Vec<String> {
+    text.split(" | ").map(str::to_string).collect()
+}
+
+/// Header cells: label `hdr` wali pehli row ka text; nahi mili to
+/// `None`. Paint isi ko header bar banata hai. Pure; unit-tested.
+pub fn table_header_cells(model: &TableModel) -> Option<Vec<String>> {
+    model
+        .rows
+        .iter()
+        .find(|row| row.label.trim() == "hdr")
+        .map(|row| split_table_cells(&row.text))
+}
+
+/// Bordered row text: cells ko widths tak pad karke `| a | b |` me
+/// bandhta hai. Missing cell `-` dikhta hai (views_table convention).
+/// Widths [`views_table::table_column_widths`] se aate hain. Pure;
+/// unit-tested.
+pub fn format_table_bordered_row(cells: &[String], widths: &[usize]) -> String {
+    let mut out = String::from("|");
+    for (idx, width) in widths.iter().enumerate() {
+        let cell = cells.get(idx).map(String::as_str).unwrap_or("-");
+        out.push(' ');
+        out.push_str(&views_table::pad_table_cell(cell, *width));
+        out.push_str(" |");
+    }
+    out
+}
+
+/// Header separator: bordered line jitni lambi `-` line. Pure;
+/// unit-tested.
+pub fn format_table_header_rule(line_len: usize) -> String {
+    "-".repeat(line_len.max(1))
 }
 
 /// The model-driven table view: keyed summary line, the positional
@@ -601,6 +819,29 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
         );
     });
     ui.add_space(TIGHT_GAP);
+    // Header bar + cell grid: `hdr` row header banta hai, data rows
+    // bordered cells me (padding/borders via existing TablePager
+    // window; widths views_table spec se, koi naya color/token nahi).
+    let header = table_header_cells(model);
+    let data_cells: Vec<Vec<String>> = model
+        .rows
+        .iter()
+        .filter(|row| row.label.trim() != "hdr")
+        .map(|row| split_table_cells(&row.text))
+        .collect();
+    let widths = match header.as_ref() {
+        Some(cells) => views_table::table_column_widths(cells, &data_cells),
+        None => Vec::new(),
+    };
+    if let Some(cells) = header.as_ref() {
+        let line = format_table_bordered_row(cells, &widths);
+        ui.label(RichText::new(format!("  {line}")).monospace().strong());
+        ui.label(
+            RichText::new(format!("  {}", format_table_header_rule(line.len())))
+                .monospace()
+                .weak(),
+        );
+    }
     let row_height = text_row_height(ui);
     let (wstart, wend) = pager.visible_range();
     let wend = wend.min(model.rows.len());
@@ -621,7 +862,12 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
                     'R' => glyph.color(green_for(dark)),
                     _ => glyph.color(dim_for(dark)),
                 };
-                let mut body = RichText::new(format!("{} | {}", row.label, row.text)).monospace();
+                let body_text = if widths.is_empty() {
+                    format!("{} | {}", row.label, row.text)
+                } else {
+                    format_table_bordered_row(&split_table_cells(&row.text), &widths)
+                };
+                let mut body = RichText::new(body_text).monospace();
                 if row.changed {
                     body = body.color(CHANGED_FG);
                 }
@@ -2231,6 +2477,129 @@ mod tests {
             paths,
             vec!["src/lib.rs".to_string(), "README.md".to_string()]
         );
+    }
+
+    #[test]
+    fn hex_grid_row_marks_covered_bytes_with_midline_gap() {
+        let hunks = vec![crate::views_hex::HexHunkView {
+            offset: 20,
+            left_len: 2,
+            right_len: 2,
+        }];
+        assert!(hunk_covers_offset(20, &hunks));
+        assert!(hunk_covers_offset(21, &hunks));
+        assert!(!hunk_covers_offset(16, &hunks));
+        assert!(!hunk_covers_offset(22, &hunks));
+        assert!(!hunk_covers_offset(20, &[]));
+        let line = format_hex_grid_row(16, &hunks);
+        assert!(line.starts_with("0x00000010  "));
+        // Hex section me 2 covered cells; ASCII column me 1 `??` jod.
+        let hex_part = line.split(" |").next().unwrap_or("");
+        assert_eq!(hex_part.matches("??").count(), 2);
+        assert_eq!(line.matches("??").count(), 3);
+        // ASCII column: 16 chars, covered at cols 4-5.
+        assert!(line.ends_with("|    ??          |"));
+        // Midline gap: 8th cell ke baad extra space.
+        let empty = format_hex_grid_row(32, &[]);
+        assert!(empty.starts_with("0x00000020"));
+        assert!(!empty.contains("??"));
+        assert!(!empty.contains('?'));
+        assert_eq!(empty.len(), line.len());
+    }
+
+    #[test]
+    fn hex_grid_rows_for_hunk_align_and_cap() {
+        let hunk = crate::views_hex::HexHunkView {
+            offset: 20,
+            left_len: 2,
+            right_len: 2,
+        };
+        assert_eq!(hex_grid_rows_for_hunk(&hunk), vec![16]);
+        let big = crate::views_hex::HexHunkView {
+            offset: 0,
+            left_len: 64,
+            right_len: 64,
+        };
+        assert_eq!(hex_grid_rows_for_hunk(&big), vec![0, 16, 32, 48]);
+        let zero = crate::views_hex::HexHunkView {
+            offset: 5,
+            left_len: 0,
+            right_len: 0,
+        };
+        assert!(hex_grid_rows_for_hunk(&zero).is_empty());
+    }
+
+    #[test]
+    fn hex_minimap_fraction_maps_to_row_and_jumps() {
+        assert_eq!(hex_minimap_row_at_y(0.0, 400.0, 4), Some(0));
+        assert_eq!(hex_minimap_row_at_y(100.0, 400.0, 4), Some(1));
+        assert_eq!(hex_minimap_row_at_y(399.9, 400.0, 4), Some(3));
+        assert_eq!(hex_minimap_row_at_y(400.0, 400.0, 4), None);
+        assert_eq!(hex_minimap_row_at_y(-1.0, 400.0, 4), None);
+        assert_eq!(hex_minimap_row_at_y(10.0, 0.0, 4), None);
+        assert_eq!(hex_minimap_row_at_y(10.0, 400.0, 0), None);
+        assert_eq!(hex_minimap_row_at_y(f32::NAN, 400.0, 4), None);
+        // Jump wahi path hai jo app.rs `hex_gutter_jump_to_row` chalata hai.
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        let mut view = crate::views_hex::HexCompareView::build_from_slices(
+            &left,
+            &right,
+            crate::views_hex::HexCompareMode::None,
+            8,
+        );
+        let mut pager = crate::views_hex::HexPager::new(0, 16);
+        assert!(hex_minimap_jump_to_row(&mut view, &mut pager, 1));
+        assert_eq!(view.selected, Some(0));
+        let (start, end) = pager.visible_range();
+        assert_eq!(start, 0);
+        assert!(end > 0);
+        assert!(!hex_minimap_jump_to_row(&mut view, &mut pager, 0));
+    }
+
+    #[test]
+    fn table_cells_split_and_border_with_header() {
+        assert_eq!(split_table_cells("a | b"), vec!["a", "b"]);
+        assert_eq!(split_table_cells("single"), vec!["single"]);
+        let model = TableModel {
+            rows: vec![
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: " hdr".to_string(),
+                    text: "ID | Price".to_string(),
+                    changed: false,
+                },
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: "   1".to_string(),
+                    text: "1 | 9.99".to_string(),
+                    changed: false,
+                },
+            ],
+            truncated: false,
+        };
+        let header = table_header_cells(&model).unwrap_or_default();
+        assert_eq!(header, vec!["ID", "Price"]);
+        assert!(table_header_cells(&TableModel::default()).is_none());
+        let data = vec![split_table_cells("1 | 9.99")];
+        let widths = crate::views_table::table_column_widths(&header, &data);
+        let line = format_table_bordered_row(&header, &widths);
+        assert!(line.starts_with('|') && line.ends_with('|'));
+        let Some(first) = data.first() else {
+            return;
+        };
+        let row_line = format_table_bordered_row(first, &widths);
+        assert_eq!(row_line.len(), line.len());
+        // Missing cell `-` dikhta hai.
+        let ragged = format_table_bordered_row(&["only".to_string()], &widths);
+        assert!(ragged.contains('-'));
+        assert_eq!(ragged.len(), line.len());
+        let rule = format_table_header_rule(line.len());
+        assert_eq!(rule.len(), line.len());
+        assert!(rule.chars().all(|ch| ch == '-'));
     }
 
     #[test]
