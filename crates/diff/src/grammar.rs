@@ -512,11 +512,7 @@ fn is_span_unimportant(
     let all_b_comment = tokens_b
         .iter()
         .all(|t| t.kind == TokenKind::Comment || t.kind == TokenKind::Whitespace);
-    if all_a_comment && all_b_comment && options.ignore_comments {
-        return true;
-    }
-
-    false
+    all_a_comment && all_b_comment && options.ignore_comments
 }
 
 #[cfg(test)]
