@@ -900,6 +900,169 @@ pub fn paint_table_keyed(
     }
     paint_table(ui, model, pager);
 }
+/// Merge 3-pane column count: left / base / right teen panes.
+/// Headless contract (test-locked); paint spells the three panes
+/// explicitly for readability. Pure.
+#[allow(dead_code)] // test-only contract; paint lists panes explicitly
+pub fn merge_pane_count() -> usize {
+    3
+}
+
+/// One conflict hunk ki teen sides marker block se: left (`<<<<<<<`
+/// ke baad), base (`|||||||` ke baad), right (`=======` ke baad).
+/// `take::resolve_take` wala section rule reuse hota hai (base marker
+/// na ho to `=======` se pehle sab left, base khali). Bahar ke hunks
+/// khali triple dete hain. Pure; unit-tested.
+pub fn merge_hunk_sides(
+    lines: &[String],
+    hunk: &viewmodel::MergeHunk,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut left = Vec::new();
+    let mut base = Vec::new();
+    let mut right = Vec::new();
+    if lines.get(hunk.start).is_none() {
+        return (left, base, right);
+    }
+    let mut section = 0u8;
+    let mut i = hunk.start.saturating_add(1);
+    while i < hunk.end {
+        let Some(line) = lines.get(i) else {
+            break;
+        };
+        if line.starts_with("<<<<<<<") || line.starts_with(">>>>>>>") {
+            i = i.saturating_add(1);
+            continue;
+        }
+        if line.starts_with("|||||||") {
+            section = 1;
+        } else if line.starts_with("=======") {
+            section = 2;
+        } else if section == 0 {
+            left.push(line.clone());
+        } else if section == 1 {
+            base.push(line.clone());
+        } else {
+            right.push(line.clone());
+        }
+        i = i.saturating_add(1);
+        if i > hunk.end.saturating_add(1) {
+            break;
+        }
+    }
+    (left, base, right)
+}
+
+/// One hunk card ka title: 1-based "hunk N of M" + teen pane naam.
+/// Pure; unit-tested.
+pub fn format_merge_hunk_title(index: usize, total: usize) -> String {
+    format!(
+        "hunk {} of {}: left / base / right",
+        index.saturating_add(1),
+        total
+    )
+}
+
+/// One hunk ka decision display: picks `paint_merge_three_pane` me
+/// staged nahi hote (stub), isliye har bachi hunk honest pending hai.
+/// Pure; unit-tested.
+pub fn format_merge_hunk_decision(index: usize) -> String {
+    format!("hunk {}: decision pending", index.saturating_add(1))
+}
+
+/// 3-pane summary line: kul conflict hunks + pending + conflicted flag.
+/// [`viewmodel::merge_pick_summary`] ke numbers ko paint wording deta hai.
+/// Pure; unit-tested.
+pub fn merge_three_pane_summary_line(total: usize, pending: usize, conflicted: bool) -> String {
+    format!(
+        "{} conflict hunk(s), {} pending{}",
+        total,
+        pending,
+        if conflicted { ", conflicted" } else { "" }
+    )
+}
+
+/// The merge 3-pane: har conflict hunk ke left/base/right panes +
+/// per-hunk decision display. Model reuse read-only hai
+/// ([`viewmodel::merge_conflict_hunks`] + [`viewmodel::merge_pick_summary`]);
+/// per-hunk Take buttons stub hain (label me "stub" saaf, no-op) jabki
+/// panes + decisions real dikhte hain. Global Take `paint_merge` me
+/// functional rehta hai.
+pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
+    let hunks = viewmodel::merge_conflict_hunks(lines);
+    let summary = viewmodel::merge_pick_summary(lines, &[]);
+    ui.label(
+        RichText::new(merge_three_pane_summary_line(
+            summary.total,
+            summary.pending,
+            summary.conflicted,
+        ))
+        .small()
+        .weak(),
+    );
+    if hunks.is_empty() {
+        ui.label(RichText::new("(no conflict hunks: single merged pane below)").weak());
+        return;
+    }
+    for hunk in &hunks {
+        let (left, base, right) = merge_hunk_sides(lines, hunk);
+        let idx = hunk.conflict_index;
+        let total = hunks.len();
+        ui.group(|ui| {
+            ui.label(
+                RichText::new(format_merge_hunk_title(idx, total))
+                    .small()
+                    .strong(),
+            );
+            ui.label(
+                RichText::new(format_merge_hunk_decision(idx))
+                    .small()
+                    .weak(),
+            );
+            ui.add_space(TIGHT_GAP);
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Left").small().strong());
+                    if left.is_empty() {
+                        ui.label(RichText::new("(empty)").small().weak());
+                    }
+                    for line in &left {
+                        ui.label(RichText::new(line.as_str()).monospace());
+                    }
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Base").small().strong());
+                    if base.is_empty() {
+                        ui.label(RichText::new("(empty)").small().weak());
+                    }
+                    for line in &base {
+                        ui.label(RichText::new(line.as_str()).monospace());
+                    }
+                });
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Right").small().strong());
+                    if right.is_empty() {
+                        ui.label(RichText::new("(empty)").small().weak());
+                    }
+                    for line in &right {
+                        ui.label(RichText::new(line.as_str()).monospace());
+                    }
+                });
+            });
+            ui.add_space(TIGHT_GAP);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Take:").small().weak());
+                let _ = ui.small_button("Take Left (stub)");
+                let _ = ui.small_button("Take Right (stub)");
+                let _ = ui.small_button("Take Base (stub)");
+                let _ = ui.small_button("Take Both (stub)");
+            });
+        });
+        ui.add_space(TIGHT_GAP);
+    }
+}
+
 /// The three-way merge output: conflict blocks highlighted, notes
 /// for conflicts and truncation first, with Take resolution actions.
 pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
@@ -936,6 +1099,8 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
         ui.label(RichText::new("(merged output is empty)").weak());
         return;
     }
+    paint_merge_three_pane(ui, &model.lines);
+    ui.add_space(TIGHT_GAP);
     let row_height = row_height_for_line(text_row_height(ui));
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -1136,6 +1301,7 @@ fn paint_note(ui: &mut Ui, text: &str) {
 /// (word wrap off, line numbers on, syntax on). Kept so the existing
 /// `App` call-site compiles; new code should prefer
 /// [`paint_text_with_prefs`].
+#[allow(dead_code)] // compat: App text tab ab `paint_text_with_find` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
     let prefs = TextViewPrefs::default();
     paint_text_with_prefs(ui, model, &prefs);
@@ -2599,6 +2765,7 @@ pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
 /// N/M badge text for the text find bar: "2/5", no hit par "0/0".
 /// Pure; App badge model ko paint bina App borrow ke dikhata hai.
 /// App text tab se called (Wave T wiring).
+#[allow(dead_code)] // compat: App text tab ab `FindState::count_label` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -2610,6 +2777,7 @@ pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
 /// Returns `(prev_clicked, next_clicked)`; cursor/badge advance App
 /// ke `text_find_next_row` / `text_find_prev_row` me hota hai.
 /// App text tab se called (Wave T wiring).
+#[allow(dead_code)] // compat: App text tab ab `paint_text_with_find` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn paint_text_find_bar(
     ui: &mut Ui,
     needle: &mut String,
@@ -4013,5 +4181,92 @@ mod tests {
         // Missing right sides dash padded dikhte hain.
         assert!(right.contains('-'));
         assert!(right.contains(" | "));
+    }
+
+    #[test]
+    fn merge_hunk_sides_splits_left_base_right() {
+        let lines = vec![
+            "clean".to_string(),
+            "<<<<<<< left".to_string(),
+            "L1".to_string(),
+            "||||||| base".to_string(),
+            "B1".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>> right".to_string(),
+        ];
+        let hunks = viewmodel::merge_conflict_hunks(&lines);
+        assert_eq!(hunks.len(), 1);
+        let Some(hunk) = hunks.first() else {
+            return;
+        };
+        let (left, base, right) = merge_hunk_sides(&lines, hunk);
+        assert_eq!(left, vec!["L1".to_string()]);
+        assert_eq!(base, vec!["B1".to_string()]);
+        assert_eq!(right, vec!["R1".to_string()]);
+    }
+
+    #[test]
+    fn merge_hunk_sides_without_base_marker_puts_left_before_sep() {
+        let lines = vec![
+            "<<<<<<<".to_string(),
+            "L1".to_string(),
+            "L2".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>>".to_string(),
+        ];
+        let hunks = viewmodel::merge_conflict_hunks(&lines);
+        assert_eq!(hunks.len(), 1);
+        let Some(hunk) = hunks.first() else {
+            return;
+        };
+        let (left, base, right) = merge_hunk_sides(&lines, hunk);
+        assert_eq!(left, vec!["L1".to_string(), "L2".to_string()]);
+        assert!(base.is_empty());
+        assert_eq!(right, vec!["R1".to_string()]);
+    }
+
+    #[test]
+    fn merge_hunk_sides_out_of_range_is_empty() {
+        let lines = vec!["clean".to_string()];
+        let hunk = viewmodel::MergeHunk {
+            conflict_index: 0,
+            start: 99,
+            end: 200,
+        };
+        let (left, base, right) = merge_hunk_sides(&lines, &hunk);
+        assert!(left.is_empty());
+        assert!(base.is_empty());
+        assert!(right.is_empty());
+    }
+
+    #[test]
+    fn merge_three_pane_summary_line_counts_pending() {
+        assert_eq!(
+            merge_three_pane_summary_line(2, 2, true),
+            "2 conflict hunk(s), 2 pending, conflicted".to_string()
+        );
+        assert_eq!(
+            merge_three_pane_summary_line(0, 0, false),
+            "0 conflict hunk(s), 0 pending".to_string()
+        );
+    }
+
+    #[test]
+    fn merge_hunk_title_and_decision_labels() {
+        assert_eq!(
+            format_merge_hunk_title(0, 2),
+            "hunk 1 of 2: left / base / right".to_string()
+        );
+        assert_eq!(
+            format_merge_hunk_decision(0),
+            "hunk 1: decision pending".to_string()
+        );
+    }
+
+    #[test]
+    fn merge_pane_count_is_three() {
+        assert_eq!(merge_pane_count(), 3);
     }
 }
