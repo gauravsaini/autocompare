@@ -1049,3 +1049,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Original AL sessions frozen the (zero output) — fresh AL2/AL3 se lossless resume; purani session ko STOP bheja, koi collision nahi.
 - Verify combined: 393 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AM (3-pane/apply wiring, text diff nav, snapshot parity).
+
+## 2026-11-20 — Wave AM plan (2 parallel: apply wiring + diff nav)
+- AM-APPLY `sess-apply-am`: OWNS app.rs+checks/gui-apply-am (Gap #7/#8 merge decisions file apply path).
+- AM-DIFFNAV `sess-diffnav-am`: OWNS views.rs+checks/gui-diffnav-am (text next/prev difference jump + count).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
