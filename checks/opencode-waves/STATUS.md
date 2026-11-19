@@ -168,3 +168,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 15
 - Hooks red test fixed (gutter test ok, 7/7 focused pass). Land approaching.
+
+## Wave D poll 16
+- Hooks in proof phase (wrap proof script in own checks dir). Land approaching.
