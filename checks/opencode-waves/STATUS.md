@@ -693,3 +693,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - 4 Wave L live: GEO 59745, TYPO 59746, PARITY 59747 (opencode default, logs growing), LOCALBIN agyx 59748 spawned (log 0B, startup slow, probe running). K-B 57742 still writing REPORT (round-K-1 artifacts done).
 - Orchestrator local-run proof: harness PASS post-K-A into checks/local-run-orch/round-orch-1 (after.png 9914B, magic ok, distinct 256). Moved out of checks/local-run-l/** to keep LOCALBIN OWNS disjoint (agent uses round-L-1).
 - GEO/TYPO reading phase (TYPO log shows views.rs typo-signal grep, read-only ok). PARITY mapping viewmodel/tree/views refs (read-only ok). No commits yet, no OWNS violations. Wait.
+
+## Wave L poll 02 baselines green, agyx slow
+- GEO baseline done (PNG magic noted), reading local-run-exq REPORT + parity-hex-table (read-only ok). TYPO harness round-L-1 RESULT PASS, now type-hierarchy grep (80 matches) — views.rs read is read-only, no edit, OWNS holds.
+- PARITY baseline 182, editing views_hex grid slices (one identical-edit retry, normal loop). K-B re-checking release warnings post-K-A (touch+rebuild, no content edit).
+- LOCALBIN agyx log still 0B (~5 min, startup slow; probe also slow). Not blocking: K-B covers release+PNG+gaps + orch harness PASS already green. If agyx still 0B next poll, fallback respawn via opencode default report-only same OWNS.
+- No commits from agents yet. Disjoint holds (M none, all untracked in own dirs). Wait.
