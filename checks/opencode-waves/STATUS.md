@@ -73,3 +73,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Folder errors down to 2 (was 21/16) — almost through shared-crate breakage.
 - Shell writing REPORT, land imminent. Text retrying views.rs edit after oldString mismatch.
 - No land commits yet.
+
+## Verify 01 (folder 9b1293d + shell e59fd07)
+- OWNS respected by both (folder: tree/home + gui-folder; shell: app/screenshot + gui-shell).
+- PNG magic OK all 4 (before 9174, after 9846, differ).
+- Banned-pattern scan CLEAN on both commits.
+- 90-test claims plausible (folder log showed 90 green pre-commit); current crate red = 3 errors ALL in views.rs (text mid-edit: TextRows missing filter/selected init). Attributed to text WIP, no revert. Full green re-verify at text land.
