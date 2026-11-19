@@ -27,7 +27,7 @@
 
 ## Tests (G3)
 - Naye 8 (sab `tablefind_` prefix): empty-needle, case-modes (+multibyte char indices), overlapping, grid-spans-row-mapping, current-cell-cursor (+wrap + is_current), current/other-format-distinct (block-vs-line + same FontId), padded-spans-aligned-with-key-cols, cell-job-marks-current-vs-others (job text == cell, overlap me pehla hit jeetta hai).
-- Full: `cargo test -p autocompare-gui` 515 passed, 0 failed. Hisaab: pre-edit baseline run me 498 note hua tha; meri diff se filter-proof 8 judte hain (`cargo test tablefind` = 8 passed, `tablefind_` prefix sirf mere tests me hai); baaki +9 parallel sibling activity ka delta hai (same checkout me waves parallel chal rahi hain — meri diff `views_table.rs` me +416/-0 pure addition hai, isliye mere naam par sirf 8 judte hain). Zero failures throughout.
+- Full: `cargo test -p autocompare-gui` 515 passed, 0 failed. Hisaab exact hai: pre-edit baseline 498 + meri filter-proof 8 (`cargo test tablefind` = 8 passed, `tablefind_` prefix sirf mere tests me hai) + sibling filterpaint commit `9ba596d` ki 9 (us diff me `^+.*#\[test\]` = 9, `^-` = 0; wo commit meri wave ke beech me land hua). Zero failures throughout.
 
 ## Gates
 - G1 baseline: 498 passed, 0 failed (pre-edit run, `main@700669d`).
