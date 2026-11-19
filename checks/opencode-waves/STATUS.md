@@ -1002,3 +1002,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Mid-wave compile break (sibling WIP) dono ne haath lagaye bina wait+fix se green kiya.
 - Verify combined: 355 green, clippy 0, fmt clean, banned 0.
 - Pushed. Next: Wave AI (table-find UI, hex-find paint, merge-pick UI, home polish).
+
+## 2026-11-20 — Wave AI plan (2 parallel: table-find UI + merge-pick UI)
+- AI-TABLEFIND `sess-tablefind-ai`: OWNS views_table.rs+app.rs+checks/gui-tablefind-ai (Gap #12 table find box+N/M; caller signature same).
+- AI-MERGEPICK `sess-mergepick-ai`: OWNS views.rs+checks/gui-mergepick-ai (Gap #13 per-hunk pick buttons; decision wiring next).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
