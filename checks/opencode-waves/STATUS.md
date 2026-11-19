@@ -1099,3 +1099,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AQ-WRAP `sess-wrap-aq`: OWNS views.rs+checks/gui-wrap-aq (word-wrap paint parity).
 - AQ-FOLDERSYNC `sess-foldersync-aq`: OWNS tree.rs+app.rs+checks/gui-foldersync-aq (sync direction wiring).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AQ complete (2 parallel: text wrap parity + folder sync)
+- FOLDERSYNC `01ae605` sync direction wiring + badges/selection/dry-run summary — OWNS tree.rs+app.rs.
+- WRAP `c522641` word-wrap parity paint + row mapping — OWNS views.rs (458 tests).
+- Original wrap session frozen thi — aq2 se resume; purani ne STOP mana + pehle ka insert preserve hua, single-writer continue, koi collision nahi.
+- Verify combined: 458 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AR (folder sync paint, home recent polish, hex gutter parity).
