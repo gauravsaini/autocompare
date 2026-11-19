@@ -466,3 +466,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 05 wiring 151 green
 - All 3 live. A main.rs +2 (mods), tests 151 green (125+26: hex/table wired + gutter tests?), dead-code warnings (summarize/total/line) being fixed. B gutter 153 + viewmodel 323 pure models. C REPORT written, commit next.
 - No commits yet. Wait.
+
+## Wave I poll 06 C landed A/B wiring
+- C dab07ad landed+pushed (verify REPORT 2686B, OWNS clean). C done.
+- A+B live. M main/gutter/viewmodel. A wiring diffs, B viewmodel tests. No A/B commits yet. Wait.
