@@ -17,6 +17,10 @@ use eframe::egui::{
 };
 
 use crate::app::Tab;
+use crate::app::{
+    AudioCheckKind, AudioChecklist, FolderMergeChecklist, PictureCompareModel, PictureMode,
+    PictureViewState, SyncChecklist,
+};
 use crate::gutter::gutter_bar_width_for_font;
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
 use crate::theme::{
@@ -1025,27 +1029,6 @@ fn folder_columns(row: &FolderRow) -> String {
     format!(" {ls:>10} {rs:>10}  {lt:>16} {rt:>16}  {rel_path}{dir_mark}")
 }
 
-// ----------------------------------------------------------------------------
-// Picture view
-// ----------------------------------------------------------------------------
-
-/// The picture summary lines, then the heatmap texture at its
-/// natural size (shrunk to the panel width when needed).
-pub fn paint_picture(ui: &mut Ui, lines: &[String], heatmap: Option<&TextureHandle>) {
-    for line in lines {
-        ui.label(RichText::new(line.as_str()).monospace());
-    }
-    match heatmap {
-        Some(handle) => {
-            ui.add_space(FOOTER_GAP);
-            ui.add(
-                egui::Image::new((handle.id(), handle.size_vec2())).max_width(ui.available_width()),
-            );
-        }
-        None => paint_note(ui, "heatmap unavailable for these inputs"),
-    }
-}
-
 /// Straight-alpha RGBA bytes into an egui [`ColorImage`]: egui
 /// textures expect premultiplied alpha, so every channel is scaled by
 /// its alpha with saturating integer math. `None` when the bytes are
@@ -1093,6 +1076,407 @@ fn premultiplied_rgba(bytes: &[u8]) -> Vec<u8> {
 fn premul(channel: u8, alpha: u8) -> u8 {
     let scaled = u16::from(channel).saturating_mul(u16::from(alpha)) / 255;
     u8::try_from(scaled).unwrap_or(255)
+}
+
+// ----------------------------------------------------------------------------
+// Picture compare (model-driven side-by-side / overlay + zoom / pan)
+// ----------------------------------------------------------------------------
+
+/// Width of one picture column: half the available width minus one
+/// tight gap, floored at [`MIN_HALF`] so narrow panels scroll instead
+/// of crushing the image.
+pub fn picture_column_width(avail: f32) -> f32 {
+    ((avail - TIGHT_GAP) / 2.0).max(MIN_HALF)
+}
+
+/// Clamped overlay mix paint honors (0 = full left, 100 = full right).
+pub fn clamp_overlay_mix(mix: u8) -> u8 {
+    mix.min(crate::app::PICTURE_OVERLAY_MAX)
+}
+
+/// Clamped zoom percent paint honors (25..=400).
+pub fn clamp_zoom_pct(pct: u32) -> u32 {
+    pct.clamp(crate::app::PICTURE_ZOOM_MIN, crate::app::PICTURE_ZOOM_MAX)
+}
+
+/// Zoom slider label: `zoom 100% (1.00x)`.
+pub fn zoom_label(pct: u32) -> String {
+    let clamped = clamp_zoom_pct(pct);
+    format!("zoom {clamped}% ({:.2}x)", clamped as f32 / 100.0)
+}
+
+/// Overlay slider label: `mix 30% left / 70% right`.
+pub fn overlay_label(mix: u8) -> String {
+    let clamped = clamp_overlay_mix(mix);
+    format!(
+        "mix {clamped}% left / {}% right",
+        crate::app::PICTURE_OVERLAY_MAX.saturating_sub(clamped)
+    )
+}
+
+/// Pan readout label: `pan (+32,-16)px`.
+pub fn pan_label(pan_x: i32, pan_y: i32) -> String {
+    format!("pan ({pan_x:+},{pan_y:+})px")
+}
+
+/// Status verdict for the picture header: identical reads clean,
+/// otherwise the differing share. Pure; unit-tested.
+pub fn picture_status_line(model: &PictureCompareModel) -> String {
+    if model.identical {
+        String::from("identical: no differences")
+    } else {
+        model.status_summary()
+    }
+}
+
+/// Display size of the heatmap under the current zoom: natural size
+/// scaled by the zoom factor. Pure; unit-tested.
+pub fn picture_display_size(natural_w: f32, natural_h: f32, view: &PictureViewState) -> (f32, f32) {
+    let scale = view.zoom_factor().max(0.25);
+    ((natural_w * scale).max(1.0), (natural_h * scale).max(1.0))
+}
+
+/// The model-driven picture view: mode radio (side-by-side columns
+/// with per-side dimensions vs one overlay frame with a mix slider),
+/// zoom slider, pan nudge buttons, the heatmap at the zoomed size,
+/// then the CLI-worded summary lines. Spacing reuses the tree/gutter
+/// tokens ([`TREE_INDENT`], [`SECTION_GAP`], [`TIGHT_GAP`]); colors
+/// stay the frozen diff palette (no new hues).
+pub fn paint_picture_compare(
+    ui: &mut Ui,
+    model: &PictureCompareModel,
+    view: &mut PictureViewState,
+    heatmap: Option<&TextureHandle>,
+) {
+    ui.label(RichText::new(picture_status_line(model)).monospace().weak());
+    ui.add_space(TIGHT_GAP);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Layout:").small().weak());
+        let mut mode = view.mode;
+        for candidate in PictureMode::all() {
+            ui.radio_value(&mut mode, candidate, candidate.label());
+        }
+        if mode != view.mode {
+            view.mode = mode;
+        }
+    });
+    ui.add_space(TIGHT_GAP);
+    match view.mode {
+        PictureMode::SideBySide => {
+            let col = picture_column_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(col);
+                    ui.label(RichText::new("left").small().weak());
+                    ui.label(
+                        RichText::new(format!("{}x{}", model.width_l, model.height_l)).monospace(),
+                    );
+                    ui.add_space(tree_indent(1));
+                    ui.label(
+                        RichText::new(format!(
+                            "overlap {}x{} ({} px)",
+                            model.overlap_w, model.overlap_h, model.total
+                        ))
+                        .small()
+                        .weak(),
+                    );
+                });
+                ui.vertical(|ui| {
+                    ui.set_width(col);
+                    ui.label(RichText::new("right").small().weak());
+                    ui.label(
+                        RichText::new(format!("{}x{}", model.width_r, model.height_r)).monospace(),
+                    );
+                    ui.add_space(tree_indent(1));
+                    ui.label(
+                        RichText::new(if model.identical {
+                            "verdict: identical".to_string()
+                        } else {
+                            format!("differing: {}", model.differing)
+                        })
+                        .small()
+                        .weak(),
+                    );
+                });
+            });
+        }
+        PictureMode::Overlay => {
+            ui.label(
+                RichText::new("overlay: heatmap frame, slider blends sides")
+                    .small()
+                    .weak(),
+            );
+            let mut mix = clamp_overlay_mix(view.overlay_mix);
+            let mix_text = overlay_label(mix);
+            ui.add(egui::Slider::new(&mut mix, 0..=crate::app::PICTURE_OVERLAY_MAX).text(mix_text));
+            if mix != view.overlay_mix {
+                view.set_overlay_mix(mix);
+            }
+        }
+    }
+    ui.add_space(TIGHT_GAP);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(zoom_label(view.zoom_pct)).small().weak());
+        let mut zoom = clamp_zoom_pct(view.zoom_pct);
+        ui.add(
+            egui::Slider::new(
+                &mut zoom,
+                crate::app::PICTURE_ZOOM_MIN..=crate::app::PICTURE_ZOOM_MAX,
+            )
+            .text("zoom"),
+        );
+        if zoom != view.zoom_pct {
+            view.set_zoom_pct(zoom);
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(pan_label(view.pan_x, view.pan_y))
+                .small()
+                .weak(),
+        );
+        if ui.small_button("◀").clicked() {
+            view.nudge_pan(-crate::app::PICTURE_PAN_STEP, 0);
+        }
+        if ui.small_button("▶").clicked() {
+            view.nudge_pan(crate::app::PICTURE_PAN_STEP, 0);
+        }
+        if ui.small_button("▲").clicked() {
+            view.nudge_pan(0, -crate::app::PICTURE_PAN_STEP);
+        }
+        if ui.small_button("▼").clicked() {
+            view.nudge_pan(0, crate::app::PICTURE_PAN_STEP);
+        }
+        if ui.small_button("Reset view").clicked() {
+            view.reset_view();
+        }
+    });
+    ui.add_space(SECTION_GAP);
+    match heatmap {
+        Some(handle) => {
+            let natural = handle.size_vec2();
+            let (dw, dh) = picture_display_size(natural.x, natural.y, view);
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .scroll_offset(egui::vec2(
+                    view.pan_x.clamp(0, crate::app::PICTURE_PAN_LIMIT) as f32,
+                    view.pan_y.clamp(0, crate::app::PICTURE_PAN_LIMIT) as f32,
+                ))
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Image::new((handle.id(), handle.size_vec2()))
+                            .fit_to_exact_size(egui::vec2(dw, dh)),
+                    );
+                });
+        }
+        None => paint_note(ui, "heatmap unavailable for these inputs"),
+    }
+    ui.add_space(TIGHT_GAP);
+    paint_lines(ui, &model.lines);
+}
+
+// ----------------------------------------------------------------------------
+// Sync / folder-merge / audio checklists (per-file rows)
+// ----------------------------------------------------------------------------
+
+/// Paint-ready text of one sync checklist row: checkbox state plus
+/// the display line. Pure; unit-tested.
+pub fn sync_row_text(checked: bool, line: &str) -> String {
+    let box_glyph = if checked { "[x]" } else { "[ ]" };
+    format!("{box_glyph} {line}")
+}
+
+/// Paint-ready text of one skipped sync entry. Pure; unit-tested.
+pub fn sync_skip_text(rel_path: &str, reason: &str) -> String {
+    format!("~ {rel_path} ({reason})")
+}
+
+/// Glyph color of one sync row: copies track blue, deletes red, like
+/// the folder glyphs; frozen palette, no new hues.
+pub fn sync_row_color(action: autocompare_compare::SyncAction, dark: bool) -> egui::Color32 {
+    use autocompare_compare::SyncAction;
+    match action {
+        SyncAction::CopyToRight | SyncAction::CopyToLeft => blue_for(dark),
+        SyncAction::DeleteRight | SyncAction::DeleteLeft => red_for(dark),
+    }
+}
+
+/// The sync plan as per-file checklist rows: each step is a checkbox
+/// row with its glyph, path and action label, then skipped entries
+/// and the honest counts line. Dry-run only; checking rows stages
+/// them, Apply stays a CLI operation.
+pub fn paint_sync_checklist(ui: &mut Ui, list: &mut SyncChecklist) {
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(list.summary()).monospace().weak());
+    if list.truncated {
+        paint_note(
+            ui,
+            "the walk stopped at the depth limit; deeper entries are not planned",
+        );
+    }
+    ui.add_space(TIGHT_GAP);
+    if list.rows.is_empty() {
+        ui.label(RichText::new("(nothing to do: the trees already match the plan)").weak());
+    } else {
+        for row in &mut list.rows {
+            let color = sync_row_color(row.action, dark);
+            let hover = sync_row_text(row.checked, &row.display_line());
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut row.checked, "").on_hover_text(hover);
+                ui.label(
+                    RichText::new(row.glyph().to_string())
+                        .monospace()
+                        .color(color),
+                );
+                ui.label(RichText::new(row.display_line()).monospace());
+                ui.label(RichText::new(row.action_label()).small().weak());
+            });
+        }
+    }
+    if !list.skipped.is_empty() {
+        ui.add_space(TIGHT_GAP);
+        for (path, reason) in &list.skipped {
+            ui.label(
+                RichText::new(sync_skip_text(path, reason))
+                    .monospace()
+                    .small()
+                    .color(dim_for(dark)),
+            );
+        }
+    }
+    ui.label(
+        RichText::new(format!(
+            "{} of {} step(s) selected",
+            list.checked_count(),
+            list.rows.len()
+        ))
+        .small()
+        .weak(),
+    );
+}
+
+/// Glyph color of one folder-merge row: conflicts red, clean merges
+/// green, side takes blue, new dirs dim; frozen palette only.
+pub fn folder_merge_row_color(
+    action: autocompare_compare::TreeMergeAction,
+    dark: bool,
+) -> egui::Color32 {
+    use autocompare_compare::TreeMergeAction;
+    match action {
+        TreeMergeAction::Conflict => red_for(dark),
+        TreeMergeAction::MergedText => green_for(dark),
+        TreeMergeAction::TakeLeft | TreeMergeAction::TakeRight => blue_for(dark),
+        TreeMergeAction::MakeDir => dim_for(dark),
+    }
+}
+
+/// The folder-merge plan as per-file checklist rows: each step is a
+/// checkbox row with its glyph, path and action label, then conflict
+/// paths and the counts line. Dry-run only.
+pub fn paint_folder_merge_checklist(ui: &mut Ui, list: &mut FolderMergeChecklist) {
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(list.summary()).monospace().weak());
+    ui.add_space(TIGHT_GAP);
+    if list.rows.is_empty() {
+        ui.label(RichText::new("(nothing to do: the merge plan is empty)").weak());
+    } else {
+        for row in &mut list.rows {
+            let color = folder_merge_row_color(row.action, dark);
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut row.checked, "");
+                ui.label(
+                    RichText::new(row.glyph().to_string())
+                        .monospace()
+                        .color(color),
+                );
+                ui.label(RichText::new(row.display_line()).monospace());
+                if row.is_conflict() {
+                    ui.label(
+                        RichText::new("needs a decision")
+                            .small()
+                            .color(red_for(dark)),
+                    );
+                } else {
+                    ui.label(RichText::new(row.action_label()).small().weak());
+                }
+            });
+        }
+    }
+    if !list.conflicts.is_empty() {
+        ui.add_space(TIGHT_GAP);
+        ui.label(
+            RichText::new(format!("{} conflict(s):", list.conflicts.len()))
+                .small()
+                .weak(),
+        );
+        for path in &list.conflicts {
+            ui.label(
+                RichText::new(format!("! {path} (conflict)"))
+                    .monospace()
+                    .small()
+                    .color(red_for(dark)),
+            );
+        }
+    }
+    ui.label(
+        RichText::new(format!(
+            "{} of {} step(s) selected",
+            list.checked_count(),
+            list.rows.len()
+        ))
+        .small()
+        .weak(),
+    );
+}
+
+/// Paint-ready text of one audio row: label plus detail. Pure;
+/// unit-tested.
+pub fn audio_row_text(kind: AudioCheckKind, label: &str, detail: &str) -> String {
+    let tag = match kind {
+        AudioCheckKind::LeftConfig => "L",
+        AudioCheckKind::RightConfig => "R",
+        AudioCheckKind::Verdict => "=",
+    };
+    format!("{tag} {label}: {detail}")
+}
+
+/// Color of one audio row: configs dim, identical verdict green,
+/// mismatch red, differing verdict changed-fg; frozen palette only.
+pub fn audio_row_color(
+    kind: AudioCheckKind,
+    identical: bool,
+    mismatch: bool,
+    dark: bool,
+) -> egui::Color32 {
+    match kind {
+        AudioCheckKind::LeftConfig | AudioCheckKind::RightConfig => dim_for(dark),
+        AudioCheckKind::Verdict if mismatch => red_for(dark),
+        AudioCheckKind::Verdict if identical => green_for(dark),
+        AudioCheckKind::Verdict => CHANGED_FG,
+    }
+}
+
+/// The audio compare as checklist rows: one row per stream config
+/// plus the verdict row, each with a checkbox, then the summary.
+pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(list.summary()).monospace().weak());
+    ui.add_space(TIGHT_GAP);
+    if list.rows.is_empty() {
+        ui.label(RichText::new("(no audio facts to show)").weak());
+        return;
+    }
+    for row in &mut list.rows {
+        let color = audio_row_color(row.kind, list.identical, list.config_mismatch, dark);
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut row.checked, "");
+            ui.label(
+                RichText::new(audio_row_text(row.kind, &row.label, &row.detail))
+                    .monospace()
+                    .color(color),
+            );
+        });
+    }
 }
 
 #[cfg(test)]
@@ -1481,5 +1865,123 @@ mod tests {
         assert_eq!(blue_for(false), LIGHT_BLUE);
         assert_eq!(track_for(true), DARK_TRACK);
         assert_eq!(track_for(false), LIGHT_TRACK);
+    }
+
+    fn picture_model_fixture(identical: bool) -> crate::app::PictureCompareModel {
+        crate::app::PictureCompareModel::from_diff(&autocompare_diff::PictureDiff {
+            width_l: 2,
+            height_l: 2,
+            width_r: 3,
+            height_r: 3,
+            overlap_w: 2,
+            overlap_h: 2,
+            differing: if identical { 0 } else { 1 },
+            total: 4,
+            bbox: None,
+            identical,
+        })
+    }
+
+    #[test]
+    fn picture_columns_split_avail_with_floor() {
+        assert_eq!(picture_column_width(800.0), (800.0 - TIGHT_GAP) / 2.0);
+        assert_eq!(picture_column_width(0.0), MIN_HALF);
+        assert_eq!(picture_column_width(100.0), MIN_HALF);
+    }
+
+    #[test]
+    fn picture_sliders_clamp_and_label() {
+        assert_eq!(clamp_overlay_mix(200), 100);
+        assert_eq!(clamp_overlay_mix(30), 30);
+        assert_eq!(clamp_zoom_pct(9), 25);
+        assert_eq!(clamp_zoom_pct(900), 400);
+        assert_eq!(clamp_zoom_pct(150), 150);
+        assert!(zoom_label(100).contains("1.00x"));
+        assert!(overlay_label(30).contains("30% left"));
+        assert!(overlay_label(30).contains("70% right"));
+        assert!(pan_label(32, -16).contains("+32"));
+    }
+
+    #[test]
+    fn picture_status_and_display_size_follow_view() {
+        let clean = picture_model_fixture(true);
+        assert!(picture_status_line(&clean).contains("identical"));
+        let diffed = picture_model_fixture(false);
+        assert!(picture_status_line(&diffed).contains("1 of 4 pixels differ"));
+        let mut view = crate::app::PictureViewState::default();
+        assert_eq!(picture_display_size(100.0, 50.0, &view), (100.0, 50.0));
+        view.set_zoom_pct(200);
+        assert_eq!(picture_display_size(100.0, 50.0, &view), (200.0, 100.0));
+        view.set_zoom_pct(25);
+        assert_eq!(picture_display_size(0.0, 0.0, &view), (1.0, 1.0));
+    }
+
+    #[test]
+    fn sync_row_text_and_colors_map_actions() {
+        use autocompare_compare::SyncAction;
+        assert_eq!(sync_row_text(true, "> a.txt"), "[x] > a.txt");
+        assert_eq!(sync_row_text(false, "> a.txt"), "[ ] > a.txt");
+        assert_eq!(
+            sync_skip_text("b.txt", "already in sync"),
+            "~ b.txt (already in sync)"
+        );
+        assert_eq!(
+            sync_row_color(SyncAction::CopyToRight, true),
+            blue_for(true)
+        );
+        assert_eq!(
+            sync_row_color(SyncAction::CopyToLeft, false),
+            blue_for(false)
+        );
+        assert_eq!(sync_row_color(SyncAction::DeleteRight, true), red_for(true));
+        assert_eq!(
+            sync_row_color(SyncAction::DeleteLeft, false),
+            red_for(false)
+        );
+    }
+
+    #[test]
+    fn folder_merge_colors_flag_conflicts() {
+        use autocompare_compare::TreeMergeAction;
+        assert_eq!(
+            folder_merge_row_color(TreeMergeAction::Conflict, true),
+            red_for(true)
+        );
+        assert_eq!(
+            folder_merge_row_color(TreeMergeAction::MergedText, true),
+            green_for(true)
+        );
+        assert_eq!(
+            folder_merge_row_color(TreeMergeAction::TakeLeft, false),
+            blue_for(false)
+        );
+        assert_eq!(
+            folder_merge_row_color(TreeMergeAction::MakeDir, true),
+            dim_for(true)
+        );
+    }
+
+    #[test]
+    fn audio_row_text_and_colors_follow_verdict() {
+        let left = audio_row_text(AudioCheckKind::LeftConfig, "left", "1.000s");
+        assert!(left.starts_with("L left: "));
+        let verdict = audio_row_text(AudioCheckKind::Verdict, "verdict", "no differences");
+        assert!(verdict.starts_with("= verdict: "));
+        assert_eq!(
+            audio_row_color(AudioCheckKind::Verdict, true, false, true),
+            green_for(true)
+        );
+        assert_eq!(
+            audio_row_color(AudioCheckKind::Verdict, false, true, false),
+            red_for(false)
+        );
+        assert_eq!(
+            audio_row_color(AudioCheckKind::Verdict, false, false, true),
+            CHANGED_FG
+        );
+        assert_eq!(
+            audio_row_color(AudioCheckKind::LeftConfig, false, false, true),
+            dim_for(true)
+        );
     }
 }

@@ -16,12 +16,14 @@ use std::sync::mpsc::{Receiver, channel};
 
 use eframe::egui::{self, RichText, TextureHandle};
 
-use autocompare_compare::{FolderOptions, TextOptions};
+use autocompare_compare::{FolderOptions, SyncAction, TextOptions};
 use autocompare_compare::{
-    JobRunner, PictureOptions, SyncOptions, TableOptions, compare_audio_files,
-    compare_binary_files_aligned, compare_folders, compare_picture_files, compare_table_files,
-    compare_table_files_by_key, compare_text_files, load_lines, plan_sync, plan_tree_merge,
+    JobRunner, PictureOptions, SyncOptions, SyncPlan, TableOptions, TreeMergeAction, TreeMergePlan,
+    compare_audio_files, compare_binary_files_aligned, compare_folders, compare_picture_files,
+    compare_table_files, compare_table_files_by_key, compare_text_files, load_lines, plan_sync,
+    plan_tree_merge,
 };
+use autocompare_diff::{AudioDiff, PictureDiff};
 
 pub use crate::viewmodel::Tab;
 use crate::viewmodel::{self, FolderRow, MergeSummary, TableModel};
@@ -49,10 +51,13 @@ enum CompareResult {
     Hex(Result<(Vec<String>, views_hex::HexCompareView), String>),
     Merge(Result<MergeSummary, String>),
     Table(Result<(TableModel, views_table::TableKeySummary), String>),
-    Sync(Result<Vec<String>, String>),
-    Picture(Result<Vec<String>, String>, Option<(Vec<u8>, u32, u32)>),
-    FolderMerge(Result<Vec<String>, String>),
-    Audio(Result<Vec<String>, String>),
+    Sync(Result<SyncChecklist, String>),
+    Picture(
+        Result<PictureCompareModel, String>,
+        Option<(Vec<u8>, u32, u32)>,
+    ),
+    FolderMerge(Result<FolderMergeChecklist, String>),
+    Audio(Result<AudioChecklist, String>),
 }
 
 /// The GUI's whole state.
@@ -75,10 +80,11 @@ pub struct App {
     pub table_model: Option<TableModel>,
     pub table_view: views_table::TableKeyView,
     pub table_tolerance_text: String,
-    pub sync_model: Option<Vec<String>>,
-    pub picture_model: Option<Vec<String>>,
-    pub folder_merge_model: Option<Vec<String>>,
-    pub audio_model: Option<Vec<String>>,
+    pub sync_model: Option<SyncChecklist>,
+    pub picture_model: Option<PictureCompareModel>,
+    pub picture_view: PictureViewState,
+    pub folder_merge_model: Option<FolderMergeChecklist>,
+    pub audio_model: Option<AudioChecklist>,
     pub error: Option<String>,
     heatmap: Option<TextureHandle>,
     pub dark_mode: bool,
@@ -117,6 +123,7 @@ impl Default for App {
             table_tolerance_text: String::new(),
             sync_model: None,
             picture_model: None,
+            picture_view: PictureViewState::default(),
             folder_merge_model: None,
             audio_model: None,
             error: None,
@@ -308,6 +315,7 @@ impl App {
             Tab::Picture => {
                 std::mem::swap(&mut self.picture.left, &mut self.picture.right);
                 self.picture_model = None;
+                self.picture_view = PictureViewState::default();
                 self.heatmap = None;
                 true
             }
@@ -713,25 +721,19 @@ impl App {
                 None => String::from("table: no results yet"),
             },
             Tab::Sync => match self.sync_model.as_ref() {
-                Some(lines) => format!("sync: {} line(s)", lines.len()),
+                Some(list) => format!("sync: {}", list.summary()),
                 None => String::from("sync: no results yet"),
             },
             Tab::Picture => match self.picture_model.as_ref() {
-                Some(lines) => {
-                    if let Some(first) = lines.first() {
-                        format!("picture: {first}")
-                    } else {
-                        String::from("picture: no results yet")
-                    }
-                }
+                Some(model) => format!("picture: {}", model.status_summary()),
                 None => String::from("picture: no results yet"),
             },
             Tab::FolderMerge => match self.folder_merge_model.as_ref() {
-                Some(lines) => format!("folder-merge: {} line(s)", lines.len()),
+                Some(list) => format!("folder-merge: {}", list.summary()),
                 None => String::from("folder-merge: no results yet"),
             },
             Tab::Audio => match self.audio_model.as_ref() {
-                Some(lines) => format!("audio: {} line(s)", lines.len()),
+                Some(list) => format!("audio: {}", list.summary()),
                 None => String::from("audio: no results yet"),
             },
             Tab::Home => String::from("home: pick Text/Folder/Hex to begin"),
@@ -972,7 +974,7 @@ impl App {
         self.rx = Some(rx);
         let _ = JobRunner::spawn(move |_cancel, _progress| {
             let res = plan_sync(Path::new(&left), Path::new(&right), &SyncOptions::default())
-                .map(|plan| viewmodel::build_sync_summary(&plan))
+                .map(|plan| SyncChecklist::from_plan(&plan))
                 .map_err(|err| err.to_string());
             let _ = tx.send(CompareResult::Sync(res));
             Ok(())
@@ -991,7 +993,7 @@ impl App {
         let _ = JobRunner::spawn(move |_cancel, _progress| {
             let opts = PictureOptions::default();
             let res = compare_picture_files(Path::new(&left), Path::new(&right), &opts)
-                .map(|cmp| viewmodel::build_picture_summary(&cmp.diff))
+                .map(|cmp| PictureCompareModel::from_diff(&cmp.diff))
                 .map_err(|err| err.to_string());
             let hm = load_heatmap_rgba(Path::new(&left), Path::new(&right)).ok();
             let _ = tx.send(CompareResult::Picture(res, hm));
@@ -1009,7 +1011,7 @@ impl App {
         self.rx = Some(rx);
         let _ = JobRunner::spawn(move |_cancel, _progress| {
             let res = plan_tree_merge(Path::new(&base), Path::new(&left), Path::new(&right))
-                .map(|plan| viewmodel::build_folder_merge_summary(&plan))
+                .map(|plan| FolderMergeChecklist::from_plan(&plan))
                 .map_err(|err| err.to_string());
             let _ = tx.send(CompareResult::FolderMerge(res));
             Ok(())
@@ -1026,7 +1028,7 @@ impl App {
         self.rx = Some(rx);
         let _ = JobRunner::spawn(move |_cancel, _progress| {
             let res = compare_audio_files(Path::new(&left), Path::new(&right))
-                .map(|cmp| viewmodel::build_audio_summary(&cmp.diff))
+                .map(|cmp| AudioChecklist::from_diff(&cmp.diff))
                 .map_err(|err| err.to_string());
             let _ = tx.send(CompareResult::Audio(res));
             Ok(())
@@ -1065,6 +1067,591 @@ fn load_heatmap_rgba(left: &Path, right: &Path) -> Result<(Vec<u8>, u32, u32), S
         .ok_or_else(|| format!("{} is not a decodable PNG", right.display()))?;
     let heatmap = autocompare_diff::picture_heatmap(&a, &b);
     Ok(viewmodel::build_heatmap_rgba(&heatmap))
+}
+
+// ----------------------------------------------------------------------------
+// Picture / sync / folder-merge / audio structured models (Wave J-B)
+// ----------------------------------------------------------------------------
+//
+// The run paths for these tabs return structured models instead of
+// plain summary strings: the picture tab keeps its compare result
+// plus view params (mode/zoom/pan/overlay), and the sync,
+// folder-merge and audio tabs keep per-file action rows. Everything
+// here is pure and headless-testable; `views.rs` only paints it.
+
+/// Smallest picture zoom the slider offers, in percent.
+pub const PICTURE_ZOOM_MIN: u32 = 25;
+/// Largest picture zoom the slider offers, in percent.
+pub const PICTURE_ZOOM_MAX: u32 = 400;
+/// Largest overlay mix, in percent (0 = full left, 100 = full right).
+pub const PICTURE_OVERLAY_MAX: u8 = 100;
+/// One pan nudge step, in pixels.
+pub const PICTURE_PAN_STEP: i32 = 32;
+/// Pan clamp, in pixels, so nudges never run away.
+pub const PICTURE_PAN_LIMIT: i32 = 4096;
+
+/// How the picture tab shows the two images.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PictureMode {
+    /// Left and right images in two columns.
+    #[default]
+    SideBySide,
+    /// One heatmap frame with a left/right mix slider.
+    Overlay,
+}
+
+impl PictureMode {
+    /// All modes in tab order, for the paint radio row.
+    pub fn all() -> [PictureMode; 2] {
+        [PictureMode::SideBySide, PictureMode::Overlay]
+    }
+
+    /// Short label for the paint radio row.
+    pub fn label(self) -> &'static str {
+        match self {
+            PictureMode::SideBySide => "side-by-side",
+            PictureMode::Overlay => "overlay",
+        }
+    }
+}
+
+/// View params of the picture tab: layout mode, overlay mix, zoom and
+/// pan. All setters clamp, so paint never sees a wild value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PictureViewState {
+    /// Layout mode.
+    pub mode: PictureMode,
+    /// Overlay mix in percent (0 = full left, 100 = full right).
+    pub overlay_mix: u8,
+    /// Zoom in percent (25..=400).
+    pub zoom_pct: u32,
+    /// Horizontal pan in pixels.
+    pub pan_x: i32,
+    /// Vertical pan in pixels.
+    pub pan_y: i32,
+}
+
+impl Default for PictureViewState {
+    fn default() -> Self {
+        Self {
+            mode: PictureMode::SideBySide,
+            overlay_mix: 50,
+            zoom_pct: 100,
+            pan_x: 0,
+            pan_y: 0,
+        }
+    }
+}
+
+impl PictureViewState {
+    /// Sets the overlay mix, clamped to 0..=100.
+    pub fn set_overlay_mix(&mut self, mix: u8) {
+        self.overlay_mix = mix.min(PICTURE_OVERLAY_MAX);
+    }
+
+    /// Sets the zoom percent, clamped to 25..=400.
+    pub fn set_zoom_pct(&mut self, pct: u32) {
+        self.zoom_pct = pct.clamp(PICTURE_ZOOM_MIN, PICTURE_ZOOM_MAX);
+    }
+
+    /// Moves the pan by `(dx, dy)` pixels, clamped to ±4096.
+    pub fn nudge_pan(&mut self, dx: i32, dy: i32) {
+        self.pan_x = self
+            .pan_x
+            .saturating_add(dx)
+            .clamp(-PICTURE_PAN_LIMIT, PICTURE_PAN_LIMIT);
+        self.pan_y = self
+            .pan_y
+            .saturating_add(dy)
+            .clamp(-PICTURE_PAN_LIMIT, PICTURE_PAN_LIMIT);
+    }
+
+    /// Back to side-by-side at full scale without pan.
+    pub fn reset_view(&mut self) {
+        *self = PictureViewState::default();
+    }
+
+    /// Overlay mix as a 0.0..=1.0 ratio.
+    pub fn overlay_ratio(&self) -> f32 {
+        f32::from(self.overlay_mix) / 100.0
+    }
+
+    /// Zoom as a 0.25..=4.0 scale factor.
+    pub fn zoom_factor(&self) -> f32 {
+        (self.zoom_pct.max(PICTURE_ZOOM_MIN) as f32) / 100.0
+    }
+
+    /// One-line view description for the status bar.
+    pub fn describe(&self) -> String {
+        format!(
+            "{} view, overlay {}%, zoom {}%, pan ({},{})",
+            self.mode.label(),
+            self.overlay_mix,
+            self.zoom_pct,
+            self.pan_x,
+            self.pan_y
+        )
+    }
+}
+
+/// Structured result of one picture compare: the diff fields paint
+/// needs plus the CLI-worded summary lines.
+#[derive(Debug, Clone, Default)]
+pub struct PictureCompareModel {
+    /// Left image width.
+    pub width_l: u32,
+    /// Left image height.
+    pub height_l: u32,
+    /// Right image width.
+    pub width_r: u32,
+    /// Right image height.
+    pub height_r: u32,
+    /// Overlap width paint compares over.
+    pub overlap_w: u32,
+    /// Overlap height paint compares over.
+    pub overlap_h: u32,
+    /// Differing pixels in the overlap.
+    pub differing: u64,
+    /// Total pixels in the overlap.
+    pub total: u64,
+    /// Differing-pixel bounds, when any differ.
+    pub bbox: Option<(u32, u32, u32, u32)>,
+    /// Same dimensions and no differing pixel anywhere.
+    pub identical: bool,
+    /// CLI-worded summary lines, for the details section.
+    pub lines: Vec<String>,
+}
+
+impl PictureCompareModel {
+    /// Builds the model from an engine diff, reusing the CLI-worded
+    /// summary so both clients tell the same story.
+    pub fn from_diff(diff: &PictureDiff) -> Self {
+        Self {
+            width_l: diff.width_l,
+            height_l: diff.height_l,
+            width_r: diff.width_r,
+            height_r: diff.height_r,
+            overlap_w: diff.overlap_w,
+            overlap_h: diff.overlap_h,
+            differing: diff.differing,
+            total: diff.total,
+            bbox: diff.bbox,
+            identical: diff.identical,
+            lines: viewmodel::build_picture_summary(diff),
+        }
+    }
+
+    /// Short verdict for the status bar.
+    pub fn status_summary(&self) -> String {
+        if self.identical {
+            String::from("no differences")
+        } else {
+            let pct = if self.total == 0 {
+                0.0
+            } else {
+                self.differing as f64 / self.total as f64 * 100.0
+            };
+            format!(
+                "{} of {} pixels differ ({pct:.2}%)",
+                self.differing, self.total
+            )
+        }
+    }
+
+    /// First summary line, or a no-results note when empty.
+    pub fn summary_first_line(&self) -> &str {
+        self.lines.first().map_or("no results yet", String::as_str)
+    }
+}
+
+/// One planned sync step as a checklist row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncCheckRow {
+    /// Path relative to the compared roots, '/'-separated.
+    pub rel_path: String,
+    /// Whether the subject is a directory.
+    pub is_dir: bool,
+    /// What the plan would do.
+    pub action: SyncAction,
+    /// Whether the step stays selected for Apply.
+    pub checked: bool,
+}
+
+impl SyncCheckRow {
+    /// Status glyph, like the CLI's: `>` rightwards, `<` leftwards,
+    /// `x` for prune deletes.
+    pub fn glyph(&self) -> char {
+        match self.action {
+            SyncAction::CopyToRight => '>',
+            SyncAction::CopyToLeft => '<',
+            SyncAction::DeleteRight | SyncAction::DeleteLeft => 'x',
+        }
+    }
+
+    /// Plain-English action label for the checklist row.
+    pub fn action_label(&self) -> &'static str {
+        match self.action {
+            SyncAction::CopyToRight => "copy to right",
+            SyncAction::CopyToLeft => "copy to left",
+            SyncAction::DeleteRight => "delete right",
+            SyncAction::DeleteLeft => "delete left",
+        }
+    }
+
+    /// Paint-ready row text: glyph plus path with the directory mark.
+    pub fn display_line(&self) -> String {
+        let mark = if self.is_dir { "/" } else { "" };
+        format!("{} {}{mark}", self.glyph(), self.rel_path)
+    }
+}
+
+/// The sync tab model: per-file action rows plus skips.
+#[derive(Debug, Clone, Default)]
+pub struct SyncChecklist {
+    /// Planned steps as checklist rows, parents before children.
+    pub rows: Vec<SyncCheckRow>,
+    /// Entries left alone: (relative path, plain-English reason).
+    pub skipped: Vec<(String, String)>,
+    /// Whether the walk stopped at the depth limit.
+    pub truncated: bool,
+}
+
+impl SyncChecklist {
+    /// Builds the checklist from an engine plan. Rows start checked;
+    /// skips stay informational and are never rows.
+    pub fn from_plan(plan: &SyncPlan) -> Self {
+        Self {
+            rows: plan
+                .steps
+                .iter()
+                .map(|step| SyncCheckRow {
+                    rel_path: step.rel_path.clone(),
+                    is_dir: step.is_dir,
+                    action: step.action,
+                    checked: true,
+                })
+                .collect(),
+            skipped: plan.skipped.clone(),
+            truncated: plan.truncated,
+        }
+    }
+
+    /// Honest counts line, mirroring the CLI's planned/skipped wording.
+    pub fn summary(&self) -> String {
+        let mut out = format!(
+            "{} step(s) planned, {} skipped",
+            self.rows.len(),
+            self.skipped.len()
+        );
+        if self.truncated {
+            out.push_str(" (truncated at the depth limit)");
+        }
+        out
+    }
+
+    /// Rows still selected for Apply.
+    pub fn checked_count(&self) -> usize {
+        self.rows.iter().filter(|row| row.checked).count()
+    }
+
+    /// Flips one row; false when the index names no row.
+    pub fn set_checked(&mut self, idx: usize, on: bool) -> bool {
+        match self.rows.get_mut(idx) {
+            Some(row) => {
+                row.checked = on;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Selects or clears every row.
+    pub fn set_all(&mut self, on: bool) {
+        for row in &mut self.rows {
+            row.checked = on;
+        }
+    }
+}
+
+/// One planned folder-merge step as a checklist row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderMergeCheckRow {
+    /// Path relative to the merged roots, '/'-separated.
+    pub rel_path: String,
+    /// What the plan would do.
+    pub action: TreeMergeAction,
+    /// Whether the step stays selected for Apply.
+    pub checked: bool,
+}
+
+impl FolderMergeCheckRow {
+    /// Status glyph: `L`/`R` take a side, `M` clean merge,
+    /// `C` conflict, `+` new directory.
+    pub fn glyph(&self) -> char {
+        match self.action {
+            TreeMergeAction::TakeLeft => 'L',
+            TreeMergeAction::TakeRight => 'R',
+            TreeMergeAction::MergedText => 'M',
+            TreeMergeAction::Conflict => 'C',
+            TreeMergeAction::MakeDir => '+',
+        }
+    }
+
+    /// Plain-English action label for the checklist row.
+    pub fn action_label(&self) -> &'static str {
+        match self.action {
+            TreeMergeAction::TakeLeft => "take left",
+            TreeMergeAction::TakeRight => "take right",
+            TreeMergeAction::MergedText => "merged text",
+            TreeMergeAction::Conflict => "conflict",
+            TreeMergeAction::MakeDir => "make dir",
+        }
+    }
+
+    /// Whether this row needs a manual decision.
+    pub fn is_conflict(&self) -> bool {
+        matches!(self.action, TreeMergeAction::Conflict)
+    }
+
+    /// Paint-ready row text: glyph plus path with the directory mark.
+    pub fn display_line(&self) -> String {
+        let mark = if matches!(self.action, TreeMergeAction::MakeDir) {
+            "/"
+        } else {
+            ""
+        };
+        format!("{} {}{mark}", self.glyph(), self.rel_path)
+    }
+}
+
+/// The folder-merge tab model: per-file action rows plus conflicts.
+#[derive(Debug, Clone, Default)]
+pub struct FolderMergeChecklist {
+    /// Planned steps as checklist rows, sorted by relative path.
+    pub rows: Vec<FolderMergeCheckRow>,
+    /// Relative paths with conflicts, sorted.
+    pub conflicts: Vec<String>,
+    /// Entries left out of the output, with reasons.
+    pub skipped: Vec<(String, String)>,
+}
+
+impl FolderMergeChecklist {
+    /// Builds the checklist from an engine plan. Rows start checked;
+    /// conflict rows stay checked so Apply reviews them, never skips
+    /// them silently.
+    pub fn from_plan(plan: &TreeMergePlan) -> Self {
+        Self {
+            rows: plan
+                .steps
+                .iter()
+                .map(|step| FolderMergeCheckRow {
+                    rel_path: step.rel_path.clone(),
+                    action: step.action,
+                    checked: true,
+                })
+                .collect(),
+            conflicts: plan.conflicts.clone(),
+            skipped: plan.skipped.clone(),
+        }
+    }
+
+    /// Honest counts line, mirroring the CLI's wording.
+    pub fn summary(&self) -> String {
+        format!(
+            "{} step(s) planned, {} omitted, {} conflict(s)",
+            self.rows.len(),
+            self.skipped.len(),
+            self.conflicts.len()
+        )
+    }
+
+    /// Rows still selected for Apply.
+    pub fn checked_count(&self) -> usize {
+        self.rows.iter().filter(|row| row.checked).count()
+    }
+
+    /// Flips one row; false when the index names no row.
+    pub fn set_checked(&mut self, idx: usize, on: bool) -> bool {
+        match self.rows.get_mut(idx) {
+            Some(row) => {
+                row.checked = on;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Selects or clears every row.
+    pub fn set_all(&mut self, on: bool) {
+        for row in &mut self.rows {
+            row.checked = on;
+        }
+    }
+}
+
+/// Which audio fact one checklist row carries.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AudioCheckKind {
+    /// Left stream configuration.
+    #[default]
+    LeftConfig,
+    /// Right stream configuration.
+    RightConfig,
+    /// The compare verdict.
+    Verdict,
+}
+
+/// One audio fact as a checklist row.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AudioCheckRow {
+    /// Which fact this row carries.
+    pub kind: AudioCheckKind,
+    /// Short row label.
+    pub label: String,
+    /// Row detail (config text or verdict text).
+    pub detail: String,
+    /// Whether the row stays selected.
+    pub checked: bool,
+}
+
+/// The audio tab model: per-stream config rows plus a verdict row.
+#[derive(Debug, Clone, Default)]
+pub struct AudioChecklist {
+    /// Config rows for both streams plus the verdict row.
+    pub rows: Vec<AudioCheckRow>,
+    /// Same configuration and no differing sample anywhere.
+    pub identical: bool,
+    /// Sample rates or channel counts differ; samples are not comparable.
+    pub config_mismatch: bool,
+}
+
+impl AudioChecklist {
+    /// Builds the checklist from an engine diff: one row per stream
+    /// config plus one verdict row.
+    pub fn from_diff(diff: &AudioDiff) -> Self {
+        let left = AudioCheckRow {
+            kind: AudioCheckKind::LeftConfig,
+            label: String::from("left"),
+            detail: format!(
+                "{:.3}s, {} Hz, {} channel(s)",
+                diff.duration_l, diff.sample_rate_l, diff.channels_l
+            ),
+            checked: true,
+        };
+        let right = AudioCheckRow {
+            kind: AudioCheckKind::RightConfig,
+            label: String::from("right"),
+            detail: format!(
+                "{:.3}s, {} Hz, {} channel(s)",
+                diff.duration_r, diff.sample_rate_r, diff.channels_r
+            ),
+            checked: true,
+        };
+        let verdict = if diff.config_mismatch {
+            AudioCheckRow {
+                kind: AudioCheckKind::Verdict,
+                label: String::from("verdict"),
+                detail: String::from(
+                    "not comparable: stream configurations differ; sample comparison skipped",
+                ),
+                checked: true,
+            }
+        } else if diff.identical {
+            AudioCheckRow {
+                kind: AudioCheckKind::Verdict,
+                label: String::from("verdict"),
+                detail: String::from("no differences"),
+                checked: true,
+            }
+        } else {
+            let at = diff.first_diff_at.map_or_else(
+                || String::from("first difference: -"),
+                |at| format!("first difference at {at:.3}s"),
+            );
+            let pct = if diff.windows_total > 0 {
+                diff.windows_differing as f64 / diff.windows_total as f64 * 100.0
+            } else {
+                0.0
+            };
+            AudioCheckRow {
+                kind: AudioCheckKind::Verdict,
+                label: String::from("verdict"),
+                detail: format!(
+                    "{at}; differing 10ms windows: {}/{} ({pct:.2}%)",
+                    diff.windows_differing, diff.windows_total
+                ),
+                checked: true,
+            }
+        };
+        Self {
+            rows: vec![left, right, verdict],
+            identical: diff.identical,
+            config_mismatch: diff.config_mismatch,
+        }
+    }
+
+    /// Honest one-line verdict for the status bar.
+    pub fn summary(&self) -> String {
+        if self.config_mismatch {
+            String::from("not comparable: config mismatch")
+        } else if self.identical {
+            String::from("no differences")
+        } else {
+            self.rows
+                .iter()
+                .find(|row| row.kind == AudioCheckKind::Verdict)
+                .map_or_else(|| String::from("compared"), |row| row.detail.clone())
+        }
+    }
+
+    /// Flips one row; false when the index names no row.
+    pub fn set_checked(&mut self, idx: usize, on: bool) -> bool {
+        match self.rows.get_mut(idx) {
+            Some(row) => {
+                row.checked = on;
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+impl App {
+    /// Switches the picture layout mode, keeping zoom/pan/overlay.
+    pub fn set_picture_mode(&mut self, mode: PictureMode) {
+        self.picture_view.mode = mode;
+        self.status = format!("picture: {} view", mode.label());
+    }
+
+    /// Sets the overlay mix (0 = full left, 100 = full right).
+    pub fn set_picture_overlay(&mut self, mix: u8) {
+        self.picture_view.set_overlay_mix(mix);
+        self.status = format!("picture overlay: {}%", self.picture_view.overlay_mix);
+    }
+
+    /// Sets the picture zoom percent (clamped 25..=400).
+    pub fn set_picture_zoom(&mut self, pct: u32) {
+        self.picture_view.set_zoom_pct(pct);
+        self.status = format!("picture zoom: {}%", self.picture_view.zoom_pct);
+    }
+
+    /// Nudges the picture pan by one step in a direction.
+    pub fn nudge_picture_pan(&mut self, dx: i32, dy: i32) {
+        self.picture_view.nudge_pan(
+            dx.saturating_mul(PICTURE_PAN_STEP),
+            dy.saturating_mul(PICTURE_PAN_STEP),
+        );
+        self.status = format!(
+            "picture pan: ({},{})",
+            self.picture_view.pan_x, self.picture_view.pan_y
+        );
+    }
+
+    /// Resets the picture view to side-by-side at full scale.
+    pub fn reset_picture_view(&mut self) {
+        self.picture_view.reset_view();
+        self.status = String::from("picture view reset");
+    }
 }
 
 impl eframe::App for App {
@@ -1168,10 +1755,10 @@ impl eframe::App for App {
                     },
                     CompareResult::Sync(res) => match res {
                         Ok(model) => {
-                            let n = model.len();
+                            let n = model.rows.len();
                             self.sync_model = Some(model);
                             self.error = None;
-                            self.status = format!("sync plan done: {n} line(s)");
+                            self.status = format!("sync plan done: {n} step(s)");
                         }
                         Err(err) => {
                             self.sync_model = None;
@@ -1182,10 +1769,10 @@ impl eframe::App for App {
                     CompareResult::Picture(res, hm) => {
                         match res {
                             Ok(model) => {
-                                let n = model.len();
+                                let summary = model.status_summary();
                                 self.picture_model = Some(model);
                                 self.error = None;
-                                self.status = format!("picture compare done: {n} line(s)");
+                                self.status = format!("picture compare done: {summary}");
                             }
                             Err(err) => {
                                 self.picture_model = None;
@@ -1209,10 +1796,10 @@ impl eframe::App for App {
                     }
                     CompareResult::FolderMerge(res) => match res {
                         Ok(model) => {
-                            let n = model.len();
+                            let n = model.rows.len();
                             self.folder_merge_model = Some(model);
                             self.error = None;
-                            self.status = format!("folder merge done: {n} line(s)");
+                            self.status = format!("folder merge done: {n} step(s)");
                         }
                         Err(err) => {
                             self.folder_merge_model = None;
@@ -1222,10 +1809,10 @@ impl eframe::App for App {
                     },
                     CompareResult::Audio(res) => match res {
                         Ok(model) => {
-                            let n = model.len();
+                            let n = model.rows.len();
                             self.audio_model = Some(model);
                             self.error = None;
-                            self.status = format!("audio compare done: {n} line(s)");
+                            self.status = format!("audio compare done: {n} row(s)");
                         }
                         Err(err) => {
                             self.audio_model = None;
@@ -1730,8 +2317,8 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Sync => {
-                    if let Some(lines) = self.sync_model.as_ref() {
-                        views::paint_lines(ui, lines);
+                    if let Some(list) = self.sync_model.as_mut() {
+                        views::paint_sync_checklist(ui, list);
                     } else {
                         ui.label(
                             RichText::new("no sync plan yet: type both folder paths and Compare.")
@@ -1740,8 +2327,27 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Picture => {
-                    if let Some(lines) = self.picture_model.as_ref() {
-                        views::paint_picture(ui, lines, self.heatmap.as_ref());
+                    if self.picture_model.is_some() {
+                        let mut view = self.picture_view;
+                        let mut changed = false;
+                        if let Some(model) = self.picture_model.as_ref() {
+                            views::paint_picture_compare(
+                                ui,
+                                model,
+                                &mut view,
+                                self.heatmap.as_ref(),
+                            );
+                        }
+                        if view != self.picture_view {
+                            self.picture_view = view;
+                            changed = true;
+                        }
+                        if changed {
+                            self.status = format!(
+                                "picture view: {}",
+                                self.picture_view.describe()
+                            );
+                        }
                     } else {
                         ui.label(
                             RichText::new(
@@ -1752,8 +2358,8 @@ impl eframe::App for App {
                     }
                 }
                 Tab::FolderMerge => {
-                    if let Some(lines) = self.folder_merge_model.as_ref() {
-                        views::paint_lines(ui, lines);
+                    if let Some(list) = self.folder_merge_model.as_mut() {
+                        views::paint_folder_merge_checklist(ui, list);
                     } else {
                         ui.label(
                             RichText::new(
@@ -1764,8 +2370,8 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Audio => {
-                    if let Some(lines) = self.audio_model.as_ref() {
-                        views::paint_lines(ui, lines);
+                    if let Some(list) = self.audio_model.as_mut() {
+                        views::paint_audio_checklist(ui, list);
                     } else {
                         ui.label(
                             RichText::new("no audio results yet: type both audio paths and Compare.")
@@ -2225,5 +2831,267 @@ mod tests {
         app.set_folder_sync_mode(SyncModeChoice::Mirror);
         assert!(!app.folder_can_apply());
         assert!(app.status.contains("Mirror"));
+    }
+
+    fn picture_diff(
+        identical: bool,
+        differing: u64,
+        total: u64,
+        bbox: Option<(u32, u32, u32, u32)>,
+    ) -> autocompare_diff::PictureDiff {
+        autocompare_diff::PictureDiff {
+            width_l: 2,
+            height_l: 2,
+            width_r: 2,
+            height_r: 2,
+            overlap_w: 2,
+            overlap_h: 2,
+            differing,
+            total,
+            bbox,
+            identical,
+        }
+    }
+
+    #[test]
+    fn picture_view_defaults_clamp_and_describe() {
+        let mut view = PictureViewState::default();
+        assert_eq!(view.mode, PictureMode::SideBySide);
+        assert_eq!(view.overlay_mix, 50);
+        assert_eq!(view.zoom_pct, 100);
+        assert_eq!((view.pan_x, view.pan_y), (0, 0));
+        assert_eq!(PictureMode::all().len(), 2);
+        view.set_overlay_mix(200);
+        assert_eq!(view.overlay_mix, 100);
+        view.set_overlay_mix(30);
+        assert_eq!(view.overlay_mix, 30);
+        assert!((view.overlay_ratio() - 0.3).abs() < 0.001);
+        view.set_zoom_pct(9);
+        assert_eq!(view.zoom_pct, PICTURE_ZOOM_MIN);
+        view.set_zoom_pct(900);
+        assert_eq!(view.zoom_pct, PICTURE_ZOOM_MAX);
+        assert!((view.zoom_factor() - 4.0).abs() < 0.001);
+        view.nudge_pan(PICTURE_PAN_STEP, -PICTURE_PAN_STEP);
+        assert_eq!((view.pan_x, view.pan_y), (32, -32));
+        view.nudge_pan(1_000_000, 0);
+        assert_eq!(view.pan_x, PICTURE_PAN_LIMIT);
+        view.reset_view();
+        assert_eq!(view, PictureViewState::default());
+        assert!(view.describe().contains("side-by-side"));
+    }
+
+    #[test]
+    fn picture_model_from_diff_maps_fields_and_verdict() {
+        let model = PictureCompareModel::from_diff(&picture_diff(false, 1, 4, Some((1, 0, 1, 0))));
+        assert_eq!((model.width_l, model.height_l), (2, 2));
+        assert_eq!((model.overlap_w, model.overlap_h), (2, 2));
+        assert_eq!((model.differing, model.total), (1, 4));
+        assert_eq!(model.bbox, Some((1, 0, 1, 0)));
+        assert!(!model.identical);
+        assert!(model.status_summary().contains("1 of 4 pixels differ"));
+        assert!(model.status_summary().contains("25.00%"));
+        assert!(!model.lines.is_empty());
+        assert!(model.summary_first_line().contains("2x2"));
+        let clean = PictureCompareModel::from_diff(&picture_diff(true, 0, 4, None));
+        assert!(clean.identical);
+        assert_eq!(clean.status_summary(), "no differences");
+        let empty = PictureCompareModel::from_diff(&picture_diff(false, 0, 0, None));
+        assert!(empty.status_summary().contains("0.00%"));
+    }
+
+    #[test]
+    fn picture_view_setters_report_status() {
+        let mut app = App::default();
+        app.set_tab(Tab::Picture);
+        app.set_picture_mode(PictureMode::Overlay);
+        assert_eq!(app.picture_view.mode, PictureMode::Overlay);
+        assert!(app.status.contains("overlay view"));
+        app.set_picture_overlay(200);
+        assert_eq!(app.picture_view.overlay_mix, 100);
+        app.set_picture_zoom(9);
+        assert_eq!(app.picture_view.zoom_pct, PICTURE_ZOOM_MIN);
+        assert!(app.status.contains("25%"));
+        app.nudge_picture_pan(1, 0);
+        assert_eq!(app.picture_view.pan_x, PICTURE_PAN_STEP);
+        assert!(app.status.contains("picture pan"));
+        app.reset_picture_view();
+        assert_eq!(app.picture_view, PictureViewState::default());
+        // Swap clears the model and resets the view.
+        app.picture_model = Some(PictureCompareModel::from_diff(&picture_diff(
+            true, 0, 1, None,
+        )));
+        app.set_picture_zoom(200);
+        assert!(app.swap_sides());
+        assert!(app.picture_model.is_none());
+        assert_eq!(app.picture_view, PictureViewState::default());
+    }
+
+    #[test]
+    fn picture_status_line_uses_model_verdict() {
+        let mut app = App::default();
+        app.set_tab(Tab::Picture);
+        assert!(app.status_line().contains("no results yet"));
+        app.picture_model = Some(PictureCompareModel::from_diff(&picture_diff(
+            true, 0, 1, None,
+        )));
+        assert!(app.status_line().contains("no differences"));
+        app.picture_model = Some(PictureCompareModel::from_diff(&picture_diff(
+            false, 3, 4, None,
+        )));
+        assert!(app.status_line().contains("3 of 4 pixels differ"));
+    }
+
+    fn sync_plan_fixture() -> autocompare_compare::SyncPlan {
+        autocompare_compare::SyncPlan {
+            steps: vec![
+                autocompare_compare::SyncStep {
+                    rel_path: "new.txt".to_string(),
+                    is_dir: false,
+                    action: autocompare_compare::SyncAction::CopyToRight,
+                },
+                autocompare_compare::SyncStep {
+                    rel_path: "old/".to_string(),
+                    is_dir: true,
+                    action: autocompare_compare::SyncAction::DeleteLeft,
+                },
+            ],
+            skipped: vec![("same.txt".to_string(), "already in sync".to_string())],
+            truncated: false,
+        }
+    }
+
+    #[test]
+    fn sync_checklist_from_plan_rows_glyphs_and_toggles() {
+        let mut list = SyncChecklist::from_plan(&sync_plan_fixture());
+        assert_eq!(list.rows.len(), 2);
+        assert_eq!(list.checked_count(), 2);
+        let Some(first) = list.rows.first() else {
+            return;
+        };
+        assert_eq!(first.glyph(), '>');
+        assert_eq!(first.action_label(), "copy to right");
+        assert_eq!(first.display_line(), "> new.txt");
+        let Some(second) = list.rows.get(1) else {
+            return;
+        };
+        assert_eq!(second.glyph(), 'x');
+        assert!(second.display_line().ends_with('/'));
+        assert_eq!(list.summary(), "2 step(s) planned, 1 skipped");
+        assert!(list.set_checked(0, false));
+        assert_eq!(list.checked_count(), 1);
+        assert!(!list.set_checked(9, true));
+        list.set_all(true);
+        assert_eq!(list.checked_count(), 2);
+    }
+
+    #[test]
+    fn sync_status_line_uses_checklist_summary() {
+        let mut app = App::default();
+        app.set_tab(Tab::Sync);
+        assert!(app.status_line().contains("no results yet"));
+        app.sync_model = Some(SyncChecklist::from_plan(&sync_plan_fixture()));
+        let line = app.status_line();
+        assert!(line.contains("2 step(s) planned, 1 skipped"));
+    }
+
+    fn merge_plan_fixture() -> autocompare_compare::TreeMergePlan {
+        autocompare_compare::TreeMergePlan {
+            steps: vec![
+                autocompare_compare::TreeMergeStep {
+                    rel_path: "keep.txt".to_string(),
+                    action: autocompare_compare::TreeMergeAction::TakeLeft,
+                    merged: None,
+                },
+                autocompare_compare::TreeMergeStep {
+                    rel_path: "clash.txt".to_string(),
+                    action: autocompare_compare::TreeMergeAction::Conflict,
+                    merged: None,
+                },
+            ],
+            conflicts: vec!["clash.txt".to_string()],
+            skipped: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn folder_merge_checklist_flags_conflicts() {
+        let mut list = FolderMergeChecklist::from_plan(&merge_plan_fixture());
+        assert_eq!(list.rows.len(), 2);
+        let Some(first) = list.rows.first() else {
+            return;
+        };
+        assert_eq!(first.glyph(), 'L');
+        assert_eq!(first.action_label(), "take left");
+        assert!(!first.is_conflict());
+        let Some(second) = list.rows.get(1) else {
+            return;
+        };
+        assert!(second.is_conflict());
+        assert_eq!(second.display_line(), "C clash.txt");
+        assert_eq!(
+            list.summary(),
+            "2 step(s) planned, 0 omitted, 1 conflict(s)"
+        );
+        assert!(list.set_checked(1, false));
+        assert_eq!(list.checked_count(), 1);
+        assert!(!list.set_checked(7, false));
+        list.set_all(false);
+        assert_eq!(list.checked_count(), 0);
+        let mut app = App::default();
+        app.set_tab(Tab::FolderMerge);
+        app.folder_merge_model = Some(list);
+        assert!(app.status_line().contains("1 conflict(s)"));
+    }
+
+    fn audio_diff_fixture(
+        identical: bool,
+        mismatch: bool,
+        first: Option<f64>,
+    ) -> autocompare_diff::AudioDiff {
+        autocompare_diff::AudioDiff {
+            sample_rate_l: 44_100,
+            sample_rate_r: if mismatch { 48_000 } else { 44_100 },
+            channels_l: 1,
+            channels_r: 1,
+            duration_l: 1.0,
+            duration_r: 1.0,
+            config_mismatch: mismatch,
+            first_diff_at: first,
+            windows_total: 100,
+            windows_differing: if identical { 0 } else { 1 },
+            identical,
+        }
+    }
+
+    #[test]
+    fn audio_checklist_rows_cover_configs_and_verdict() {
+        let list = AudioChecklist::from_diff(&audio_diff_fixture(true, false, None));
+        assert_eq!(list.rows.len(), 3);
+        assert!(list.identical);
+        assert_eq!(list.summary(), "no differences");
+        let Some(left) = list.rows.first() else {
+            return;
+        };
+        assert_eq!(left.kind, AudioCheckKind::LeftConfig);
+        assert!(left.detail.contains("44100 Hz"));
+        let mismatch = AudioChecklist::from_diff(&audio_diff_fixture(false, true, None));
+        assert!(mismatch.config_mismatch);
+        assert!(mismatch.summary().contains("not comparable"));
+        assert!(
+            mismatch
+                .rows
+                .iter()
+                .any(|row| row.detail.contains("not comparable"))
+        );
+        let diffed = AudioChecklist::from_diff(&audio_diff_fixture(false, false, Some(0.5)));
+        assert!(diffed.summary().contains("0.500s"));
+        assert!(diffed.summary().contains("1/100"));
+        let mut toggled = diffed;
+        assert!(toggled.set_checked(2, false));
+        assert!(!toggled.set_checked(9, false));
+        let mut app = App::default();
+        app.set_tab(Tab::Audio);
+        app.audio_model = Some(toggled);
+        assert!(app.status_line().contains("0.500s"));
     }
 }
