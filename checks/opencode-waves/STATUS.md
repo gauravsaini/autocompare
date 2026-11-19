@@ -283,3 +283,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 11 proof pass
 - checks/gui-int harness PASS 9914B, tests 117 green. INT live final commit pending.
+
+## Wave F poll 12 report pending
+- INT live 04:27, harness outputs present, REPORT.md pending. No commit yet.
