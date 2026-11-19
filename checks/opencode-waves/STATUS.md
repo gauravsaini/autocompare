@@ -586,3 +586,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 02 planning phase
 - All 3 live, tree clean. A planning real-use wiring (reading app/views read-only ok). B reading audio model. C release check.
 - No edits yet. Wait.
+
+## Wave J poll 03 scoping
+- All 3 live, tree clean. A scoping real-use (app/views refs). B paint_lines refs for picture/checklists. C release baseline check.
+- No edits yet. Wait.
