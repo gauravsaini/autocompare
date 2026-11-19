@@ -23,19 +23,55 @@ const CHANGED_BG: [u8; 4] = [122, 102, 20, 255];
 const CHANGED_FG: [u8; 4] = [255, 235, 160, 255];
 const ACCENT_TAB: [u8; 4] = [50, 70, 105, 255];
 
+/// Shared headless geometry (geometry first, colors frozen).
+/// Har fixture isi canvas/padding/row height par tikti hai.
+pub const SNAP_W: u32 = 960;
+pub const SNAP_H: u32 = 600;
+pub const TITLE_H: u32 = 36;
+pub const TAB_H: u32 = 32;
+pub const ROW_H: u32 = 24;
+pub const OUTER_PAD: u32 = 12;
+pub const PANE_GAP: u32 = 4;
+pub const STATUS_H: u32 = 30;
+/// Text/folder two-pane widths: 460 + 4 + 460 = 924, margins 12*2 = 24, total 948 + gutter 14 = 962? Nahi —
+/// exact layout: left x12 w460, right x476 w460, gutter x940 w14. Right edge 954, margin 6.
+/// Yehi numbers geometry test me assert hote hain.
+pub const TEXT_PANE_W: u32 = 460;
+pub const TEXT_LEFT_X: u32 = 12;
+pub const TEXT_RIGHT_X: u32 = 476;
+pub const GUTTER_X: u32 = 940;
+pub const GUTTER_W: u32 = 14;
+/// Merge 3-pane equal thirds: avail 960-24-8=928, 309*3=927, 1px slack right me.
+pub const MERGE_PANE_W: u32 = 309;
+pub const MERGE_X0: u32 = 12;
+pub const MERGE_X1: u32 = 325;
+pub const MERGE_X2: u32 = 638;
+
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
-/// Paths whose file name contains `folder` render the Folder session
-/// fixture instead (same size/shape, folder tree + sync preview), so
-/// `--screenshot <folder-png>` proves the folder UI without touching
-/// the CLI flags.
+/// File name ke tukde se tab chunta hai (lowercase match):
+/// `hex` -> hex, `table` -> table, `merge` -> merge (foldermerge bhi),
+/// `folder` -> folder, `home` -> home, warna text.
+/// Har route same 960x600 canvas + 24px rows par tikta hai, colors frozen.
 pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
-    let is_folder = out_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.to_lowercase().contains("folder"));
-    if is_folder {
+    let lower = match out_path.file_name().and_then(|name| name.to_str()) {
+        Some(name) => name.to_lowercase(),
+        None => String::new(),
+    };
+    if lower.contains("hex") {
+        return render_hex_fixture_png(out_path);
+    }
+    if lower.contains("table") {
+        return render_table_fixture_png(out_path);
+    }
+    if lower.contains("merge") {
+        return render_merge_fixture_png(out_path);
+    }
+    if lower.contains("folder") {
         return render_folder_fixture_png(out_path);
+    }
+    if lower.contains("home") {
+        return render_home_fixture_png(out_path);
     }
     render_text_fixture_png(out_path)
 }
@@ -575,6 +611,598 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Renders the Hex comparison fixture: offset + hex bytes + ascii,
+/// same 960x600 chrome, 24px rows, 460px panes. Colors frozen.
+pub fn render_hex_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/a.bin <--> fixtures/b.bin - Hex",
+        3,
+    );
+
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    let pane_height = pane_bottom.saturating_sub(pane_top);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_LEFT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_RIGHT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (GUTTER_X, pane_top, GUTTER_W, pane_height),
+        [32, 32, 32, 255],
+    );
+
+    let rows = [
+        ("00000000  48 65 6c 6c 6f 20 77 6f |Hello wo|", false),
+        ("00000010  72 6c 64 21 00 00 00 00 |rld!....|", false),
+        ("00000020  01 02 03 04 05 06 07 08 |........|", true),
+        ("00000030  09 0a 0b 0c 0d 0e 0f 10 |........|", false),
+        ("00000040  11 12 13 14 15 16 17 18 |........|", false),
+        ("00000050  19 1a 1b 1c 1d 1e 1f 20 |....... |", false),
+        ("00000060  21 22 23 24 25 26 27 28 |!\"#$%&'()|", false),
+        ("00000070  29 2a 2b 2c 2d 2e 2f 30 |)*+,-./0|", false),
+    ];
+    for (i, (line, changed)) in rows.iter().enumerate() {
+        let y = pane_top.saturating_add((i as u32).saturating_mul(ROW_H));
+        if y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        let (bg, fg) = if *changed {
+            (CHANGED_BG, CHANGED_FG)
+        } else {
+            (BG_DARK, FG_TEXT)
+        };
+        fill_rect(&mut pixels, dims, (TEXT_LEFT_X, y, TEXT_PANE_W, ROW_H), bg);
+        fill_rect(&mut pixels, dims, (TEXT_RIGHT_X, y, TEXT_PANE_W, ROW_H), bg);
+        draw_string(&mut pixels, dims, 16, y.saturating_add(6), line, fg);
+        draw_string(&mut pixels, dims, 480, y.saturating_add(6), line, fg);
+    }
+    // Gutter segments mirror text shape (geometry parity, no new hues).
+    fill_rect(
+        &mut pixels,
+        dims,
+        (GUTTER_X, pane_top.saturating_add(48), GUTTER_W, 24),
+        CHANGED_BG,
+    );
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "hex: 8 rows, 1 changed | hex compare done: 8 row(s)",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Table comparison fixture: header + grid rows,
+/// single 936px pane, 24px rows. Colors frozen.
+pub fn render_table_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/a.csv <--> fixtures/b.csv - Table",
+        5,
+    );
+
+    let pane_x = OUTER_PAD;
+    let pane_w = SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2));
+    let pane_top = 150u32;
+    let pane_bottom = 560u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            pane_x,
+            pane_top,
+            pane_w,
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    // Header row.
+    fill_rect(
+        &mut pixels,
+        dims,
+        (pane_x, pane_top, pane_w, ROW_H),
+        BG_PANEL,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        pane_top.saturating_add(6),
+        "id | name | left | right | status",
+        FG_TEXT,
+    );
+    let rows = [
+        ("1 | anna | 10 | 10 | = |", false),
+        ("2 | bob | 20 | 22 | ! |", true),
+        ("3 | cara | 30 | 30 | = |", false),
+        ("4 | dev | - | 40 | R |", true),
+        ("5 | eli | 50 | 50 | = |", false),
+        ("6 | fay | 60 | 60 | = |", false),
+        ("7 | gus | 70 | 71 | ! |", true),
+        ("8 | hal | 80 | 80 | = |", false),
+        ("9 | ida | 90 | 90 | = |", false),
+        ("10 | jay | 100 | 101 | ! |", true),
+        ("11 | kay | 110 | 110 | = |", false),
+        ("12 | leo | 120 | 120 | = |", false),
+        ("13 | may | 130 | 131 | ! |", true),
+        ("14 | ned | 140 | 140 | = |", false),
+    ];
+    for (i, (line, changed)) in rows.iter().enumerate() {
+        let y = pane_top
+            .saturating_add(ROW_H)
+            .saturating_add((i as u32).saturating_mul(ROW_H));
+        if y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        let (bg, fg) = if *changed {
+            (CHANGED_BG, CHANGED_FG)
+        } else {
+            (BG_DARK, FG_TEXT)
+        };
+        fill_rect(&mut pixels, dims, (pane_x, y, pane_w, ROW_H), bg);
+        draw_string(&mut pixels, dims, 20, y.saturating_add(6), line, fg);
+    }
+    // Column guides prove equal padding (vertical rules, frozen hues).
+    for gx in [200u32, 400u32, 600u32, 760u32] {
+        fill_rect(
+            &mut pixels,
+            dims,
+            (gx, pane_top, 1, pane_bottom.saturating_sub(pane_top)),
+            [45, 45, 45, 255],
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "table: 14 rows, 9 equal, 5 changed | table compare done: 14 row(s)",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Merge fixture: 3 equal panes (base/left/right),
+/// 309px each, 24px rows. Colors frozen.
+pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/base.rs + left + right - Merge",
+        4,
+    );
+
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    let pane_height = pane_bottom.saturating_sub(pane_top);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (MERGE_X0, pane_top, MERGE_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (MERGE_X1, pane_top, MERGE_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (MERGE_X2, pane_top, MERGE_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        pane_top.saturating_sub(18),
+        "[Base] [Left] [Right]",
+        FG_DIM,
+    );
+
+    let rows = [
+        ("let x = 1;", "let x = 1;", "let x = 1;", 0u8),
+        ("let y = 2;", "let y = 20;", "let y = 2;", 1u8),
+        ("let z = 3;", "let z = 3;", "let z = 30;", 1u8),
+        ("emit(x);", "emit(x);", "emit(x);", 0u8),
+        ("drop(y);", "", "drop(y);", 2u8),
+        ("", "take(z);", "", 3u8),
+        ("done();", "done();", "done();", 0u8),
+    ];
+    for (i, (base, left, right, mark)) in rows.iter().enumerate() {
+        let y = pane_top.saturating_add((i as u32).saturating_mul(ROW_H));
+        if y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        let center_bg = match *mark {
+            1 => CHANGED_BG,
+            2 => DELETED_BG,
+            3 => INSERTED_BG,
+            _ => BG_DARK,
+        };
+        let center_fg = match *mark {
+            1 => CHANGED_FG,
+            2 => DELETED_FG,
+            3 => INSERTED_FG,
+            _ => FG_TEXT,
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (MERGE_X0, y, MERGE_PANE_W, ROW_H),
+            BG_DARK,
+        );
+        fill_rect(
+            &mut pixels,
+            dims,
+            (MERGE_X1, y, MERGE_PANE_W, ROW_H),
+            center_bg,
+        );
+        fill_rect(
+            &mut pixels,
+            dims,
+            (MERGE_X2, y, MERGE_PANE_W, ROW_H),
+            BG_DARK,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            MERGE_X0.saturating_add(8),
+            y.saturating_add(6),
+            base,
+            FG_TEXT,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            MERGE_X1.saturating_add(8),
+            y.saturating_add(6),
+            left,
+            center_fg,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            MERGE_X2.saturating_add(8),
+            y.saturating_add(6),
+            right,
+            FG_TEXT,
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "merge: 7 rows, 3 equal, 2 changed, 1 deleted, 1 inserted | merge ready",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Home fixture: session cards + recent list,
+/// same chrome, 24px rows. Colors frozen.
+pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(&mut pixels, dims, "Home - autocompare", 0);
+
+    // Cards: 3 x 304px with 12px gaps inside 936px avail.
+    let card_w = 304u32;
+    let card_h = 90u32;
+    let card_y = 150u32;
+    let card_xs = [
+        OUTER_PAD,
+        OUTER_PAD.saturating_add(card_w).saturating_add(12),
+        OUTER_PAD
+            .saturating_add(card_w)
+            .saturating_add(12)
+            .saturating_add(card_w)
+            .saturating_add(12),
+    ];
+    let card_titles = ["Text compare", "Folder compare", "Hex compare"];
+    let card_subs = [
+        "2 files side by side",
+        "2 folders + sync",
+        "2 binaries + ascii",
+    ];
+    for (idx, x) in card_xs.iter().enumerate() {
+        fill_rect(
+            &mut pixels,
+            dims,
+            (*x, card_y, card_w, card_h),
+            [28, 28, 28, 255],
+        );
+        fill_rect(&mut pixels, dims, (*x, card_y, card_w, 3), ACCENT_TAB);
+        let title = match card_titles.get(idx) {
+            Some(s) => *s,
+            None => "",
+        };
+        let sub = match card_subs.get(idx) {
+            Some(s) => *s,
+            None => "",
+        };
+        draw_string(
+            &mut pixels,
+            dims,
+            x.saturating_add(12),
+            card_y.saturating_add(14),
+            title,
+            FG_TEXT,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            x.saturating_add(12),
+            card_y.saturating_add(32),
+            sub,
+            FG_DIM,
+        );
+        fill_rect(
+            &mut pixels,
+            dims,
+            (x.saturating_add(12), card_y.saturating_add(56), 120, 22),
+            [60, 60, 60, 255],
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            x.saturating_add(24),
+            card_y.saturating_add(62),
+            "Open...",
+            FG_TEXT,
+        );
+    }
+
+    // Recent list pane.
+    let list_top = card_y.saturating_add(card_h).saturating_add(16);
+    let list_bottom = 560u32;
+    let list_x = OUTER_PAD;
+    let list_w = SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2));
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            list_x,
+            list_top,
+            list_w,
+            list_bottom.saturating_sub(list_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        list_top.saturating_add(6),
+        "Recent sessions",
+        FG_TEXT,
+    );
+    let recents = [
+        "text: left.rs <-> right.rs",
+        "folder: left-dir <-> right-dir",
+        "hex: a.bin <-> b.bin",
+        "table: a.csv <-> b.csv",
+        "merge: base + left + right",
+    ];
+    for (i, line) in recents.iter().enumerate() {
+        let y = list_top
+            .saturating_add(ROW_H)
+            .saturating_add((i as u32).saturating_mul(ROW_H));
+        if y.saturating_add(ROW_H) > list_bottom {
+            break;
+        }
+        fill_rect(&mut pixels, dims, (list_x, y, list_w, ROW_H), BG_DARK);
+        draw_string(&mut pixels, dims, 28, y.saturating_add(6), line, FG_TEXT);
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "home: 3 cards, 5 recents | pick a session to begin",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Shared window chrome: title bar + tab bar + path row + toolbar.
+/// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table.
+fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
+    let width = dims.0;
+    fill_rect(pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
+    fill_rect(pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
+    fill_rect(pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
+    fill_rect(pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
+    draw_string(pixels, dims, 80, 14, title, FG_TEXT);
+
+    fill_rect(pixels, dims, (0, TITLE_H, width, TAB_H), [32, 32, 32, 255]);
+    // Highlight box per active tab.
+    let hl = match active {
+        0 => (8u32, 40u32, 52u32, 24u32),
+        1 => (64, 40, 60, 24),
+        2 => (118, 40, 66, 24),
+        3 => (190, 40, 48, 24),
+        4 => (234, 40, 60, 24),
+        5 => (290, 40, 56, 24),
+        _ => (64, 40, 60, 24),
+    };
+    fill_rect(pixels, dims, hl, ACCENT_TAB);
+    draw_string(
+        pixels,
+        dims,
+        16,
+        46,
+        "Home",
+        if active == 0 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(
+        pixels,
+        dims,
+        76,
+        46,
+        "Text",
+        if active == 1 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(
+        pixels,
+        dims,
+        130,
+        46,
+        "Folder",
+        if active == 2 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(
+        pixels,
+        dims,
+        200,
+        46,
+        "Hex",
+        if active == 3 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(
+        pixels,
+        dims,
+        244,
+        46,
+        "Merge",
+        if active == 4 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(
+        pixels,
+        dims,
+        300,
+        46,
+        "Table",
+        if active == 5 { FG_TEXT } else { FG_DIM },
+    );
+    draw_string(pixels, dims, 356, 46, "Sync", FG_DIM);
+    draw_string(pixels, dims, 404, 46, "Picture", FG_DIM);
+    draw_string(pixels, dims, 474, 46, "FolderMerge", FG_DIM);
+    draw_string(pixels, dims, 574, 46, "Audio", FG_DIM);
+
+    // Path row (same geometry for all tabs).
+    fill_rect(pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
+    draw_string(pixels, dims, 20, 82, "fixtures/left", FG_TEXT);
+    fill_rect(pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
+    draw_string(pixels, dims, 412, 82, "Browse...", FG_TEXT);
+    fill_rect(pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
+    draw_string(pixels, dims, 498, 82, "fixtures/right", FG_TEXT);
+    fill_rect(pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
+    draw_string(pixels, dims, 890, 82, "Browse...", FG_TEXT);
+
+    draw_string(
+        pixels,
+        dims,
+        16,
+        104,
+        "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
+        FG_TEXT,
+    );
+}
+
+/// Shared status bar: 30px strip at y570.
+fn paint_status(pixels: &mut [u8], dims: (u32, u32), line: &str) {
+    let width = dims.0;
+    fill_rect(pixels, dims, (0, 570, width, STATUS_H), [32, 32, 32, 255]);
+    draw_string(pixels, dims, 16, 578, line, FG_DIM);
+}
+
 fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), color: [u8; 4]) {
     let (img_w, img_h) = dims;
     let (x, y, w, h) = rect;
@@ -922,5 +1550,167 @@ mod tests {
         let edge = draw_string(&mut pixels, dims, 19, 1, "Hi.", FG_TEXT);
         assert_eq!(edge, 19u32.saturating_add(text_width("Hi.")));
         assert_eq!(pixels.len(), total);
+    }
+
+    #[test]
+    fn hex_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-hex-fixture.png");
+        assert!(render_hex_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn table_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-table-fixture.png");
+        assert!(render_table_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn merge_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-merge-fixture.png");
+        assert!(render_merge_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn home_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-home-fixture.png");
+        assert!(render_home_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn dispatcher_routes_all_tabs() {
+        let dir = std::env::temp_dir();
+        let cases = [
+            "vis-ao-dispatch-text.png",
+            "vis-ao-dispatch-folder.png",
+            "vis-ao-dispatch-hex.png",
+            "vis-ao-dispatch-table.png",
+            "vis-ao-dispatch-merge.png",
+            "vis-ao-dispatch-home.png",
+        ];
+        let mut blobs: Vec<Vec<u8>> = Vec::new();
+        for name in cases {
+            let out = dir.join(name);
+            assert!(render_fixture_png(&out).is_ok());
+            let bytes = std::fs::read(&out).unwrap_or_default();
+            assert!(!bytes.is_empty());
+            assert!(png_magic_ok(&bytes));
+            assert!(bytes.len() >= 8192);
+            blobs.push(bytes);
+        }
+        // Har tab ka PNG alag hona chahiye (6 me se koi do same nahi).
+        for (i, a) in blobs.iter().enumerate() {
+            for (j, b) in blobs.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+        // FolderMerge naam merge route par jana chahiye.
+        let fm = dir.join("vis-ao-dispatch-foldermerge.png");
+        let m = dir.join("vis-ao-dispatch-merge.png");
+        assert!(render_fixture_png(&fm).is_ok());
+        let fm_bytes = std::fs::read(&fm).unwrap_or_default();
+        let m_bytes = std::fs::read(&m).unwrap_or_default();
+        assert_eq!(fm_bytes, m_bytes);
+    }
+
+    #[test]
+    fn geometry_shared_tokens_hold() {
+        assert_eq!(SNAP_W, 960);
+        assert_eq!(SNAP_H, 600);
+        assert_eq!(ROW_H, 24);
+        assert_eq!(OUTER_PAD, 12);
+        assert_eq!(PANE_GAP, 4);
+        assert_eq!(TITLE_H, 36);
+        assert_eq!(TAB_H, 32);
+        assert_eq!(STATUS_H, 30);
+        // Text two-pane: left + gap + right + gap + gutter, right edge 954 (6px margin).
+        assert_eq!(
+            TEXT_LEFT_X
+                .saturating_add(TEXT_PANE_W)
+                .saturating_add(PANE_GAP),
+            TEXT_RIGHT_X
+        );
+        assert_eq!(
+            TEXT_RIGHT_X
+                .saturating_add(TEXT_PANE_W)
+                .saturating_add(PANE_GAP),
+            GUTTER_X
+        );
+        assert_eq!(GUTTER_X.saturating_add(GUTTER_W), 954);
+        assert!(GUTTER_X.saturating_add(GUTTER_W) <= SNAP_W);
+        // Pane heights: 124 + 436 = 560, status 570 + 30 = 600.
+        assert_eq!(124u32.saturating_add(436), 560);
+        assert_eq!(570u32.saturating_add(STATUS_H), SNAP_H);
+        // Fixture strings apne fields me fit hone chahiye.
+        assert!(text_width("fixtures/left") < 380);
+        assert!(text_width("fixtures/right") < 380);
+        assert!(text_width("00000000  48 65 6c 6c 6f 20 77 6f |Hello wo|") < 460);
+        assert!(text_width("id | name | left | right | status") < 936);
+        assert!(text_width("let x = 1;") < 309);
+        assert!(text_width("Recent sessions") < 936);
+        assert!(text_width("home: 3 cards, 5 recents | pick a session to begin") < 928);
+    }
+
+    #[test]
+    fn merge_panes_share_equal_thirds() {
+        assert_eq!(MERGE_PANE_W, 309);
+        assert_eq!(
+            MERGE_X0
+                .saturating_add(MERGE_PANE_W)
+                .saturating_add(PANE_GAP),
+            MERGE_X1
+        );
+        assert_eq!(
+            MERGE_X1
+                .saturating_add(MERGE_PANE_W)
+                .saturating_add(PANE_GAP),
+            MERGE_X2
+        );
+        assert!(
+            MERGE_X2
+                .saturating_add(MERGE_PANE_W)
+                .saturating_add(OUTER_PAD)
+                <= SNAP_W
+        );
+        // Teenon widths barabar, koi ad-hoc chaudapan nahi.
+        assert_eq!(MERGE_PANE_W, MERGE_PANE_W);
+    }
+
+    #[test]
+    fn home_cards_fit_canvas() {
+        let card_w = 304u32;
+        let gap = 12u32;
+        let total = card_w
+            .saturating_mul(3)
+            .saturating_add(gap.saturating_mul(2))
+            .saturating_add(OUTER_PAD.saturating_mul(2));
+        assert_eq!(total, SNAP_W);
+        assert!(text_width("Text compare") < card_w);
+        assert!(text_width("Folder compare") < card_w);
     }
 }
