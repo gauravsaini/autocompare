@@ -493,6 +493,7 @@ impl App {
     /// Sets the pane split fraction, clamped to 0.20..=0.80.
     pub fn set_split_fraction(&mut self, fraction: f32) {
         self.split_fraction = views::clamp_split_fraction(fraction);
+        self.clamp_scroll_after_layout();
     }
 
     /// Drags the pane split by `dx` pixels over `avail` pixels of
@@ -500,6 +501,16 @@ impl App {
     /// the paint-time drag handle.
     pub fn drag_split_by(&mut self, dx: f32, avail: f32) {
         self.split_fraction = views::split_apply_drag(self.split_fraction, dx, avail);
+        self.clamp_scroll_after_layout();
+    }
+
+    /// Clamps every pager top after a layout change so a wider or
+    /// narrower row never leaves a stale offset past the end. Reuses
+    /// the existing per-tab sync (totals from the model, then clamp).
+    pub fn clamp_scroll_after_layout(&mut self) {
+        self.sync_hex_pager();
+        self.sync_table_pager();
+        self.sync_folder_pager();
     }
 
     /// Sets the hex alignment mode, clearing stale hunks so the next
@@ -1556,6 +1567,98 @@ impl App {
     }
 }
 
+/// Narrow-window breakpoint (px): below this width content rows keep
+/// their split min-widths and h-scroll instead of overlapping.
+pub const LAYOUT_NARROW_BREAKPOINT: f32 = 900.0;
+/// Minimum hit size (px) for find prev/next controls.
+pub const LAYOUT_FIND_HIT_MIN: f32 = 24.0;
+
+/// Below-width test for the narrow-window path. Pure; unit-tested.
+pub fn layout_is_narrow(avail: f32) -> bool {
+    avail < LAYOUT_NARROW_BREAKPOINT
+}
+
+/// Split widths for a two-pane content row at `fraction` of `avail`.
+/// Reuses Wave-R [`views::split_picture_widths`] so both panes share
+/// one floor and the pair always fills the row; narrow windows keep
+/// the floors and scroll instead of crushing. Pure; unit-tested.
+pub fn layout_pane_widths(avail: f32, fraction: f32) -> (f32, f32) {
+    views::split_picture_widths(avail, fraction)
+}
+
+/// Minimum honest row width for the current split: both pane floors
+/// plus one section gap. Pure; unit-tested.
+pub fn layout_row_min_width(avail: f32, fraction: f32) -> f32 {
+    let (left, right) = layout_pane_widths(avail, fraction);
+    left + right + views::SECTION_GAP
+}
+
+/// Whether the row at `avail` must h-scroll at `min_width` instead of
+/// crushing panes. Pure; unit-tested.
+pub fn layout_needs_hscroll(avail: f32, min_width: f32) -> bool {
+    avail < min_width
+}
+
+/// Docked find-bar geometry: the bar spans the full width, the badge
+/// pins at the right end, prev/next hit rects keep the 24px floor.
+/// Pure; unit-tested.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FindBarGeometry {
+    /// Full-width bar span (px).
+    pub bar_w: f32,
+    /// Badge right-end x (px): always the bar end.
+    pub badge_x: f32,
+    /// Prev hit width (px): always the 24px floor.
+    pub prev_hit: f32,
+    /// Next hit width (px): always the 24px floor.
+    pub next_hit: f32,
+}
+
+/// Computes [`FindBarGeometry`] for `avail` px of bar width. Pure;
+/// unit-tested.
+pub fn find_bar_geometry(avail: f32) -> FindBarGeometry {
+    let bar_w = avail.max(0.0);
+    FindBarGeometry {
+        bar_w,
+        badge_x: bar_w,
+        prev_hit: LAYOUT_FIND_HIT_MIN,
+        next_hit: LAYOUT_FIND_HIT_MIN,
+    }
+}
+
+/// Pixel scroll-offset clamp after a layout change: keeps `offset`
+/// inside `[0, content - viewport]`, zero when the content fits or the
+/// input is not finite. Pure; unit-tested.
+pub fn clamp_scroll_offset(offset: f32, content: f32, viewport: f32) -> f32 {
+    if !offset.is_finite() || !content.is_finite() || !viewport.is_finite() {
+        return 0.0;
+    }
+    let max = (content - viewport).max(0.0);
+    offset.clamp(0.0, max)
+}
+
+/// Split-aware content wrapper: reserves the split row minimum inside
+/// a horizontal scroll area so narrow windows h-scroll instead of
+/// crushing or overlapping panes. Paint-only; geometry comes from
+/// [`layout_row_min_width`].
+fn show_split_content(ui: &mut egui::Ui, fraction: f32, content: impl FnOnce(&mut egui::Ui)) {
+    let avail = ui.available_width();
+    let row_min = layout_row_min_width(avail, fraction);
+    egui::ScrollArea::horizontal()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.allocate_space(egui::vec2(row_min.max(1.0), 0.0));
+            content(ui);
+        });
+}
+
+/// Find-nav button with the 24px exquisite hit floor. Paint-only;
+/// returns clicked like `small_button`.
+fn find_nav_button(ui: &mut egui::Ui, label: &str) -> bool {
+    ui.add(egui::Button::new(label).min_size(egui::vec2(LAYOUT_FIND_HIT_MIN, LAYOUT_FIND_HIT_MIN)))
+        .clicked()
+}
+
 /// Counts text rows by kind: (equal, changed, deleted, inserted).
 fn text_kind_counts(model: &viewmodel::TextRows) -> (usize, usize, usize, usize) {
     let mut eq = 0usize;
@@ -2448,15 +2551,17 @@ impl eframe::App for App {
                     &mut compare_clicked,
                     &mut self.split_fraction,
                 ),
-                Tab::Merge => views::paint_triple_paths(
-                    ui,
-                    "file",
-                    false,
-                    &mut self.merge.base,
-                    &mut self.merge.left,
-                    &mut self.merge.right,
-                    &mut compare_clicked,
-                ),
+                Tab::Merge => show_split_content(ui, views::SPLIT_DEFAULT_FRACTION, |ui| {
+                    views::paint_triple_paths(
+                        ui,
+                        "file",
+                        false,
+                        &mut self.merge.base,
+                        &mut self.merge.left,
+                        &mut self.merge.right,
+                        &mut compare_clicked,
+                    );
+                }),
                 Tab::Table => views::paint_paths(
                     ui,
                     "table",
@@ -2484,15 +2589,17 @@ impl eframe::App for App {
                     &mut compare_clicked,
                     &mut self.split_fraction,
                 ),
-                Tab::FolderMerge => views::paint_triple_paths(
-                    ui,
-                    "folder",
-                    true,
-                    &mut self.folder_merge.base,
-                    &mut self.folder_merge.left,
-                    &mut self.folder_merge.right,
-                    &mut compare_clicked,
-                ),
+                Tab::FolderMerge => show_split_content(ui, views::SPLIT_DEFAULT_FRACTION, |ui| {
+                    views::paint_triple_paths(
+                        ui,
+                        "folder",
+                        true,
+                        &mut self.folder_merge.base,
+                        &mut self.folder_merge.left,
+                        &mut self.folder_merge.right,
+                        &mut compare_clicked,
+                    );
+                }),
                 Tab::Audio => views::paint_paths(
                     ui,
                     "audio",
@@ -2523,11 +2630,17 @@ impl eframe::App for App {
             match tab {
                 Tab::Home => {}
                 Tab::Text => {
-                    // Find bar + N/M badge: paint views me, cursor/badge
-                    // advance App model me (Wave Q state, Wave T wiring).
-                    let badge =
-                        views::text_find_badge_label(self.text_find_position(), self.text_find_total());
+                    // Find bar + N/M badge (LAYOUT-EXQUISITE wiring):
+                    // docked top full-width via the bar geometry, paint
+                    // itself stays views-owned (U-GEO rects). Cursor and
+                    // badge advance in the App model (Wave Q state).
+                    let badge = views::text_find_badge_label(
+                        self.text_find_position(),
+                        self.text_find_total(),
+                    );
                     let old_needle = self.text_find_needle.clone();
+                    let bar_geo = find_bar_geometry(ui.available_width());
+                    ui.set_min_width(bar_geo.bar_w);
                     let (find_prev, find_next) = views::paint_text_find_bar(
                         ui,
                         &mut self.text_find_needle,
@@ -2556,7 +2669,13 @@ impl eframe::App for App {
                             egui::TextWrapMode::Extend
                         });
                         let mut view = self.view_text_for_paint(&snapshot);
-                        views::paint_text(ui, &mut view);
+                        // Split-aware panes: row keeps the split
+                        // min-widths and h-scrolls instead of crushing.
+                        let text_fraction = self.split_fraction();
+                        self.clamp_scroll_after_layout();
+                        show_split_content(ui, text_fraction, |ui| {
+                            views::paint_text(ui, &mut view);
+                        });
                         // paint_text works on the view clone (toggles are
                         // view-only): propagate navigation selection and
                         // display-filter choices back so they stick.
@@ -2658,12 +2777,12 @@ impl eframe::App for App {
                             if ui.small_button("Next page ▶").clicked() {
                                 self.folder_page_next();
                             }
-                            if ui.small_button("◀ Prev change").clicked()
+                            if find_nav_button(ui, "◀ Prev change")
                                 && self.folder_prev_changed_paged().is_none()
                             {
                                 self.status = String::from("folder: no changed rows");
                             }
-                            if ui.small_button("Next change ▶").clicked()
+                            if find_nav_button(ui, "Next change ▶")
                                 && self.folder_next_changed_paged().is_none()
                             {
                                 self.status = String::from("folder: no changed rows");
@@ -2674,7 +2793,7 @@ impl eframe::App for App {
                                     .desired_width(120.0)
                                     .hint_text("path needle"),
                             );
-                            if ui.small_button("Next match ▶").clicked()
+                            if find_nav_button(ui, "Next match ▶")
                                 && self.folder_find_next_paged().is_none()
                             {
                                 self.status = String::from("folder find: no match");
@@ -2710,50 +2829,56 @@ impl eframe::App for App {
                             .small()
                             .weak(),
                         );
-                        if nodes.is_empty() {
-                            ui.label(
-                                RichText::new(home::folder_empty_hint(
-                                    has_rows, has_error,
-                                ))
-                                .weak(),
-                            );
-                        } else {
-                            let mut toggle_dir: Option<String> = None;
-                            let mut double_clicked: Vec<tree::FolderTreeNode> = Vec::new();
-                            let window = nodes.get(wstart..wend).unwrap_or(&[]);
-                            for node in window {
-                                ui.horizontal(|ui| {
-                                    if node.depth > 0 {
-                                        ui.add_space(views::tree_indent(node.depth));
-                                    }
-                                    if node.row.is_dir && node.has_children {
-                                        let icon =
-                                            if node.is_expanded { "▼" } else { "▶" };
-                                        if ui.small_button(icon).clicked() {
-                                            toggle_dir = Some(node.row.rel_path.clone());
+                        // Split-aware rows: list keeps the split
+                        // min-widths and h-scrolls instead of overlapping.
+                        let folder_fraction = self.split_fraction();
+                        self.clamp_scroll_after_layout();
+                        show_split_content(ui, folder_fraction, |ui| {
+                            if nodes.is_empty() {
+                                ui.label(
+                                    RichText::new(home::folder_empty_hint(
+                                        has_rows, has_error,
+                                    ))
+                                    .weak(),
+                                );
+                            } else {
+                                let mut toggle_dir: Option<String> = None;
+                                let mut double_clicked: Vec<tree::FolderTreeNode> = Vec::new();
+                                let window = nodes.get(wstart..wend).unwrap_or(&[]);
+                                for node in window {
+                                    ui.horizontal(|ui| {
+                                        if node.depth > 0 {
+                                            ui.add_space(views::tree_indent(node.depth));
                                         }
-                                    } else if node.row.is_dir {
-                                        ui.label(RichText::new("  ").monospace());
-                                    }
-                                    let glyph = node.row.glyph.to_string();
-                                    ui.label(RichText::new(glyph).monospace().weak());
-                                    let mark =
-                                        if node.row.is_dir { "/" } else { "" };
-                                    let text =
-                                        format!("{}{}", node.row.rel_path, mark);
-                                    let resp = ui.selectable_label(false, text);
-                                    if resp.double_clicked() {
-                                        double_clicked.push(node.clone());
-                                    }
-                                });
+                                        if node.row.is_dir && node.has_children {
+                                            let icon =
+                                                if node.is_expanded { "▼" } else { "▶" };
+                                            if ui.small_button(icon).clicked() {
+                                                toggle_dir = Some(node.row.rel_path.clone());
+                                            }
+                                        } else if node.row.is_dir {
+                                            ui.label(RichText::new("  ").monospace());
+                                        }
+                                        let glyph = node.row.glyph.to_string();
+                                        ui.label(RichText::new(glyph).monospace().weak());
+                                        let mark =
+                                            if node.row.is_dir { "/" } else { "" };
+                                        let text =
+                                            format!("{}{}", node.row.rel_path, mark);
+                                        let resp = ui.selectable_label(false, text);
+                                        if resp.double_clicked() {
+                                            double_clicked.push(node.clone());
+                                        }
+                                    });
+                                }
+                                if let Some(dir) = toggle_dir {
+                                    self.toggle_folder_dir(&dir);
+                                }
+                                for node in &double_clicked {
+                                    self.stage_folder_double_click(node);
+                                }
                             }
-                            if let Some(dir) = toggle_dir {
-                                self.toggle_folder_dir(&dir);
-                            }
-                            for node in &double_clicked {
-                                self.stage_folder_double_click(node);
-                            }
-                        }
+                        });
                         // Sync preview: mode select, dry-run options,
                         // consent gate, Apply button.
                         ui.add_space(views::TIGHT_GAP);
@@ -2841,7 +2966,7 @@ impl eframe::App for App {
                                     .desired_width(60.0)
                                     .hint_text("e.g. 2"),
                             );
-                            if ui.small_button("Jump to row").clicked() {
+                            if find_nav_button(ui, "Jump to row") {
                                 match views::parse_gutter_row_text(&self.hex_gutter_row_text) {
                                     Some(row) => {
                                         if !self.hex_gutter_jump_to_row(row) {
@@ -2857,10 +2982,10 @@ impl eframe::App for App {
                                     }
                                 }
                             }
-                            if ui.small_button("◀ Prev change").clicked() {
+                            if find_nav_button(ui, "◀ Prev change") {
                                 self.hex_select_prev_paged();
                             }
-                            if ui.small_button("Next change ▶").clicked() {
+                            if find_nav_button(ui, "Next change ▶") {
                                 self.hex_select_next_paged();
                             }
                         });
@@ -2977,7 +3102,7 @@ impl eframe::App for App {
                                 .desired_width(120.0)
                                 .hint_text("needle"),
                         );
-                        if ui.small_button("Next match ▶").clicked()
+                        if find_nav_button(ui, "Next match ▶")
                             && self.table_find_next_paged().is_none()
                         {
                             self.status = String::from("table find: no match");
@@ -2990,9 +3115,15 @@ impl eframe::App for App {
                         }
                     });
                     if self.table_model.is_some() {
+                        // Split-aware rows: row keeps the split
+                        // min-widths and h-scrolls instead of crushing.
+                        let table_fraction = self.split_fraction();
+                        self.clamp_scroll_after_layout();
                         if let Some(model) = self.table_model.clone() {
                             let (view, pager) = (&self.table_view, &mut self.table_pager);
-                            views::paint_table_keyed(ui, view, &model, pager);
+                            show_split_content(ui, table_fraction, |ui| {
+                                views::paint_table_keyed(ui, view, &model, pager);
+                            });
                         }
                     } else {
                         ui.label(
@@ -3015,14 +3146,21 @@ impl eframe::App for App {
                     if self.picture_model.is_some() {
                         let mut view = self.picture_view;
                         let mut changed = false;
+                        // Split-aware columns: row keeps the split
+                        // min-widths and h-scrolls instead of crushing.
+                        let picture_fraction = self.split_fraction();
+                        self.clamp_scroll_after_layout();
                         if let Some(model) = self.picture_model.as_ref() {
-                            views::paint_picture_compare(
-                                ui,
-                                model,
-                                &mut view,
-                                self.heatmap.as_ref(),
-                                &mut self.split_fraction,
-                            );
+                            let heat = self.heatmap.as_ref();
+                            show_split_content(ui, picture_fraction, |ui| {
+                                views::paint_picture_compare(
+                                    ui,
+                                    model,
+                                    &mut view,
+                                    heat,
+                                    &mut self.split_fraction,
+                                );
+                            });
                         }
                         if view != self.picture_view {
                             self.picture_view = view;
@@ -4097,5 +4235,90 @@ mod tests {
             crate::views::text_find_badge_label(app.text_find_position(), app.text_find_total()),
             "0/0",
         );
+    }
+
+    #[test]
+    fn layout_narrow_breakpoint_is_900() {
+        assert_eq!(LAYOUT_NARROW_BREAKPOINT, 900.0);
+        assert!(layout_is_narrow(899.0));
+        assert!(!layout_is_narrow(900.0));
+        assert!(!layout_is_narrow(1200.0));
+    }
+
+    #[test]
+    fn layout_pane_widths_follow_split_with_floor() {
+        let (left, right) = layout_pane_widths(800.0, 0.50);
+        assert_eq!((left, right), (396.0, 396.0));
+        let (wide_left, wide_right) = layout_pane_widths(800.0, 0.80);
+        assert!(wide_left > wide_right);
+        // Narrow windows keep the floors instead of crushing.
+        let (tiny_left, tiny_right) = layout_pane_widths(0.0, 0.50);
+        assert_eq!((tiny_left, tiny_right), (180.0, 180.0));
+        // Same helper the picture columns use: single source.
+        assert_eq!(
+            layout_pane_widths(800.0, 0.50),
+            crate::views::split_picture_widths(800.0, 0.50)
+        );
+    }
+
+    #[test]
+    fn layout_row_min_width_needs_hscroll_when_narrow() {
+        assert_eq!(layout_row_min_width(800.0, 0.50), 800.0);
+        assert!(!layout_needs_hscroll(
+            800.0,
+            layout_row_min_width(800.0, 0.50)
+        ));
+        // Crushed avail keeps floors: min row exceeds avail -> scroll.
+        let min = layout_row_min_width(100.0, 0.50);
+        assert_eq!(min, 368.0);
+        assert!(layout_needs_hscroll(100.0, min));
+        assert!(!layout_needs_hscroll(min, min));
+    }
+
+    #[test]
+    fn find_bar_geometry_docks_full_width_with_right_badge() {
+        assert_eq!(LAYOUT_FIND_HIT_MIN, 24.0);
+        let geo = find_bar_geometry(800.0);
+        assert_eq!(geo.bar_w, 800.0);
+        assert_eq!(geo.badge_x, geo.bar_w);
+        assert!(geo.prev_hit >= 24.0);
+        assert!(geo.next_hit >= 24.0);
+        let zero = find_bar_geometry(-5.0);
+        assert_eq!((zero.bar_w, zero.badge_x), (0.0, 0.0));
+    }
+
+    #[test]
+    fn clamp_scroll_offset_keeps_offsets_honest() {
+        assert_eq!(clamp_scroll_offset(10.0, 100.0, 40.0), 10.0);
+        assert_eq!(clamp_scroll_offset(90.0, 100.0, 40.0), 60.0);
+        assert_eq!(clamp_scroll_offset(-4.0, 100.0, 40.0), 0.0);
+        // Content fits the viewport: offset collapses to zero.
+        assert_eq!(clamp_scroll_offset(10.0, 30.0, 40.0), 0.0);
+        // Non-finite input never escapes as NaN.
+        assert_eq!(clamp_scroll_offset(f32::NAN, 100.0, 40.0), 0.0);
+        assert_eq!(clamp_scroll_offset(10.0, f32::INFINITY, 40.0), 0.0);
+    }
+
+    #[test]
+    fn scroll_clamp_after_layout_keeps_pager_tops_valid() {
+        let mut app = App {
+            table_model: Some(crate::viewmodel::TableModel {
+                rows: vec![crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: String::from("   1"),
+                    text: String::from("apple"),
+                    changed: false,
+                }],
+                truncated: false,
+            }),
+            ..Default::default()
+        };
+        app.table_pager.top = 99;
+        app.set_split_fraction(0.60);
+        assert_eq!(app.split_fraction(), 0.60);
+        assert_eq!(app.table_pager.top, 0);
+        app.table_pager.top = 99;
+        app.drag_split_by(40.0, 800.0);
+        assert_eq!(app.table_pager.top, 0);
     }
 }
