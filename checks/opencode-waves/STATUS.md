@@ -277,3 +277,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 09 all green
 - Tests 117, clippy clean. Diff 69 lines. INT live finalizing REPORT + commit.
+
+## Wave F poll 10 home edit added
+- INT live 03:53, diff now home.rs 1 + views 69. No gui-int proof yet. Tests green check next.
