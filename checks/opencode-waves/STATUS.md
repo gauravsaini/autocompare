@@ -1060,3 +1060,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - APPLY `e417b9d` merge decisions headless file apply + dry-run/summary — OWNS app.rs (Gap #7/#8 apply half).
 - Verify combined: 404 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AN (3-pane layout, apply paint wiring, snapshot parity).
+
+## 2026-11-20 — Wave AN plan (2 parallel: 3-pane layout + apply paint-state)
+- AN-THREE `sess-three-an`: OWNS views.rs+checks/gui-three-an (Gap #7 3-way left/base/right pane layout).
+- AN-APPLYPAINT `sess-applypaint-an`: OWNS app.rs+checks/gui-applypaint-an (Gap #8 apply action state machine).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
