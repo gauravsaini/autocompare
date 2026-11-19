@@ -990,3 +990,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CHROME `3f6529d` unify chrome hierarchy with TypoRole + align header bar — OWNS theme.rs+views.rs+checks/gui-chrome-ag (Gap #18).
 - Verify combined: 344 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
 - Pushed. Next: Wave AH (splitter-handle paint, audio action, table-find UI).
+
+## 2026-11-20 — Wave AH plan (2 parallel: splitter-handle paint + audio action)
+- AH-SPLITPAINT `sess-splitpaint-ah`: OWNS views.rs+checks/gui-splitpaint-ah (Gap #1 drag-handle paint; model read-only).
+- AH-AUDIO `sess-audio-ah`: OWNS app.rs+checks/gui-audio-ah (Gap #8 audio compare+display, play stub).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
