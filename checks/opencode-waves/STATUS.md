@@ -239,3 +239,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave E poll 11 GEO landed both waves complete
 - 007714d feat(gui) verified: OWNS app/views + checks/gui-geo only, scan clean, 115 green clippy/fmt clean. No new Color32 (pre-existing consts only).
 - Both GEO+TYPO terminal, diffs landed disjoint. Pushing + binary refresh next.
+
+## Wave E COMPLETE exquisite geo+typo
+- GEO 007714d + TYPO 20cabdb landed disjoint, pushed. Tree 115 green, clippy clean, fmt clean, harness gui-geo+gui-typo PASS, PNGs 9914B valid, colors untouched.
+- Geometry: central inner_margin OUTER_MARGIN, single toolbar row, gap tokens, equal halves/thirds, centered cards, equal panes, consistent indent. Typography: TypoRole scale 18/13/11/12 mono + Home 14, gutter_for_font, wrap/full chars, letter-spacing 0.0 documented.
+- Next: colors wave + integration applying TypoRole/HOME consts in paint_home/text panes, release binary refresh, full parity waves.
