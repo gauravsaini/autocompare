@@ -162,3 +162,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 13
 - Hooks in paint fg/bg code, no land. Both alive.
+
+## Wave D poll 14
+- Hooks WHITE/BLACK hits all in test module (9 in-test, 0 non-test) — no color-scope creep. No land. Both alive.
