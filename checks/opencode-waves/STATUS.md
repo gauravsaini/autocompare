@@ -899,3 +899,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Z-HEX `sess-hex-z`: OWNS views_hex.rs+views.rs+checks/gui-hex-z (Gap #2 hex byte-grid paint).
 - Z-FIND `sess-find-z`: OWNS app.rs+viewmodel.rs+checks/gui-find-z (Gap #12 model half: find state + N/M count helper; views paint next wave).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave Z complete (2 parallel: hex-grid + find-count-model)
+- FIND `9794a1b` find count-label model (pure find_count_label + FindState::count_label, next/prev wrap) — OWNS viewmodel.rs+checks/gui-find-z, app.rs zero-diff verify-only (Gap #12 model half; views paint next).
+- HEX `b5145a5` hex byte-grid paint: format_hex_grid_cells (addr,hex,ascii) + egui::Grid teen-column monospace grid — OWNS views.rs+checks/gui-hex-z (Gap #2 paint; views_hex.rs untouched).
+- Shared-worktree note: FIND ke dauraan HEX ka views.rs:485 dead-code clippy red tha, wait+retry se green (OWNS respect).
+- Verify combined: 278 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok.
+- Pushed. Next: Wave AA (table-grid paint, find paint wiring, 3-pane/apply next steps).
