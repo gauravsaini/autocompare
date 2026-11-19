@@ -730,3 +730,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Orchestrator verify post-land: tests 193 green, clippy -p gui zero, fmt clean. Pushed.
 - LOCALBIN early feedback + K-B final verify landed earlier. Wave L complete: exquisite-geo + exquisite-typo + localbin + parity all landed.
 - Next: Wave M paint wiring (GEO/TYPO tokens into views paint) + remaining gaps (gutter-click/find/merge-hunk/paging) + release rebuild + local re-run.
+
+## Wave M plan paint-adoption+gaps (3 parallel, disjoint)
+- Methodology anchor: /tmp/craft-anything (study -> build -> check -> refine per feature, evidence-backed, never-crash denies, clean-room). Already cloned, read-only reference.
+- M-GEO ses-geo-paint-M (opencode default): OWNS views.rs+app.rs+checks/gui-exq-geo2/**. Apply Wave L GEO tokens (TAB_BOTTOM_GAP 6, CARD_W 240, splits/margins/padding/alignment) in live paint paths. Proof: headless asserts + harness PASS + px math.
+- M-TYPO ses-typo-paint-M (opencode default): OWNS theme.rs+gutter.rs+home.rs+checks/gui-exq-typo2/**. Replace direct monospace/strong/small/.size(14.0) with TypoRole::rich per pane hierarchy + tests.
+- M-GAPS ses-gaps-m (opencode default): OWNS views_hex.rs+views_table.rs+tree.rs+checks/parity-m/**. Models for gutter-click jump, find-box, per-hunk merge, paging, folder size/time columns + tests; app/views wiring as INTEGRATION.patch for orchestrator (no app/views edits).
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room own-words, disjoint OWNS, STATUS orch-only.
