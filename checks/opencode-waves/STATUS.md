@@ -268,3 +268,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave F poll 06 REL landed INT final
 - 408b41d docs(release) landed: binary 10851744B + smoke 9914B + 115 pass. Pushed.
 - INT live 22935, views 68 lines, tests 117 green, clippy 1 unused + fmt 30 RED final cleanup pending. REL terminal done.
+
+## Wave F poll 07 one import left
+- INT live 22935 02:43, views 66 lines, tests 117 green, fmt 0 fixed, clippy 1 unused gutter_bar_width left. Progress ongoing, no interrupt.
