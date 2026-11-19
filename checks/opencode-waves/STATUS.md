@@ -711,3 +711,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave L poll 05 steady progress
 - PARITY +517 refining (dead_code comment cleanup), LOCALBIN2 release binary confirmed 11022272B, GEO/TYPO/K-B in builds/reads. No lands yet. Wait.
+
+## Wave L poll 06 first edits land in worktree
+- GEO first edit in views.rs (owned), TYPO first edits in theme.rs (doc-scale + egui import, no color touches, owned). PARITY +551 across 3 owned files. Disjoint holds (5 M files map 1:1 to owners).
+- Banned-pattern scan CLEAN (only forbid(unsafe_code) hit). LOCALBIN2 probing BCompare windows via osascript (missing value = no open windows, adapting, report-only). K-B at 26KB writing REPORT.
+- No commits yet. Wait for gates + lands.
