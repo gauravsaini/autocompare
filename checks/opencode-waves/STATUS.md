@@ -1384,3 +1384,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - Wave BR plan (folder grid P0, single wave)
 - BR-FOLDERGRID sess-foldergrid-br: OWNS views.rs+checks/gui-foldergrid-br (G-F2 Name/Size/Modified columns; tree.rs NO-TOUCH, model spec REPORT me).
 - Single wave (table wiring bhi views.rs mangta hai — uske baad). Agent commits locally, NO PUSH.
+
+## 2026-11-20 - Wave BS plan (exquisite UI full parallel, unlazy+ponytail)
+- BR-FOLDERGRID sess-foldergrid-br still in-flight (OWNS views.rs). No collision: new waves avoid views.rs.
+- 4 parallel opencode default-model waves, disjoint OWNS, commit locally NO PUSH:
+  - BS-TYPO sess-typo-bs: OWNS theme.rs+gutter.rs+home.rs+checks/gui-typo-bs (TypoRole paint adoption G-T7/G-C1, geometry spacing tokens, views.rs NO-TOUCH).
+  - BS-TABLEWIRE sess-tablewire-bs: OWNS views_table.rs+app.rs+checks/gui-tablewire-bs (G-B2 single Find/nav dedup, G-B1 dashed remainder, Grid polish).
+  - BS-LOCALRUN sess-localrun-bs: OWNS checks/gui-localrun-bs only (local run + fullscreen PNGs + live gap REPORT early feedback, zero crates edits).
+  - BS-BIN sess-bin-bs: OWNS scripts/+tools/packaging/+checks/bin-bs (rebuild tarball + install proof, zero crates edits).
+- All: unlazy GATES.md first + ponytail laziest + gui-polish skill harness loop (max 6 rounds) + MS rust (forbid unsafe, no unwrap/expect/panic/todo non-test) + colors FROZEN.
+- Probe: no tight timer, one-shot --screenshot + outer harness recurring loop (craft-anything replicate+validate per feature).
