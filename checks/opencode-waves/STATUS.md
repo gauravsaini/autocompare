@@ -1366,3 +1366,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TYPO 22976a6 verify ok: OWNS theme.rs+checks/gui-typo-bn, isolated worktree 607 green + clippy 0 + fmt clean + banned 0 + colors 0 + PNG magic-ok + harness PASS, STATUS untouched. Typo session done.
 - LOCALRUN 0effef5 verify ok: OWNS checks/localrun-bo only, live PNGs magic-ok, STATUS untouched. Pushed.
 - Baaki in-flight: BN-GEO (views.rs+views_table.rs dirty, `;;` clippy fix pending uske paas).
+
+## 2026-11-20 - BN-GEO landed, BN+BO all 4 waves complete (pushed)
+- GEO d11cb99 verify ok: OWNS views.rs+views_table.rs+checks/gui-geo-bn, 607 green, clippy 0 (`;;` fixed), fmt clean, banned 0, colors 0, PNG magic-ok, STATUS untouched. Pushed.
+- Next: P0 follow-up waves from livecomp+localrun REPORTs (dual-pane gutter G-T1, folder grid columns G-F2, table header/grid G-B1/B3) + paint adoption of TypoRole aliases.
