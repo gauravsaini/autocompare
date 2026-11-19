@@ -1414,3 +1414,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BS-TYPO + BS-TABLEWIRE landed (concurrent, post-hoc verified, pushed)
 - de9ca8e (typo) + 4798d56 (tablewire) mere foldergrid-push ke saath concurrently land hue aur same push me chale gaye — protocol deviation, isliye post-hoc full gates HEAD par: OWNS dono clean (typo: gutter+home, tablewire: app+views_table, views.rs collision nahi hua), 616 green, clippy 0, fmt clean, banned 0, colors 0, PNGs 2/2 PASS, STATUS untouched. Pushed.
 - Is wave-batch ki 5/5 waves complete (localrun, bin, foldergrid, typo, tablewire). Age: TypoRole paint adoption baaki surfaces par + localrun REPORT ke BC gaps (session tabs, meta row, 3-zone status) P0 follow-ups.
+
+## 2026-11-20 - Wave BT plan (localrun P0/P1 follow-ups, 4 parallel)
+- BT-DIFF sess-diff-bt: OWNS views.rs+checks/gui-diff-bt (P0-2 selective word highlight + filler, full-row bands hatanao).
+- BT-STATUS sess-status-bt: OWNS viewmodel.rs+checks/gui-status-bt (P1-2 3-zone summary model + P1-3 cursor/focused-line model; views.rs paint spec REPORT me, NO-TOUCH).
+- BT-CARDCTA sess-cardcta-bt: OWNS home.rs+checks/gui-cardcta-bt (P1-4 CTA wrap, button width budget).
+- BT-SHOTFIX sess-shotfix-bt: OWNS screenshot.rs+checks/gui-shotfix-bt (P2-2 fixture glyph overlap spacing).
+- All: unlazy GATES + ponytail + gui-polish harness + MS rust + colors FROZEN, commit locally NO PUSH.
