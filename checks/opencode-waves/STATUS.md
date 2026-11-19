@@ -851,3 +851,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave V poll GLYPH landed (1/3)
 - GLYPH 149bb2c verified+pushed: OWNS clean (theme 76 + glyph-v GATES/REPORT/round-V-1). Line-height intent retune + zoom row-feel, PNG bit-identical paint-neutral. 249 green (+4), theme fmt clean, banned 0. Full-tree clippy red noted as siblings in-progress (re-verify at wave end).
 - TOOLBAR/MINI live, app.rs + views.rs uncommitted edits in tree.
+
+## Wave V poll TOOLBAR+MINI landed (3/3) WAVE COMPLETE
+- TOOLBAR a9c4b63 verified+pushed: OWNS clean (app.rs 26 + toolbar-v GATES/REPORT/round-V-1 + PNGs). Toolbar row reuses TIGHT_GAP/SECTION_GAP, hierarchy test green.
+- MINI 437bd49 verified+pushed: OWNS clean (views.rs 47 + mini-v GATES/REPORT/round-V-1). Wider minimap strip + floored segment hits, mapping exact, 3 minimap tests green.
+- Wave verify on clean tree: 249 green (245 + toolbar1 + mini3; glyph paint-neutral retune, existing theme tests green), clippy zero, fmt clean, banned 0.
+- Wave V complete: 3/3 landed. All V feedback deltas done.
