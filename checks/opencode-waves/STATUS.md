@@ -894,3 +894,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Shared-worktree note: FONT ka bare `cargo fmt` ne SPLIT ki views.rs hunks format kiye — fmt-only, SPLIT commit me samahit, koi conflict nahi.
 - Verify combined: 275 green, clippy zero, fmt clean, banned 0.
 - Pushed. Next: Wave Z (hex-grid, table-grid, text-find+count drying gaps).
+
+## 2026-11-20 — Wave Z plan (2 parallel: hex-grid + find-count-model)
+- Z-HEX `sess-hex-z`: OWNS views_hex.rs+views.rs+checks/gui-hex-z (Gap #2 hex byte-grid paint).
+- Z-FIND `sess-find-z`: OWNS app.rs+viewmodel.rs+checks/gui-find-z (Gap #12 model half: find state + N/M count helper; views paint next wave).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
