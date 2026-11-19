@@ -509,3 +509,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 16 tests enumerating
 - A+B live. Diff 1409 (app 414, views 116). A enumerating tests (22 views + 12 hex + 10 table). B same 2 errors tail (possibly stale, A fixing).
 - No commits. Wait for green.
+
+## Wave I poll 17 error churn
+- A+B live, diff steady 1409. A 3 clippy field_reassign errors fixing. B same 2 E0308 (integration, A paint side resolving).
+- No commits. Wait for green.
