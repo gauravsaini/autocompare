@@ -1072,3 +1072,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Three-an ne bahar sandbox copy banayi thi — nudge par turant `rm -rf` se delete, final verify in-tree; sibling discipline kept.
 - Verify combined: 416 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AO (apply paint adoption, snapshot parity, minimap-click).
+
+## 2026-11-20 — Wave AO plan (2 parallel: apply paint adoption + snapshot parity)
+- AO-APPLYUI `sess-applyui-ao`: OWNS views.rs+checks/gui-applyui-ao (Gap #8 Apply button + result paint).
+- AO-SNAPSHOT `sess-snapshot-ao`: OWNS screenshot.rs+checks/gui-snapshot-ao (per-tab headless PNG routes).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
