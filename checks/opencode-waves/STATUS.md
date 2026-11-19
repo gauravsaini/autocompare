@@ -354,3 +354,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 20 NaN persists pcomp hex
 - Diff 51/1 NaN same fail 3rd poll, PCOMP into hex modes too. COLOR gui green. Both live.
+
+## Wave G poll 21 expanding nan still red
+- 7 files 948 ins (was 744). GUI 122 green. Diff 51/1 NaN 4th poll. Both live 07:07/04:21.
