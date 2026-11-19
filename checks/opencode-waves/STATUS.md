@@ -995,3 +995,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AH-SPLITPAINT `sess-splitpaint-ah`: OWNS views.rs+checks/gui-splitpaint-ah (Gap #1 drag-handle paint; model read-only).
 - AH-AUDIO `sess-audio-ah`: OWNS app.rs+checks/gui-audio-ah (Gap #8 audio compare+display, play stub).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AH complete (2 parallel: splitter-handle paint + audio action)
+- SPLITPAINT `8c74d61` split-handle geometry model wired into drag-handle paint (text/picture/dual, resize cursor + a11y label) — OWNS views.rs (Gap #1 paint done).
+- AUDIO `99f2990` audio tab action UI with stub play + state-driven summary — OWNS app.rs (Gap #8 audio).
+- Mid-wave compile break (sibling WIP) dono ne haath lagaye bina wait+fix se green kiya.
+- Verify combined: 355 green, clippy 0, fmt clean, banned 0.
+- Pushed. Next: Wave AI (table-find UI, hex-find paint, merge-pick UI, home polish).
