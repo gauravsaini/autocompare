@@ -1952,6 +1952,143 @@ impl App {
         tree::toggle_expanded(&mut self.folder_expanded, dir);
     }
 
+    // ------------------------------------------------------------------
+    // Folder filter-bar wiring (Wave AT-FOLDERFILTER, headless).
+    // Naam/type/status + legacy checkbox setters: har setter display
+    // state badalkar pager/dual sync karta hai taaki scroll stale na
+    // rahe. Paint adoption agle wave ka hai; ye sirf App truth hai.
+    // ------------------------------------------------------------------
+
+    /// Current name query (filter-bar text field ka source of truth).
+    pub fn folder_name_filter(&self) -> &str {
+        self.folder_session.display.name_query.as_str()
+    }
+
+    /// Sets the name substring filter; trims nothing (match time par
+    /// trim hota hai), pager/dual sync hota hai. Khali = saaf.
+    pub fn set_folder_name_filter(&mut self, query: impl Into<String>) {
+        let text = query.into();
+        let shown = text.trim().to_string();
+        self.folder_session.display.name_query = text;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = if shown.is_empty() {
+            String::from("folder filter: name cleared")
+        } else {
+            format!("folder filter: name contains '{shown}'")
+        };
+    }
+
+    /// Current entry-kind filter.
+    pub fn folder_entry_kind(&self) -> tree::FolderEntryKind {
+        self.folder_session.display.kind
+    }
+
+    /// Sets the file/dir chunta + pager/dual sync.
+    pub fn set_folder_entry_kind(&mut self, kind: tree::FolderEntryKind) {
+        self.folder_session.display.kind = kind;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = format!("folder filter: type {}", kind.label());
+    }
+
+    /// Current status filter.
+    pub fn folder_status_filter(&self) -> tree::FolderStatusFilter {
+        self.folder_session.display.status
+    }
+
+    /// Sets the glyph-family chunta + pager/dual sync.
+    pub fn set_folder_status_filter(&mut self, status: tree::FolderStatusFilter) {
+        self.folder_session.display.status = status;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = format!("folder filter: status {}", status.label());
+    }
+
+    /// Sets hide-orphans + pager/dual sync.
+    pub fn set_folder_hide_orphans(&mut self, on: bool) {
+        self.folder_session.display.hide_orphans = on;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = if on {
+            String::from("folder filter: orphans hidden")
+        } else {
+            String::from("folder filter: orphans shown")
+        };
+    }
+
+    /// Sets left-newer-only + pager/dual sync.
+    pub fn set_folder_left_newer_only(&mut self, on: bool) {
+        self.folder_session.display.left_newer_only = on;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = if on {
+            String::from("folder filter: left-newer only")
+        } else {
+            String::from("folder filter: left-newer off")
+        };
+    }
+
+    /// Sets right-newer-only + pager/dual sync.
+    pub fn set_folder_right_newer_only(&mut self, on: bool) {
+        self.folder_session.display.right_newer_only = on;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = if on {
+            String::from("folder filter: right-newer only")
+        } else {
+            String::from("folder filter: right-newer off")
+        };
+    }
+
+    /// Sets flatten + pager/dual sync.
+    pub fn set_folder_flatten(&mut self, on: bool) {
+        self.folder_session.display.flatten = on;
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = if on {
+            String::from("folder filter: flat list")
+        } else {
+            String::from("folder filter: tree list")
+        };
+    }
+
+    /// Clears every folder filter (filter-bar Clear button ka App roop).
+    /// Pager/dual sync hota hai; view state default par laut-ta hai.
+    pub fn clear_folder_filters(&mut self) {
+        self.folder_session.clear_filters();
+        self.sync_folder_pager();
+        self.sync_folder_dual();
+        self.status = String::from("folder filters cleared");
+    }
+
+    /// Koi folder filter laga hai (badge jalane ke liye).
+    pub fn folder_has_active_filters(&self) -> bool {
+        self.folder_session.has_active_filters()
+    }
+
+    /// Lage hue folder filters ki ginti (badge `N`).
+    pub fn folder_active_filter_count(&self) -> usize {
+        self.folder_session.active_filter_count()
+    }
+
+    /// Khali folder view ka honest kaaran. Bina model hamesha
+    /// `NoResults` (compare-first jhooth nahi bolta).
+    pub fn folder_empty_state(&self) -> Option<tree::FolderEmptyState> {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.empty_state(rows),
+            None => Some(tree::FolderEmptyState::NoResults),
+        }
+    }
+
+    /// Khali folder view ka paint-stable hint line.
+    pub fn folder_empty_hint(&self) -> &'static str {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.empty_hint(rows),
+            None => tree::folder_empty_hint(Some(tree::FolderEmptyState::NoResults)),
+        }
+    }
+
     /// Rows the folder tree paints: filtered, then hierarchical/flat.
     pub fn folder_visible_tree(&self) -> Vec<tree::FolderTreeNode> {
         match self.folder_rows() {
@@ -4590,7 +4727,7 @@ impl eframe::App for App {
                         );
                     } else {
                         // 4 display-filter checkboxes from FolderDisplay.
-                        let mut display = self.folder_session.display;
+                        let mut display = self.folder_session.display.clone();
                         ui.horizontal_wrapped(|ui| {
                             ui.checkbox(&mut display.hide_orphans, "Hide orphans");
                             ui.checkbox(&mut display.left_newer_only, "Left newer only");
@@ -6273,6 +6410,96 @@ mod tests {
             app.folder_dual.pager.total_rows,
             app.folder_visible_tree().len()
         );
+    }
+
+    #[test]
+    fn folder_name_filter_narrows_tree_and_counts_honestly() {
+        let mut app = folder_app_with_rows();
+        app.toggle_folder_dir("src");
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        assert!(!app.folder_has_active_filters());
+        assert_eq!(app.folder_active_filter_count(), 0);
+        app.set_folder_name_filter("src/");
+        assert_eq!(app.folder_name_filter(), "src/");
+        assert!(app.folder_has_active_filters());
+        assert_eq!(app.folder_active_filter_count(), 1);
+        assert_eq!(app.folder_visible_tree().len(), 1);
+        let summary = app.folder_counts_summary();
+        assert!(summary.contains("1 entries"));
+        assert!(app.status.contains("src/"));
+        // Khali query = saaf.
+        app.set_folder_name_filter("   ");
+        assert!(!app.folder_has_active_filters());
+        assert_eq!(app.folder_visible_tree().len(), 3);
+    }
+
+    #[test]
+    fn folder_kind_and_status_filters_narrow_really() {
+        let mut app = folder_app_with_rows();
+        app.toggle_folder_dir("src");
+        app.set_folder_entry_kind(crate::tree::FolderEntryKind::DirsOnly);
+        assert_eq!(
+            app.folder_entry_kind(),
+            crate::tree::FolderEntryKind::DirsOnly
+        );
+        assert_eq!(app.folder_visible_tree().len(), 1);
+        app.set_folder_entry_kind(crate::tree::FolderEntryKind::All);
+        app.set_folder_status_filter(crate::tree::FolderStatusFilter::NewerLeft);
+        assert_eq!(
+            app.folder_status_filter(),
+            crate::tree::FolderStatusFilter::NewerLeft
+        );
+        assert_eq!(app.folder_visible_tree().len(), 1);
+        let summary = app.folder_counts_summary();
+        assert!(summary.contains("1 entries"));
+        assert!(summary.contains("1 newer left"));
+        // Legacy checkbox setters bhi sync karte hain.
+        app.set_folder_status_filter(crate::tree::FolderStatusFilter::All);
+        app.set_folder_hide_orphans(true);
+        assert_eq!(app.folder_visible_tree().len(), 2);
+        app.set_folder_left_newer_only(true);
+        assert_eq!(app.folder_visible_tree().len(), 1);
+        app.set_folder_left_newer_only(false);
+        app.set_folder_right_newer_only(true);
+        assert_eq!(app.folder_visible_tree().len(), 0);
+        assert_eq!(
+            app.folder_empty_state(),
+            Some(crate::tree::FolderEmptyState::NoMatch)
+        );
+        assert!(app.folder_empty_hint().contains("clear filters"));
+        // Flatten setter + clear sab wapas lata hai.
+        app.set_folder_right_newer_only(false);
+        app.set_folder_hide_orphans(false);
+        app.set_folder_flatten(true);
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        app.clear_folder_filters();
+        assert!(!app.folder_has_active_filters());
+        assert_eq!(app.folder_active_filter_count(), 0);
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        assert!(app.status.contains("cleared"));
+    }
+
+    #[test]
+    fn folder_empty_hints_separate_no_results_from_no_match() {
+        let mut empty = App::default();
+        empty.set_tab(Tab::Folder);
+        assert_eq!(
+            empty.folder_empty_state(),
+            Some(crate::tree::FolderEmptyState::NoResults)
+        );
+        assert!(empty.folder_empty_hint().contains("no results yet"));
+        assert!(empty.folder_counts_summary().contains("no results yet"));
+        let mut app = folder_app_with_rows();
+        app.toggle_folder_dir("src");
+        assert_eq!(app.folder_empty_state(), None);
+        assert!(app.folder_empty_hint().is_empty());
+        app.set_folder_name_filter("zzz-no-such-file");
+        assert_eq!(
+            app.folder_empty_state(),
+            Some(crate::tree::FolderEmptyState::NoMatch)
+        );
+        assert!(app.folder_empty_hint().contains("no rows match filters"));
+        assert!(app.folder_counts_summary().contains("0 entries"));
     }
 
     #[test]

@@ -114,10 +114,94 @@ pub fn collapse_all(expanded_dirs: &mut BTreeSet<String>) {
     expanded_dirs.clear();
 }
 
-/// Display filters for the folder view. All fields are independent
-/// checkboxes; counts stay honest because filtering never rewrites
-/// glyphs, it only hides rows.
+/// Entry-kind filter for the folder view: files, dirs, or both.
+/// Paint filter-bar `Type` chunta isi se banta hai (agle wave me).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FolderEntryKind {
+    /// Files aur dirs dono dikhte hain.
+    #[default]
+    All,
+    /// Sirf files (`is_dir == false`).
+    FilesOnly,
+    /// Sirf directories (`is_dir == true`).
+    DirsOnly,
+}
+
+impl FolderEntryKind {
+    /// Filter-bar label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::All => "All types",
+            Self::FilesOnly => "Files only",
+            Self::DirsOnly => "Dirs only",
+        }
+    }
+}
+
+/// Status filter for the folder view: one glyph family at a time.
+/// Legacy `hide_orphans` / `*_newer_only` checkboxes ke saath judta
+/// hai (dono lagte hain); paint filter-bar `Status` chunta agle wave
+/// me isi se banega.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FolderStatusFilter {
+    /// Koi status rok nahi (glyph-blind).
+    #[default]
+    All,
+    /// Sirf same rows (`=`).
+    Same,
+    /// Sirf content-differ rows (`!`).
+    Different,
+    /// Sirf left-newer rows (`>`).
+    NewerLeft,
+    /// Sirf right-newer rows (`<`).
+    NewerRight,
+    /// Sirf left-only rows (`L`).
+    LeftOnly,
+    /// Sirf right-only rows (`R`).
+    RightOnly,
+    /// Har badli row (`=` ke siva sab).
+    Changed,
+}
+
+impl FolderStatusFilter {
+    /// Filter-bar label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::All => "All statuses",
+            Self::Same => "Same",
+            Self::Different => "Different",
+            Self::NewerLeft => "Newer left",
+            Self::NewerRight => "Newer right",
+            Self::LeftOnly => "Left only",
+            Self::RightOnly => "Right only",
+            Self::Changed => "Changed",
+        }
+    }
+
+    /// Kya `glyph` is status me aata hai. Unknown glyph sirf `All`
+    /// me dikhta hai taaki koi filter anjaan pankti kabhi galat
+    /// shreni me na gin le; summary filtered rows par honest rehti hai.
+    pub const fn matches_glyph(self, glyph: char) -> bool {
+        match self {
+            Self::All => true,
+            Self::Same => glyph == '=',
+            Self::Different => glyph == '!',
+            Self::NewerLeft => glyph == '>',
+            Self::NewerRight => glyph == '<',
+            Self::LeftOnly => glyph == 'L',
+            Self::RightOnly => glyph == 'R',
+            Self::Changed => matches!(glyph, '!' | '>' | '<' | 'L' | 'R'),
+        }
+    }
+}
+
+/// Display filters for the folder view. Legacy checkbox fields
+/// (`hide_orphans`, `left_newer_only`, `right_newer_only`, `flatten`)
+/// untouched hain; naye `name_query` / `kind` / `status` unke saath
+/// judte hain (har shart lagti hai). Filtering kabhi glyph rewrite
+/// nahi karti, sirf rows chhupti hain isliye counts honest rehti hain.
+/// `String` field ki wajah se `Copy` nahi, sirf `Clone`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FolderDisplay {
     /// Hide orphan rows (`L` / `R` glyphs).
     pub hide_orphans: bool,
@@ -127,6 +211,64 @@ pub struct FolderDisplay {
     pub right_newer_only: bool,
     /// Ignore hierarchy and show a flat list.
     pub flatten: bool,
+    /// Name substring (case-insensitive contains on `rel_path`).
+    /// Khali ya whitespace-only = koi naam rok nahi.
+    pub name_query: String,
+    /// File/dir chunta.
+    pub kind: FolderEntryKind,
+    /// Glyph-family chunta.
+    pub status: FolderStatusFilter,
+}
+
+impl FolderDisplay {
+    /// Koi filter laga hai ya sab default par hain.
+    pub fn is_active(&self) -> bool {
+        self.active_count() > 0
+    }
+
+    /// Lage hue independent filters ki ginti (filter-bar badge `N`
+    /// isi se aata hai; zyada se zyada 7).
+    pub fn active_count(&self) -> usize {
+        let mut count = 0usize;
+        if self.hide_orphans {
+            count = count.saturating_add(1);
+        }
+        if self.left_newer_only {
+            count = count.saturating_add(1);
+        }
+        if self.right_newer_only {
+            count = count.saturating_add(1);
+        }
+        if self.flatten {
+            count = count.saturating_add(1);
+        }
+        if !self.name_query.trim().is_empty() {
+            count = count.saturating_add(1);
+        }
+        if self.kind != FolderEntryKind::All {
+            count = count.saturating_add(1);
+        }
+        if self.status != FolderStatusFilter::All {
+            count = count.saturating_add(1);
+        }
+        count
+    }
+
+    /// Saare filters saaf karke default par lao (filter-bar Clear
+    /// button isi ko chalata hai).
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// Naam filter: khali/whitespace kabhi rokta nahi, warna
+/// case-insensitive contains on `rel_path`.
+fn folder_name_pass(rel_path: &str, query: &str) -> bool {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    rel_path.to_lowercase().contains(&trimmed.to_lowercase())
 }
 
 /// Whether one row passes the active display filter.
@@ -138,6 +280,25 @@ pub fn filter_pass(row: &FolderRow, display: &FolderDisplay) -> bool {
         return false;
     }
     if display.right_newer_only && row.glyph != '<' {
+        return false;
+    }
+    match display.kind {
+        FolderEntryKind::All => {}
+        FolderEntryKind::FilesOnly => {
+            if row.is_dir {
+                return false;
+            }
+        }
+        FolderEntryKind::DirsOnly => {
+            if !row.is_dir {
+                return false;
+            }
+        }
+    }
+    if !display.status.matches_glyph(row.glyph) {
+        return false;
+    }
+    if !folder_name_pass(&row.rel_path, &display.name_query) {
         return false;
     }
     true
@@ -233,6 +394,106 @@ pub fn filtered_folder_rows(rows: &[FolderRow], display: &FolderDisplay) -> Vec<
         .filter(|row| filter_pass(row, display))
         .cloned()
         .collect()
+}
+
+// ----------------------------------------------------------------------------
+// Folder filter bar: affordance state + honest empty states (headless).
+// ----------------------------------------------------------------------------
+//
+// Bahar se dekhe folder compare ki filter patti teen cheezen karti
+// hai: naam/type/status chunta, laga hua filter ginti samait dikhana,
+// aur kuch na bache to saaf khali sandesh. Ye section uska headless
+// spec hai taaki paint (agle wave, dusre agent ke paas) har frame same
+// numbers, same shabd use kare. Geometry first: bar height, padding,
+// gap sab MD spacing scale (4/8/12/16/24) par. Typography second:
+// mono + size + weight, `FolderTypo` reuse, `TypoRole` Body/Caption
+// precedent ke naam se, bina theme import ke. Colors frozen: yahan
+// koi hue nahi, farak sirf weight se (active chip strong).
+//
+// WIRING (paint, agle wave): bar `folder_filter_bar_height()` par
+// `folder_filter_typo()` me; active chip `folder_filter_active_typo()`
+// me; Clear button `FolderDisplay::clear()` chalata hai; khali view
+// `folder_empty_hint(session.empty_state(rows))` dikhata hai; counts
+// line `filtered_counts_summary` wahi rehti hai (filtered rows par).
+
+/// Filter bar ki height (px): 24.0, MD spacing scale par (row jaisi).
+pub const FOLDER_FILTER_BAR_HEIGHT: f32 = 24.0;
+/// Filter bar ka ek taraf ka horizontal padding (px): 8.0, MD scale par.
+pub const FOLDER_FILTER_BAR_PAD_X: f32 = 8.0;
+/// Filter bar controls ke beech ka gap (px): 8.0, MD scale par.
+pub const FOLDER_FILTER_BAR_GAP: f32 = 8.0;
+
+/// Filter bar ki height (px). Header/row se alag function taaki paint
+/// teeno ko ek saath na badle.
+pub fn folder_filter_bar_height() -> f32 {
+    FOLDER_FILTER_BAR_HEIGHT
+}
+
+/// Filter bar ka ek taraf ka horizontal padding (px).
+pub fn folder_filter_bar_pad_x() -> f32 {
+    FOLDER_FILTER_BAR_PAD_X
+}
+
+/// Filter bar controls ke beech ka gap (px).
+pub fn folder_filter_bar_gap() -> f32 {
+    FOLDER_FILTER_BAR_GAP
+}
+
+/// Filter bar text ki typography: mono body-regular (naam query aur
+/// chunte ek baseline par).
+pub fn folder_filter_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_BODY_SIZE,
+        strong: false,
+    }
+}
+
+/// Active-filter chip ki typography: mono caption-strong (laga hua
+/// filter ek nazar me; farak weight se hai, rang se nahi).
+pub fn folder_filter_active_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_SIDE_SIZE,
+        strong: true,
+    }
+}
+
+/// Khali folder view ka honest kaaran: ginati kabhi jhooth na bole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderEmptyState {
+    /// Koi compare hi nahi hua (model khaali).
+    NoResults,
+    /// Model hai par filter ke baad kuch dikhne ko nahi bacha.
+    NoMatch,
+}
+
+/// Khali view ka kaaran chuno: `total` model rows, `visible` filtered
+/// tree nodes, `has_filters` filter-bar affordance state se. `None`
+/// matlab view khaali nahi (kuch dikh raha hai).
+pub fn folder_empty_state(
+    total_rows: usize,
+    visible_rows: usize,
+    has_filters: bool,
+) -> Option<FolderEmptyState> {
+    if total_rows == 0 {
+        return Some(FolderEmptyState::NoResults);
+    }
+    if visible_rows == 0 && has_filters {
+        return Some(FolderEmptyState::NoMatch);
+    }
+    None
+}
+
+/// Khali view ka paint-stable English hint. `None` par khaali string
+/// (paint kuch nahi dikhata); dono khali states ke shabd tay hain
+/// taaki snapshots stable rahen.
+pub fn folder_empty_hint(state: Option<FolderEmptyState>) -> &'static str {
+    match state {
+        None => "",
+        Some(FolderEmptyState::NoResults) => "folder: no results yet — compare first",
+        Some(FolderEmptyState::NoMatch) => "folder: no rows match filters — clear filters",
+    }
 }
 
 /// Stages a double-clicked file node as compare intent. Directories
@@ -1607,6 +1868,36 @@ impl FolderSessionState {
     /// One-line honest summary over the filtered rows.
     pub fn filtered_counts_summary(&self, rows: &[FolderRow]) -> String {
         self.filtered_counts(rows).summary()
+    }
+
+    /// Koi filter laga hai (filter-bar badge isi se jalti hai).
+    pub fn has_active_filters(&self) -> bool {
+        self.display.is_active()
+    }
+
+    /// Lage hue filters ki ginti (badge `N`).
+    pub fn active_filter_count(&self) -> usize {
+        self.display.active_count()
+    }
+
+    /// Saare filters saaf karo (filter-bar Clear button ka headless roop).
+    pub fn clear_filters(&mut self) {
+        self.display.clear();
+    }
+
+    /// Khali view ka honest kaaran: model rows vs filtered visible
+    /// tree par. Bina model (`rows` khaali) hamesha `NoResults`.
+    pub fn empty_state(&self, rows: &[FolderRow]) -> Option<FolderEmptyState> {
+        folder_empty_state(
+            rows.len(),
+            self.visible_tree(rows).len(),
+            self.display.is_active(),
+        )
+    }
+
+    /// Khali view ka paint-stable hint line.
+    pub fn empty_hint(&self, rows: &[FolderRow]) -> &'static str {
+        folder_empty_hint(self.empty_state(rows))
     }
 
     /// Stages a double-clicked node; returns whether intent was staged.
@@ -2989,5 +3280,263 @@ mod sync_direction_tests {
         assert!(summary.mono);
         assert_eq!(summary.size, FOLDER_SIDE_SIZE);
         assert!(!summary.strong);
+    }
+}
+
+#[cfg(test)]
+mod folderfilter_tests {
+    use super::*;
+
+    fn glyph_row(path: &str, is_dir: bool, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    fn sample_rows() -> Vec<FolderRow> {
+        vec![
+            glyph_row("src", true, '='),
+            glyph_row("src/a.txt", false, '>'),
+            glyph_row("src/b.txt", false, '='),
+            glyph_row("orphan.txt", false, 'R'),
+            glyph_row("left-only.txt", false, 'L'),
+            glyph_row("diff.txt", false, '!'),
+            glyph_row("newer-right.txt", false, '<'),
+        ]
+    }
+
+    #[test]
+    fn name_filter_matches_case_insensitive_and_trims() {
+        let rows = sample_rows();
+        let mut display = FolderDisplay {
+            name_query: String::from("SRC/"),
+            ..FolderDisplay::default()
+        };
+        let kept = filtered_folder_rows(&rows, &display);
+        assert_eq!(kept.len(), 2);
+        let Some(first) = kept.first() else {
+            return;
+        };
+        assert_eq!(first.rel_path, "src/a.txt");
+        // Whitespace-only = koi rok nahi.
+        display.name_query = String::from("   ");
+        assert_eq!(filtered_folder_rows(&rows, &display).len(), rows.len());
+        // Khali = sab.
+        display.name_query = String::new();
+        assert_eq!(filtered_folder_rows(&rows, &display).len(), rows.len());
+        // Koi mail nahi = honest khaali.
+        display.name_query = String::from("zzz-no-such-file");
+        assert!(filtered_folder_rows(&rows, &display).is_empty());
+    }
+
+    #[test]
+    fn kind_filter_splits_files_and_dirs() {
+        let rows = sample_rows();
+        let display = FolderDisplay {
+            kind: FolderEntryKind::FilesOnly,
+            ..FolderDisplay::default()
+        };
+        let kept = filtered_folder_rows(&rows, &display);
+        assert!(!kept.is_empty());
+        assert!(kept.iter().all(|row| !row.is_dir));
+        let display = FolderDisplay {
+            kind: FolderEntryKind::DirsOnly,
+            ..FolderDisplay::default()
+        };
+        let kept = filtered_folder_rows(&rows, &display);
+        assert_eq!(kept.len(), 1);
+        let Some(only) = kept.first() else {
+            return;
+        };
+        assert_eq!(only.rel_path, "src");
+        assert_eq!(FolderEntryKind::FilesOnly.label(), "Files only");
+        assert_eq!(FolderEntryKind::DirsOnly.label(), "Dirs only");
+        assert_eq!(FolderEntryKind::All.label(), "All types");
+    }
+
+    #[test]
+    fn status_filter_covers_every_glyph_honestly() {
+        let rows = sample_rows();
+        let with = |status: FolderStatusFilter| FolderDisplay {
+            status,
+            ..FolderDisplay::default()
+        };
+        assert!(
+            filtered_folder_rows(&rows, &with(FolderStatusFilter::Same))
+                .iter()
+                .all(|row| row.glyph == '=')
+        );
+        assert_eq!(
+            filtered_folder_rows(&rows, &with(FolderStatusFilter::Different)).len(),
+            1
+        );
+        let kept = filtered_folder_rows(&rows, &with(FolderStatusFilter::NewerLeft));
+        assert_eq!(kept.len(), 1);
+        let Some(first) = kept.first() else {
+            return;
+        };
+        assert_eq!(first.glyph, '>');
+        assert_eq!(
+            filtered_folder_rows(&rows, &with(FolderStatusFilter::NewerRight)).len(),
+            1
+        );
+        assert_eq!(
+            filtered_folder_rows(&rows, &with(FolderStatusFilter::LeftOnly)).len(),
+            1
+        );
+        assert_eq!(
+            filtered_folder_rows(&rows, &with(FolderStatusFilter::RightOnly)).len(),
+            1
+        );
+        let kept = filtered_folder_rows(&rows, &with(FolderStatusFilter::Changed));
+        assert!(kept.iter().all(|row| row.glyph != '='));
+        assert_eq!(kept.len(), 5);
+        // Unknown glyph sirf All me dikhta hai.
+        let mut odd = sample_rows();
+        odd.push(glyph_row("odd.txt", false, '~'));
+        assert!(
+            filtered_folder_rows(&odd, &with(FolderStatusFilter::Changed))
+                .iter()
+                .all(|row| row.rel_path != "odd.txt")
+        );
+        assert_eq!(
+            filtered_folder_rows(&odd, &with(FolderStatusFilter::All)).len(),
+            odd.len()
+        );
+        assert!(FolderStatusFilter::Changed.label().contains("Changed"));
+    }
+
+    #[test]
+    fn legacy_and_new_filters_narrow_together() {
+        let rows = sample_rows();
+        let display = FolderDisplay {
+            hide_orphans: true,
+            status: FolderStatusFilter::Changed,
+            ..FolderDisplay::default()
+        };
+        // Orphans pehle hi gaye, Changed `=` hatata hai.
+        let kept = filtered_folder_rows(&rows, &display);
+        assert!(
+            kept.iter()
+                .all(|row| row.glyph != '=' && row.glyph != 'L' && row.glyph != 'R')
+        );
+        assert_eq!(kept.len(), 3);
+        // Naam aur jod do: sirf src ped bachta hai.
+        let display = FolderDisplay {
+            name_query: String::from("src/"),
+            ..display
+        };
+        let kept = filtered_folder_rows(&rows, &display);
+        assert_eq!(kept.len(), 1);
+        let Some(first) = kept.first() else {
+            return;
+        };
+        assert_eq!(first.rel_path, "src/a.txt");
+    }
+
+    #[test]
+    fn active_count_and_clear_cover_all_seven() {
+        let mut display = FolderDisplay::default();
+        assert!(!display.is_active());
+        assert_eq!(display.active_count(), 0);
+        display.hide_orphans = true;
+        display.left_newer_only = true;
+        display.right_newer_only = true;
+        display.flatten = true;
+        display.name_query = String::from("a");
+        display.kind = FolderEntryKind::FilesOnly;
+        display.status = FolderStatusFilter::Changed;
+        assert!(display.is_active());
+        assert_eq!(display.active_count(), 7);
+        display.clear();
+        assert_eq!(display, FolderDisplay::default());
+        assert!(!display.is_active());
+        assert_eq!(display.active_count(), 0);
+    }
+
+    #[test]
+    fn empty_states_stay_honest() {
+        assert_eq!(
+            folder_empty_state(0, 0, false),
+            Some(FolderEmptyState::NoResults)
+        );
+        assert_eq!(
+            folder_empty_state(0, 0, true),
+            Some(FolderEmptyState::NoResults)
+        );
+        assert_eq!(
+            folder_empty_state(5, 0, true),
+            Some(FolderEmptyState::NoMatch)
+        );
+        assert_eq!(folder_empty_state(5, 2, true), None);
+        assert_eq!(folder_empty_state(5, 5, false), None);
+        assert!(folder_empty_hint(None).is_empty());
+        assert!(folder_empty_hint(Some(FolderEmptyState::NoResults)).contains("no results yet"));
+        assert!(
+            folder_empty_hint(Some(FolderEmptyState::NoMatch)).contains("no rows match filters")
+        );
+    }
+
+    #[test]
+    fn filter_bar_geo_typo_tokens_stay_on_scale() {
+        // Geometry first: bar/pad/gap spacing scale par.
+        assert_eq!(folder_filter_bar_height(), 24.0);
+        assert_eq!(folder_filter_bar_height(), FOLDER_FILTER_BAR_HEIGHT);
+        assert_eq!(folder_filter_bar_pad_x(), 8.0);
+        assert_eq!(folder_filter_bar_gap(), 8.0);
+        // Frozen tokens hilte nahi.
+        assert_eq!(tree_indent_step(), 12.0);
+        assert_eq!(folder_row_height(), 24.0);
+        // Typography second: bar body-regular mono, chip caption-strong mono.
+        let bar = folder_filter_typo();
+        assert!(bar.mono);
+        assert_eq!(bar.size, FOLDER_BODY_SIZE);
+        assert!(!bar.strong);
+        let chip = folder_filter_active_typo();
+        assert!(chip.mono);
+        assert_eq!(chip.size, FOLDER_SIDE_SIZE);
+        assert!(chip.strong);
+    }
+
+    #[test]
+    fn session_filter_helpers_wire_counts_and_hints() {
+        let rows = sample_rows();
+        let mut session = FolderSessionState::default();
+        assert!(!session.has_active_filters());
+        assert_eq!(session.active_filter_count(), 0);
+        assert_eq!(session.empty_state(&rows), None);
+        assert!(session.empty_hint(&rows).is_empty());
+        // Naam filter: ginati filtered tree par.
+        session.display.name_query = String::from("zzz-no-such-file");
+        assert!(session.has_active_filters());
+        assert_eq!(session.active_filter_count(), 1);
+        assert_eq!(session.filtered_counts(&rows).total, 0);
+        assert!(session.filtered_counts_summary(&rows).contains("0 entries"));
+        assert_eq!(session.empty_state(&rows), Some(FolderEmptyState::NoMatch));
+        assert!(session.empty_hint(&rows).contains("clear filters"));
+        // Clear: sab wapas.
+        session.clear_filters();
+        assert!(!session.has_active_filters());
+        assert_eq!(session.filtered_counts(&rows).total, rows.len());
+        assert_eq!(session.empty_state(&rows), None);
+        // Khali model: hamesha NoResults.
+        let empty: Vec<FolderRow> = Vec::new();
+        assert_eq!(
+            session.empty_state(&empty),
+            Some(FolderEmptyState::NoResults)
+        );
+        // Flatten + status bhi visible tree par lagte hain.
+        session.display.status = FolderStatusFilter::LeftOnly;
+        session.display.flatten = true;
+        let flat = session.visible_tree(&rows);
+        assert_eq!(flat.len(), 1);
+        assert!(flat.iter().all(|node| node.depth == 0));
     }
 }
