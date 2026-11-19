@@ -40,3 +40,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Poll 04
 - All 3 alive. Folder agent entering verify phase (fmt + tests). Text agent needs a hook in read-only app.rs — watching that it does NOT edit it (OWNS rule); so far app.rs still +312 from shell only.
 - Diff +1305/-96, banned-pattern scan CLEAN.
+
+## Poll 05
+- Interface collision: folder tree.rs references TextFilter, text viewmodel.rs mid-edit — 16 compile errors on folder side. Folder agent self-diagnosing (fmt diffs, own-files-only fix). No orchestrator interrupt yet; re-check next poll, intervene only if still red.
+- Text agent still reading viewmodel (offset 409). Shell agent reading app.rs tail sections.
+- Banned-pattern scan CLEAN.
