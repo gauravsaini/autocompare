@@ -156,3 +156,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 11
 - Hooks confirming workspace lint source (expect_used deny), still working. Its 3 files uncommitted. Folder proc gone (landed), hooks proc alive.
+
+## Wave D poll 12
+- Hooks in views.rs accent/color fmt code, no land. Both alive.
