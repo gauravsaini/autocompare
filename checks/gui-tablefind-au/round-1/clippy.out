@@ -1,0 +1,6 @@
+    Checking autocompare-evidence v0.5.0 (/Users/ektasaini/autocompare/crates/evidence)
+    Checking autocompare-diff v0.5.0 (/Users/ektasaini/autocompare/crates/diff)
+    Checking autocompare-vfs v0.5.0 (/Users/ektasaini/autocompare/crates/vfs)
+    Checking autocompare-compare v0.5.0 (/Users/ektasaini/autocompare/crates/compare)
+    Checking autocompare-gui v0.5.0 (/Users/ektasaini/autocompare/crates/gui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.47s

@@ -644,6 +644,245 @@ pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str)
 }
 
 // ----------------------------------------------------------------------------
+// Table find match highlight (AU-TABLEFIND): current-vs-other distinction +
+// grid geometry. Gap: find bar sirf cursor/badge chalata hai
+// (`table_find_match_rows` + `table_find_badge_label`), per-match highlight
+// nahi dikhta — current-vs-other farak nahi hai. Ye section pure
+// span/format helpers hai; Grid paint wiring orchestrator ke paas rehti hai
+// (caller signature stable, `views.rs` untouched).
+// Geometry first: match spans char indices me hain (unpadded cell text par),
+// row mapping grid order me hai (`table_find_match_rows` wahi row-major
+// order), key-col ke saath alignment grid se aati hai (`pad_table_row`
+// trailing pad se span indices nahi hilte — `table_find_span_in_padded`
+// sirf cap par clamp karta hai). Typography second: same mono `FontId`
+// (koi naya size nahi), emphasis sirf block-vs-line se: current = inverted
+// block (no underline), other = underline-only line (no block). Colors
+// frozen: caller ke apne `fg/bg` reuse + `TABLE_FIND_UNDERLINE_W`
+// underline, koi naya hue/token nahi. No egui ctx, no I/O. Pure;
+// unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Table find underline width (px): `INTRA_SPAN_UNDERLINE_W` precedent
+/// mirror (`views.rs`), same value — koi naya size/token nahi.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const TABLE_FIND_UNDERLINE_W: f32 = 1.0;
+
+/// Ek cell me needle ke char-index spans: `(start, end)` char offsets,
+/// natural order me (sorted, clamped). Khali needle par empty; overlapping
+/// matches allowed (har char offset se ek window). Case-fold ascii-only hai
+/// taaki indices multibyte text par bhi sahi rahen. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_cell_spans(cell: &str, needle: &str, ignore_case: bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    let cell_chars: Vec<char> = cell.chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    if needle_chars.is_empty() || needle_chars.len() > cell_chars.len() {
+        return out;
+    }
+    let last = cell_chars.len().saturating_sub(needle_chars.len());
+    for start in 0..=last {
+        let mut hit = true;
+        for (off, nch) in needle_chars.iter().enumerate() {
+            let same = match cell_chars.get(start.saturating_add(off)) {
+                Some(cch) if ignore_case => cch.eq_ignore_ascii_case(nch),
+                Some(cch) => cch == nch,
+                None => false,
+            };
+            if !same {
+                hit = false;
+                break;
+            }
+        }
+        if hit {
+            out.push((start, start.saturating_add(needle_chars.len())));
+        }
+    }
+    out
+}
+
+/// Ek row ki sab hits `(col, start, end)` me, column order me.
+/// `table_find_match_rows` ka span judvaan. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_row_spans(
+    cells: &[String],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (col_idx, cell) in cells.iter().enumerate() {
+        for (start, end) in table_find_cell_spans(cell, needle, ignore_case) {
+            out.push((col_idx, start, end));
+        }
+    }
+    out
+}
+
+/// Poore grid ki sab hits `(row, col, start, end)` me, row-major order me —
+/// row mapping Grid paint order jaisi hai (data row index + column index).
+/// Key-col ke saath alignment: spans unpadded cell text par hain aur Grid
+/// `pad_table_row` se trailing pad karta hai, isliye span indices padded
+/// cells me nahi hilte (`table_find_span_in_padded` sirf cap par clamp
+/// karta hai). Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_grid_spans(
+    rows: &[Vec<String>],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize, usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (row_idx, cells) in rows.iter().enumerate() {
+        for (col_idx, start, end) in table_find_row_spans(cells, needle, ignore_case) {
+            out.push((row_idx, col_idx, start, end));
+        }
+    }
+    out
+}
+
+/// Kya `(row, col)` hit current match hai. Current N/M cursor se aata hai
+/// (`table_find_current_cell`); `None` par koi current nahi (sab other).
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_is_current(found: (usize, usize), current: Option<(usize, usize)>) -> bool {
+    match current {
+        Some(at) => at == found,
+        None => false,
+    }
+}
+
+/// N/M cursor se current match cell: `table_find_match_rows` list me index.
+/// Khali list par `None`; bada cursor wrap hota hai (modulo, saturating).
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_current_cell(
+    matches: &[(usize, usize)],
+    cursor: usize,
+) -> Option<(usize, usize)> {
+    if matches.is_empty() {
+        return None;
+    }
+    matches.get(cursor % matches.len().max(1)).copied()
+}
+
+/// Padded cell me span clamp: padding trailing-only hai isliye andar ke
+/// spans nahi hilte; cap (`TABLE_MAX_COL_CHARS`) ke bahar ka hissa kat-ta
+/// hai, poora bahar ho to `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_span_in_padded(start: usize, end: usize, width: usize) -> Option<(usize, usize)> {
+    if start >= end || start >= width {
+        return None;
+    }
+    Some((start, end.min(width)))
+}
+
+/// Kya hit key column me hai — `is_key_column` reuse. Key hits ko bhi wahi
+/// underline/block highlight milta hai (koi alag color nahi); alignment
+/// grid se aati hai, isliye key-col highlight kabhi column se bahar nahi
+/// jata. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_hit_in_key_col(view: &TableKeyView, col: usize) -> bool {
+    is_key_column(view, col)
+}
+
+/// Ek cell-hit ka paint format: same mono `FontId` (size untouched),
+/// caller ke apne `fg/bg` reuse. Current = inverted block (no underline),
+/// other = underline-only line (no block) — block-vs-line se clearly
+/// distinct. `TABLE_FIND_UNDERLINE_W` reuse, koi naya token/color nahi.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_hit_format(
+    font_id: egui::FontId,
+    fg: egui::Color32,
+    bg: egui::Color32,
+    is_current: bool,
+) -> egui::TextFormat {
+    if is_current {
+        let mut fmt = egui::TextFormat::simple(font_id, bg);
+        fmt.background = fg;
+        fmt
+    } else {
+        let mut fmt = egui::TextFormat::simple(font_id, fg);
+        fmt.background = bg;
+        fmt.underline = egui::Stroke::new(TABLE_FIND_UNDERLINE_W, fg);
+        fmt
+    }
+}
+
+/// Ek cell ka find-aware layout: non-hit hissa plain mono, har hit
+/// `table_find_hit_format` se (current block, others line). Khali needle ya
+/// zero spans par single plain section. Overlapping spans me pehla hit
+/// jeetta hai (consumed range dobara paint nahi hota) taaki job text cell
+/// ke barabar rahe. Headless-first: `LayoutJob` ctx ke bina banta hai,
+/// isliye unit-test me sections inspect hote hain. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_find_cell_job(
+    cell: &str,
+    needle: &str,
+    ignore_case: bool,
+    is_current: bool,
+    font_id: egui::FontId,
+    fg: egui::Color32,
+    bg: egui::Color32,
+) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let plain = egui::TextFormat::simple(font_id.clone(), fg);
+    let spans = table_find_cell_spans(cell, needle, ignore_case);
+    if spans.is_empty() {
+        job.append(cell, 0.0, plain);
+        return job;
+    }
+    let chars: Vec<char> = cell.chars().collect();
+    let mut cursor = 0usize;
+    for (start, end) in spans {
+        if start < cursor {
+            continue;
+        }
+        if start > cursor
+            && let Some(gap) = chars.get(cursor..start)
+        {
+            let text: String = gap.iter().collect();
+            job.append(&text, 0.0, plain.clone());
+        }
+        if let Some(hit) = chars.get(start..end) {
+            let text: String = hit.iter().collect();
+            job.append(
+                &text,
+                0.0,
+                table_find_hit_format(font_id.clone(), fg, bg, is_current),
+            );
+        }
+        if end > cursor {
+            cursor = end;
+        }
+    }
+    if let Some(tail) = chars.get(cursor..)
+        && !tail.is_empty()
+    {
+        let text: String = tail.iter().collect();
+        job.append(&text, 0.0, plain);
+    }
+    job
+}
+
+// ----------------------------------------------------------------------------
 // Per-hunk merge (headless; paint wiring stays with the orchestrator).
 // Gap local-run-l #10: table tab me har modified/orphan row par
 // take-left/take-right. Ye pure row choice hai; file apply (I/O)
@@ -1202,5 +1441,182 @@ mod tests {
         assert_eq!(TABLE_KEY_BAR_H, 28.0);
         assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
         assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+    }
+
+    #[test]
+    fn tablefind_cell_spans_empty_needle_gives_no_hits() {
+        assert!(table_find_cell_spans("apple pie", "", false).is_empty());
+        assert!(table_find_cell_spans("", "apple", false).is_empty());
+        assert!(table_find_cell_spans("", "", false).is_empty());
+        // Needle cell se lambi ho to bhi empty (panic nahi).
+        assert!(table_find_cell_spans("hi", "hello world", false).is_empty());
+    }
+
+    #[test]
+    fn tablefind_cell_spans_case_modes() {
+        // Case-sensitive: sirf exact case.
+        assert_eq!(
+            table_find_cell_spans("Banana banana", "banana", false),
+            vec![(7, 13)]
+        );
+        // Ignore-case: dono milte hain, indices original cell par.
+        assert_eq!(
+            table_find_cell_spans("Banana banana", "banana", true),
+            vec![(0, 6), (7, 13)]
+        );
+        // Multibyte: char indices hain (byte nahi).
+        assert_eq!(
+            table_find_cell_spans("café au lait", "au", false),
+            vec![(5, 7)]
+        );
+    }
+
+    #[test]
+    fn tablefind_cell_spans_overlapping_ok() {
+        // Overlap allowed: har offset se ek window, sorted + clamped.
+        assert_eq!(
+            table_find_cell_spans("aaa", "aa", false),
+            vec![(0, 2), (1, 3)]
+        );
+        let spans = table_find_cell_spans("apple pie apple", "apple", false);
+        assert_eq!(spans, vec![(0, 5), (10, 15)]);
+        for (start, end) in spans {
+            assert!(start < end);
+            assert!(end <= "apple pie apple".chars().count());
+        }
+    }
+
+    #[test]
+    fn tablefind_grid_spans_map_rows_and_cols() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "apple pie".to_string()],
+        ];
+        assert_eq!(
+            table_find_grid_spans(&rows, "apple", false),
+            vec![(1, 0, 0, 5), (2, 1, 0, 5)]
+        );
+        // Row-level: (col, start, end) column order me.
+        let row_last: &[String] = rows.get(2).map(Vec::as_slice).unwrap_or(&[]);
+        let row_first: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        assert_eq!(
+            table_find_row_spans(row_last, "apple", false),
+            vec![(1, 0, 5)]
+        );
+        assert!(table_find_row_spans(row_first, "apple", false).is_empty());
+        // Khali needle: khali grid spans (koi fake count nahi).
+        assert!(table_find_grid_spans(&rows, "", false).is_empty());
+        // Row-major order barkarar (row 1 col 0, phir row 2 col 1).
+        let spans = table_find_grid_spans(&rows, "a", true);
+        let mut prev = (0usize, 0usize);
+        for (row, col, _, _) in spans {
+            assert!((row, col) >= prev);
+            prev = (row, col);
+        }
+    }
+
+    #[test]
+    fn tablefind_current_cell_tracks_cursor_with_wrap() {
+        let matches = vec![(1, 0), (2, 1), (2, 0)];
+        assert_eq!(table_find_current_cell(&matches, 0), Some((1, 0)));
+        assert_eq!(table_find_current_cell(&matches, 2), Some((2, 0)));
+        // Bada cursor wrap hota hai.
+        assert_eq!(table_find_current_cell(&matches, 3), Some((1, 0)));
+        assert_eq!(table_find_current_cell(&matches, 4), Some((2, 1)));
+        // Khali list: None.
+        assert_eq!(table_find_current_cell(&[], 0), None);
+        // Current-vs-other distinction.
+        assert!(table_find_is_current((1, 0), Some((1, 0))));
+        assert!(!table_find_is_current((2, 1), Some((1, 0))));
+        assert!(!table_find_is_current((1, 0), None));
+    }
+
+    #[test]
+    fn tablefind_current_other_formats_differ() {
+        let font = egui::FontId::monospace(14.0);
+        let fg = egui::Color32::WHITE;
+        let bg = egui::Color32::BLACK;
+        let current = table_find_hit_format(font.clone(), fg, bg, true);
+        let other = table_find_hit_format(font.clone(), fg, bg, false);
+        // Same mono FontId, koi naya size nahi.
+        assert_eq!(current.font_id, other.font_id);
+        assert_eq!(current.font_id, font);
+        // Block-vs-line: current inverted block (no underline),
+        // other underline-only line (no block).
+        assert_eq!((current.color, current.background), (bg, fg));
+        assert_eq!(current.underline.width, 0.0);
+        assert_eq!((other.color, other.background), (fg, bg));
+        assert_eq!(other.underline.width, TABLE_FIND_UNDERLINE_W);
+        assert_eq!(other.underline.color, fg);
+        // Underline precedent mirror: same 1px value.
+        assert_eq!(TABLE_FIND_UNDERLINE_W, 1.0);
+    }
+
+    #[test]
+    fn tablefind_padded_spans_stay_aligned_with_key_cols() {
+        // Trailing pad: andar ke spans nahi hilte.
+        assert_eq!(table_find_span_in_padded(0, 5, 8), Some((0, 5)));
+        assert_eq!(table_find_span_in_padded(3, 5, 8), Some((3, 5)));
+        // Cap par clamp (TABLE_MAX_COL_CHARS precedent).
+        assert_eq!(
+            table_find_span_in_padded(0, 99, TABLE_MAX_COL_CHARS),
+            Some((0, TABLE_MAX_COL_CHARS))
+        );
+        // Poora bahar ya ulta span: None.
+        assert_eq!(table_find_span_in_padded(8, 10, 8), None);
+        assert_eq!(table_find_span_in_padded(5, 5, 8), None);
+        assert_eq!(table_find_span_in_padded(6, 3, 8), None);
+        // Key-col hits ko wahi highlight: alignment grid se.
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        assert!(table_find_hit_in_key_col(&view, 0));
+        assert!(!table_find_hit_in_key_col(&view, 1));
+        // Padded cells par spans wahi rehte hain (pad trailing-only).
+        let widths = vec![8, 8];
+        let cells = vec!["apple".to_string(), "9.99".to_string()];
+        let padded = pad_table_row(&cells, &widths);
+        for (col, start, end) in table_find_row_spans(&cells, "apple", false) {
+            let width = widths.get(col).copied().unwrap_or(0);
+            let clamped = table_find_span_in_padded(start, end, width);
+            assert_eq!(clamped, Some((start, end)));
+            let _ = padded.get(col);
+        }
+    }
+
+    #[test]
+    fn tablefind_cell_job_marks_current_vs_others() {
+        let font = egui::FontId::monospace(14.0);
+        let fg = egui::Color32::WHITE;
+        let bg = egui::Color32::BLACK;
+        // Current cell: hit inverted block.
+        let job = table_find_cell_job("apple pie", "apple", false, true, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple pie");
+        assert_eq!(job.sections.len(), 2);
+        let hit = job.sections.first();
+        assert!(hit.is_some());
+        if let Some(sec) = hit {
+            assert_eq!((sec.format.color, sec.format.background), (bg, fg));
+            assert_eq!(sec.format.underline.width, 0.0);
+            assert_eq!(
+                job.text.get(sec.byte_range.start.0..sec.byte_range.end.0),
+                Some("apple")
+            );
+        }
+        // Other cell: hit underline-only line.
+        let job = table_find_cell_job("apple pie", "apple", false, false, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple pie");
+        assert_eq!(job.sections.len(), 2);
+        if let Some(sec) = job.sections.first() {
+            assert_eq!((sec.format.color, sec.format.background), (fg, bg));
+            assert_eq!(sec.format.underline.width, TABLE_FIND_UNDERLINE_W);
+        }
+        // Khali needle: single plain section.
+        let job = table_find_cell_job("apple", "", false, false, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple");
+        assert_eq!(job.sections.len(), 1);
+        // Overlap me pehla hit jeetta hai: job text cell ke barabar.
+        let job = table_find_cell_job("aaa", "aa", false, false, font, fg, bg);
+        assert_eq!(job.text, "aaa");
     }
 }

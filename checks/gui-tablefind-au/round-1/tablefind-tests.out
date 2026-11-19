@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/main.rs (target/debug/deps/autocompare_gui-bf7333b0df08e843)
+
+running 8 tests
+test views_table::tests::tablefind_cell_spans_empty_needle_gives_no_hits ... ok
+test views_table::tests::tablefind_cell_spans_case_modes ... ok
+test views_table::tests::tablefind_current_cell_tracks_cursor_with_wrap ... ok
+test views_table::tests::tablefind_cell_spans_overlapping_ok ... ok
+test views_table::tests::tablefind_current_other_formats_differ ... ok
+test views_table::tests::tablefind_cell_job_marks_current_vs_others ... ok
+test views_table::tests::tablefind_padded_spans_stay_aligned_with_key_cols ... ok
+test views_table::tests::tablefind_grid_spans_map_rows_and_cols ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 507 filtered out; finished in 0.00s
+

@@ -1,0 +1,13 @@
+ M crates/gui/src/views.rs
+ M crates/gui/src/views_table.rs
+?? checks/gui-filterpaint-au/
+?? checks/gui-tablefind-au/
+---
+ crates/gui/src/views.rs       | 387 +++++++++++++++++++++++++++++++++++++--
+ crates/gui/src/views_table.rs | 416 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 791 insertions(+), 12 deletions(-)
+---
+crates/gui/src/views.rs
+---
+crates/gui/src/views.rs
+KEVL-TOUCHED
