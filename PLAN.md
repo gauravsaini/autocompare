@@ -233,3 +233,20 @@ Ready to Proceed — Two Confirmations
 
 1. Where to write & build: Should I save this [invalid URL] to /Users/ektasaini/autocompare/PLAN.md and extend the existing autocompare v0.5.0 codebase toward full Beyond Compare 5 parity (v1.0.0), or create a brand-new workspace from scratch in a separate subfolder (e.g., /Users/ektasaini/autocompare/bc-replica/)?
 2. Scope priority: Would you like me to execute all waves (Waves 0–4) end-to-end, or prioritize a specific milestone first (for example, Home View + interactive Text/Merge editing + Folder tree drill-down before Archives/Reports/VCS)?
+9. Execution Decision Record (2026-11-20)
+
+Decision (user-confirmed): extend existing autocompare v0.5.0 codebase toward
+v1.0.0 in place. No new subfolder. Full waves end-to-end, harness-driven.
+
+Active dispatch (disjoint OWNS, isolated logs in /tmp):
+
+| Agent | OWNS | Task |
+|---|---|---|
+| release | target/release/**, checks/release-smoke/** | Rebuild release after HEAD, harness PASS, publish gh release v0.5.0 with both binaries |
+| wave-A | crates/diff/src/text*, merge*, grammar* | Harness loop max 3 rounds, MS rust rules |
+| wave-B | crates/vfs/**, crates/compare/src/folder*, sync* | Harness loop max 3 rounds, symlink-safe |
+| wave-C | crates/gui/**, checks/gui-live/** | Live BC app outside-observation, screenshot smoke |
+
+Probe strategy: no fixed timer. Detached agyx --print per agent, file-log
+polling via fresh short execs, rolling dispatch on green. Orchestrator owns
+PLAN.md, GATES-release.md, scripts/verify-*.mjs only.
