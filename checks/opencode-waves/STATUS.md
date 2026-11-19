@@ -804,3 +804,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - SPLIT f7621ec verified+pushed: OWNS clean (app 52 + views 149 + split-r REPORT 58 + proof). Draggable splitter, fraction 0.20..=0.80 clamp, replaces static halves.
 - ZOOM 0d137a3 verified+pushed: OWNS clean (theme 163 + zoom-r REPORT 62 + INTEGRATION.patch 77 apply-check OK on post-SPLIT HEAD + proof). Steps -2..+4 per-role clamp, Cmd +/-/0 wiring as patch.
 - Post-land verify: 229 green, clippy zero, fmt clean, disjoint held. All pushed. Wave R complete. Gap #1 PARTIAL (paint done, dual-file single agent worked), #9 PARTIAL (model+patch, app wiring pending).
+
+## Wave S poll 01 patches applied wave complete
+- ZOOM patch (77 lines) + FIND patch (56 lines) both apply-check OK, applied by orchestrator. FIND hunk truncated on apply (file tail cut) -> reverted views.rs hunk, appended complete block from patch, moved before mod tests, added allow(dead_code) per Wave H precedent, repaired header/attribute fallout.
+- Verify: 229 green, clippy zero, fmt clean, release 11074624B (+0.16%), PNG 9914B magic ok 256, harness round-S-1 PASS.
+- Committed feat + proof. Wave S complete. Gaps #9/#12 now PARTIAL+ (state+helpers live, paint call wiring remains).
