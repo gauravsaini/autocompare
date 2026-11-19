@@ -521,3 +521,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 19 A nudged
 - Diff steady 1409 4th poll, both live. Nudge sent to A: tuple destructure in views paint, struct-update for clippy, owned-only. B holds disjoint.
 - No commits. Wait.
+
+## Wave I poll 20 B landed A paint
+- B 442d124 verified+pushed: OWNS clean (4 files 974+), REPORT honest (owned clippy/fmt clean, wiring points). Tests 172 green. Worktree clippy red is A-side transitional (views_hex/table dead-code + app field_reassign, A mid-wiring).
+- A live (app 414 + views 116). Wait for A green.
