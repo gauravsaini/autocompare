@@ -945,3 +945,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Duplicate-filter lesson: stuck session ko nudge do, jaldi respawn mat karo — purana FILTER khud jaagke land hua, duplicate ac2 ko STOP karaya (no edits).
 - Verify combined: 301 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
 - Pushed. Next: Wave AD (folder-cols paint, find-paint wiring, header/chrome).
+
+## 2026-11-20 — Wave AD plan (2 parallel: folder-cols + sync-apply)
+- AD-COLS `sess-cols-ad`: OWNS tree.rs+views.rs+checks/gui-cols-ad (Gap #6 size/time columns paint).
+- AD-APPLY `sess-apply-ad`: OWNS app.rs+checks/gui-apply-ad (Gap #8 one-direction apply, dry-run default, temp-dir tests).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
