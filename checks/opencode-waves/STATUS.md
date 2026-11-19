@@ -433,3 +433,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 12 B wiring C selfcheck
 - B+C live. B 22 green, wiring refs extraction for REPORT + INTEGRATION.patch, commit next. C OWNS selfcheck clean (no forbidden touches), gates next.
 - No B/C commits yet. Wait.
+
+## Wave H poll 13 C landed B last mile
+- C a2c0380 verified+pushed: OWNS clean (7 files), tests 125 green, clippy clean, fmt clean, no hue change. Geometry 4/8/12/16/24 + typo weights headless.
+- B live, checks/parity-hex-table/ written, REPORT+patch+gates next. Wait.
