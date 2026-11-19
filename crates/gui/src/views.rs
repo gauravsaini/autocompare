@@ -1059,11 +1059,92 @@ pub fn format_merge_hunk_title(index: usize, total: usize) -> String {
     )
 }
 
-/// One hunk ka decision display: picks `paint_merge_three_pane` me
-/// staged nahi hote (stub), isliye har bachi hunk honest pending hai.
-/// Pure; unit-tested.
+/// One hunk ka decision display bina staged pick ke: honest pending.
+/// Staged pick ke saath display [`format_merge_hunk_decision_with_pick`]
+/// deta hai. Pure; unit-tested.
 pub fn format_merge_hunk_decision(index: usize) -> String {
     format!("hunk {}: decision pending", index.saturating_add(1))
+}
+
+/// Staged picks ka temp-store id, live `lines` content hash se scoped taaki
+/// naya compare purani intent kabhi inherit na kare. Decision ka App wiring
+/// agli wave ka hai; is wave me picks isi id par local rehte hain.
+/// Pure (no egui context); unit-tested.
+pub fn merge_pick_id(lines: &[String]) -> egui::Id {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    lines.hash(&mut hasher);
+    egui::Id::unique("merge_hunk_picks").with(hasher.finish())
+}
+
+/// Ek staged side ka display naam: intent/summary labels ke liye.
+/// Pure; unit-tested.
+pub fn merge_pick_choice_label(choice: viewmodel::TakeChoice) -> &'static str {
+    match choice {
+        viewmodel::TakeChoice::Left => "left",
+        viewmodel::TakeChoice::Right => "right",
+        viewmodel::TakeChoice::Base => "base",
+        viewmodel::TakeChoice::Both => "both",
+    }
+}
+
+/// Ek hunk ka pick intent display: "hunk N: take <side>".
+/// Pure; unit-tested.
+pub fn format_merge_pick_intent(index: usize, choice: viewmodel::TakeChoice) -> String {
+    format!(
+        "hunk {}: take {}",
+        index.saturating_add(1),
+        merge_pick_choice_label(choice)
+    )
+}
+
+/// Staged picks me hunk `index` ki aakhri staged side; unknown par `None`.
+/// Duplicate picks me aakhri staged jeetti hai
+/// ([`viewmodel::apply_merge_picks`] dedup rule). Pure; unit-tested.
+pub fn merge_pick_for_hunk(
+    picks: &[viewmodel::MergeHunkPick],
+    index: usize,
+) -> Option<viewmodel::TakeChoice> {
+    let mut found = None;
+    for pick in picks {
+        if pick.conflict_index == index {
+            found = Some(pick.choice);
+        }
+    }
+    found
+}
+
+/// Ek pick stage karta hai: same hunk ki purani pick overwrite hoti hai
+/// (aakhri jeetti hai), nayi hunk judti hai. [`viewmodel::apply_merge_picks`]
+/// ke dedup rule ka paint-side mirror. Pure; unit-tested.
+pub fn stage_merge_pick(
+    picks: &[viewmodel::MergeHunkPick],
+    index: usize,
+    choice: viewmodel::TakeChoice,
+) -> Vec<viewmodel::MergeHunkPick> {
+    let mut out: Vec<viewmodel::MergeHunkPick> = Vec::new();
+    for pick in picks {
+        if pick.conflict_index != index {
+            out.push(*pick);
+        }
+    }
+    out.push(viewmodel::MergeHunkPick {
+        conflict_index: index,
+        choice,
+    });
+    out
+}
+
+/// Ek hunk ka decision display staged pick ke saath: pick ho to
+/// "take <side>" intent, nahi to honest pending. Pure; unit-tested.
+pub fn format_merge_hunk_decision_with_pick(
+    index: usize,
+    pick: Option<viewmodel::TakeChoice>,
+) -> String {
+    match pick {
+        Some(choice) => format_merge_pick_intent(index, choice),
+        None => format_merge_hunk_decision(index),
+    }
 }
 
 /// 3-pane summary line: kul conflict hunks + pending + conflicted flag.
@@ -1079,14 +1160,21 @@ pub fn merge_three_pane_summary_line(total: usize, pending: usize, conflicted: b
 }
 
 /// The merge 3-pane: har conflict hunk ke left/base/right panes +
-/// per-hunk decision display. Model reuse read-only hai
-/// ([`viewmodel::merge_conflict_hunks`] + [`viewmodel::merge_pick_summary`]);
-/// per-hunk Take buttons stub hain (label me "stub" saaf, no-op) jabki
-/// panes + decisions real dikhte hain. Global Take `paint_merge` me
-/// functional rehta hai.
+/// per-hunk decision display + per-hunk real Take buttons. Model reuse
+/// read-only hai ([`viewmodel::merge_conflict_hunks`] +
+/// [`viewmodel::merge_pick_summary`]); picks egui temp store me stage hote
+/// hain ([`merge_pick_id`], live lines se scoped) aur decision display
+/// pending se "take <side>" intent me badalta hai — decision ka App wiring
+/// agli wave ka hai, is wave me pick intent local state/display tak.
+/// Har card par Take Left / Take Right (plus Take Base / Take Both) real
+/// buttons hain, koi stub nahi. Global Take `paint_merge` me functional
+/// rehta hai. Signature unchanged (KEVL `app.rs` call-site compat).
 pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
     let hunks = viewmodel::merge_conflict_hunks(lines);
-    let summary = viewmodel::merge_pick_summary(lines, &[]);
+    let mut picks: Vec<viewmodel::MergeHunkPick> = ui
+        .data_mut(|data| data.get_temp::<Vec<viewmodel::MergeHunkPick>>(merge_pick_id(lines)))
+        .unwrap_or_default();
+    let summary = viewmodel::merge_pick_summary(lines, &picks);
     ui.label(
         RichText::new(merge_three_pane_summary_line(
             summary.total,
@@ -1104,6 +1192,7 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
         let (left, base, right) = merge_hunk_sides(lines, hunk);
         let idx = hunk.conflict_index;
         let total = hunks.len();
+        let mut staged: Option<viewmodel::TakeChoice> = None;
         ui.group(|ui| {
             ui.label(
                 RichText::new(format_merge_hunk_title(idx, total))
@@ -1111,9 +1200,12 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
                     .strong(),
             );
             ui.label(
-                RichText::new(format_merge_hunk_decision(idx))
-                    .small()
-                    .weak(),
+                RichText::new(format_merge_hunk_decision_with_pick(
+                    idx,
+                    merge_pick_for_hunk(&picks, idx),
+                ))
+                .small()
+                .weak(),
             );
             ui.add_space(TIGHT_GAP);
             ui.horizontal(|ui| {
@@ -1150,14 +1242,28 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
             ui.add_space(TIGHT_GAP);
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Take:").small().weak());
-                let _ = ui.small_button("Take Left (stub)");
-                let _ = ui.small_button("Take Right (stub)");
-                let _ = ui.small_button("Take Base (stub)");
-                let _ = ui.small_button("Take Both (stub)");
+                if ui.small_button("Take Left").clicked() {
+                    staged = Some(viewmodel::TakeChoice::Left);
+                }
+                if ui.small_button("Take Right").clicked() {
+                    staged = Some(viewmodel::TakeChoice::Right);
+                }
+                if ui.small_button("Take Base").clicked() {
+                    staged = Some(viewmodel::TakeChoice::Base);
+                }
+                if ui.small_button("Take Both").clicked() {
+                    staged = Some(viewmodel::TakeChoice::Both);
+                }
             });
         });
+        if let Some(choice) = staged {
+            picks = stage_merge_pick(&picks, idx, choice);
+        }
         ui.add_space(TIGHT_GAP);
     }
+    ui.data_mut(|data| {
+        data.insert_temp(merge_pick_id(lines), picks);
+    });
 }
 
 /// The three-way merge output: conflict blocks highlighted, notes
@@ -4419,6 +4525,129 @@ mod tests {
     #[test]
     fn merge_pane_count_is_three() {
         assert_eq!(merge_pane_count(), 3);
+    }
+
+    #[test]
+    fn merge_pick_id_scopes_to_live_lines() {
+        let lines = vec!["<<<<<<< left".to_string(), "L1".to_string()];
+        let same = lines.clone();
+        let mut other = lines.clone();
+        other.push("extra".to_string());
+        assert_eq!(merge_pick_id(&lines), merge_pick_id(&same));
+        assert_ne!(merge_pick_id(&lines), merge_pick_id(&other));
+        assert_ne!(merge_pick_id(&lines), merge_pick_id(&[]));
+    }
+
+    #[test]
+    fn merge_pick_choice_labels_are_take_sides() {
+        assert_eq!(merge_pick_choice_label(viewmodel::TakeChoice::Left), "left");
+        assert_eq!(
+            merge_pick_choice_label(viewmodel::TakeChoice::Right),
+            "right"
+        );
+        assert_eq!(merge_pick_choice_label(viewmodel::TakeChoice::Base), "base");
+        assert_eq!(merge_pick_choice_label(viewmodel::TakeChoice::Both), "both");
+    }
+
+    #[test]
+    fn merge_pick_for_hunk_returns_last_staged() {
+        let picks = vec![
+            viewmodel::MergeHunkPick {
+                conflict_index: 0,
+                choice: viewmodel::TakeChoice::Left,
+            },
+            viewmodel::MergeHunkPick {
+                conflict_index: 1,
+                choice: viewmodel::TakeChoice::Right,
+            },
+            viewmodel::MergeHunkPick {
+                conflict_index: 0,
+                choice: viewmodel::TakeChoice::Both,
+            },
+        ];
+        assert_eq!(
+            merge_pick_for_hunk(&picks, 0),
+            Some(viewmodel::TakeChoice::Both)
+        );
+        assert_eq!(
+            merge_pick_for_hunk(&picks, 1),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        assert_eq!(merge_pick_for_hunk(&picks, 7), None);
+        assert_eq!(merge_pick_for_hunk(&[], 0), None);
+    }
+
+    #[test]
+    fn stage_merge_pick_upserts_last_wins() {
+        let staged = stage_merge_pick(&[], 0, viewmodel::TakeChoice::Left);
+        assert_eq!(staged.len(), 1);
+        let restaged = stage_merge_pick(&staged, 0, viewmodel::TakeChoice::Right);
+        assert_eq!(restaged.len(), 1);
+        assert_eq!(
+            merge_pick_for_hunk(&restaged, 0),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        let two = stage_merge_pick(&restaged, 1, viewmodel::TakeChoice::Base);
+        assert_eq!(two.len(), 2);
+        assert_eq!(
+            merge_pick_for_hunk(&two, 1),
+            Some(viewmodel::TakeChoice::Base)
+        );
+    }
+
+    #[test]
+    fn merge_pick_intent_and_decision_with_pick_labels() {
+        assert_eq!(
+            format_merge_pick_intent(0, viewmodel::TakeChoice::Left),
+            "hunk 1: take left".to_string()
+        );
+        assert_eq!(
+            format_merge_pick_intent(1, viewmodel::TakeChoice::Right),
+            "hunk 2: take right".to_string()
+        );
+        assert_eq!(
+            format_merge_hunk_decision_with_pick(0, None),
+            format_merge_hunk_decision(0)
+        );
+        assert_eq!(
+            format_merge_hunk_decision_with_pick(0, Some(viewmodel::TakeChoice::Left)),
+            "hunk 1: take left".to_string()
+        );
+        assert_eq!(
+            format_merge_hunk_decision_with_pick(2, Some(viewmodel::TakeChoice::Both)),
+            "hunk 3: take both".to_string()
+        );
+    }
+
+    #[test]
+    fn merge_pick_summary_reflects_staged_picks() {
+        let lines = vec![
+            "<<<<<<< left".to_string(),
+            "L1".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>> right".to_string(),
+            "mid".to_string(),
+            "<<<<<<< left".to_string(),
+            "L2".to_string(),
+            "=======".to_string(),
+            "R2".to_string(),
+            ">>>>>>> right".to_string(),
+        ];
+        let none = viewmodel::merge_pick_summary(&lines, &[]);
+        assert_eq!((none.total, none.pending), (2, 2));
+        assert!(none.conflicted);
+        let one = stage_merge_pick(&[], 0, viewmodel::TakeChoice::Left);
+        let half = viewmodel::merge_pick_summary(&lines, &one);
+        assert_eq!((half.total, half.resolved, half.pending), (2, 1, 1));
+        assert!(half.conflicted);
+        let unknown = stage_merge_pick(&one, 9, viewmodel::TakeChoice::Right);
+        let still = viewmodel::merge_pick_summary(&lines, &unknown);
+        assert_eq!((still.resolved, still.pending), (1, 1));
+        let full = stage_merge_pick(&one, 1, viewmodel::TakeChoice::Right);
+        let done = viewmodel::merge_pick_summary(&lines, &full);
+        assert_eq!((done.resolved, done.pending), (2, 0));
+        assert!(!done.conflicted);
     }
 
     #[test]
