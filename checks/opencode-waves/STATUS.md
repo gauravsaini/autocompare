@@ -477,3 +477,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave I poll 08 steady 894
 - A+B live, diff steady 894 (main+3 B files). A engine error refs, B MergeHunk model. No commits. Wait.
+
+## Wave I poll 09 B clippy A same
+- A+B live, diff 894 steady. A tail unchanged (engine grep, wiring complex). B clippy warnings viewmodel 1319/1299 fixing.
+- No commits. If A still same next poll, nudge via session follow-up. Wait.
