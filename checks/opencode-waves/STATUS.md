@@ -565,3 +565,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 30 REPORT writing
 - A live, paint calls wired (paint_hex/paint_table_keyed with views). REPORT writing, commit next.
 - Wait for land.
+
+## Wave I poll 31 committing
+- A staged REPORT + 3 files, scan clean, committing now.
+- Wait for land.
