@@ -979,3 +979,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Shared-worktree hazard fir dikha (paint_text unused, empty-if) — dono ne wait+coordinate karke green kiya.
 - Verify combined: 333 green, clippy 0, fmt clean, banned 0.
 - Pushed. Next: Wave AG (header/chrome, splitter-handle paint, audio action).
+
+## 2026-11-20 — Wave AG plan (2 parallel: chrome hierarchy + splitter-drag model)
+- AG-CHROME `sess-chrome-ag`: OWNS theme.rs+views.rs+checks/gui-chrome-ag (Gap #18 header/chrome/line-height).
+- AG-SPLITDRAG `sess-splitdrag-ag`: OWNS viewmodel.rs+checks/gui-splitdrag-ag (Gap #1 drag-handle geometry model; paint next).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
