@@ -485,3 +485,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 10 patch green 151
 - A+B live. A patch green 151 (125+22+4), Error variants check for wiring. B MergeHunk wiring-pending note (A wires paint), viewmodel 602.
 - Diff 898+. No commits. Wait.
+
+## Wave I poll 11 A app wiring
+- A+B live. A M app.rs 11 lines (model wiring started) + main 2. B gutter/tree/viewmodel pure models (611). Disjoint holds, diff 914.
+- No commits. Wait.
