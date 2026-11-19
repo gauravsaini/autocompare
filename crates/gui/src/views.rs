@@ -359,6 +359,11 @@ pub fn paint_hex(ui: &mut Ui, view: &mut views_hex::HexCompareView, lines: &[Str
         {
             view.navigate_to_offset(off);
         }
+        // Parity-m wiring (orchestrator): gutter row-click `row` par
+        // `views_hex::hex_row_to_hunk(row, &view.hunks)` se hunk idx
+        // lekar `view.selected = Some(idx)` kare; page keys
+        // `App::hex_pager` (`next_page`/`prev_page`/`bring_into_view`)
+        // chalaye. Grid paint khud parity-l F1 WIRING ke saath aayega.
     });
     if view.hunks.is_empty() {
         ui.label(RichText::new("(no differing hunks)").weak());

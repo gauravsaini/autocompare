@@ -5,9 +5,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use autocompare_diff::{
-    DiffScript, Op, Table, TableCompareOptions, cells_equal_with_tolerance,
-    detect_key_columns, diff_cells, diff_cells_with_options, diff_rows,
-    diff_table_by_key, diff_table_by_key_with_options, parse_delimited, sort_table_rows,
+    DiffScript, Op, Table, TableCompareOptions, cells_equal_with_tolerance, detect_key_columns,
+    diff_cells, diff_cells_with_options, diff_rows, diff_table_by_key,
+    diff_table_by_key_with_options, parse_delimited, sort_table_rows,
 };
 
 /// Shorthand for expected cells: `cells(&["a", "b"])`.
@@ -455,10 +455,6 @@ fn sorted_and_diff_cells_with_options_agree() {
         ignore_case: false,
         trim_space: false,
     };
-    let d = diff_cells_with_options(
-        &cells(&["5", "x"]),
-        &cells(&["5.2", "x"]),
-        &opts,
-    );
+    let d = diff_cells_with_options(&cells(&["5", "x"]), &cells(&["5.2", "x"]), &opts);
     assert!(d.is_empty(), "5 vs 5.2 is within 0.5");
 }

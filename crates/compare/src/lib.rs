@@ -16,12 +16,12 @@ mod sync;
 mod table;
 mod text;
 
+pub use autocompare_diff::hex::HexAlignment;
 pub use folder::{FolderCompare, compare_folders_cancellable};
 pub use folder_merge::FolderMerge;
 pub use jobs::{JobHandle, JobProgress, JobRunner};
 pub use sync::{SyncMode, SyncPlanner};
 pub use table::{TableKeyFileComparison, TableKeyOptions};
-pub use autocompare_diff::hex::HexAlignment;
 
 use std::fmt;
 use std::path::Path;

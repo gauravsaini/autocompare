@@ -90,6 +90,9 @@ pub struct App {
     pub dark_mode: bool,
     pub folder_expanded: BTreeSet<String>,
     pub folder_session: tree::FolderSessionState,
+    pub hex_pager: views_hex::HexPager,
+    pub table_pager: views_table::TablePager,
+    pub folder_pager: tree::RowPager,
     pub word_wrap: bool,
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
@@ -131,6 +134,9 @@ impl Default for App {
             dark_mode: true,
             folder_expanded: BTreeSet::new(),
             folder_session: tree::FolderSessionState::default(),
+            hex_pager: views_hex::HexPager::new(0, 16),
+            table_pager: views_table::TablePager::new(0, 20),
+            folder_pager: tree::RowPager::new(0, 20),
             word_wrap: false,
             show_line_numbers: true,
             syntax_highlight: true,
@@ -458,6 +464,20 @@ impl App {
         }
     }
 
+    /// Gutter-click jump: grid row `row` ko offset banakar covering
+    /// hunk select karta hai (parity-m F1 model). Paint
+    /// `views_hex::hex_row_start(row)` se row deta hai.
+    pub fn hex_gutter_jump_to_row(&mut self, row: u64) -> bool {
+        match views_hex::hex_row_to_hunk(row, &self.hex_view.hunks) {
+            Some(idx) => {
+                self.hex_view.selected = Some(idx);
+                self.status = format!("hex: {}", self.hex_view.status_line());
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Toggles one table key column, clearing stale results.
     pub fn toggle_table_key_column(&mut self, column: usize) {
         self.table_view.toggle_key_column(column);
@@ -508,6 +528,27 @@ impl App {
     fn clear_table_results(&mut self) {
         self.table_model = None;
         self.table_view.summary = views_table::TableKeySummary::default();
+    }
+
+    /// Table find-box (parity-m F2 model): agli match cell `from_row`
+    /// se, row-major wrap ke saath. Caller data rows deta hai.
+    pub fn table_find_next_cell(
+        rows: &[Vec<String>],
+        needle: &str,
+        from_row: usize,
+        ignore_case: bool,
+    ) -> Option<(usize, usize)> {
+        views_table::table_find_next(rows, needle, from_row, ignore_case)
+    }
+
+    /// Table per-hunk merge (parity-m F3 model): chosen side ki row.
+    /// `None` side matlab orphan ka missing side (fallback dusri side).
+    pub fn table_merge_row(
+        left_row: Option<&[String]>,
+        right_row: Option<&[String]>,
+        side: views_table::TableMergeSide,
+    ) -> Vec<String> {
+        views_table::table_resolve_row(left_row, right_row, side)
     }
 
     /// Honest over-cap view when an input exceeds the aligned hex cap.
@@ -569,6 +610,24 @@ impl App {
         match self.folder_rows() {
             Some(rows) => self.folder_session.visible_tree(rows),
             None => Vec::new(),
+        }
+    }
+
+    /// Folder gutter next-change (parity-m F1 model): `from` ke baad
+    /// ka agla changed row index, wrap ke saath.
+    pub fn folder_next_changed_index(&self, from: usize) -> Option<usize> {
+        match self.folder_rows() {
+            Some(rows) => tree::folder_next_changed(rows, from),
+            None => None,
+        }
+    }
+
+    /// Folder gutter prev-change (parity-m F1 model): `from` se pehle
+    /// ka pichhla changed row index, wrap ke saath.
+    pub fn folder_prev_changed_index(&self, from: usize) -> Option<usize> {
+        match self.folder_rows() {
+            Some(rows) => tree::folder_prev_changed(rows, from),
+            None => None,
         }
     }
 

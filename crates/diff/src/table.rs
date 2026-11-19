@@ -518,12 +518,7 @@ pub fn diff_table_by_key_with_options(
         let key = normalised_key(row_a, &opts.key_columns, opts);
         let hit = right_key_map
             .get_mut(&key)
-            .and_then(|indices| {
-                indices
-                    .iter()
-                    .copied()
-                    .find(|i| !used_right.contains(i))
-            });
+            .and_then(|indices| indices.iter().copied().find(|i| !used_right.contains(i)));
         if let Some(r_idx) = hit {
             used_right.insert(r_idx);
             let row_b = b.rows.get(r_idx).cloned().unwrap_or_default();
@@ -1083,7 +1078,8 @@ mod tests {
     }
 
     #[test]
-    fn test_workbook_diff() {        let wb1 = Workbook {
+    fn test_workbook_diff() {
+        let wb1 = Workbook {
             sheets: vec![Sheet {
                 name: "Sheet1".into(),
                 table: Table {
@@ -1197,7 +1193,11 @@ mod tests {
                 .map(|r| r.into_iter().map(|c| c.to_string()).collect())
                 .collect(),
         };
-        let t1 = mk(vec![vec!["a", "1.00"], vec!["b", "2.00"], vec!["gone", "3.00"]]);
+        let t1 = mk(vec![
+            vec!["a", "1.00"],
+            vec!["b", "2.00"],
+            vec!["gone", "3.00"],
+        ]);
         let t2 = mk(vec![vec!["a", "1.05"], vec!["b", "9.99"]]);
         let opts = TableCompareOptions {
             key_columns: Vec::new(),

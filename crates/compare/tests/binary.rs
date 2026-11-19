@@ -4,7 +4,9 @@
 
 mod common;
 
-use autocompare_compare::{Error, HexAlignment, compare_binary_files, compare_binary_files_aligned};
+use autocompare_compare::{
+    Error, HexAlignment, compare_binary_files, compare_binary_files_aligned,
+};
 use common::{cleanup, temp_root, write_bytes};
 use std::path::PathBuf;
 
@@ -208,9 +210,9 @@ fn aligned_complete_finds_insertion_as_gap() {
         .expect("files must compare");
     assert_eq!(cmp.first_diff, Some(4));
     assert!(
-        cmp.hunks.iter().any(|h| h.left.is_empty()
-            && h.right == b"____".to_vec()
-            && h.offset == 4),
+        cmp.hunks
+            .iter()
+            .any(|h| h.left.is_empty() && h.right == b"____".to_vec() && h.offset == 4),
         "inserted bytes must surface as one right-only hunk, got {:?}",
         cmp.hunks
     );
@@ -296,13 +298,9 @@ fn aligned_missing_file_is_missing_error() {
     let base = temp_root();
     let file = base.join("exists.bin");
     write_bytes(&file, b"x");
-    let err = compare_binary_files_aligned(
-        &base.join("nope.bin"),
-        &file,
-        4,
-        HexAlignment::Complete,
-    )
-    .expect_err("missing file must fail");
+    let err =
+        compare_binary_files_aligned(&base.join("nope.bin"), &file, 4, HexAlignment::Complete)
+            .expect_err("missing file must fail");
     assert!(matches!(err, Error::Missing { .. }));
     cleanup(&base);
 }
