@@ -688,3 +688,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - LOCALBIN ses-localbin-L (agyx print single-shot): OWNS checks/local-run-l/** only, zero source edits. Local run + release binary early feedback vs running Beyond Compare (PID 23316, outside observation, own words): geometry/typo gaps, horrible-UI deltas, feature/usability far-from-parity list.
 - PARITY ses-parity-l (opencode default): OWNS views_hex.rs+views_table.rs+tree.rs+checks/parity-l/**. Craft-anything per-feature replicate+validate loop: cases/ pairs, test, fix, repeat (max 6 rounds), headless-first.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, harness PASS required, STATUS orchestrator-only.
+
+## Wave L poll 01 all live + orch proof moved
+- 4 Wave L live: GEO 59745, TYPO 59746, PARITY 59747 (opencode default, logs growing), LOCALBIN agyx 59748 spawned (log 0B, startup slow, probe running). K-B 57742 still writing REPORT (round-K-1 artifacts done).
+- Orchestrator local-run proof: harness PASS post-K-A into checks/local-run-orch/round-orch-1 (after.png 9914B, magic ok, distinct 256). Moved out of checks/local-run-l/** to keep LOCALBIN OWNS disjoint (agent uses round-L-1).
+- GEO/TYPO reading phase (TYPO log shows views.rs typo-signal grep, read-only ok). PARITY mapping viewmodel/tree/views refs (read-only ok). No commits yet, no OWNS violations. Wait.
