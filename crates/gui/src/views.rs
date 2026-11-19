@@ -52,14 +52,83 @@ const BROWSE_RESERVE: f32 = 75.0;
 const MIN_HALF: f32 = 180.0;
 const MIN_THIRD: f32 = 130.0;
 
+/// Draggable split bounds: left pane fraction stays inside
+/// 20%..=80% so neither pane collapses; default centers at 50%.
+/// Per-run state only (lives on `App`, no filesystem writes).
+pub const SPLIT_MIN_FRACTION: f32 = 0.20;
+pub const SPLIT_MAX_FRACTION: f32 = 0.80;
+pub const SPLIT_DEFAULT_FRACTION: f32 = 0.50;
+const SPLIT_HANDLE_W: f32 = 8.0;
+
 /// Equal half width for two path fields sharing one row.
+/// Kept as the centered wrapper over [`split_field_widths`]; new
+/// paint code goes through the draggable split instead.
+#[allow(dead_code)]
 pub fn half_field_width(avail: f32) -> f32 {
-    (avail / 2.0).max(MIN_HALF) - BROWSE_RESERVE
+    split_field_widths(avail, SPLIT_DEFAULT_FRACTION).0
 }
 
 /// Equal third width for three path fields sharing one row.
 pub fn third_field_width(avail: f32) -> f32 {
     (avail / 3.0).max(MIN_THIRD) - BROWSE_RESERVE
+}
+
+/// Clamp a raw split fraction into the draggable range.
+pub fn clamp_split_fraction(fraction: f32) -> f32 {
+    fraction.clamp(SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION)
+}
+
+/// Drag delta applied to a split fraction: `dx` pixels over `avail`
+/// pixels of travel, then clamped. Non-positive `avail` keeps the
+/// current fraction so headless callers never divide by zero.
+pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
+    if avail <= 0.0 {
+        return clamp_split_fraction(fraction);
+    }
+    clamp_split_fraction(fraction + dx / avail)
+}
+
+/// Split widths for the two path fields at `fraction` of `avail`.
+/// Each side keeps the [`MIN_HALF`] floor minus the browse reserve,
+/// so narrow windows scroll instead of crushing the fields.
+pub fn split_field_widths(avail: f32, fraction: f32) -> (f32, f32) {
+    let f = clamp_split_fraction(fraction);
+    let left = (avail * f).max(MIN_HALF) - BROWSE_RESERVE;
+    let right = (avail * (1.0 - f)).max(MIN_HALF) - BROWSE_RESERVE;
+    (left, right)
+}
+
+/// Split widths for the picture side-by-side columns at `fraction`
+/// of `avail` minus one [`SECTION_GAP`]. Each side keeps the
+/// [`MIN_HALF`] floor; the leftover goes to the other side so the
+/// pair always fills the row.
+pub fn split_picture_widths(avail: f32, fraction: f32) -> (f32, f32) {
+    let total = (avail - SECTION_GAP).max(2.0 * MIN_HALF);
+    let f = clamp_split_fraction(fraction);
+    let left = (total * f).clamp(MIN_HALF, total - MIN_HALF);
+    (left, total - left)
+}
+
+/// Draggable divider between two panes. Paints a narrow grab strip
+/// and folds horizontal drag deltas back into `fraction` via
+/// [`split_apply_drag`]. Returns true while the divider moves.
+pub fn paint_split_handle(ui: &mut Ui, fraction: &mut f32, avail: f32) -> bool {
+    let height = ui.available_height().max(20.0);
+    let (rect, resp) =
+        ui.allocate_exact_size(egui::vec2(SPLIT_HANDLE_W, height), egui::Sense::drag());
+    ui.painter().rect_filled(
+        rect.shrink(2.0),
+        2.0,
+        ui.visuals().widgets.noninteractive.bg_fill,
+    );
+    if resp.dragged() {
+        let dx = resp.drag_delta().x;
+        if dx != 0.0 {
+            *fraction = split_apply_drag(*fraction, dx, avail);
+            return true;
+        }
+    }
+    false
 }
 
 /// Consistent tree indent for one depth level.
@@ -186,6 +255,8 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
 }
 
 /// Two path text fields with native file/folder picker buttons plus Compare.
+/// The fields share the row by `split` (see [`clamp_split_fraction`]);
+/// a drag handle between them resizes both panes for this run.
 pub fn paint_paths(
     ui: &mut Ui,
     noun: &str,
@@ -193,12 +264,15 @@ pub fn paint_paths(
     left: &mut String,
     right: &mut String,
     compare: &mut bool,
+    split: &mut f32,
 ) {
+    *split = clamp_split_fraction(*split);
+    let avail = ui.available_width();
+    let (left_w, right_w) = split_field_widths(avail, *split);
     ui.horizontal(|ui| {
-        let half = half_field_width(ui.available_width());
         ui.add(
             TextEdit::singleline(left)
-                .desired_width(half)
+                .desired_width(left_w)
                 .hint_text(format!("left {noun} path")),
         );
         if ui.button("Browse...").clicked() {
@@ -210,9 +284,10 @@ pub fn paint_paths(
                 *left = file.display().to_string();
             }
         }
+        paint_split_handle(ui, split, avail);
         ui.add(
             TextEdit::singleline(right)
-                .desired_width(half)
+                .desired_width(right_w)
                 .hint_text(format!("right {noun} path")),
         );
         if ui.button("Browse...").clicked() {
@@ -1505,9 +1580,12 @@ fn premul(channel: u8, alpha: u8) -> u8 {
 
 /// Width of one picture column: half the available width minus one
 /// section gap, floored at [`MIN_HALF`] so narrow panels scroll instead
-/// of crushing the image.
+/// of crushing the image. Kept as the centered wrapper over
+/// [`split_picture_widths`]; new paint code goes through the
+/// draggable split instead.
+#[allow(dead_code)]
 pub fn picture_column_width(avail: f32) -> f32 {
-    ((avail - SECTION_GAP) / 2.0).max(MIN_HALF)
+    split_picture_widths(avail, SPLIT_DEFAULT_FRACTION).0
 }
 
 /// Clamped overlay mix paint honors (0 = full left, 100 = full right).
@@ -1568,6 +1646,7 @@ pub fn paint_picture_compare(
     model: &PictureCompareModel,
     view: &mut PictureViewState,
     heatmap: Option<&TextureHandle>,
+    split: &mut f32,
 ) {
     ui.label(RichText::new(picture_status_line(model)).monospace().weak());
     ui.add_space(TIGHT_GAP);
@@ -1584,10 +1663,12 @@ pub fn paint_picture_compare(
     ui.add_space(TIGHT_GAP);
     match view.mode {
         PictureMode::SideBySide => {
-            let col = picture_column_width(ui.available_width());
+            *split = clamp_split_fraction(*split);
+            let avail = ui.available_width();
+            let (left_w, right_w) = split_picture_widths(avail, *split);
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.set_width(col);
+                    ui.set_width(left_w);
                     ui.label(RichText::new("left").small().weak());
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_l, model.height_l)).monospace(),
@@ -1602,8 +1683,9 @@ pub fn paint_picture_compare(
                         .weak(),
                     );
                 });
+                paint_split_handle(ui, split, avail);
                 ui.vertical(|ui| {
-                    ui.set_width(col);
+                    ui.set_width(right_w);
                     ui.label(RichText::new("right").small().weak());
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_r, model.height_r)).monospace(),
@@ -2242,6 +2324,55 @@ mod tests {
     fn third_fields_share_equal_width() {
         assert_eq!(third_field_width(900.0), 225.0);
         assert_eq!(third_field_width(0.0), 55.0);
+    }
+
+    #[test]
+    fn split_fraction_clamps_to_drag_range() {
+        assert_eq!(clamp_split_fraction(0.50), 0.50);
+        assert_eq!(clamp_split_fraction(0.0), SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(1.0), SPLIT_MAX_FRACTION);
+        assert_eq!(clamp_split_fraction(-5.0), SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(9.9), SPLIT_MAX_FRACTION);
+        assert_eq!((SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION), (0.20, 0.80));
+        assert_eq!(SPLIT_DEFAULT_FRACTION, 0.50);
+    }
+
+    #[test]
+    fn split_field_widths_follow_fraction() {
+        let (left, right) = split_field_widths(800.0, 0.50);
+        assert_eq!((left, right), (325.0, 325.0));
+        assert_eq!(
+            (left, right),
+            (half_field_width(800.0), half_field_width(800.0))
+        );
+        let (wide_left, wide_right) = split_field_widths(800.0, 0.80);
+        assert!(wide_left > wide_right);
+        assert_eq!(wide_left, 800.0 * 0.80 - 75.0);
+        let (narrow_left, narrow_right) = split_field_widths(800.0, 0.0);
+        assert_eq!((narrow_left, narrow_right), split_field_widths(800.0, 0.20));
+    }
+
+    #[test]
+    fn split_picture_widths_sum_to_row() {
+        let (left, right) = split_picture_widths(800.0, 0.50);
+        assert_eq!(left + right, 800.0 - SECTION_GAP);
+        assert_eq!((left, right), (396.0, 396.0));
+        let (wide_left, wide_right) = split_picture_widths(800.0, 0.80);
+        assert_eq!(wide_left + wide_right, 800.0 - SECTION_GAP);
+        assert!(wide_left > wide_right);
+        assert!(wide_left >= MIN_HALF && wide_right >= MIN_HALF);
+        let (tiny_left, tiny_right) = split_picture_widths(0.0, 0.50);
+        assert_eq!(tiny_left + tiny_right, 2.0 * MIN_HALF);
+    }
+
+    #[test]
+    fn split_drag_delta_moves_fraction() {
+        assert_eq!(split_apply_drag(0.50, 80.0, 800.0), 0.60);
+        assert_eq!(split_apply_drag(0.50, -80.0, 800.0), 0.40);
+        assert_eq!(split_apply_drag(0.50, 800.0, 800.0), SPLIT_MAX_FRACTION);
+        assert_eq!(split_apply_drag(0.50, -800.0, 800.0), SPLIT_MIN_FRACTION);
+        assert_eq!(split_apply_drag(0.50, 10.0, 0.0), 0.50);
+        assert_eq!(split_apply_drag(0.50, 10.0, -4.0), 0.50);
     }
 
     #[test]

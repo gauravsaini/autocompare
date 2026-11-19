@@ -107,6 +107,9 @@ pub struct App {
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
     pub status: String,
+    /// Draggable pane split fraction (left share of the row).
+    /// Clamped to 0.20..=0.80, default 0.50; per-run only.
+    pub split_fraction: f32,
     rx: Option<Receiver<CompareResult>>,
 }
 
@@ -161,6 +164,7 @@ impl Default for App {
             show_line_numbers: true,
             syntax_highlight: true,
             status: String::from("ready: pick a session to begin"),
+            split_fraction: views::SPLIT_DEFAULT_FRACTION,
             rx: None,
         }
     }
@@ -450,6 +454,23 @@ impl App {
     /// Records user-visible status feedback.
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status = msg.into();
+    }
+
+    /// Current draggable pane split fraction (left share of the row).
+    pub fn split_fraction(&self) -> f32 {
+        views::clamp_split_fraction(self.split_fraction)
+    }
+
+    /// Sets the pane split fraction, clamped to 0.20..=0.80.
+    pub fn set_split_fraction(&mut self, fraction: f32) {
+        self.split_fraction = views::clamp_split_fraction(fraction);
+    }
+
+    /// Drags the pane split by `dx` pixels over `avail` pixels of
+    /// travel, clamped to 0.20..=0.80. Headless-testable core behind
+    /// the paint-time drag handle.
+    pub fn drag_split_by(&mut self, dx: f32, avail: f32) {
+        self.split_fraction = views::split_apply_drag(self.split_fraction, dx, avail);
     }
 
     /// Sets the hex alignment mode, clearing stale hunks so the next
@@ -2358,6 +2379,7 @@ impl eframe::App for App {
                     &mut self.text.left,
                     &mut self.text.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::Folder => views::paint_paths(
                     ui,
@@ -2366,6 +2388,7 @@ impl eframe::App for App {
                     &mut self.folder.left,
                     &mut self.folder.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::Hex => views::paint_paths(
                     ui,
@@ -2374,6 +2397,7 @@ impl eframe::App for App {
                     &mut self.hex.left,
                     &mut self.hex.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::Merge => views::paint_triple_paths(
                     ui,
@@ -2391,6 +2415,7 @@ impl eframe::App for App {
                     &mut self.table.left,
                     &mut self.table.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::Sync => views::paint_paths(
                     ui,
@@ -2399,6 +2424,7 @@ impl eframe::App for App {
                     &mut self.sync.left,
                     &mut self.sync.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::Picture => views::paint_paths(
                     ui,
@@ -2407,6 +2433,7 @@ impl eframe::App for App {
                     &mut self.picture.left,
                     &mut self.picture.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
                 Tab::FolderMerge => views::paint_triple_paths(
                     ui,
@@ -2424,6 +2451,7 @@ impl eframe::App for App {
                     &mut self.audio.left,
                     &mut self.audio.right,
                     &mut compare_clicked,
+                    &mut self.split_fraction,
                 ),
             }
 
@@ -2945,6 +2973,7 @@ impl eframe::App for App {
                                 model,
                                 &mut view,
                                 self.heatmap.as_ref(),
+                                &mut self.split_fraction,
                             );
                         }
                         if view != self.picture_view {
@@ -3000,6 +3029,29 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn split_fraction_defaults_centered_and_clamps() {
+        let mut app = App::default();
+        assert_eq!(app.split_fraction(), 0.50);
+        app.set_split_fraction(0.0);
+        assert_eq!(app.split_fraction(), 0.20);
+        app.set_split_fraction(1.0);
+        assert_eq!(app.split_fraction(), 0.80);
+        app.set_split_fraction(0.60);
+        assert_eq!(app.split_fraction(), 0.60);
+    }
+
+    #[test]
+    fn split_drag_moves_fraction_within_range() {
+        let mut app = App::default();
+        app.drag_split_by(80.0, 800.0);
+        assert_eq!(app.split_fraction(), 0.60);
+        app.drag_split_by(-800.0, 800.0);
+        assert_eq!(app.split_fraction(), 0.20);
+        app.drag_split_by(800.0, 800.0);
+        assert_eq!(app.split_fraction(), 0.80);
+    }
 
     #[test]
     fn switching_tabs_preserves_paths() {
