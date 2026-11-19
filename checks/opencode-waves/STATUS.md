@@ -171,3 +171,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 16
 - Hooks in proof phase (wrap proof script in own checks dir). Land approaching.
+
+## Wave D poll 17
+- Hooks visual PASS, final gates running (one compound-command tool hiccup, retrying split). No land. Both alive.
