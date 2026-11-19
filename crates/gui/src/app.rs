@@ -188,6 +188,10 @@ pub struct App {
     /// Last mirror-copy outcome line for the Folder Apply section.
     /// `None` until a dry-run or real apply reports one.
     pub folder_sync_last_report: Option<String>,
+    /// Multi-select model behind folder sync direction actions: kaunsi
+    /// rows par copy/prune direction lagna hai. Paint adoption agle
+    /// wave me; is wave me sirf headless wiring + scoped dry-run.
+    pub folder_sync_selection: tree::FolderSyncSelection,
     pub hex_gutter_row_text: String,
     pub table_find_needle: String,
     pub table_find_from: usize,
@@ -284,6 +288,7 @@ impl Default for App {
             folder_dual: tree::DualTreeState::new(20),
             folder_sync_dry_run: true,
             folder_sync_last_report: None,
+            folder_sync_selection: tree::FolderSyncSelection::new(),
             hex_gutter_row_text: String::new(),
             table_find_needle: String::new(),
             table_find_from: 0,
@@ -668,6 +673,7 @@ impl App {
             Tab::Folder => {
                 self.folder_model = None;
                 self.folder_sync_last_report = None;
+                self.folder_sync_selection.clear();
                 self.reset_folder_dual();
             }
             Tab::Hex => {
@@ -765,6 +771,7 @@ impl App {
                 std::mem::swap(&mut self.folder.left, &mut self.folder.right);
                 self.folder_model = None;
                 self.folder_sync_last_report = None;
+                self.folder_sync_selection.clear();
                 self.reset_folder_dual();
                 true
             }
@@ -2328,6 +2335,88 @@ impl App {
     pub fn folder_can_apply(&self) -> bool {
         self.folder_session
             .can_apply_now(&self.folder_sync_preview())
+    }
+
+    /// Ek row ka sync direction current preview mode me. Model ya row
+    /// na mile par `None` (koi action nahi). Paint agle wave me isi
+    /// se per-row badge banayega. Pure; headless-tested.
+    pub fn folder_sync_direction(&self, rel_path: &str) -> tree::SyncRowDirection {
+        match self.folder_rows() {
+            Some(rows) => rows
+                .iter()
+                .find(|row| row.rel_path == rel_path)
+                .map(|row| tree::sync_direction_for_row(row, self.folder_session.sync_mode))
+                .unwrap_or(tree::SyncRowDirection::None),
+            None => tree::SyncRowDirection::None,
+        }
+    }
+
+    /// Ek row ka badge text current preview mode me. Unknown paths
+    /// par `=` (koi action nahi). Paint adoption agle wave ka hai.
+    pub fn folder_sync_badge(&self, rel_path: &str) -> &'static str {
+        self.folder_sync_direction(rel_path).badge()
+    }
+
+    /// Ek real row ko sync selection me jodo. Returns true jab row
+    /// maujood thi; unknown paths kabhi select nahi hote.
+    pub fn select_folder_sync_row(&mut self, rel_path: &str) -> bool {
+        let real = self
+            .folder_rows()
+            .is_some_and(|rows| rows.iter().any(|row| row.rel_path == rel_path));
+        if real {
+            self.folder_sync_selection.select(rel_path);
+        }
+        real
+    }
+
+    /// Ek row ka select flip karo. Unknown paths par false, kuch
+    /// badalta nahi. Returns ab selected hai ya nahi.
+    pub fn toggle_folder_sync_row(&mut self, rel_path: &str) -> bool {
+        let real = self
+            .folder_rows()
+            .is_some_and(|rows| rows.iter().any(|row| row.rel_path == rel_path));
+        if real {
+            self.folder_sync_selection.toggle(rel_path)
+        } else {
+            false
+        }
+    }
+
+    /// Sync selection saaf karo.
+    pub fn clear_folder_sync_selection(&mut self) {
+        self.folder_sync_selection.clear();
+    }
+
+    /// Selection par scoped dry-run preview (sirf selected rows).
+    /// Khali selection ya bina model ke khali preview.
+    pub fn folder_sync_selected_preview(&self) -> tree::SyncPreview {
+        match self.folder_rows() {
+            Some(rows) => tree::sync_preview_for_selection(
+                rows,
+                self.folder_session.sync_mode,
+                &self.folder_sync_selection,
+            ),
+            None => tree::SyncPreview::default(),
+        }
+    }
+
+    /// Poore model par real dry-run summary line (paint agle wave
+    /// me summary section me dikhayega).
+    pub fn folder_sync_summary_line(&self) -> String {
+        let preview = self.folder_sync_preview();
+        tree::format_sync_summary(tree::summarize_sync_preview(&preview))
+    }
+
+    /// Selection par real dry-run summary line: `N selected: <line>`.
+    /// Khali selection par explicit zero line, jhooth kabhi nahi.
+    pub fn folder_sync_selected_summary_line(&self) -> String {
+        let preview = self.folder_sync_selected_preview();
+        let counts = tree::summarize_sync_preview(&preview);
+        format!(
+            "{} selected: {}",
+            self.folder_sync_selection.len(),
+            tree::format_sync_summary(counts)
+        )
     }
 
     /// Engine sync options behind the current preview mode (same mapping
@@ -3987,6 +4076,7 @@ impl eframe::App for App {
                         Ok(model) => {
                             let n = model.0.len();
                             self.folder_model = Some(model);
+                            self.folder_sync_selection.clear();
                             self.sync_folder_dual();
                             self.error = None;
                             self.folder_sync_last_report = None;
@@ -3994,6 +4084,7 @@ impl eframe::App for App {
                         }
                         Err(err) => {
                             self.folder_model = None;
+                            self.folder_sync_selection.clear();
                             self.reset_folder_dual();
                             self.folder_sync_last_report = None;
                             self.status = format!("folder compare failed: {err}");
@@ -6056,6 +6147,78 @@ mod tests {
             app.folder_dual.pager.total_rows,
             app.folder_visible_tree().len()
         );
+    }
+
+    #[test]
+    fn folder_sync_badges_follow_preview_mode() {
+        use crate::tree::SyncRowDirection;
+        let mut app = folder_app_with_rows();
+        // UpdateBoth: left-newer L->R, right-only R->L.
+        assert_eq!(
+            app.folder_sync_direction("src/a.txt"),
+            SyncRowDirection::CopyToRight
+        );
+        assert_eq!(app.folder_sync_badge("src/a.txt"), "->");
+        assert_eq!(
+            app.folder_sync_direction("orphan.txt"),
+            SyncRowDirection::CopyToLeft
+        );
+        assert_eq!(app.folder_sync_badge("orphan.txt"), "<-");
+        // Dir same: koi action nahi.
+        assert_eq!(app.folder_sync_direction("src"), SyncRowDirection::None);
+        assert_eq!(app.folder_sync_badge("src"), "=");
+        // Unknown path: honest none.
+        assert_eq!(
+            app.folder_sync_direction("ghost.txt"),
+            SyncRowDirection::None
+        );
+        // Mirror me right-only prune badge.
+        app.set_folder_sync_mode(crate::tree::SyncModeChoice::Mirror);
+        assert_eq!(
+            app.folder_sync_direction("orphan.txt"),
+            SyncRowDirection::DeleteRight
+        );
+        assert_eq!(app.folder_sync_badge("orphan.txt"), "X");
+        // Bina model: hamesha none.
+        let empty = App::default();
+        assert_eq!(
+            empty.folder_sync_direction("src/a.txt"),
+            SyncRowDirection::None
+        );
+    }
+
+    #[test]
+    fn folder_sync_selection_holds_only_real_rows() {
+        let mut app = folder_app_with_rows();
+        assert!(app.folder_sync_selection.is_empty());
+        assert!(app.select_folder_sync_row("src/a.txt"));
+        assert!(!app.select_folder_sync_row("ghost.txt"));
+        assert!(app.folder_sync_selection.contains("src/a.txt"));
+        // Toggle flip karta hai, unknown par false.
+        assert!(!app.toggle_folder_sync_row("src/a.txt"));
+        assert!(!app.folder_sync_selection.contains("src/a.txt"));
+        assert!(app.toggle_folder_sync_row("orphan.txt"));
+        assert!(!app.toggle_folder_sync_row("ghost.txt"));
+        // Scoped preview sirf selected rows ka.
+        let scoped = app.folder_sync_selected_preview();
+        assert_eq!(scoped.steps.len(), 1);
+        let Some(step) = scoped.steps.first() else {
+            return;
+        };
+        assert_eq!(step.rel_path, "orphan.txt");
+        // Summary lines real counts bolti hain.
+        let full = app.folder_sync_summary_line();
+        assert!(full.contains("L->R"));
+        assert!(full.contains("R->L"));
+        let sel_line = app.folder_sync_selected_summary_line();
+        assert!(sel_line.contains("1 selected"));
+        // Clear + swap selection girate hain.
+        app.clear_folder_sync_selection();
+        assert!(app.folder_sync_selection.is_empty());
+        assert!(app.select_folder_sync_row("src/a.txt"));
+        app.swap_sides();
+        assert!(app.folder_sync_selection.is_empty());
+        assert!(app.folder_sync_selected_preview().is_empty());
     }
 
     #[test]

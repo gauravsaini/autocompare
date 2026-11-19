@@ -1,0 +1,108 @@
+warning: function `wrap_width_for` is never used
+    --> crates/gui/src/views.rs:2512:8
+     |
+2512 | pub fn wrap_width_for(pane_chars: usize, word_wrap: bool) -> usize {
+     |        ^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `wrap_leading_indent` is never used
+    --> crates/gui/src/views.rs:2522:8
+     |
+2522 | pub fn wrap_leading_indent(line: &str) -> String {
+     |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `WrapChunk` is never constructed
+    --> crates/gui/src/views.rs:2538:12
+     |
+2538 | pub struct WrapChunk {
+     |            ^^^^^^^^^
+
+warning: function `wrap_break_at` is never used
+    --> crates/gui/src/views.rs:2552:4
+     |
+2552 | fn wrap_break_at(chars: &[char], budget: usize) -> usize {
+     |    ^^^^^^^^^^^^^
+
+warning: function `wrap_hard_cuts` is never used
+    --> crates/gui/src/views.rs:2573:4
+     |
+2573 | fn wrap_hard_cuts(line: &str, width: usize) -> Vec<WrapChunk> {
+     |    ^^^^^^^^^^^^^^
+
+warning: function `wrap_chunks` is never used
+    --> crates/gui/src/views.rs:2607:8
+     |
+2607 | pub fn wrap_chunks(line: &str, width: usize) -> Vec<WrapChunk> {
+     |        ^^^^^^^^^^^
+
+warning: function `wrap_visual_lines` is never used
+    --> crates/gui/src/views.rs:2715:8
+     |
+2715 | pub fn wrap_visual_lines(line: &str, width: usize) -> Vec<String> {
+     |        ^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_visual_count` is never used
+    --> crates/gui/src/views.rs:2725:8
+     |
+2725 | pub fn wrap_visual_count(line: &str, width: usize) -> usize {
+     |        ^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_pane_pair_count` is never used
+    --> crates/gui/src/views.rs:2732:8
+     |
+2732 | pub fn wrap_pane_pair_count(left: &str, right: &str, width: usize) -> usize {
+     |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_chunk_spans` is never used
+    --> crates/gui/src/views.rs:2742:8
+     |
+2742 | pub fn wrap_chunk_spans(spans: &[(usize, usize)], chunk: &WrapChunk) -> Vec<(usize, usize)> {
+     |        ^^^^^^^^^^^^^^^^
+
+warning: function `wrap_visual_to_model` is never used
+    --> crates/gui/src/views.rs:2773:8
+     |
+2773 | pub fn wrap_visual_to_model(counts: &[usize], visual: usize) -> Option<(usize, usize)> {
+     |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_model_to_visual_start` is never used
+    --> crates/gui/src/views.rs:2792:8
+     |
+2792 | pub fn wrap_model_to_visual_start(counts: &[usize], row: usize) -> Option<usize> {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_total_visual` is never used
+    --> crates/gui/src/views.rs:2808:8
+     |
+2808 | pub fn wrap_total_visual(counts: &[usize]) -> usize {
+     |        ^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_continuation_gutter` is never used
+    --> crates/gui/src/views.rs:2819:8
+     |
+2819 | pub fn wrap_continuation_gutter(gutter_chars: usize) -> String {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `side_jobs_wrapped_with_prefs` is never used
+    --> crates/gui/src/views.rs:2828:4
+     |
+2828 | fn side_jobs_wrapped_with_prefs(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `wrap_blank_sub_job` is never used
+    --> crates/gui/src/views.rs:2882:4
+     |
+2882 | fn wrap_blank_sub_job(
+     |    ^^^^^^^^^^^^^^^^^^
+
+
+running 448 tests
+....................................................................................... 87/448
+....................................................................................... 174/448
+....................................................................................... 261/448
+....................................................................................... 348/448
+....................................................................................... 435/448
+.............
+test result: ok. 448 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+

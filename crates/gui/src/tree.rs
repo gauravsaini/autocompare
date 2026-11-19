@@ -2456,3 +2456,538 @@ mod three_way_tree_tests {
         assert!(dup.summary_line().contains("2 decided"));
     }
 }
+
+// ----------------------------------------------------------------------------
+// Folder sync direction actions (headless; paint adoption agle wave me).
+// Bahar se dekhe folder compare me har changed row par ek direction
+// affordance hota hai: kaunsa side kidhar copy hoga, kya prune hoga.
+// Ye section uska headless spec hai: per-row direction, badge text,
+// multi-select model aur real dry-run summary. Geometry first (badge
+// min width mono advance par, row height/pad/gap frozen tokens reuse),
+// typography second (mono + size + weight, FolderTypo reuse, theme
+// import nahi taaki ownership disjoint rahe). Colors frozen: yahan
+// koi hue nahi. Paint agle wave me inhi se badges + selection +
+// summary line banayega; is wave me koi egui code nahi.
+// ----------------------------------------------------------------------------
+
+/// Ek folder row ka sync direction: preview step ka per-row roop.
+/// `sync_preview` ke rules se mel khata hai taaki badge kabhi plan
+/// se alag na bole (dirs: sirf Mirror + right-only prune).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SyncRowDirection {
+    /// Koi sync step nahi (same row ya plain dir).
+    #[default]
+    None,
+    /// Left side ka content right par copy hoga.
+    CopyToRight,
+    /// Right side ka content left par copy hoga.
+    CopyToLeft,
+    /// Right copy prune hogi (Mirror mode).
+    DeleteRight,
+    /// Content differ ya unknown: manual resolve chahiye, auto step nahi.
+    Manual,
+}
+
+impl SyncRowDirection {
+    /// Paint badge text: fixed 2-char max, mono me paint hota hai.
+    /// `None` par `=` (kuch karna nahi), manual par `?`.
+    pub const fn badge(self) -> &'static str {
+        match self {
+            Self::None => "=",
+            Self::CopyToRight => "->",
+            Self::CopyToLeft => "<-",
+            Self::DeleteRight => "X",
+            Self::Manual => "?",
+        }
+    }
+
+    /// Menu/summary label (paint agle wave me use karega).
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::None => "No action",
+            Self::CopyToRight => "Copy L to R",
+            Self::CopyToLeft => "Copy R to L",
+            Self::DeleteRight => "Delete on right",
+            Self::Manual => "Manual resolve",
+        }
+    }
+
+    /// Plan step action, `None`/`Manual` par kuch nahi.
+    pub const fn action(self) -> Option<SyncAction> {
+        match self {
+            Self::None | Self::Manual => None,
+            Self::CopyToRight => Some(SyncAction::CopyToRight),
+            Self::CopyToLeft => Some(SyncAction::CopyToLeft),
+            Self::DeleteRight => Some(SyncAction::DeleteRight),
+        }
+    }
+}
+
+/// Ek row ka sync direction: wahi faisla jo `sync_preview` us row
+/// par leta hai. Dirs par sirf Mirror + right-only prune, baaki
+/// dirs `None`. Files: `=` none, `!`/unknown manual, `>` L->R,
+/// `<` mode par (UpdateBoth R->L, Mirror manual), `L` L->R,
+/// `R` mode par (UpdateBoth R->L, Mirror delete-right).
+pub fn sync_direction_for_row(row: &FolderRow, mode: SyncModeChoice) -> SyncRowDirection {
+    if row.is_dir {
+        if mode == SyncModeChoice::Mirror && row.glyph == 'R' {
+            return SyncRowDirection::DeleteRight;
+        }
+        return SyncRowDirection::None;
+    }
+    match row.glyph {
+        '=' => SyncRowDirection::None,
+        '!' => SyncRowDirection::Manual,
+        '>' => SyncRowDirection::CopyToRight,
+        '<' => {
+            if mode == SyncModeChoice::UpdateBoth {
+                SyncRowDirection::CopyToLeft
+            } else {
+                SyncRowDirection::Manual
+            }
+        }
+        'L' => SyncRowDirection::CopyToRight,
+        'R' => {
+            if mode == SyncModeChoice::UpdateBoth {
+                SyncRowDirection::CopyToLeft
+            } else {
+                SyncRowDirection::DeleteRight
+            }
+        }
+        _ => SyncRowDirection::Manual,
+    }
+}
+
+/// Ek row ka badge text: `sync_direction_for_row` ka paint roop.
+/// Fixed strings taaki snapshots stable rahen.
+pub fn sync_badge_for_row(row: &FolderRow, mode: SyncModeChoice) -> &'static str {
+    sync_direction_for_row(row, mode).badge()
+}
+
+/// Folder sync ke liye multi-select model: kaunsi rows par direction
+/// action lagna hai. Single `DualTreeState.selected` se alag hai:
+/// ye set scoped dry-run + future per-row Apply ke liye hai.
+/// Sirf real row paths tikte hain (`retain_real_rows` stale paths
+/// hatata hai). Pure, no I/O.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FolderSyncSelection {
+    paths: BTreeSet<String>,
+}
+
+impl FolderSyncSelection {
+    /// Khali selection.
+    pub fn new() -> Self {
+        Self {
+            paths: BTreeSet::new(),
+        }
+    }
+
+    /// Ek path select karo.
+    pub fn select(&mut self, rel_path: &str) {
+        self.paths.insert(rel_path.to_string());
+    }
+
+    /// Ek path ka select flip karo; returns ab selected hai ya nahi.
+    pub fn toggle(&mut self, rel_path: &str) -> bool {
+        if self.paths.contains(rel_path) {
+            self.paths.remove(rel_path);
+            false
+        } else {
+            self.paths.insert(rel_path.to_string());
+            true
+        }
+    }
+
+    /// Ek path ka select hatao; returns kuch hata ya nahi.
+    pub fn remove(&mut self, rel_path: &str) -> bool {
+        self.paths.remove(rel_path)
+    }
+
+    /// Poora selection saaf karo.
+    pub fn clear(&mut self) {
+        self.paths.clear();
+    }
+
+    /// Kya ye path selected hai.
+    pub fn contains(&self, rel_path: &str) -> bool {
+        self.paths.contains(rel_path)
+    }
+
+    /// Selected paths ki ginti.
+    pub fn len(&self) -> usize {
+        self.paths.len()
+    }
+
+    /// Kya kuch selected nahi.
+    pub fn is_empty(&self) -> bool {
+        self.paths.is_empty()
+    }
+
+    /// Ordered path list (BTreeSet order, paint-stable).
+    pub fn ordered(&self) -> Vec<String> {
+        self.paths.iter().cloned().collect()
+    }
+
+    /// Stale paths hatao jo `rows` me nahi (naya compare / swap ke
+    /// baad caller isi se selection honest rakhta hai).
+    pub fn retain_real_rows(&mut self, rows: &[FolderRow]) {
+        let mut live = BTreeSet::new();
+        for row in rows {
+            if self.paths.contains(row.rel_path.as_str()) {
+                live.insert(row.rel_path.clone());
+            }
+        }
+        self.paths = live;
+    }
+}
+
+/// Dry-run preview ke real counts: steps actions se, skipped alag.
+/// Summary line isi se banta hai taaki ginti kabhi jhooth na bole.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SyncSummaryCounts {
+    /// `CopyToRight` steps.
+    pub copies_right: usize,
+    /// `CopyToLeft` steps.
+    pub copies_left: usize,
+    /// Delete steps (left/right dono, preview aaj sirf right deta hai).
+    pub deletes: usize,
+    /// Plan me na aaye entries (manual/unknown).
+    pub skipped: usize,
+}
+
+impl SyncSummaryCounts {
+    /// Kul planned steps (copies + deletes).
+    pub fn planned(self) -> usize {
+        self.copies_right
+            .saturating_add(self.copies_left)
+            .saturating_add(self.deletes)
+    }
+}
+
+/// Preview se real counts gino. Pure; unit-tested.
+pub fn summarize_sync_preview(preview: &SyncPreview) -> SyncSummaryCounts {
+    let mut counts = SyncSummaryCounts {
+        copies_right: 0,
+        copies_left: 0,
+        deletes: 0,
+        skipped: preview.skipped.len(),
+    };
+    for step in &preview.steps {
+        match step.action {
+            SyncAction::CopyToRight => {
+                counts.copies_right = counts.copies_right.saturating_add(1);
+            }
+            SyncAction::CopyToLeft => {
+                counts.copies_left = counts.copies_left.saturating_add(1);
+            }
+            SyncAction::DeleteRight | SyncAction::DeleteLeft => {
+                counts.deletes = counts.deletes.saturating_add(1);
+            }
+        }
+    }
+    counts
+}
+
+/// Honest one-line dry-run summary: real counts, koi estimate nahi.
+/// Paint agle wave me isi ko summary line me dikhayega.
+pub fn format_sync_summary(counts: SyncSummaryCounts) -> String {
+    format!(
+        "dry-run: {} L->R, {} R->L, {} delete(s), {} skipped",
+        counts.copies_right, counts.copies_left, counts.deletes, counts.skipped
+    )
+}
+
+/// Selection par scoped preview: sirf selected rows ka plan, wahi
+/// dir-prune rules ke saath. Khali selection par khali preview.
+pub fn sync_preview_for_selection(
+    rows: &[FolderRow],
+    mode: SyncModeChoice,
+    selection: &FolderSyncSelection,
+) -> SyncPreview {
+    if selection.is_empty() {
+        return SyncPreview::default();
+    }
+    let mut scoped = Vec::new();
+    for row in rows {
+        if selection.contains(row.rel_path.as_str()) {
+            scoped.push(row.clone());
+        }
+    }
+    sync_preview(&scoped, mode)
+}
+
+/// Sync badge cell ki fixed width (chars me): badges `->`/`<-`
+/// 2-char hain, `=`/`X`/`?` 1-char (mono me pad hote hain).
+pub const SYNC_BADGE_CHARS: usize = 2;
+
+/// Badge cell ki min paint width (px): `chars * advance + 2 * pad`,
+/// column math [`folder_column_min_px`] precedent par.
+pub fn sync_badge_min_px() -> f32 {
+    SYNC_BADGE_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDER_CELL_PAD_X * 2.0
+}
+
+/// Badge cell ki typography: mono caption-regular, delete strong
+/// (prune ek nazar me alag dikhe; color frozen hai isliye weight
+/// se farak). Paint agle wave me map karega.
+pub fn sync_badge_typo(direction: SyncRowDirection) -> FolderTypo {
+    match direction {
+        SyncRowDirection::DeleteRight => FolderTypo {
+            mono: true,
+            size: FOLDER_SIDE_SIZE,
+            strong: true,
+        },
+        _ => FolderTypo {
+            mono: true,
+            size: FOLDER_SIDE_SIZE,
+            strong: false,
+        },
+    }
+}
+
+/// Dry-run summary line ki typography: mono caption-regular.
+pub fn sync_summary_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_SIDE_SIZE,
+        strong: false,
+    }
+}
+
+#[cfg(test)]
+mod sync_direction_tests {
+    use super::*;
+
+    fn glyph_row(path: &str, is_dir: bool, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    #[test]
+    fn row_directions_match_preview_rules() {
+        // Same: kabhi step nahi.
+        assert_eq!(
+            sync_direction_for_row(
+                &glyph_row("same.txt", false, '='),
+                SyncModeChoice::UpdateBoth
+            ),
+            SyncRowDirection::None
+        );
+        // Content differ: manual, dono modes me.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("d.txt", false, '!'), SyncModeChoice::Mirror),
+            SyncRowDirection::Manual
+        );
+        // Left-newer hamesha L->R.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("n.txt", false, '>'), SyncModeChoice::Mirror),
+            SyncRowDirection::CopyToRight
+        );
+        // Right-newer: UpdateBoth me R->L, Mirror me manual.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("n.txt", false, '<'), SyncModeChoice::UpdateBoth),
+            SyncRowDirection::CopyToLeft
+        );
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("n.txt", false, '<'), SyncModeChoice::Mirror),
+            SyncRowDirection::Manual
+        );
+        // Left-only hamesha L->R.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("l.txt", false, 'L'), SyncModeChoice::Mirror),
+            SyncRowDirection::CopyToRight
+        );
+        // Right-only: UpdateBoth me R->L, Mirror me prune.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("r.txt", false, 'R'), SyncModeChoice::UpdateBoth),
+            SyncRowDirection::CopyToLeft
+        );
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("r.txt", false, 'R'), SyncModeChoice::Mirror),
+            SyncRowDirection::DeleteRight
+        );
+        // Unknown glyph manual (preview skip karta hai).
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("u.txt", false, '~'), SyncModeChoice::UpdateBoth),
+            SyncRowDirection::Manual
+        );
+        // Dirs: sirf Mirror + right-only prune, baaki none.
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("gone", true, 'R'), SyncModeChoice::Mirror),
+            SyncRowDirection::DeleteRight
+        );
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("gone", true, 'R'), SyncModeChoice::UpdateBoth),
+            SyncRowDirection::None
+        );
+        assert_eq!(
+            sync_direction_for_row(&glyph_row("src", true, '='), SyncModeChoice::Mirror),
+            SyncRowDirection::None
+        );
+    }
+
+    #[test]
+    fn badges_are_fixed_short_strings() {
+        assert_eq!(SyncRowDirection::None.badge(), "=");
+        assert_eq!(SyncRowDirection::CopyToRight.badge(), "->");
+        assert_eq!(SyncRowDirection::CopyToLeft.badge(), "<-");
+        assert_eq!(SyncRowDirection::DeleteRight.badge(), "X");
+        assert_eq!(SyncRowDirection::Manual.badge(), "?");
+        // Row helper direction se mel khata hai.
+        assert_eq!(
+            sync_badge_for_row(&glyph_row("a.txt", false, '>'), SyncModeChoice::UpdateBoth),
+            "->"
+        );
+        assert_eq!(
+            sync_badge_for_row(&glyph_row("same.txt", false, '='), SyncModeChoice::Mirror),
+            "="
+        );
+        // Labels khali nahi, actions honest hain.
+        assert_eq!(
+            SyncRowDirection::CopyToRight.action(),
+            Some(SyncAction::CopyToRight)
+        );
+        assert_eq!(
+            SyncRowDirection::CopyToLeft.action(),
+            Some(SyncAction::CopyToLeft)
+        );
+        assert_eq!(
+            SyncRowDirection::DeleteRight.action(),
+            Some(SyncAction::DeleteRight)
+        );
+        assert_eq!(SyncRowDirection::None.action(), None);
+        assert_eq!(SyncRowDirection::Manual.action(), None);
+    }
+
+    #[test]
+    fn selection_toggle_and_retain() {
+        let mut sel = FolderSyncSelection::new();
+        assert!(sel.is_empty());
+        assert_eq!(sel.len(), 0);
+        sel.select("b.txt");
+        sel.select("a.txt");
+        assert_eq!(
+            sel.ordered(),
+            vec!["a.txt".to_string(), "b.txt".to_string()]
+        );
+        assert!(sel.contains("a.txt"));
+        assert!(!sel.contains("zzz.txt"));
+        // Toggle: selected hata, unselected jodta hai.
+        assert!(!sel.toggle("a.txt"));
+        assert!(!sel.contains("a.txt"));
+        assert!(sel.toggle("c.txt"));
+        assert!(sel.contains("c.txt"));
+        assert!(sel.remove("c.txt"));
+        assert!(!sel.remove("c.txt"));
+        // Retain: stale paths girte hain.
+        let rows = vec![
+            glyph_row("b.txt", false, '>'),
+            glyph_row("fresh.txt", false, 'L'),
+        ];
+        sel.retain_real_rows(&rows);
+        assert_eq!(sel.ordered(), vec!["b.txt".to_string()]);
+        sel.clear();
+        assert!(sel.is_empty());
+    }
+
+    #[test]
+    fn summary_counts_are_real() {
+        let rows = vec![
+            glyph_row("same.txt", false, '='),
+            glyph_row("diff.txt", false, '!'),
+            glyph_row("nl.txt", false, '>'),
+            glyph_row("nr.txt", false, '<'),
+            glyph_row("lo.txt", false, 'L'),
+            glyph_row("ro.txt", false, 'R'),
+        ];
+        let preview = sync_preview(&rows, SyncModeChoice::UpdateBoth);
+        let counts = summarize_sync_preview(&preview);
+        // UpdateBoth: nl + lo L->R (2), nr + ro R->L (2), diff skipped (1).
+        assert_eq!(counts.copies_right, 2);
+        assert_eq!(counts.copies_left, 2);
+        assert_eq!(counts.deletes, 0);
+        assert_eq!(counts.skipped, 1);
+        assert_eq!(counts.planned(), 4);
+        let line = format_sync_summary(counts);
+        assert!(line.contains("2 L->R"));
+        assert!(line.contains("2 R->L"));
+        assert!(line.contains("0 delete(s)"));
+        assert!(line.contains("1 skipped"));
+        // Mirror: nl + lo L->R (2), ro prune (1 delete), diff + nr skipped (2).
+        let mirror = sync_preview(&rows, SyncModeChoice::Mirror);
+        let counts = summarize_sync_preview(&mirror);
+        assert_eq!(counts.copies_right, 2);
+        assert_eq!(counts.copies_left, 0);
+        assert_eq!(counts.deletes, 1);
+        assert_eq!(counts.skipped, 2);
+        let line = format_sync_summary(counts);
+        assert!(line.contains("2 L->R"));
+        assert!(line.contains("1 delete(s)"));
+        assert!(line.contains("2 skipped"));
+    }
+
+    #[test]
+    fn scoped_preview_only_covers_selection() {
+        let rows = vec![
+            glyph_row("nl.txt", false, '>'),
+            glyph_row("nr.txt", false, '<'),
+            glyph_row("same.txt", false, '='),
+        ];
+        // Khali selection: khali preview.
+        let empty = FolderSyncSelection::new();
+        assert!(sync_preview_for_selection(&rows, SyncModeChoice::UpdateBoth, &empty).is_empty());
+        // Sirf ek row: usi ka step.
+        let mut one = FolderSyncSelection::new();
+        one.select("nr.txt");
+        let scoped = sync_preview_for_selection(&rows, SyncModeChoice::UpdateBoth, &one);
+        assert_eq!(scoped.steps.len(), 1);
+        let Some(step) = scoped.steps.first() else {
+            return;
+        };
+        assert_eq!(step.rel_path, "nr.txt");
+        assert_eq!(step.action, SyncAction::CopyToLeft);
+        // Stale path select me ho to bhi plan me nahi aata.
+        let mut stale = FolderSyncSelection::new();
+        stale.select("ghost.txt");
+        stale.select("nl.txt");
+        let scoped = sync_preview_for_selection(&rows, SyncModeChoice::UpdateBoth, &stale);
+        assert_eq!(scoped.steps.len(), 1);
+        let Some(step) = scoped.steps.first() else {
+            return;
+        };
+        assert_eq!(step.rel_path, "nl.txt");
+    }
+
+    #[test]
+    fn sync_geo_typo_tokens_stay_on_scale() {
+        // Geometry first: badge min width advance+pad math par.
+        assert_eq!(SYNC_BADGE_CHARS, 2);
+        assert_eq!(
+            sync_badge_min_px(),
+            2.0 * FOLDER_MONO_ADVANCE + FOLDER_CELL_PAD_X * 2.0
+        );
+        assert_eq!(sync_badge_min_px(), 2.0 * 7.0 + 16.0);
+        // Row height/pad frozen tokens reuse hote hain.
+        assert_eq!(folder_row_height(), 24.0);
+        assert_eq!(folder_cell_pad_x(), 8.0);
+        // Typography second: sab mono, delete strong, baaki regular.
+        let plain = sync_badge_typo(SyncRowDirection::CopyToRight);
+        assert!(plain.mono);
+        assert_eq!(plain.size, FOLDER_SIDE_SIZE);
+        assert!(!plain.strong);
+        let del = sync_badge_typo(SyncRowDirection::DeleteRight);
+        assert!(del.mono);
+        assert!(del.strong);
+        let summary = sync_summary_typo();
+        assert!(summary.mono);
+        assert_eq!(summary.size, FOLDER_SIDE_SIZE);
+        assert!(!summary.strong);
+    }
+}
