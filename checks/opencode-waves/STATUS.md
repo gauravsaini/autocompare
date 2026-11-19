@@ -972,3 +972,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AF-APPFIND `sess-appfind-af`: OWNS app.rs+checks/gui-appfind-af (Gap #12 final: Text tab find wiring, allow(dead_code) removal).
 - AF-MERGEPAINT `sess-mergepaint-af`: OWNS views.rs+checks/gui-mergepaint-af (Gap #7 3-pane merge paint; model read-only).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AF complete (2 parallel: App find wiring + 3-pane paint)
+- APPFIND `51617be` wire FindState text find box in App text tab paint (Gap #12 final wiring; 333 pass, clippy note: 4 views.rs stub errors sibling ke the, KEVL).
+- MERGEPAINT `ae4d905` 3-pane merge hunks with per-hunk decisions (Gap #7 paint; stubs fixed, combined clippy 0).
+- Shared-worktree hazard fir dikha (paint_text unused, empty-if) — dono ne wait+coordinate karke green kiya.
+- Verify combined: 333 green, clippy 0, fmt clean, banned 0.
+- Pushed. Next: Wave AG (header/chrome, splitter-handle paint, audio action).
