@@ -950,3 +950,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AD-COLS `sess-cols-ad`: OWNS tree.rs+views.rs+checks/gui-cols-ad (Gap #6 size/time columns paint).
 - AD-APPLY `sess-apply-ad`: OWNS app.rs+checks/gui-apply-ad (Gap #8 one-direction apply, dry-run default, temp-dir tests).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AD complete (2 parallel: cols + apply, with collision recovery)
+- COLS `d3b5385` aligned folder size/time columns in single+dual trees — OWNS tree.rs+views.rs+checks/gui-cols-ad (Gap #6).
+- APPLY `5b4d744` one-direction folder sync apply, dry-run default — OWNS app.rs+checks/gui-apply-ad (Gap #8 first real wiring). COLLISION: purani sess-apply-ad freeze ke baad khud jaag gayi, ac2 ke saath same files concurrently edit (brace mismatch). Dono ko STOP karaya, mixed tree verify (317 green, clippy 0, fmt clean, banned 0, harness PASS) karke orchestrator ne single commit kiya. Lesson: frozen session ko respawn se PEHLE aur der tak observe karo; respawn ke baad purane session ko turant STOP bhejo, kaam shuru hone ka wait mat karo.
+- Verify combined: 317 green, clippy 0, fmt clean, banned 0, PNG 9624B magic-ok.
+- Pushed. Next: Wave AE (find-paint wiring, 3-pane paint, header/chrome).
