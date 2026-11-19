@@ -1297,3 +1297,14 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BI-HEXTEXT `sess-hextext-bi`: OWNS views_hex.rs+checks/gui-hextext-bi (format_hex_grid_cells real byte digits; screenshot.rs read-only unless fixture breaks; views.rs callsite + app.rs snap FROZEN).
 - BI-MERGESYNC `sess-mergesync-bi`: OWNS checks/gui-mergesync-bi ONLY (merge-view + sync-view geometry parity audit vs BC, exact follow-up specs; zero .rs edits).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BI complete (2 parallel: hex grid text + merge/sync audit)
+- HEXTEXT `b9b373f` real hex digits in grid cells via byte-content helpers — OWNS views_hex.rs.
+- MERGESYNC `dd10b27` merge+sync parity audit, P0-P2 follow-up specs (BI-M1..M4, BI-S1..S4) — OWNS checks/gui-mergesync-bi only.
+- Verify combined: 591 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok x5. Stray .outs removed.
+- Pushed. Next: Wave BJ (merge take-row rewire + merge/sync fixtures; syncwire BK me).
+
+## 2026-11-20 — Wave BJ plan (2 parallel: merge paint rewire + merge/sync fixtures)
+- BJ-MERGEPAINT `sess-merge-bj`: OWNS views.rs+app.rs+checks/gui-mergepaint-bj (BI-M1 global take-row apply_merge_picks rewire P0, THEN BI-M3 paint_merge_apply wiring P1; sequential same owner).
+- BJ-MERGEFIX `sess-mergefix-bj`: OWNS screenshot.rs+checks/gui-mergefix-bj (BI-M4 take-row strip fixture + BI-S4 sync branch route; paint files NO-TOUCH).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
