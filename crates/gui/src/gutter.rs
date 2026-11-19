@@ -94,6 +94,23 @@ pub fn gutter_bar_width(show_line_numbers: bool) -> f32 {
     }
 }
 
+/// Gutter text role: regular monospace so gutter-adjacent chrome reads
+/// in the same family as pane rows. Typography only; bar widths stay
+/// in [`gutter_bar_width`]/[`gutter_bar_width_for_font`].
+pub const fn gutter_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Gutter text size: the shared mono token.
+pub const fn gutter_text_size() -> f32 {
+    crate::theme::TYPO_MONO_SIZE
+}
+
+/// Gutter line-height source: the shared measured mono row height.
+pub const fn gutter_line_height_source() -> &'static str {
+    crate::theme::TYPO_LINE_HEIGHT_SOURCE
+}
+
 /// Gutter width scaled from the mono font size. Calibrated so
 /// [`crate::theme::TYPO_MONO_SIZE`] (12.0) reproduces
 /// [`gutter_bar_width`]; other sizes scale linearly. Non-finite or
@@ -248,6 +265,17 @@ mod tests {
         assert_eq!(second.kind, TextRowKind::Inserted);
         assert_eq!(second.y_start, 300.0);
         assert_eq!(second.y_end, 400.0);
+    }
+
+    #[test]
+    fn gutter_text_typo_follows_mono_tokens() {
+        use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TypoRole};
+        assert_eq!(gutter_text_role(), TypoRole::Mono);
+        assert!(gutter_text_role().is_mono());
+        assert!(!gutter_text_role().is_strong());
+        assert_eq!(gutter_text_size(), TYPO_MONO_SIZE);
+        assert_eq!(gutter_text_size(), 12.0);
+        assert_eq!(gutter_line_height_source(), TYPO_LINE_HEIGHT_SOURCE);
     }
 
     #[test]

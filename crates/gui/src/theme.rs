@@ -11,13 +11,22 @@
 //! `gutter.rs` / `tree.rs` apply the tokens purely so paint stays
 //! aligned without touching `views.rs`.
 //!
-//! Typography scale (family, weight, line-height only): heading 18
-//! strong, body 13, small 11, mono diff 12 (13 is the tolerated upper
-//! bound), Home card title strong 14. Line-height is always
-//! `text_style_height(Monospace)` at paint time (5 call sites in
-//! `views.rs`); egui has no letter-tracking so letter-spacing is a
-//! documented no-op ([`TYPO_LETTER_SPACING`]) with weight +
-//! line-height carrying hierarchy.
+//! Typography scale (family, weight, size, line-height,
+//! letter-spacing): heading 18 strong, body 13, small 11, mono diff 12
+//! (13 is the tolerated upper bound), Home card title strong 14. Every
+//! [`TypoRole`] maps to one egui text style via
+//! [`TypoRole::text_style`] and paints via [`TypoRole::rich`], which
+//! applies family + weight + size + letter-spacing
+//! ([`TYPO_LETTER_SPACING`], a documented 0.0 no-op: egui has no
+//! tracking, so weight + line-height carry hierarchy). Line-height is
+//! always the measured monospace row height at paint time in
+//! `views.rs`; there is no per-role override
+//! ([`TYPO_LINE_HEIGHT_SOURCE`]).
+//!
+//! Pane hierarchy: app header -> Heading; Home cards ->
+//! HomeTitle/HomeDesc/HomeButton; diff panes, summaries, status lines
+//! -> Mono; hints, subtitles, counts -> Small; plain labels, buttons
+//! -> Body.
 //!
 //! Color model: the diff accents are fixed (a deleted row reads the
 //! same in light and dark mode, so those colors carry their own
@@ -30,7 +39,7 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 
-use eframe::egui::Color32;
+use eframe::egui::{self, Color32};
 
 // ----------------------------------------------------------------------------
 // Typography scale (headless, ponytail minimal)
@@ -170,6 +179,40 @@ impl TypoRole {
         match self {
             Self::Mono => "monospace",
             _ => "proportional",
+        }
+    }
+
+    /// egui text style carrying this role's family. Explicit
+    /// [`TypoRole::size`] overrides the style default at paint time via
+    /// [`TypoRole::rich`]; the style itself picks the family (plus the
+    /// semantic slot for buttons). HomeTitle stays on Body: it is
+    /// proportional 14px strong, not a full Heading jump.
+    pub fn text_style(self) -> egui::TextStyle {
+        match self {
+            Self::Heading => egui::TextStyle::Heading,
+            Self::Mono => egui::TextStyle::Monospace,
+            Self::Small | Self::HomeDesc => egui::TextStyle::Small,
+            Self::HomeButton => egui::TextStyle::Button,
+            Self::Body | Self::HomeTitle => egui::TextStyle::Body,
+        }
+    }
+
+    /// Builds the egui text for this role: family via
+    /// [`TypoRole::text_style`], point size via [`TypoRole::size`],
+    /// weight via strong/weak, letter-spacing via
+    /// [`TYPO_LETTER_SPACING`]. Line-height stays unset so paint keeps
+    /// measuring the shared monospace row height
+    /// ([`TYPO_LINE_HEIGHT_SOURCE`]). Headless: needs no `Ui` or
+    /// `Context`. Colors untouched (paint owns them).
+    pub fn rich(self, text: impl Into<String>) -> egui::RichText {
+        let styled = egui::RichText::new(text)
+            .text_style(self.text_style())
+            .size(self.size())
+            .extra_letter_spacing(TYPO_LETTER_SPACING);
+        match self {
+            Self::Heading | Self::HomeTitle => styled.strong(),
+            Self::Small | Self::HomeDesc => styled.weak(),
+            Self::Body | Self::Mono | Self::HomeButton => styled,
         }
     }
 }
@@ -450,6 +493,34 @@ mod tests {
         assert_eq!(TypoRole::Mono.family(), "monospace");
         assert_eq!(TypoRole::Body.family(), "proportional");
         assert_eq!(TypoRole::Heading.family(), "proportional");
+    }
+
+    #[test]
+    fn typo_roles_map_to_egui_text_styles() {
+        assert_eq!(TypoRole::Heading.text_style(), egui::TextStyle::Heading);
+        assert_eq!(TypoRole::Body.text_style(), egui::TextStyle::Body);
+        assert_eq!(TypoRole::Small.text_style(), egui::TextStyle::Small);
+        assert_eq!(TypoRole::Mono.text_style(), egui::TextStyle::Monospace);
+        assert_eq!(TypoRole::HomeDesc.text_style(), egui::TextStyle::Small);
+        assert_eq!(TypoRole::HomeButton.text_style(), egui::TextStyle::Button);
+        // HomeTitle stays proportional-body + explicit 14px strong.
+        assert_eq!(TypoRole::HomeTitle.text_style(), egui::TextStyle::Body);
+    }
+
+    #[test]
+    fn typo_rich_carries_size_and_weight_per_role() {
+        let debug = |role: TypoRole| format!("{role:?}::{:?}", role.rich("x"));
+        assert!(debug(TypoRole::HomeTitle).contains("14.0"));
+        assert!(debug(TypoRole::Mono).contains("12.0"));
+        assert!(debug(TypoRole::Body).contains("13.0"));
+        assert!(debug(TypoRole::Small).contains("11.0"));
+        // Hierarchy: distinct roles differ, same-scale roles match.
+        assert_ne!(TypoRole::Heading.rich("a"), TypoRole::Body.rich("a"));
+        assert_eq!(TypoRole::Small.rich("a"), TypoRole::HomeDesc.rich("a"));
+        // Weight carriers survive the applicator.
+        assert!(debug(TypoRole::Heading).contains("strong: true"));
+        assert!(debug(TypoRole::HomeDesc).contains("weak: true"));
+        assert!(debug(TypoRole::Mono).contains("strong: false"));
     }
 
     #[test]

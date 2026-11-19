@@ -133,6 +133,22 @@ pub const fn home_card_button_size() -> f32 {
     HOME_CARD_BUTTON_BODY_SIZE
 }
 
+/// Home card title role: strong proportional 14. Typography only;
+/// paint geometry (card widths, spacing) lives elsewhere.
+pub const fn home_card_title_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeTitle
+}
+
+/// Home card description role: small weak proportional 11.
+pub const fn home_card_desc_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeDesc
+}
+
+/// Home card button role: default proportional body scale.
+pub const fn home_card_button_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeButton
+}
+
 /// Empty-state guidance for the Folder tab so the view never looks
 /// blank: rows win, then errors, then the idle hint.
 pub const fn folder_empty_hint(has_rows: bool, has_error: bool) -> &'static str {
@@ -207,6 +223,26 @@ mod tests {
             Tab::Text
         );
         assert_eq!(resolve_compare_tab(&None), Tab::Folder);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home_card_roles_carry_pane_hierarchy() {
+        use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TypoRole};
+        assert_eq!(home_card_title_role(), TypoRole::HomeTitle);
+        assert_eq!(home_card_desc_role(), TypoRole::HomeDesc);
+        assert_eq!(home_card_button_role(), TypoRole::HomeButton);
+        assert_eq!(home_card_title_role().size(), HOME_CARD_TITLE_SIZE);
+        assert!(home_card_title_role().is_strong());
+        assert_eq!(home_card_title_role().family(), "proportional");
+        assert!(home_card_desc_role().is_small());
+        assert!(home_card_desc_role().is_weak());
+        assert_eq!(home_card_button_role().size(), HOME_CARD_BUTTON_BODY_SIZE);
+        assert!(!home_card_button_role().is_strong());
+        assert_eq!(
+            home_card_title_role().line_height_source(),
+            TYPO_LINE_HEIGHT_SOURCE
+        );
     }
 
     #[test]
