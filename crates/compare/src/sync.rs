@@ -311,3 +311,87 @@ fn is_under(rel: &str, dir_rel: &str) -> bool {
     let prefix = format!("{dir_rel}/");
     rel.starts_with(&prefix)
 }
+
+/// High-level folder synchronization modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SyncMode {
+    /// Update right target with newer and left-only files from left (no pruning).
+    UpdateRight,
+    /// Update left target with newer and right-only files from right (no pruning).
+    UpdateLeft,
+    /// Bi-directional update: newer files win on both sides (no pruning).
+    Both,
+    /// Mirror left to right: copy newer/left-only files and delete files on right that do not exist on left.
+    Mirror,
+}
+
+/// A high-level folder synchronization planner and executor.
+#[derive(Debug, Clone)]
+pub struct SyncPlanner {
+    left: PathBuf,
+    right: PathBuf,
+    mode: SyncMode,
+}
+
+impl SyncPlanner {
+    /// Creates a new `SyncPlanner` for the given roots and sync mode.
+    pub fn new(left: impl AsRef<Path>, right: impl AsRef<Path>, mode: SyncMode) -> Self {
+        Self {
+            left: left.as_ref().to_path_buf(),
+            right: right.as_ref().to_path_buf(),
+            mode,
+        }
+    }
+
+    /// Converts the `SyncMode` into underlying [`SyncOptions`].
+    pub fn options(&self) -> SyncOptions {
+        match self.mode {
+            SyncMode::UpdateRight => SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: false,
+            },
+            SyncMode::UpdateLeft => SyncOptions {
+                direction: SyncDirection::RightToLeft,
+                prune: false,
+            },
+            SyncMode::Both => SyncOptions {
+                direction: SyncDirection::NewerWins,
+                prune: false,
+            },
+            SyncMode::Mirror => SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: true,
+            },
+        }
+    }
+
+    /// Generates the sync plan without modifying the filesystem (dry-run).
+    pub fn dry_run(&self) -> Result<SyncPlan> {
+        plan_sync(&self.left, &self.right, &self.options())
+    }
+
+    /// Generates the sync plan. Equivalent to [`Self::dry_run`].
+    pub fn plan(&self) -> Result<SyncPlan> {
+        self.dry_run()
+    }
+
+    /// Applies the planned synchronization steps to the filesystem.
+    pub fn apply(&self, plan: &SyncPlan) -> Result<SyncReport> {
+        apply_sync(&self.left, &self.right, plan)
+    }
+
+    /// Left root directory.
+    pub fn left(&self) -> &Path {
+        &self.left
+    }
+
+    /// Right root directory.
+    pub fn right(&self) -> &Path {
+        &self.right
+    }
+
+    /// Current sync mode.
+    pub fn mode(&self) -> SyncMode {
+        self.mode
+    }
+}

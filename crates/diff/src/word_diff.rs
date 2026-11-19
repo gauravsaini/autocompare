@@ -153,3 +153,88 @@ pub(crate) fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
     }
     spans
 }
+
+/// Character-level changed spans between two lines.
+#[allow(dead_code)]
+pub(crate) fn char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    if a == b {
+        return Vec::new();
+    }
+    let ca: Vec<char> = a.chars().collect();
+    let cb: Vec<char> = b.chars().collect();
+    let (ops, _) = engine::diff_slices(&ca, &cb, Some(crate::EDIT_BUDGET));
+
+    let mut spans = Vec::new();
+    let (mut ai, mut bi) = (0usize, 0usize);
+    let mut idx = 0usize;
+
+    while let Some(op) = ops.get(idx) {
+        match op {
+            Op::Equal { len } => {
+                ai = ai.saturating_add(*len);
+                bi = bi.saturating_add(*len);
+            }
+            Op::Delete { len } => {
+                let a_start = ai;
+                let a_end = ai.saturating_add(*len);
+                match ops.get(idx.saturating_add(1)) {
+                    Some(Op::Insert { len: ins }) => {
+                        let b_start = bi;
+                        let b_end = bi.saturating_add(*ins);
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start,
+                            b_end,
+                        });
+                        ai = a_end;
+                        bi = b_end;
+                        idx += 1;
+                    }
+                    _ => {
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start: bi,
+                            b_end: bi,
+                        });
+                        ai = a_end;
+                    }
+                }
+            }
+            Op::Insert { len } => {
+                let b_start = bi;
+                let b_end = bi.saturating_add(*len);
+                spans.push(InlineSpan {
+                    a_start: ai,
+                    a_end: ai,
+                    b_start,
+                    b_end,
+                });
+                bi = b_end;
+            }
+        }
+        idx += 1;
+    }
+
+    spans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_char_diff() {
+        let spans = char_diff("abcde", "abXde");
+        assert_eq!(
+            spans,
+            vec![InlineSpan {
+                a_start: 2,
+                a_end: 3,
+                b_start: 2,
+                b_end: 3,
+            }]
+        );
+    }
+}

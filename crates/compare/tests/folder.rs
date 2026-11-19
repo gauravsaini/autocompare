@@ -455,3 +455,46 @@ fn compare_folders_dir_symlink_loop_terminates() {
     assert_eq!(selfloop.status, FolderStatus::LeftOnly);
     cleanup(&base);
 }
+
+#[test]
+fn folder_compare_tree_over_local_fs_and_cancellation() {
+    use autocompare_compare::{FolderCompare, compare_folders_cancellable};
+    use autocompare_vfs::LocalFs;
+    use std::sync::atomic::AtomicBool;
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    std::fs::create_dir_all(&left).expect("create left");
+    std::fs::create_dir_all(&right).expect("create right");
+
+    write(&left.join("file1.txt"), "same content");
+    write(&right.join("file1.txt"), "same content");
+    write(&left.join("file2.txt"), "diff content 1");
+    write(&right.join("file2.txt"), "diff content 2");
+
+    let left_fs = LocalFs::new(&left).expect("left local fs");
+    let right_fs = LocalFs::new(&right).expect("right local fs");
+
+    let opts = FolderOptions {
+        content_compare: true,
+        ..default_opts()
+    };
+
+    let fc = FolderCompare::from_local_fs(&left_fs, &right_fs, opts.clone());
+    let res = fc.run().expect("fc run must succeed");
+    assert_eq!(res.entries.len(), 2);
+    let f1 = entry(&res.entries, "file1.txt");
+    assert_eq!(f1.status, FolderStatus::Same);
+    let f2 = entry(&res.entries, "file2.txt");
+    assert_eq!(f2.status, FolderStatus::Different);
+
+    // Test cancellation via AtomicBool
+    let cancel = AtomicBool::new(true);
+    let cancel_res = fc.run_cancellable(&cancel);
+    assert!(matches!(cancel_res, Err(Error::Cancelled)));
+
+    let cancel_func_res = compare_folders_cancellable(&left, &right, &opts, &cancel);
+    assert!(matches!(cancel_func_res, Err(Error::Cancelled)));
+
+    cleanup(&base);
+}

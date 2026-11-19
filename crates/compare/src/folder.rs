@@ -30,10 +30,79 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::binary::files_equal;
+use autocompare_vfs::LocalFs;
+
+use crate::binary::files_equal_cancellable;
 use crate::{Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, NodeInfo, Result};
+
+/// Folder comparison engine over physical directories or [`LocalFs`].
+#[derive(Debug, Clone)]
+pub struct FolderCompare {
+    left_root: PathBuf,
+    right_root: PathBuf,
+    options: FolderOptions,
+}
+
+impl FolderCompare {
+    /// Creates a new `FolderCompare` between two directory paths, validating that they exist and are directories.
+    pub fn new(
+        left: impl AsRef<Path>,
+        right: impl AsRef<Path>,
+        options: FolderOptions,
+    ) -> Result<Self> {
+        let left_path = left.as_ref();
+        let right_path = right.as_ref();
+        require_dir(left_path)?;
+        require_dir(right_path)?;
+        Ok(Self {
+            left_root: left_path.to_path_buf(),
+            right_root: right_path.to_path_buf(),
+            options,
+        })
+    }
+
+    /// Creates a `FolderCompare` from existing [`LocalFs`] instances.
+    pub fn from_local_fs(left_fs: &LocalFs, right_fs: &LocalFs, options: FolderOptions) -> Self {
+        Self {
+            left_root: left_fs.root_path().to_path_buf(),
+            right_root: right_fs.root_path().to_path_buf(),
+            options,
+        }
+    }
+
+    /// Left root directory.
+    pub fn left_root(&self) -> &Path {
+        &self.left_root
+    }
+
+    /// Right root directory.
+    pub fn right_root(&self) -> &Path {
+        &self.right_root
+    }
+
+    /// Comparison options.
+    pub fn options(&self) -> &FolderOptions {
+        &self.options
+    }
+
+    /// Runs the comparison to completion.
+    pub fn run(&self) -> Result<FolderComparison> {
+        compare_folders_inner(&self.left_root, &self.right_root, &self.options, None)
+    }
+
+    /// Runs the comparison, checking the `cancel` flag periodically.
+    pub fn run_cancellable(&self, cancel: &AtomicBool) -> Result<FolderComparison> {
+        compare_folders_inner(
+            &self.left_root,
+            &self.right_root,
+            &self.options,
+            Some(cancel),
+        )
+    }
+}
 
 /// A directory pair (or one-sided directory) pending the walk.
 struct WalkNode {
@@ -67,6 +136,25 @@ pub(crate) fn compare_folders(
     right: &Path,
     opts: &FolderOptions,
 ) -> Result<FolderComparison> {
+    compare_folders_inner(left, right, opts, None)
+}
+
+/// Compares two folder trees with cancellation support.
+pub fn compare_folders_cancellable(
+    left: &Path,
+    right: &Path,
+    opts: &FolderOptions,
+    cancel: &AtomicBool,
+) -> Result<FolderComparison> {
+    compare_folders_inner(left, right, opts, Some(cancel))
+}
+
+fn compare_folders_inner(
+    left: &Path,
+    right: &Path,
+    opts: &FolderOptions,
+    cancel: Option<&AtomicBool>,
+) -> Result<FolderComparison> {
     require_dir(left)?;
     require_dir(right)?;
 
@@ -80,6 +168,12 @@ pub(crate) fn compare_folders(
     }];
 
     while let Some(node) = stack.pop() {
+        if let Some(c) = cancel
+            && c.load(Ordering::Relaxed)
+        {
+            return Err(Error::Cancelled);
+        }
+
         let child_depth = match node.depth.checked_add(1) {
             Some(cd) if cd <= opts.depth_limit => cd,
             _ => {
@@ -114,6 +208,7 @@ pub(crate) fn compare_folders(
                         opts,
                         &mut entries,
                         &mut stack,
+                        cancel,
                     )?;
                 }
                 for child in left_only {
@@ -282,6 +377,7 @@ fn pair_children<'a>(
 /// Classifies a paired node: both directories walk children, both
 /// non-directories follow the file rules (size, then content or
 /// mtime), mixed kinds are `Different`.
+#[allow(clippy::too_many_arguments)]
 fn classify_pair(
     lc: &Child,
     rc: &Child,
@@ -290,6 +386,7 @@ fn classify_pair(
     opts: &FolderOptions,
     entries: &mut Vec<FolderEntry>,
     stack: &mut Vec<WalkNode>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<()> {
     let lside = probe_side(&lc.path);
     let rside = probe_side(&rc.path);
@@ -308,7 +405,7 @@ fn classify_pair(
         if lside.info.size != rside.info.size {
             status = FolderStatus::Different;
         } else if opts.content_compare && !lside.is_symlink && !rside.is_symlink {
-            status = if files_equal(&lc.path, &rc.path)? {
+            status = if files_equal_cancellable(&lc.path, &rc.path, cancel)? {
                 FolderStatus::Same
             } else {
                 FolderStatus::Different

@@ -6,6 +6,9 @@ members = [
     "crates/cli",
     "crates/gui",
     "crates/evidence",
+    "crates/vfs",
+    "crates/sessions",
+    "crates/reports",
     "xtask",
 ]
 

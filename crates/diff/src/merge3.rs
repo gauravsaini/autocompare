@@ -10,6 +10,19 @@
 
 use crate::{DiffScript, Op, diff_lines};
 
+/// A structured block in a 3-way merge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Merge3Block {
+    /// Non-conflicting lines (context or clean one-sided/identical edit).
+    Clean(Vec<String>),
+    /// Conflicting edit region where left and right disagree.
+    Conflict {
+        base: Vec<String>,
+        left: Vec<String>,
+        right: Vec<String>,
+    },
+}
+
 /// One side's edit: base lines `[bs, be)` were replaced by `repl`
 /// (empty for a pure deletion, a zero-length range for a pure insert).
 struct Edit {
@@ -108,13 +121,12 @@ fn emit_side(out: &mut Vec<String>, base: &[&str], gs: usize, ge: usize, edits: 
     }
 }
 
-/// Three-way merge of `base`, `left` and `right`. Never panics; the
-/// result is always complete lines.
-pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
+/// Computes structured 3-way merge blocks for `base`, `left`, and `right`.
+pub(crate) fn merge3_blocks(base: &[&str], left: &[&str], right: &[&str]) -> Vec<Merge3Block> {
     let le = script_to_edits(base.len(), &diff_lines(base, left), left);
     let re = script_to_edits(base.len(), &diff_lines(base, right), right);
     let n = base.len();
-    let mut out: Vec<String> = Vec::new();
+    let mut out: Vec<Merge3Block> = Vec::new();
     let (mut i, mut j, mut p) = (0usize, 0usize, 0usize);
     loop {
         if p >= n && i >= le.len() && j >= re.len() {
@@ -124,11 +136,17 @@ pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String
         let ls = le.get(i).map(|e| e.bs).unwrap_or(n);
         let rs = re.get(j).map(|e| e.bs).unwrap_or(n);
         let ctx_to = ls.min(rs).min(n);
-        while p < ctx_to {
-            if let Some(line) = base.get(p) {
-                out.push(line.to_string());
+        if p < ctx_to {
+            let mut ctx = Vec::new();
+            while p < ctx_to {
+                if let Some(line) = base.get(p) {
+                    ctx.push(line.to_string());
+                }
+                p += 1;
             }
-            p += 1;
+            if !ctx.is_empty() {
+                out.push(Merge3Block::Clean(ctx));
+            }
         }
         if i >= le.len() && j >= re.len() {
             break;
@@ -184,9 +202,13 @@ pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String
             continue;
         }
         if nl == 0 {
-            emit_side(&mut out, base, ctx_to, ge, rslice);
+            let mut side_out = Vec::new();
+            emit_side(&mut side_out, base, ctx_to, ge, rslice);
+            out.push(Merge3Block::Clean(side_out));
         } else if nr == 0 {
-            emit_side(&mut out, base, ctx_to, ge, lslice);
+            let mut side_out = Vec::new();
+            emit_side(&mut side_out, base, ctx_to, ge, lslice);
+            out.push(Merge3Block::Clean(side_out));
         } else if nl == 1
             && nr == 1
             && lslice.first().is_some_and(|a| {
@@ -197,16 +219,48 @@ pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String
         {
             // The same edit on both sides applies once.
             if let Some(a) = lslice.first() {
-                out.extend(a.repl.iter().cloned());
+                out.push(Merge3Block::Clean(a.repl.clone()));
             }
         } else {
-            out.push("<<<<<<< left".to_string());
-            emit_side(&mut out, base, ctx_to, ge, lslice);
-            out.push("=======".to_string());
-            emit_side(&mut out, base, ctx_to, ge, rslice);
-            out.push(">>>>>>> right".to_string());
+            let mut l_out = Vec::new();
+            emit_side(&mut l_out, base, ctx_to, ge, lslice);
+            let mut r_out = Vec::new();
+            emit_side(&mut r_out, base, ctx_to, ge, rslice);
+            let base_slice: Vec<String> = base
+                .get(ctx_to..ge)
+                .unwrap_or(&[])
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            out.push(Merge3Block::Conflict {
+                base: base_slice,
+                left: l_out,
+                right: r_out,
+            });
         }
         p = ge;
+    }
+    out
+}
+
+/// Three-way merge of `base`, `left` and `right`. Never panics; the
+/// result is always complete lines.
+pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
+    let blocks = merge3_blocks(base, left, right);
+    let mut out: Vec<String> = Vec::new();
+    for block in blocks {
+        match block {
+            Merge3Block::Clean(lines) => {
+                out.extend(lines);
+            }
+            Merge3Block::Conflict { left, right, .. } => {
+                out.push("<<<<<<< left".to_string());
+                out.extend(left);
+                out.push("=======".to_string());
+                out.extend(right);
+                out.push(">>>>>>> right".to_string());
+            }
+        }
     }
     out
 }

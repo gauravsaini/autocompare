@@ -2,6 +2,14 @@
 
 ## UPDATED ON : 2026-11-19
 
+### Feature (2026-11-19) — Wave-2 Leaf-2.3: FolderCompare, SyncPlanner, FolderMerge & JobRunner
+
+1. **Scope**: Extended `crates/compare` (`autocompare-compare`) with `autocompare-vfs` integration and serde support. Implemented `FolderCompare` tree over `LocalFs` with cancellable recursive walk and byte comparison via `AtomicBool`, `SyncPlanner` supporting `UpdateLeft`, `UpdateRight`, `Both`, `Mirror` with dry-run and apply operations, `FolderMerge` 3-way merge wrapper, and a new cancellable background `JobRunner` with thread management and progress callbacks.
+2. **Tests** (before → after): 88 → 94 compare crate tests (+6 new tests covering FolderCompare over LocalFs, cancellation flag, all 4 Sync modes dry-run/apply, FolderMerge struct, and JobRunner spawn/progress/cancel/background compare/sync), strict workspace lints clean.
+3. **Files changed**: `crates/compare/Cargo.toml`, `crates/compare/src/{lib,binary,folder,sync,folder_merge,jobs}.rs`, `crates/compare/tests/{folder,sync,folder_merge,jobs}.rs`.
+
+## UPDATED ON : 2026-11-19
+
 ### Feature (2026-11-19) — v0.5.0: desktop GUI covers all nine session types
 
 1. **Scope**: `autocompare-gui` grows from 3 tabs to 9 (Text, Folder, Hex, Merge, Table, Sync, Picture, FolderMerge, Audio), matching the nine CLI commands and the original's nine observed session types. Merge/FolderMerge take base/left/right paths; Sync/FolderMerge show the dry-run plan (apply stays CLI). No engine changes: thin GUI over `autocompare-compare` / `autocompare-diff`, pure headless view-model builders, safe Rust, never panics.
@@ -47,3 +55,20 @@
 1. **Scope**: text (side-by-side + unified), recursive folder, hex and three-way merge comparison as a pure-Rust workspace (`crates/diff` → `crates/compare` → `crates/cli`), built clean-room from a user-facing study of the original app (`docs/study.md`); no code, assets or wording copied.
 2. **Tests** (before → after): none → 72/72 workspace tests, `clippy -D warnings` clean; 5 exhaustive release-mode sweeps (~430k pairs) verify diff replay, canonical form and minimality; live CLI sanity verified all six folder statuses, `--content` reclassification, exit codes 0/1/2 and conflict markers.
 3. **Files changed**: `crates/*`, `docs/study.md`, `README.md`, `.github/workflows/ci.yml`, `LICENSE`.
+
+## UPDATED ON : 2026-11-19
+
+### Feature (2026-11-19) — Wave 2 Leaf-2.2: autocompare-reports crate delivered
+
+1. **Reports Engine**: Created `crates/reports` with decoupled std-only inputs (`ReportInput`, `Hunk`, `DiffStats`, `ChildReportAnchor`). Built HTML color/mono renderers with linked child report anchors, plain text, XML, and unified/context patch renderers with hostile input character escaping.
+2. **Tests** (before → after): 0 → 9 snapshot tests passing (all green); strict workspace lints passed (`forbid(unsafe_code)`, `unwrap_used=deny`, `indexing_slicing=deny`).
+3. **Files changed**: `crates/reports/Cargo.toml`, `crates/reports/src/{lib,html,text,xml,patch}.rs`, `crates/reports/tests/snapshot_tests.rs`.
+
+## UPDATED ON : 2026-11-19
+
+### Feature (2026-11-19) — Wave 2 Leaf-2.1: autocompare-sessions crate delivered
+
+1. **Sessions & Config Engine**: Created `crates/sessions` with `SessionDocument`, `SessionTab`, `WorkspaceDocument`, `AppSettings`, and schema migration logic. Supports v0->v1 migrations (legacy fields, unversioned, bare arrays), forward-compatibility rejection, hostile inputs handling without panics, and file/string JSON serialization.
+2. **Tests** (before → after): 0 → 29 tests passing (11 unit tests, 7 corrupt-input tests, 8 migration tests, 3 round-trip tests, 0 failed); strict workspace lints passed (`forbid(unsafe_code)`, `unwrap_used=deny`, `expect_used=deny`, `panic=deny`, `indexing_slicing=deny`).
+3. **Files changed**: `crates/sessions/Cargo.toml`, `crates/sessions/src/{lib,session,workspace,settings,error}.rs`, `crates/sessions/tests/{round_trip,migration,corrupt_input}.rs`.
+

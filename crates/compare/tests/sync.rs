@@ -575,3 +575,56 @@ fn apply_prune_removes_a_symlink_without_following_it() {
     assert!(outside.join("secret.txt").exists());
     cleanup(&base);
 }
+
+#[test]
+fn sync_planner_all_modes_dry_run_and_apply() {
+    use autocompare_compare::{SyncMode, SyncPlanner};
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    std::fs::create_dir_all(&left).unwrap();
+    std::fs::create_dir_all(&right).unwrap();
+
+    let t = fixed_time();
+    one(&left, "left_new.txt", "left_new");
+    set_mtime(&left.join("left_new.txt"), later());
+
+    one(&right, "right_new.txt", "right_new");
+    set_mtime(&right.join("right_new.txt"), later());
+
+    one(&right, "extra_on_right.txt", "extra");
+    set_mtime(&right.join("extra_on_right.txt"), t);
+
+    // 1. UpdateRight dry run & plan
+    let p_update_r = SyncPlanner::new(&left, &right, SyncMode::UpdateRight);
+    let plan_r = p_update_r.dry_run().unwrap();
+    assert_eq!(p_update_r.mode(), SyncMode::UpdateRight);
+    assert!(step(&plan_r, "left_new.txt").is_some());
+    assert!(step(&plan_r, "extra_on_right.txt").is_none());
+
+    // 2. UpdateLeft dry run
+    let p_update_l = SyncPlanner::new(&left, &right, SyncMode::UpdateLeft);
+    let plan_l = p_update_l.plan().unwrap();
+    assert!(step(&plan_l, "right_new.txt").is_some());
+    assert!(step(&plan_l, "left_new.txt").is_none());
+
+    // 3. Both (bi-directional)
+    let p_both = SyncPlanner::new(&left, &right, SyncMode::Both);
+    let plan_both = p_both.dry_run().unwrap();
+    assert!(step(&plan_both, "left_new.txt").is_some());
+    assert!(step(&plan_both, "right_new.txt").is_some());
+
+    // 4. Mirror (copies to right and prunes extra on right)
+    let p_mirror = SyncPlanner::new(&left, &right, SyncMode::Mirror);
+    let plan_mirror = p_mirror.dry_run().unwrap();
+    let prune_step = step(&plan_mirror, "extra_on_right.txt").unwrap();
+    assert_eq!(prune_step.action, SyncAction::DeleteRight);
+
+    // Apply Mirror
+    let rep = p_mirror.apply(&plan_mirror).unwrap();
+    assert_eq!(rep.failed.len(), 0);
+    assert!(right.join("left_new.txt").exists());
+    assert!(!right.join("extra_on_right.txt").exists());
+
+    cleanup(&base);
+}

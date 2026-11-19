@@ -17,6 +17,7 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{BinaryComparison, BinaryHunk, Error, Result};
 
@@ -115,9 +116,23 @@ pub(crate) fn compare_binary_files(
 /// equal. Used by folder comparison when `content_compare` is set.
 /// Read errors propagate as [`Error::Io`] with the failing path.
 pub(crate) fn files_equal(left: &Path, right: &Path) -> Result<bool> {
+    files_equal_cancellable(left, right, None)
+}
+
+/// Streams both files in chunks with optional cancellation.
+pub(crate) fn files_equal_cancellable(
+    left: &Path,
+    right: &Path,
+    cancel: Option<&AtomicBool>,
+) -> Result<bool> {
     let mut lreader = open_buffered(left)?;
     let mut rreader = open_buffered(right)?;
     loop {
+        if let Some(c) = cancel
+            && c.load(Ordering::Relaxed)
+        {
+            return Err(Error::Cancelled);
+        }
         let (llen, rlen, equal) = {
             let lb = match lreader.fill_buf() {
                 Ok(buf) => buf,

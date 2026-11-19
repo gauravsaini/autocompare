@@ -1,0 +1,201 @@
+//! Normalized virtual filesystem paths.
+
+#![forbid(unsafe_code)]
+
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::VfsError;
+
+/// A normalized, relative, forward-slash separated virtual path.
+///
+/// An empty path `""` represents the root of the virtual filesystem.
+/// A path never contains leading or trailing slashes, empty segments,
+/// dot segments (`.`), or parent traversal segments (`..`).
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct VfsPath(String);
+
+impl VfsPath {
+    /// Creates a path representing the VFS root.
+    #[must_use]
+    pub const fn root() -> Self {
+        Self(String::new())
+    }
+
+    /// Normalizes and parses a string slice into a [`VfsPath`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::InvalidPath`] if the path contains null bytes
+    /// or parent-traversal components (`..`).
+    pub fn new(raw: impl AsRef<str>) -> Result<Self, VfsError> {
+        let s = raw.as_ref();
+        if s.contains('\0') {
+            return Err(VfsError::InvalidPath("path contains null byte".to_string()));
+        }
+
+        let mut parts = Vec::new();
+        let normalized = s.replace('\\', "/");
+        for component in normalized.split('/') {
+            let trimmed = component.trim();
+            if trimmed.is_empty() || trimmed == "." {
+                continue;
+            }
+            if trimmed == ".." {
+                return Err(VfsError::InvalidPath(
+                    "parent directory traversal '..' forbidden in VfsPath".to_string(),
+                ));
+            }
+            parts.push(trimmed.to_string());
+        }
+
+        Ok(Self(parts.join("/")))
+    }
+
+    /// Creates a [`VfsPath`] from a local filesystem path relative to a base directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::InvalidPath`] if relative path resolution fails or
+    /// contains invalid components.
+    pub fn from_relative_path(path: &Path) -> Result<Self, VfsError> {
+        let str_rep = path
+            .to_str()
+            .ok_or_else(|| VfsError::InvalidPath("non-UTF8 path".to_string()))?;
+        Self::new(str_rep)
+    }
+
+    /// Returns `true` if this path refers to the root of the virtual filesystem.
+    #[must_use]
+    pub fn is_root(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the normalized path as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Returns the immediate parent path, or `None` if this path is already root.
+    #[must_use]
+    pub fn parent(&self) -> Option<Self> {
+        if self.is_root() {
+            return None;
+        }
+
+        match self.0.rfind('/') {
+            Some(idx) => {
+                let parent_slice = self.0.get(..idx).unwrap_or("");
+                Some(Self(parent_slice.to_string()))
+            }
+            None => Some(Self::root()),
+        }
+    }
+
+    /// Returns the final file or directory name component of the path.
+    #[must_use]
+    pub fn file_name(&self) -> Option<&str> {
+        if self.is_root() {
+            return None;
+        }
+
+        match self.0.rfind('/') {
+            Some(idx) => {
+                let start = idx.saturating_add(1);
+                self.0.get(start..)
+            }
+            None => Some(&self.0),
+        }
+    }
+
+    /// Returns the extension of the file, if present.
+    #[must_use]
+    pub fn extension(&self) -> Option<&str> {
+        let name = self.file_name()?;
+        let dot_idx = name.rfind('.')?;
+        if dot_idx == 0 {
+            return None; // Hidden dotfile without extension
+        }
+        let ext_start = dot_idx.saturating_add(1);
+        name.get(ext_start..)
+    }
+
+    /// Joins a child path to this path, validating the resulting path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::InvalidPath`] if the child contains traversal components.
+    pub fn join(&self, child: &str) -> Result<Self, VfsError> {
+        let child_path = Self::new(child)?;
+        if child_path.is_root() {
+            return Ok(self.clone());
+        }
+        if self.is_root() {
+            return Ok(child_path);
+        }
+
+        let mut combined = String::with_capacity(self.0.len() + 1 + child_path.0.len());
+        combined.push_str(&self.0);
+        combined.push('/');
+        combined.push_str(&child_path.0);
+        Ok(Self(combined))
+    }
+
+    /// Returns the directory depth (root has depth 0).
+    #[must_use]
+    pub fn depth(&self) -> usize {
+        if self.is_root() {
+            0
+        } else {
+            self.0.split('/').count()
+        }
+    }
+
+    /// Returns an iterator over each path component.
+    pub fn components(&self) -> impl Iterator<Item = &str> {
+        self.0.split('/').filter(|s| !s.is_empty())
+    }
+
+    /// Converts this virtual path to a [`PathBuf`] under a base physical directory.
+    #[must_use]
+    pub fn to_physical_path(&self, base_dir: &Path) -> PathBuf {
+        let mut result = base_dir.to_path_buf();
+        for component in self.components() {
+            result.push(component);
+        }
+        result
+    }
+}
+
+impl fmt::Display for VfsPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_root() {
+            write!(f, "/")
+        } else {
+            write!(f, "{}", self.0)
+        }
+    }
+}
+
+impl fmt::Debug for VfsPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VfsPath(\"{}\")", self)
+    }
+}
+
+impl AsRef<str> for VfsPath {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::str::FromStr for VfsPath {
+    type Err = VfsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
+}

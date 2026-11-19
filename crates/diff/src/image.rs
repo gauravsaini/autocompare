@@ -152,6 +152,41 @@ pub fn encode_png(image: &RgbaImage) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// Blend or composition mode for image comparison and rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)]
+pub enum PictureBlendMode {
+    /// Exact raw RGBA channel comparison.
+    #[default]
+    Exact,
+    /// Alpha-composites pixels over a solid RGB backdrop before comparing.
+    CompositeBackdrop([u8; 3]),
+    /// Absolute difference blend evaluation.
+    Difference,
+}
+
+/// Options controlling picture comparison sensitivity, tolerance, range, and blending.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PictureOptions {
+    /// Maximum difference allowed on any individual channel (0..=255) for two pixels to match.
+    pub tolerance: u8,
+    /// Maximum total channel delta (sum of absolute differences across all channels, 0..=1020).
+    /// If 0, only `tolerance` is checked.
+    pub channel_range: u16,
+    /// Blending / composition strategy.
+    pub blend_mode: PictureBlendMode,
+}
+
+impl Default for PictureOptions {
+    fn default() -> Self {
+        Self {
+            tolerance: 0,
+            channel_range: 0,
+            blend_mode: PictureBlendMode::Exact,
+        }
+    }
+}
+
 /// Statistics of a pixel-wise comparison over the two images'
 /// overlapping region.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,14 +214,17 @@ pub struct PictureDiff {
     pub identical: bool,
 }
 
-/// Compares two images pixel by pixel over their overlap.
-///
-/// Pixels are compared on all four RGBA channels. Regions beyond the
-/// smaller image's extent are not compared; `identical` requires the
-/// same dimensions and zero differing pixels. A pixel whose data is
-/// missing on either side (only possible in a hand-built
-/// [`RgbaImage`] with inconsistent fields) counts as differing.
+/// Compares two images pixel by pixel over their overlap with default options (exact RGBA match).
 pub fn diff_pictures(a: &RgbaImage, b: &RgbaImage) -> PictureDiff {
+    diff_pictures_with_options(a, b, &PictureOptions::default())
+}
+
+/// Compares two images pixel by pixel over their overlap with custom tolerance, range, and blend options.
+pub fn diff_pictures_with_options(
+    a: &RgbaImage,
+    b: &RgbaImage,
+    opts: &PictureOptions,
+) -> PictureDiff {
     let overlap_w = a.width.min(b.width);
     let overlap_h = a.height.min(b.height);
     let total = u64::from(overlap_w).saturating_mul(u64::from(overlap_h));
@@ -194,10 +232,10 @@ pub fn diff_pictures(a: &RgbaImage, b: &RgbaImage) -> PictureDiff {
     let mut bbox: Option<(u32, u32, u32, u32)> = None;
     for y in 0..overlap_h {
         for x in 0..overlap_w {
-            let same = matches!(
-                (pixel(a, x, y), pixel(b, x, y)),
-                (Some(pa), Some(pb)) if pa == pb
-            );
+            let same = match (pixel(a, x, y), pixel(b, x, y)) {
+                (Some(pa), Some(pb)) => pixel_matches(pa, pb, opts),
+                _ => false,
+            };
             if !same {
                 differing = differing.saturating_add(1);
                 bbox = Some(match bbox {
@@ -224,15 +262,84 @@ pub fn diff_pictures(a: &RgbaImage, b: &RgbaImage) -> PictureDiff {
     }
 }
 
-/// A heatmap of the differences over the overlap: identical pixels
-/// dimmed to 30% grayscale of the left image, differing pixels opaque
-/// red `(255, 0, 0, 255)`.
-///
-/// The heatmap covers only the overlap of the two images. If the
-/// overlap is too large for the machine's address space (only
-/// possible with hand-built images), an empty image is returned
-/// instead of panicking.
+/// Decides whether two RGBA pixels match given tolerance, range, and blend settings.
+fn pixel_matches(pa: [u8; 4], pb: [u8; 4], opts: &PictureOptions) -> bool {
+    let (ca, cb) = match opts.blend_mode {
+        PictureBlendMode::Exact => (pa, pb),
+        PictureBlendMode::CompositeBackdrop(bg) => (composite_over(pa, bg), composite_over(pb, bg)),
+        PictureBlendMode::Difference => (pa, pb),
+    };
+
+    let dr = ca
+        .first()
+        .copied()
+        .unwrap_or(0)
+        .abs_diff(cb.first().copied().unwrap_or(0));
+    let dg = ca
+        .get(1)
+        .copied()
+        .unwrap_or(0)
+        .abs_diff(cb.get(1).copied().unwrap_or(0));
+    let db = ca
+        .get(2)
+        .copied()
+        .unwrap_or(0)
+        .abs_diff(cb.get(2).copied().unwrap_or(0));
+    let da = ca
+        .get(3)
+        .copied()
+        .unwrap_or(0)
+        .abs_diff(cb.get(3).copied().unwrap_or(0));
+
+    if dr > opts.tolerance || dg > opts.tolerance || db > opts.tolerance || da > opts.tolerance {
+        return false;
+    }
+
+    if opts.channel_range > 0 {
+        let total_diff = u16::from(dr)
+            .saturating_add(u16::from(dg))
+            .saturating_add(u16::from(db))
+            .saturating_add(u16::from(da));
+        if total_diff > opts.channel_range {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Alpha composites an RGBA sample over a solid RGB background color.
+fn composite_over(sample: [u8; 4], bg: [u8; 3]) -> [u8; 4] {
+    let [r, g, b, a] = sample;
+    let alpha = f64::from(a) / 255.0;
+    let bg_r = f64::from(bg.first().copied().unwrap_or(0));
+    let bg_g = f64::from(bg.get(1).copied().unwrap_or(0));
+    let bg_b = f64::from(bg.get(2).copied().unwrap_or(0));
+
+    let out_r = ((f64::from(r) * alpha) + (bg_r * (1.0 - alpha)))
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let out_g = ((f64::from(g) * alpha) + (bg_g * (1.0 - alpha)))
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    let out_b = ((f64::from(b) * alpha) + (bg_b * (1.0 - alpha)))
+        .round()
+        .clamp(0.0, 255.0) as u8;
+
+    [out_r, out_g, out_b, 255]
+}
+
+/// A heatmap of differences over the overlap with default exact comparison.
 pub fn picture_heatmap(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
+    picture_heatmap_with_options(a, b, &PictureOptions::default())
+}
+
+/// A heatmap of differences over the overlap using custom tolerance, range, and blend settings.
+pub fn picture_heatmap_with_options(
+    a: &RgbaImage,
+    b: &RgbaImage,
+    opts: &PictureOptions,
+) -> RgbaImage {
     let overlap_w = a.width.min(b.width);
     let overlap_h = a.height.min(b.height);
     let byte_len = u64::from(overlap_w)
@@ -250,7 +357,7 @@ pub fn picture_heatmap(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
     for y in 0..overlap_h {
         for x in 0..overlap_w {
             let out = match (pixel(a, x, y), pixel(b, x, y)) {
-                (Some(pa), Some(pb)) if pa == pb => {
+                (Some(pa), Some(pb)) if pixel_matches(pa, pb, opts) => {
                     let [r, g, b, _alpha] = pa;
                     let luma = 0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b);
                     let gray = (luma * 30.0 / 100.0).round().clamp(0.0, 255.0) as u8;
@@ -259,6 +366,80 @@ pub fn picture_heatmap(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
                 _ => [255, 0, 0, 255],
             };
             pixels.extend_from_slice(&out);
+        }
+    }
+    RgbaImage {
+        width: overlap_w,
+        height: overlap_h,
+        pixels,
+    }
+}
+
+/// Blends two images pixel-by-pixel with `alpha_ratio` (`0.0` = only `a`, `1.0` = only `b`).
+#[allow(dead_code)]
+pub fn picture_blend(a: &RgbaImage, b: &RgbaImage, alpha_ratio: f32) -> RgbaImage {
+    let overlap_w = a.width.min(b.width);
+    let overlap_h = a.height.min(b.height);
+    let clamped_ratio = f64::from(alpha_ratio).clamp(0.0, 1.0);
+    let byte_len = u64::from(overlap_w)
+        .saturating_mul(u64::from(overlap_h))
+        .saturating_mul(4);
+    let byte_len = usize::try_from(byte_len).unwrap_or(usize::MAX);
+    let mut pixels: Vec<u8> = Vec::new();
+    if pixels.try_reserve_exact(byte_len).is_err() {
+        return RgbaImage {
+            width: 0,
+            height: 0,
+            pixels,
+        };
+    }
+    for y in 0..overlap_h {
+        for x in 0..overlap_w {
+            let pa = pixel(a, x, y).unwrap_or([0, 0, 0, 255]);
+            let pb = pixel(b, x, y).unwrap_or([0, 0, 0, 255]);
+            let r = (f64::from(pa[0]) * (1.0 - clamped_ratio) + f64::from(pb[0]) * clamped_ratio)
+                .round() as u8;
+            let g = (f64::from(pa[1]) * (1.0 - clamped_ratio) + f64::from(pb[1]) * clamped_ratio)
+                .round() as u8;
+            let b_ch = (f64::from(pa[2]) * (1.0 - clamped_ratio) + f64::from(pb[2]) * clamped_ratio)
+                .round() as u8;
+            let a_ch = (f64::from(pa[3]) * (1.0 - clamped_ratio) + f64::from(pb[3]) * clamped_ratio)
+                .round() as u8;
+            pixels.extend_from_slice(&[r, g, b_ch, a_ch]);
+        }
+    }
+    RgbaImage {
+        width: overlap_w,
+        height: overlap_h,
+        pixels,
+    }
+}
+
+/// Computes an absolute difference blend image `|a - b|` over the overlap.
+#[allow(dead_code)]
+pub fn picture_difference_blend(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
+    let overlap_w = a.width.min(b.width);
+    let overlap_h = a.height.min(b.height);
+    let byte_len = u64::from(overlap_w)
+        .saturating_mul(u64::from(overlap_h))
+        .saturating_mul(4);
+    let byte_len = usize::try_from(byte_len).unwrap_or(usize::MAX);
+    let mut pixels: Vec<u8> = Vec::new();
+    if pixels.try_reserve_exact(byte_len).is_err() {
+        return RgbaImage {
+            width: 0,
+            height: 0,
+            pixels,
+        };
+    }
+    for y in 0..overlap_h {
+        for x in 0..overlap_w {
+            let pa = pixel(a, x, y).unwrap_or([0, 0, 0, 255]);
+            let pb = pixel(b, x, y).unwrap_or([0, 0, 0, 255]);
+            let r = pa[0].abs_diff(pb[0]);
+            let g = pa[1].abs_diff(pb[1]);
+            let b_ch = pa[2].abs_diff(pb[2]);
+            pixels.extend_from_slice(&[r, g, b_ch, 255]);
         }
     }
     RgbaImage {
@@ -278,4 +459,84 @@ fn pixel(img: &RgbaImage, x: u32, y: u32) -> Option<[u8; 4]> {
         .checked_mul(4)?;
     let bytes = img.pixels.get(index..index.checked_add(4)?)?;
     bytes.try_into().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tolerance_matching() {
+        let a = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![100, 100, 100, 255],
+        };
+        let b = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![105, 103, 98, 255],
+        };
+        // Strict diff should report different
+        let strict = diff_pictures(&a, &b);
+        assert_eq!(strict.differing, 1);
+        assert!(!strict.identical);
+
+        // With tolerance = 5, channels differ by at most 5, so it should match
+        let opts = PictureOptions {
+            tolerance: 5,
+            channel_range: 0,
+            blend_mode: PictureBlendMode::Exact,
+        };
+        let relaxed = diff_pictures_with_options(&a, &b, &opts);
+        assert_eq!(relaxed.differing, 0);
+        assert!(relaxed.identical);
+    }
+
+    #[test]
+    fn test_channel_range_matching() {
+        let a = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![10, 10, 10, 255],
+        };
+        let b = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![14, 10, 10, 255],
+        };
+        // Tolerance = 10, range = 3: total diff is 4, which exceeds range 3!
+        let opts_fail = PictureOptions {
+            tolerance: 10,
+            channel_range: 3,
+            blend_mode: PictureBlendMode::Exact,
+        };
+        assert_eq!(diff_pictures_with_options(&a, &b, &opts_fail).differing, 1);
+
+        let opts_pass = PictureOptions {
+            tolerance: 10,
+            channel_range: 5,
+            blend_mode: PictureBlendMode::Exact,
+        };
+        assert_eq!(diff_pictures_with_options(&a, &b, &opts_pass).differing, 0);
+    }
+
+    #[test]
+    fn test_blend_functions() {
+        let a = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![0, 0, 0, 255],
+        };
+        let b = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![100, 100, 100, 255],
+        };
+        let blended = picture_blend(&a, &b, 0.5);
+        assert_eq!(blended.pixels, vec![50, 50, 50, 255]);
+
+        let diff_blend = picture_difference_blend(&a, &b);
+        assert_eq!(diff_blend.pixels, vec![100, 100, 100, 255]);
+    }
 }

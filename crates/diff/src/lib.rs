@@ -8,9 +8,14 @@
 
 mod audio;
 mod engine;
+pub mod grammar;
+pub mod hex;
 mod image;
+pub mod media_tags;
+pub mod merge;
 mod merge3;
 mod table;
+pub mod text_diff;
 mod word_diff;
 
 pub use audio::{

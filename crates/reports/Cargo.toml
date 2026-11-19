@@ -1,0 +1,11 @@
+[package]
+name = "autocompare-reports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Report generation engine: HTML (color/mono with linked child reports), Plain Text, XML, and Patch builders"
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -9,11 +9,17 @@
 mod binary;
 mod folder;
 mod folder_merge;
+pub mod jobs;
 mod media;
 mod picture;
 mod sync;
 mod table;
 mod text;
+
+pub use folder::{FolderCompare, compare_folders_cancellable};
+pub use folder_merge::FolderMerge;
+pub use jobs::{JobHandle, JobProgress, JobRunner};
+pub use sync::{SyncMode, SyncPlanner};
 
 use std::fmt;
 use std::path::Path;
@@ -33,6 +39,8 @@ pub enum Error {
     },
     /// A path exists but its content cannot be handled as requested.
     Unsupported { path: String, what: &'static str },
+    /// Operation was cancelled.
+    Cancelled,
 }
 
 impl fmt::Display for Error {
@@ -41,6 +49,7 @@ impl fmt::Display for Error {
             Error::Missing { path } => write!(f, "path not found: {path}"),
             Error::Io { path, source } => write!(f, "reading {path} failed: {source}"),
             Error::Unsupported { path, what } => write!(f, "{path}: {what}"),
+            Error::Cancelled => write!(f, "operation cancelled"),
         }
     }
 }
@@ -58,7 +67,7 @@ impl std::error::Error for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Options that tune how text comparison decides equality.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct TextOptions {
     /// Ignore differences in letter case.
     pub ignore_case: bool,
@@ -90,7 +99,7 @@ pub fn compare_text_files(left: &Path, right: &Path, opts: &TextOptions) -> Resu
 }
 
 /// Options for table comparison.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct TableOptions {
     /// Field delimiter (',' by default).
     pub delimiter: char,
@@ -133,7 +142,7 @@ pub fn compare_table_files(
 }
 
 /// Metadata for one side of a compared node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NodeInfo {
     /// Size in bytes (0 for directories).
     pub size: u64,
@@ -142,7 +151,7 @@ pub struct NodeInfo {
 }
 
 /// How one node compares between the two folder trees.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FolderStatus {
     /// Present on both sides and equal by the active comparison rule.
     Same,
@@ -159,7 +168,7 @@ pub enum FolderStatus {
 }
 
 /// One row of a folder comparison.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FolderEntry {
     /// Path relative to the compared roots, '/'-separated.
     pub rel_path: String,
@@ -174,7 +183,7 @@ pub struct FolderEntry {
 }
 
 /// Options for a folder comparison.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FolderOptions {
     /// Compare file bytes when sizes match, not only size and time.
     pub content_compare: bool,
@@ -202,7 +211,7 @@ impl Default for FolderOptions {
 }
 
 /// The result of comparing two folder trees.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FolderComparison {
     /// Entries sorted by relative path.
     pub entries: Vec<FolderEntry>,
@@ -227,7 +236,7 @@ pub fn compare_folders(
 }
 
 /// One run of differing bytes, capped in length.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BinaryHunk {
     /// Offset of the first differing byte.
     pub offset: u64,
@@ -238,7 +247,7 @@ pub struct BinaryHunk {
 }
 
 /// The result of a byte-by-byte comparison.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct BinaryComparison {
     /// Size of the left file.
     pub left_size: u64,
@@ -266,7 +275,7 @@ pub fn compare_binary_files(
 }
 
 /// Direction of a folder sync.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SyncDirection {
     /// Copy left-side content over the right side.
     LeftToRight,
@@ -277,7 +286,7 @@ pub enum SyncDirection {
 }
 
 /// Options for building a sync plan.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct SyncOptions {
     /// Which side wins.
     pub direction: SyncDirection,
@@ -296,7 +305,7 @@ impl Default for SyncOptions {
 }
 
 /// What one planned step does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SyncAction {
     /// Copy the left copy over the right one.
     CopyToRight,
@@ -309,7 +318,7 @@ pub enum SyncAction {
 }
 
 /// One planned change.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SyncStep {
     /// Path relative to the roots, '/'-separated.
     pub rel_path: String,
@@ -321,7 +330,7 @@ pub struct SyncStep {
 
 /// A whole sync plan: the steps to apply and the entries intentionally
 /// left alone, with reasons.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SyncPlan {
     /// Actions to apply, parents before children.
     pub steps: Vec<SyncStep>,
@@ -333,7 +342,7 @@ pub struct SyncPlan {
 }
 
 /// Outcome of applying a plan.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct SyncReport {
     /// Files successfully copied.
     pub copied: usize,
@@ -367,7 +376,7 @@ pub fn apply_sync(left: &Path, right: &Path, plan: &SyncPlan) -> Result<SyncRepo
 }
 
 /// Options for picture comparison.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PictureOptions {
     /// When set, a heatmap PNG (identical pixels dimmed, differing
     /// pixels red) is written to this path. This is a real file write.
@@ -393,7 +402,7 @@ pub fn compare_picture_files(
 }
 
 /// What one step of a three-way tree merge does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TreeMergeAction {
     /// Take the left side's copy.
     TakeLeft,
@@ -412,7 +421,7 @@ pub enum TreeMergeAction {
 }
 
 /// One planned write in a three-way tree merge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TreeMergeStep {
     /// Path relative to the roots, '/'-separated.
     pub rel_path: String,
@@ -424,7 +433,7 @@ pub struct TreeMergeStep {
 }
 
 /// A whole three-way merge plan.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct TreeMergePlan {
     /// Steps sorted by relative path, `MakeDir` steps before their
     /// children.
@@ -436,7 +445,7 @@ pub struct TreeMergePlan {
 }
 
 /// Outcome of applying a merge plan.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct TreeMergeReport {
     /// Files written (copies and merges).
     pub written: usize,

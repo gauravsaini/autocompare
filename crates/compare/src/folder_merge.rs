@@ -662,3 +662,47 @@ fn require_dir(path: &Path) -> Result<()> {
         }),
     }
 }
+
+/// High-level three-way folder merge planner and executor.
+#[derive(Debug, Clone)]
+pub struct FolderMerge {
+    base: PathBuf,
+    left: PathBuf,
+    right: PathBuf,
+}
+
+impl FolderMerge {
+    /// Creates a new three-way folder merge over a common base directory.
+    pub fn new(base: impl AsRef<Path>, left: impl AsRef<Path>, right: impl AsRef<Path>) -> Self {
+        Self {
+            base: base.as_ref().to_path_buf(),
+            left: left.as_ref().to_path_buf(),
+            right: right.as_ref().to_path_buf(),
+        }
+    }
+
+    /// Plans a three-way merge without modifying the filesystem (read-only).
+    pub fn plan(&self) -> Result<TreeMergePlan> {
+        plan_tree_merge(&self.base, &self.left, &self.right)
+    }
+
+    /// Applies the merge plan into `output`.
+    pub fn apply(&self, plan: &TreeMergePlan, output: impl AsRef<Path>) -> Result<TreeMergeReport> {
+        apply_tree_merge(&self.left, &self.right, plan, output.as_ref())
+    }
+
+    /// Base directory root.
+    pub fn base(&self) -> &Path {
+        &self.base
+    }
+
+    /// Left directory root.
+    pub fn left(&self) -> &Path {
+        &self.left
+    }
+
+    /// Right directory root.
+    pub fn right(&self) -> &Path {
+        &self.right
+    }
+}

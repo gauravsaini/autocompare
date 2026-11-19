@@ -657,3 +657,36 @@ fn a_vanished_source_fails_one_step_and_the_rest_still_apply() {
 
     cleanup(&base);
 }
+
+#[test]
+fn folder_merge_struct_api() {
+    use autocompare_compare::FolderMerge;
+
+    let base = temp_root();
+    let (b, l, r) = make_roots(&base);
+    write(&b.join("merged.txt"), "line1\nline2\nline3\n");
+    write(&l.join("merged.txt"), "line1_left\nline2\nline3\n");
+    write(&r.join("merged.txt"), "line1\nline2\nline3_right\n");
+
+    let merger = FolderMerge::new(&b, &l, &r);
+    assert_eq!(merger.base(), b);
+    assert_eq!(merger.left(), l);
+    assert_eq!(merger.right(), r);
+
+    let plan = merger.plan().unwrap();
+    assert_eq!(plan.conflicts.len(), 0);
+    assert_eq!(
+        action(&plan, "merged.txt"),
+        Some(TreeMergeAction::MergedText)
+    );
+
+    let out = base.join("out");
+    let report = merger.apply(&plan, &out).unwrap();
+    assert_eq!(report.failed.len(), 0);
+    assert_eq!(report.written, 1);
+
+    let content = std::fs::read_to_string(out.join("merged.txt")).unwrap();
+    assert_eq!(content, "line1_left\nline2\nline3_right\n");
+
+    cleanup(&base);
+}
