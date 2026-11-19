@@ -1,14 +1,46 @@
 //! Thumbnail gutter geometry calculations.
 //!
 //! Pure mapping of diff row ranges to vertical gutter bar segments.
-//! Bar widths, minimum segment height and merge gap come from
-//! `crate::theme` spacing tokens (4/8/12/16/24 scale) so markers,
-//! separator and text rows stay aligned.
+//! Bar widths, minimum segment height and merge gap come from the
+//! spacing scale (4/8/12/16/24) so markers, separator and text rows
+//! stay aligned.
+//!
+//! Two widths exist: the legacy paint bar ([`gutter_bar_width`], 12/6,
+//! kept so `views.rs`/`views_hex.rs` chrome and tests stay stable) and
+//! the overview ruler ([`gutter_ruler_width`], 16/8) that paint adopts
+//! for the Beyond Compare-style ruler: wider track, taller minimum
+//! segments and a slop-expanded hit test. Both sit on the same scale;
+//! only `gutter.rs` owns them.
 
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 
 use crate::viewmodel::{TextRow, TextRowKind};
+
+/// Overview-ruler track width with line numbers: one LG step.
+///
+/// Layout budget (960px canvas): 12 margin + 460 pane + 4 gap + 460
+/// pane + 16 ruler + 8 margin = 960. The ruler absorbs the old 4px
+/// inter-chrome gap plus 2px of right margin, so panes keep 460px.
+pub const GUTTER_RULER_WIDE: f32 = 16.0;
+
+/// Overview-ruler track width without line numbers: one SM step.
+///
+/// Same budget as [`GUTTER_RULER_WIDE`]: +2px over the legacy 6px bar,
+/// absorbed by the right margin. Narrow stays under wide.
+pub const GUTTER_RULER_NARROW: f32 = 8.0;
+
+/// Minimum overview-ruler segment height: one XS step.
+///
+/// Single-row hunks in tall files used to collapse to 2px dots with no
+/// click target; 4px keeps every hunk visible and pointer-hittable.
+/// Consecutive diff rows still fuse via the merge gap below.
+pub const GUTTER_SEGMENT_MIN_H: f32 = 4.0;
+
+/// Hit-test slop: each segment grows by this many px per side so
+/// adjacent 4px bands stay separately clickable with an ~8px target.
+/// Geometry only; colors untouched.
+pub const GUTTER_HIT_SLOP: f32 = 2.0;
 
 /// A vertical span in the thumbnail gutter representing a difference hunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,6 +66,9 @@ pub struct GutterGeometry {
 ///
 /// Maps diff rows onto vertical screen space `[0.0, height]`.
 /// Consecutive rows of the same diff kind are merged when possible.
+/// Thin hunks grow to [`GUTTER_SEGMENT_MIN_H`] so every difference
+/// stays visible and clickable on the ruler; segment colors still
+/// come from paint (frozen), never from here.
 pub fn gutter_geometry(total_rows: usize, height: f32, rows: &[TextRow]) -> GutterGeometry {
     if total_rows == 0 || height <= 0.0 {
         return GutterGeometry {
@@ -55,8 +90,8 @@ pub fn gutter_geometry(total_rows: usize, height: f32, rows: &[TextRow]) -> Gutt
 
         let y_start = (idx as f32 / total_f) * height;
         let mut y_end = ((idx + 1) as f32 / total_f) * height;
-        if y_end < y_start + crate::theme::GUTTER_MIN_SEGMENT_H {
-            y_end = (y_start + crate::theme::GUTTER_MIN_SEGMENT_H).min(height);
+        if y_end < y_start + GUTTER_SEGMENT_MIN_H {
+            y_end = (y_start + GUTTER_SEGMENT_MIN_H).min(height);
         }
 
         if let Some(last) = segments.last_mut() {
@@ -94,9 +129,37 @@ pub fn gutter_bar_width(show_line_numbers: bool) -> f32 {
     }
 }
 
+/// Overview-ruler track width in logical pixels: [`GUTTER_RULER_WIDE`]
+/// with line numbers, [`GUTTER_RULER_NARROW`] without. The Beyond
+/// Compare-style ruler paint adopts this (wider than the legacy
+/// [`gutter_bar_width`] bar); the allocate rect doubles as the click
+/// target so no extra hit rect is needed. Pure; unit-tested.
+pub fn gutter_ruler_width(show_line_numbers: bool) -> f32 {
+    if show_line_numbers {
+        GUTTER_RULER_WIDE
+    } else {
+        GUTTER_RULER_NARROW
+    }
+}
+
+/// Ruler width scaled from the mono font size. Calibrated so
+/// [`crate::theme::TYPO_MONO_SIZE`] (12.0) reproduces
+/// [`gutter_ruler_width`]; other sizes scale linearly. Non-finite or
+/// non-positive sizes fall back to the unscaled width so paint never
+/// feeds NaN into layout. Pure; unit-tested.
+pub fn gutter_ruler_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
+    use crate::theme::TYPO_MONO_SIZE;
+    let base = gutter_ruler_width(show_line_numbers);
+    if font_size.is_finite() && font_size > 0.0 && TYPO_MONO_SIZE > 0.0 {
+        base * (font_size / TYPO_MONO_SIZE)
+    } else {
+        base
+    }
+}
 /// Gutter text role: regular monospace so gutter-adjacent chrome reads
 /// in the same family as pane rows. Typography only; bar widths stay
-/// in [`gutter_bar_width`]/[`gutter_bar_width_for_font`].
+/// in [`gutter_bar_width`]/[`gutter_bar_width_for_font`], ruler widths
+/// in [`gutter_ruler_width`]/[`gutter_ruler_width_for_font`].
 pub const fn gutter_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
@@ -155,20 +218,43 @@ pub fn gutter_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> 
 
 /// Hit-tests a gutter-local y against already-computed `segments`.
 ///
-/// Returns the first segment with `y_start <= y < y_end` (the final
-/// segment is inclusive of its end so clicks on its bottom edge land).
-/// `None` for non-finite y or no containing segment. Pure; unit-tested.
+/// Exact test (zero slop): the first segment with
+/// `y_start <= y < y_end` (the final segment is inclusive of its end
+/// so clicks on its bottom edge land). `None` for non-finite y or no
+/// containing segment. Pure; unit-tested.
 pub fn gutter_segment_at_y(segments: &[GutterSegment], y: f32) -> Option<usize> {
+    gutter_segment_at_y_with_slop(segments, y, 0.0)
+}
+
+/// Slop-expanded hit test for the overview ruler.
+///
+/// Each segment grows by `slop` px on both sides (low side clamped at
+/// 0.0) so 4px bands stay finger-clickable without merging their
+/// paint. Non-finite or non-positive slop behaves exactly like
+/// [`gutter_segment_at_y`]. First match wins, final segment keeps its
+/// inclusive end. Pure; unit-tested.
+pub fn gutter_segment_at_y_with_slop(
+    segments: &[GutterSegment],
+    y: f32,
+    slop: f32,
+) -> Option<usize> {
     if !y.is_finite() {
         return None;
     }
+    let pad = if slop.is_finite() && slop > 0.0 {
+        slop
+    } else {
+        0.0
+    };
     let mut idx = 0usize;
     for seg in segments {
         let last = idx.saturating_add(1) >= segments.len();
+        let lo = (seg.y_start - pad).max(0.0);
+        let hi = seg.y_end + pad;
         let inside = if last {
-            y >= seg.y_start && y <= seg.y_end
+            y >= lo && y <= hi
         } else {
-            y >= seg.y_start && y < seg.y_end
+            y >= lo && y < hi
         };
         if inside {
             return Some(idx);
@@ -226,6 +312,28 @@ pub fn gutter_y_for_row(row: usize, total_rows: usize, height: f32) -> Option<f3
         return None;
     }
     let y = (row as f32 / total_rows as f32) * height;
+    if y.is_finite() && y >= 0.0 && y < height {
+        Some(y)
+    } else {
+        None
+    }
+}
+
+/// Band center for a model row: `((row + 0.5) / total_rows) * height`.
+///
+/// Companion to [`gutter_y_for_row`] (band top): markers centered on
+/// the band read aligned on 4px ruler segments, and
+/// `gutter_row_at_y(center) == row` round-trips so offset<->row holds
+/// in both directions. Same `None` contract as [`gutter_y_for_row`].
+/// Pure; unit-tested.
+pub fn gutter_row_center_y(row: usize, total_rows: usize, height: f32) -> Option<f32> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if row >= total_rows {
+        return None;
+    }
+    let y = ((row as f32 + 0.5) / total_rows as f32) * height;
     if y.is_finite() && y >= 0.0 && y < height {
         Some(y)
     } else {
@@ -425,6 +533,169 @@ mod tests {
         while row < 4 {
             if let Some(y) = gutter_y_for_row(row, 4, 400.0) {
                 assert_eq!(gutter_row_at_y(y + 0.5, 4, 400.0), Some(row));
+            }
+            row = row.saturating_add(1);
+        }
+    }
+
+    #[test]
+    fn ruler_tokens_match_spacing_scale() {
+        use crate::theme::{SPACE_LG, SPACE_SM, SPACE_XS};
+        assert_eq!(GUTTER_RULER_WIDE, SPACE_LG);
+        assert_eq!(GUTTER_RULER_WIDE, 16.0);
+        assert_eq!(GUTTER_RULER_NARROW, SPACE_SM);
+        assert_eq!(GUTTER_RULER_NARROW, 8.0);
+        assert_eq!(GUTTER_SEGMENT_MIN_H, SPACE_XS);
+        assert_eq!(GUTTER_SEGMENT_MIN_H, 4.0);
+        assert_eq!(GUTTER_HIT_SLOP, 2.0);
+        // Ladder: narrow bar < narrow ruler < wide bar < wide ruler,
+        // segments above the old 2px dot floor.
+        const {
+            assert!(GUTTER_RULER_NARROW < GUTTER_RULER_WIDE);
+            assert!(crate::theme::GUTTER_BAR_NARROW < GUTTER_RULER_NARROW);
+            assert!(crate::theme::GUTTER_BAR_WIDE < GUTTER_RULER_WIDE);
+            assert!(crate::theme::GUTTER_MIN_SEGMENT_H < GUTTER_SEGMENT_MIN_H);
+        }
+    }
+
+    #[test]
+    fn ruler_width_widens_track_but_stays_narrower_without_numbers() {
+        assert_eq!(gutter_ruler_width(true), 16.0);
+        assert_eq!(gutter_ruler_width(false), 8.0);
+        assert!(gutter_ruler_width(false) < gutter_ruler_width(true));
+        // Legacy bar stays put so views/hex chrome tests hold.
+        assert!(gutter_bar_width(true) < gutter_ruler_width(true));
+        assert!(gutter_bar_width(false) < gutter_ruler_width(false));
+    }
+
+    #[test]
+    fn ruler_width_for_font_scales_from_mono_size() {
+        use crate::theme::TYPO_MONO_SIZE;
+        assert_eq!(gutter_ruler_width_for_font(TYPO_MONO_SIZE, true), 16.0);
+        assert_eq!(gutter_ruler_width_for_font(TYPO_MONO_SIZE, false), 8.0);
+        // Upper mono bound (13px) scales linearly: 16*13/12, 8*13/12.
+        let wide13 = gutter_ruler_width_for_font(13.0, true);
+        let narrow13 = gutter_ruler_width_for_font(13.0, false);
+        assert!((wide13 - 17.333_333).abs() < 0.01);
+        assert!((narrow13 - 8.666_667).abs() < 0.01);
+        // Bad sizes fall back instead of poisoning layout.
+        assert_eq!(gutter_ruler_width_for_font(0.0, true), 16.0);
+        assert_eq!(gutter_ruler_width_for_font(-4.0, false), 8.0);
+        assert_eq!(gutter_ruler_width_for_font(f32::NAN, true), 16.0);
+        assert_eq!(gutter_ruler_width_for_font(f32::INFINITY, false), 8.0);
+    }
+
+    #[test]
+    fn min_segment_height_keeps_tall_file_hunks_visible() {
+        // 1000 rows over 400px: one row owns 0.4px, far below visible.
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            rows.push(make_test_row(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = rows.get_mut(500) {
+            row.kind = TextRowKind::Deleted;
+        }
+        let geom = gutter_geometry(1000, 400.0, &rows);
+        assert_eq!(geom.segments.len(), 1);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        assert_eq!(seg.kind, TextRowKind::Deleted);
+        assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+    }
+
+    #[test]
+    fn adjacent_diffs_fuse_into_one_clickable_band() {
+        // Same tall file, two neighbouring diffs: min-height growth
+        // overlaps them so they fuse into a single band.
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            rows.push(make_test_row(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = rows.get_mut(500) {
+            row.kind = TextRowKind::Deleted;
+        }
+        if let Some(row) = rows.get_mut(501) {
+            row.kind = TextRowKind::Deleted;
+        }
+        let geom = gutter_geometry(1000, 400.0, &rows);
+        assert_eq!(geom.segments.len(), 1);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        assert!((seg.y_end - seg.y_start) >= GUTTER_SEGMENT_MIN_H);
+    }
+
+    #[test]
+    fn slop_hit_test_expands_bands_without_moving_paint() {
+        // Tall file: one diff row owns a 4px band at y 200..204.
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            rows.push(make_test_row(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = rows.get_mut(500) {
+            row.kind = TextRowKind::Deleted;
+        }
+        let geom = gutter_geometry(1000, 400.0, &rows);
+        assert_eq!(geom.segments.len(), 1);
+        // Neighbour pixels just outside the band: exact misses...
+        assert_eq!(gutter_segment_at_y(&geom.segments, 199.0), None);
+        assert_eq!(gutter_segment_at_y(&geom.segments, 205.0), None);
+        // ...slop reaches them, zero/bad slop matches the exact test.
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 199.0, GUTTER_HIT_SLOP),
+            Some(0)
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 205.0, GUTTER_HIT_SLOP),
+            Some(0)
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 150.0, GUTTER_HIT_SLOP),
+            None
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 202.0, 0.0),
+            gutter_segment_at_y(&geom.segments, 202.0)
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 202.0, -3.0),
+            gutter_segment_at_y(&geom.segments, 202.0)
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, 202.0, f32::NAN),
+            gutter_segment_at_y(&geom.segments, 202.0)
+        );
+        assert_eq!(
+            gutter_segment_at_y_with_slop(&geom.segments, f32::NAN, 4.0),
+            None
+        );
+        assert_eq!(gutter_segment_at_y_with_slop(&[], 202.0, 4.0), None);
+    }
+
+    #[test]
+    fn row_center_y_round_trips_both_directions() {
+        // 4 rows over 400px: band centers at 50/150/250/350.
+        assert_eq!(gutter_row_center_y(0, 4, 400.0), Some(50.0));
+        assert_eq!(gutter_row_center_y(1, 4, 400.0), Some(150.0));
+        assert_eq!(gutter_row_center_y(3, 4, 400.0), Some(350.0));
+        // Bad input maps nothing, same contract as y_for_row.
+        assert_eq!(gutter_row_center_y(4, 4, 400.0), None);
+        assert_eq!(gutter_row_center_y(0, 0, 400.0), None);
+        assert_eq!(gutter_row_center_y(1, 4, 0.0), None);
+        assert_eq!(gutter_row_center_y(1, 4, f32::NAN), None);
+        // Round-trip both ways: center -> row -> top.
+        let mut row = 0usize;
+        while row < 4 {
+            if let Some(center) = gutter_row_center_y(row, 4, 400.0) {
+                assert_eq!(gutter_row_at_y(center, 4, 400.0), Some(row));
+                assert_eq!(gutter_y_for_row(row, 4, 400.0), Some(row as f32 * 100.0));
             }
             row = row.saturating_add(1);
         }
