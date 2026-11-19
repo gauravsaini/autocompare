@@ -740,3 +740,11 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave M poll 01 edits mapping clean
 - TYPO gutter 4 (role-routed size) + home 8, harness PASS. GEO views 8 (TIGHT_GAP->TAB_BOTTOM_GAP in triple paths). GAPS hex 120 (hex_row_to_hunk tests) + tree 107. Disjoint holds, no commits yet. Wait.
+
+## Wave M poll 02 ALL LANDED wave complete
+- GEO af438e9 (proof outs) + bb08fac (app/views TAB rhythm + REPORT 55 lines) + 8a56fb3 (proof refresh 198) verified+pushed. Banned clean, no color/typo touches.
+- TYPO e142104 verified+pushed: gutter/home role-routed sizes + typo2 REPORT 69 lines + proof PNG. Claimed 195/195, worktree now 204 green.
+- GAPS ff52f01 verified+pushed: OWNS clean (hex 447 + tree 382 + table 286 + INTEGRATION.patch 110 apply-check OK + REPORT 102). F1 gutter-jump, F2 find-box, F3 per-hunk merge, F4 pagers, F5 folder columns. Banned clean, 204 green, clippy zero, fmt clean.
+- LOCALBIN 8213faa (orch-committed orphan, enriched BC-window report 199 lines, zero source edits) pushed.
+- Orchestrator verify post-land: 204 green, clippy zero, fmt clean. All pushed. Wave M complete.
+- Next: Wave N orchestrator applies INTEGRATION.patch (paint wiring) + release rebuild + local re-run + gap recheck.
