@@ -111,3 +111,33 @@ MEDIUM pending a visual pass (see "Verification status"):
       Recording to the terminal app in System Settings → Privacy &
       Security, or capture manually. The MEDIUM items above stay
       MEDIUM until that pass happens.
+
+## Wave 0: Workspace, Schema & Clean-Room Architecture Decisions (2026-11-19)
+
+1. **Clean-Room Boundary & Provenance (`craft.json`)**:
+   - `craft.json` versioned manifest initialized with `schema_version: 1`, `mode: "clean-room"`.
+   - Outside-observation-only provenance confirmed: no decompilation, no disassembly, no copied assets or proprietary wording.
+   - Six-round maximum refinement loop configured with deterministic console parity harness.
+
+2. **Workspace Safety & Never-Crash Contracts**:
+   - `#![forbid(unsafe_code)]` enforced workspace-wide and in every individual crate.
+   - Strict clippy lints active for all non-test code (`unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `unreachable`, and `indexing_slicing` denied).
+   - Zero-panic contract: all failure modes return typed errors or honest limitations.
+
+3. **Layered Crate Map & xtask Verification**:
+   - Four distinct architectural layers locked:
+     - L0 (Pure, zero I/O, WASM-safe): `autocompare-evidence`, `autocompare-diff`
+     - L1 (Domain & VFS abstractions): `autocompare-vfs`, `autocompare-sessions`, `autocompare-reports`
+     - L2 (Orchestration & tool runner): `autocompare-compare`
+     - L3 (Delivery surfaces): `autocompare-cli`, `autocompare-gui`
+   - Strict directional dependency rule: lower crates may never depend on higher crates.
+   - Enforced by `cargo run -p xtask -- layers`.
+   - Secret scanning enforced by `cargo run -p xtask -- secrets`.
+   - WASM build integrity for L0 crates enforced by `cargo run -p xtask -- wasm`.
+
+4. **Versioned Evidence Schema (`crates/evidence`)**:
+   - Dedicated zero-dependency L0 crate `autocompare-evidence` established.
+   - `CURRENT_SCHEMA_VERSION = 1` enforced on all evidence records and coverage reports.
+   - Limitation taxonomy codified: `EditBudgetFallback`, `DepthCapped`, `HunkCapped`, `BinaryTreatedAsOpaque`, `PermissionDenied`, `SymlinkSkipped`, `TruncatedOutput`, `UnsupportedCodec`.
+   - Structured `EvidenceRecord`, `HypothesisRecord`, and `KnowledgeGraphRecord` schema types defined for tracking observations and hypotheses throughout the clean-room lifecycle.
+

@@ -5,6 +5,8 @@ members = [
     "crates/compare",
     "crates/cli",
     "crates/gui",
+    "crates/evidence",
+    "xtask",
 ]
 
 [workspace.package]

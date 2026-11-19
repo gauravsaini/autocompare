@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "name": "autocompare",
+  "version": "1.0.0",
+  "mode": "clean-room",
+  "target": {
+    "product": "Beyond Compare 5",
+    "platform": "macOS",
+    "bundle_id": "com.ScooterSoftware.BeyondCompare",
+    "observed_version": "5.2.6.32774",
+    "methodology": "outside-observation-only"
+  },
+  "provenance": {
+    "clean_room": true,
+    "decompilation": false,
+    "disassembly": false,
+    "asset_copying": false,
+    "proprietary_wording_copying": false,
+    "observation_record": "docs/study.md"
+  },
+  "rounds": {
+    "max_refinement_rounds": 6,
+    "current_round": 0,
+    "parity_harness": "tools/parity-harness/run-round.sh"
+  },
+  "not_working_checks": [
+    {
+      "check": "visual-screen-recording",
+      "reason": "Terminal context lacks macOS Screen Recording permission for automated screencapture",
+      "status": "pending-manual-or-grant"
+    }
+  ]
+}
