@@ -643,7 +643,7 @@ pub fn parse_gutter_row_text(text: &str) -> Option<u64> {
 /// [`views_table::table_find_next`]: each painted row becomes one
 /// single-cell row carrying its display text (`label | text`), so the
 /// find-box searches exactly what paint shows. Pure; unit-tested.
-#[allow(dead_code)]
+/// Wired: `paint_table` isi par `table_find_match_rows` chalata hai.
 pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
     model
         .rows
@@ -658,6 +658,84 @@ pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
 #[allow(dead_code)]
 pub fn folder_path_rows(rows: &[FolderRow]) -> Vec<String> {
     rows.iter().map(|row| row.rel_path.clone()).collect()
+}
+
+// ----------------------------------------------------------------------------
+// Wirefind: hex + table find-bar caller wiring (Gap #12 final).
+// Needle + cursor egui temp store me rehte hain taaki caller signature
+// same rahe (App struct untouched — merge-pick `merge_pick_id`
+// precedent). Count displayed content par kaam karta hai, Next/Prev
+// selection + `bring_into_view` chalata hai. Geometry/typo callee fns
+// ke andar hai (28/120/4 reuse), yahan koi naya token/color nahi.
+// ----------------------------------------------------------------------------
+
+/// Hex find needle ka temp-store id (caller-local, App untouched).
+/// Pure (no egui context); unit-tested.
+pub fn hex_find_needle_id() -> egui::Id {
+    egui::Id::unique("wirefind_hex_needle")
+}
+
+/// Hex find cursor ka temp-store id (matches vec me index). Pure; unit-tested.
+pub fn hex_find_cursor_id() -> egui::Id {
+    egui::Id::unique("wirefind_hex_cursor")
+}
+
+/// Table find needle ka temp-store id (caller-local, App untouched).
+/// Pure (no egui context); unit-tested.
+pub fn table_find_needle_id() -> egui::Id {
+    egui::Id::unique("wirefind_table_needle")
+}
+
+/// Table find cursor ka temp-store id (matches vec me index). Pure; unit-tested.
+pub fn table_find_cursor_id() -> egui::Id {
+    egui::Id::unique("wirefind_table_cursor")
+}
+
+/// Displayed hunk lines me needle wale hunk indices: har hunk ki
+/// [`format_hex_hunk_line`] me substring ho to hit. Khali needle par
+/// khali (koi fake count nahi). Hex bytes view me nahi hain (sirf
+/// offset/len), isliye count wahi hai jo paint dikhata hai. Pure;
+/// unit-tested.
+pub fn hex_find_hunk_hits(hunks: &[views_hex::HexHunkView], needle: &str) -> Vec<usize> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (idx, hunk) in hunks.iter().enumerate() {
+        if format_hex_hunk_line(hunk).contains(needle) {
+            out.push(idx);
+        }
+    }
+    out
+}
+
+/// Find cursor step: click na ho ya koi hit na ho to `None` (selection
+/// untouched, taaki F3/diff-nav se ladai na ho); Next aage wrap,
+/// Prev peeche wrap (text `advance_text_find` precedent: Next jeetta
+/// hai jab dono dab jayen). Caller cursor ko pehle clamp karta hai.
+/// Pure; unit-tested.
+pub fn find_cursor_step(
+    cursor: usize,
+    total: usize,
+    prev_clicked: bool,
+    next_clicked: bool,
+) -> Option<usize> {
+    if total == 0 {
+        return None;
+    }
+    if next_clicked {
+        let cur = cursor % total.max(1);
+        Some((cur.saturating_add(1)) % total.max(1))
+    } else if prev_clicked {
+        let cur = cursor % total.max(1);
+        if cur == 0 {
+            Some(total.saturating_sub(1))
+        } else {
+            Some(cur.saturating_sub(1))
+        }
+    } else {
+        None
+    }
 }
 
 /// Hex minimap click/drag mapping: local `y` (px) ko grid row me
@@ -744,6 +822,53 @@ pub fn paint_hex(
         paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
         return;
     }
+    // Find row (Gap #12 final wiring): hex window ke andar
+    // `views_hex::paint_hex_find_bar` (signature same). Needle + cursor
+    // caller-local temp me (App untouched); count displayed hunk lines
+    // par ([`hex_find_hunk_hits`]), badge `hex_find_count_label` se N/M;
+    // Next/Prev hunk selection + `bring_into_view` chalata hai.
+    // Geometry/typo callee me (28/120/4 reuse), yahan koi naya token nahi.
+    let mut needle: String = ui
+        .data_mut(|data| data.get_temp::<String>(hex_find_needle_id()))
+        .unwrap_or_default();
+    let mut cursor: usize = ui
+        .data_mut(|data| data.get_temp::<usize>(hex_find_cursor_id()))
+        .unwrap_or(0);
+    let old_needle = needle.clone();
+    let mut hits = hex_find_hunk_hits(&view.hunks, &needle);
+    let mut total = hits.len();
+    if total == 0 {
+        cursor = 0;
+    } else {
+        cursor %= total.max(1);
+    }
+    let pos = if total == 0 {
+        None
+    } else {
+        Some(cursor.saturating_add(1))
+    };
+    let badge = views_hex::hex_find_count_label(pos, total);
+    let (find_prev, find_next) = views_hex::paint_hex_find_bar(ui, &mut needle, &badge);
+    if needle != old_needle {
+        cursor = 0;
+        hits = hex_find_hunk_hits(&view.hunks, &needle);
+        total = hits.len();
+        if total > 0 {
+            cursor = 0;
+        }
+    }
+    if let Some(next_idx) = find_cursor_step(cursor, total, find_prev, find_next)
+        && let Some(hunk_idx) = hits.get(next_idx).copied()
+    {
+        cursor = next_idx;
+        view.selected = Some(hunk_idx);
+        pager.set_total(view.hunks.len() as u64);
+        pager.bring_into_view(hunk_idx as u64);
+    }
+    ui.data_mut(|data| {
+        data.insert_temp(hex_find_needle_id(), needle);
+        data.insert_temp(hex_find_cursor_id(), cursor);
+    });
     pager.set_total(view.hunks.len() as u64);
     let (page_up, page_down) = ui.input(|input| {
         (
@@ -1339,6 +1464,51 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::Tab
         ui.label(RichText::new("(both tables are empty)").weak());
         return;
     }
+    // Find row (Gap #12 final wiring, tablefind precedent
+    // `checks/gui-tablefind-ai/REPORT.md`): table window ke andar
+    // `views_table::paint_table_find_bar` (signature same). Needle +
+    // cursor caller-local temp me (App untouched); search exactly what
+    // paint shows ([`table_model_text_rows`]), count N/M
+    // `table_find_badge_label` se; Next/Prev `pager.bring_into_view`
+    // chalata hai. Geometry/typo callee me, yahan koi naya token nahi.
+    let mut needle: String = ui
+        .data_mut(|data| data.get_temp::<String>(table_find_needle_id()))
+        .unwrap_or_default();
+    let mut cursor: usize = ui
+        .data_mut(|data| data.get_temp::<usize>(table_find_cursor_id()))
+        .unwrap_or(0);
+    let old_needle = needle.clone();
+    let mut matches =
+        views_table::table_find_match_rows(&table_model_text_rows(model), &needle, false);
+    let mut total = matches.len();
+    if total == 0 {
+        cursor = 0;
+    } else {
+        cursor %= total.max(1);
+    }
+    let pos = if total == 0 {
+        None
+    } else {
+        Some(cursor.saturating_add(1))
+    };
+    let badge = views_table::table_find_badge_label(pos, total);
+    let (find_prev, find_next) = views_table::paint_table_find_bar(ui, &mut needle, &badge);
+    if needle != old_needle {
+        cursor = 0;
+        matches = views_table::table_find_match_rows(&table_model_text_rows(model), &needle, false);
+        total = matches.len();
+    }
+    if let Some(next_idx) = find_cursor_step(cursor, total, find_prev, find_next)
+        && let Some((row, _col)) = matches.get(next_idx).copied()
+    {
+        cursor = next_idx;
+        pager.total_rows = model.rows.len();
+        pager.bring_into_view(row);
+    }
+    ui.data_mut(|data| {
+        data.insert_temp(table_find_needle_id(), needle);
+        data.insert_temp(table_find_cursor_id(), cursor);
+    });
     pager.total_rows = model.rows.len();
     pager.clamp_top();
     let (page_up, page_down) = ui.input(|input| {
@@ -3865,6 +4035,77 @@ mod tests {
             paths,
             vec!["src/lib.rs".to_string(), "README.md".to_string()]
         );
+    }
+
+    #[test]
+    fn hex_find_hunk_hits_search_displayed_hunk_lines() {
+        let hunks = vec![
+            crate::views_hex::HexHunkView {
+                offset: 16,
+                left_len: 2,
+                right_len: 2,
+            },
+            crate::views_hex::HexHunkView {
+                offset: 64,
+                left_len: 1,
+                right_len: 3,
+            },
+        ];
+        assert!(hex_find_hunk_hits(&hunks, "").is_empty());
+        assert!(hex_find_hunk_hits(&[], "vs").is_empty());
+        assert!(hex_find_hunk_hits(&hunks, "missing-needle-zzz").is_empty());
+        // Displayed line me "vs" har hunk me hai; offset text se selective hit.
+        assert_eq!(hex_find_hunk_hits(&hunks, "vs"), vec![0, 1]);
+        let first = hunks.first().map(format_hex_hunk_line).unwrap_or_default();
+        let tag = first.split_whitespace().next().unwrap_or_default();
+        assert_eq!(hex_find_hunk_hits(&hunks, tag), vec![0]);
+    }
+
+    #[test]
+    fn find_cursor_step_wraps_next_prev() {
+        assert_eq!(find_cursor_step(0, 0, false, true), None);
+        assert_eq!(find_cursor_step(0, 3, false, false), None);
+        assert_eq!(find_cursor_step(0, 3, false, true), Some(1));
+        assert_eq!(find_cursor_step(2, 3, false, true), Some(0));
+        assert_eq!(find_cursor_step(0, 3, true, false), Some(2));
+        assert_eq!(find_cursor_step(1, 3, true, false), Some(0));
+        // Dono dabe to Next jeetta hai (text precedent).
+        assert_eq!(find_cursor_step(1, 3, true, true), Some(2));
+        // Stale cursor clamp hokar wrap karta hai.
+        assert_eq!(find_cursor_step(9, 3, false, true), Some(1));
+    }
+
+    #[test]
+    fn table_wirefind_matches_painted_text_and_badge() {
+        let model = TableModel {
+            rows: vec![
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: "   1".to_string(),
+                    text: "alpha | beta".to_string(),
+                    changed: false,
+                },
+                crate::viewmodel::TableRow {
+                    glyph: '!',
+                    label: "   2".to_string(),
+                    text: "needle here".to_string(),
+                    changed: true,
+                },
+            ],
+            truncated: false,
+        };
+        let texts = table_model_text_rows(&model);
+        let hits = crate::views_table::table_find_match_rows(&texts, "needle", false);
+        assert_eq!(hits, vec![(1, 0)]);
+        assert_eq!(
+            crate::views_table::table_find_badge_label(Some(1), hits.len()),
+            "1/1"
+        );
+        assert!(crate::views_table::table_find_match_rows(&texts, "", false).is_empty());
+        assert_eq!(crate::views_table::table_find_badge_label(None, 0), "0/0");
+        // Caller step: Next wrap + Prev wrap painted hits par.
+        assert_eq!(find_cursor_step(0, hits.len(), false, true), Some(0));
+        assert_eq!(find_cursor_step(0, hits.len(), true, false), Some(0));
     }
 
     #[test]
