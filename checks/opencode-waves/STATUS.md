@@ -399,3 +399,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 04 slow steady
 - All 3 PIDs live. A into views.rs + old report gap analysis (build.log only so far). B reading main/viewmodel, pure models next. C harness re-ran (after.png 9914B same scale, tests green), exquisite proof dir pending.
 - No agent commits yet. Untracked only checks/local-run-exq/. Wait.
+
+## Wave H poll 05 waiting on builds
+- All 3 PIDs live. A waiting release build (read-only survey done: screenshot/main/views/app/theme/gutter/home/tree). B still reading main/viewmodel, pure models next. C hit 4 clippy assertions_on_constants warnings (pre-existing, owned files must stay clean), geometry edits next.
+- No agent commits yet. Wait.
