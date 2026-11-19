@@ -590,3 +590,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 03 scoping
 - All 3 live, tree clean. A scoping real-use (app/views refs). B paint_lines refs for picture/checklists. C release baseline check.
 - No edits yet. Wait.
+
+## Wave J poll 04 nudged B+C
+- 4 polls no edits, tails identical. Nudged B (start writing picture model+paint) and C (interim REPORT commit). A cleanup left (needs care).
+- Wait.
