@@ -794,3 +794,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Orchestrator micro-fixes: 5x set_total->field+clamp (Wave O, owned files) + 1 let-chain split attempt (superseded — agent restructured itself, no orch edit needed).
 - Post-land verify: 218 green, clippy zero, fmt clean, disjoint held. All pushed. Wave Q complete.
 - Remaining top-5: #1 draggable splitter (needs views+app, next wave single agent or sequential).
+
+## Wave R plan splitter+zoom (2 parallel, disjoint)
+- R-SPLIT ses-split-r (opencode default): OWNS views.rs+app.rs+checks/gui-split-r/**. Draggable pane splitter: split fraction state (0.20..=0.80 clamp) in App, drag handle between panes (replaces static half_field_width :56 / picture_column_width :1509 call sites), persists per session run. Tests headless + harness. No color/typo edits.
+- R-ZOOM ses-zoom-r (opencode default): OWNS theme.rs+checks/gui-zoom-r/** (gutter.rs/home.rs read-only for passthrough shape). Font zoom model: zoom step table + resolver fns over TypoRole sizes (body/mono/small clamp MIN..MAX, MAX already 13.0 :57); Cmd +/-/0 keybinding wiring as INTEGRATION.patch for app.rs (apply-check OK, no app.rs edits). Tests + harness. No geometry/color edits.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
