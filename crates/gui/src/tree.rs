@@ -466,6 +466,11 @@ pub enum FolderEmptyState {
     NoResults,
     /// Model hai par filter ke baad kuch dikhne ko nahi bacha.
     NoMatch,
+    /// Model me rows hain par active filters sab chhupa rahe hain.
+    /// `NoMatch` legacy generic hai (frozen — dusri waves ke tests us
+    /// par hain); yeh filter-specific wording ke liye hai, paint
+    /// `folder_empty_state_full` se aata hai.
+    FilterPruned,
 }
 
 /// Khali view ka kaaran chuno: `total` model rows, `visible` filtered
@@ -485,6 +490,32 @@ pub fn folder_empty_state(
     None
 }
 
+/// Khali view ka kaaran model-maujoodgi ke saath: `has_model == false`
+/// matlab kabhi compare hi nahi hua (never-compared → `NoResults`,
+/// legacy compare-first line). Model hai par zero rows → `NoResults`;
+/// rows hain par active filters sab chhupa rahe hain → filter-specific
+/// `FilterPruned`; kuch dikh raha hai → `None`. Legacy
+/// `folder_empty_state` frozen hai (dusri waves ke tests us par hain);
+/// yeh uska filter-specific uttaradhikari hai — paint adopt kare to
+/// pruned aur never-compared alag wording paate hain.
+pub fn folder_empty_state_full(
+    has_model: bool,
+    total_rows: usize,
+    visible_rows: usize,
+    display: &FolderDisplay,
+) -> Option<FolderEmptyState> {
+    if !has_model {
+        return Some(FolderEmptyState::NoResults);
+    }
+    if total_rows == 0 {
+        return Some(FolderEmptyState::NoResults);
+    }
+    if visible_rows == 0 && display.is_active() {
+        return Some(FolderEmptyState::FilterPruned);
+    }
+    None
+}
+
 /// Khali view ka paint-stable English hint. `None` par khaali string
 /// (paint kuch nahi dikhata); dono khali states ke shabd tay hain
 /// taaki snapshots stable rahen.
@@ -493,6 +524,7 @@ pub fn folder_empty_hint(state: Option<FolderEmptyState>) -> &'static str {
         None => "",
         Some(FolderEmptyState::NoResults) => "folder: no results yet — compare first",
         Some(FolderEmptyState::NoMatch) => "folder: no rows match filters — clear filters",
+        Some(FolderEmptyState::FilterPruned) => "folder: filters hide every row — clear filters",
     }
 }
 
@@ -3481,6 +3513,59 @@ mod folderfilter_tests {
         assert!(folder_empty_hint(Some(FolderEmptyState::NoResults)).contains("no results yet"));
         assert!(
             folder_empty_hint(Some(FolderEmptyState::NoMatch)).contains("no rows match filters")
+        );
+    }
+
+    #[test]
+    fn filter_pruned_wording_differs_from_never_compared() {
+        // Never-compared (legacy line, frozen): compare-first guidance.
+        let idle = folder_empty_hint(Some(FolderEmptyState::NoResults));
+        assert!(idle.contains("no results yet"));
+        // Filter-pruned (naya variant): prune-specific wording.
+        let pruned = folder_empty_hint(Some(FolderEmptyState::FilterPruned));
+        assert!(pruned.contains("hide every row"));
+        assert!(pruned.contains("clear filters"));
+        // Dono alag hain — ek hi idle hint nahi.
+        assert_ne!(idle, pruned);
+        // Legacy generic barkarar (dusri waves ke tests us par hain).
+        assert!(
+            folder_empty_hint(Some(FolderEmptyState::NoMatch)).contains("no rows match filters")
+        );
+    }
+
+    #[test]
+    fn empty_state_full_routes_pruned_vs_never_compared() {
+        let rows = sample_rows();
+        let total = rows.len();
+        let active = FolderDisplay {
+            name_query: String::from("zzz-no-such-file"),
+            ..FolderDisplay::default()
+        };
+        assert!(active.is_active());
+        // Never-compared: model hi nahi — legacy line.
+        assert_eq!(
+            folder_empty_state_full(false, 0, 0, &active),
+            Some(FolderEmptyState::NoResults)
+        );
+        assert_eq!(
+            folder_empty_state_full(false, 0, 0, &FolderDisplay::default()),
+            Some(FolderEmptyState::NoResults)
+        );
+        // Model hai par zero rows (compare hua, kuch nahi) — legacy line.
+        assert_eq!(
+            folder_empty_state_full(true, 0, 0, &FolderDisplay::default()),
+            Some(FolderEmptyState::NoResults)
+        );
+        // Rows hain par filter sab chhupa raha — filter-specific variant.
+        assert_eq!(
+            folder_empty_state_full(true, total, 0, &active),
+            Some(FolderEmptyState::FilterPruned)
+        );
+        // Kuch dikh raha — khaali nahi.
+        assert_eq!(folder_empty_state_full(true, total, 2, &active), None);
+        assert_eq!(
+            folder_empty_state_full(true, total, total, &FolderDisplay::default()),
+            None
         );
     }
 
