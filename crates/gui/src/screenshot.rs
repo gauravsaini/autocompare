@@ -73,9 +73,10 @@ pub const MERGE_X2: u32 = 638;
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
 /// File name ke tukde se tab chunta hai (lowercase match):
-/// `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
-/// `merge` -> merge (foldermerge bhi), `allsame` -> folder identical
-/// (AllSame) scene, `folder` + `empty` -> folder filtered
+/// `accent` -> text accent scene, `allsame` -> folder identical
+/// (AllSame) scene, `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
+/// `merge` -> merge (foldermerge bhi), `merge-take` -> merge take-row scene,
+/// `sync` -> sync, `folder` + `empty` -> folder filtered
 /// empty scene, `folder` -> folder, `home` -> home, `picture` -> picture,
 /// `wrap` -> wrap-on + find-active text scene, warna text.
 /// Har route same 960x600 canvas par tikta hai, colors frozen.
@@ -99,8 +100,14 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     if lower.contains("table") {
         return render_table_fixture_png(out_path);
     }
+    if lower.contains("merge-take") {
+        return render_merge_take_fixture_png(out_path);
+    }
     if lower.contains("merge") {
         return render_merge_fixture_png(out_path);
+    }
+    if lower.contains("sync") {
+        return render_sync_fixture_png(out_path);
     }
     if lower.contains("folder") && lower.contains("empty") {
         return render_folder_empty_fixture_png(out_path);
@@ -1237,10 +1244,556 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
+    // Take-row strip: live per-hunk Take buttons (paint_merge_three_pane
+    // wale labels) + staged decision display, sab headless truth se.
+    // Marker model par live `merge_conflict_hunks` ek hunk deta hai;
+    // title/decision strings live paint helpers se, koi mock nahi.
+    let marker_lines = vec![
+        "<<<<<<< left".to_string(),
+        "let y = 20;".to_string(),
+        "||||||| base".to_string(),
+        "let y = 2;".to_string(),
+        "=======".to_string(),
+        "let y = 2;".to_string(),
+        ">>>>>>> right".to_string(),
+    ];
+    let hunks = crate::viewmodel::merge_conflict_hunks(&marker_lines);
+    let hunk_total = hunks.len();
+    let pick = crate::viewmodel::MergeHunkPick {
+        conflict_index: 0,
+        choice: crate::take::TakeChoice::Left,
+    };
+    let summary = crate::viewmodel::merge_pick_summary(&marker_lines, &[pick]);
+    let take_title = if hunk_total > 0 {
+        crate::views::format_merge_hunk_title(0, hunk_total)
+    } else {
+        "hunk 0 of 0: left / base / right".to_string()
+    };
+    let take_decision = crate::views::format_merge_hunk_decision_with_pick(0, Some(pick.choice));
+    let strip_y = pane_top
+        .saturating_add(7u32.saturating_mul(ROW_H))
+        .saturating_add(8);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            MERGE_X0,
+            strip_y,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+            ROW_H,
+        ),
+        [28, 28, 28, 255],
+    );
+    let mut pen_x = MERGE_X0.saturating_add(8);
+    pen_x = draw_string(
+        &mut pixels,
+        dims,
+        pen_x,
+        strip_y.saturating_add(6),
+        "Take:",
+        FG_DIM,
+    )
+    .saturating_add(8);
+    for label in ["Take Left", "Take Right", "Take Base", "Take Both"] {
+        let btn_w = text_width(label).saturating_add(16);
+        fill_rect(
+            &mut pixels,
+            dims,
+            (pen_x, strip_y.saturating_add(3), btn_w, 18),
+            [60, 60, 60, 255],
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            pen_x.saturating_add(8),
+            strip_y.saturating_add(6),
+            label,
+            FG_TEXT,
+        );
+        pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
+        if pen_x.saturating_add(60) > MERGE_X2.saturating_add(MERGE_PANE_W) {
+            break;
+        }
+    }
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        strip_y.saturating_add(ROW_H).saturating_add(6),
+        &take_title,
+        FG_DIM,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        strip_y
+            .saturating_add(ROW_H)
+            .saturating_add(12)
+            .saturating_add(6),
+        &take_decision,
+        FG_TEXT,
+    );
+    let _ = summary;
+
     paint_status(
         &mut pixels,
         dims,
-        "merge: 7 rows, 3 equal, 2 changed, 1 deleted, 1 inserted | merge ready",
+        "merge: 7 rows, 3 equal, 2 changed, 1 deleted, 1 inserted | hunk 1 of 1: take left",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Merge take-row scene: ek conflict hunk ka focused card —
+/// live `merge_conflict_hunks` se hunk, `merge_hunk_sides` se teen sides,
+/// live Take button labels, staged `take left` decision aur
+/// `apply_merge_picks` ka resolved output. Merge fixture se alag bytes
+/// (BI-M4 live take-row ka headless proof). Colors frozen.
+pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/base.rs + left + right - Merge (take)",
+        4,
+    );
+
+    let marker_lines = vec![
+        "<<<<<<< left".to_string(),
+        "let y = 20;".to_string(),
+        "||||||| base".to_string(),
+        "let y = 2;".to_string(),
+        "=======".to_string(),
+        "let y = 2;".to_string(),
+        ">>>>>>> right".to_string(),
+    ];
+    let hunks = crate::viewmodel::merge_conflict_hunks(&marker_lines);
+    let hunk_total = hunks.len();
+    let (left, base, right) = match hunks.first() {
+        Some(hunk) => crate::views::merge_hunk_sides(&marker_lines, hunk),
+        None => (Vec::new(), Vec::new(), Vec::new()),
+    };
+    let pick = crate::viewmodel::MergeHunkPick {
+        conflict_index: 0,
+        choice: crate::take::TakeChoice::Left,
+    };
+    let title = if hunk_total > 0 {
+        crate::views::format_merge_hunk_title(0, hunk_total)
+    } else {
+        "hunk 0 of 0: left / base / right".to_string()
+    };
+    let decision = crate::views::format_merge_hunk_decision_with_pick(0, Some(pick.choice));
+    let resolved =
+        crate::viewmodel::apply_merge_picks(&marker_lines, &[pick]).map_err(|e| e.to_string())?;
+    let resolved_line = match resolved.first() {
+        Some(line) => format!("resolved (take left): {line}"),
+        None => "resolved (take left): (empty)".to_string(),
+    };
+
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            MERGE_X0,
+            pane_top,
+            MERGE_PANE_W,
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            MERGE_X1,
+            pane_top,
+            MERGE_PANE_W,
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            MERGE_X2,
+            pane_top,
+            MERGE_PANE_W,
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        pane_top.saturating_sub(18),
+        "[Base] [Left] [Right]",
+        FG_DIM,
+    );
+
+    // Card title + teen sides (changed band: sides alag hain).
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        pane_top.saturating_add(6),
+        &title,
+        FG_TEXT,
+    );
+    let side_y = pane_top.saturating_add(ROW_H);
+    for (x, lines) in [(MERGE_X0, &left), (MERGE_X1, &base), (MERGE_X2, &right)] {
+        fill_rect(
+            &mut pixels,
+            dims,
+            (x, side_y, MERGE_PANE_W, ROW_H),
+            CHANGED_BG,
+        );
+        let text = match lines.first() {
+            Some(line) => line.as_str(),
+            None => "(empty)",
+        };
+        draw_string(
+            &mut pixels,
+            dims,
+            x.saturating_add(8),
+            side_y.saturating_add(6),
+            text,
+            CHANGED_FG,
+        );
+    }
+    // Take strip: live button labels, staged pick highlight nahi (frozen hues).
+    let strip_y = side_y.saturating_add(ROW_H).saturating_add(8);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            MERGE_X0,
+            strip_y,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+            ROW_H,
+        ),
+        [28, 28, 28, 255],
+    );
+    let mut pen_x = MERGE_X0.saturating_add(8);
+    pen_x = draw_string(
+        &mut pixels,
+        dims,
+        pen_x,
+        strip_y.saturating_add(6),
+        "Take:",
+        FG_DIM,
+    )
+    .saturating_add(8);
+    for label in ["Take Left", "Take Right", "Take Base", "Take Both"] {
+        let btn_w = text_width(label).saturating_add(16);
+        fill_rect(
+            &mut pixels,
+            dims,
+            (pen_x, strip_y.saturating_add(3), btn_w, 18),
+            [60, 60, 60, 255],
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            pen_x.saturating_add(8),
+            strip_y.saturating_add(6),
+            label,
+            FG_TEXT,
+        );
+        pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
+        if pen_x.saturating_add(60) > MERGE_X2.saturating_add(MERGE_PANE_W) {
+            break;
+        }
+    }
+    // Decision + resolved output, dono live strings.
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        strip_y.saturating_add(ROW_H).saturating_add(6),
+        &decision,
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        MERGE_X0.saturating_add(8),
+        strip_y
+            .saturating_add(ROW_H)
+            .saturating_add(12)
+            .saturating_add(6),
+        &resolved_line,
+        FG_DIM,
+    );
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "merge-take: 1 hunk, take left staged | resolved 1 line(s)",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the Sync fixture: dedicated Sync-tab scene (BI-S4 — AW2
+/// picture-precedent wali fallback-twin class se bachne ke liye alag
+/// branch). Checklist rows + dry-run + confirm + Apply sab live headless
+/// truth se: `SyncChecklist::from_plan`, `summary`, `checked_count`,
+/// `copy_right_plan`, `sync_dry_run_summary`, `sync_apply_enabled`, aur
+/// row strings `glyph`/`display_line`/`action_label` se. Colors frozen.
+pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
+    use crate::app::{SyncChecklist, sync_apply_enabled, sync_dry_run_summary};
+    use autocompare_compare::{SyncAction, SyncPlan, SyncStep};
+
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left-dir <--> fixtures/right-dir - Sync",
+        6,
+    );
+
+    // Live checklist model: 2 left->right copies + 1 skip.
+    let plan = SyncPlan {
+        steps: vec![
+            SyncStep {
+                rel_path: "src/a.txt".to_string(),
+                is_dir: false,
+                action: SyncAction::CopyToRight,
+            },
+            SyncStep {
+                rel_path: "new.txt".to_string(),
+                is_dir: false,
+                action: SyncAction::CopyToRight,
+            },
+        ],
+        skipped: vec![(
+            "src/b.txt".to_string(),
+            "content differs; no side wins".to_string(),
+        )],
+        truncated: false,
+    };
+    let list = SyncChecklist::from_plan(&plan);
+    let checked_total = list.checked_count();
+    let copy_steps = list.copy_right_plan().steps.len();
+    let dry_line = sync_dry_run_summary(copy_steps, checked_total);
+    let count_line =
+        format!("{copy_steps} of {checked_total} checked step(s) are left->right copies");
+    let apply_open = sync_apply_enabled(true, copy_steps);
+
+    // Checklist panel.
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            OUTER_PAD,
+            pane_top,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        pane_top.saturating_add(6),
+        &list.summary(),
+        FG_TEXT,
+    );
+    let mut row_y = pane_top.saturating_add(ROW_H);
+    for row in &list.rows {
+        if row_y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        fill_rect(
+            &mut pixels,
+            dims,
+            (
+                OUTER_PAD,
+                row_y,
+                SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+                ROW_H,
+            ),
+            BG_DARK,
+        );
+        let mark = if row.checked { "[x]" } else { "[ ]" };
+        let mut pen = draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            mark,
+            FG_TEXT,
+        )
+        .saturating_add(8);
+        pen = draw_string(
+            &mut pixels,
+            dims,
+            pen,
+            row_y.saturating_add(6),
+            &row.glyph().to_string(),
+            FG_TEXT,
+        )
+        .saturating_add(8);
+        pen = draw_string(
+            &mut pixels,
+            dims,
+            pen,
+            row_y.saturating_add(6),
+            &row.display_line(),
+            FG_TEXT,
+        )
+        .saturating_add(8);
+        draw_string(
+            &mut pixels,
+            dims,
+            pen,
+            row_y.saturating_add(6),
+            row.action_label(),
+            FG_DIM,
+        );
+        let _ = pen;
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    for (path, reason) in &list.skipped {
+        if row_y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            &crate::views::sync_skip_text(path, reason),
+            FG_DIM,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    row_y = row_y.saturating_add(8);
+    // Apply gate: dry-run + confirm + counts + Apply (live strings/order).
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        row_y.saturating_add(6),
+        "Apply copies checked left->right only, never deletes.",
+        FG_DIM,
+    );
+    row_y = row_y.saturating_add(ROW_H);
+    if row_y.saturating_add(ROW_H) <= pane_bottom {
+        draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            "[x] Dry-run (no writes)",
+            FG_TEXT,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    if row_y.saturating_add(ROW_H) <= pane_bottom {
+        draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            "[x] I understand Apply copies files left->right",
+            FG_TEXT,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    if row_y.saturating_add(ROW_H) <= pane_bottom {
+        draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            &dry_line,
+            FG_DIM,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    if row_y.saturating_add(ROW_H) <= pane_bottom {
+        draw_string(
+            &mut pixels,
+            dims,
+            20,
+            row_y.saturating_add(6),
+            &count_line,
+            FG_DIM,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+    }
+    if row_y.saturating_add(ROW_H) <= pane_bottom {
+        let label = "Apply checked copies";
+        let btn_w = text_width(label).saturating_add(24);
+        fill_rect(
+            &mut pixels,
+            dims,
+            (20, row_y.saturating_add(3), btn_w, 18),
+            [60, 60, 60, 255],
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            32,
+            row_y.saturating_add(6),
+            label,
+            if apply_open { FG_TEXT } else { FG_DIM },
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "sync: 2 step(s) planned, 1 skipped | dry-run 2 of 2 checked would copy (no writes)",
     );
     let image = RgbaImage {
         width,
@@ -2485,7 +3038,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
 }
 
 /// Shared window chrome: title bar + tab bar + path row + toolbar.
-/// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table, 7 picture.
+/// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table, 6 sync, 7 picture.
 fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     let width = dims.0;
     fill_rect(pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
@@ -2503,6 +3056,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         3 => (190, 40, 48, 24),
         4 => (234, 40, 60, 24),
         5 => (290, 40, 56, 24),
+        6 => (348, 40, 56, 24),
         7 => (392, 40, 66, 24),
         _ => (64, 40, 60, 24),
     };
@@ -2555,7 +3109,14 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         "Table",
         if active == 5 { FG_TEXT } else { FG_DIM },
     );
-    draw_string(pixels, dims, 356, 46, "Sync", FG_DIM);
+    draw_string(
+        pixels,
+        dims,
+        356,
+        46,
+        "Sync",
+        if active == 6 { FG_TEXT } else { FG_DIM },
+    );
     draw_string(
         pixels,
         dims,
@@ -3530,5 +4091,176 @@ mod tests {
             assert_ne!(folder_empty, &folder_bytes);
             assert_ne!(table_find, &table_bytes);
         }
+    }
+
+    #[test]
+    fn merge_take_scene_proves_live_take_row() {
+        // Headless truth: ek well-formed hunk, live title/decision/resolve.
+        let marker = vec![
+            "<<<<<<< left".to_string(),
+            "let y = 20;".to_string(),
+            "||||||| base".to_string(),
+            "let y = 2;".to_string(),
+            "=======".to_string(),
+            "let y = 2;".to_string(),
+            ">>>>>>> right".to_string(),
+        ];
+        let hunks = crate::viewmodel::merge_conflict_hunks(&marker);
+        assert_eq!(hunks.len(), 1);
+        let (left, base, right) = match hunks.first() {
+            Some(hunk) => crate::views::merge_hunk_sides(&marker, hunk),
+            None => (Vec::new(), Vec::new(), Vec::new()),
+        };
+        assert_eq!(left, vec!["let y = 20;".to_string()]);
+        assert_eq!(base, vec!["let y = 2;".to_string()]);
+        assert_eq!(right, vec!["let y = 2;".to_string()]);
+        assert_eq!(
+            crate::views::format_merge_hunk_title(0, 1),
+            "hunk 1 of 1: left / base / right"
+        );
+        assert_eq!(
+            crate::views::format_merge_hunk_decision_with_pick(
+                0,
+                Some(crate::take::TakeChoice::Left)
+            ),
+            "hunk 1: take left"
+        );
+        let pick = crate::viewmodel::MergeHunkPick {
+            conflict_index: 0,
+            choice: crate::take::TakeChoice::Left,
+        };
+        let summary = crate::viewmodel::merge_pick_summary(&marker, &[pick]);
+        assert_eq!(summary.total, 1);
+        assert_eq!(summary.resolved, 1);
+        assert_eq!(summary.pending, 0);
+        let resolved = crate::viewmodel::apply_merge_picks(&marker, &[pick]).unwrap_or_default();
+        assert_eq!(resolved, vec!["let y = 20;".to_string()]);
+        // Fixture strings apne fields me fit honi chahiye.
+        assert!(text_width("hunk 1 of 1: left / base / right") < 936);
+        assert!(text_width("hunk 1: take left") < 936);
+        assert!(text_width("resolved (take left): let y = 20;") < 936);
+        assert!(text_width("merge-take: 1 hunk, take left staged | resolved 1 line(s)") < 928);
+        // PNG valid, non-blank, merge fixture se alag bytes.
+        let dir = std::env::temp_dir();
+        let take_out = dir.join("vis-bj-dispatch-merge-take.png");
+        assert!(render_merge_take_fixture_png(&take_out).is_ok());
+        let take_bytes = std::fs::read(&take_out).unwrap_or_default();
+        assert!(!take_bytes.is_empty());
+        assert!(png_magic_ok(&take_bytes));
+        assert!(take_bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = take_bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+        let merge_out = dir.join("vis-bj-dispatch-merge.png");
+        assert!(render_fixture_png(&merge_out).is_ok());
+        let merge_bytes = std::fs::read(&merge_out).unwrap_or_default();
+        assert_ne!(take_bytes, merge_bytes);
+    }
+
+    #[test]
+    fn sync_scene_matches_checklist_gate_contract() {
+        use crate::app::{SyncChecklist, sync_apply_enabled, sync_dry_run_summary};
+        use autocompare_compare::{SyncAction, SyncPlan, SyncStep};
+        // Fixture wala plan: 2 left->right copies + 1 skip.
+        let plan = SyncPlan {
+            steps: vec![
+                SyncStep {
+                    rel_path: "src/a.txt".to_string(),
+                    is_dir: false,
+                    action: SyncAction::CopyToRight,
+                },
+                SyncStep {
+                    rel_path: "new.txt".to_string(),
+                    is_dir: false,
+                    action: SyncAction::CopyToRight,
+                },
+            ],
+            skipped: vec![(
+                "src/b.txt".to_string(),
+                "content differs; no side wins".to_string(),
+            )],
+            truncated: false,
+        };
+        let list = SyncChecklist::from_plan(&plan);
+        assert_eq!(list.summary(), "2 step(s) planned, 1 skipped");
+        assert_eq!(list.checked_count(), 2);
+        assert_eq!(list.copy_right_plan().steps.len(), 2);
+        assert_eq!(
+            sync_dry_run_summary(2, 2),
+            "dry-run: 2 of 2 checked step(s) would copy left->right (no writes)"
+        );
+        assert!(sync_apply_enabled(true, 2));
+        assert!(!sync_apply_enabled(false, 2));
+        assert!(!sync_apply_enabled(true, 0));
+        // Row strings live helpers se, fields me fit.
+        let row = match list.rows.first() {
+            Some(row) => row,
+            None => {
+                assert!(!list.rows.is_empty());
+                return;
+            }
+        };
+        assert_eq!(row.glyph(), '>');
+        assert_eq!(row.display_line(), "> src/a.txt");
+        assert_eq!(row.action_label(), "copy to right");
+        assert!(text_width(&row.display_line()) < 936);
+        assert!(
+            text_width(
+                "sync: 2 step(s) planned, 1 skipped | dry-run 2 of 2 checked would copy (no writes)"
+            ) < 928
+        );
+        // PNG valid, non-blank.
+        let out = std::env::temp_dir().join("vis-bj-dispatch-sync.png");
+        assert!(render_sync_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn dispatcher_routes_sync_scene() {
+        // BI-S4 twin-guard (AW2 picture precedent): sync naam apne scene
+        // par jana chahiye, fallback text se byte-alag hona chahiye.
+        let dir = std::env::temp_dir();
+        let sync_out = dir.join("vis-bj-dispatch-sync-route.png");
+        assert!(render_fixture_png(&sync_out).is_ok());
+        let sync_bytes = std::fs::read(&sync_out).unwrap_or_default();
+        assert!(!sync_bytes.is_empty());
+        assert!(png_magic_ok(&sync_bytes));
+        assert!(sync_bytes.len() >= 8192);
+        // Merge-take route bhi dispatcher se chunta hai.
+        let take_out = dir.join("vis-bj-dispatch-merge-take-route.png");
+        assert!(render_fixture_png(&take_out).is_ok());
+        let take_bytes = std::fs::read(&take_out).unwrap_or_default();
+        assert!(!take_bytes.is_empty());
+        assert_ne!(take_bytes, sync_bytes);
+        // Sync/foldermerge fallback twins nahi: har purana scene alag.
+        for name in [
+            "vis-bj-dispatch-text.png",
+            "vis-bj-dispatch-folder.png",
+            "vis-bj-dispatch-merge.png",
+            "vis-bj-dispatch-table.png",
+            "vis-bj-dispatch-home.png",
+        ] {
+            let out = dir.join(name);
+            assert!(render_fixture_png(&out).is_ok());
+            let bytes = std::fs::read(&out).unwrap_or_default();
+            assert!(!bytes.is_empty());
+            assert_ne!(sync_bytes, bytes);
+            assert_ne!(take_bytes, bytes);
+        }
+        // FolderMerge naam ab bhi merge route par (compat, twin by design).
+        let fm = dir.join("vis-bj-dispatch-foldermerge.png");
+        let m = dir.join("vis-bj-check-foldermerge-twin.png");
+        assert!(render_fixture_png(&fm).is_ok());
+        let fm_bytes = std::fs::read(&fm).unwrap_or_default();
+        assert!(render_fixture_png(&m).is_ok());
+        let _ = std::fs::read(&m).unwrap_or_default();
+        let merge_direct = dir.join("vis-bj-dispatch-merge.png");
+        assert!(render_fixture_png(&merge_direct).is_ok());
+        let merge_bytes = std::fs::read(&merge_direct).unwrap_or_default();
+        assert_eq!(fm_bytes, merge_bytes);
     }
 }
