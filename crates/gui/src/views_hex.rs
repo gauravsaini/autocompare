@@ -694,6 +694,102 @@ pub fn hex_find_prev(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
 }
 
 // ----------------------------------------------------------------------------
+// Hex find positions + count label (headless; paint wiring stays with the
+// orchestrator). Gap #12 hex half: find box ko byte offset ke saath grid
+// `(row, col)` hit chahiye taaki paint sahi row par scroll karke sahi column
+// highlight kare, aur N/M badge ke liye count + label. Offset layer
+// (`hex_find_next` / `hex_find_prev`, wrap samet) reuse hota hai; ye sirf
+// grid conversion + counting hai. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Grid `(row, col)` ek byte offset ke liye (`HEX_BYTES_PER_ROW` = 16).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_offset_to_row_col(offset: u64) -> (u64, u64) {
+    (
+        offset / (HEX_BYTES_PER_ROW as u64),
+        offset % (HEX_BYTES_PER_ROW as u64),
+    )
+}
+
+/// Grid `(row, col)` se byte offset. `col >= HEX_BYTES_PER_ROW` par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_col_to_offset(row: u64, col: u64) -> Option<u64> {
+    if col >= HEX_BYTES_PER_ROW as u64 {
+        return None;
+    }
+    Some(
+        row.saturating_mul(HEX_BYTES_PER_ROW as u64)
+            .saturating_add(col),
+    )
+}
+
+/// Agli needle occurrence `from (row, col)` se (inclusive), wrap ke saath,
+/// grid `(row, col)` hit ke roop me. Khali needle/haystack ya invalid `col`
+/// par `None`. Andar `hex_find_next` reuse hota hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_next_position(
+    haystack: &[u8],
+    needle: &[u8],
+    from_row: u64,
+    from_col: u64,
+) -> Option<(u64, u64)> {
+    let from = hex_row_col_to_offset(from_row, from_col)?;
+    let hit = hex_find_next(haystack, needle, from)?;
+    Some(hex_offset_to_row_col(hit))
+}
+
+/// Pichhli needle occurrence `from (row, col)` se peeche (exclusive), wrap
+/// ke saath, grid `(row, col)` hit ke roop me. Khali needle/haystack ya
+/// invalid `col` par `None`. Andar `hex_find_prev` reuse hota hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_prev_position(
+    haystack: &[u8],
+    needle: &[u8],
+    from_row: u64,
+    from_col: u64,
+) -> Option<(u64, u64)> {
+    let from = hex_row_col_to_offset(from_row, from_col)?;
+    let hit = hex_find_prev(haystack, needle, from)?;
+    Some(hex_offset_to_row_col(hit))
+}
+
+/// Needle ki overlapping occurrence count (ek-ek byte aage badhkar, taaki
+/// koi hit chhute nahi). Khali needle/haystack ya badi needle par `0`.
+/// Badge ke `total` ke liye; position cursor se aati hai.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_count(haystack: &[u8], needle: &[u8]) -> usize {
+    if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
+        return 0;
+    }
+    let mut count: usize = 0;
+    let mut idx: usize = 0;
+    while let Some(window) = haystack.get(idx..idx.saturating_add(needle.len())) {
+        if window == needle {
+            count = count.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    count
+}
+
+/// N/M badge text for the hex find bar: "2/5", no hit par "0/0".
+/// Pure; `viewmodel::find_count_label` ka hex-side judvaan — agla paint
+/// wave isko badge label ke liye use karega. Unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Per-hunk merge (headless; paint wiring stays with the orchestrator).
 // Gap local-run-l #10: product view-only hai, comparable tools har hunk
 // par take-left/take-right dete hain. Ye pure byte choice hai: hunk ke
@@ -1274,5 +1370,57 @@ mod tests {
         assert_eq!(hex_row_to_hunk(0, &view.hunks), None);
         assert_eq!(hex_row_to_hunk(99, &view.hunks), None);
         assert_eq!(hex_row_to_hunk(0, &[]), None);
+    }
+
+    #[test]
+    fn hex_find_positions_report_row_col_with_wrap() {
+        let hay = vec![10u8, 20, 30, 20, 30, 40];
+        let needle = vec![20u8, 30];
+        // Offset <-> grid round-trip (16 bytes per row).
+        assert_eq!(hex_offset_to_row_col(1), (0, 1));
+        assert_eq!(hex_offset_to_row_col(17), (1, 1));
+        assert_eq!(hex_row_col_to_offset(0, 1), Some(1));
+        assert_eq!(hex_row_col_to_offset(1, 1), Some(17));
+        assert_eq!(hex_row_col_to_offset(0, 16), None);
+        // Aage: from inclusive, row+col hit.
+        assert_eq!(hex_find_next_position(&hay, &needle, 0, 0), Some((0, 1)));
+        assert_eq!(hex_find_next_position(&hay, &needle, 0, 2), Some((0, 3)));
+        // Wrap: aakhri occurrence ke baad pehli.
+        assert_eq!(hex_find_next_position(&hay, &needle, 0, 4), Some((0, 1)));
+        assert_eq!(hex_find_prev_position(&hay, &needle, 0, 4), Some((0, 3)));
+        assert_eq!(hex_find_prev_position(&hay, &needle, 0, 3), Some((0, 1)));
+        // Wrap peeche: shuru se peeche aakhri.
+        assert_eq!(hex_find_prev_position(&hay, &needle, 0, 0), Some((0, 3)));
+        // Dusri row ka hit: offset 17 -> (1, 1).
+        let mut big = vec![0u8; 20];
+        if let Some(slot) = big.get_mut(17) {
+            *slot = 9;
+        }
+        assert_eq!(hex_find_next_position(&big, &[9u8], 0, 0), Some((1, 1)));
+        assert_eq!(hex_find_prev_position(&big, &[9u8], 1, 2), Some((1, 1)));
+        // Invalid col / khali needle / missing needle: None.
+        assert_eq!(hex_find_next_position(&hay, &needle, 0, 16), None);
+        assert_eq!(hex_find_prev_position(&hay, &needle, 0, 16), None);
+        assert_eq!(hex_find_next_position(&hay, &[], 0, 0), None);
+        assert_eq!(hex_find_prev_position(&hay, &[], 0, 0), None);
+        assert_eq!(hex_find_next_position(&hay, &[99u8], 0, 0), None);
+        assert_eq!(hex_find_prev_position(&hay, &[99u8], 0, 1), None);
+    }
+
+    #[test]
+    fn hex_find_count_and_label_formats_n_of_m() {
+        let hay = vec![10u8, 20, 30, 20, 30, 40];
+        let needle = vec![20u8, 30];
+        assert_eq!(hex_find_count(&hay, &needle), 2);
+        // Overlapping: 3 same bytes me 2-wide needle do baar.
+        assert_eq!(hex_find_count(&[7u8, 7, 7], &[7u8, 7]), 2);
+        assert_eq!(hex_find_count(&hay, &[]), 0);
+        assert_eq!(hex_find_count(&[], &needle), 0);
+        assert_eq!(hex_find_count(&[1u8], &[1u8, 2u8]), 0);
+        assert_eq!(hex_find_count(&hay, &[99u8]), 0);
+        assert_eq!(hex_find_count_label(Some(2), 5), "2/5");
+        assert_eq!(hex_find_count_label(Some(1), 1), "1/1");
+        assert_eq!(hex_find_count_label(None, 5), "0/5");
+        assert_eq!(hex_find_count_label(None, 0), "0/0");
     }
 }

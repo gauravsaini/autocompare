@@ -1,0 +1,8 @@
+running 4 tests
+test views_hex::tests::hex_find_count_and_label_formats_n_of_m ... ok
+test views_hex::tests::hex_find_positions_report_row_col_with_wrap ... ok
+test views_hex::tests::hex_find_wraps_forward_and_backward ... ok
+test app::tests::hex_find_needle_parses_and_reuses_model_search ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 315 filtered out; finished in 0.00s
+
