@@ -336,3 +336,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 14 color red duplicates
 - COLOR theme 234 ins, test red E0255 8 errors duplicate ACCENT/CHANGED/DELETED names vs views.rs palette. Live fixing (namespace or drop old). PCOMP reading diff/compare.
+
+## Wave G poll 15 dangling refs
+- Duplicates gone by deleting old palette, now E0425 12 errors RED/DIM/GREEN in tests need token names. COLOR live fixing. PCOMP no diff yet.
