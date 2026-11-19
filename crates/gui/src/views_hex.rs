@@ -1083,6 +1083,176 @@ impl HexPager {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Hex gutter parity (headless; paint wiring stays with the orchestrator).
+// Text gutter precedent (`crate::gutter`) ka hex judvaan: offsets/row
+// markers + click-to-jump. Geometry first (wahi bar widths, wahi
+// min-height/merge-gap tokens, marker alignment wahi row bands par),
+// typography second (wahi mono role/size/source). Koi naya token ya
+// color nahi; sab pure fns, `.get()`/saturating only. No egui, no I/O;
+// paint ek gutter click ki local y ko `hex_gutter_jump_target` deta hai
+// aur mili hunk index ko `navigate_to_offset` jaisa selection me le jata hai.
+// ----------------------------------------------------------------------------
+
+/// Hex grid rows kul bytes se (`hex_row_count` reuse, `usize` me cap).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_total_rows(total_len: u64) -> usize {
+    hex_row_count(total_len).min(usize::MAX as u64) as usize
+}
+
+/// Hex diff rows ka gutter geometry: har `hex_row_has_diff` wali row ek
+/// band hai, lagatar diff rows merge hote hain. Wahi `GutterGeometry` type,
+/// wahi `GUTTER_MIN_SEGMENT_H`/`GUTTER_MERGE_GAP` tokens, kind `Changed`
+/// (text `Changed` jaisa paired-diff marker). Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_geometry(
+    total_rows: usize,
+    height: f32,
+    hunks: &[HexHunkView],
+) -> crate::gutter::GutterGeometry {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return crate::gutter::GutterGeometry {
+            total_height: height.max(0.0),
+            segments: Vec::new(),
+        };
+    }
+    let mut segments: Vec<crate::gutter::GutterSegment> = Vec::new();
+    let total_f = total_rows as f32;
+    let mut idx: usize = 0;
+    while idx < total_rows {
+        let row_start = hex_row_start(idx as u64);
+        if hex_row_has_diff(row_start, hunks) {
+            let y_start = (idx as f32 / total_f) * height;
+            let mut y_end = ((idx.saturating_add(1)) as f32 / total_f) * height;
+            if y_end < y_start + crate::theme::GUTTER_MIN_SEGMENT_H {
+                y_end = (y_start + crate::theme::GUTTER_MIN_SEGMENT_H).min(height);
+            }
+            let mut merged = false;
+            if let Some(last) = segments.last_mut()
+                && last.kind == crate::viewmodel::TextRowKind::Changed
+                && y_start <= last.y_end + crate::theme::GUTTER_MERGE_GAP
+            {
+                last.y_end = last.y_end.max(y_end);
+                merged = true;
+            }
+            if !merged {
+                segments.push(crate::gutter::GutterSegment {
+                    y_start,
+                    y_end,
+                    kind: crate::viewmodel::TextRowKind::Changed,
+                });
+            }
+        }
+        idx = idx.saturating_add(1);
+    }
+    crate::gutter::GutterGeometry {
+        total_height: height,
+        segments,
+    }
+}
+
+/// Hex gutter bar width: text precedent ka seedha reuse (12.0/6.0).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_bar_width(show_line_numbers: bool) -> f32 {
+    crate::gutter::gutter_bar_width(show_line_numbers)
+}
+
+/// Font size se scaled gutter width: text precedent ka seedha reuse.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_bar_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
+    crate::gutter::gutter_bar_width_for_font(font_size, show_line_numbers)
+}
+
+/// Hex gutter text role: text precedent ka seedha reuse (Mono).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const fn hex_gutter_text_role() -> crate::theme::TypoRole {
+    crate::gutter::gutter_text_role()
+}
+
+/// Hex gutter text size: text precedent ka seedha reuse (mono token).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const fn hex_gutter_text_size() -> f32 {
+    crate::gutter::gutter_text_size()
+}
+
+/// Hex gutter line-height source: text precedent ka seedha reuse.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const fn hex_gutter_line_height_source() -> &'static str {
+    crate::gutter::gutter_line_height_source()
+}
+
+/// Gutter-local y se grid row: text mapping ka seedha reuse.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> {
+    crate::gutter::gutter_row_at_y(y, total_rows, height)
+}
+
+/// Gutter-local y se segment hit: text hit-test ka seedha reuse.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_segment_at_y(segments: &[crate::gutter::GutterSegment], y: f32) -> Option<usize> {
+    crate::gutter::gutter_segment_at_y(segments, y)
+}
+
+/// Grid row se gutter-local y: text inverse mapping ka seedha reuse.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_y_for_row(row: usize, total_rows: usize, height: f32) -> Option<f32> {
+    crate::gutter::gutter_y_for_row(row, total_rows, height)
+}
+
+/// Gutter row marker label: us row ka offset ruler text
+/// (`format_hex_offset(hex_row_start(row))` reuse). Marker alignment
+/// geometry se aati hai (row bands), ye sirf label text hai. Pure.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_row_label(row: u64) -> String {
+    format_hex_offset(hex_row_start(row))
+}
+
+/// Hex gutter click-to-jump: y se row (`gutter_row_at_y` reuse), row se
+/// covering hunk (`hex_row_to_hunk` reuse); khali row par aage ki rows
+/// me pehla covering hunk, warna peeche ka aakhri. Khali hunks ya
+/// out-of-range click par `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_gutter_jump_target(
+    hunks: &[HexHunkView],
+    total_rows: usize,
+    height: f32,
+    y: f32,
+) -> Option<usize> {
+    let row = crate::gutter::gutter_row_at_y(y, total_rows, height)?;
+    let row_u64 = row as u64;
+    if let Some(hit) = hex_row_to_hunk(row_u64, hunks) {
+        return Some(hit);
+    }
+    let total_u64 = total_rows as u64;
+    let mut fwd = row_u64.saturating_add(1);
+    while fwd < total_u64 {
+        if let Some(hit) = hex_row_to_hunk(fwd, hunks) {
+            return Some(hit);
+        }
+        fwd = fwd.saturating_add(1);
+    }
+    let mut back = row_u64;
+    while back > 0 {
+        back = back.saturating_sub(1);
+        if let Some(hit) = hex_row_to_hunk(back, hunks) {
+            return Some(hit);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1604,5 +1774,144 @@ mod tests {
         // Badge label shape count label jaisa hai.
         assert_eq!(hex_find_count_label(Some(2), 5), "2/5");
         assert_eq!(hex_find_count_label(None, 0), "0/0");
+    }
+
+    #[test]
+    fn hex_gutter_geometry_marks_diff_rows_and_merges() {
+        use crate::viewmodel::TextRowKind;
+        // 64 bytes = 4 rows; byte 20 (row 1) aur byte 50 (row 3) diff.
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        if let Some(slot) = right.get_mut(50) {
+            *slot = 7;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(view.hunks.len() >= 2);
+        let total = hex_gutter_total_rows(64);
+        assert_eq!(total, 4);
+        let geom = hex_gutter_geometry(total, 400.0, &view.hunks);
+        // Row 1 (16-31) aur row 3 (48-63) diff: do segments.
+        assert_eq!(geom.segments.len(), 2);
+        for seg in geom.segments.iter() {
+            assert_eq!(seg.kind, TextRowKind::Changed);
+        }
+        let Some(first) = geom.segments.first() else {
+            return;
+        };
+        assert_eq!(first.y_start, 100.0);
+        assert_eq!(first.y_end, 200.0);
+        let Some(second) = geom.segments.get(1) else {
+            return;
+        };
+        assert_eq!(second.y_start, 300.0);
+        assert_eq!(second.y_end, 400.0);
+        // Lagatar diff rows merge: 32 bytes (2 rows) ek hi run.
+        let l2 = vec![0u8; 32];
+        let r2 = vec![1u8; 32];
+        let v2 = HexCompareView::build_from_slices(&l2, &r2, HexCompareMode::None, 8);
+        let g2 = hex_gutter_geometry(hex_gutter_total_rows(32), 200.0, &v2.hunks);
+        assert_eq!(g2.segments.len(), 1);
+        // Khali/zero par koi segment nahi.
+        assert!(
+            hex_gutter_geometry(0, 400.0, &view.hunks)
+                .segments
+                .is_empty()
+        );
+        assert!(
+            hex_gutter_geometry(total, 0.0, &view.hunks)
+                .segments
+                .is_empty()
+        );
+        assert!(hex_gutter_geometry(total, 400.0, &[]).segments.is_empty());
+    }
+
+    #[test]
+    fn hex_gutter_width_and_typo_follow_text_precedent() {
+        use crate::gutter::{
+            gutter_bar_width, gutter_bar_width_for_font, gutter_text_role, gutter_text_size,
+        };
+        use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE};
+        assert_eq!(hex_gutter_bar_width(true), gutter_bar_width(true));
+        assert_eq!(hex_gutter_bar_width(false), gutter_bar_width(false));
+        assert_eq!(hex_gutter_bar_width(true), 12.0);
+        assert_eq!(hex_gutter_bar_width(false), 6.0);
+        assert_eq!(
+            hex_gutter_bar_width_for_font(TYPO_MONO_SIZE, true),
+            gutter_bar_width_for_font(TYPO_MONO_SIZE, true)
+        );
+        assert_eq!(hex_gutter_text_role(), gutter_text_role());
+        assert_eq!(hex_gutter_text_size(), gutter_text_size());
+        assert_eq!(hex_gutter_text_size(), TYPO_MONO_SIZE);
+        assert_eq!(hex_gutter_line_height_source(), TYPO_LINE_HEIGHT_SOURCE);
+        assert_eq!(
+            hex_gutter_line_height_source(),
+            crate::gutter::gutter_line_height_source()
+        );
+    }
+
+    #[test]
+    fn hex_gutter_row_at_y_delegates_to_text_mapping() {
+        // 4 rows, height 400: har row 100px band.
+        assert_eq!(hex_gutter_row_at_y(0.0, 4, 400.0), Some(0));
+        assert_eq!(hex_gutter_row_at_y(150.0, 4, 400.0), Some(1));
+        assert_eq!(hex_gutter_row_at_y(399.9, 4, 400.0), Some(3));
+        assert_eq!(hex_gutter_row_at_y(400.0, 4, 400.0), None);
+        assert_eq!(hex_gutter_row_at_y(10.0, 0, 400.0), None);
+        assert_eq!(hex_gutter_row_at_y(f32::NAN, 4, 400.0), None);
+        // Inverse + segment hit bhi text precedent jaisa.
+        assert_eq!(hex_gutter_y_for_row(1, 4, 400.0), Some(100.0));
+        assert_eq!(hex_gutter_y_for_row(4, 4, 400.0), None);
+        let geom = hex_gutter_geometry(4, 400.0, &[]);
+        assert_eq!(hex_gutter_segment_at_y(&geom.segments, 150.0), None);
+    }
+
+    #[test]
+    fn hex_gutter_jump_target_snaps_to_covering_hunk() {
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        if let Some(slot) = right.get_mut(50) {
+            *slot = 7;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(view.hunks.len() >= 2);
+        // Row 1 par click covering hunk 0 deta hai.
+        assert_eq!(
+            hex_gutter_jump_target(&view.hunks, 4, 400.0, 150.0),
+            Some(0)
+        );
+        // Row 0 khali: aage snap karke hunk 0.
+        assert_eq!(hex_gutter_jump_target(&view.hunks, 4, 400.0, 50.0), Some(0));
+        // Row 2 khali (32-47): aage snap karke hunk 1.
+        assert_eq!(
+            hex_gutter_jump_target(&view.hunks, 4, 400.0, 250.0),
+            Some(1)
+        );
+        // Row 3 covering hunk 1.
+        assert_eq!(
+            hex_gutter_jump_target(&view.hunks, 4, 400.0, 350.0),
+            Some(1)
+        );
+        // Khali hunks / out-of-range: None.
+        assert_eq!(hex_gutter_jump_target(&[], 4, 400.0, 150.0), None);
+        assert_eq!(hex_gutter_jump_target(&view.hunks, 4, 400.0, 999.0), None);
+        assert_eq!(hex_gutter_jump_target(&[], 0, 400.0, 50.0), None);
+    }
+
+    #[test]
+    fn hex_gutter_row_labels_use_offset_ruler() {
+        assert_eq!(hex_gutter_row_label(0), format_hex_offset(0));
+        assert_eq!(hex_gutter_row_label(1), format_hex_offset(16));
+        assert_eq!(hex_gutter_row_label(1), "0x00000010");
+        assert_eq!(hex_gutter_row_label(2), "0x00000020");
+        assert_eq!(hex_gutter_total_rows(0), 0);
+        assert_eq!(hex_gutter_total_rows(1), 1);
+        assert_eq!(hex_gutter_total_rows(16), 1);
+        assert_eq!(hex_gutter_total_rows(17), 2);
     }
 }
