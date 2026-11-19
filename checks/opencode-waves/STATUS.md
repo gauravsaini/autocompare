@@ -252,3 +252,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 01 reading
 - Both live 22935/22936. INT reading views/home/app, gui-int dir absent expected to create. REL reading workspace, release check starting. No diff yet.
+
+## Wave F poll 02 implementing
+- Both live 22935/22936. INT into harness/reports, edits next. REL release build EXIT 0 cached (no source changes), screenshot+report next. No diff yet.
