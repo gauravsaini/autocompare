@@ -579,3 +579,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - J-B ses-picture-j OWNS app+views+checks/parity-picture: picture side-by-side/zoom/pan + sync/merge/audio checklists.
 - J-C ses-reverify-j OWNS checks/wave-j-verify: release+harness+PNG+tests report-only.
 - Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
+
+## Wave J poll 01 all live
+- PIDs 49716/49717/49718 live. A mapping dead-code refs. B starting. C release ok + reading.
