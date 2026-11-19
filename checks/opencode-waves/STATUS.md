@@ -1257,3 +1257,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BE-PAINT `sess-paint-be`: OWNS views.rs+app.rs+screenshot.rs+checks/gui-paint-be (P0-2 intra-line word spans + fixture scene proof, THEN hex callsite per hexpure REPORT §4, THEN toolbar chrome; sequential same owner).
 - BE-FONT `sess-font-be`: OWNS checks/gui-pixelfont-be ONLY (P2 pixel-font ceiling: harness-verifiable vs live-only roles + live-verification protocol; zero .rs edits).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BE complete (2 parallel: paint bundle + font protocol)
+- PAINT `e34a868` intra-line word accent + fixture scene, hex callsite wiring, toolbar chrome — OWNS views.rs+app.rs+screenshot.rs.
+- FONT `6aaaa69` pixel-font ceiling classification + live-egui protocol — OWNS checks/gui-pixelfont-be only.
+- Verify combined: 581 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok x3. Stray .outs removed (tree clean).
+- Pushed. Next: Wave BF (fresh localrun on BE state — P0/P1 closure check + new gap rank).
+
+## 2026-11-20 — Wave BF plan (1 agent: fresh localrun on BE state)
+- BF-LOCALRUN `sess-localrun-bf`: OWNS checks/localrun-bf (harness + app screenshots incl. accent scene + gap re-rank vs AX2 §10; all .rs READ-ONLY).
+- Agent commits locally, NO PUSH (push MANA hai). REPORT se Wave BG plan banega.
