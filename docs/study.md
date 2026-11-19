@@ -104,9 +104,13 @@ MEDIUM pending a visual pass (see "Verification status"):
       Session → New Session menu): Folder Compare, Folder Merge,
       Folder Sync, Text Compare, Text Merge, Hex Compare, Media
       Compare, Picture Compare, Table Compare.
-- [x] Menu & Layout Audit (2026-11-20): Observed Baithak (Session),
-      Nazara (View), Sampadan (Edit), Khoj (Search), and Auzaar (Tools)
-      menus. Confirmed Side-by-Side and Over-Under layouts. Gaps
+- [ ] Visual pass (screenshots of pane layout, colors and navigation):
+      attempted 2026-11-18 and **blocked by the macOS screen-recording
+      permission** for this terminal context (`screencapture` fails
+      with "could not create image"). Remediation: grant Screen
+      Recording to the terminal app in System Settings, or capture
+      manually. MEDIUM items stay MEDIUM until that pass happens.
+- [x] Menu & Layout Audit (2026-11-20): Observed Session, View, Edit, Search, and Tools menus. Confirmed Side-by-Side and Over-Under layouts. Gaps
       identified and logged in `checks/ui-feedback/observations.md`.
 
 ## UI Observation & Parity (HIGH, 2026-11-20)
@@ -116,10 +120,10 @@ Observed via System Events AX on PID 23316. Menu names paraphrased for clean-roo
 | Observation | Confidence |
 |---|---|
 | Window title follows `left <--> right - Text Compare` pattern | HIGH |
-| **Baithak (Session) menu:** Tab/Window lifecycle, Session Persistence (Open/Save), Side Swapping, Re-compare | HIGH |
-| **Nazara (View) menu:** Visibility filters (Differences, Same, Context), Feature toggles (Whitespace, Numbers, Syntax, Wrap), Layouts (Side-by-Side, Over-Under), Thumbnail/Ruler/Details | HIGH |
-| **Sampadan (Edit) menu:** Undo/Redo, Clipboard actions, Section Copy (Right/Line), Alignment controls | HIGH |
-| **Khoj (Search) menu:** Diff/Section navigation (Next/Prev), Find/Replace, Bookmarks | HIGH |
+| **Session menu:** tab/window lifecycle, session open/save, workspaces, swap sides, reload/recompare | HIGH |
+| **View menu:** show all/differences/same/context, whitespace/line-number/syntax/wrap toggles, side-by-side and over-under layouts, thumbnail/ruler/details | HIGH |
+| **Edit menu:** undo/redo, clipboard, copy-to-right and copy-line-to-right, align-with, isolate | HIGH |
+| **Search menu:** next/prev difference and difference-section, find/replace, go-to, bookmarks | HIGH |
 
 ### GUI Parity Gaps (Observed vs Rebuild)
 

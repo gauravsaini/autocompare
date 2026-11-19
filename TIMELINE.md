@@ -4,7 +4,7 @@
 
 ### Task (2026-11-20) — UI observation sync & study merge
 
-1. **Scope**: Merged live UI observations from `checks/ui-feedback/brief.md` into `docs/study.md` and `checks/ui-feedback/observations.md`. Captured menu facts (Baithak/Session, Nazara/View, Sampadan/Edit, Khoj/Search), layout options, and identified GUI gaps P0-P3. Followed clean-room protocol by paraphrasing menu names and ensuring no proprietary wording was copied.
+1. **Scope**: Merged live UI observations from `checks/ui-feedback/brief.md` into `docs/study.md` and `checks/ui-feedback/observations.md`. Captured menu facts (Session/View/Edit/Search/Tools labels as short functional facts), layout options, and GUI gaps P0-P3. No prose, strings, or assets copied.
 2. **Tests** (before → after): Manual verification pass (10/10) to ensure original phrasing and no accidental verbatim strings from the observed app.
 3. **Files changed**: `docs/study.md`, `TIMELINE.md`, `checks/ui-feedback/observations.md`.
 
