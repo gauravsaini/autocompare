@@ -133,3 +133,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 07
 - Diff +944/-22: screenshot +334, views +230, app +315. Scan clean. CI still queued.
+
+## Wave E planned (exquisite UI: geometry first, typography second, colors later)
+- Sequenced AFTER wave D lands (same files: views/app/tree/screenshot — concurrent edit = conflict).
+- GEO agent: pane widths/splits, margins, padding, alignment, positioning. Proof in px (measured margins/padding from layout code + screenshots), not vibes.
+- TYPO agent: font family/weight/line-height/letter-spacing via egui text styles, per-pane hierarchy. Proof: before/after screenshots + style table.
+- Note: screenshot.rs .expect() hits all inside mod tests (8/8) — permitted, non-test code clean.
