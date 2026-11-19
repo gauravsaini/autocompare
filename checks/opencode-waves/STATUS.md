@@ -1106,3 +1106,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Original wrap session frozen thi — aq2 se resume; purani ne STOP mana + pehle ka insert preserve hua, single-writer continue, koi collision nahi.
 - Verify combined: 458 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AR (folder sync paint, home recent polish, hex gutter parity).
+
+## 2026-11-20 — Wave AR plan (2 parallel: folder sync paint + home recent polish)
+- AR-SYNCPAINT `sess-syncpaint-ar`: OWNS views.rs+checks/gui-syncpaint-ar (sync badges/selection paint).
+- AR-HOMERECENT `sess-homerecent-ar`: OWNS home.rs+app.rs+checks/gui-homerecent-ar (recent list refinement).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
