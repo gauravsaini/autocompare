@@ -56,3 +56,25 @@ syntax toggles panes me dikhe. Scope: owned files hi chhue —
 2. Text paint call-site: `views::paint_text(ui, &mut view)` ki jagah
    `views::paint_text_with_prefs(ui, &mut view, &prefs)` jahan `prefs` upar
    jaisa App toggles se bane. `paint_text` wrapper tab tak kaam karta rahega.
+
+## Addendum — second harness + final gates (2026-11-20, ~01:30 UTC)
+
+1. Dusra independent harness `render_proof.py` (stdlib-only, font table
+   `screenshot.rs` se parse — copy-paste nahi): `wrap_off.png` (10434 B)
+   vs `wrap_on.png` (10668 B). Dono valid PNG 960x600 RGBA, bytes alag
+   (toggle dikhta: lambi changed-row off me 1 line truncate, on me
+   flowed continuation lines). Status strip (y 570-600) byte-identical
+   aur thumbnail gutter columns byte-identical — counts honest.
+   Manifest `manifest.json` me sha256 + unit-test mapping hai.
+2. Is pass ke code fixes (sibling base ke upar): `TextViewPrefs::default`
+   manual impl (wrap off, numbers on, syntax on — derive-all-false hota
+   to `paint_text` numbers/accents chhupa deta); views test me
+   `join` fix; `LayoutJob` same-format merge wali section-count samajh
+   (egui `append` merge karta — `epaint` source se verify); folder-paint
+   API (`paint_folder`, `glyph_color`, `folder_columns`, `NEWER_BLUE`)
+   par targeted `#[allow(dead_code)]` taaki App-rewiring tak tree
+   clippy-clean rahe, API delete kiye bina.
+3. Final gates is tree par: `cargo test -p autocompare-gui` 107 passed /
+   0 failed; `cargo clippy -p autocompare-gui --all-targets -- -D
+   warnings` exit 0 (screenshot test-module lints sibling ne fix kiye);
+   `rustfmt --edition 2024 --check` owned teen files par clean.

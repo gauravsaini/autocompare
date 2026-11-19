@@ -1,0 +1,21 @@
+{
+  "wrap_off": {
+    "file": "wrap_off.png",
+    "bytes": 10434,
+    "sha256": "2d254197bbb68cb837f48a416a6c8cb2fc62d3c754a8539163e502cbab31a969"
+  },
+  "wrap_on": {
+    "file": "wrap_on.png",
+    "bytes": 10668,
+    "sha256": "36ad03fb65fcfa9cef6f06fdea8ee193c027059d75d3b4d758c76d2e0ca4d746"
+  },
+  "status_bar_identical": true,
+  "thumbnail_gutter_identical": true,
+  "proves": {
+    "wrap_caps_80": "unit text_prefs_effective_widths_cap_and_narrow",
+    "wrap_paints_80": "unit prefs_word_wrap_caps_pane_at_80",
+    "numbers_narrow_gutter": "unit text_prefs_view_hides_numbers_accents_and_keeps_counts",
+    "accents_clear": "unit prefs_syntax_off_clears_accents_but_keeps_text",
+    "counts_honest": "filter_counts unchanged by prefs (same unit) + identical status strip"
+  }
+}
