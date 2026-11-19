@@ -1398,3 +1398,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - Wave BS/BR relaunch (daemonized, interrupt fix)
 - 5/5 sessions `interrupted` mile (launch wala exec turn-end par kill hua tha). Fix: python double-fork + setsid daemon (/tmp/relaunch.py), same session IDs continue (partial work preserved, localrun fixtures intact).
 - 5 run processes alive verified (ps count 5, localrun tokens 2394 -> 3194). Landing par isolated-verify + push.
+
+## 2026-11-20 - BS-LOCALRUN landed (early feedback, pushed)
+- bc033d8 verify ok: OWNS checks/gui-localrun-bs only, zero .rs, STATUS untouched, 7/7 PNG magic+size+distinct PASS, REPORT Hinglish-Roman (shot map + BC gap table), 611 green. Pushed.
+- Findings: Home live solid; BC gaps fresh (session tabs, meta row, selective highlight, 3-zone status bar, mono-heavy UI note). Baaki in-flight: BR-FOLDERGRID, BS-TYPO, BS-TABLEWIRE, BS-BIN.
