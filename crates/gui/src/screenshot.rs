@@ -735,14 +735,15 @@ mod tests {
     use super::*;
 
     fn png_magic_ok(bytes: &[u8]) -> bool {
-        bytes.len() >= 8 && bytes[0..8] == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+        bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     }
 
     #[test]
     fn text_fixture_renders_valid_png() {
         let out = std::env::temp_dir().join("vis-folder-text-fixture.png");
-        render_text_fixture_png(&out).expect("text fixture renders");
-        let bytes = std::fs::read(&out).expect("text fixture readable");
+        assert!(render_text_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
         assert!(png_magic_ok(&bytes));
         assert!(bytes.len() >= 8192);
     }
@@ -750,8 +751,9 @@ mod tests {
     #[test]
     fn folder_fixture_renders_valid_png() {
         let out = std::env::temp_dir().join("vis-folder-folder-fixture.png");
-        render_folder_fixture_png(&out).expect("folder fixture renders");
-        let bytes = std::fs::read(&out).expect("folder fixture readable");
+        assert!(render_folder_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
         assert!(png_magic_ok(&bytes));
         assert!(bytes.len() >= 8192);
         let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
@@ -763,10 +765,11 @@ mod tests {
         let dir = std::env::temp_dir();
         let text_out = dir.join("vis-dispatch-text.png");
         let folder_out = dir.join("vis-dispatch-folder.png");
-        render_fixture_png(&text_out).expect("text dispatch renders");
-        render_fixture_png(&folder_out).expect("folder dispatch renders");
-        let text_bytes = std::fs::read(&text_out).expect("text readable");
-        let folder_bytes = std::fs::read(&folder_out).expect("folder readable");
+        assert!(render_fixture_png(&text_out).is_ok());
+        assert!(render_fixture_png(&folder_out).is_ok());
+        let text_bytes = std::fs::read(&text_out).unwrap_or_default();
+        let folder_bytes = std::fs::read(&folder_out).unwrap_or_default();
+        assert!(!text_bytes.is_empty() && !folder_bytes.is_empty());
         assert!(png_magic_ok(&text_bytes));
         assert!(png_magic_ok(&folder_bytes));
         assert_ne!(text_bytes, folder_bytes);
