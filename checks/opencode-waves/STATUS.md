@@ -112,3 +112,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - ses-vis-folder4 (log /tmp/vis-folder.log): app/screenshot/home/tree + checks/gui-folder-vis + round-D-1. Folder tab wiring + sync Apply gating + screenshot Folder fixture.
 - ses-vis-hooks4 (log /tmp/vis-hooks.log): views/gutter/viewmodel + checks/gui-text-hooks. paint_text prefs hook (wrap/syntax/line-numbers) with visual toggle proof.
 - Disjoint OWNS, both on skills/parity-harness/SKILL.md proof rounds. NO push by agents.
+
+## Wave D poll 01
+- Both alive. Folder registered sibling scopes, reading REPORT hooks. Hooks grepping paint prefs (39 matches in app.rs), reading run-visual.sh. Tree clean. CI still queued.
