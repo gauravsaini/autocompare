@@ -23,8 +23,17 @@ use crate::app::{
     AudioCheckKind, AudioChecklist, FolderMergeChecklist, MergeApplyState, MergeApplySummary,
     PictureCompareModel, PictureMode, PictureViewState, SyncChecklist,
 };
-use crate::gutter::{gutter_bar_width_for_font, gutter_row_at_y, gutter_y_for_row};
-use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
+use crate::gutter::{
+    GUTTER_HIT_SLOP, GutterSegment, gutter_bar_width_for_font, gutter_row_at_y,
+    gutter_row_center_y, gutter_ruler_width_for_font, gutter_segment_at_y_with_slop,
+};
+use crate::home::{
+    HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
+    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, RECENT_COL_GAP, RECENT_ROW_GAP, SessionHistory,
+    SessionSnapshot, home_card_button_size, home_card_desc_is_small_weak, home_card_min_height,
+    home_card_title_size, recent_list_empty_hint, recent_row_columns, recent_row_meta_role,
+    recent_row_meta_text, recent_row_title_role, recent_row_two_line_height,
+};
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
     ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TypoRole,
@@ -298,8 +307,31 @@ pub fn home_button_paint_size() -> f32 {
     home_card_button_size()
 }
 
+/// Paint-applied Home card height: the headless contract minimum
+/// ([`home_card_min_height`]: title + two-line desc + 28px CTA stack =
+/// 99.6) floored by the legacy [`CARD_W`]/[`CARD_H`] card so paint never
+/// shrinks below the old grid. Pure; unit-tested.
+pub fn home_paint_card_height() -> f32 {
+    home_card_min_height().max(CARD_H)
+}
+
+/// Paint-applied Home CTA size: 120x28 hit floor (area 3360 vs the old
+/// 120x22 = 2640) from the card contract. Paint feeds it to `add_sized`
+/// so the whole floor stays clickable. Pure; unit-tested.
+pub fn home_paint_cta_size() -> (f32, f32) {
+    (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
+}
+
+/// Paint-applied Home grid columns: 3 per row, so the 9 session cards
+/// tile into 3 full rows on the section rhythm. Pure; unit-tested.
+pub fn home_paint_grid_columns() -> usize {
+    HOME_GRID_COLUMNS
+}
+
 /// Paint-applied gutter width at the mono scale: reproduces 12/6 via
-/// [`gutter_bar_width_for_font`].
+/// [`gutter_bar_width_for_font`]. Legacy bar lock (ruler ab 16/8 contract
+/// par hai); `GUTTER_W` parity tests isi par hain.
+#[allow(dead_code)] // Legacy chrome lock; ruler contract `text_minimap_ruler_width` par gaya
 pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
     gutter_bar_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
 }
@@ -337,20 +369,37 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
 }
 
 /// The Home View launcher screen displaying cards for all 9 comparison session types.
+///
+/// Geometry: cards sit on the contract minimum ([`home_paint_card_height`]
+/// = 99.6, never below legacy [`CARD_H`]), the grid tiles
+/// [`home_paint_grid_columns`] = 3 per row on the section rhythm
+/// ([`HOME_GRID_GAP`]), and the CTA fills the 120x28 hit floor
+/// ([`home_paint_cta_size`], area 3360). Typography: title strong-14 vs
+/// desc small-weak-11 hierarchy ([`home_title_paint_size`] /
+/// [`home_desc_paint_is_small_weak`]), button body scale — same sizes and
+/// weights, koi naya size nahi. Home shows no path picker
+/// ([`HOME_SHOWS_PATH_PICKER`]): Compare tabs own their pickers; the
+/// section starts on the grid rhythm directly.
 pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
+    // Launcher par path picker nahi: Compare tabs apne picker khud rakhte
+    // hain (App Home branch me `paint_paths` nahi chalata).
+    #[allow(clippy::assertions_on_constants)]
+    {
+        debug_assert!(!HOME_SHOWS_PATH_PICKER);
+    }
     let model = viewmodel::home_model();
     ui.label(chrome_section_role().rich("Comparison Sessions"));
     ui.label(RichText::new("Select a session type or use the tabs above:").weak());
     ui.add_space(SECTION_GAP);
 
     egui::Grid::new("home_sessions_grid")
-        .num_columns(3)
-        .spacing([SECTION_GAP, SECTION_GAP])
+        .num_columns(home_paint_grid_columns())
+        .spacing([HOME_GRID_GAP, HOME_GRID_GAP])
         .show(ui, |ui| {
             for (i, item) in model.items.iter().enumerate() {
                 ui.group(|ui| {
                     ui.set_width(CARD_W);
-                    ui.set_height(CARD_H);
+                    ui.set_height(home_paint_card_height());
                     ui.vertical_centered(|ui| {
                         ui.label(
                             RichText::new(item.title)
@@ -363,20 +412,79 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
                         }
                         ui.label(desc);
                         ui.add_space(TIGHT_GAP);
+                        let (cta_w, cta_h) = home_paint_cta_size();
                         if ui
-                            .add(egui::Button::new(
-                                RichText::new(format!("Open {}", item.title))
-                                    .size(home_button_paint_size()),
-                            ))
+                            .add_sized(
+                                egui::vec2(cta_w, cta_h),
+                                egui::Button::new(
+                                    RichText::new(format!("Open {}", item.title))
+                                        .size(home_button_paint_size()),
+                                ),
+                            )
                             .clicked()
                         {
                             *tab = item.tab;
                         }
                     });
                 });
-                if i % 3 == 2 {
+                if i % home_paint_grid_columns() == home_paint_grid_columns().saturating_sub(1) {
                     ui.end_row();
                 }
+            }
+        });
+}
+
+/// One recent row ka title text: paths ka honest summary. Three-way par
+/// base samahit, dono paths khali par sirf session kind (clip ka jhooth
+/// nahi — khali list rows kabhi fake paths nahi dikhati). Pure;
+/// unit-tested.
+#[allow(dead_code)] // App call-site wiring (history + now_secs) agle wave ka hai; tab tak tests live rakhte hain
+pub fn home_recent_row_title(snapshot: &SessionSnapshot) -> String {
+    let left = snapshot.left.trim();
+    let right = snapshot.right.trim();
+    if left.is_empty() && right.is_empty() {
+        snapshot.tab.title().to_string()
+    } else if snapshot.is_three_way() && !snapshot.base.trim().is_empty() {
+        format!("{left} \u{2194} {right} (base {})", snapshot.base.trim())
+    } else {
+        format!("{left} \u{2194} {right}")
+    }
+}
+
+/// Session-start recent list (columnar): title flex + kind fixed (96) +
+/// age fixed (72) via [`recent_row_columns`], do-line rows (title + meta
+/// status line). Khali par honest hint, koi fake row nahi. History +
+/// `now_secs` caller (App) se; unknown waqt par age chhupta hai (koi
+/// "just now" ka jhooth nahi). Geometry/typo callee tokens me (section
+/// gap, column gaps, title/meta roles) — koi naya size/color nahi.
+#[allow(dead_code)] // App call-site wiring (history + now_secs) agle wave ka hai; tab tak tests live rakhte hain
+pub fn paint_home_recent(ui: &mut Ui, history: &SessionHistory, now_secs: u64) {
+    ui.add_space(HOME_SECTION_GAP);
+    ui.label(recent_row_title_role().rich("Recent sessions"));
+    if history.is_empty() {
+        ui.label(recent_row_meta_role().rich(recent_list_empty_hint(false)));
+        return;
+    }
+    let avail = ui.available_width();
+    let (title_w, kind_w, age_w) = recent_row_columns(avail);
+    let row_h = recent_row_two_line_height();
+    egui::Grid::new("home_recent_grid")
+        .num_columns(3)
+        .spacing([RECENT_COL_GAP, RECENT_ROW_GAP])
+        .show(ui, |ui| {
+            for snapshot in history.list() {
+                let age = snapshot.age_label(now_secs).unwrap_or_default();
+                ui.vertical(|ui| {
+                    ui.set_width(title_w.max(1.0));
+                    ui.label(recent_row_title_role().rich(home_recent_row_title(snapshot)));
+                    ui.label(recent_row_meta_role().rich(recent_row_meta_text(snapshot, now_secs)));
+                });
+                ui.add_sized(
+                    egui::vec2(kind_w, row_h),
+                    egui::Label::new(snapshot.tab.title()),
+                );
+                ui.add_sized(egui::vec2(age_w, row_h), egui::Label::new(age));
+                ui.end_row();
             }
         });
 }
@@ -818,12 +926,13 @@ pub fn text_gutter_pending_id() -> egui::Id {
     egui::Id::unique("text_gutter_pending_scroll")
 }
 
-/// Text overview-ruler click-target width: ruler rect ka chaudha hissa.
-/// [`text_gutter_paint_width`] ka alias taaki ruler hamesha chrome ke
-/// saath sync rahe (12.0 numbers ke saath, 6.0 bina). Single source;
-/// paint rect isi se banta hai. Pure; unit-tested.
+/// Text overview-ruler click-target width: the gutter contract ruler
+/// track ([`gutter_ruler_width_for_font`] at the mono scale: 16.0 numbers
+/// ke saath, 8.0 bina) — legacy 12/6 bar se chauda taaki the Beyond
+/// Compare-style ruler ungli se lage. Single source; paint rect isi se
+/// banta hai. Pure; unit-tested.
 pub fn text_minimap_ruler_width(show_line_numbers: bool) -> f32 {
-    text_gutter_paint_width(show_line_numbers)
+    gutter_ruler_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
 }
 
 /// Overview-ruler row mapping: local `y` (px) ko model row me badalta
@@ -833,6 +942,32 @@ pub fn text_minimap_ruler_width(show_line_numbers: bool) -> f32 {
 /// ek pattern par rahen. Pure (no egui); unit-tested.
 pub fn text_minimap_row_at_y(y: f32, height: f32, total_rows: usize) -> Option<usize> {
     gutter_row_at_y(y, total_rows, height)
+}
+
+/// Ruler row-center mapping (offset<->row, wapas): model row ke band ka
+/// center ([`gutter_row_center_y`]) — marker isi center par lagta hai aur
+/// `text_minimap_row_at_y(center) == row` round-trip karta hai, taaki
+/// offset se row aur row se offset dono disha sahi rahen. Wahi `None`
+/// contract jo [`crate::gutter::gutter_y_for_row`] ka hai. Pure (no egui); unit-tested.
+pub fn text_minimap_row_center_y(row: usize, total_rows: usize, height: f32) -> Option<f32> {
+    gutter_row_center_y(row, total_rows, height)
+}
+
+/// Overview-ruler slop: segment hit-test har taraf itne px badhta hai
+/// ([`GUTTER_HIT_SLOP`]) taaki 4px bands alag-alag pointer-clickable
+/// rahen bina paint hile. Paint sirf hit me lagata hai. Pure;
+/// unit-tested.
+pub fn text_ruler_hit_slop() -> f32 {
+    GUTTER_HIT_SLOP
+}
+
+/// Slop-expanded segment hit: ruler `y` (px) par kaun sa paint segment
+/// hai. Exact test par band-beech ke 1px gaps miss hote hain; slop se
+/// 4px bands ungli se lagte hain. Paint click isi gate ke baad
+/// [`text_gutter_click_select`] se row snap karta hai. Pure (no egui);
+/// unit-tested.
+pub fn text_ruler_segment_hit(segments: &[GutterSegment], y: f32) -> Option<usize> {
+    gutter_segment_at_y_with_slop(segments, y, text_ruler_hit_slop())
 }
 
 /// Text overview-ruler accessibility label: khali par honest empty, bina
@@ -2504,7 +2639,7 @@ fn paint_text_body(
         ));
         ui.painter().rect_filled(rect, 0.0, track_for(dark));
 
-        for seg in geom.segments {
+        for seg in &geom.segments {
             let seg_rect = egui::Rect::from_min_max(
                 egui::pos2(rect.min.x, rect.min.y + seg.y_start),
                 egui::pos2(rect.max.x, (rect.min.y + seg.y_end).min(rect.max.y)),
@@ -2517,31 +2652,39 @@ fn paint_text_body(
             };
             ui.painter().rect_filled(seg_rect, 0.0, color);
         }
-        // Selection/viewport marker: selected row ki band par theme
-        // text tone me ek pad-height tick (GEO token `ROW_PAD`, koi
-        // naya color nahi), taaki jump ke baad indicator synced dikhe.
+        // Selection/viewport marker: selected row ke band center par theme
+        // text tone me ek pad-height tick (GEO token `ROW_PAD`, koi naya
+        // color nahi) — inverse mapping ([`text_minimap_row_center_y`]) se
+        // taaki jump ke baad indicator clicked band par synced dikhe.
         if let Some(sel) = model.selected
-            && let Some(y) = gutter_y_for_row(sel, model.rows.len(), avail_h)
+            && let Some(cy) = text_minimap_row_center_y(sel, model.rows.len(), avail_h)
         {
+            let y0 = (rect.min.y + cy - ROW_PAD / 2.0).max(rect.min.y);
             let marker = egui::Rect::from_min_max(
-                egui::pos2(rect.min.x, rect.min.y + y),
-                egui::pos2(rect.max.x, (rect.min.y + y + ROW_PAD).min(rect.max.y)),
+                egui::pos2(rect.min.x, y0),
+                egui::pos2(rect.max.x, (y0 + ROW_PAD).min(rect.max.y)),
             );
             ui.painter()
                 .rect_filled(marker, 0.0, ui.visuals().text_color());
         }
         // Click/drag jump: pointer y se nearest-diff row, selection set
         // + next-frame scroll pending (list isi frame pehle paint ho
-        // chuki hai, isliye scroll agli frame hota hai).
+        // chuki hai, isliye scroll agli frame hota hai). Slop-expanded
+        // segment gate pehle: ruler bands par hi jump, khali track par
+        // nahi (4px bands ungli se lagte hain, segment paint nahi hilta).
         if (resp.clicked() || resp.dragged())
             && let Some(pos) = resp.interact_pointer_pos()
-            && let Some(idx) =
-                text_gutter_click_select(&model.rows, model.rows.len(), avail_h, pos.y - rect.min.y)
         {
-            model.selected = Some(idx);
-            ui.ctx().data_mut(|data| {
-                data.insert_temp(text_gutter_pending_id(), idx);
-            });
+            let local_y = pos.y - rect.min.y;
+            if text_ruler_segment_hit(&geom.segments, local_y).is_some()
+                && let Some(idx) =
+                    text_gutter_click_select(&model.rows, model.rows.len(), avail_h, local_y)
+            {
+                model.selected = Some(idx);
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(text_gutter_pending_id(), idx);
+                });
+            }
         }
     });
 
@@ -6962,18 +7105,22 @@ mod tests {
 
     #[test]
     fn text_minimap_ruler_geometry_and_row_mapping() {
-        // Click-target chaudhai chrome ke saath sync: numbers ke saath
-        // 12.0, bina 6.0 (wahi `text_gutter_paint_width` single source).
+        use crate::gutter::{gutter_ruler_width, gutter_ruler_width_for_font};
+        use crate::theme::TYPO_MONO_SIZE;
+        // Click-target chaudhai gutter ruler contract par hai: numbers ke
+        // saath 16.0, bina 8.0 (legacy 12/6 bar se chauda).
         assert_eq!(
             text_minimap_ruler_width(true),
-            text_gutter_paint_width(true)
+            gutter_ruler_width_for_font(TYPO_MONO_SIZE, true)
         );
         assert_eq!(
             text_minimap_ruler_width(false),
-            text_gutter_paint_width(false)
+            gutter_ruler_width_for_font(TYPO_MONO_SIZE, false)
         );
-        assert_eq!(text_minimap_ruler_width(true), 12.0);
-        assert_eq!(text_minimap_ruler_width(false), 6.0);
+        assert_eq!(text_minimap_ruler_width(true), gutter_ruler_width(true));
+        assert_eq!(text_minimap_ruler_width(false), gutter_ruler_width(false));
+        assert_eq!(text_minimap_ruler_width(true), 16.0);
+        assert_eq!(text_minimap_ruler_width(false), 8.0);
         // Row mapping: 4 rows over 400px, har band 100px (hex order
         // `y, height, total` me).
         assert_eq!(text_minimap_row_at_y(0.0, 400.0, 4), Some(0));
@@ -6990,11 +7137,143 @@ mod tests {
         // Round-trip: marker y wapas usi row band me girta hai.
         let mut row = 0usize;
         while row < 4 {
-            if let Some(y) = gutter_y_for_row(row, 4, 400.0) {
+            if let Some(y) = crate::gutter::gutter_y_for_row(row, 4, 400.0) {
                 assert_eq!(text_minimap_row_at_y(y + 0.5, 400.0, 4), Some(row));
             }
             row = row.saturating_add(1);
         }
+    }
+
+    #[test]
+    fn text_ruler_adopts_gutter_contract() {
+        use crate::gutter::{
+            GUTTER_HIT_SLOP, GUTTER_SEGMENT_MIN_H, gutter_ruler_width, gutter_segment_at_y,
+        };
+        use crate::viewmodel::TextRowKind;
+        // Width: ruler legacy bar se chauda, contract ke barabar.
+        assert!(text_minimap_ruler_width(true) > text_gutter_paint_width(true));
+        assert!(text_minimap_ruler_width(false) > text_gutter_paint_width(false));
+        assert_eq!(text_minimap_ruler_width(true), gutter_ruler_width(true));
+        assert_eq!(text_minimap_ruler_width(false), gutter_ruler_width(false));
+        // Slop: paint hit-test contract slop par hai (2px har taraf).
+        assert_eq!(text_ruler_hit_slop(), GUTTER_HIT_SLOP);
+        assert_eq!(text_ruler_hit_slop(), 2.0);
+        // Segment min height: paint geometry (viewmodel re-export = gutter
+        // contract) lambi file me 1-row hunk ko 4px par rakhta hai.
+        let row = |kind| TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            rows.push(row(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(r) = rows.get_mut(500) {
+            r.kind = TextRowKind::Deleted;
+        }
+        let geom = viewmodel::gutter_geometry(1000, 400.0, &rows);
+        assert_eq!(geom.segments.len(), 1);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        assert!((seg.y_end - seg.y_start - 4.0).abs() < 0.001);
+        // Slop hit: band ke bilkul bahar ke pixels exact par miss, slop
+        // par hit — bina paint hile.
+        assert_eq!(gutter_segment_at_y(&geom.segments, 199.0), None);
+        assert_eq!(text_ruler_segment_hit(&geom.segments, 199.0), Some(0));
+        assert_eq!(gutter_segment_at_y(&geom.segments, 205.0), None);
+        assert_eq!(text_ruler_segment_hit(&geom.segments, 205.0), Some(0));
+        assert_eq!(text_ruler_segment_hit(&geom.segments, 150.0), None);
+        assert_eq!(text_ruler_segment_hit(&geom.segments, f32::NAN), None);
+        // Dono directions: band top (marker) aur band center dono wapas
+        // usi row par map hote hain.
+        let mut r = 0usize;
+        while r < 4 {
+            if let Some(y) = crate::gutter::gutter_y_for_row(r, 4, 400.0) {
+                assert_eq!(text_minimap_row_at_y(y + 0.5, 400.0, 4), Some(r));
+            }
+            if let Some(center) = text_minimap_row_center_y(r, 4, 400.0) {
+                assert_eq!(text_minimap_row_at_y(center, 400.0, 4), Some(r));
+                assert_eq!(
+                    crate::gutter::gutter_y_for_row(r, 4, 400.0),
+                    Some(r as f32 * 100.0)
+                );
+            }
+            r = r.saturating_add(1);
+        }
+        assert_eq!(text_minimap_row_center_y(0, 4, 400.0), Some(50.0));
+        assert_eq!(text_minimap_row_center_y(1, 4, 400.0), Some(150.0));
+        assert_eq!(text_minimap_row_center_y(2, 4, 400.0), Some(250.0));
+        assert_eq!(text_minimap_row_center_y(3, 4, 400.0), Some(350.0));
+        assert_eq!(text_minimap_row_center_y(4, 4, 400.0), None);
+        assert_eq!(text_minimap_row_center_y(0, 0, 400.0), None);
+        assert_eq!(text_minimap_row_center_y(1, 4, 0.0), None);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home_paint_adopts_home_contract() {
+        use crate::home::{
+            HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_SHOWS_PATH_PICKER,
+            RECENT_COL_AGE_W, RECENT_COL_KIND_W, home_card_hierarchy_ok, home_card_min_height,
+            home_recent_section_top, home_saved_chrome_height, recent_row_columns,
+        };
+        // Card min-h: contract 99.6, legacy 75 clip se mehfooz.
+        assert_eq!(home_paint_card_height(), home_card_min_height());
+        assert!((home_paint_card_height() - 99.6).abs() < 0.01);
+        assert!(home_paint_card_height() > CARD_H);
+        // CTA min-h 28 (hit 3360 vs purana 2640).
+        assert_eq!(
+            home_paint_cta_size(),
+            (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
+        );
+        assert_eq!(home_paint_cta_size(), (120.0, 28.0));
+        let (cta_w, cta_h) = home_paint_cta_size();
+        assert!((cta_w * cta_h - 3_360.0).abs() < 0.001);
+        // Grid: 3 columns, section rhythm gap.
+        assert_eq!(home_paint_grid_columns(), 3);
+        assert_eq!(HOME_GRID_GAP, SECTION_GAP);
+        // Hierarchy: HomeTitle strong-14 vs HomeDesc small-weak-11, koi
+        // naya size nahi (paint sizes wahi contract sizes hain).
+        assert!(home_card_hierarchy_ok());
+        assert_eq!(home_title_paint_size(), 14.0);
+        assert!(home_desc_paint_is_small_weak());
+        assert_eq!(home_button_paint_size(), 13.0);
+        // Home par path picker nahi: paint lock + bachta chrome 32.
+        assert!(!HOME_SHOWS_PATH_PICKER);
+        assert_eq!(home_saved_chrome_height(), 32.0);
+        assert!((home_recent_section_top(200.0) - 208.0).abs() < 0.001);
+        // Recent columns: title flex + kind 96 + age 72 tile karte hain.
+        assert_eq!(RECENT_COL_KIND_W, 96.0);
+        assert_eq!(RECENT_COL_AGE_W, 72.0);
+        let (title, kind, age) = recent_row_columns(460.0);
+        assert!(
+            (title + kind + age + 8.0 * 2.0 + 4.0 * 2.0 - 460.0).abs() < 0.001,
+            "title {title} kind {kind} age {age}"
+        );
+        // Row title: khali paths par kind, warna honest path summary.
+        let empty = crate::home::SessionSnapshot::new(crate::home::Tab::Text, "", "", "", 0);
+        assert_eq!(home_recent_row_title(&empty), "Text");
+        let paths = crate::home::SessionSnapshot::new(
+            crate::home::Tab::Text,
+            "left.txt",
+            "right.txt",
+            "",
+            0,
+        );
+        let title_text = home_recent_row_title(&paths);
+        assert!(title_text.contains("left.txt"));
+        assert!(title_text.contains("right.txt"));
+        let three = crate::home::SessionSnapshot::new(crate::home::Tab::Merge, "l", "r", "base", 0);
+        assert!(home_recent_row_title(&three).contains("base"));
     }
 
     #[test]
