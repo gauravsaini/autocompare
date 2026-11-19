@@ -1253,6 +1253,175 @@ pub fn hex_gutter_jump_target(
     None
 }
 
+// ----------------------------------------------------------------------------
+// Hex minimap hit-rect + offset-proportional bands (headless; paint wiring
+// stays with the orchestrator).
+// AX2 §10.4: live paint ka 24px minimap strip (`views::HEX_MINIMAP_W`)
+// gutter bar ka double hai; ye section us hit-rect ka headless judvaan
+// hai — strip width gutter single-source se, band list offset-proportional
+// (paint ka inline hunk loop isi mapping par aata hai), aur row->y inverse
+// selection marker ke liye. Koi naya token ya color nahi; sab pure fns,
+// `.get()`/saturating only, no egui, no I/O. Paint allocate rect
+// `hex_minimap_strip_width` se banata hai, click y ko locked
+// `hex_minimap_row_at_y` (views.rs) se row me badalta hai, bands
+// `hex_minimap_bands` se nikalta hai.
+// ----------------------------------------------------------------------------
+
+/// Hex minimap strip width: gutter bar ka double (legacy 12px bar ->
+/// 24px hit-rect). Single source gutter contract hai
+/// (`gutter_bar_width(true)`); test paint ke `HEX_MINIMAP_W` se equality
+/// lock karta hai taaki allocate rect aur hit-rect kabhi alag na hon.
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_minimap_strip_width() -> f32 {
+    crate::gutter::gutter_bar_width(true) * 2.0
+}
+
+/// Ek hunk ka offset-proportional minimap band `(y_start, y_end)`.
+/// `first = offset / 16`, `last = (offset + run - 1) / 16`, y fraction
+/// se; sub-row bands `GUTTER_MIN_SEGMENT_H` floor par (paint ke
+/// `hex_minimap_seg_end` = `y0 + ROW_PAD` jaisa, wahi theme token, wahi
+/// 2px). Khali run, row se bahar hunk ya kharab input par `None`.
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_minimap_band_for_hunk(
+    hunk: &HexHunkView,
+    total_rows: u64,
+    height: f32,
+) -> Option<(f32, f32)> {
+    let run = (hunk.left_len).max(hunk.right_len);
+    if run == 0 || total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let step = HEX_BYTES_PER_ROW as u64;
+    let first = hunk.offset.saturating_div(step);
+    if first >= total_rows {
+        return None;
+    }
+    let last = hunk
+        .offset
+        .saturating_add(run as u64)
+        .saturating_sub(1)
+        .saturating_div(step)
+        .min(total_rows.saturating_sub(1));
+    let total_f = total_rows as f32;
+    let y_start = (first as f32 / total_f) * height;
+    let raw_end = ((last.saturating_add(1)) as f32 / total_f) * height;
+    let floored = raw_end.max(y_start + crate::theme::GUTTER_MIN_SEGMENT_H);
+    Some((y_start, floored.min(height)))
+}
+
+/// Poori minimap band list offset order me: `total_len` se
+/// `hex_row_count`, har hunk par [`hex_minimap_band_for_hunk`]. Paint ka
+/// inline hunk loop isi list par aata hai (track rect + `CHANGED_BG`
+/// frozen rehte hain). Khali/kharab input par khali vec.
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_minimap_bands(total_len: u64, height: f32, hunks: &[HexHunkView]) -> Vec<(f32, f32)> {
+    let total_rows = hex_row_count(total_len);
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for hunk in hunks {
+        if let Some(band) = hex_minimap_band_for_hunk(hunk, total_rows, height) {
+            out.push(band);
+        }
+    }
+    out
+}
+
+/// Grid row -> minimap-local y (band top): `(row / total_rows) * height`.
+/// Gutter `gutter_y_for_row` (usize) ka u64 grid judvaan; selection marker
+/// paint isi par lagta hai taaki marker clicked band par baithe. Wahi
+/// `None` contract. Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_minimap_y_for_row(row: u64, total_rows: u64, height: f32) -> Option<f32> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if row >= total_rows {
+        return None;
+    }
+    let y = (row as f32 / total_rows as f32) * height;
+    if y.is_finite() && y >= 0.0 && y < height {
+        Some(y)
+    } else {
+        None
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Nibble parity cell geometry (headless; paint wiring stays with the
+// orchestrator).
+// AX2 §10.3: changed row poori-row paint hoti hai — kaun sa nibble badla
+// geometry se pata nahi chalta. Ye section per-byte nibble diff nikalta
+// hai taaki paint sirf badle cells highlight kare (poori row nahi).
+// Model me byte values nahi (sirf offset/len), isliye caller slices deta
+// hai; barabar bytes aur missing slots skip hote hain (saturating, kabhi
+// panic nahi). Geometry first (offset/col + high/low flags), typography
+// second (wahi mono role, koi naya token nahi). No egui, no I/O; colors
+// frozen (koi Color32/Visuals nahi).
+// ----------------------------------------------------------------------------
+
+/// Ek badle byte ka nibble-level cell: grid column + kaun sa nibble alag
+/// hai. Paint Grid cell isi par accent lagata hai (poori row par nahi).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HexNibbleCell {
+    /// Absolute byte offset.
+    pub offset: u64,
+    /// Grid column (0..16).
+    pub col: u64,
+    /// High nibble alag hai.
+    pub high_diff: bool,
+    /// Low nibble alag hai.
+    pub low_diff: bool,
+}
+
+/// Do byte values me kaun sa nibble alag hai: `(high, low)`. Barabar
+/// bytes par `(false, false)`. Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_nibbles_differ(left: u8, right: u8) -> (bool, bool) {
+    (left >> 4 != right >> 4, left & 0x0F != right & 0x0F)
+}
+
+/// 16-byte row (`row_start` se) ke badle bytes nibble cells ke roop me,
+/// offset order me. Barabar bytes aur missing slots skip hote hain
+/// (saturating, kabhi panic nahi). Khali vec = is row me koi nibble antar
+/// nahi — paint poori-row accent chhodkar inhi cells par lagata hai.
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_diff_nibble_cells(row_start: u64, left: &[u8], right: &[u8]) -> Vec<HexNibbleCell> {
+    let mut out = Vec::new();
+    let mut col: u64 = 0;
+    while col < HEX_BYTES_PER_ROW as u64 {
+        let off = row_start.saturating_add(col);
+        let idx = off.min(usize::MAX as u64) as usize;
+        match (left.get(idx).copied(), right.get(idx).copied()) {
+            (Some(lv), Some(rv)) if lv != rv => {
+                let (high_diff, low_diff) = hex_nibbles_differ(lv, rv);
+                out.push(HexNibbleCell {
+                    offset: off,
+                    col,
+                    high_diff,
+                    low_diff,
+                });
+            }
+            _ => {}
+        }
+        col = col.saturating_add(1);
+    }
+    out
+}
+
+/// Nibble cell text role: grid cells monospace paint hote hain, wahi
+/// shared mono token (koi naya token nahi). Pure; unit-tested.
+#[allow(dead_code)]
+pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1913,5 +2082,168 @@ mod tests {
         assert_eq!(hex_gutter_total_rows(1), 1);
         assert_eq!(hex_gutter_total_rows(16), 1);
         assert_eq!(hex_gutter_total_rows(17), 2);
+    }
+
+    #[test]
+    fn hex_minimap_strip_width_is_double_gutter_bar() {
+        use crate::gutter::gutter_bar_width;
+        // Single source: gutter contract ka double, paint token parity.
+        assert_eq!(hex_minimap_strip_width(), gutter_bar_width(true) * 2.0);
+        assert_eq!(hex_minimap_strip_width(), 24.0);
+        assert_eq!(hex_minimap_strip_width(), crate::views::HEX_MINIMAP_W);
+    }
+
+    #[test]
+    fn hex_minimap_bands_are_offset_proportional() {
+        // 64 bytes = 4 rows, height 400: har row 100px band.
+        let hunks = vec![HexHunkView {
+            offset: 20,
+            left_len: 1,
+            right_len: 1,
+        }];
+        let bands = hex_minimap_bands(64, 400.0, &hunks);
+        assert_eq!(bands.len(), 1);
+        assert_eq!(bands.first(), Some(&(100.0, 200.0)));
+        // Multi-row hunk: row 1 se row 3 tak failta hai.
+        let wide = vec![HexHunkView {
+            offset: 20,
+            left_len: 30,
+            right_len: 30,
+        }];
+        let wide_bands = hex_minimap_bands(64, 400.0, &wide);
+        assert_eq!(wide_bands.len(), 1);
+        assert_eq!(wide_bands.first(), Some(&(100.0, 400.0)));
+        // Tall file: sub-row band floor par (y0 + 2px, paint seg_end jaisa).
+        // 16000 bytes = 1000 rows, height 400: har row 0.4px band.
+        let tall = vec![HexHunkView {
+            offset: 8000,
+            left_len: 1,
+            right_len: 1,
+        }];
+        let tall_bands = hex_minimap_bands(16_000, 400.0, &tall);
+        assert_eq!(tall_bands.len(), 1);
+        let Some((y0, y1)) = tall_bands.first().copied() else {
+            return;
+        };
+        assert_eq!(y0, 200.0);
+        assert!((y1 - y0 - crate::theme::GUTTER_MIN_SEGMENT_H).abs() < 0.001);
+        // Khali run / row se bahar / kharab input: koi band nahi.
+        let empty_run = vec![HexHunkView {
+            offset: 20,
+            left_len: 0,
+            right_len: 0,
+        }];
+        assert!(hex_minimap_bands(64, 400.0, &empty_run).is_empty());
+        let past_end = vec![HexHunkView {
+            offset: 10_000,
+            left_len: 1,
+            right_len: 1,
+        }];
+        assert!(hex_minimap_bands(64, 400.0, &past_end).is_empty());
+        assert!(hex_minimap_bands(0, 400.0, &hunks).is_empty());
+        assert!(hex_minimap_bands(64, 0.0, &hunks).is_empty());
+        assert!(hex_minimap_bands(64, 400.0, &[]).is_empty());
+        let single = HexHunkView {
+            offset: 20,
+            left_len: 1,
+            right_len: 1,
+        };
+        assert_eq!(hex_minimap_band_for_hunk(&single, 0, 400.0), None);
+    }
+
+    #[test]
+    fn hex_minimap_y_for_row_inverts_locked_row_mapping() {
+        // 4 rows over 400px: band tops 0/100/200/300.
+        assert_eq!(hex_minimap_y_for_row(0, 4, 400.0), Some(0.0));
+        assert_eq!(hex_minimap_y_for_row(1, 4, 400.0), Some(100.0));
+        assert_eq!(hex_minimap_y_for_row(3, 4, 400.0), Some(300.0));
+        // Bad input maps nothing.
+        assert_eq!(hex_minimap_y_for_row(4, 4, 400.0), None);
+        assert_eq!(hex_minimap_y_for_row(0, 0, 400.0), None);
+        assert_eq!(hex_minimap_y_for_row(1, 4, 0.0), None);
+        assert_eq!(hex_minimap_y_for_row(1, 4, f32::NAN), None);
+        // Round-trip locked paint mapping ke saath: marker y wapas usi row.
+        let mut row: u64 = 0;
+        while row < 4 {
+            if let Some(y) = hex_minimap_y_for_row(row, 4, 400.0) {
+                assert_eq!(
+                    crate::views::hex_minimap_row_at_y(y + 0.5, 400.0, 4),
+                    Some(row)
+                );
+            }
+            row = row.saturating_add(1);
+        }
+    }
+
+    #[test]
+    fn hex_nibbles_differ_flags_each_half_byte() {
+        assert_eq!(hex_nibbles_differ(0xAB, 0xAB), (false, false));
+        assert_eq!(hex_nibbles_differ(0xAB, 0xCB), (true, false));
+        assert_eq!(hex_nibbles_differ(0xAB, 0xAD), (false, true));
+        assert_eq!(hex_nibbles_differ(0xAB, 0xCD), (true, true));
+        assert_eq!(hex_nibbles_differ(0x00, 0xFF), (true, true));
+    }
+
+    #[test]
+    fn hex_diff_nibble_cells_report_only_changed_bytes() {
+        // Row 0: col 3 low-only, col 5 high-only.
+        let mut left = Vec::new();
+        let mut right = Vec::new();
+        let mut i: u8 = 0;
+        while i < 16 {
+            left.push(i);
+            right.push(i);
+            i = i.saturating_add(1);
+        }
+        if let Some(slot) = right.get_mut(3) {
+            *slot = 0x02;
+        }
+        if let Some(slot) = right.get_mut(5) {
+            *slot = 0xF5;
+        }
+        let cells = hex_diff_nibble_cells(0, &left, &right);
+        assert_eq!(cells.len(), 2);
+        assert_eq!(
+            cells.first(),
+            Some(&HexNibbleCell {
+                offset: 3,
+                col: 3,
+                high_diff: false,
+                low_diff: true,
+            })
+        );
+        assert_eq!(
+            cells.get(1),
+            Some(&HexNibbleCell {
+                offset: 5,
+                col: 5,
+                high_diff: true,
+                low_diff: false,
+            })
+        );
+        // Dusri row barabar: koi cell nahi (poori-row accent ka koi kaaran nahi).
+        let big_left = vec![0u8; 32];
+        let mut big_right = vec![0u8; 32];
+        if let Some(slot) = big_right.get_mut(3) {
+            *slot = 9;
+        }
+        assert!(hex_diff_nibble_cells(16, &big_left, &big_right).is_empty());
+        assert_eq!(hex_diff_nibble_cells(0, &big_left, &big_right).len(), 1);
+        // Chhoti slices: missing slots skip, panic nahi.
+        let tiny = vec![7u8, 7, 7, 7];
+        let tiny_r = vec![7u8, 7, 8, 7];
+        let tiny_cells = hex_diff_nibble_cells(0, &tiny, &tiny_r);
+        assert_eq!(tiny_cells.len(), 1);
+        assert_eq!(tiny_cells.first().map(|c| c.col), Some(2));
+        // Khali slices: khali vec.
+        assert!(hex_diff_nibble_cells(0, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn hex_nibble_text_role_reuses_mono_token() {
+        use crate::theme::{TYPO_MONO_SIZE, TypoRole};
+        assert_eq!(hex_nibble_text_role(), TypoRole::Mono);
+        assert!(hex_nibble_text_role().is_mono());
+        assert_eq!(hex_nibble_text_role().size(), TYPO_MONO_SIZE);
     }
 }
