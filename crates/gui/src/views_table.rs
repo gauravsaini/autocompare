@@ -224,6 +224,114 @@ pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
 }
 
 // ----------------------------------------------------------------------------
+// Key-column affordance (pure state queries + thin paint; wiring stays with
+// the orchestrator). Existing `TableKeyView` reuse: toggle/select state,
+// `POSITIONAL_NOTE`, `positional_note()` same rahte hain. Geometry first:
+// fixed 1-char marker har toggle ke start me (indicator column align),
+// `TABLE_KEY_BAR_H` uncha bar, `TABLE_KEY_COL_GAP` gap, badge right-end par
+// `TABLE_KEY_BADGE_PAD` ke saath (find-bar badge geometry reuse).
+// Typography second: header `.monospace()`, selected `.strong()`, hint/badge/
+// note `.small().weak()`; koi size-override/color add nahi. No I/O.
+// ----------------------------------------------------------------------------
+
+/// Key-col header bar ki unchai (find-bar precedent reuse).
+pub const TABLE_KEY_BAR_H: f32 = 28.0;
+/// Per-column key toggle ke beech ka gap (default item-spacing scale).
+pub const TABLE_KEY_COL_GAP: f32 = 8.0;
+/// Key badge ka right-end pad (find-bar badge precedent reuse).
+pub const TABLE_KEY_BADGE_PAD: f32 = 4.0;
+
+/// Key toggle ka fixed 1-char indicator: selected vs deselected hamesha
+/// alag dikhta hai aur hamesha button text ke start me rehta hai, isliye
+/// indicator column align rehta hai. Pure; unit-tested.
+pub fn key_column_marker(selected: bool) -> &'static str {
+    if selected { "●" } else { "○" }
+}
+
+/// Kya `col` is waqt key me selected hai. Pure; unit-tested.
+pub fn is_key_column(view: &TableKeyView, col: usize) -> bool {
+    view.key_columns.contains(&col)
+}
+
+/// Kya `col` aakhri suggestion me tha. Pure; unit-tested.
+pub fn is_suggested_key(view: &TableKeyView, col: usize) -> bool {
+    view.suggested_keys.contains(&col)
+}
+
+/// Key badge text: keyed par `key: 0,2`, positional par `positional`.
+/// Khali header par bhi safe (sirf view state par). Pure; unit-tested.
+pub fn table_key_badge_label(view: &TableKeyView) -> String {
+    if view.is_positional() {
+        String::from("positional")
+    } else {
+        let mut out = String::from("key:");
+        for (pos, col) in view.key_columns.iter().enumerate() {
+            if pos == 0 {
+                out.push(' ');
+            } else {
+                out.push(',');
+            }
+            out.push_str(&col.to_string());
+        }
+        out
+    }
+}
+
+/// Key-col header affordance row: har header column ek
+/// `selectable_label(marker + name)` toggle hai (selected par
+/// `.strong().monospace()`, deselected par `.monospace()`), click par
+/// `toggle_key_column(col)`; suggested-par-`.small().weak()`
+/// `(suggested)` hint; right-end me `table_key_badge_label` badge
+/// `.small().weak()` me (find-bar badge geometry reuse); positional hone
+/// par `POSITIONAL_NOTE` note line me (honest, `positional_note()` reuse,
+/// koi naya wording nahi). Caller signature stable rehti hai (table tab
+/// wiring isi ko chalati hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
+    let avail = ui.available_width();
+    let mut clicked: Option<usize> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
+        ui.label(egui::RichText::new("Key:").small().weak());
+        for (col, name) in header.iter().enumerate() {
+            let selected = is_key_column(view, col);
+            let suggested = is_suggested_key(view, col);
+            let marker = key_column_marker(selected);
+            let text = format!("{marker} {name}");
+            let rich = if selected {
+                egui::RichText::new(text).monospace().strong()
+            } else {
+                egui::RichText::new(text).monospace()
+            };
+            if ui.selectable_label(selected, rich).clicked() {
+                clicked = Some(col);
+            }
+            if suggested && !selected {
+                ui.label(egui::RichText::new("(suggested)").small().weak());
+            }
+            ui.add_space(TABLE_KEY_COL_GAP);
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_KEY_BADGE_PAD);
+            ui.label(
+                egui::RichText::new(table_key_badge_label(view))
+                    .small()
+                    .weak(),
+            );
+        });
+    });
+    if let Some(col) = clicked {
+        view.toggle_key_column(col);
+    }
+    // `positional_note()` khud sirf positional par `Some` deta hai,
+    // isliye ek `if let` hi honest-note gate hai (outer check redundant).
+    if let Some(note) = view.positional_note() {
+        ui.label(egui::RichText::new(note).small().weak());
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Table grid (headless; paint wiring stays with the orchestrator).
 // Gap 3: the table tab paints har row ko ek hi monospace string me.
 // Ye section pure grid spec hai: header labels, char-width se column
@@ -1049,5 +1157,50 @@ mod tests {
         assert_eq!(padded.first().map(String::len), Some(TABLE_MAX_COL_CHARS));
         // Khali widths: khali row.
         assert!(pad_table_row(&cells, &[]).is_empty());
+    }
+
+    #[test]
+    fn table_key_marker_distinguishes_selected() {
+        let on = key_column_marker(true);
+        let off = key_column_marker(false);
+        assert_ne!(on, off);
+        // Dono single-char: indicator column align rehta hai.
+        assert_eq!(on.chars().count(), 1);
+        assert_eq!(off.chars().count(), 1);
+    }
+
+    #[test]
+    fn table_key_badge_labels_keyed_vs_positional() {
+        let plain = TableKeyView::new();
+        assert_eq!(table_key_badge_label(&plain), "positional");
+        let mut keyed = TableKeyView::new();
+        keyed.toggle_key_column(2);
+        keyed.toggle_key_column(0);
+        assert_eq!(table_key_badge_label(&keyed), "key: 0,2");
+        let mut single = TableKeyView::new();
+        single.toggle_key_column(1);
+        assert_eq!(table_key_badge_label(&single), "key: 1");
+        // Deselect par wapas positional.
+        single.toggle_key_column(1);
+        assert_eq!(table_key_badge_label(&single), "positional");
+    }
+
+    #[test]
+    fn table_key_bar_state_helpers_are_honest() {
+        let mut view = TableKeyView::new();
+        assert!(!is_key_column(&view, 0));
+        assert!(view.positional_note().is_some());
+        view.toggle_key_column(1);
+        assert!(is_key_column(&view, 1));
+        assert!(!is_key_column(&view, 0));
+        assert!(view.positional_note().is_none());
+        let (left, _) = sample_tables();
+        view.suggest_for(&left);
+        assert!(is_suggested_key(&view, 0));
+        assert!(!is_suggested_key(&view, 5));
+        // Geometry tokens find-bar precedent reuse karte hain.
+        assert_eq!(TABLE_KEY_BAR_H, 28.0);
+        assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
     }
 }
