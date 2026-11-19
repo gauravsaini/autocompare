@@ -52,12 +52,13 @@ const BROWSE_RESERVE: f32 = 75.0;
 const MIN_HALF: f32 = 180.0;
 const MIN_THIRD: f32 = 130.0;
 
-/// Draggable split bounds: left pane fraction stays inside
-/// 20%..=80% so neither pane collapses; default centers at 50%.
-/// Per-run state only (lives on `App`, no filesystem writes).
-pub const SPLIT_MIN_FRACTION: f32 = 0.20;
-pub const SPLIT_MAX_FRACTION: f32 = 0.80;
-pub const SPLIT_DEFAULT_FRACTION: f32 = 0.50;
+/// Draggable split bounds: left pane share stays inside 20%..=80%
+/// so neither pane collapses; default centers at 50%. Single source
+/// is [`crate::viewmodel`] (headless test surface); this module
+/// re-exports the math so `App` keeps one path without touching
+/// `viewmodel` directly. Per-run state only (lives on `App`, no
+/// filesystem writes).
+pub use crate::viewmodel::{SPLIT_DEFAULT_FRACTION, clamp_split_fraction, split_apply_drag};
 const SPLIT_HANDLE_W: f32 = 8.0;
 
 // Exquisite geometry tokens (px): every magic offset lives here so
@@ -117,21 +118,6 @@ pub fn half_field_width(avail: f32) -> f32 {
 /// Equal third width for three path fields sharing one row.
 pub fn third_field_width(avail: f32) -> f32 {
     (avail / 3.0).max(MIN_THIRD) - BROWSE_RESERVE
-}
-
-/// Clamp a raw split fraction into the draggable range.
-pub fn clamp_split_fraction(fraction: f32) -> f32 {
-    fraction.clamp(SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION)
-}
-
-/// Drag delta applied to a split fraction: `dx` pixels over `avail`
-/// pixels of travel, then clamped. Non-positive `avail` keeps the
-/// current fraction so headless callers never divide by zero.
-pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
-    if avail <= 0.0 {
-        return clamp_split_fraction(fraction);
-    }
-    clamp_split_fraction(fraction + dx / avail)
 }
 
 /// Split widths for the two path fields at `fraction` of `avail`.
@@ -2739,11 +2725,14 @@ mod tests {
     #[test]
     fn split_fraction_clamps_to_drag_range() {
         assert_eq!(clamp_split_fraction(0.50), 0.50);
-        assert_eq!(clamp_split_fraction(0.0), SPLIT_MIN_FRACTION);
-        assert_eq!(clamp_split_fraction(1.0), SPLIT_MAX_FRACTION);
-        assert_eq!(clamp_split_fraction(-5.0), SPLIT_MIN_FRACTION);
-        assert_eq!(clamp_split_fraction(9.9), SPLIT_MAX_FRACTION);
-        assert_eq!((SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION), (0.20, 0.80));
+        assert_eq!(clamp_split_fraction(0.0), viewmodel::SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(1.0), viewmodel::SPLIT_MAX_FRACTION);
+        assert_eq!(clamp_split_fraction(-5.0), viewmodel::SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(9.9), viewmodel::SPLIT_MAX_FRACTION);
+        assert_eq!(
+            (viewmodel::SPLIT_MIN_FRACTION, viewmodel::SPLIT_MAX_FRACTION),
+            (0.20, 0.80)
+        );
         assert_eq!(SPLIT_DEFAULT_FRACTION, 0.50);
     }
 
@@ -2779,8 +2768,14 @@ mod tests {
     fn split_drag_delta_moves_fraction() {
         assert_eq!(split_apply_drag(0.50, 80.0, 800.0), 0.60);
         assert_eq!(split_apply_drag(0.50, -80.0, 800.0), 0.40);
-        assert_eq!(split_apply_drag(0.50, 800.0, 800.0), SPLIT_MAX_FRACTION);
-        assert_eq!(split_apply_drag(0.50, -800.0, 800.0), SPLIT_MIN_FRACTION);
+        assert_eq!(
+            split_apply_drag(0.50, 800.0, 800.0),
+            viewmodel::SPLIT_MAX_FRACTION
+        );
+        assert_eq!(
+            split_apply_drag(0.50, -800.0, 800.0),
+            viewmodel::SPLIT_MIN_FRACTION
+        );
         assert_eq!(split_apply_drag(0.50, 10.0, 0.0), 0.50);
         assert_eq!(split_apply_drag(0.50, 10.0, -4.0), 0.50);
     }
@@ -3279,7 +3274,7 @@ mod tests {
         // Fraction clamp me rehta hai.
         assert_eq!(
             dual_tree_pane_widths(800.0, 0.0),
-            dual_tree_pane_widths(800.0, SPLIT_MIN_FRACTION)
+            dual_tree_pane_widths(800.0, viewmodel::SPLIT_MIN_FRACTION)
         );
     }
 

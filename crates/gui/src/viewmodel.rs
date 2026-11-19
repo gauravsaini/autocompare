@@ -922,6 +922,38 @@ pub fn picture_pan_drag(
 }
 
 // ----------------------------------------------------------------------------
+// Pane split fraction (headless math; paint + App delegate here)
+// ----------------------------------------------------------------------------
+
+/// Draggable split bounds: left pane share stays inside 20%..=80% so
+/// neither pane collapses; default centers at 50%. Single source for
+/// [`crate::views`] (which re-exports this math so `App` keeps one
+/// path) and the dual-tree/picture width helpers. Per-run state only,
+/// no filesystem writes.
+pub const SPLIT_MIN_FRACTION: f32 = 0.20;
+/// See [`SPLIT_MIN_FRACTION`].
+pub const SPLIT_MAX_FRACTION: f32 = 0.80;
+/// See [`SPLIT_MIN_FRACTION`].
+pub const SPLIT_DEFAULT_FRACTION: f32 = 0.50;
+
+/// Clamp a raw split fraction into the draggable range. Pure;
+/// unit-tested.
+pub fn clamp_split_fraction(fraction: f32) -> f32 {
+    fraction.clamp(SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION)
+}
+
+/// Drag delta applied to a split fraction: `dx` pixels over `avail`
+/// pixels of travel, then clamped. Non-positive `avail` keeps the
+/// current fraction so headless callers never divide by zero. Pure;
+/// unit-tested.
+pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
+    if avail <= 0.0 {
+        return clamp_split_fraction(fraction);
+    }
+    clamp_split_fraction(fraction + dx / avail)
+}
+
+// ----------------------------------------------------------------------------
 // Hex
 // ----------------------------------------------------------------------------
 
@@ -2682,5 +2714,27 @@ mod tests {
             picture_pan_drag(390, 0, 50, 0, 400.0, 300.0, 4096),
             (400, 0)
         );
+    }
+
+    #[test]
+    fn split_fraction_clamps_to_drag_range() {
+        assert_eq!((SPLIT_MIN_FRACTION, SPLIT_MAX_FRACTION), (0.20, 0.80));
+        assert_eq!(SPLIT_DEFAULT_FRACTION, 0.50);
+        assert_eq!(clamp_split_fraction(0.50), 0.50);
+        assert_eq!(clamp_split_fraction(0.0), SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(1.0), SPLIT_MAX_FRACTION);
+        assert_eq!(clamp_split_fraction(-5.0), SPLIT_MIN_FRACTION);
+        assert_eq!(clamp_split_fraction(9.9), SPLIT_MAX_FRACTION);
+    }
+
+    #[test]
+    fn split_drag_delta_moves_fraction() {
+        // Half the travel moves half the fraction, then clamps.
+        assert_eq!(split_apply_drag(0.50, 80.0, 800.0), 0.60);
+        assert_eq!(split_apply_drag(0.50, -400.0, 800.0), SPLIT_MIN_FRACTION);
+        assert_eq!(split_apply_drag(0.50, 400.0, 800.0), SPLIT_MAX_FRACTION);
+        // Non-positive travel keeps the (clamped) current fraction.
+        assert_eq!(split_apply_drag(0.50, 80.0, 0.0), 0.50);
+        assert_eq!(split_apply_drag(9.9, 0.0, 0.0), SPLIT_MAX_FRACTION);
     }
 }
