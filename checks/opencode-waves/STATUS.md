@@ -1013,3 +1013,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - MERGEPICK `d59ce16` per-hunk Take Left/Right/Base/Both buttons with staged intent display — OWNS views.rs (Gap #13 pick half).
 - Verify combined: 364 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AJ (hex-find paint, table/hex find completion, per-hunk decision App wiring, home polish).
+
+## 2026-11-20 — Wave AJ plan (2 parallel: hex-find UI + home polish)
+- AJ-HEXFIND `sess-hexfind-aj`: OWNS views_hex.rs+checks/gui-hexfind-aj (Gap #12 hex find box+N/M; app.rs read-only, no edit).
+- AJ-HOME `sess-home-aj`: OWNS home.rs+app.rs+checks/gui-home-aj (home geometry+typo polish).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
