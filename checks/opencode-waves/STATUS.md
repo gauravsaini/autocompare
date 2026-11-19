@@ -771,3 +771,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - VERIFY f539a04: OWNS clean (REPORT 45 + PNGs + round-O-1 PASS).
 - PAINT 569dcd4 verified+pushed: OWNS clean (app 405 + views 307 + paint-o REPORT 44 + proof). Pagers consumed in hex/table/folder paint, gutter-jump + find-box wiring, 211 green, clippy zero, fmt clean, harness PASS. Orchestrator unblocked 5x set_total (owned files, documented poll 01).
 - All pushed. Wave O complete. Tests 211 green. Next: Wave P release rebuild + local re-run post-paint.
+
+## Wave P plan post-paint release+recheck (2 parallel, disjoint, report-only)
+- P-RELEASE ses-release-p (opencode default): OWNS checks/wave-p-release/**, zero source edits. Release rebuild post-paint (time/size vs 11022272B), --screenshot PNG (vs 9914B), harness round-P-1, workspace tests (vs 43-suites/211-gui), clippy/fmt/layers/secrets. REPORT + commit NO push.
+- P-GAPRECHECK ses-gaprecheck-p (opencode default): OWNS checks/wave-p-gaps/**, zero source edits. BC-window recheck post-paint (BC running): which OPEN/PARTIAL gaps closed by pager-consume + gutter-jump + find wiring; own-words, file:line evidence; remaining OPEN list with owner waves. REPORT + commit NO push.
+- Rules: Hinglish Roman, English conventional NO push, clean-room, STATUS orch-only.
