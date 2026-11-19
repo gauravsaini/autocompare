@@ -765,3 +765,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - RECHECK 971197f landed+pushed? (verify at end): OWNS clean (wave-o-gaps REPORT 41 lines).
 - VERIFY f539a04 landed: release metrics + proof PNGs + REPORT 45 lines, OWNS clean.
 - PAINT +579 (app 308 + views 298) working: hex/table/folder pager wiring + find-box fields + tests (208 green). Orchestrator unblocked 5x set_total->total_rows+clamp_top (PAINT-owned files only, agent circling 6 polls; agent acknowledged green, continued). Remaining: ~13 clippy lints (dead_code/collapsible/let-else/indexing/field_assign) in agent fix-loop. No land yet.
+
+## Wave O poll 02 ALL LANDED wave complete
+- RECHECK 971197f: OWNS clean (wave-o-gaps REPORT 41 lines, FIXED/PARTIAL/OPEN vs Wave N head).
+- VERIFY f539a04: OWNS clean (REPORT 45 + PNGs + round-O-1 PASS).
+- PAINT 569dcd4 verified+pushed: OWNS clean (app 405 + views 307 + paint-o REPORT 44 + proof). Pagers consumed in hex/table/folder paint, gutter-jump + find-box wiring, 211 green, clippy zero, fmt clean, harness PASS. Orchestrator unblocked 5x set_total (owned files, documented poll 01).
+- All pushed. Wave O complete. Tests 211 green. Next: Wave P release rebuild + local re-run post-paint.
