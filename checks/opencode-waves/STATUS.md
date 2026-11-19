@@ -553,3 +553,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 27 dead-code decision
 - A live, diff steady 540. Dead-code lint decision (real-use vs allow) in progress.
 - No commit. Wait.
+
+## Wave I poll 28 trim 536 tests green
+- A live, diff 536 (trimmed), tests 172 green. Clippy views_hex refs read-only (disjoint holds, M only app/main/views).
+- No commit. Wait.
