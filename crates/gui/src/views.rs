@@ -1959,6 +1959,20 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
 /// accents. Counts come from [`viewmodel::filter_counts`] so they stay
 /// honest under any toggle combination.
 pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextViewPrefs) {
+    paint_text_body(ui, model, prefs, None);
+}
+
+/// Find-aware text body: `find` None par plain text view jaisa, Some par
+/// per-match blocks (current = inverted block, others = underline line;
+/// [`FindPaintCtx`] se). Public wrappers (`paint_text_with_prefs` /
+/// `paint_text_with_find`) isi par route karte hain taaki list geometry
+/// ek jagah rahe. Koi naya token/color nahi.
+fn paint_text_body(
+    ui: &mut Ui,
+    model: &mut TextRows,
+    prefs: &TextViewPrefs,
+    find: Option<FindPaintCtx<'_>>,
+) {
     ui.style_mut().wrap_mode = Some(if prefs.word_wrap {
         egui::TextWrapMode::Wrap
     } else {
@@ -2207,22 +2221,51 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                 prefs,
                                 dim: gutter_dim,
                             };
-                            let mut left_jobs = side_jobs_wrapped_with_prefs(
-                                Side::Left,
-                                row,
-                                &layout,
-                                font_id.clone(),
-                                fg,
-                                bg,
-                            );
-                            let mut right_jobs = side_jobs_wrapped_with_prefs(
-                                Side::Right,
-                                row,
-                                &layout,
-                                font_id.clone(),
-                                fg,
-                                bg,
-                            );
+                            let find_row = find.map(|ctx| FindRowPaint {
+                                needle: ctx.needle,
+                                ignore_case: ctx.ignore_case,
+                                is_current: find_is_current_row(orig, ctx.current),
+                            });
+                            let mut left_jobs = if let Some(fr) = find_row {
+                                side_jobs_wrapped_with_find_current(
+                                    Side::Left,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                    fr,
+                                )
+                            } else {
+                                side_jobs_wrapped_with_prefs(
+                                    Side::Left,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                )
+                            };
+                            let mut right_jobs = if let Some(fr) = find_row {
+                                side_jobs_wrapped_with_find_current(
+                                    Side::Right,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                    fr,
+                                )
+                            } else {
+                                side_jobs_wrapped_with_prefs(
+                                    Side::Right,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                )
+                            };
                             while left_jobs.len() < count {
                                 left_jobs.push(wrap_blank_sub_job(
                                     font_id.clone(),
@@ -2341,14 +2384,32 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                     prefs,
                                     dim: gutter_dim,
                                 };
-                                ui.label(side_job_with_prefs(
-                                    Side::Left,
-                                    row,
-                                    &layout,
-                                    font_id.clone(),
-                                    fg,
-                                    bg,
-                                ));
+                                let find_row = find.map(|ctx| FindRowPaint {
+                                    needle: ctx.needle,
+                                    ignore_case: ctx.ignore_case,
+                                    is_current: find_is_current_row(orig, ctx.current),
+                                });
+                                let left_job = if let Some(fr) = find_row {
+                                    side_job_with_prefs_and_find_current(
+                                        Side::Left,
+                                        row,
+                                        &layout,
+                                        font_id.clone(),
+                                        fg,
+                                        bg,
+                                        fr,
+                                    )
+                                } else {
+                                    side_job_with_prefs(
+                                        Side::Left,
+                                        row,
+                                        &layout,
+                                        font_id.clone(),
+                                        fg,
+                                        bg,
+                                    )
+                                };
+                                ui.label(left_job);
 
                                 if row.kind != TextRowKind::Equal {
                                     if ui
@@ -2371,14 +2432,27 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                     ui.label(RichText::new(" | ").monospace().color(gutter_dim));
                                 }
 
-                                ui.label(side_job_with_prefs(
-                                    Side::Right,
-                                    row,
-                                    &layout,
-                                    font_id.clone(),
-                                    fg,
-                                    bg,
-                                ));
+                                let right_job = if let Some(fr) = find_row {
+                                    side_job_with_prefs_and_find_current(
+                                        Side::Right,
+                                        row,
+                                        &layout,
+                                        font_id.clone(),
+                                        fg,
+                                        bg,
+                                        fr,
+                                    )
+                                } else {
+                                    side_job_with_prefs(
+                                        Side::Right,
+                                        row,
+                                        &layout,
+                                        font_id.clone(),
+                                        fg,
+                                        bg,
+                                    )
+                                };
+                                ui.label(right_job);
                                 if scroll_to == Some(orig) {
                                     ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
                                 }
@@ -2554,6 +2628,272 @@ pub fn span_text_format(font_id: FontId, fg: Color32, bg: Color32, accented: boo
     fmt
 }
 
+// ----------------------------------------------------------------------------
+// Text find highlight (AT-FINDHL): current vs others + wrap geometry.
+// Geometry first: find spans char indices me hain (same `normalize_intra_spans`
+// clamp/merge), wrap continuations me `wrap_chunk_spans` reuse se map hote
+// hain — match wrapping geometry `pane_segments`/wrap precedent jaisi hai.
+// Typography second: same mono `FontId` (koi naya size nahi), emphasis sirf
+// block-vs-line se: current = inverted block (no underline), other =
+// underline-only line (no block). Accent precedent (`span_text_format`:
+// inverted + underline) se dono alag hain; find wins over accent jahan
+// overlap ho. Colors frozen: row ke apne `fg/bg` + `INTRA_SPAN_UNDERLINE_W`
+// reuse, koi naya hue/token nahi. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// One find match ka paint kind: plain (koi hit/accent nahi), accent
+/// (syntax intra-span only), other (non-current needle hit), current
+/// (selected row ka needle hit). Find wins over accent jahan overlap ho.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FindHl {
+    /// Koi accent/find nahi — row strip pair as-is.
+    Plain,
+    /// Syntax accent only — `span_text_format(true)` reuse.
+    Accent,
+    /// Non-current needle hit — underline-only line, no block.
+    Other,
+    /// Current row ka needle hit — inverted block, no underline.
+    Current,
+}
+
+/// Per-frame find paint context: needle + case flag + current row.
+/// `paint_text_body` is me `FindState::query/ignore_case` aur
+/// `model.selected` pack karta hai; panes per-row `is_current` nikalte
+/// hain. `Copy` taaki list loop me cheap reuse ho.
+#[derive(Debug, Clone, Copy)]
+pub struct FindPaintCtx<'a> {
+    /// Needle text (`FindState::query` se).
+    pub needle: &'a str,
+    /// Case-insensitive match ho ya nahi.
+    pub ignore_case: bool,
+    /// Current match row (`model.selected` se).
+    pub current: Option<usize>,
+}
+
+/// One row ka find paint input: needle + flag + resolved current flag.
+/// Teen find args ek struct me taaki pane painters argument-count lint
+/// ke andar rahen ([`TextPaneLayout`] precedent). `Copy` taaki list loop
+/// me cheap reuse ho.
+#[derive(Debug, Clone, Copy)]
+pub struct FindRowPaint<'a> {
+    /// Needle text.
+    pub needle: &'a str,
+    /// Case-insensitive match ho ya nahi.
+    pub ignore_case: bool,
+    /// Ye row current-match row hai ya nahi.
+    pub is_current: bool,
+}
+
+/// Line me needle ke char-index spans (half-open `[start, end)`).
+/// Khali needle par khali (koi fake hit nahi). ASCII case-fold
+/// (`to_ascii_lowercase` per char) taaki indices stable rahen — unicode
+/// non-ascii exact rehta hai. Non-overlapping nahi: overlap allow hai
+/// (`"aaa"` me `"aa"` do hits deta hai) taaki paint koi match na chhupaye.
+/// Clamp/merge caller [`normalize_intra_spans`] karta hai (pane geometry
+/// wahi). Pure; unit-tested.
+pub fn find_line_spans(line: &str, needle: &str, ignore_case: bool) -> Vec<(usize, usize)> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let line_chars: Vec<char> = line.chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    let mut nlen = 0usize;
+    for _ in needle_chars.iter() {
+        nlen = nlen.saturating_add(1);
+    }
+    let mut llen = 0usize;
+    for _ in line_chars.iter() {
+        llen = llen.saturating_add(1);
+    }
+    if nlen == 0 || nlen > llen {
+        return Vec::new();
+    }
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut start = 0usize;
+    while start.saturating_add(nlen) <= llen {
+        let mut ok = true;
+        let mut j = 0usize;
+        while j < nlen {
+            let lc = line_chars.get(start.saturating_add(j));
+            let nc = needle_chars.get(j);
+            match (lc, nc) {
+                (Some(l), Some(n)) => {
+                    let same = if ignore_case {
+                        l.eq_ignore_ascii_case(n)
+                    } else {
+                        l == n
+                    };
+                    if !same {
+                        ok = false;
+                        break;
+                    }
+                }
+                _ => {
+                    ok = false;
+                    break;
+                }
+            }
+            j = j.saturating_add(1);
+        }
+        if ok {
+            out.push((start, start.saturating_add(nlen)));
+        }
+        start = start.saturating_add(1);
+    }
+    out
+}
+
+/// Row current-match row hai ya nahi: `Some(row) == current`.
+/// Pure; unit-tested.
+pub fn find_is_current_row(row_idx: usize, current: Option<usize>) -> bool {
+    match current {
+        Some(c) => c == row_idx,
+        None => false,
+    }
+}
+
+/// One find hit ka paint format: same mono `FontId` (size untouched),
+/// row ke apne `fg/bg` reuse. Current = inverted block (no underline),
+/// other = underline-only line (no block) — block-vs-line se clearly
+/// distinct, accent (block + line) se bhi alag. `INTRA_SPAN_UNDERLINE_W`
+/// reuse, koi naya token/color nahi. Pure; unit-tested.
+pub fn find_hit_format(font_id: FontId, fg: Color32, bg: Color32, is_current: bool) -> TextFormat {
+    if is_current {
+        let (color, background) = span_colors(fg, bg, true);
+        let mut fmt = TextFormat::simple(font_id, color);
+        fmt.background = background;
+        fmt
+    } else {
+        let mut fmt = TextFormat::simple(font_id, fg);
+        fmt.background = bg;
+        fmt.underline = Stroke::new(INTRA_SPAN_UNDERLINE_W, fg);
+        fmt
+    }
+}
+
+/// One pane ke find-aware segments: `(text, kind)` list, `pane` chars tak
+/// truncated plus padding — [`pane_segments`] wahi geometry (truncation +
+/// trailing pad). Accent spans syntax-gated hone chahiye (caller
+/// `prefs.syntax_highlight` off par `&[]` de); find spans needle se
+/// nikalte hain. Find wins over accent. Pure; unit-tested.
+pub fn find_pane_segments(
+    line: &str,
+    accent_spans: &[(usize, usize)],
+    needle: &str,
+    ignore_case: bool,
+    is_current: bool,
+    pane: usize,
+) -> Vec<(String, FindHl)> {
+    let line_len = line.chars().count();
+    let accents = normalize_intra_spans(accent_spans, line_len, pane);
+    let find_raw = find_line_spans(line, needle, ignore_case);
+    let finds = normalize_intra_spans(&find_raw, line_len, pane);
+    let mut out: Vec<(String, FindHl)> = Vec::new();
+    let mut current_text = String::new();
+    let mut current_kind = FindHl::Plain;
+    let mut started = false;
+    let mut visible = 0usize;
+    for (idx, ch) in line.chars().enumerate() {
+        if visible >= pane {
+            break;
+        }
+        let in_accent = accents.iter().any(|&(s, e)| idx >= s && idx < e);
+        let in_find = finds.iter().any(|&(s, e)| idx >= s && idx < e);
+        let kind = if in_find {
+            if is_current {
+                FindHl::Current
+            } else {
+                FindHl::Other
+            }
+        } else if in_accent {
+            FindHl::Accent
+        } else {
+            FindHl::Plain
+        };
+        if started && kind != current_kind && !current_text.is_empty() {
+            out.push((std::mem::take(&mut current_text), current_kind));
+        }
+        current_kind = kind;
+        started = true;
+        current_text.push(ch);
+        visible = visible.saturating_add(1);
+    }
+    if started && !current_text.is_empty() {
+        out.push((current_text, current_kind));
+    }
+    if visible < pane {
+        out.push((" ".repeat(pane.saturating_sub(visible)), FindHl::Plain));
+    }
+    out
+}
+
+/// One wrap chunk ke find-aware segments: line-level `accent_raw` /
+/// `find_raw` spans ko [`wrap_chunk_spans`] se chunk-local karke wahi
+/// block-vs-line walk. Caller syntax off par `accent_raw = &[]` de.
+/// `width` chunk paint width hai (caller `wrap_width_for` se). Pure;
+/// unit-tested.
+pub fn find_chunk_segments(
+    chunk: &WrapChunk,
+    accent_raw: &[(usize, usize)],
+    find_raw: &[(usize, usize)],
+    is_current: bool,
+    width: usize,
+) -> Vec<(String, FindHl)> {
+    let accents = wrap_chunk_spans(accent_raw, chunk);
+    let finds = wrap_chunk_spans(find_raw, chunk);
+    let accents = normalize_intra_spans(&accents, chunk.text.chars().count(), width);
+    let finds = normalize_intra_spans(&finds, chunk.text.chars().count(), width);
+    let mut out: Vec<(String, FindHl)> = Vec::new();
+    let mut current_text = String::new();
+    let mut current_kind = FindHl::Plain;
+    let mut started = false;
+    let mut visible = 0usize;
+    for (idx, ch) in chunk.text.chars().enumerate() {
+        if visible >= width {
+            break;
+        }
+        let in_accent = accents.iter().any(|&(s, e)| idx >= s && idx < e);
+        let in_find = finds.iter().any(|&(s, e)| idx >= s && idx < e);
+        let kind = if in_find {
+            if is_current {
+                FindHl::Current
+            } else {
+                FindHl::Other
+            }
+        } else if in_accent {
+            FindHl::Accent
+        } else {
+            FindHl::Plain
+        };
+        if started && kind != current_kind && !current_text.is_empty() {
+            out.push((std::mem::take(&mut current_text), current_kind));
+        }
+        current_kind = kind;
+        started = true;
+        current_text.push(ch);
+        visible = visible.saturating_add(1);
+    }
+    if started && !current_text.is_empty() {
+        out.push((current_text, current_kind));
+    }
+    if visible < width {
+        out.push((" ".repeat(width.saturating_sub(visible)), FindHl::Plain));
+    }
+    out
+}
+
+/// One find segment ka paint format: `Plain`/`Accent` existing
+/// `span_text_format` reuse, `Other`/`Current` [`find_hit_format`] reuse.
+/// Same mono `FontId`, koi naya size/color nahi. Pure; unit-tested.
+pub fn find_segment_format(font_id: FontId, fg: Color32, bg: Color32, kind: FindHl) -> TextFormat {
+    match kind {
+        FindHl::Plain => span_text_format(font_id, fg, bg, false),
+        FindHl::Accent => span_text_format(font_id, fg, bg, true),
+        FindHl::Other => find_hit_format(font_id, fg, bg, false),
+        FindHl::Current => find_hit_format(font_id, fg, bg, true),
+    }
+}
+
 /// One pane of one row honoring `layout`: line numbers blank when off,
 /// accent spans cleared when syntax is off, width from the
 /// prefs-effective `pane_chars`/`gutter_chars`. Counts are untouched:
@@ -2588,6 +2928,59 @@ fn side_job_with_prefs(
             &segment,
             0.0,
             span_text_format(font_id.clone(), fg, bg, accented),
+        );
+    }
+    job
+}
+
+/// Find-aware pane job with explicit current flag: current row par
+/// `find.is_current=true` (inverted block), others par false (underline
+/// line). Paint loop `find_is_current_row` se flag nikalta hai.
+fn side_job_with_prefs_and_find_current(
+    side: Side,
+    row: &TextRow,
+    layout: &TextPaneLayout<'_>,
+    font_id: FontId,
+    fg: Color32,
+    bg: Color32,
+    find: FindRowPaint<'_>,
+) -> LayoutJob {
+    if find.needle.is_empty() {
+        return side_job_with_prefs(side, row, layout, font_id, fg, bg);
+    }
+    let (raw_no, line, raw_spans) = match side {
+        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
+        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    };
+    let accents: &[(usize, usize)] = if layout.prefs.syntax_highlight {
+        raw_spans
+    } else {
+        &[]
+    };
+    let mut job = LayoutJob {
+        keep_trailing_whitespace: true,
+        ..Default::default()
+    };
+    let mut gutter = TextFormat::simple(font_id.clone(), layout.dim);
+    gutter.background = bg;
+    let no = if layout.prefs.show_line_numbers {
+        raw_no
+    } else {
+        None
+    };
+    job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+    for (segment, kind) in find_pane_segments(
+        line,
+        accents,
+        find.needle,
+        find.ignore_case,
+        find.is_current,
+        layout.pane_chars,
+    ) {
+        job.append(
+            &segment,
+            0.0,
+            find_segment_format(font_id.clone(), fg, bg, kind),
         );
     }
     job
@@ -3051,6 +3444,68 @@ fn side_jobs_wrapped_with_prefs(
                 &segment,
                 0.0,
                 span_text_format(font_id.clone(), fg, bg, accented),
+            );
+        }
+        jobs.push(job);
+    }
+    jobs
+}
+
+/// Wrap-on find-aware sub-row jobs: har chunk me `find_chunk_segments`
+/// (chunk-local find mapping) + highlight format. Khali needle par plain
+/// [`side_jobs_wrapped_with_prefs`] jaisa. Continuation gutter/geometry
+/// wahi, koi naya size/color nahi.
+fn side_jobs_wrapped_with_find_current(
+    side: Side,
+    row: &TextRow,
+    layout: &TextPaneLayout<'_>,
+    font_id: FontId,
+    fg: Color32,
+    bg: Color32,
+    find: FindRowPaint<'_>,
+) -> Vec<LayoutJob> {
+    if find.needle.is_empty() {
+        return side_jobs_wrapped_with_prefs(side, row, layout, font_id, fg, bg);
+    }
+    let (raw_no, line, raw_spans) = match side {
+        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
+        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    };
+    let accents: &[(usize, usize)] = if layout.prefs.syntax_highlight {
+        raw_spans
+    } else {
+        &[]
+    };
+    let find_raw = find_line_spans(line, find.needle, find.ignore_case);
+    let width = wrap_width_for(layout.pane_chars, layout.prefs.word_wrap).max(1);
+    let chunks = wrap_chunks(line, width);
+    let mut jobs: Vec<LayoutJob> = Vec::new();
+    let mut first = true;
+    for chunk in chunks.iter() {
+        let mut job = LayoutJob {
+            keep_trailing_whitespace: true,
+            ..Default::default()
+        };
+        let mut gutter = TextFormat::simple(font_id.clone(), layout.dim);
+        gutter.background = bg;
+        if first {
+            let no = if layout.prefs.show_line_numbers {
+                raw_no
+            } else {
+                None
+            };
+            job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+            first = false;
+        } else {
+            job.append(&wrap_continuation_gutter(layout.gutter_chars), 0.0, gutter);
+        }
+        for (segment, kind) in
+            find_chunk_segments(chunk, accents, &find_raw, find.is_current, width)
+        {
+            job.append(
+                &segment,
+                0.0,
+                find_segment_format(font_id.clone(), fg, bg, kind),
             );
         }
         jobs.push(job);
@@ -4494,11 +4949,13 @@ pub fn paint_text_find_state_bar(
     (prev, next)
 }
 
-/// Find-box wired text view: `FindState` bar upar, neeche existing
-/// [`paint_text_with_prefs`]. Har frame `refresh_if_stale` chalata hai
+/// Find-box wired text view: `FindState` bar upar, neeche find-aware
+/// [`paint_text_body`]. Har frame `refresh_if_stale` chalata hai
 /// taaki naya compare stale counts na dikhaye; Prev/Next clicks
 /// [`advance_text_find`] se `model.selected` sync karte hain (wahi
-/// highlight jo F3 diff-nav use karta hai). Prefs/counts behavior
+/// highlight jo F3 diff-nav use karta hai) plus per-match blocks:
+/// current row inverted block, others underline line (existing palette
+/// reuse, wrap continuations samahit). Prefs/counts behavior
 /// `paint_text_with_prefs` jaisa hi hai.
 #[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this
 pub fn paint_text_with_find(
@@ -4512,7 +4969,17 @@ pub fn paint_text_with_find(
     if let Some(row) = advance_text_find(find, find_prev, find_next) {
         model.selected = Some(row);
     }
-    paint_text_with_prefs(ui, model, prefs);
+    // Borrow split: needle copy nikal kar body ko `&str` do (find + model
+    // dono `&mut` nahi ho sakte ek saath).
+    let needle_owned: String = find.query().to_string();
+    let ignore_case: bool = find.ignore_case();
+    let current: Option<usize> = model.selected;
+    let ctx = FindPaintCtx {
+        needle: needle_owned.as_str(),
+        ignore_case,
+        current,
+    };
+    paint_text_body(ui, model, prefs, Some(ctx));
 }
 #[cfg(test)]
 mod tests {
@@ -6186,6 +6653,129 @@ mod tests {
         empty.set_query(&rows, "absent");
         assert_eq!(advance_text_find(&mut empty, false, true), None);
         assert_eq!(advance_text_find(&mut empty, true, false), None);
+    }
+
+    #[test]
+    fn findhl_line_spans_empty_needle_gives_no_hits() {
+        assert!(find_line_spans("hello world", "", false).is_empty());
+        assert!(find_line_spans("hello world", "", true).is_empty());
+        assert!(find_line_spans("", "needle", false).is_empty());
+        assert!(find_line_spans("hi", "hello", false).is_empty());
+    }
+
+    #[test]
+    fn findhl_line_spans_case_modes() {
+        // Case-sensitive: sirf exact lower hit.
+        assert_eq!(
+            find_line_spans("AbC abc", "abc", false),
+            vec![(4usize, 7usize)]
+        );
+        // Ignore-case (ascii-fold): dono hits.
+        assert_eq!(
+            find_line_spans("AbC abc", "abc", true),
+            vec![(0usize, 3usize), (4usize, 7usize)]
+        );
+        // Upper needle bhi fold hota hai.
+        assert_eq!(
+            find_line_spans("abc ABC", "ABC", true),
+            vec![(0usize, 3usize), (4usize, 7usize)]
+        );
+    }
+
+    #[test]
+    fn findhl_line_spans_overlapping_ok() {
+        // Overlap allow: koi match chhupta nahi, sorted rehte hain.
+        assert_eq!(
+            find_line_spans("aaa", "aa", false),
+            vec![(0usize, 2usize), (1usize, 3usize)]
+        );
+        assert_eq!(
+            find_line_spans("hello world", "o w", false),
+            vec![(4usize, 7usize)]
+        );
+    }
+
+    #[test]
+    fn findhl_current_other_formats_differ() {
+        // Same mono size, same row pair reuse — farak sirf block-vs-line.
+        let font = FontId::monospace(12.0);
+        let fg = Color32::WHITE;
+        let bg = Color32::BLACK;
+        let current = find_hit_format(font.clone(), fg, bg, true);
+        let other = find_hit_format(font.clone(), fg, bg, false);
+        // Current inverted block (no underline), other underline line (no block).
+        assert_eq!(current.background, fg);
+        assert_eq!(other.background, bg);
+        assert_eq!(current.underline.width, 0.0);
+        assert_eq!(other.underline.width, INTRA_SPAN_UNDERLINE_W);
+        assert_eq!(current.font_id, other.font_id);
+        // Segment router same baant-ta hai.
+        assert_eq!(
+            find_segment_format(font.clone(), fg, bg, FindHl::Current).background,
+            fg
+        );
+        assert_eq!(
+            find_segment_format(font.clone(), fg, bg, FindHl::Other).background,
+            bg
+        );
+        assert_eq!(
+            find_segment_format(font, fg, bg, FindHl::Plain).background,
+            bg
+        );
+    }
+
+    #[test]
+    fn findhl_wrap_chunks_keep_match() {
+        // Match wrapping geometry: lambi line + chhoti width par match
+        // kisi continuation chunk me `find_chunk_segments` se milta hai.
+        let line = "hi world";
+        let width = 5usize;
+        let chunks = wrap_chunks(line, width);
+        assert!(chunks.len() >= 2);
+        let find_raw = find_line_spans(line, "world", false);
+        assert_eq!(find_raw, vec![(3usize, 8usize)]);
+        let mut seen_current = false;
+        let mut joined = String::new();
+        for chunk in chunks.iter() {
+            for (text, kind) in find_chunk_segments(chunk, &[], &find_raw, true, width) {
+                if kind == FindHl::Current {
+                    seen_current = true;
+                    joined.push_str(&text);
+                }
+            }
+        }
+        assert!(seen_current);
+        assert!(joined.contains("world"));
+    }
+
+    #[test]
+    fn findhl_pane_segments_mark_current_row() {
+        // Current row ke hits Current, others ke Other; find wins over accent.
+        let line = "foo bar foo";
+        let pane = 11usize;
+        let others = find_pane_segments(line, &[], "foo", false, false, pane);
+        assert!(others.iter().any(|(_, k)| *k == FindHl::Other));
+        assert!(!others.iter().any(|(_, k)| *k == FindHl::Current));
+        let currents = find_pane_segments(line, &[], "foo", false, true, pane);
+        assert!(currents.iter().any(|(_, k)| *k == FindHl::Current));
+        assert!(!currents.iter().any(|(_, k)| *k == FindHl::Other));
+        // Geometry wahi: segments ka jod pane text (padding samahit) deta hai.
+        let mut text = String::new();
+        for (seg, _) in currents.iter() {
+            text.push_str(seg);
+        }
+        assert_eq!(text.len(), pane);
+        // Bina needle koi find kind nahi.
+        let plain = find_pane_segments(line, &[], "", false, true, pane);
+        assert!(
+            !plain
+                .iter()
+                .any(|(_, k)| *k == FindHl::Other || *k == FindHl::Current)
+        );
+        // Row-level flag helper.
+        assert!(find_is_current_row(2, Some(2)));
+        assert!(!find_is_current_row(1, Some(2)));
+        assert!(!find_is_current_row(1, None));
     }
 
     #[test]
