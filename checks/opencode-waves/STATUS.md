@@ -868,3 +868,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - PROG `474942d` feat(gui): wire job progress and cancel across compare runs — OWNS app.rs+checks/gui-prog-w (Gap #15). All 9 run paths keep JobHandle, chunk-boundary progress throttled to status bar, cancel honored with channel-reported abort.
 - Verify combined: gui tests 257 green (249 base +8), clippy zero warnings, fmt clean, banned 0, PNG 9914B magic-ok 960x600.
 - Pushed 895671e..474942d. OPEN gaps now #10 PNG glyphs, #19 dual-tree. Next: Wave X.
+
+## 2026-11-20 — Wave X plan (3 parallel: png glyphs + dual-tree + local-run)
+- X-PNG `sess-png-x`: OWNS screenshot.rs+checks/gui-png-x (Gap #10 headless 5x7 kerning).
+- X-TREE `sess-tree-x`: OWNS tree.rs+views.rs+checks/gui-tree-x (Gap #19 dual-tree first step).
+- X-RUN `sess-run-x`: code READ-ONLY, OWNS checks/local-run-x only (local early-feedback run + exquisite-geometry findings).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
