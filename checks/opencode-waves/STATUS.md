@@ -249,3 +249,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - ses-int-exq PID 22935: views.rs+home.rs+checks/gui-int, apply TypoRole in paint, geometry frozen, colors out.
 - ses-rel-exq PID 22936: checks/local-run+release-smoke only, release build + screenshot + report, no source.
 - Default model, Hinglish Roman, NO push by agents.
+
+## Wave F poll 01 reading
+- Both live 22935/22936. INT reading views/home/app, gui-int dir absent expected to create. REL reading workspace, release check starting. No diff yet.
