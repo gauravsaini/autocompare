@@ -754,3 +754,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Pre-existing fmt drift fixed (compare lib import order + binary.rs + diff table.rs/tests, fmt-only, no logic change).
 - Verify: 43 suites 0 failed, gui 204 green, clippy workspace zero, fmt clean, layers ok, secrets ok, release 11022272B, PNG 9914B magic ok distinct 256, harness round-N-1 PASS.
 - Committed feat(gui) wiring + proof. Wave N complete. Next: gap recheck vs BC window + remaining paint work.
+
+## Wave O plan gaps-recheck+paint-consume+verify (3 parallel, disjoint)
+- O-RECHECK ses-gaps-recheck-O (opencode default, report-only): OWNS checks/wave-o-gaps/**, zero source edits. Re-check local-run-exq 15 gaps + local-run-l gap table + parity-m F1-F5 vs HEAD post-integration: FIXED/PARTIAL/OPEN with file:line evidence. Commit NO push.
+- O-PAINT ses-paint-o (opencode default): OWNS views.rs+app.rs+checks/gui-paint-o/**. Consume pagers in paint (HexPager/TablePager/RowPager next/prev/bring_into_view in scroll paths; gutter-jump + find-box into input handlers). Smallest diff, gates, REPORT. Commit NO push.
+- O-VERIFY ses-verify-o (opencode default, report-only): OWNS checks/wave-o-verify/**, zero source edits. Release rebuild + harness + workspace tests + clippy/fmt + PNG metrics vs baselines (204/11022272B/9914B). Commit NO push.
+- Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
