@@ -4647,13 +4647,40 @@ pub fn folder_sync_selected_line(
     )
 }
 
-/// Sync adoption grid: glyph + direction badge + path/sides, click se
-/// selection toggle, neeche selected summary line. [`paint_folder`] ka
-/// sync judvaan; purani signatures untouched (KEVL `app.rs` call sites
-/// na tooten — App rewiring orchestrator ke paas pending). Geometry:
-/// wahi header/page/grid rhythm; typography: badge/summary mono
-/// caption mapping; colors frozen.
-#[allow(dead_code)] // App rewiring baad me; tab tak pending painter (dual precedent)
+/// Sync preview modes the mode radio offers, in paint order:
+/// Update Both first, Mirror second. Picture tab ke `PictureMode::all`
+/// jaisa ek source of truth taaki radio aur App wiring kabhi alag na
+/// hon. Pure; unit-tested.
+pub fn sync_mode_choices() -> [crate::tree::SyncModeChoice; 2] {
+    use crate::tree::SyncModeChoice;
+    [SyncModeChoice::UpdateBoth, SyncModeChoice::Mirror]
+}
+
+/// Sync preview mode radio row (Update Both / Mirror), picture tab ke
+/// mode radio (`paint_picture_compare`) wala precedent: local pick par
+/// `radio_value`, badlaav caller par wapas. Caller
+/// [`crate::app::App::set_folder_sync_mode`] se wire kare taaki mode
+/// switch consent reset kare. Returns the picked mode. Colors frozen.
+pub fn paint_sync_mode_row(
+    ui: &mut Ui,
+    mode: crate::tree::SyncModeChoice,
+) -> crate::tree::SyncModeChoice {
+    let mut picked = mode;
+    ui.horizontal(|ui| {
+        ui.label(TypoRole::Small.rich("Mode:"));
+        for candidate in sync_mode_choices() {
+            ui.radio_value(&mut picked, candidate, candidate.label());
+        }
+    });
+    picked
+}
+
+/// Sync adoption grid: mode radio + glyph + direction badge + path/sides,
+/// click se selection toggle, neeche selected summary line.
+/// [`paint_folder`] ka sync judvaan. Returns the picked preview mode;
+/// caller ise [`crate::app::App::set_folder_sync_mode`] se wire kare
+/// (consent reset samet). Geometry: wahi header/page/grid rhythm;
+/// typography: badge/summary mono caption mapping; colors frozen.
 pub fn paint_folder_sync(
     ui: &mut Ui,
     rows: &[FolderRow],
@@ -4662,12 +4689,14 @@ pub fn paint_folder_sync(
     selection: &mut crate::tree::FolderSyncSelection,
     expanded: &mut std::collections::BTreeSet<String>,
     pager: &mut crate::tree::RowPager,
-) {
+) -> crate::tree::SyncModeChoice {
     ui.label(chrome_status_role().rich(summary));
+    ui.add_space(TIGHT_GAP);
+    let picked = paint_sync_mode_row(ui, mode);
     ui.add_space(TIGHT_GAP);
     if rows.is_empty() {
         ui.label(RichText::new("(both folders are empty)").weak());
-        return;
+        return picked;
     }
     let tree_nodes = viewmodel::folder_tree(rows, expanded);
     pager.total_rows = tree_nodes.len();
@@ -4751,9 +4780,9 @@ pub fn paint_folder_sync(
                                 .monospace()
                                 .color(glyph_color(&node.row, dark)),
                         );
-                        let direction = crate::tree::sync_direction_for_row(&node.row, mode);
+                        let direction = crate::tree::sync_direction_for_row(&node.row, picked);
                         ui.label(sync_badge_rich(
-                            sync_badge_for_paint(&node.row, mode),
+                            sync_badge_for_paint(&node.row, picked),
                             direction,
                         ));
                         // Path column (flex): depth indent +
@@ -4810,8 +4839,9 @@ pub fn paint_folder_sync(
     // Selected summary: real counts, khali par explicit zero line.
     ui.add_space(TIGHT_GAP);
     ui.label(sync_summary_rich(
-        folder_sync_selected_line(rows, mode, selection).as_str(),
+        folder_sync_selected_line(rows, picked, selection).as_str(),
     ));
+    picked
 }
 
 // ----------------------------------------------------------------------------
@@ -7277,6 +7307,19 @@ mod tests {
         assert!(folder_paint_empty_hint_full_rows(&rows, 0, &display).contains("all same"));
         let display = crate::tree::FolderDisplay::default();
         assert_eq!(folder_paint_empty_hint_full_rows(&rows, 1, &display), "");
+    }
+
+    #[test]
+    fn sync_mode_choices_offer_update_both_first_then_mirror() {
+        use crate::tree::SyncModeChoice;
+        let choices = sync_mode_choices();
+        assert_eq!(choices.len(), 2);
+        assert_eq!(
+            choices,
+            [SyncModeChoice::UpdateBoth, SyncModeChoice::Mirror]
+        );
+        assert_eq!(choices[0].label(), "Update Both");
+        assert_eq!(choices[1].label(), "Mirror");
     }
 
     #[test]

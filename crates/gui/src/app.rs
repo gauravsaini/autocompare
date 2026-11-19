@@ -2896,6 +2896,21 @@ impl App {
         };
     }
 
+    /// Whether Sync-tab Apply may run now: the one shared gate behind
+    /// both Apply paths. Folder side reads
+    /// [`App::folder_can_apply`] (`can_apply_now`: consented + steps);
+    /// Sync side reads this (confirmed + checked left->right copies) —
+    /// same shape, same [`sync_apply_enabled`] core. Pure;
+    /// headless-tested.
+    pub fn sync_tab_can_apply(&self) -> bool {
+        match self.sync_model.as_ref() {
+            Some(list) => {
+                sync_apply_enabled(self.sync_confirmed, list.copy_right_plan().steps.len())
+            }
+            None => false,
+        }
+    }
+
     /// Sync-tab Apply entry point (Gap #8, Sync checklist side).
     /// Dry-run counts checked left->right copies and writes nothing;
     /// a confirmed non-dry-run run plans nothing new — it converts the
@@ -4968,16 +4983,16 @@ impl eframe::App for App {
                             self.folder_expanded =
                                 self.folder_session.expanded.clone();
                         }
-                        // Sync badges + selection (BI-S1 wiring): live
-                        // Folder view me paint_folder_sync, mode +
-                        // selection + expanded + pager ke saath taaki
-                        // badge/selection dikhe. Mode radios neeche
-                        // preview section me rehte hain.
+                        // Sync badges + selection + mode (BI-S1/S2 wiring):
+                        // live Folder view me paint_folder_sync — mode radio
+                        // paint ke andar hai, pick wapas App me
+                        // set_folder_sync_mode se judta hai (consent reset
+                        // samet) taaki grid + preview ek mode par rahen.
                         if self.folder_model.is_some() {
                             let sync_rows = self.folder_dual_rows();
                             let sync_summary = self.folder_counts_summary();
                             let sync_mode = self.folder_session.sync_mode;
-                            {
+                            let picked = {
                                 let selection = &mut self.folder_sync_selection;
                                 let expanded = &mut self.folder_session.expanded;
                                 let pager = &mut self.folder_pager;
@@ -4989,33 +5004,19 @@ impl eframe::App for App {
                                     selection,
                                     expanded,
                                     pager,
-                                );
-                            }
+                                )
+                            };
                             self.folder_expanded =
                                 self.folder_session.expanded.clone();
+                            if picked != self.folder_session.sync_mode {
+                                self.set_folder_sync_mode(picked);
+                            }
                         }
-                        // Sync preview: mode select, dry-run options,
-                        // consent gate, Apply button.
+                        // Sync preview: dry-run options, consent gate,
+                        // Apply button (mode radio grid paint ke andar hai).
                         ui.add_space(views::TIGHT_GAP);
                         ui.separator();
                         ui.label(RichText::new("Sync preview (dry-run)").strong());
-                        let mode = self.folder_session.sync_mode;
-                        ui.horizontal(|ui| {
-                            let mut next = mode;
-                            ui.radio_value(
-                                &mut next,
-                                tree::SyncModeChoice::UpdateBoth,
-                                tree::SyncModeChoice::UpdateBoth.label(),
-                            );
-                            ui.radio_value(
-                                &mut next,
-                                tree::SyncModeChoice::Mirror,
-                                tree::SyncModeChoice::Mirror.label(),
-                            );
-                            if next != mode {
-                                self.set_folder_sync_mode(next);
-                            }
-                        });
                         ui.label(
                             RichText::new(self.folder_sync_options_label()).small().weak(),
                         );
@@ -5358,13 +5359,6 @@ impl eframe::App for App {
                         self.set_sync_dry_run(dry_run);
                     }
                     let mut confirmed = self.sync_confirmed;
-                    ui.checkbox(&mut confirmed, "I understand Apply copies files left->right");
-                    if confirmed != self.sync_confirmed {
-                        self.set_sync_confirmed(confirmed);
-                    }
-                    if let Some(report) = self.sync_last_report.clone() {
-                        ui.label(RichText::new(report).monospace().small().weak());
-                    }
                     let (copy_steps, checked_total) = match self.sync_model.as_ref() {
                         Some(list) => (
                             list.copy_right_plan().steps.len(),
@@ -5372,6 +5366,20 @@ impl eframe::App for App {
                         ),
                         None => (0, 0),
                     };
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut confirmed, "I understand Apply copies files left->right");
+                        ui.label(
+                            RichText::new(home::sync_consent_hint(confirmed, copy_steps))
+                                .small()
+                                .weak(),
+                        );
+                    });
+                    if confirmed != self.sync_confirmed {
+                        self.set_sync_confirmed(confirmed);
+                    }
+                    if let Some(report) = self.sync_last_report.clone() {
+                        ui.label(RichText::new(report).monospace().small().weak());
+                    }
                     ui.label(
                         RichText::new(format!(
                             "{copy_steps} of {checked_total} checked step(s) are left->right copies"
@@ -5380,7 +5388,7 @@ impl eframe::App for App {
                         .weak(),
                     );
                     let apply = ui.add_enabled(
-                        sync_apply_enabled(self.sync_confirmed, copy_steps),
+                        self.sync_tab_can_apply(),
                         egui::Button::new("Apply checked copies"),
                     );
                     if apply.clicked() {
@@ -7234,6 +7242,23 @@ mod tests {
             "unexpected: {}",
             sync_dry_run_summary(1, 2)
         );
+        // BI-S3 shared gate: Sync tab button reads sync_tab_can_apply,
+        // Folder tab reads folder_can_apply — dono ek shape ke gate.
+        let mut app = App::default();
+        assert!(!app.sync_tab_can_apply());
+        app.sync_model = Some(SyncChecklist::from_plan(&sync_plan_fixture()));
+        assert!(!app.sync_tab_can_apply());
+        app.set_sync_confirmed(true);
+        assert!(app.sync_tab_can_apply());
+        app.set_sync_confirmed(false);
+        assert!(!app.sync_tab_can_apply());
+        // Checked copy hate hi gate band, consent rehne par bhi.
+        app.set_sync_confirmed(true);
+        let Some(list) = app.sync_model.as_mut() else {
+            return;
+        };
+        list.set_all(false);
+        assert!(!app.sync_tab_can_apply());
         assert!(sync_dry_run_summary(0, 0).contains("0 of 0"));
     }
 
