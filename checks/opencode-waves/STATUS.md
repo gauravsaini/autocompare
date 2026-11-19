@@ -557,3 +557,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 28 trim 536 tests green
 - A live, diff 536 (trimmed), tests 172 green. Clippy views_hex refs read-only (disjoint holds, M only app/main/views).
 - No commit. Wait.
+
+## Wave I poll 29 status plumbing
+- A live, diff steady 536. Table summary default + hex over-cap view + status line plumbing.
+- No commit. Wait.
