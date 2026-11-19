@@ -416,3 +416,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 08 hex file harness done
 - All 3 live. B wrote crates/gui/src/views_hex.rs untracked (views_table + REPORT + patch next). A harness done: after.png 9914B, tests 123 green (+1 vs 122 baseline, likely C theme test), REPORT + commit next. C gutter expanded (22 lines token application), theme 115, still OWNS.
 - No agent commits yet. Verify tests/clippy/fmt + OWNS at land time.
+
+## Wave H poll 09 both views written
+- All 3 live. B both files untracked (views_hex + views_table), REPORT + INTEGRATION.patch + gates next. C M tree too (14 lines), total 151+/15- across theme/gutter/tree, OWNS ok. A tests 123 green, REPORT + commit next.
+- No agent commits yet. Wait.
