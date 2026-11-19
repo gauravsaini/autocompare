@@ -1198,3 +1198,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TABLECELL `02c7a65` pure cell-geometry rects + key boxes + find underlines + wiring spec P1-P4 — OWNS views_table.rs.
 - Verify combined: 559 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AZ (table Grid paint wiring in views.rs per P1-P4 + folder empty-hint variant).
+
+## 2026-11-20 — Wave AZ plan (2 parallel: table Grid wiring + empty-hint variant)
+- AZ-TABLEWIRE `sess-tablewire-az`: OWNS views.rs+checks/gui-tablewire-az (apply AY wiring spec P1-P4 from checks/gui-tablecell-ay/REPORT.md §spec).
+- AZ-EMPTYHINT `sess-emptyhint-az`: OWNS tree.rs+checks/gui-emptyhint-az (filter-specific empty variant; AX2 §10.5).
+- Agents commit locally, NO push (push karna MANA hai — orchestrator karega). Orchestrator verifies then pushes.
