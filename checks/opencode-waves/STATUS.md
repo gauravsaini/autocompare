@@ -315,3 +315,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 07 color measuring
 - COLOR live 01:58, DIM_LIGHT fails dark (1.2/1.23/2.5) OK light (6.49). Token fix pending, no diff yet.
+
+## Wave G poll 08 color matrix
+- COLOR live 02:13, DIM_DARK matrix done (DARK_BG 5.82 OK others fail). Measuring before editing, no diff yet.
