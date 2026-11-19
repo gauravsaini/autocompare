@@ -2142,27 +2142,63 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     let mut copy_action = None;
     let mut select_action = None;
 
+    // Wrap-on list state (G1..G4): flat width plus per-visible-row visual
+    // heights. Wrap-off path inhe nahi chhoota (byte-identical else).
+    let wrap_on = prefs.word_wrap;
+    let wrap_width = wrap_width_for(pane_chars, prefs.word_wrap).max(1);
+    let mut wrap_counts: Vec<usize> = Vec::new();
+    if wrap_on {
+        let mut vi = 0usize;
+        while vi < visible.len() {
+            if let Some(orig) = visible.get(vi).copied()
+                && let Some(row) = model.rows.get(orig)
+            {
+                wrap_counts.push(wrap_pane_pair_count(&row.left, &row.right, wrap_width));
+            } else {
+                wrap_counts.push(1);
+            }
+            vi = vi.saturating_add(1);
+        }
+        debug_assert!(wrap_total_visual(&wrap_counts) >= visible.len());
+    }
+
     ui.horizontal(|ui| {
         // Main diff scroll area
         ui.vertical(|ui| {
-            egui::ScrollArea::both()
-                .auto_shrink([false, false])
-                .show_rows(ui, row_height, visible.len(), |ui, range| {
-                    for vis_pos in range {
-                        let Some(orig) = visible.get(vis_pos).copied() else {
-                            continue;
-                        };
-                        let Some(row) = model.rows.get(orig) else {
-                            continue;
-                        };
-                        ui.set_row_height(row_height);
-                        let is_selected = model.selected == Some(orig);
-                        ui.horizontal(|ui| {
-                            if is_selected {
-                                ui.label(RichText::new("▶").monospace().strong());
-                            } else if ui.small_button("·").clicked() {
-                                select_action = Some(orig);
+            if wrap_on {
+                // Wrap-on: variable-height manual list (G4). Har model row
+                // apne visual count tak failta hai (left/right me jo bada,
+                // chhota blank filler se); pehli sub-row number gutter plus
+                // actions rakhti hai, continuations blank gutter ke saath
+                // indent carry karti hain (G2). Har sub-row ek hi
+                // `row_height_for_line` rhythm par hai, poori row
+                // `wrap_reserved_height` reserve karti hai; scroll/mapping
+                // `wrap_model_to_visual_start` plus `wrap_visual_to_model`
+                // invariant se guarded hai (G3). Typo second: continuation
+                // plain mono, wahi `span_text_format` (T1); koi naya size,
+                // weight, hue ya token nahi (T2, colors frozen).
+                egui::ScrollArea::both()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let mut vis_pos = 0usize;
+                        while vis_pos < visible.len() {
+                            let Some(orig) = visible.get(vis_pos).copied() else {
+                                vis_pos = vis_pos.saturating_add(1);
+                                continue;
+                            };
+                            let Some(row) = model.rows.get(orig) else {
+                                vis_pos = vis_pos.saturating_add(1);
+                                continue;
+                            };
+                            let count = wrap_counts.get(vis_pos).copied().unwrap_or(1).max(1);
+                            if let Some(vstart) = wrap_model_to_visual_start(&wrap_counts, vis_pos)
+                            {
+                                debug_assert_eq!(
+                                    wrap_visual_to_model(&wrap_counts, vstart),
+                                    Some((vis_pos, 0))
+                                );
                             }
+                            let is_selected = model.selected == Some(orig);
                             let (fg, bg) = kind_palette(row.kind, base_text);
                             let bg = if is_selected { CHANGED_BG } else { bg };
                             let layout = TextPaneLayout {
@@ -2171,50 +2207,185 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
                                 prefs,
                                 dim: gutter_dim,
                             };
-                            ui.label(side_job_with_prefs(
+                            let mut left_jobs = side_jobs_wrapped_with_prefs(
                                 Side::Left,
                                 row,
                                 &layout,
                                 font_id.clone(),
                                 fg,
                                 bg,
-                            ));
-
-                            if row.kind != TextRowKind::Equal {
-                                if ui
-                                    .small_button("→")
-                                    .on_hover_text("Copy Left to Right")
-                                    .clicked()
-                                {
-                                    copy_action =
-                                        Some((orig, viewmodel::CopyDirection::LeftToRight));
-                                }
-                                if ui
-                                    .small_button("←")
-                                    .on_hover_text("Copy Right to Left")
-                                    .clicked()
-                                {
-                                    copy_action =
-                                        Some((orig, viewmodel::CopyDirection::RightToLeft));
-                                }
-                            } else {
-                                ui.label(RichText::new(" | ").monospace().color(gutter_dim));
-                            }
-
-                            ui.label(side_job_with_prefs(
+                            );
+                            let mut right_jobs = side_jobs_wrapped_with_prefs(
                                 Side::Right,
                                 row,
                                 &layout,
                                 font_id.clone(),
                                 fg,
                                 bg,
-                            ));
-                            if scroll_to == Some(orig) {
-                                ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
+                            );
+                            while left_jobs.len() < count {
+                                left_jobs.push(wrap_blank_sub_job(
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                    gutter_dim,
+                                    gutter_chars,
+                                    wrap_width,
+                                ));
                             }
-                        });
-                    }
-                });
+                            while right_jobs.len() < count {
+                                right_jobs.push(wrap_blank_sub_job(
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                    gutter_dim,
+                                    gutter_chars,
+                                    wrap_width,
+                                ));
+                            }
+                            let mut pairs = left_jobs.into_iter().zip(right_jobs);
+                            let mut sub = 0usize;
+                            while sub < count {
+                                let Some((left_job, right_job)) = pairs.next() else {
+                                    break;
+                                };
+                                ui.set_row_height(wrap_reserved_height(1, row_height));
+                                if sub == 0 {
+                                    ui.horizontal(|ui| {
+                                        if is_selected {
+                                            ui.label(RichText::new("▶").monospace().strong());
+                                        } else if ui.small_button("·").clicked() {
+                                            select_action = Some(orig);
+                                        }
+                                        ui.label(left_job);
+                                        if row.kind != TextRowKind::Equal {
+                                            if ui
+                                                .small_button("→")
+                                                .on_hover_text("Copy Left to Right")
+                                                .clicked()
+                                            {
+                                                copy_action = Some((
+                                                    orig,
+                                                    viewmodel::CopyDirection::LeftToRight,
+                                                ));
+                                            }
+                                            if ui
+                                                .small_button("←")
+                                                .on_hover_text("Copy Right to Left")
+                                                .clicked()
+                                            {
+                                                copy_action = Some((
+                                                    orig,
+                                                    viewmodel::CopyDirection::RightToLeft,
+                                                ));
+                                            }
+                                        } else {
+                                            ui.label(
+                                                RichText::new(" | ").monospace().color(gutter_dim),
+                                            );
+                                        }
+                                        ui.label(right_job);
+                                        let do_scroll = scroll_to == Some(orig)
+                                            && wrap_model_to_visual_start(&wrap_counts, vis_pos)
+                                                .is_some();
+                                        if do_scroll {
+                                            ui.scroll_to_rect(
+                                                ui.min_rect(),
+                                                Some(egui::Align::Center),
+                                            );
+                                        }
+                                    });
+                                } else {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            RichText::new(CONTENT_LEAD)
+                                                .monospace()
+                                                .color(gutter_dim),
+                                        );
+                                        ui.label(left_job);
+                                        ui.label(
+                                            RichText::new(" | ").monospace().color(gutter_dim),
+                                        );
+                                        ui.label(right_job);
+                                    });
+                                }
+                                sub = sub.saturating_add(1);
+                            }
+                            vis_pos = vis_pos.saturating_add(1);
+                        }
+                    });
+            } else {
+                egui::ScrollArea::both()
+                    .auto_shrink([false, false])
+                    .show_rows(ui, row_height, visible.len(), |ui, range| {
+                        for vis_pos in range {
+                            let Some(orig) = visible.get(vis_pos).copied() else {
+                                continue;
+                            };
+                            let Some(row) = model.rows.get(orig) else {
+                                continue;
+                            };
+                            ui.set_row_height(row_height);
+                            let is_selected = model.selected == Some(orig);
+                            ui.horizontal(|ui| {
+                                if is_selected {
+                                    ui.label(RichText::new("▶").monospace().strong());
+                                } else if ui.small_button("·").clicked() {
+                                    select_action = Some(orig);
+                                }
+                                let (fg, bg) = kind_palette(row.kind, base_text);
+                                let bg = if is_selected { CHANGED_BG } else { bg };
+                                let layout = TextPaneLayout {
+                                    pane_chars,
+                                    gutter_chars,
+                                    prefs,
+                                    dim: gutter_dim,
+                                };
+                                ui.label(side_job_with_prefs(
+                                    Side::Left,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                ));
+
+                                if row.kind != TextRowKind::Equal {
+                                    if ui
+                                        .small_button("→")
+                                        .on_hover_text("Copy Left to Right")
+                                        .clicked()
+                                    {
+                                        copy_action =
+                                            Some((orig, viewmodel::CopyDirection::LeftToRight));
+                                    }
+                                    if ui
+                                        .small_button("←")
+                                        .on_hover_text("Copy Right to Left")
+                                        .clicked()
+                                    {
+                                        copy_action =
+                                            Some((orig, viewmodel::CopyDirection::RightToLeft));
+                                    }
+                                } else {
+                                    ui.label(RichText::new(" | ").monospace().color(gutter_dim));
+                                }
+
+                                ui.label(side_job_with_prefs(
+                                    Side::Right,
+                                    row,
+                                    &layout,
+                                    font_id.clone(),
+                                    fg,
+                                    bg,
+                                ));
+                                if scroll_to == Some(orig) {
+                                    ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
+                                }
+                            });
+                        }
+                    });
+            }
         });
 
         // Thumbnail overview gutter on the right; narrows when line
@@ -2491,6 +2662,424 @@ fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(Stri
         out.push((" ".repeat(pane - visible), false));
     }
     out
+}
+
+// ----------------------------------------------------------------------------
+// Word-wrap parity (AQ-WRAP): wrapped line paint.
+//
+// Geometry first: wrap width (80-char cap reuse), indent continuity
+// (continuations carry the leading indent, blank gutter keeps the column),
+// row mapping (model row <-> flat visual index for the virtualized list).
+// Typography second: continuations paint plain mono — same `FontId`, no
+// strong, no new size; accent inversion + 1px underline rule unchanged
+// (`span_text_format` reuse). Colors frozen: koi naya hue/token nahi.
+// `word_wrap` state read-only use hota hai (cap/mapping me), toggle khud
+// KEVL `viewmodel.rs` me rehta hai (untouched).
+// ----------------------------------------------------------------------------
+
+/// Wrap width panes paint at: wrap on par 80-char cap
+/// (`TYPO_WRAP_PANE_CHARS` reuse, [`effective_pane_chars_for`] jaisa),
+/// wrap off par full pass-through. Pure; unit-tested.
+pub fn wrap_width_for(pane_chars: usize, word_wrap: bool) -> usize {
+    if word_wrap {
+        pane_chars.min(crate::theme::TYPO_WRAP_PANE_CHARS)
+    } else {
+        pane_chars
+    }
+}
+
+/// Leading indent (spaces/tabs) jo continuation lines carry karti hain.
+/// Sirf line-start blanks; beech ke blanks nahi. Pure; unit-tested.
+pub fn wrap_leading_indent(line: &str) -> String {
+    let mut out = String::new();
+    for ch in line.chars() {
+        if ch == ' ' || ch == '\t' {
+            out.push(ch);
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// One wrapped visual chunk: text plus original-line coords taaki accent
+/// spans shift ho saken. Pehle chunk ka `indent` 0 hai, continuations ka
+/// leading-indent length hai (prefix text me shamil hai).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrapChunk {
+    /// Paint text (continuations me indent prefix samahit).
+    pub text: String,
+    /// Original line me content slice ka char offset.
+    pub start: usize,
+    /// Content slice ki char length (indent prefix excluded).
+    pub len: usize,
+    /// Continuation indent prefix ki char length (pehle 0).
+    pub indent: usize,
+}
+
+/// Break point (chars) `budget` ke andar: aakhri blank (space/tab) ke
+/// baad toot-ta hai, blank na mile to hard cut. Hamesha `>= 1` taaki
+/// paint aage badhe. Pure (no egui).
+fn wrap_break_at(chars: &[char], budget: usize) -> usize {
+    let max = chars.len().min(budget).max(1);
+    let mut scan = max;
+    loop {
+        match chars.get(scan.saturating_sub(1)) {
+            Some(c) if *c == ' ' || *c == '\t' => {
+                return scan;
+            }
+            _ => {}
+        }
+        if scan <= 1 {
+            break;
+        }
+        scan = scan.saturating_sub(1);
+    }
+    max
+}
+
+/// Degenerate wrap (indent hi width se lamba): hard cuts bina indent ke,
+/// taaki progress ruke nahi. `width >= 1` caller guarantee karta hai.
+/// Pure (no egui).
+fn wrap_hard_cuts(line: &str, width: usize) -> Vec<WrapChunk> {
+    let mut out: Vec<WrapChunk> = Vec::new();
+    let mut start = 0usize;
+    let mut cur = String::new();
+    let mut n = 0usize;
+    for ch in line.chars() {
+        cur.push(ch);
+        n = n.saturating_add(1);
+        if n >= width {
+            out.push(WrapChunk {
+                text: std::mem::take(&mut cur),
+                start,
+                len: n,
+                indent: 0,
+            });
+            start = start.saturating_add(n);
+            n = 0;
+        }
+    }
+    if n > 0 || out.is_empty() {
+        out.push(WrapChunk {
+            text: cur,
+            start,
+            len: n,
+            indent: 0,
+        });
+    }
+    out
+}
+
+/// One line ke wrapped visual chunks (at most `width` chars each):
+/// word-aware (blank par toot-ta hai), continuations leading indent
+/// carry karti hain, consumed break blanks gir jate hain. `width == 0`
+/// guard single-chunk deta hai (koi clip/loop nahi). Pure; unit-tested.
+pub fn wrap_chunks(line: &str, width: usize) -> Vec<WrapChunk> {
+    if width == 0 {
+        return vec![WrapChunk {
+            text: line.to_string(),
+            start: 0,
+            len: line.chars().count(),
+            indent: 0,
+        }];
+    }
+    let total = line.chars().count();
+    if total <= width {
+        return vec![WrapChunk {
+            text: line.to_string(),
+            start: 0,
+            len: total,
+            indent: 0,
+        }];
+    }
+    let indent = wrap_leading_indent(line);
+    let indent_len = indent.chars().count();
+    if indent_len >= width {
+        return wrap_hard_cuts(line, width);
+    }
+    let mut out: Vec<WrapChunk> = Vec::new();
+    let mut rest: Vec<char> = line.chars().collect();
+    let mut start = 0usize;
+    let mut first = true;
+    loop {
+        let budget = if first {
+            width
+        } else {
+            width.saturating_sub(indent_len)
+        };
+        if rest.len() <= budget {
+            break;
+        }
+        let cut = wrap_break_at(rest.as_slice(), budget)
+            .min(rest.len())
+            .max(1);
+        let tail = rest.split_off(cut);
+        let mut piece: String = rest.into_iter().collect();
+        while piece.ends_with(' ') || piece.ends_with('\t') {
+            piece.pop();
+        }
+        let content_len = piece.chars().count();
+        if first {
+            out.push(WrapChunk {
+                text: piece,
+                start,
+                len: content_len,
+                indent: 0,
+            });
+            first = false;
+        } else {
+            let mut text = indent.clone();
+            text.push_str(&piece);
+            out.push(WrapChunk {
+                text,
+                start,
+                len: content_len,
+                indent: indent_len,
+            });
+        }
+        start = start.saturating_add(cut);
+        let mut next: Vec<char> = Vec::new();
+        let mut dropped = 0usize;
+        let mut stripping = true;
+        for ch in tail {
+            if stripping && (ch == ' ' || ch == '\t') {
+                dropped = dropped.saturating_add(1);
+                continue;
+            }
+            stripping = false;
+            next.push(ch);
+        }
+        start = start.saturating_add(dropped);
+        rest = next;
+        if rest.is_empty() {
+            break;
+        }
+    }
+    let last: String = rest.into_iter().collect();
+    if !last.is_empty() || out.is_empty() {
+        let last_len = last.chars().count();
+        if first {
+            out.push(WrapChunk {
+                text: last,
+                start,
+                len: last_len,
+                indent: 0,
+            });
+        } else {
+            let mut text = indent.clone();
+            text.push_str(&last);
+            out.push(WrapChunk {
+                text,
+                start,
+                len: last_len,
+                indent: indent_len,
+            });
+        }
+    }
+    out
+}
+
+/// One line ki wrapped paint strings (chunk text, indent samahit).
+/// [`wrap_chunks`] ka text view; row mapping/count isi par chalta hai.
+/// Pure; unit-tested.
+pub fn wrap_visual_lines(line: &str, width: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for chunk in wrap_chunks(line, width) {
+        out.push(chunk.text);
+    }
+    out
+}
+
+/// One line ke visual sub-rows ki ginati (hamesha `>= 1`).
+/// List virtualization isi se apni heights nikalta hai. Pure; unit-tested.
+pub fn wrap_visual_count(line: &str, width: usize) -> usize {
+    wrap_visual_lines(line, width).len().max(1)
+}
+
+/// Dono panes ka visual height: left/right me jo bada, kam se kam 1.
+/// Chhote side ke missing sub-rows blank filler paint karte hain taaki
+/// columns aligned rahen. Pure; unit-tested.
+pub fn wrap_pane_pair_count(left: &str, right: &str, width: usize) -> usize {
+    wrap_visual_count(left, width)
+        .max(wrap_visual_count(right, width))
+        .max(1)
+}
+
+/// Raw accent spans ka chunk-local view: `[start, start+len)` intersect,
+/// chunk origin par shift plus indent prefix offset. Bahar ke spans gir
+/// jate hain. [`pane_segments`] isi ko normalize karta hai. Pure;
+/// unit-tested.
+pub fn wrap_chunk_spans(spans: &[(usize, usize)], chunk: &WrapChunk) -> Vec<(usize, usize)> {
+    let end = chunk.start.saturating_add(chunk.len);
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    for pair in spans {
+        let (s, e) = (pair.0, pair.1);
+        if e <= chunk.start || s >= end {
+            continue;
+        }
+        let cs = if s > chunk.start {
+            s.saturating_sub(chunk.start)
+        } else {
+            0
+        };
+        let ce = if e < end {
+            e.saturating_sub(chunk.start)
+        } else {
+            chunk.len
+        };
+        if ce > cs {
+            out.push((
+                cs.saturating_add(chunk.indent),
+                ce.saturating_add(chunk.indent),
+            ));
+        }
+    }
+    out
+}
+
+/// Flat visual index ko (visible-row position, sub-row) me badalta hai.
+/// `counts` har visible row ka visual height hai
+/// ([`wrap_pane_pair_count`] se). Bahar par `None`. Pure; unit-tested.
+pub fn wrap_visual_to_model(counts: &[usize], visual: usize) -> Option<(usize, usize)> {
+    let mut base = 0usize;
+    let mut idx = 0usize;
+    while idx < counts.len() {
+        let mut height = 0usize;
+        if let Some(c) = counts.get(idx) {
+            height = *c;
+        }
+        if visual >= base && visual < base.saturating_add(height) {
+            return Some((idx, visual.saturating_sub(base)));
+        }
+        base = base.saturating_add(height);
+        idx = idx.saturating_add(1);
+    }
+    None
+}
+
+/// Model (visible) row ka flat visual offset: us row ka pehla sub-row.
+/// Bahar par `None`. Pure; unit-tested.
+pub fn wrap_model_to_visual_start(counts: &[usize], row: usize) -> Option<usize> {
+    counts.get(row)?;
+    let mut base = 0usize;
+    let mut idx = 0usize;
+    while idx < row {
+        if let Some(c) = counts.get(idx) {
+            base = base.saturating_add(*c);
+        }
+        idx = idx.saturating_add(1);
+    }
+    Some(base)
+}
+
+/// Kul flat visual rows (virtualized list ki length). Pure; unit-tested.
+pub fn wrap_total_visual(counts: &[usize]) -> usize {
+    let mut total = 0usize;
+    for c in counts {
+        total = total.saturating_add(*c);
+    }
+    total
+}
+
+/// Reserved paint height for one model row in wrap mode: `visual_count`
+/// sub-rows, har ek [`row_height_for_line`] rhythm par. Wrap-off single
+/// `row_height` rakhta hai; wrap-on `count` rhythms stack karta hai taaki
+/// selection strip continuous lage. Non-finite/zero input pass-through
+/// (paint kabhi NaN layout me nahi bhejta). Pure; unit-tested.
+pub fn wrap_reserved_height(visual_count: usize, row_height: f32) -> f32 {
+    if row_height.is_finite() && row_height > 0.0 {
+        row_height * visual_count.max(1) as f32
+    } else {
+        row_height
+    }
+}
+
+/// Continuation gutter: number column blank par same width
+/// ([`gutter_text`] `None` shape) — column rhythm nahi toot-ta.
+/// Pure; unit-tested.
+pub fn wrap_continuation_gutter(gutter_chars: usize) -> String {
+    gutter_text(None, gutter_chars)
+}
+
+/// One pane ke wrapped sub-row jobs: har chunk ek `LayoutJob` (gutter +
+/// padded segments, [`span_text_format`] reuse — continuation plain mono,
+/// koi naya size/weight nahi). Pehle chunk me number gutter, baad me
+/// blank continuation gutter. Hamesha `>= 1` job. (No egui context
+/// banata nahi — caller ka `font_id` reuse hota hai.)
+fn side_jobs_wrapped_with_prefs(
+    side: Side,
+    row: &TextRow,
+    layout: &TextPaneLayout<'_>,
+    font_id: FontId,
+    fg: Color32,
+    bg: Color32,
+) -> Vec<LayoutJob> {
+    let (raw_no, line, raw_spans) = match side {
+        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
+        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    };
+    let width = wrap_width_for(layout.pane_chars, layout.prefs.word_wrap).max(1);
+    let chunks = wrap_chunks(line, width);
+    let mut jobs: Vec<LayoutJob> = Vec::new();
+    let mut first = true;
+    for chunk in chunks.iter() {
+        let spans = if layout.prefs.syntax_highlight {
+            wrap_chunk_spans(raw_spans, chunk)
+        } else {
+            Vec::new()
+        };
+        let mut job = LayoutJob {
+            keep_trailing_whitespace: true,
+            ..Default::default()
+        };
+        let mut gutter = TextFormat::simple(font_id.clone(), layout.dim);
+        gutter.background = bg;
+        if first {
+            let no = if layout.prefs.show_line_numbers {
+                raw_no
+            } else {
+                None
+            };
+            job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+            first = false;
+        } else {
+            job.append(&wrap_continuation_gutter(layout.gutter_chars), 0.0, gutter);
+        }
+        for (segment, accented) in pane_segments(&chunk.text, &spans, width) {
+            job.append(
+                &segment,
+                0.0,
+                span_text_format(font_id.clone(), fg, bg, accented),
+            );
+        }
+        jobs.push(job);
+    }
+    jobs
+}
+
+/// Chhote side ke missing sub-rows ka blank filler: blank continuation
+/// gutter plus `width` blanks, same strip `bg` — columns aligned rahen,
+/// selection strip continuous lage. Pure paint helper (caller font reuse).
+fn wrap_blank_sub_job(
+    font_id: FontId,
+    fg: Color32,
+    bg: Color32,
+    dim: Color32,
+    gutter_chars: usize,
+    width: usize,
+) -> LayoutJob {
+    let mut job = LayoutJob {
+        keep_trailing_whitespace: true,
+        ..Default::default()
+    };
+    let mut gutter = TextFormat::simple(font_id.clone(), dim);
+    gutter.background = bg;
+    job.append(&wrap_continuation_gutter(gutter_chars), 0.0, gutter);
+    let mut body = TextFormat::simple(font_id, fg);
+    body.background = bg;
+    job.append(&" ".repeat(width), 0.0, body);
+    job
 }
 
 // ----------------------------------------------------------------------------
@@ -5723,5 +6312,187 @@ mod tests {
             line,
             Some("wrote 4 line(s) -> out.txt (1/2 decided, 1 pending)".to_string())
         );
+    }
+
+    #[test]
+    fn wrap_width_on_caps_at_80_off_passes_through() {
+        assert_eq!(wrap_width_for(200, true), 80);
+        assert_eq!(
+            wrap_width_for(200, true),
+            crate::theme::TYPO_WRAP_PANE_CHARS
+        );
+        assert_eq!(wrap_width_for(40, true), 40);
+        assert_eq!(wrap_width_for(200, false), 200);
+        assert_eq!(wrap_width_for(80, false), 80);
+    }
+
+    #[test]
+    fn wrap_leading_indent_takes_only_line_start_blanks() {
+        assert_eq!(wrap_leading_indent("    code"), "    ");
+        assert_eq!(wrap_leading_indent("\t\tcode"), "\t\t");
+        assert_eq!(wrap_leading_indent(" \t code"), " \t ");
+        assert_eq!(wrap_leading_indent("code"), "");
+        assert_eq!(wrap_leading_indent(""), "");
+        assert_eq!(wrap_leading_indent("  mid dle"), "  ");
+    }
+
+    #[test]
+    fn wrap_visual_lines_short_single_and_zero_width_guard() {
+        assert_eq!(wrap_visual_lines("hi", 80), vec!["hi".to_string()]);
+        assert_eq!(wrap_visual_lines("", 80), vec![String::new()]);
+        assert_eq!(wrap_visual_lines("abcdef", 0), vec!["abcdef".to_string()]);
+    }
+
+    #[test]
+    fn wrap_visual_lines_prefers_word_boundary_with_indent_continuity() {
+        let lines = wrap_visual_lines("    alpha beta gamma delta", 12);
+        assert!(lines.len() >= 2);
+        let Some(first) = lines.first() else {
+            return;
+        };
+        assert!(first.starts_with("    alpha"), "unexpected first: {first}");
+        let mut idx = 1usize;
+        while idx < lines.len() {
+            if let Some(line) = lines.get(idx) {
+                assert!(line.starts_with("    "), "continuation gaps indent: {line}");
+            }
+            idx = idx.saturating_add(1);
+        }
+        let hard = wrap_visual_lines("abcdefghij", 4);
+        assert_eq!(
+            hard,
+            vec!["abcd".to_string(), "efgh".to_string(), "ij".to_string()]
+        );
+    }
+
+    #[test]
+    fn wrap_counts_pair_total_stay_honest() {
+        assert_eq!(wrap_visual_count("hi", 80), 1);
+        assert!(wrap_visual_count(&"x".repeat(200), 80) > 1);
+        assert_eq!(wrap_visual_count("", 80), 1);
+        let long = "hello world this is a long line for wrap";
+        assert_eq!(
+            wrap_pane_pair_count("hi", long, 8),
+            wrap_visual_count(long, 8)
+        );
+        assert_eq!(wrap_pane_pair_count("a", "b", 80), 1);
+        assert_eq!(wrap_total_visual(&[1, 3, 2]), 6);
+        assert_eq!(wrap_total_visual(&[]), 0);
+    }
+
+    #[test]
+    fn wrap_row_mapping_roundtrips_and_rejects_oob() {
+        let counts = vec![1, 3, 2];
+        assert_eq!(wrap_visual_to_model(&counts, 0), Some((0, 0)));
+        assert_eq!(wrap_visual_to_model(&counts, 1), Some((1, 0)));
+        assert_eq!(wrap_visual_to_model(&counts, 3), Some((1, 2)));
+        assert_eq!(wrap_visual_to_model(&counts, 4), Some((2, 0)));
+        assert_eq!(wrap_visual_to_model(&counts, 6), None);
+        assert_eq!(wrap_model_to_visual_start(&counts, 0), Some(0));
+        assert_eq!(wrap_model_to_visual_start(&counts, 1), Some(1));
+        assert_eq!(wrap_model_to_visual_start(&counts, 2), Some(4));
+        assert_eq!(wrap_model_to_visual_start(&counts, 3), None);
+        assert_eq!(wrap_model_to_visual_start(&[], 0), None);
+        let total = wrap_total_visual(&counts);
+        assert_eq!(total, 6);
+        let mut v = 0usize;
+        while v < total {
+            assert!(wrap_visual_to_model(&counts, v).is_some());
+            if let Some((row, sub)) = wrap_visual_to_model(&counts, v) {
+                assert_eq!(
+                    wrap_model_to_visual_start(&counts, row),
+                    Some(v.saturating_sub(sub))
+                );
+            }
+            v = v.saturating_add(1);
+        }
+    }
+
+    #[test]
+    fn wrap_chunk_spans_shift_with_indent_and_clip() {
+        let chunks = wrap_chunks("    alpha beta gamma", 12);
+        assert!(chunks.len() >= 2);
+        let Some(first) = chunks.first() else {
+            return;
+        };
+        let Some(second) = chunks.get(1) else {
+            return;
+        };
+        assert_eq!(second.indent, 4);
+        assert_eq!(wrap_chunk_spans(&[(4, 9)], first), vec![(4, 9)]);
+        assert!(wrap_chunk_spans(&[(4, 9)], second).is_empty());
+        assert_eq!(wrap_chunk_spans(&[(7, 12)], first), vec![(7, 9)]);
+        assert_eq!(wrap_chunk_spans(&[(7, 12)], second), vec![(4, 6)]);
+    }
+
+    #[test]
+    fn wrap_reserved_height_stacks_single_rhythm() {
+        assert_eq!(wrap_reserved_height(1, 16.0), 16.0);
+        assert_eq!(wrap_reserved_height(3, 16.0), 48.0);
+        assert_eq!(wrap_reserved_height(0, 16.0), 16.0);
+        assert_eq!(wrap_reserved_height(2, 0.0), 0.0);
+        assert!(wrap_reserved_height(2, f32::NAN).is_nan());
+        assert_eq!(wrap_reserved_height(2, row_height_for_line(14.0)), 32.0);
+    }
+
+    #[test]
+    fn wrap_continuation_gutter_keeps_column_rhythm() {
+        assert_eq!(wrap_continuation_gutter(4), gutter_text(None, 4));
+        assert_eq!(wrap_continuation_gutter(4), "     ");
+        assert_eq!(wrap_continuation_gutter(1), "  ");
+    }
+
+    #[test]
+    fn wrap_jobs_first_numbered_continuations_plain_mono() {
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(1),
+            right_no: None,
+            left: "    alpha beta gamma delta epsilon zeta ".repeat(3),
+            ..TextRow::default()
+        };
+        let prefs = TextViewPrefs {
+            word_wrap: true,
+            ..TextViewPrefs::default()
+        };
+        let layout = TextPaneLayout {
+            pane_chars: 80,
+            gutter_chars: 4,
+            prefs: &prefs,
+            dim: crate::theme::DARK_DIM,
+        };
+        let jobs = side_jobs_wrapped_with_prefs(
+            Side::Left,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        assert!(jobs.len() > 1);
+        let Some(first) = jobs.first() else {
+            return;
+        };
+        assert!(
+            first.text.starts_with("   1 "),
+            "unexpected head: {}",
+            first.text
+        );
+        let mut idx = 1usize;
+        while idx < jobs.len() {
+            if let Some(job) = jobs.get(idx) {
+                assert!(
+                    job.text.starts_with("     "),
+                    "continuation gaps gutter: {}",
+                    job.text
+                );
+            }
+            idx = idx.saturating_add(1);
+        }
+        for job in jobs.iter() {
+            for section in job.sections.iter() {
+                assert_eq!(section.format.font_id.size, 12.0);
+            }
+        }
     }
 }
