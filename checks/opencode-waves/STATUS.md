@@ -68,3 +68,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Folder: 90 tests green + clippy done — land imminent.
 - Shell: own-file warnings check running, build recovering.
 - Diff +1889/-23 across 6 files, banned-pattern scan CLEAN.
+
+## Poll 12
+- Folder errors down to 2 (was 21/16) — almost through shared-crate breakage.
+- Shell writing REPORT, land imminent. Text retrying views.rs edit after oldString mismatch.
+- No land commits yet.
