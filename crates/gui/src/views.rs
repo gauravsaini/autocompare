@@ -11,6 +11,8 @@
 //! row must read the same in light and dark mode, so its colors carry
 //! their own contrast.
 
+#![forbid(unsafe_code)]
+
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
     self, Color32, FontId, RichText, Stroke, TextEdit, TextFormat, TextureHandle, Ui,
@@ -24,7 +26,7 @@ use crate::app::{
 use crate::gutter::{gutter_bar_width_for_font, gutter_jump_target, gutter_y_for_row};
 use crate::home::{home_card_button_size, home_card_desc_is_small_weak, home_card_title_size};
 use crate::theme::{
-    ACCENT_FG, CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
+    CHANGED_BG, CHANGED_FG, DELETED_BG, DELETED_FG, ERROR_BG, INSERTED_BG, INSERTED_FG,
     TYPO_MONO_SIZE, blue_for, dim_for, green_for, red_for, track_for,
 };
 use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
@@ -1475,6 +1477,14 @@ pub struct TextPaneLayout<'a> {
     pub dim: Color32,
 }
 
+/// (text, background) for one pane segment: plain passes the row
+/// strip pair through, accented inverts it so the span paints as a
+/// distinct block over the full-row strip. Row ke apne frozen pair
+/// ka reuse — koi naya hue/token nahi. Pure; unit-tested.
+fn span_colors(fg: Color32, bg: Color32, accented: bool) -> (Color32, Color32) {
+    if accented { (bg, fg) } else { (fg, bg) }
+}
+
 /// One pane of one row honoring `layout`: line numbers blank when off,
 /// accent spans cleared when syntax is off, width from the
 /// prefs-effective `pane_chars`/`gutter_chars`. Counts are untouched:
@@ -1505,11 +1515,11 @@ fn side_job_with_prefs(
     job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
     for (segment, accented) in prefs_pane_segments(line, raw_spans, layout.pane_chars, layout.prefs)
     {
-        let mut fmt = TextFormat::simple(font_id.clone(), fg);
-        fmt.background = bg;
+        let (color, background) = span_colors(fg, bg, accented);
+        let mut fmt = TextFormat::simple(font_id.clone(), color);
+        fmt.background = background;
         if accented {
-            fmt.color = ACCENT_FG;
-            fmt.underline = Stroke::new(1.0, ACCENT_FG);
+            fmt.underline = Stroke::new(1.0, color);
         }
         job.append(&segment, 0.0, fmt);
     }
@@ -2696,6 +2706,57 @@ mod tests {
             Color32::BLACK,
         );
         assert_eq!(blank.text, "         ");
+    }
+
+    #[test]
+    fn span_colors_inverts_accent_over_row_strip() {
+        let fg = Color32::WHITE;
+        let bg = Color32::BLACK;
+        // Plain passes the row strip pair through.
+        assert_eq!(span_colors(fg, bg, false), (fg, bg));
+        // Accented inverts it: distinct block over the strip.
+        assert_eq!(span_colors(fg, bg, true), (bg, fg));
+    }
+
+    #[test]
+    fn side_job_accents_paint_inverted_block_over_strip() {
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(1),
+            right_no: None,
+            left: "ab".to_string(),
+            right: String::new(),
+            accent_a: vec![(1, 2)],
+            accent_b: Vec::new(),
+        };
+        let shown = TextViewPrefs::default();
+        let layout = TextPaneLayout {
+            pane_chars: 4,
+            gutter_chars: 4,
+            prefs: &shown,
+            dim: crate::theme::DARK_DIM,
+        };
+        let fg = Color32::WHITE;
+        let bg = Color32::BLACK;
+        let job = side_job_with_prefs(Side::Left, &row, &layout, FontId::monospace(12.0), fg, bg);
+        // Gutter + plain "a" + accented "b" + padding.
+        assert_eq!(job.sections.len(), 4);
+        // (text, background, underlined) for body sections past the
+        // gutter: plain passes the strip pair through, accented
+        // inverts it into a distinct block with underline kept.
+        let body: Vec<(Color32, Color32, bool)> = job
+            .sections
+            .iter()
+            .skip(1)
+            .map(|s| {
+                (
+                    s.format.color,
+                    s.format.background,
+                    s.format.underline != Stroke::NONE,
+                )
+            })
+            .collect();
+        assert_eq!(body, vec![(fg, bg, false), (bg, fg, true), (fg, bg, false)]);
     }
 
     #[test]
