@@ -614,3 +614,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 09 C landed A respawned
 - C b96a414 verified+pushed (OWNS clean, honest mid-flight FAIL notes). B live (app 105, models adding).
 - A ses-cleanup-j 8 polls no edits (954 out tokens) — respawned ses-cleanup-j2 with slice-1 micro-scope (2 items + commit). Old session abandoned (no files touched, no conflict).
+
+## Wave J poll 10 both writing disjoint holds
+- A2 views_hex 22 lines (first cleanup edits). B app 947 lines (picture/media section). M app(B)+hex(A2), no overlap. Both mid-red transitional (bin-only learnings).
+- No commits. Wait.
