@@ -5622,6 +5622,168 @@ pub fn paint_folder_merge_checklist(ui: &mut Ui, list: &mut FolderMergeChecklist
     );
 }
 
+// ----------------------------------------------------------------------------
+// Three-way tree paint (BI-M2 paint half; FolderMerge tab wiring next wave).
+// Bahar se dekha teen taraf ka faisla ek ped me dikhta hai: har path par
+// base/left/right maujoodgi, conflict par Take Left/Base/Right, header me
+// honest progress. Model reuse read-only hai
+// (`crate::tree::three_way_tree_rows` + `is_three_way_conflict` +
+// `three_way_tree_summary`); decisions `ThreeWayDecision` staged list me
+// rehte hain (last-wins, [`stage_three_way_decision`]). Geometry/typo
+// existing tokens me hai (TIGHT_GAP spacing, status role header, mono
+// rows, small weak notes), colors frozen palette only.
+// ----------------------------------------------------------------------------
+
+/// Base/left/right presence marks: maujood side ka akshar, gayab par `-`
+/// (`"BLR"`, `"B-R"`, `"-L-"`). Fixed 3-char, mono me paint hota hai.
+/// Pure; unit-tested.
+pub fn three_way_presence_marks(row: &crate::tree::ThreeWayTreeRow) -> String {
+    let base = if row.has_base { 'B' } else { '-' };
+    let left = if row.has_left { 'L' } else { '-' };
+    let right = if row.has_right { 'R' } else { '-' };
+    format!("{base}{left}{right}")
+}
+
+/// Ek three-way row ki paint-ready path line: relative path plus dir par
+/// `/` mark (folder checklist precedent). Pure; unit-tested.
+pub fn three_way_row_line(row: &crate::tree::ThreeWayTreeRow) -> String {
+    if row.is_dir {
+        format!("{}/", row.rel_path)
+    } else {
+        row.rel_path.clone()
+    }
+}
+
+/// Staged decisions me `rel_path` ki aakhri staged side; unknown par `None`.
+/// Duplicate picks me aakhri staged jeetti hai
+/// (`three_way_tree_summary` dedup rule). Pure; unit-tested.
+pub fn three_way_decision_for_row(
+    decisions: &[crate::tree::ThreeWayDecision],
+    rel_path: &str,
+) -> Option<crate::tree::ThreeWaySide> {
+    let mut found = None;
+    for decision in decisions {
+        if decision.rel_path == rel_path {
+            found = Some(decision.side);
+        }
+    }
+    found
+}
+
+/// Ek decision stage karta hai: same path ki purani pick overwrite hoti hai
+/// (aakhri jeetti hai), naya path judta hai. Summary dedup rule ka
+/// paint-side mirror. Pure; unit-tested.
+pub fn stage_three_way_decision(
+    decisions: &[crate::tree::ThreeWayDecision],
+    rel_path: &str,
+    side: crate::tree::ThreeWaySide,
+) -> Vec<crate::tree::ThreeWayDecision> {
+    let mut out: Vec<crate::tree::ThreeWayDecision> = Vec::new();
+    for decision in decisions {
+        if decision.rel_path != rel_path {
+            out.push(decision.clone());
+        }
+    }
+    out.push(crate::tree::ThreeWayDecision {
+        rel_path: rel_path.to_string(),
+        side,
+    });
+    out
+}
+
+/// Ek row ka decision display: staged pick ho to "take <side>" intent,
+/// conflict par honest pending, clean par "clean". Pure; unit-tested.
+pub fn three_way_row_decision_text(
+    conflict: bool,
+    decided: Option<crate::tree::ThreeWaySide>,
+) -> String {
+    match decided {
+        Some(side) => side.label().to_lowercase(),
+        None if conflict => "needs a decision".to_string(),
+        None => "clean".to_string(),
+    }
+}
+
+/// Header progress line: rows + decisions par honest summary
+/// (`three_way_tree_summary().summary_line()` reuse). Pure; unit-tested.
+pub fn three_way_header_line(
+    rows: &[crate::tree::ThreeWayTreeRow],
+    decisions: &[crate::tree::ThreeWayDecision],
+) -> String {
+    crate::tree::three_way_tree_summary(rows, decisions).summary_line()
+}
+
+/// The three-way tree: header me summary line, har row par presence marks,
+/// path aur decision display; conflict rows par real Take Left, Take Base aur
+/// Take Right buttons (koi stub nahi). Click staged decisions me jata hai
+/// (model rows untouched); FolderMerge tab wiring agli wave ka hai.
+#[allow(dead_code)] // FolderMerge tab rewiring baad me; tab tak pending painter
+pub fn paint_three_way_tree(
+    ui: &mut Ui,
+    rows: &[crate::tree::ThreeWayTreeRow],
+    decisions: &mut Vec<crate::tree::ThreeWayDecision>,
+) {
+    ui.label(chrome_status_role().rich(three_way_header_line(rows, decisions)));
+    ui.add_space(TIGHT_GAP);
+    if rows.is_empty() {
+        ui.label(RichText::new("(nothing to merge: all three snapshots are empty)").weak());
+        return;
+    }
+    let dark = ui.visuals().dark_mode;
+    let mut pending: Vec<(String, crate::tree::ThreeWaySide)> = Vec::new();
+    for row in rows {
+        let conflict = crate::tree::is_three_way_conflict(row);
+        let decided = three_way_decision_for_row(decisions, row.rel_path.as_str());
+        let mut chosen: Option<crate::tree::ThreeWaySide> = None;
+        ui.horizontal(|ui| {
+            let marks = three_way_presence_marks(row);
+            let mark_color = if conflict {
+                red_for(dark)
+            } else {
+                dim_for(dark)
+            };
+            ui.label(RichText::new(marks).monospace().color(mark_color));
+            ui.label(RichText::new(three_way_row_line(row)).monospace());
+            let text = three_way_row_decision_text(conflict, decided);
+            if conflict && decided.is_none() {
+                ui.label(RichText::new(text).small().color(red_for(dark)));
+            } else {
+                ui.label(RichText::new(text).small().weak());
+            }
+        });
+        if conflict {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Take:").small().weak());
+                if ui
+                    .small_button(crate::tree::ThreeWaySide::Left.label())
+                    .clicked()
+                {
+                    chosen = Some(crate::tree::ThreeWaySide::Left);
+                }
+                if ui
+                    .small_button(crate::tree::ThreeWaySide::Base.label())
+                    .clicked()
+                {
+                    chosen = Some(crate::tree::ThreeWaySide::Base);
+                }
+                if ui
+                    .small_button(crate::tree::ThreeWaySide::Right.label())
+                    .clicked()
+                {
+                    chosen = Some(crate::tree::ThreeWaySide::Right);
+                }
+            });
+            ui.add_space(TIGHT_GAP);
+        }
+        if let Some(side) = chosen {
+            pending.push((row.rel_path.clone(), side));
+        }
+    }
+    for (path, side) in pending {
+        *decisions = stage_three_way_decision(decisions, path.as_str(), side);
+    }
+}
+
 /// Paint-ready text of one audio row: label plus detail. Pure;
 /// unit-tested.
 pub fn audio_row_text(kind: AudioCheckKind, label: &str, detail: &str) -> String {
@@ -9098,5 +9260,150 @@ mod tests {
             }
         }
         assert!(hit_subs > 0);
+    }
+
+    #[test]
+    fn three_way_presence_marks_cover_sides() {
+        use crate::tree::ThreeWayTreeRow;
+        let full = ThreeWayTreeRow {
+            rel_path: "a.txt".to_string(),
+            is_dir: false,
+            has_base: true,
+            has_left: true,
+            has_right: true,
+        };
+        assert_eq!(three_way_presence_marks(&full), "BLR");
+        let missing_left = ThreeWayTreeRow {
+            rel_path: "b.txt".to_string(),
+            is_dir: false,
+            has_base: true,
+            has_left: false,
+            has_right: true,
+        };
+        assert_eq!(three_way_presence_marks(&missing_left), "B-R");
+        let left_only = ThreeWayTreeRow {
+            rel_path: "c.txt".to_string(),
+            is_dir: false,
+            has_base: false,
+            has_left: true,
+            has_right: false,
+        };
+        assert_eq!(three_way_presence_marks(&left_only), "-L-");
+    }
+
+    #[test]
+    fn three_way_row_line_marks_dirs() {
+        use crate::tree::ThreeWayTreeRow;
+        let file = ThreeWayTreeRow {
+            rel_path: "a/b.txt".to_string(),
+            is_dir: false,
+            has_base: true,
+            has_left: true,
+            has_right: true,
+        };
+        assert_eq!(three_way_row_line(&file), "a/b.txt");
+        let dir = ThreeWayTreeRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            has_base: true,
+            has_left: true,
+            has_right: false,
+        };
+        assert_eq!(three_way_row_line(&dir), "src/");
+    }
+
+    #[test]
+    fn three_way_decision_for_row_returns_last_staged() {
+        use crate::tree::{ThreeWayDecision, ThreeWaySide};
+        let decisions = vec![
+            ThreeWayDecision {
+                rel_path: "del.txt".to_string(),
+                side: ThreeWaySide::Left,
+            },
+            ThreeWayDecision {
+                rel_path: "del.txt".to_string(),
+                side: ThreeWaySide::Right,
+            },
+        ];
+        assert_eq!(
+            three_way_decision_for_row(&decisions, "del.txt"),
+            Some(ThreeWaySide::Right)
+        );
+        assert_eq!(three_way_decision_for_row(&decisions, "ghost.txt"), None);
+        let empty: Vec<ThreeWayDecision> = Vec::new();
+        assert_eq!(three_way_decision_for_row(&empty, "del.txt"), None);
+    }
+
+    #[test]
+    fn stage_three_way_decision_upserts_last_wins() {
+        use crate::tree::{ThreeWayDecision, ThreeWaySide};
+        let empty: Vec<ThreeWayDecision> = Vec::new();
+        let one = stage_three_way_decision(&empty, "del.txt", ThreeWaySide::Left);
+        assert_eq!(one.len(), 1);
+        let two = stage_three_way_decision(&one, "keep.txt", ThreeWaySide::Base);
+        assert_eq!(two.len(), 2);
+        // Same path overwrite: ek hi rehta hai, aakhri jeetta hai.
+        let over = stage_three_way_decision(&two, "del.txt", ThreeWaySide::Right);
+        assert_eq!(over.len(), 2);
+        assert_eq!(
+            three_way_decision_for_row(&over, "del.txt"),
+            Some(ThreeWaySide::Right)
+        );
+        assert_eq!(
+            three_way_decision_for_row(&over, "keep.txt"),
+            Some(ThreeWaySide::Base)
+        );
+    }
+
+    #[test]
+    fn three_way_row_decision_text_covers_states() {
+        use crate::tree::ThreeWaySide;
+        assert_eq!(
+            three_way_row_decision_text(true, None),
+            "needs a decision".to_string()
+        );
+        assert_eq!(
+            three_way_row_decision_text(false, None),
+            "clean".to_string()
+        );
+        assert_eq!(
+            three_way_row_decision_text(true, Some(ThreeWaySide::Left)),
+            "take left".to_string()
+        );
+        assert_eq!(
+            three_way_row_decision_text(false, Some(ThreeWaySide::Base)),
+            "take base".to_string()
+        );
+        assert_eq!(
+            three_way_row_decision_text(true, Some(ThreeWaySide::Right)),
+            "take right".to_string()
+        );
+    }
+
+    #[test]
+    fn three_way_header_line_uses_summary() {
+        use crate::tree::{ThreeWaySide, three_way_tree_rows};
+        use crate::viewmodel::FolderRow;
+        let snapshot = |path: &str| FolderRow {
+            rel_path: path.to_string(),
+            is_dir: false,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        };
+        let base = vec![snapshot("keep.txt"), snapshot("del.txt")];
+        let left = vec![snapshot("keep.txt")];
+        let right = vec![snapshot("keep.txt"), snapshot("del.txt")];
+        let rows = three_way_tree_rows(&base, &left, &right);
+        let header = three_way_header_line(&rows, &[]);
+        assert!(header.contains("1 conflict(s)"));
+        assert!(header.contains("(unresolved)"));
+        let decided = stage_three_way_decision(&[], "del.txt", ThreeWaySide::Right);
+        let resolved = three_way_header_line(&rows, &decided);
+        assert!(!resolved.contains("(unresolved)"));
+        assert!(resolved.contains("1 decided"));
     }
 }
