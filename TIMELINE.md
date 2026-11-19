@@ -1,5 +1,22 @@
 # TIMELINE
 
+## UPDATED ON : 2026-11-20
+
+### Feature (2026-11-20) — Wave-3: CLI reports+VCS flags, GUI Home+gutter+screenshot
+
+1. **Scope**: `leaf-3.1` extended `autocompare-cli` with `--report <fmt:path>` (html/text/xml/patch via `autocompare-reports`), bcomp VCS compat flags (`-ro`, `-automerge`, `-mergeoutput`, `-vcs1..4`), strict exit codes 0/1/2; `leaf-3.2` extended `autocompare-gui` with Home View, 9 tabs, pure `gutter_geometry`/`apply_copy`/`resolve_take`/`folder_tree`/`theme_contrast_ok` headless fns, rfd native dialogs, drag-drop, Dark/Light themes, and `--screenshot` PNG writer. Both leaves built in parallel under disjoint OWNS with Microsoft Rust guidelines enforced (Result errors, Debug+Display, no meta-design docs, hand-computed test truths).
+2. **Tests** (before → after): CLI 0 → 20 integration tests (exit codes + reports on all 9 sessions + bcomp + session + error paths) with harness `RESULT: PASS` 10/10; GUI 0 → 57 headless view-model tests + valid 9KB screenshot PNG; workspace 43 suites ok, `clippy -D warnings` clean, `xtask layers/secrets` ok. All 4 leaf gates reverified `ALL MET` from exact ledgers.
+3. **Files changed**: `crates/cli/src/{args,bcomp,error,lib,outcome,report,report_adapter,report_adapter_media,runner,session_cmd,render_text_unified}.rs`, `crates/cli/tests/{subcommands_text,subcommands_media,bcomp,session,errors}_test.rs`, `crates/gui/src/{copy,gutter,home,screenshot,take,theme,tree}.rs`, `crates/gui/{Cargo.toml→+rfd}`, `Cargo.lock`.
+
+## UPDATED ON : 2026-11-20
+
+### Task (2026-11-20) — Wave-4: full workspace check + release ready
+
+1. **Scope**: Ran Wave-4 root gates on the Wave-3 tree: `cargo fmt --check`, workspace `clippy -D warnings`, full `cargo test --workspace`, `xtask layers/secrets`, exhaustive release-mode diff sweeps (`--ignored`), and `cargo build --release --workspace`.
+2. **Tests** (before → after): workspace 43/43 suites ok (0 failed); release sweeps 5/5 ignored tests passed; release binaries `autocompare` (1.6MB) + `autocompare-gui` (10.8MB) built in 1m42s. No source changes needed; verification only.
+3. **Files changed**: `TIMELINE.md` (this entry); evidence under `.unlazy/v1/evidence/wave-4/` (uncommitted).
+
+
 ## UPDATED ON : 2026-11-19
 
 ### Feature (2026-11-19) — Wave-2 Leaf-2.3: FolderCompare, SyncPlanner, FolderMerge & JobRunner
