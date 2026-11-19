@@ -2845,6 +2845,15 @@ pub struct AudioChecklist {
     pub identical: bool,
     /// Sample rates or channel counts differ; samples are not comparable.
     pub config_mismatch: bool,
+    /// 10ms comparison windows over the common duration. The action-UI
+    /// waveform strip reads these, so the strip always comes from App
+    /// state (never a paint-side guess).
+    pub windows_total: u64,
+    /// Windows containing at least one differing sample.
+    pub windows_differing: u64,
+    /// Seconds into the stream of the first differing frame, when the
+    /// streams are comparable and any window differs.
+    pub first_diff_at: Option<f64>,
 }
 
 impl AudioChecklist {
@@ -2909,6 +2918,9 @@ impl AudioChecklist {
             rows: vec![left, right, verdict],
             identical: diff.identical,
             config_mismatch: diff.config_mismatch,
+            windows_total: diff.windows_total,
+            windows_differing: diff.windows_differing,
+            first_diff_at: diff.first_diff_at,
         }
     }
 
@@ -2935,6 +2947,50 @@ impl AudioChecklist {
             }
             None => false,
         }
+    }
+}
+
+/// Fixed width of the audio action-UI waveform strip, in characters.
+/// One shared width keeps every compare on the same visual beat.
+pub const AUDIO_WAVEFORM_WIDTH: usize = 40;
+
+/// Stub label of the audio Play affordance. The word "stub" stays in
+/// the label so nobody mistakes it for real playback; there is no
+/// audio output path anywhere behind it.
+pub fn audio_play_stub_label() -> &'static str {
+    "Play (stub: no playback)"
+}
+
+/// Textual waveform strip over the compared windows: the differing
+/// share renders as `#`, the rest as `-`. Total zero (nothing to draw
+/// over) renders an honest all-`-` strip; differing clamps to total so
+/// a wild model never overflows the fixed width. Pure; headless-tested.
+pub fn audio_waveform_bar(differing: u64, total: u64) -> String {
+    let width = AUDIO_WAVEFORM_WIDTH.max(1);
+    let filled = if total == 0 {
+        0
+    } else {
+        let ratio = differing.min(total) as f64 / total as f64;
+        if ratio.is_finite() {
+            (ratio * width as f64).ceil().clamp(0.0, width as f64) as usize
+        } else {
+            0
+        }
+    };
+    let mut bar = String::new();
+    for idx in 0..width {
+        bar.push(if idx < filled { '#' } else { '-' });
+    }
+    bar
+}
+
+/// Honest first-difference line for the audio action UI. Non-finite or
+/// missing stamps render as `-`, never as a made-up timestamp. Pure;
+/// headless-tested.
+pub fn audio_first_diff_text(first: Option<f64>) -> String {
+    match first {
+        Some(at) if at.is_finite() => format!("first difference at {at:.3}s"),
+        _ => String::from("first difference: -"),
     }
 }
 
@@ -2973,6 +3029,23 @@ impl App {
     pub fn reset_picture_view(&mut self) {
         self.picture_view.reset_view();
         self.status = String::from("picture view reset");
+    }
+
+    /// Action-UI summary line for the Audio tab, straight from App
+    /// state: the checklist verdict when compared, else an honest
+    /// no-results note. Pure; headless-tested.
+    pub fn audio_action_summary(&self) -> String {
+        match self.audio_model.as_ref() {
+            Some(list) => list.summary(),
+            None => String::from("no audio results yet"),
+        }
+    }
+
+    /// Stub behind the Audio tab Play affordance: records a status
+    /// line only. There is no playback path, so the model stays
+    /// untouched and the status names the stub outright. Headless-tested.
+    pub fn request_audio_play_stub(&mut self) {
+        self.status = String::from("audio play (stub): no playback — compare output only");
     }
 }
 
@@ -4002,6 +4075,37 @@ impl eframe::App for App {
                                 .weak(),
                         );
                     }
+                    // Gap #8 audio action UI: stub play affordance plus
+                    // summary/waveform display from App state. Play is a
+                    // labeled stub (koi real playback nahi); the strip
+                    // reads the checklist windows, never a paint guess.
+                    ui.add_space(views::TIGHT_GAP);
+                    ui.separator();
+                    ui.label(RichText::new(self.audio_action_summary()).small().weak());
+                    if let Some(list) = self.audio_model.as_ref() {
+                        let bar = audio_waveform_bar(
+                            list.windows_differing,
+                            list.windows_total,
+                        );
+                        ui.label(
+                            RichText::new(format!("waveform (diff share): [{bar}]"))
+                                .monospace()
+                                .small()
+                                .weak(),
+                        );
+                        ui.label(
+                            RichText::new(audio_first_diff_text(list.first_diff_at))
+                                .small()
+                                .weak(),
+                        );
+                    }
+                    let play = ui.add_enabled(
+                        self.audio_model.is_some(),
+                        egui::Button::new(audio_play_stub_label()),
+                    );
+                    if play.clicked() {
+                        self.request_audio_play_stub();
+                    }
                 }
             }
             ui.add_space(views::SECTION_GAP);
@@ -5015,6 +5119,86 @@ mod tests {
         app.set_tab(Tab::Audio);
         app.audio_model = Some(toggled);
         assert!(app.status_line().contains("0.500s"));
+    }
+
+    #[test]
+    fn audio_checklist_carries_windows_for_waveform() {
+        let list = AudioChecklist::from_diff(&audio_diff_fixture(false, false, Some(0.5)));
+        assert_eq!(list.windows_total, 100);
+        assert_eq!(list.windows_differing, 1);
+        assert_eq!(list.first_diff_at, Some(0.5));
+        let fresh = AudioChecklist::default();
+        assert_eq!(fresh.windows_total, 0);
+        assert_eq!(fresh.windows_differing, 0);
+        assert_eq!(fresh.first_diff_at, None);
+    }
+
+    #[test]
+    fn audio_play_stub_label_names_stub() {
+        let label = audio_play_stub_label();
+        assert!(label.contains("stub"));
+        assert!(label.contains("no playback"));
+    }
+
+    #[test]
+    fn audio_play_stub_request_sets_status_only() {
+        let mut app = App::default();
+        app.set_tab(Tab::Audio);
+        app.audio_model = Some(AudioChecklist::from_diff(&audio_diff_fixture(
+            true, false, None,
+        )));
+        let rows_before = app.audio_model.as_ref().map_or(0, |list| list.rows.len());
+        app.request_audio_play_stub();
+        assert!(app.status.contains("stub"));
+        assert!(app.status.contains("no playback"));
+        assert_eq!(
+            app.audio_model.as_ref().map_or(0, |list| list.rows.len()),
+            rows_before
+        );
+        assert!(app.audio_model.is_some());
+    }
+
+    #[test]
+    fn audio_waveform_bar_covers_empty_and_shares() {
+        assert_eq!(audio_waveform_bar(0, 0).len(), AUDIO_WAVEFORM_WIDTH);
+        assert!(audio_waveform_bar(0, 0).chars().all(|ch| ch == '-'));
+        let same = audio_waveform_bar(0, 100);
+        assert_eq!(same.len(), AUDIO_WAVEFORM_WIDTH);
+        assert!(same.chars().all(|ch| ch == '-'));
+        let all = audio_waveform_bar(100, 100);
+        assert!(all.chars().all(|ch| ch == '#'));
+        let partial = audio_waveform_bar(1, 100);
+        assert_eq!(partial.len(), AUDIO_WAVEFORM_WIDTH);
+        assert!(partial.contains('#'));
+        assert!(partial.contains('-'));
+        // Wild model clamps instead of overflowing.
+        let wild = audio_waveform_bar(9_999, 100);
+        assert_eq!(wild.len(), AUDIO_WAVEFORM_WIDTH);
+        assert!(wild.chars().all(|ch| ch == '#'));
+    }
+
+    #[test]
+    fn audio_first_diff_text_names_stamp_or_dash() {
+        assert!(audio_first_diff_text(Some(0.5)).contains("0.500s"));
+        assert_eq!(audio_first_diff_text(None), "first difference: -");
+        assert_eq!(audio_first_diff_text(Some(f64::NAN)), "first difference: -");
+    }
+
+    #[test]
+    fn audio_action_summary_follows_app_state() {
+        let mut app = App::default();
+        app.set_tab(Tab::Audio);
+        assert_eq!(app.audio_action_summary(), "no audio results yet");
+        app.audio_model = Some(AudioChecklist::from_diff(&audio_diff_fixture(
+            true, false, None,
+        )));
+        assert_eq!(app.audio_action_summary(), "no differences");
+        app.audio_model = Some(AudioChecklist::from_diff(&audio_diff_fixture(
+            false,
+            false,
+            Some(0.5),
+        )));
+        assert!(app.audio_action_summary().contains("0.500s"));
     }
 
     #[test]
