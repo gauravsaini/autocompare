@@ -36,3 +36,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - All 3 builders alive, all logs growing (shell log un-stuck, now wiring toolbar + status bar).
 - Diff now +1291/-96: viewmodel +264 (nav/filter), tree +568, app +312, copy +37, home +23. Banned-pattern scan CLEAN.
 - No land commits yet; verify at land time.
+
+## Poll 04
+- All 3 alive. Folder agent entering verify phase (fmt + tests). Text agent needs a hook in read-only app.rs — watching that it does NOT edit it (OWNS rule); so far app.rs still +312 from shell only.
+- Diff +1305/-96, banned-pattern scan CLEAN.
