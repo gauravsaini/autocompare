@@ -1361,3 +1361,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - e96b46f verify ok: OWNS scripts/install-macos.sh + README install section + .gitignore /dist + checks/bin-bo/, zero crates edits, STATUS untouched, sh -n SYNTAX_OK, 606 green. Pushed.
 - Tarball dist/autocompare-gui-0.5.0-macos-arm64.tar.gz (5MB, binary+VERSION, smoke-ok) gitignored, user early feedback ready: scripts/install-macos.sh --install.
 - Baaki in-flight: BN-GEO, BN-TYPO, BO-LOCALRUN.
+
+## 2026-11-20 - BN-TYPO + BO-LOCALRUN landed (isolated-verify, pushed)
+- TYPO 22976a6 verify ok: OWNS theme.rs+checks/gui-typo-bn, isolated worktree 607 green + clippy 0 + fmt clean + banned 0 + colors 0 + PNG magic-ok + harness PASS, STATUS untouched. Typo session done.
+- LOCALRUN 0effef5 verify ok: OWNS checks/localrun-bo only, live PNGs magic-ok, STATUS untouched. Pushed.
+- Baaki in-flight: BN-GEO (views.rs+views_table.rs dirty, `;;` clippy fix pending uske paas).
