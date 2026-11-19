@@ -517,3 +517,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 18 fix loop no new lines
 - A+B live, diff steady 1409 3rd poll. A clippy app refs, B 2 E0308 same. Iterating, no new lines.
 - No commits. One more poll, then nudge if still red.
+
+## Wave I poll 19 A nudged
+- Diff steady 1409 4th poll, both live. Nudge sent to A: tuple destructure in views paint, struct-update for clippy, owned-only. B holds disjoint.
+- No commits. Wait.
