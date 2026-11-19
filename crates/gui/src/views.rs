@@ -3538,31 +3538,200 @@ fn wrap_blank_sub_job(
 }
 
 // ----------------------------------------------------------------------------
-// Folder view
+// Folder filter paint adoption (Wave AU-FILTERPAINT; AT model wiring).
+// Naam/type/status chunte ab paint me lagte hain: filtered-out rows
+// chhupti hain (tree source `folder_tree_filtered` hai), counts
+// filtered rows par honest hain, khali view me honest hint + Clear
+// milta hai. Geometry: sirf wired tokens (bar 24 / pad 8 / gap 8,
+// existing TIGHT_GAP/SECTION_GAP/HEADER_H/grid spacing); typography:
+// naam field mono body-regular, active chip mono caption-strong,
+// hint status-role; colors frozen (koi `.color()` nahi).
 // ----------------------------------------------------------------------------
 
-/// The folder listing: the summary line (with its truncation note)
-/// above the monospace tree grid with expand/collapse drill-down.
-/// Rows are virtualized the same way as the text view. `pager` ka
-/// total visible nodes se sync hota hai; page buttons aur
+/// Type chunta ke paint options: model enum ka poora set, `All`
+/// pehle. Paint ComboBox isi se banta hai taaki naya variant kabhi
+/// chipke na. Pure; unit-tested.
+pub fn folder_kind_options() -> [crate::tree::FolderEntryKind; 3] {
+    use crate::tree::FolderEntryKind;
+    [
+        FolderEntryKind::All,
+        FolderEntryKind::FilesOnly,
+        FolderEntryKind::DirsOnly,
+    ]
+}
+
+/// Status chunta ke paint options: model enum ka poora set, `All`
+/// pehle. Paint ComboBox isi se banta hai. Pure; unit-tested.
+pub fn folder_status_options() -> [crate::tree::FolderStatusFilter; 8] {
+    use crate::tree::FolderStatusFilter;
+    [
+        FolderStatusFilter::All,
+        FolderStatusFilter::Same,
+        FolderStatusFilter::Different,
+        FolderStatusFilter::NewerLeft,
+        FolderStatusFilter::NewerRight,
+        FolderStatusFilter::LeftOnly,
+        FolderStatusFilter::RightOnly,
+        FolderStatusFilter::Changed,
+    ]
+}
+
+/// Filter bar height (px): wired token ka paint-alias taaki bar
+/// hamesha model scale par rahe. Pure; unit-tested.
+pub fn folder_filter_bar_height_px() -> f32 {
+    crate::tree::folder_filter_bar_height()
+}
+
+/// Filter bar ka ek taraf ka horizontal padding (px): wired token ka
+/// paint-alias. Pure; unit-tested.
+pub fn folder_filter_bar_pad_px() -> f32 {
+    crate::tree::folder_filter_bar_pad_x()
+}
+
+/// Filter bar controls ke beech ka gap (px): wired token ka
+/// paint-alias. Pure; unit-tested.
+pub fn folder_filter_bar_gap_px() -> f32 {
+    crate::tree::folder_filter_bar_gap()
+}
+
+/// Paint-side tree source: display filter lagakar hierarchical/flat
+/// nodes. `paint_folder` isi se banta hai taaki filtered-out rows
+/// kabhi paint na hon. Pure (no egui); unit-tested.
+pub fn folder_filter_nodes(
+    rows: &[FolderRow],
+    expanded: &std::collections::BTreeSet<String>,
+    display: &crate::tree::FolderDisplay,
+) -> Vec<crate::tree::FolderTreeNode> {
+    crate::tree::folder_tree_filtered(rows, expanded, display)
+}
+
+/// Honest one-line summary over the filtered rows (caller string ki
+/// jagah paint isi ko dikhata hai). Pure; unit-tested.
+pub fn folder_filtered_summary(rows: &[FolderRow], display: &crate::tree::FolderDisplay) -> String {
+    crate::tree::count_folder_rows(&crate::tree::filtered_folder_rows(rows, display)).summary()
+}
+
+/// Khali view ka paint-stable hint: model rows vs visible nodes par.
+/// `None` (kuch dikh raha hai) par khali string. Pure; unit-tested.
+pub fn folder_paint_empty_hint(
+    rows: &[FolderRow],
+    visible_rows: usize,
+    display: &crate::tree::FolderDisplay,
+) -> &'static str {
+    crate::tree::folder_empty_hint(crate::tree::folder_empty_state(
+        rows.len(),
+        visible_rows,
+        display.is_active(),
+    ))
+}
+
+/// `FolderTypo` se paint `RichText`: mono/size/strong mapping, koi
+/// rang nahi. Paint-only.
+pub fn folder_filter_rich(text: &str, typo: crate::tree::FolderTypo) -> RichText {
+    let mut styled = RichText::new(text).size(typo.size);
+    if typo.mono {
+        styled = styled.monospace();
+    }
+    if typo.strong {
+        styled = styled.strong();
+    }
+    styled
+}
+
+/// Folder filter bar: naam field + type/status chunte + active chip +
+/// Clear. Caller (`paint_folder`) har frame isi se `display` chalata
+/// hai; `true` matlab kuch badla (caller pager top girata hai taaki
+/// scroll stale na rahe). Geometry: bar height + pad + gap wired
+/// tokens; typography: naam field mono body-regular, active chip mono
+/// caption-strong; colors frozen.
+pub fn paint_folder_filter_bar(ui: &mut Ui, display: &mut crate::tree::FolderDisplay) -> bool {
+    let before = display.clone();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(
+            ui.available_width(),
+            folder_filter_bar_height_px(),
+        ));
+        ui.spacing_mut().item_spacing.x = folder_filter_bar_gap_px();
+        ui.add_space(folder_filter_bar_pad_px());
+        ui.add(
+            TextEdit::singleline(&mut display.name_query)
+                .desired_width(FIND_NEEDLE_W)
+                .hint_text("filter by name")
+                .font(egui::FontId::monospace(crate::tree::FOLDER_BODY_SIZE)),
+        );
+        egui::ComboBox::from_label("Type")
+            .selected_text(display.kind.label())
+            .show_ui(ui, |ui| {
+                for kind in folder_kind_options() {
+                    ui.selectable_value(&mut display.kind, kind, kind.label());
+                }
+            });
+        egui::ComboBox::from_label("Status")
+            .selected_text(display.status.label())
+            .show_ui(ui, |ui| {
+                for status in folder_status_options() {
+                    ui.selectable_value(&mut display.status, status, status.label());
+                }
+            });
+        if display.is_active() {
+            ui.label(folder_filter_rich(
+                format!("{} active", display.active_count()).as_str(),
+                crate::tree::folder_filter_active_typo(),
+            ));
+            if ui.button("Clear filters").clicked() {
+                display.clear();
+            }
+        }
+    });
+    *display != before
+}
+
+/// The folder listing: wired filter bar, honest filtered summary,
+/// then the monospace tree grid with expand/collapse drill-down.
+/// Filtered-out rows kabhi paint nahi hoti (tree source filtered hai);
+/// khali view me honest hint + Clear milta hai. Rows are virtualized
+/// the same way as the text view. `pager` ka total visible nodes se
+/// sync hota hai; filter badle to top girta hai; page buttons aur
 /// PageUp/PageDown `next_page`/`prev_page` chalate hain.
 #[allow(dead_code)]
 pub fn paint_folder(
     ui: &mut Ui,
     rows: &[FolderRow],
-    summary: &str,
+    display: &mut crate::tree::FolderDisplay,
     expanded: &mut std::collections::BTreeSet<String>,
     pager: &mut crate::tree::RowPager,
 ) {
-    ui.label(chrome_status_role().rich(summary));
-    ui.add_space(TIGHT_GAP);
-    if rows.is_empty() {
-        ui.label(RichText::new("(both folders are empty)").weak());
-        return;
+    if paint_folder_filter_bar(ui, display) {
+        pager.top = 0;
     }
-    let tree_nodes = viewmodel::folder_tree(rows, expanded);
+    ui.add_space(TIGHT_GAP);
+    let tree_nodes = folder_filter_nodes(rows, expanded, display);
+    ui.label(chrome_status_role().rich(folder_filtered_summary(rows, display)));
+    ui.add_space(TIGHT_GAP);
     pager.total_rows = tree_nodes.len();
     pager.clamp_top();
+    if tree_nodes.is_empty() {
+        let hint = folder_paint_empty_hint(rows, tree_nodes.len(), display);
+        ui.add_space(SECTION_GAP);
+        ui.vertical_centered(|ui| {
+            ui.label(chrome_status_role().rich(hint));
+            if display.is_active() {
+                ui.add_space(TIGHT_GAP);
+                if ui
+                    .button(folder_filter_rich(
+                        "Clear filters",
+                        crate::tree::folder_filter_active_typo(),
+                    ))
+                    .clicked()
+                {
+                    display.clear();
+                    pager.top = 0;
+                }
+            }
+        });
+        ui.add_space(SECTION_GAP);
+        return;
+    }
     let (page_up, page_down) = ui.input(|input| {
         (
             input.key_pressed(egui::Key::PageUp),
@@ -5918,6 +6087,200 @@ mod tests {
             paths,
             vec!["src/lib.rs".to_string(), "README.md".to_string()]
         );
+    }
+
+    fn filterpaint_row(path: &str, is_dir: bool, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    fn filterpaint_expanded() -> std::collections::BTreeSet<String> {
+        std::collections::BTreeSet::new()
+    }
+
+    #[test]
+    fn folder_kind_options_lock_model_variants() {
+        let options = folder_kind_options();
+        assert_eq!(options.len(), 3);
+        let Some(first) = options.first() else {
+            return;
+        };
+        assert_eq!(*first, crate::tree::FolderEntryKind::All);
+        for kind in options {
+            assert!(!kind.label().is_empty());
+        }
+    }
+
+    #[test]
+    fn folder_status_options_lock_model_variants() {
+        let options = folder_status_options();
+        assert_eq!(options.len(), 8);
+        let Some(first) = options.first() else {
+            return;
+        };
+        assert_eq!(*first, crate::tree::FolderStatusFilter::All);
+        let labels: Vec<&str> = options.iter().map(|status| status.label()).collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for label in &labels {
+            seen.insert(*label);
+        }
+        assert_eq!(seen.len(), labels.len());
+    }
+
+    #[test]
+    fn folder_filter_bar_tokens_stay_on_md_scale() {
+        assert_eq!(folder_filter_bar_height_px(), 24.0);
+        assert_eq!(folder_filter_bar_pad_px(), 8.0);
+        assert_eq!(folder_filter_bar_gap_px(), 8.0);
+        assert_eq!(
+            folder_filter_bar_height_px(),
+            crate::tree::folder_filter_bar_height()
+        );
+        assert_eq!(
+            folder_filter_bar_pad_px(),
+            crate::tree::folder_filter_bar_pad_x()
+        );
+        assert_eq!(
+            folder_filter_bar_gap_px(),
+            crate::tree::folder_filter_bar_gap()
+        );
+    }
+
+    #[test]
+    fn folder_filter_typos_are_body_regular_and_caption_strong() {
+        let bar = crate::tree::folder_filter_typo();
+        assert!(bar.mono);
+        assert!(!bar.strong);
+        assert_eq!(bar.size, 13.0);
+        let chip = crate::tree::folder_filter_active_typo();
+        assert!(chip.mono);
+        assert!(chip.strong);
+        assert_eq!(chip.size, 12.0);
+    }
+
+    #[test]
+    fn folder_filter_nodes_hide_name_mismatch() {
+        let rows = vec![
+            filterpaint_row("lib.rs", false, '='),
+            filterpaint_row("README.md", false, '!'),
+        ];
+        let expanded = filterpaint_expanded();
+        let display = crate::tree::FolderDisplay {
+            name_query: "lib".to_string(),
+            ..Default::default()
+        };
+        let nodes = folder_filter_nodes(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 1);
+        let Some(node) = nodes.first() else {
+            return;
+        };
+        assert_eq!(node.row.rel_path, "lib.rs");
+    }
+
+    #[test]
+    fn folder_filter_nodes_kind_and_status_narrow() {
+        let rows = vec![
+            filterpaint_row("sub", true, '='),
+            filterpaint_row("a.txt", false, '='),
+            filterpaint_row("b.txt", false, '!'),
+        ];
+        let expanded = filterpaint_expanded();
+        let display = crate::tree::FolderDisplay {
+            kind: crate::tree::FolderEntryKind::FilesOnly,
+            ..Default::default()
+        };
+        let nodes = folder_filter_nodes(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().all(|node| !node.row.is_dir));
+        let display = crate::tree::FolderDisplay {
+            status: crate::tree::FolderStatusFilter::Same,
+            ..Default::default()
+        };
+        let nodes = folder_filter_nodes(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().all(|node| node.row.glyph == '='));
+    }
+
+    #[test]
+    fn folder_filter_nodes_legacy_and_new_combine() {
+        let rows = vec![
+            filterpaint_row("same.txt", false, '='),
+            filterpaint_row("left.txt", false, 'L'),
+            filterpaint_row("diff.txt", false, '!'),
+        ];
+        let expanded = filterpaint_expanded();
+        let display = crate::tree::FolderDisplay {
+            hide_orphans: true,
+            status: crate::tree::FolderStatusFilter::Changed,
+            ..Default::default()
+        };
+        let nodes = folder_filter_nodes(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 1);
+        let Some(node) = nodes.first() else {
+            return;
+        };
+        assert_eq!(node.row.rel_path, "diff.txt");
+    }
+
+    #[test]
+    fn folder_filtered_summary_stays_honest() {
+        let rows = vec![
+            filterpaint_row("same.txt", false, '='),
+            filterpaint_row("diff.txt", false, '!'),
+            filterpaint_row("newer.txt", false, '>'),
+            filterpaint_row("older.txt", false, '<'),
+            filterpaint_row("left.txt", false, 'L'),
+            filterpaint_row("right.txt", false, 'R'),
+        ];
+        let expanded = filterpaint_expanded();
+        let display = crate::tree::FolderDisplay::default();
+        let summary = folder_filtered_summary(&rows, &display);
+        assert_eq!(summary, crate::tree::count_folder_rows(&rows).summary());
+        assert!(summary.contains("6 entries"));
+        let display = crate::tree::FolderDisplay {
+            status: crate::tree::FolderStatusFilter::NewerLeft,
+            ..Default::default()
+        };
+        let summary = folder_filtered_summary(&rows, &display);
+        assert_eq!(
+            summary,
+            crate::tree::count_folder_rows(&crate::tree::filtered_folder_rows(&rows, &display))
+                .summary()
+        );
+        assert!(summary.contains("1 entries"));
+        assert!(summary.contains("1 newer left"));
+        let nodes = folder_filter_nodes(&rows, &expanded, &display);
+        assert_eq!(nodes.len(), 1);
+    }
+
+    #[test]
+    fn folder_paint_empty_hint_stays_honest() {
+        let display = crate::tree::FolderDisplay::default();
+        let empty: Vec<FolderRow> = Vec::new();
+        assert_eq!(
+            folder_paint_empty_hint(&empty, 0, &display),
+            crate::tree::folder_empty_hint(Some(crate::tree::FolderEmptyState::NoResults))
+        );
+        let rows = vec![filterpaint_row("a.txt", false, '=')];
+        let display = crate::tree::FolderDisplay {
+            status: crate::tree::FolderStatusFilter::Different,
+            ..Default::default()
+        };
+        assert_eq!(
+            folder_paint_empty_hint(&rows, 0, &display),
+            crate::tree::folder_empty_hint(Some(crate::tree::FolderEmptyState::NoMatch))
+        );
+        assert!(folder_paint_empty_hint(&rows, 0, &display).contains("clear filters"));
+        let display = crate::tree::FolderDisplay::default();
+        assert_eq!(folder_paint_empty_hint(&rows, 1, &display), "");
     }
 
     #[test]
