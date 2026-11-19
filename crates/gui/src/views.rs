@@ -2016,12 +2016,78 @@ pub struct TextPaneLayout<'a> {
     pub dim: Color32,
 }
 
+/// Intra-line span underline width (px): 1px line jo same mono
+/// line-height ke andar rehti hai — row height kabhi nahi badalti.
+/// TypoRole precedent (chrome `strong` = bina size badle emphasis):
+/// span emphasis sirf inversion + is underline se aata hai, naya
+/// size/weight nahi. Pure token; unit-tested.
+pub const INTRA_SPAN_UNDERLINE_W: f32 = 1.0;
+
 /// (text, background) for one pane segment: plain passes the row
 /// strip pair through, accented inverts it so the span paints as a
 /// distinct block over the full-row strip. Row ke apne frozen pair
 /// ka reuse — koi naya hue/token nahi. Pure; unit-tested.
 fn span_colors(fg: Color32, bg: Color32, accented: bool) -> (Color32, Color32) {
     if accented { (bg, fg) } else { (fg, bg) }
+}
+
+/// Normalized intra-line spans: sort + clamp + merge, taaki paint
+/// rects chipke hue aayen (koi overlap/gap/overflow nahi).
+/// `line_len` line ke chars hain, `pane` paint width hai — limit dono
+/// ka min hai. Zero-length aur bahar ke ranges gir jate hain, aas-paas
+/// wale (`next.start <= cur.end`) jud jate hain taaki ek hi block
+/// paint ho. Geometry-first: rect alignment line-height ke andar.
+/// Pure; unit-tested.
+pub fn normalize_intra_spans(
+    spans: &[(usize, usize)],
+    line_len: usize,
+    pane: usize,
+) -> Vec<(usize, usize)> {
+    let limit = line_len.min(pane);
+    let mut sorted: Vec<(usize, usize)> = Vec::new();
+    for &(start, end) in spans {
+        if end <= start {
+            continue;
+        }
+        let s = start.min(limit);
+        let e = end.min(limit);
+        if e <= s {
+            continue;
+        }
+        sorted.push((s, e));
+    }
+    sorted.sort();
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    for (s, e) in sorted {
+        let mut merged = false;
+        if let Some(last) = out.last_mut() {
+            if s <= last.1 && e > last.1 {
+                last.1 = e;
+                merged = true;
+            } else if s <= last.1 {
+                merged = true;
+            }
+        }
+        if !merged {
+            out.push((s, e));
+        }
+    }
+    out
+}
+
+/// One segment ka paint format: same mono `FontId` (size kabhi nahi
+/// badalta — line-height untouched), background `span_colors` se,
+/// accented par `INTRA_SPAN_UNDERLINE_W` underline. TypoRole precedent:
+/// chrome me `strong` bina size badle zor deta hai; yahan mono me zor
+/// inversion + underline se hai. Pure; unit-tested.
+pub fn span_text_format(font_id: FontId, fg: Color32, bg: Color32, accented: bool) -> TextFormat {
+    let (color, background) = span_colors(fg, bg, accented);
+    let mut fmt = TextFormat::simple(font_id, color);
+    fmt.background = background;
+    if accented {
+        fmt.underline = Stroke::new(INTRA_SPAN_UNDERLINE_W, color);
+    }
+    fmt
 }
 
 /// One pane of one row honoring `layout`: line numbers blank when off,
@@ -2054,13 +2120,11 @@ fn side_job_with_prefs(
     job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
     for (segment, accented) in prefs_pane_segments(line, raw_spans, layout.pane_chars, layout.prefs)
     {
-        let (color, background) = span_colors(fg, bg, accented);
-        let mut fmt = TextFormat::simple(font_id.clone(), color);
-        fmt.background = background;
-        if accented {
-            fmt.underline = Stroke::new(1.0, color);
-        }
-        job.append(&segment, 0.0, fmt);
+        job.append(
+            &segment,
+            0.0,
+            span_text_format(font_id.clone(), fg, bg, accented),
+        );
     }
     job
 }
@@ -2104,8 +2168,13 @@ fn gutter_text(no: Option<usize>, width: usize) -> String {
 /// Splits `line` into (text, accented) segments at the half-open
 /// char ranges in `spans`, truncated at `pane` characters like the
 /// CLI's panes, with one trailing unaccented segment padding to the
-/// full pane width. Pure; unit-tested.
+/// full pane width. Ranges pehle [`normalize_intra_spans`] se guzarte
+/// hain (sort + clamp + merge) taaki rects chipke rahen — unsorted ya
+/// overlapping model spans bhi deterministic paint dete hain.
+/// Pure; unit-tested.
 fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(String, bool)> {
+    let line_len = line.chars().count();
+    let spans = normalize_intra_spans(spans, line_len, pane);
     let mut out: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
     let mut current_accent = false;
@@ -3499,6 +3568,181 @@ mod tests {
             })
             .collect();
         assert_eq!(body, vec![(fg, bg, false), (bg, fg, true), (fg, bg, false)]);
+    }
+
+    #[test]
+    fn normalize_intra_spans_sorts_and_merges() {
+        // Unsorted + overlapping ranges ek hi block me judte hain —
+        // rects chipke, koi gap/overlap nahi.
+        assert_eq!(
+            normalize_intra_spans(&[(4, 6), (1, 3), (2, 5)], 10, 10),
+            vec![(1, 6)]
+        );
+        // Aas-paas wale judte hain (ek hi paint block).
+        assert_eq!(
+            normalize_intra_spans(&[(2, 3), (1, 2)], 10, 10),
+            vec![(1, 3)]
+        );
+        // Alag ranges alag rehte hain, sorted order me.
+        assert_eq!(
+            normalize_intra_spans(&[(5, 6), (1, 2)], 10, 10),
+            vec![(1, 2), (5, 6)]
+        );
+    }
+
+    #[test]
+    fn normalize_intra_spans_clamps_and_drops_empty() {
+        // limit = min(line_len, pane) = 6: (4,20) chipak kar (4,6),
+        // zero-length (1,1) aur poori-bahar (8,20) gir jate hain.
+        assert_eq!(
+            normalize_intra_spans(&[(1, 1), (4, 20), (8, 20)], 10, 6),
+            vec![(4, 6)]
+        );
+        // Khali line par kuch nahi bachta.
+        assert!(normalize_intra_spans(&[(0, 1)], 0, 4).is_empty());
+        // Khali input khali rehta hai.
+        assert!(normalize_intra_spans(&[], 10, 10).is_empty());
+    }
+
+    #[test]
+    fn pane_segments_refinement_stays_deterministic() {
+        // Unsorted input bhi sorted paint deta hai: "a" accented,
+        // "b" plain, "c" accented.
+        assert_eq!(
+            pane_segments("abc", &[(2, 3), (0, 1)], 3),
+            vec![
+                ("a".to_string(), true),
+                ("b".to_string(), false),
+                ("c".to_string(), true),
+            ]
+        );
+        // Overlapping input ek hi block me judta hai.
+        assert_eq!(
+            pane_segments("abc", &[(0, 2), (1, 3)], 3),
+            vec![("abc".to_string(), true)]
+        );
+    }
+
+    #[test]
+    fn span_text_format_keeps_mono_size_with_accent_underline() {
+        let font = FontId::monospace(12.0);
+        let plain = span_text_format(font.clone(), Color32::WHITE, Color32::BLACK, false);
+        let accented = span_text_format(font.clone(), Color32::WHITE, Color32::BLACK, true);
+        // Dono ka size same — line-height untouched (TypoRole precedent:
+        // zor bina size badle).
+        assert_eq!(plain.font_id.size, 12.0);
+        assert_eq!(accented.font_id.size, 12.0);
+        assert_eq!(plain.underline, Stroke::NONE);
+        assert_eq!(
+            accented.underline,
+            Stroke::new(INTRA_SPAN_UNDERLINE_W, Color32::BLACK)
+        );
+        assert_eq!(INTRA_SPAN_UNDERLINE_W, 1.0);
+        // Inversion barkarar: accented block strip se alag.
+        assert_eq!(plain.background, Color32::BLACK);
+        assert_eq!(accented.background, Color32::WHITE);
+    }
+
+    #[test]
+    fn side_job_intra_spans_keep_mono_size_and_underline() {
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(1),
+            right_no: None,
+            left: "ab".to_string(),
+            right: String::new(),
+            accent_a: vec![(1, 2)],
+            accent_b: Vec::new(),
+        };
+        let shown = TextViewPrefs::default();
+        let layout = TextPaneLayout {
+            pane_chars: 4,
+            gutter_chars: 4,
+            prefs: &shown,
+            dim: crate::theme::DARK_DIM,
+        };
+        let job = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        // Gutter ke baad har body section same mono size par hai —
+        // geometry first (line-height se chipke).
+        for section in job.sections.iter().skip(1) {
+            assert_eq!(section.format.font_id.size, 12.0);
+        }
+        let mut saw_accent = false;
+        let mut saw_plain = false;
+        for section in job.sections.iter().skip(1) {
+            if section.format.underline != Stroke::NONE {
+                saw_accent = true;
+                assert_eq!(section.format.underline.width, INTRA_SPAN_UNDERLINE_W);
+            } else {
+                saw_plain = true;
+            }
+        }
+        assert!(saw_accent && saw_plain);
+    }
+
+    #[test]
+    fn intra_spans_visible_on_real_diff_words() {
+        // Real diff jaisi line: `hello world` me `world` badla hissa.
+        let segs = pane_segments("hello world", &[(6, 11)], 11);
+        assert_eq!(
+            segs,
+            vec![("hello ".to_string(), false), ("world".to_string(), true),]
+        );
+        // Paint job me beech ka hissa accented + underline ke saath.
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(1),
+            right_no: Some(1),
+            left: "hello world".to_string(),
+            right: "hello earth".to_string(),
+            accent_a: vec![(6, 11)],
+            accent_b: vec![(6, 11)],
+        };
+        let shown = TextViewPrefs::default();
+        let layout = TextPaneLayout {
+            pane_chars: 11,
+            gutter_chars: 4,
+            prefs: &shown,
+            dim: crate::theme::DARK_DIM,
+        };
+        let job = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        // Gutter ke baad plain "hello " phir accented "world": wahi
+        // pattern jo `pane_segments` ne diya — paint me beech ka hissa
+        // alag block + underline ke saath dikhta hai.
+        assert!(job.text.contains("world"));
+        let body: Vec<(Color32, Color32, bool)> = job
+            .sections
+            .iter()
+            .skip(1)
+            .map(|s| {
+                (
+                    s.format.color,
+                    s.format.background,
+                    s.format.underline != Stroke::NONE,
+                )
+            })
+            .collect();
+        assert_eq!(
+            body,
+            vec![
+                (Color32::WHITE, Color32::BLACK, false),
+                (Color32::BLACK, Color32::WHITE, true),
+            ]
+        );
     }
 
     #[test]
