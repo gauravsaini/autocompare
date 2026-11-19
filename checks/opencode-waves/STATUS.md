@@ -781,3 +781,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - GAPRECHECK 0b922ff: OWNS clean (wave-p-gaps REPORT 53 lines, post-paint deltas with file:line).
 - RELEASE d1b31db verified+pushed: OWNS clean (REPORT 59 + PNGs + round-P-1). Release 49.37s 11056624B (+0.31% paint code), PNG 9914B exact match magic ok 256, harness PASS, 43 suites 0 failed (579 passed), gui 211, clippy/fmt/layers/secrets per report.
 - All pushed. Wave P complete. Baselines updated: release 11056624B, gui 211, workspace 579 passed.
+
+## Wave Q plan top5-slices (2 parallel, disjoint)
+- Top-5 source: wave-p-gaps REPORT (FIXED #14/#16/#17; OPEN #1/#4/#9/#10/#15/#19; PARTIAL rest).
+- Q-FIND ses-find-q (opencode default): OWNS app.rs+checks/gui-find-q/**. Text-view find box state + cursor + N/M count badge model + tests (table_find_next_cell reuse); views.rs hook as INTEGRATION.patch (apply-check OK). No views.rs edits.
+- Q-GRID ses-grid-q (opencode default): OWNS views.rs+checks/gui-grid-q/**. Hex byte-grid paint (address + 8+8 + ASCII, views_hex grid math) + table header bar + cell borders + minimap click-to-jump (views.rs:914 hover->click). No app.rs edits (read-only OK for state shape).
+- Splitter (#1, needs both files) next wave after these land. Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
