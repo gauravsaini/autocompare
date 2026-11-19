@@ -11,3 +11,10 @@ Old agyx GUI-T/F (PIDs 85254/85255) killed after 11 min with zero log output —
 
 ## Rules for all
 Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid unsafe, no unwrap/expect/panic/todo in non-test code), headless-first, tests green, clippy -D warnings, rustfmt clean, conventional commit NO push. Orchestrator verifies, pushes, rebuilds release.
+
+## 2026-11-20 poll (orchestrator)
+- Pasted PLAN questions answered per user history: (1) existing repo extend at /Users/ektasaini/autocompare/PLAN.md, no new subfolder; (2) scope order harness -> skill -> full waves.
+- Skills active: unlazy (gates-first, depth tree, disjoint OWNS, reverify) + ponytail full (YAGNI, reuse, stdlib first, root-cause fix).
+- MS rust guidelines URL live (HTTP 200, 2026-10-26): forbid unsafe, no unwrap/expect/panic/todo in non-test code, headless-first — already baked into all 4 agent prompts.
+- Orchestrator-verified PNG: checks/local-run/run.png exists, 9174 bytes, magic 89504e470d0a1a0a OK (independent of agent claim).
+- All 4 sessions alive, correct scope reads in logs; no agent commits yet.
