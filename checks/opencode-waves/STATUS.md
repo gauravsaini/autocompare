@@ -59,3 +59,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Poll 08
 - Shared-crate breakage: all 3 edit autocompare-gui, mid-edit states break cargo for everyone (folder 21 errors, shell 11 + TextViewState never-constructed in viewmodel). Both agents correctly diagnosing own-vs-other errors, no interrupt.
 - Threshold: if still red after 2 more polls, orchestrator pauses 2 agents and lands them one by one (text -> folder -> shell).
+
+## Poll 09
+- Breakage clearing: no error mentions in latest tails. Text writing tests, folder on fmt, shell produced before/after screenshots (9174 vs 9846 bytes, both PNG magic OK, content DIFFERENT — first visual proof of real UI change).
+- No land commits yet.
