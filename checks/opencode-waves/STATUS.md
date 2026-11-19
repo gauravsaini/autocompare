@@ -88,3 +88,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - app.rs +108 uncommitted = shell post-commit follow-ups (shell log shows 8 app.rs edits, text log shows 0 app.rs edits — no OWNS violation). Left untouched; integrate at text land after tests green.
 - Text alive, editing copy/views/viewmodel only, retrying failed matches.
 - CI: 3 latest runs still queued (runners backed up); release refresh waits for green + text land.
+
+## Poll 14
+- Text in clippy-polish phase (collapsible-if in views.rs), land near. CI still queued (4 runs backed up).
