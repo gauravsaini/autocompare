@@ -1422,6 +1422,226 @@ pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
 
+// ----------------------------------------------------------------------------
+// Hex minimap pure-rect + nibble changed-accent rects (headless; paint
+// wiring stays with the orchestrator).
+// AX2 S10.3/S10.4 + localrun-bb P1-2: live paint ka 24px minimap strip
+// (`views::HEX_MINIMAP_W` x `views::HEX_MINIMAP_H`) aur changed-nibble
+// accent is file me pure `egui::Rect` math ke roop me. Tuple layer
+// (`hex_minimap_bands`, `hex_diff_nibble_cells`) offset/fraction deti hai;
+// ye section usko track-anchored rects me badalta hai taaki paint ka inline
+// first/last/y0/y1 loop aur `??` whole-row marks isi mapping par aayen.
+// Koi naya token ya color nahi: width gutter se, height paint token se,
+// floor `GUTTER_MIN_SEGMENT_H` (= paint `ROW_PAD`) se, typo `Mono` se.
+// Sab pure fns, `.get()`/saturating only, no `Ui`/painter/I/O, no paint
+// colors. Paint allocate rect `hex_minimap_track_rect` se
+// banata hai, bands `hex_minimap_band_rects` se nikalta hai, click y ko
+// `hex_minimap_row_at_pos` se row me badalta hai, changed nibbles par
+// `hex_row_nibble_accent_rects` se accent rects lagata hai.
+// ----------------------------------------------------------------------------
+
+/// Minimap allocate height: paint token `views::HEX_MINIMAP_H` ka
+/// headless judvaan (220px fixed strip height). Test paint token se
+/// equality lock karta hai. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_alloc_height() -> f32 {
+    220.0
+}
+
+/// Minimap allocate size: `(strip_width, alloc_height)` — paint ka
+/// `allocate_exact_size(vec2(bar_w, HEX_MINIMAP_H))` isi size par aata hai.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_alloc_size() -> egui::Vec2 {
+    egui::vec2(hex_minimap_strip_width(), hex_minimap_alloc_height())
+}
+
+/// Minimap track/hit rect: `origin` se `alloc_size` tak — paint ka allocate
+/// rect + click/drag sense isi rect par hai (24px hit-rect). Pure;
+/// unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_track_rect(origin: egui::Pos2) -> egui::Rect {
+    egui::Rect::from_min_size(origin, hex_minimap_alloc_size())
+}
+
+/// Ek hunk ka track-anchored band rect (x me poori track chaudai).
+/// `hex_minimap_band_for_hunk` fractions ko `track.min.y` par anchor karke
+/// `track.max.y` par clamp karta hai; paint ka `seg` rect wahi hai
+/// (`from_min_max((min.x, y0), (max.x, min(y1, max.y)))`). Zero-area ya
+/// non-finite track, kharab input par `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_band_rect(
+    track: egui::Rect,
+    total_rows: u64,
+    hunk: &HexHunkView,
+) -> Option<egui::Rect> {
+    if !track.width().is_finite()
+        || !track.height().is_finite()
+        || track.width() <= 0.0
+        || track.height() <= 0.0
+    {
+        return None;
+    }
+    let (local_start, local_end) = hex_minimap_band_for_hunk(hunk, total_rows, track.height())?;
+    let y0 = track.min.y + local_start;
+    let y1 = (track.min.y + local_end).min(track.max.y);
+    if !y0.is_finite() || !y1.is_finite() || y1 <= y0 {
+        return None;
+    }
+    Some(egui::Rect::from_min_max(
+        egui::pos2(track.min.x, y0),
+        egui::pos2(track.max.x, y1),
+    ))
+}
+
+/// Poori minimap band rect list offset order me: `total_len` se
+/// `hex_row_count`, har hunk par [`hex_minimap_band_rect`]. Paint ka inline
+/// hunk loop isi list par aata hai (track rect + `CHANGED_BG` frozen rehte
+/// hain). Kharab input par khali vec. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_band_rects(
+    track: egui::Rect,
+    total_len: u64,
+    hunks: &[HexHunkView],
+) -> Vec<egui::Rect> {
+    let total_rows = hex_row_count(total_len);
+    if total_rows == 0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for hunk in hunks {
+        if let Some(rect) = hex_minimap_band_rect(track, total_rows, hunk) {
+            out.push(rect);
+        }
+    }
+    out
+}
+
+/// Track-local hit mapping: absolute `pos_y` ko grid row me badalta hai.
+/// Paint path `hex_minimap_row_at_y(pos.y - rect.min.y, rect.height(),
+/// total)` ka track-relative judvaan; wahi `None` contract (bahar ya
+/// kharab input par `None`). Selection marker paint isi par jump karta hai.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_minimap_row_at_pos(track: egui::Rect, total_rows: u64, pos_y: f32) -> Option<u64> {
+    if total_rows == 0 || !track.height().is_finite() || track.height() <= 0.0 {
+        return None;
+    }
+    if !pos_y.is_finite() {
+        return None;
+    }
+    let local = pos_y - track.min.y;
+    if !local.is_finite() || local < 0.0 || local >= track.height() {
+        return None;
+    }
+    let row = ((local / track.height()) * total_rows as f32).floor() as u64;
+    if row < total_rows { Some(row) } else { None }
+}
+
+/// Row rect ka ek byte-cell rect: 16 barabar columns me `col` wala hissa.
+/// Grid paint row rect isi par bant-ta hai taaki accent sahi cell par lage.
+/// `col >= 16`, zero-area ya non-finite row par `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_nibble_cell_rect(row_rect: egui::Rect, col: u64) -> Option<egui::Rect> {
+    if col >= HEX_BYTES_PER_ROW as u64 {
+        return None;
+    }
+    if !row_rect.width().is_finite()
+        || !row_rect.height().is_finite()
+        || row_rect.width() <= 0.0
+        || row_rect.height() <= 0.0
+    {
+        return None;
+    }
+    let step = row_rect.width() / HEX_BYTES_PER_ROW as f32;
+    if !step.is_finite() || step <= 0.0 {
+        return None;
+    }
+    let x0 = row_rect.min.x + col as f32 * step;
+    let x1 = x0 + step;
+    if !x0.is_finite() || !x1.is_finite() || x1 <= x0 {
+        return None;
+    }
+    Some(egui::Rect::from_min_max(
+        egui::pos2(x0, row_rect.min.y),
+        egui::pos2(x1, row_rect.max.y),
+    ))
+}
+
+/// Ek nibble cell ke accent rects: `(high, low)` — high = cell ka left
+/// aadha, low = right aadha. Sirf alag nibble par `Some`, barabar par
+/// `None` (paint poori-row accent chhodkar inhi halves par lagata hai).
+/// Zero-area cell par `None` joda. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_nibble_accent_rects(
+    cell_rect: egui::Rect,
+    cell: &HexNibbleCell,
+) -> (Option<egui::Rect>, Option<egui::Rect>) {
+    if !cell_rect.width().is_finite()
+        || !cell_rect.height().is_finite()
+        || cell_rect.width() <= 0.0
+        || cell_rect.height() <= 0.0
+    {
+        return (None, None);
+    }
+    let mid_x = cell_rect.min.x + cell_rect.width() / 2.0;
+    if !mid_x.is_finite() || mid_x <= cell_rect.min.x || mid_x >= cell_rect.max.x {
+        return (None, None);
+    }
+    let high = if cell.high_diff {
+        Some(egui::Rect::from_min_max(
+            egui::pos2(cell_rect.min.x, cell_rect.min.y),
+            egui::pos2(mid_x, cell_rect.max.y),
+        ))
+    } else {
+        None
+    };
+    let low = if cell.low_diff {
+        Some(egui::Rect::from_min_max(
+            egui::pos2(mid_x, cell_rect.min.y),
+            egui::pos2(cell_rect.max.x, cell_rect.max.y),
+        ))
+    } else {
+        None
+    };
+    (high, low)
+}
+
+/// Ek grid row ke sab changed-nibble accent rects col order me: har cell ka
+/// cell-rect (`hex_nibble_cell_rect`) phir alag halves
+/// (`hex_nibble_accent_rects`). Khali cells ya kharab row par khali vec —
+/// paint ke paas accent karne ko kuch nahi to poori-row band bhi nahi.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_row_nibble_accent_rects(
+    row_rect: egui::Rect,
+    cells: &[HexNibbleCell],
+) -> Vec<egui::Rect> {
+    let mut out = Vec::new();
+    for cell in cells {
+        let Some(cell_rect) = hex_nibble_cell_rect(row_rect, cell.col) else {
+            continue;
+        };
+        let (high, low) = hex_nibble_accent_rects(cell_rect, cell);
+        if let Some(rect) = high {
+            out.push(rect);
+        }
+        if let Some(rect) = low {
+            out.push(rect);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2245,5 +2465,260 @@ mod tests {
         assert_eq!(hex_nibble_text_role(), TypoRole::Mono);
         assert!(hex_nibble_text_role().is_mono());
         assert_eq!(hex_nibble_text_role().size(), TYPO_MONO_SIZE);
+    }
+
+    #[test]
+    fn hex_minimap_alloc_tokens_lock_paint() {
+        // Contract: width gutter double (24px), height paint strip (220px).
+        assert_eq!(hex_minimap_alloc_height(), crate::views::HEX_MINIMAP_H);
+        assert_eq!(hex_minimap_alloc_height(), 220.0);
+        let size = hex_minimap_alloc_size();
+        assert_eq!(size.x, 24.0);
+        assert_eq!(size.y, 220.0);
+        assert_eq!(size.x, hex_minimap_strip_width());
+        // Track rect origin se size tak: hit-rect wahi allocate rect hai.
+        let origin = egui::pos2(100.0, 50.0);
+        let track = hex_minimap_track_rect(origin);
+        assert_eq!(track.min, origin);
+        assert_eq!(track.width(), 24.0);
+        assert_eq!(track.height(), 220.0);
+        assert_eq!(track.max.x, 124.0);
+        assert_eq!(track.max.y, 270.0);
+    }
+
+    #[test]
+    fn hex_minimap_band_rect_anchors_to_track() {
+        // 4 rows over 400px track at (10, 50): row 1 band exact.
+        let track = egui::Rect::from_min_size(egui::pos2(10.0, 50.0), egui::vec2(24.0, 400.0));
+        let hunk = HexHunkView {
+            offset: 20,
+            left_len: 1,
+            right_len: 1,
+        };
+        let rect = hex_minimap_band_rect(track, 4, &hunk);
+        assert_eq!(
+            rect,
+            Some(egui::Rect::from_min_max(
+                egui::pos2(10.0, 150.0),
+                egui::pos2(34.0, 250.0),
+            ))
+        );
+        // X poori track chaudai, Y track ke andar clamp.
+        let wide = HexHunkView {
+            offset: 20,
+            left_len: 30,
+            right_len: 30,
+        };
+        let wide_rect = hex_minimap_band_rect(track, 4, &wide);
+        assert_eq!(
+            wide_rect,
+            Some(egui::Rect::from_min_max(
+                egui::pos2(10.0, 150.0),
+                egui::pos2(34.0, 450.0),
+            ))
+        );
+        // Tall file: sub-row floor (y0 + 2px) track-anchored.
+        let tall_track = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(24.0, 400.0));
+        let tall = HexHunkView {
+            offset: 8000,
+            left_len: 1,
+            right_len: 1,
+        };
+        let Some(tall_rect) = hex_minimap_band_rect(tall_track, 1000, &tall) else {
+            return;
+        };
+        assert_eq!(tall_rect.min.x, 0.0);
+        assert_eq!(tall_rect.max.x, 24.0);
+        assert_eq!(tall_rect.min.y, 200.0);
+        assert!((tall_rect.height() - crate::theme::GUTTER_MIN_SEGMENT_H).abs() < 0.001);
+        // Bad inputs: khali run / row se bahar / zero-area track -> None.
+        let empty_run = HexHunkView {
+            offset: 20,
+            left_len: 0,
+            right_len: 0,
+        };
+        assert_eq!(hex_minimap_band_rect(track, 4, &empty_run), None);
+        let past_end = HexHunkView {
+            offset: 10_000,
+            left_len: 1,
+            right_len: 1,
+        };
+        assert_eq!(hex_minimap_band_rect(track, 4, &past_end), None);
+        assert_eq!(hex_minimap_band_rect(track, 0, &hunk), None);
+        let flat = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(24.0, 0.0));
+        assert_eq!(hex_minimap_band_rect(flat, 4, &hunk), None);
+    }
+
+    #[test]
+    fn hex_minimap_band_rects_follow_offset_order() {
+        let track = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(24.0, 400.0));
+        let first = HexHunkView {
+            offset: 20,
+            left_len: 1,
+            right_len: 1,
+        };
+        let second = HexHunkView {
+            offset: 50,
+            left_len: 1,
+            right_len: 1,
+        };
+        let rects = hex_minimap_band_rects(track, 64, &[first, second]);
+        assert_eq!(rects.len(), 2);
+        // Offset order barkarar (paint loop jaisa), y badhta hai.
+        assert!(rects.first().map(|r| r.min.y) < rects.get(1).map(|r| r.min.y));
+        // Tuple layer se parity: local bands track offset par.
+        let tuples = hex_minimap_bands(64, 400.0, &[first, second]);
+        assert_eq!(rects.len(), tuples.len());
+        for (rect, (y0, y1)) in rects.iter().zip(tuples.iter()) {
+            assert_eq!(rect.min.y, *y0);
+            assert_eq!(rect.max.y, *y1);
+            assert_eq!(rect.min.x, 0.0);
+            assert_eq!(rect.max.x, 24.0);
+        }
+        // Khali/kharab: khali vec.
+        assert!(hex_minimap_band_rects(track, 64, &[]).is_empty());
+        assert!(hex_minimap_band_rects(track, 0, &[first]).is_empty());
+    }
+
+    #[test]
+    fn hex_minimap_row_at_pos_matches_locked_mapping() {
+        let track = egui::Rect::from_min_size(egui::pos2(10.0, 50.0), egui::vec2(24.0, 400.0));
+        // Track-relative: min.y + 0 -> row 0, +100 -> row 1, +399.9 -> row 3.
+        assert_eq!(hex_minimap_row_at_pos(track, 4, 50.0), Some(0));
+        assert_eq!(hex_minimap_row_at_pos(track, 4, 150.0), Some(1));
+        assert_eq!(hex_minimap_row_at_pos(track, 4, 449.9), Some(3));
+        // Bahar ya kharab: None (paint mapping jaisa contract).
+        assert_eq!(hex_minimap_row_at_pos(track, 4, 450.0), None);
+        assert_eq!(hex_minimap_row_at_pos(track, 4, 49.9), None);
+        assert_eq!(hex_minimap_row_at_pos(track, 0, 150.0), None);
+        assert_eq!(hex_minimap_row_at_pos(track, 4, f32::NAN), None);
+        // Locked paint mapping se parity: local y par views fn wahi row.
+        let mut row: u64 = 0;
+        while row < 4 {
+            if let Some(y) = hex_minimap_y_for_row(row, 4, 400.0) {
+                assert_eq!(hex_minimap_row_at_pos(track, 4, 50.0 + y + 0.5), Some(row));
+                assert_eq!(
+                    crate::views::hex_minimap_row_at_y(y + 0.5, 400.0, 4),
+                    Some(row)
+                );
+            }
+            row = row.saturating_add(1);
+        }
+    }
+
+    #[test]
+    fn hex_nibble_cell_rect_splits_row_into_sixteen() {
+        let row = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(160.0, 20.0));
+        // Har column 10px: col 0 -> [0,10], col 15 -> [150,160].
+        assert_eq!(
+            hex_nibble_cell_rect(row, 0),
+            Some(egui::Rect::from_min_max(
+                egui::pos2(0.0, 0.0),
+                egui::pos2(10.0, 20.0),
+            ))
+        );
+        assert_eq!(
+            hex_nibble_cell_rect(row, 15),
+            Some(egui::Rect::from_min_max(
+                egui::pos2(150.0, 0.0),
+                egui::pos2(160.0, 20.0),
+            ))
+        );
+        // Y poori row height rakhta hai.
+        let Some(mid) = hex_nibble_cell_rect(row, 3) else {
+            return;
+        };
+        assert_eq!(mid.min.y, 0.0);
+        assert_eq!(mid.max.y, 20.0);
+        assert_eq!(mid.min.x, 30.0);
+        assert_eq!(mid.max.x, 40.0);
+        // col >= 16 ya zero-area row: None.
+        assert_eq!(hex_nibble_cell_rect(row, 16), None);
+        let flat = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(0.0, 20.0));
+        assert_eq!(hex_nibble_cell_rect(flat, 0), None);
+    }
+
+    #[test]
+    fn hex_nibble_accent_rects_split_halves_only_for_diffs() {
+        let cell_rect = egui::Rect::from_min_max(egui::pos2(30.0, 0.0), egui::pos2(40.0, 20.0));
+        // Dono nibble alag: dono halves (poori cell cover).
+        let both = HexNibbleCell {
+            offset: 3,
+            col: 3,
+            high_diff: true,
+            low_diff: true,
+        };
+        let (high, low) = hex_nibble_accent_rects(cell_rect, &both);
+        assert_eq!(
+            high,
+            Some(egui::Rect::from_min_max(
+                egui::pos2(30.0, 0.0),
+                egui::pos2(35.0, 20.0),
+            ))
+        );
+        assert_eq!(
+            low,
+            Some(egui::Rect::from_min_max(
+                egui::pos2(35.0, 0.0),
+                egui::pos2(40.0, 20.0),
+            ))
+        );
+        // Sirf low: high None.
+        let low_only = HexNibbleCell {
+            offset: 3,
+            col: 3,
+            high_diff: false,
+            low_diff: true,
+        };
+        let (high_none, low_some) = hex_nibble_accent_rects(cell_rect, &low_only);
+        assert_eq!(high_none, None);
+        assert!(low_some.is_some());
+        // Sirf high: low None.
+        let high_only = HexNibbleCell {
+            offset: 5,
+            col: 5,
+            high_diff: true,
+            low_diff: false,
+        };
+        let (high_some, low_none) = hex_nibble_accent_rects(cell_rect, &high_only);
+        assert!(high_some.is_some());
+        assert_eq!(low_none, None);
+        // Barabar byte: dono None (koi accent nahi).
+        let same = HexNibbleCell {
+            offset: 1,
+            col: 1,
+            high_diff: false,
+            low_diff: false,
+        };
+        assert_eq!(hex_nibble_accent_rects(cell_rect, &same), (None, None));
+    }
+
+    #[test]
+    fn hex_row_nibble_accent_rects_collect_in_col_order() {
+        let row = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(160.0, 20.0));
+        // Row 0: col 3 low-only (1 rect), col 5 high-only (1 rect).
+        let left: Vec<u8> = (0..16).collect();
+        let mut right: Vec<u8> = (0..16).collect();
+        if let Some(slot) = right.get_mut(3) {
+            *slot = 0x02;
+        }
+        if let Some(slot) = right.get_mut(5) {
+            *slot = 0xF5;
+        }
+        let cells = hex_diff_nibble_cells(0, &left, &right);
+        assert_eq!(cells.len(), 2);
+        let rects = hex_row_nibble_accent_rects(row, &cells);
+        assert_eq!(rects.len(), 2);
+        // Col order: pehla col 3 ka low half [35,40], dusra col 5 ka high [50,55].
+        assert_eq!(rects.first().map(|r| r.min.x), Some(35.0));
+        assert_eq!(rects.first().map(|r| r.max.x), Some(40.0));
+        assert_eq!(rects.get(1).map(|r| r.min.x), Some(50.0));
+        assert_eq!(rects.get(1).map(|r| r.max.x), Some(55.0));
+        // Barabar row: koi accent nahi (poori-row band ka koi kaaran nahi).
+        let big_left = vec![0u8; 32];
+        let big_right = vec![0u8; 32];
+        let same_cells = hex_diff_nibble_cells(16, &big_left, &big_right);
+        assert!(hex_row_nibble_accent_rects(row, &same_cells).is_empty());
+        assert!(hex_row_nibble_accent_rects(row, &[]).is_empty());
     }
 }
