@@ -533,3 +533,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 22 A same 2 errors
 - A live, diff steady 504, same 2 errors (field_reassign 2138 + 1). Working through.
 - No commit. Wait (nudge already active, no repeat).
+
+## Wave I poll 23 tests green clippy left
+- A live. Tests 172 green (E0308 fixed). Clippy: 3 owned errors (struct-update fix in progress, app.rs reading) + Wave H dead warnings untouched (disjoint respected).
+- No commit. Wait for clippy green.
