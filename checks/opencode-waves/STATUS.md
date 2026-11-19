@@ -174,3 +174,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 17
 - Hooks visual PASS, final gates running (one compound-command tool hiccup, retrying split). No land. Both alive.
+
+## Wave D poll 18
+- Hooks on dead-code warning (folder_columns in views.rs, its OWNS) — fixing. No land. Both alive.
