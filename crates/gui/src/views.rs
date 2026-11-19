@@ -75,6 +75,10 @@ pub const FIND_BAR_H: f32 = HEADER_H;
 pub const BADGE_PAD: f32 = TIGHT_GAP;
 pub const FIND_NEEDLE_W: f32 = 120.0;
 pub const HEX_MINIMAP_H: f32 = 220.0;
+/// Hex minimap strip width: double the gutter bar so the right-edge
+/// overview reads wider than the text gutter while staying on the
+/// same token (`2 * GUTTER_W`); hit rect grows with it. Pure token.
+pub const HEX_MINIMAP_W: f32 = 2.0 * GUTTER_W;
 pub const CONTENT_LEAD: &str = "  ";
 
 /// Centered 1px visual inside the split grab strip: equal inset on
@@ -571,6 +575,14 @@ pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64>
     if row < total_rows { Some(row) } else { None }
 }
 
+/// Minimap segment floor: sub-pixel hunk bands grow to one row
+/// pad ([`ROW_PAD`]) so hits stay visible/clickable; mapping stays
+/// exact (only paint height changes, never the row math). Pure;
+/// unit-tested.
+pub fn hex_minimap_seg_end(y0: f32, y1: f32) -> f32 {
+    y1.max(y0 + ROW_PAD)
+}
+
 /// Minimap/grid row-click jump: `row` ko offset banakar covering hunk
 /// select karta hai aur pager window me lata hai — wahi steps jo
 /// `App::hex_gutter_jump_to_row` (app.rs, read-only) chalata hai:
@@ -701,14 +713,14 @@ pub fn paint_hex(
             // Byte-grid minimap: hunk rows ka thumbnail; click/drag
             // fraction se grid row nikal kar covering hunk par jump
             // karta hai (wahi `hex_row_to_hunk` path). Sirf existing
-            // palette/tokens: track + CHANGED_BG, gutter bar width.
+            // palette/tokens: track + CHANGED_BG, double-wide strip.
             let total = views_hex::hex_row_count(view.left_size.max(view.right_size));
             if total > 0 {
                 let dark = ui.visuals().dark_mode;
-                // Wide gutter bar by token: equals
-                // `text_gutter_paint_width(true)` (locked by
-                // `gutter_widths_stay_uniform`); the minimap never narrows.
-                let bar_w = GUTTER_W;
+                // Double-wide strip by token: `HEX_MINIMAP_W`
+                // (`2 * GUTTER_W`); the gutter itself never changes
+                // (locked by `gutter_widths_stay_uniform`).
+                let bar_w = HEX_MINIMAP_W;
                 let (rect, resp) = ui.allocate_exact_size(
                     egui::vec2(bar_w, HEX_MINIMAP_H),
                     egui::Sense::click_and_drag(),
@@ -726,8 +738,11 @@ pub fn paint_hex(
                         .saturating_add(run.saturating_sub(1))
                         .saturating_div(step);
                     let y0 = rect.min.y + (first as f32 / total as f32) * rect.height();
-                    let y1 = rect.min.y
-                        + ((last.saturating_add(1)) as f32 / total as f32) * rect.height();
+                    let y1 = hex_minimap_seg_end(
+                        y0,
+                        rect.min.y
+                            + ((last.saturating_add(1)) as f32 / total as f32) * rect.height(),
+                    );
                     let seg = egui::Rect::from_min_max(
                         egui::pos2(rect.min.x, y0),
                         egui::pos2(rect.max.x, y1.min(rect.max.y)),
@@ -2787,6 +2802,24 @@ mod tests {
         assert_eq!(start, 0);
         assert!(end > 0);
         assert!(!hex_minimap_jump_to_row(&mut view, &mut pager, 0));
+    }
+
+    #[test]
+    fn hex_minimap_strip_wider_than_gutter() {
+        // Overview strip reference se kam chaudha na lage: gutter ka
+        // double, same token par; gutter khud untouched rehta hai.
+        assert_eq!(HEX_MINIMAP_W, 2.0 * GUTTER_W);
+        assert_eq!(HEX_MINIMAP_W, 24.0);
+        assert_eq!(HEX_MINIMAP_W - GUTTER_W, 12.0);
+    }
+
+    #[test]
+    fn minimap_seg_floors_at_row_pad() {
+        // Chhoti hunk band ek row-pad tak badhti hai (bigger hits);
+        // badi band jaisi hai waisi rehti hai — mapping exact.
+        assert_eq!(hex_minimap_seg_end(10.0, 10.2), 10.0 + ROW_PAD);
+        assert_eq!(hex_minimap_seg_end(10.0, 10.0 + ROW_PAD), 10.0 + ROW_PAD);
+        assert_eq!(hex_minimap_seg_end(10.0, 50.0), 50.0);
     }
 
     #[test]
