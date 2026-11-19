@@ -143,3 +143,60 @@ Summary: --help exit 0, same text exit 0, diff text exit 1, missing path exit 2.
 - target/release/** ko touch nahi kiya, sirf target/debug binary use kiya
 - likha sirf checks/local-run/** me
 - koi code change nahi, sirf run + proof hai
+
+## 5. Early exquisite baseline (2026-11-19, attempt 1)
+
+Command 9 — early screenshot:
+```
+cargo run -p autocompare-gui -- --screenshot checks/local-run/early-geo-typo.png
+echo "SCREENSHOT_EXIT:$?"
+```
+Output:
+```
+Finished `dev` profile target(s) in 0.26s
+SCREENSHOT_EXIT:0
+```
+Headless launch me koi panic nahi, exit 0 hai. Yehi app launch proof hai.
+
+Command 10 — PNG verify:
+```
+file checks/local-run/early-geo-typo.png
+ls -l checks/local-run/early-geo-typo.png checks/gui-geo/after.png
+```
+Output:
+```
+checks/local-run/early-geo-typo.png: PNG image data, 960 x 600, 8-bit/color RGBA, non-interlaced
+BYTES:9914
+MAGIC_HEX:89504e470d0a1a0a
+MAGIC_OK:True
+DIMS:960x600
+RAWLEN:2304600
+UNIQ_BYTES:95
+NONBLANK:True
+IDENTICAL_TO_AFTER_PNG:YES
+SHA256:2f4e26839bd08de24a119efd5fef9fd7bc16a78b1cfb17e78247b8e43ad14061 (dono file same)
+```
+PNG path checks/local-run/early-geo-typo.png hai, bytes 9914 hai.
+
+Command 11 — gui test quick status:
+```
+cargo test -p autocompare-gui
+```
+Output:
+```
+test result: ok. 107 passed; 0 failed; 0 ignored
+TEST_EXIT:0
+```
+Test count 107 pass, 0 fail hai.
+
+Release binary note (log only, block nahi kiya):
+- target/release/autocompare-gui pehle se maujud hai, 10849120 bytes, Nov 20 01:11 wala
+- is run me `cargo build --release` dobara nahi chalaya taaki GEO/TYPO kaam block na ho
+- early feedback ke liye debug screenshot + test hi kaafi tha
+
+Baseline tulna (shabdon me, geometry par, color par nahi):
+- checks/gui-geo/after.png baseline 9914B hai, early PNG bhi 9914B hai, byte-to-byte same hai
+- isliye gutter number right align hai, text pane padding barabar hai, row order gutter-text-padding wala bana hua hai
+- koi naya alignment gap nahi dikha, pane width cap aur line spacing me antar nahi hai
+- color ya theme par koi tippani nahi, sirf geometry dekhi hai
+- matlab early exquisite baseline GEO/TYPO ke liye saaf starting point hai
