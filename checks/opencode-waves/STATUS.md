@@ -501,3 +501,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 14 integration red paint pending
 - A+B live. Diff 1110 (app 224 wiring, B pure models). Full-crate red: app returns tuples, views paint still Vec — A owns views paint, fix is A side. B must NOT cross OWNS, gate owned pure tests + note wiring-pending.
 - No commits. Wait for A paint + B owned-gates.
+
+## Wave I poll 15 A paint wiring
+- A+B live. A views.rs 88 lines paint (merge/table model-driven) + app 303. B same 2 errors (A mid-wiring), owned gates + REPORT ready.
+- Diff 1272. No commits. Wait for A green.
