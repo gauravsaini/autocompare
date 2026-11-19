@@ -1370,3 +1370,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BN-GEO landed, BN+BO all 4 waves complete (pushed)
 - GEO d11cb99 verify ok: OWNS views.rs+views_table.rs+checks/gui-geo-bn, 607 green, clippy 0 (`;;` fixed), fmt clean, banned 0, colors 0, PNG magic-ok, STATUS untouched. Pushed.
 - Next: P0 follow-up waves from livecomp+localrun REPORTs (dual-pane gutter G-T1, folder grid columns G-F2, table header/grid G-B1/B3) + paint adoption of TypoRole aliases.
+
+## 2026-11-20 - Wave BQ plan (2 parallel P0 follow-ups)
+- BQ-GUTTER sess-gutter-bq: OWNS views.rs+checks/gui-gutter-bq (G-T1 dual-pane+gutter, G-T3 number gutter).
+- BQ-TABLE sess-table-bq: OWNS views_table.rs+checks/gui-table-bq (G-B1 header row, G-B2 toolbar dedup, G-B3 grid).
+- Agents commit locally, NO PUSH. Orchestrator verifies then pushes.
