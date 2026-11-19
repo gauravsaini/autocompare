@@ -1018,3 +1018,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AJ-HEXFIND `sess-hexfind-aj`: OWNS views_hex.rs+checks/gui-hexfind-aj (Gap #12 hex find box+N/M; app.rs read-only, no edit).
 - AJ-HOME `sess-home-aj`: OWNS home.rs+app.rs+checks/gui-home-aj (home geometry+typo polish).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AJ complete (2 parallel: hex-find UI + home polish)
+- HEXFIND `7429cc7` hex find bar paint with prev/next + N/M count in views_hex (Gap #12 hex half; caller wiring follow-up).
+- HOME `4c36826` home session-start geometry + typography polish — OWNS home.rs+app.rs (Gap home).
+- Hexfind stall par nudge bheja, session ne resume karke verify+commit kiya.
+- Verify combined: 373 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AK (hex/table find caller wiring, per-hunk decision App wiring, folder cols paint).
