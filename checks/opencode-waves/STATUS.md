@@ -505,3 +505,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 15 A paint wiring
 - A+B live. A views.rs 88 lines paint (merge/table model-driven) + app 303. B same 2 errors (A mid-wiring), owned gates + REPORT ready.
 - Diff 1272. No commits. Wait for A green.
+
+## Wave I poll 16 tests enumerating
+- A+B live. Diff 1409 (app 414, views 116). A enumerating tests (22 views + 12 hex + 10 table). B same 2 errors tail (possibly stale, A fixing).
+- No commits. Wait for green.
