@@ -277,6 +277,36 @@ pub enum TypoRole {
     HomeButton,
 }
 
+/// Single-source resolved font for one [`TypoRole`]: exact px size,
+/// egui font id (px + family), paint weight spelling, numeric weight,
+/// line-height multiplier and px, letter-tracking and tabular flag.
+/// Every field delegates to the matching [`TypoRole`] accessor so paint
+/// never re-derives sizes per call-site; the future wiring pass builds
+/// from [`TypoRole::spec`] / [`TypoRole::font_id`] instead of ad-hoc
+/// `.monospace()`/`.size()` chains. Pure; unit-tested. Colors untouched
+/// (paint owns them).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypoSpec {
+    /// Role this spec was built from.
+    pub role: TypoRole,
+    /// Point size px ([`TypoRole::size`]).
+    pub size: f32,
+    /// Resolved font id (px + family, [`TypoRole::font_id`]).
+    pub font_id: egui::FontId,
+    /// Paint weight spelling (`strong`/`weak`/`default`/`regular-mono`).
+    pub weight: &'static str,
+    /// Numeric weight (400/500/600).
+    pub weight_value: u16,
+    /// Line-height multiplier ([`TypoRole::line_height`]).
+    pub line_height: f32,
+    /// Line-height px (`size * line_height`).
+    pub line_height_px: f32,
+    /// Letter-tracking em ratio (headers 0.02, rest 0.0).
+    pub letter_spacing_em: f32,
+    /// Tabular numerals intent (Mono + Small).
+    pub is_tabular: bool,
+}
+
 impl TypoRole {
     /// Point size for this role.
     pub const fn size(self) -> f32 {
@@ -374,6 +404,26 @@ impl TypoRole {
         }
     }
 
+    /// egui font family for this role: monospace diff cells, proportional
+    /// UI chrome. String twin is [`TypoRole::family`]; this is the resolver
+    /// paint feeds to [`FontId`](egui::FontId).
+    pub const fn font_family(self) -> egui::FontFamily {
+        match self {
+            Self::Mono => egui::FontFamily::Monospace,
+            _ => egui::FontFamily::Proportional,
+        }
+    }
+
+    /// Exact resolved [`FontId`](egui::FontId) for this role: point size
+    /// from [`TypoRole::size`] plus [`TypoRole::font_family`]. Mono roles
+    /// resolve to `monospace(size)`, everything else to
+    /// `proportional(size)` (UI sans stack intent, [`TypoRole::font_stack`]).
+    /// Pure; unit-tested. Paint wiring (later wave) uses this instead of
+    /// re-deriving sizes per call-site.
+    pub const fn font_id(self) -> egui::FontId {
+        egui::FontId::new(self.size(), self.font_family())
+    }
+
     /// Numeric weight for this role: regular body, medium
     /// headers/chrome, semibold badge+counts sparingly (only
     /// [`TypoRole::Small`]). [`TypoRole::weight`] keeps the egui
@@ -433,6 +483,41 @@ impl TypoRole {
             Self::Small | Self::HomeDesc => egui::TextStyle::Small,
             Self::HomeButton => egui::TextStyle::Button,
             Self::Body | Self::HomeTitle => egui::TextStyle::Body,
+        }
+    }
+
+    /// Zoom-aware [`FontId`](egui::FontId): [`zoomed_size`] px plus the
+    /// role family. Level 0 equals [`TypoRole::font_id`]; out-of-range
+    /// levels clamp via [`clamp_zoom_level`], sizes via ZOOM_MIN/MAX.
+    /// Pure; unit-tested. Paint adoption later wave me.
+    pub fn font_id_zoomed(self, level: i8) -> egui::FontId {
+        egui::FontId::new(zoomed_size(self, level), self.font_family())
+    }
+
+    /// Style-resolved [`FontId`](egui::FontId): this role's
+    /// [`TypoRole::text_style`] resolved against `style` (honours runtime
+    /// font overrides the same way `views.rs` does today with
+    /// `TextStyle::Monospace.resolve(ui.style())`). Headless: needs no
+    /// `Ui`/`Context`. Pure; unit-tested against `Style::default`.
+    pub fn resolved_font_id(self, style: &egui::Style) -> egui::FontId {
+        self.text_style().resolve(style)
+    }
+
+    /// Single-source bundle for this role: every exact value paint needs
+    /// (px, [`FontId`](egui::FontId), weight spelling + numeric, line
+    /// height, tracking, tabular) from one call. Each field equals the
+    /// matching accessor; tests lock the delegation per role.
+    pub const fn spec(self) -> TypoSpec {
+        TypoSpec {
+            role: self,
+            size: self.size(),
+            font_id: self.font_id(),
+            weight: self.weight(),
+            weight_value: self.weight_value(),
+            line_height: self.line_height(),
+            line_height_px: self.line_height_px(),
+            letter_spacing_em: self.letter_spacing_em(),
+            is_tabular: self.is_tabular(),
         }
     }
 
@@ -1148,6 +1233,194 @@ mod tests {
         );
         assert!(
             TypoRole::chrome_tab().line_height_px() > TypoRole::chrome_status().line_height_px()
+        );
+    }
+
+    #[test]
+    fn typo_font_ids_carry_exact_px_and_family() {
+        // Mono diff panes resolve monospace; all chrome resolves proportional.
+        assert_eq!(
+            TypoRole::Mono.font_id(),
+            egui::FontId::monospace(TYPO_MONO_SIZE)
+        );
+        assert_eq!(
+            TypoRole::Body.font_id(),
+            egui::FontId::proportional(TYPO_BODY_SIZE)
+        );
+        assert_eq!(
+            TypoRole::Small.font_id(),
+            egui::FontId::proportional(TYPO_SMALL_SIZE)
+        );
+        assert_eq!(
+            TypoRole::Heading.font_id(),
+            egui::FontId::proportional(TYPO_HEADING_SIZE)
+        );
+        assert_eq!(
+            TypoRole::HomeTitle.font_id(),
+            egui::FontId::proportional(TYPO_HOME_TITLE_SIZE)
+        );
+        assert_eq!(
+            TypoRole::HomeDesc.font_id(),
+            egui::FontId::proportional(TYPO_SMALL_SIZE)
+        );
+        assert_eq!(
+            TypoRole::HomeButton.font_id(),
+            egui::FontId::proportional(TYPO_BODY_SIZE)
+        );
+        // font_family matches is_mono + the family()/font_stack() twins.
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert_eq!(role.font_id().size, role.size());
+            if role.is_mono() {
+                assert_eq!(role.font_family(), egui::FontFamily::Monospace);
+                assert_eq!(role.family(), "monospace");
+                assert_eq!(role.font_stack(), TYPO_MONO_STACK);
+            } else {
+                assert_eq!(role.font_family(), egui::FontFamily::Proportional);
+                assert_eq!(role.family(), "proportional");
+                assert_eq!(role.font_stack(), TYPO_UI_SANS_STACK);
+            }
+        }
+    }
+
+    #[test]
+    fn typo_spec_bundles_each_role_single_source() {
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            let spec = role.spec();
+            assert_eq!(spec.role, role);
+            assert_eq!(spec.size, role.size());
+            assert_eq!(spec.font_id, role.font_id());
+            assert_eq!(spec.font_id.size, role.size());
+            assert_eq!(spec.weight, role.weight());
+            assert_eq!(spec.weight_value, role.weight_value());
+            assert_eq!(spec.line_height, role.line_height());
+            assert_eq!(spec.line_height_px, role.line_height_px());
+            assert_eq!(spec.letter_spacing_em, role.letter_spacing_em());
+            assert_eq!(spec.is_tabular, role.is_tabular());
+        }
+        // Exact mapping table, single-sourced (px / family / weight spelling / numeric).
+        assert_eq!(
+            TypoRole::Heading.spec().font_id,
+            egui::FontId::proportional(18.0)
+        );
+        assert_eq!(TypoRole::Heading.spec().weight, "strong");
+        assert_eq!(TypoRole::Heading.spec().weight_value, 500);
+        assert_eq!(
+            TypoRole::Body.spec().font_id,
+            egui::FontId::proportional(13.0)
+        );
+        assert_eq!(TypoRole::Body.spec().weight, "default");
+        assert_eq!(TypoRole::Body.spec().weight_value, 400);
+        assert_eq!(
+            TypoRole::Small.spec().font_id,
+            egui::FontId::proportional(11.0)
+        );
+        assert_eq!(TypoRole::Small.spec().weight, "weak");
+        assert_eq!(TypoRole::Small.spec().weight_value, 600);
+        assert_eq!(TypoRole::Mono.spec().font_id, egui::FontId::monospace(12.0));
+        assert_eq!(TypoRole::Mono.spec().weight, "regular-mono");
+        assert_eq!(TypoRole::Mono.spec().weight_value, 400);
+        assert_eq!(
+            TypoRole::HomeTitle.spec().font_id,
+            egui::FontId::proportional(14.0)
+        );
+        // Ladder intact through the bundle: Small < Mono < Body < HomeTitle < Heading.
+        assert!(TypoRole::Small.spec().size < TypoRole::Mono.spec().size);
+        assert!(TypoRole::Mono.spec().size < TypoRole::Body.spec().size);
+        assert!(TypoRole::Body.spec().size < TypoRole::HomeTitle.spec().size);
+        assert!(TypoRole::HomeTitle.spec().size < TypoRole::Heading.spec().size);
+    }
+
+    #[test]
+    fn typo_font_id_zoomed_follows_zoom_table() {
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            // Level 0 is the base passthrough.
+            assert_eq!(role.font_id_zoomed(0), role.font_id());
+            assert_eq!(role.font_id_zoomed(ZOOM_DEFAULT_LEVEL), role.font_id());
+            // ±1px steps keep the family; extreme input clamps to the edge.
+            assert_eq!(role.font_id_zoomed(1).size, role.size() + 1.0);
+            assert_eq!(role.font_id_zoomed(-1).size, role.size() - 1.0);
+            assert_eq!(role.font_id_zoomed(1).family, role.font_family());
+            assert_eq!(
+                role.font_id_zoomed(100),
+                role.font_id_zoomed(ZOOM_MAX_LEVEL)
+            );
+            assert_eq!(
+                role.font_id_zoomed(-100),
+                role.font_id_zoomed(ZOOM_MIN_LEVEL)
+            );
+            for level in ZOOM_LEVELS {
+                let resolved = role.font_id_zoomed(level);
+                assert_eq!(resolved.family, role.font_family());
+                assert_eq!(resolved.size, zoomed_size(role, level));
+                assert!(resolved.size >= ZOOM_MIN_SIZE);
+                assert!(resolved.size <= ZOOM_MAX_SIZE);
+            }
+        }
+        // Mono zoom keeps mono family (code text zoom hota hai, chrome se alag rehta hai).
+        assert_eq!(
+            TypoRole::Mono.font_id_zoomed(2),
+            egui::FontId::monospace(TYPO_MONO_SIZE + 2.0)
+        );
+    }
+
+    #[test]
+    fn typo_resolved_font_id_uses_role_text_style() {
+        let style = egui::Style::default();
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            // Delegation lock: helper equals text_style().resolve(style).
+            assert_eq!(
+                role.resolved_font_id(&style),
+                role.text_style().resolve(&style)
+            );
+        }
+        // Family contract against the default style: mono diff vs proportional chrome.
+        assert_eq!(
+            TypoRole::Mono.resolved_font_id(&style).family,
+            egui::FontFamily::Monospace
+        );
+        assert_eq!(
+            TypoRole::Body.resolved_font_id(&style).family,
+            egui::FontFamily::Proportional
+        );
+        assert_eq!(
+            TypoRole::Small.resolved_font_id(&style).family,
+            egui::FontFamily::Proportional
+        );
+        assert_eq!(
+            TypoRole::Heading.resolved_font_id(&style).family,
+            egui::FontFamily::Proportional
         );
     }
 }
