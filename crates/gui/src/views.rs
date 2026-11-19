@@ -1589,6 +1589,240 @@ fn folder_columns(row: &FolderRow) -> String {
     format!(" {ls:>10} {rs:>10}  {lt:>16} {rt:>16}  {rel_path}{dir_mark}")
 }
 
+// ----------------------------------------------------------------------------
+// Dual-tree folder panes (Gap #19 kadam 1; App wiring baad me).
+// Dono pane ek hi node list paint karte hain; select/scroll/action
+// `tree::DualTreeState` me shared hai taaki panes kabhi alag na hon.
+// Per-row action menu stub hai (`tree::DualRowAction::label` me "(stub)"
+// saaf hai, koi I/O nahi). Ek hi ScrollArea dono panes ko chalata hai,
+// isliye synced scroll construction se milta hai. Geometry: sirf existing
+// tokens (`split_picture_widths`, `paint_split_handle`,
+// `row_height_for_line`, `HEADER_H`, `TREE_INDENT`); colors: sirf
+// `glyph_color` + frozen palette; typo: mono rows + small weak notes.
+// ----------------------------------------------------------------------------
+
+/// Dual-tree pane widths: split authority (picture panes jaisi: row
+/// bharti hai, `MIN_HALF` floor). Geometry reuse, koi naya token nahi.
+/// Pure; unit-tested.
+pub fn dual_tree_pane_widths(avail: f32, fraction: f32) -> (f32, f32) {
+    split_picture_widths(avail, fraction)
+}
+
+/// Left pane row line: glyph + naam (+ dir mark) + left side cell.
+/// Pure; unit-tested.
+pub fn dual_left_line(node: &crate::tree::FolderTreeNode) -> String {
+    let dir_mark = if node.row.is_dir { "/" } else { "" };
+    format!(
+        "{} {}{}  {}",
+        node.row.glyph,
+        node.row.rel_path,
+        dir_mark,
+        crate::tree::dual_left_cell(&node.row)
+    )
+}
+
+/// Right pane row line: glyph + naam (+ dir mark) + right side cell.
+/// Pure; unit-tested.
+pub fn dual_right_line(node: &crate::tree::FolderTreeNode) -> String {
+    let dir_mark = if node.row.is_dir { "/" } else { "" };
+    format!(
+        "{} {}{}  {}",
+        node.row.glyph,
+        node.row.rel_path,
+        dir_mark,
+        crate::tree::dual_right_cell(&node.row)
+    )
+}
+
+/// Staged stub action ki ek line: label + path, I/O-free warning ke
+/// saath taaki stub kabhi real action na lage. Pure; unit-tested.
+pub fn dual_pending_text(action: crate::tree::DualRowAction, rel_path: &str) -> String {
+    format!("stub: {} {rel_path} (koi file nahi badli)", action.label())
+}
+
+/// Synced left/right folder trees: summary + stub note, page bar, phir
+/// ek hi scroll me dono panes (left cell | menu | right cell). Click
+/// kisi bhi pane me shared select set karta hai; `···` menu stub
+/// action stage karta hai. `state` me select/scroll/pending rehta hai,
+/// `split` drag se pane widths badalti hai (agli frame se).
+/// App wiring baad me; tab tak `#[allow(dead_code)]`.
+#[allow(dead_code)]
+pub fn paint_folder_dual(
+    ui: &mut Ui,
+    rows: &[FolderRow],
+    summary: &str,
+    expanded: &mut std::collections::BTreeSet<String>,
+    state: &mut crate::tree::DualTreeState,
+    split: &mut f32,
+) {
+    ui.label(RichText::new(summary).monospace().weak());
+    ui.label(
+        RichText::new("dual-tree preview: per-row actions stub hain, koi file nahi badalti")
+            .small()
+            .weak(),
+    );
+    ui.add_space(TIGHT_GAP);
+    if rows.is_empty() {
+        ui.label(RichText::new("(both folders are empty)").weak());
+        return;
+    }
+    let tree_nodes = viewmodel::folder_tree(rows, expanded);
+    state.sync_total(tree_nodes.len());
+    let (page_up, page_down) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::PageUp),
+            input.key_pressed(egui::Key::PageDown),
+        )
+    });
+    if page_up {
+        state.pager.prev_page();
+    }
+    if page_down {
+        state.pager.next_page();
+    }
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        if ui.small_button("◀ Prev page").clicked() {
+            state.pager.prev_page();
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            state.pager.next_page();
+        }
+        ui.label(
+            RichText::new(format!(
+                "page {} of {}, showing {} row(s)",
+                state.pager.top / state.pager.rows_per_page.max(1) + 1,
+                state.pager.page_count().max(1),
+                state
+                    .pager
+                    .visible_range()
+                    .1
+                    .saturating_sub(state.pager.visible_range().0),
+            ))
+            .small()
+            .weak(),
+        );
+    });
+    ui.add_space(TIGHT_GAP);
+    *split = clamp_split_fraction(*split);
+    let avail = ui.available_width();
+    let (left_w, right_w) = dual_tree_pane_widths(avail, *split);
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width(left_w);
+            ui.label(RichText::new("left").small().weak());
+        });
+        paint_split_handle(ui, split, avail);
+        ui.vertical(|ui| {
+            ui.set_width(right_w);
+            ui.label(RichText::new("right").small().weak());
+        });
+    });
+    ui.add_space(TIGHT_GAP);
+    let dark = ui.visuals().dark_mode;
+    let row_height = row_height_for_line(text_row_height(ui));
+    let mut toggle_dir = None;
+    let (wstart, wend) = state.visible_range();
+    let wend = wend.min(tree_nodes.len());
+    let count = wend.saturating_sub(wstart);
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show_rows(ui, row_height, count, |ui, range| {
+            for pos in range {
+                let i = wstart.saturating_add(pos);
+                let Some(node) = tree_nodes.get(i) else {
+                    break;
+                };
+                ui.set_row_height(row_height);
+                let selected = state.is_selected(&node.row.rel_path);
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(left_w);
+                        ui.horizontal(|ui| {
+                            if node.depth > 0 {
+                                ui.add_space(tree_indent(node.depth));
+                            }
+                            ui.label(
+                                RichText::new(node.row.glyph.to_string())
+                                    .monospace()
+                                    .color(glyph_color(&node.row, dark)),
+                            );
+                            if ui
+                                .selectable_label(
+                                    selected,
+                                    RichText::new(dual_left_line(node)).monospace(),
+                                )
+                                .clicked()
+                            {
+                                state.select(&node.row.rel_path);
+                            }
+                        });
+                    });
+                    ui.vertical(|ui| {
+                        if node.row.is_dir && node.has_children {
+                            let icon = if node.is_expanded { "▼" } else { "▶" };
+                            if ui.small_button(icon).clicked() {
+                                toggle_dir = Some(node.row.rel_path.clone());
+                            }
+                        }
+                        ui.menu_button("···", |ui| {
+                            for action in crate::tree::dual_row_actions(&node.row) {
+                                if ui.button(action.label()).clicked() {
+                                    state.select(&node.row.rel_path);
+                                    state.stage_action(action, &node.row.rel_path);
+                                    ui.close();
+                                }
+                            }
+                        });
+                    });
+                    ui.vertical(|ui| {
+                        ui.set_width(right_w);
+                        ui.horizontal(|ui| {
+                            if node.depth > 0 {
+                                ui.add_space(tree_indent(node.depth));
+                            }
+                            ui.label(
+                                RichText::new(node.row.glyph.to_string())
+                                    .monospace()
+                                    .color(glyph_color(&node.row, dark)),
+                            );
+                            if ui
+                                .selectable_label(
+                                    selected,
+                                    RichText::new(dual_right_line(node)).monospace(),
+                                )
+                                .clicked()
+                            {
+                                state.select(&node.row.rel_path);
+                            }
+                        });
+                    });
+                });
+            }
+        });
+    if let Some(dir) = toggle_dir {
+        if expanded.contains(&dir) {
+            expanded.remove(&dir);
+        } else {
+            expanded.insert(dir);
+        }
+    }
+    let pending = state.pending.clone();
+    if let Some((action, path)) = pending {
+        ui.add_space(TIGHT_GAP);
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(dual_pending_text(action, &path))
+                    .small()
+                    .weak(),
+            );
+            if ui.small_button("Clear").clicked() {
+                state.clear_action();
+            }
+        });
+    }
+}
+
 /// Straight-alpha RGBA bytes into an egui [`ColorImage`]: egui
 /// textures expect premultiplied alpha, so every channel is scaled by
 /// its alpha with saturating integer math. `None` when the bytes are
@@ -3032,5 +3266,76 @@ mod tests {
             crate::gutter::gutter_bar_width(false)
         );
         assert!(text_gutter_paint_width(false) < GUTTER_W);
+    }
+
+    #[test]
+    fn dual_tree_panes_share_row_and_floor() {
+        // Split authority reuse: row bharti hai, narrow par floor.
+        let (left, right) = dual_tree_pane_widths(800.0, 0.50);
+        assert_eq!(left + right, 800.0 - SECTION_GAP);
+        assert_eq!((left, right), split_picture_widths(800.0, 0.50));
+        let (tiny_left, tiny_right) = dual_tree_pane_widths(0.0, 0.50);
+        assert_eq!(tiny_left + tiny_right, 2.0 * MIN_HALF);
+        // Fraction clamp me rehta hai.
+        assert_eq!(
+            dual_tree_pane_widths(800.0, 0.0),
+            dual_tree_pane_widths(800.0, SPLIT_MIN_FRACTION)
+        );
+    }
+
+    #[test]
+    fn dual_pending_text_names_stub_without_io() {
+        let text = dual_pending_text(crate::tree::DualRowAction::Compare, "a.txt");
+        assert!(text.contains("(stub)"));
+        assert!(text.contains("a.txt"));
+        assert!(text.contains("koi file nahi badli"));
+        let copy = dual_pending_text(crate::tree::DualRowAction::CopyLeftToRight, "b/c.txt");
+        assert!(copy.contains("(stub)"));
+        assert!(copy.contains("b/c.txt"));
+    }
+
+    #[test]
+    fn dual_lines_carry_glyph_name_and_side_cells() {
+        let node = crate::tree::FolderTreeNode {
+            row: FolderRow {
+                rel_path: "a/b.txt".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: Some("10".to_string()),
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+            depth: 1,
+            is_expanded: false,
+            has_children: false,
+        };
+        let left = dual_left_line(&node);
+        assert!(left.contains('!'));
+        assert!(left.contains("a/b.txt"));
+        assert!(left.contains("10"));
+        let right = dual_right_line(&node);
+        assert!(right.contains('!'));
+        assert!(right.contains("a/b.txt"));
+        // Missing right side dash dikhta hai.
+        assert!(right.contains('-'));
+        let dir_node = crate::tree::FolderTreeNode {
+            row: FolderRow {
+                rel_path: "src".to_string(),
+                is_dir: true,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            depth: 0,
+            is_expanded: true,
+            has_children: true,
+        };
+        assert!(dual_left_line(&dir_node).contains("src/"));
+        assert!(dual_right_line(&dir_node).contains("src/"));
     }
 }

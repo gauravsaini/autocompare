@@ -1511,3 +1511,247 @@ mod session_tests {
         assert!(preview.summary().contains("1 step(s)"));
     }
 }
+
+// ----------------------------------------------------------------------------
+// Dual-tree folder panes (headless; paint: `views::paint_folder_dual`).
+// Gap #19 kadam 1: single list se synced left/right trees ki taraf pehla
+// kadam. Dono pane ek hi node list dekhte hain; select aur scroll ek shared
+// state me rehte hain taaki panes kabhi alag na hon. Per-row action menu
+// stub hai: har label me "(stub)" saaf hai, koi I/O nahi. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Ek dual-tree row par stub action: compare ya copy direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DualRowAction {
+    /// Dono sides file view me kholo (stub: sirf intent stage hota hai).
+    Compare,
+    /// Left side ka content right par lao (stub: koi file nahi badalti).
+    CopyLeftToRight,
+    /// Right side ka content left par lao (stub: koi file nahi badalti).
+    CopyRightToLeft,
+}
+
+impl DualRowAction {
+    /// Menu label; har label stub saaf rakhta hai.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Compare => "Compare (stub)",
+            Self::CopyLeftToRight => "Copy L to R (stub)",
+            Self::CopyRightToLeft => "Copy R to L (stub)",
+        }
+    }
+}
+
+/// Ek row ke liye action menu: file rows par Compare + dono copy
+/// direction, dir rows par khaali (dirs par sirf expand hota hai).
+pub fn dual_row_actions(row: &FolderRow) -> Vec<DualRowAction> {
+    if row.is_dir {
+        Vec::new()
+    } else {
+        vec![
+            DualRowAction::Compare,
+            DualRowAction::CopyLeftToRight,
+            DualRowAction::CopyRightToLeft,
+        ]
+    }
+}
+
+/// Left pane cell: left size + left time, missing side `-`.
+pub fn dual_left_cell(row: &FolderRow) -> String {
+    format!(
+        "{} | {}",
+        folder_cell_text(row, FolderColumn::LeftSize),
+        folder_cell_text(row, FolderColumn::LeftTime)
+    )
+}
+
+/// Right pane cell: right size + right time, missing side `-`.
+pub fn dual_right_cell(row: &FolderRow) -> String {
+    format!(
+        "{} | {}",
+        folder_cell_text(row, FolderColumn::RightSize),
+        folder_cell_text(row, FolderColumn::RightTime)
+    )
+}
+
+/// Dono panes ka shared select + scroll + stub-action state. Scroll ek
+/// hi [`RowPager`] me hai, isliye synced scroll construction se milta
+/// hai: dono pane `visible_range` se ek hi window paint karte hain.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DualTreeState {
+    /// Dono panes me highlight wali row (relative path).
+    pub selected: Option<String>,
+    /// Dono panes ka shared scroll window.
+    pub pager: RowPager,
+    /// Staged stub action: (action, relative path). Koi I/O nahi.
+    pub pending: Option<(DualRowAction, String)>,
+}
+
+impl DualTreeState {
+    /// Naya shared state: page size kam se kam 1, top 0, koi select nahi.
+    pub fn new(rows_per_page: usize) -> Self {
+        Self {
+            selected: None,
+            pager: RowPager::new(0, rows_per_page),
+            pending: None,
+        }
+    }
+
+    /// Dono panes me ek saath select.
+    pub fn select(&mut self, rel_path: &str) {
+        self.selected = Some(rel_path.to_string());
+    }
+
+    /// Dono panes ka select saaf.
+    pub fn clear_selection(&mut self) {
+        self.selected = None;
+    }
+
+    /// Dono panes ke liye ek jaisa select check.
+    pub fn is_selected(&self, rel_path: &str) -> bool {
+        self.selected.as_deref() == Some(rel_path)
+    }
+
+    /// Visible node count sync karo (paint har frame chalata hai).
+    pub fn sync_total(&mut self, total: usize) {
+        self.pager.total_rows = total;
+        self.pager.clamp_top();
+    }
+
+    /// Dono panes ka scroll ek saath: clamp ke saath shared top.
+    pub fn sync_scroll(&mut self, top: usize) {
+        self.pager.top = top;
+        self.pager.clamp_top();
+    }
+
+    /// Dono panes ki ek hi visible window.
+    pub fn visible_range(&self) -> (usize, usize) {
+        self.pager.visible_range()
+    }
+
+    /// `row` dikhe isliye shared top adjust karo. Returns whether top moved.
+    pub fn bring_into_view(&mut self, row: usize) -> bool {
+        self.pager.bring_into_view(row)
+    }
+
+    /// Stub action stage karo (menu se); koi file nahi badalti.
+    pub fn stage_action(&mut self, action: DualRowAction, rel_path: &str) {
+        self.pending = Some((action, rel_path.to_string()));
+    }
+
+    /// Staged stub action saaf karo.
+    pub fn clear_action(&mut self) {
+        self.pending = None;
+    }
+}
+
+#[cfg(test)]
+mod dual_tree_tests {
+    use super::*;
+
+    fn glyph_row(path: &str, is_dir: bool, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    #[test]
+    fn dual_tree_select_syncs_both_panes() {
+        let mut state = DualTreeState::new(10);
+        assert_eq!(state.selected, None);
+        state.select("src/a.txt");
+        // Dono pane ek hi state padhte hain: ek jaisa select.
+        assert!(state.is_selected("src/a.txt"));
+        assert!(!state.is_selected("src/b.txt"));
+        state.clear_selection();
+        assert!(!state.is_selected("src/a.txt"));
+        assert_eq!(state.selected, None);
+    }
+
+    #[test]
+    fn dual_tree_scroll_syncs_and_clamps() {
+        let mut state = DualTreeState::new(10);
+        state.sync_total(25);
+        state.sync_scroll(10);
+        // Dono pane ek hi window dekhte hain.
+        assert_eq!(state.visible_range(), (10, 20));
+        // Aakhri page se aage clamp.
+        state.sync_scroll(99);
+        assert_eq!(state.visible_range(), (20, 25));
+        // Khali tree: window band.
+        state.sync_total(0);
+        assert_eq!(state.visible_range(), (0, 0));
+    }
+
+    #[test]
+    fn dual_tree_bring_into_view_moves_shared_top() {
+        let mut state = DualTreeState::new(10);
+        state.sync_total(25);
+        assert!(!state.bring_into_view(5));
+        assert_eq!(state.visible_range(), (0, 10));
+        assert!(state.bring_into_view(24));
+        assert_eq!(state.visible_range(), (15, 25));
+        // Khali tree: top hilta nahi.
+        let mut empty = DualTreeState::new(10);
+        empty.sync_total(0);
+        assert!(!empty.bring_into_view(0));
+    }
+
+    #[test]
+    fn dual_row_actions_cover_files_only() {
+        let file = glyph_row("a.txt", false, '!');
+        let actions = dual_row_actions(&file);
+        assert_eq!(
+            actions,
+            vec![
+                DualRowAction::Compare,
+                DualRowAction::CopyLeftToRight,
+                DualRowAction::CopyRightToLeft,
+            ]
+        );
+        // Har label stub saaf rakhta hai.
+        for action in actions {
+            assert!(action.label().contains("(stub)"));
+        }
+        let dir = glyph_row("src", true, '=');
+        assert!(dual_row_actions(&dir).is_empty());
+    }
+
+    #[test]
+    fn dual_row_action_stage_and_clear() {
+        let mut state = DualTreeState::new(10);
+        assert_eq!(state.pending, None);
+        state.stage_action(DualRowAction::Compare, "a.txt");
+        assert_eq!(
+            state.pending,
+            Some((DualRowAction::Compare, "a.txt".to_string()))
+        );
+        state.clear_action();
+        assert_eq!(state.pending, None);
+    }
+
+    #[test]
+    fn dual_side_cells_keep_missing_sides_as_dash() {
+        let orphan = glyph_row("only-left.txt", false, 'L');
+        assert!(dual_left_cell(&orphan).contains('-'));
+        assert!(dual_right_cell(&orphan).contains('-'));
+        let mut both = glyph_row("both.txt", false, '=');
+        both.left_size = Some("12".to_string());
+        both.left_time = Some("2026-01-02 03:04".to_string());
+        both.right_size = Some("34".to_string());
+        both.right_time = Some("2026-01-03 04:05".to_string());
+        let left = dual_left_cell(&both);
+        assert!(left.contains("12"));
+        assert!(left.contains("2026-01-02 03:04"));
+        let right = dual_right_cell(&both);
+        assert!(right.contains("34"));
+        assert!(right.contains("2026-01-03 04:05"));
+    }
+}
