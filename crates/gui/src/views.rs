@@ -1653,7 +1653,20 @@ pub fn paint_folder(
         );
     });
     ui.add_space(TIGHT_GAP);
+    // Column header: tree col defs se (`folder_header_line`), mono
+    // weak — path flex, sides fixed widths par padded. Rule table
+    // header jaisi (`indented_content` lead + `-` line), GEO reuse.
+    let folder_header = crate::tree::folder_header_line();
+    ui.label(RichText::new(folder_header.clone()).monospace().weak());
+    ui.label(
+        RichText::new(indented_content(&format_table_header_rule(
+            folder_header.len(),
+        )))
+        .monospace()
+        .weak(),
+    );
     let row_height = row_height_for_line(text_row_height(ui));
+    let dark = ui.visuals().dark_mode;
     let mut toggle_dir = None;
 
     let (wstart, wend) = pager.visible_range();
@@ -1662,32 +1675,53 @@ pub fn paint_folder(
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
-            for pos in range {
-                let i = wstart.saturating_add(pos);
-                let Some(node) = tree_nodes.get(i) else {
-                    break;
-                };
-                ui.set_row_height(row_height);
-                ui.horizontal(|ui| {
-                    if node.depth > 0 {
-                        ui.add_space(tree_indent(node.depth));
-                    }
-                    if node.row.is_dir && node.has_children {
-                        let icon = if node.is_expanded { "▼" } else { "▶" };
-                        if ui.small_button(icon).clicked() {
-                            toggle_dir = Some(node.row.rel_path.clone());
+            egui::Grid::new("folder_data_grid")
+                .num_columns(folder_grid_columns())
+                .spacing([SECTION_GAP, TIGHT_GAP])
+                .show(ui, |ui| {
+                    for pos in range {
+                        let i = wstart.saturating_add(pos);
+                        let Some(node) = tree_nodes.get(i) else {
+                            break;
+                        };
+                        // Glyph column: frozen palette, mode-following dim/blue/red/green.
+                        ui.label(
+                            RichText::new(node.row.glyph.to_string())
+                                .monospace()
+                                .color(glyph_color(&node.row, dark)),
+                        );
+                        // Path column (flex): depth indent + expand/collapse
+                        // + path (+ dir mark). Sides Grid columns me padded
+                        // mono rehte hain, isliye path lamba ho tab bhi
+                        // size/time align rehte hain.
+                        let cells = folder_row_cells(&node.row);
+                        let path_text = cells.first().cloned().unwrap_or_default();
+                        ui.horizontal(|ui| {
+                            if node.depth > 0 {
+                                ui.add_space(tree_indent(node.depth));
+                            }
+                            if node.row.is_dir && node.has_children {
+                                let icon = if node.is_expanded { "▼" } else { "▶" };
+                                if ui.small_button(icon).clicked() {
+                                    toggle_dir = Some(node.row.rel_path.clone());
+                                }
+                            } else if node.row.is_dir {
+                                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                            }
+                            ui.label(RichText::new(path_text).monospace());
+                        });
+                        let mut idx = 1usize;
+                        while idx < cells.len() {
+                            let mut cell = String::new();
+                            if let Some(text) = cells.get(idx) {
+                                cell = text.clone();
+                            }
+                            ui.label(RichText::new(cell).monospace());
+                            idx = idx.saturating_add(1);
                         }
-                    } else if node.row.is_dir {
-                        ui.label(RichText::new(CONTENT_LEAD).monospace());
+                        ui.end_row();
                     }
-                    ui.label(
-                        RichText::new(node.row.glyph)
-                            .monospace()
-                            .color(glyph_color(&node.row, ui.visuals().dark_mode)),
-                    );
-                    ui.label(RichText::new(folder_columns(&node.row)).monospace());
                 });
-            }
         });
 
     if let Some(dir) = toggle_dir {
@@ -1726,6 +1760,54 @@ fn folder_columns(row: &FolderRow) -> String {
     let dir_mark = if row.is_dir { "/" } else { "" };
     let rel_path = row.rel_path.as_str();
     format!(" {ls:>10} {rs:>10}  {lt:>16} {rt:>16}  {rel_path}{dir_mark}")
+}
+
+/// Folder grid header cells in paint order: flex Path plus fixed
+/// side columns from [`crate::tree::folder_column_defs`]. Path raw
+/// hai (flex), sides [`crate::tree::pad_folder_cell`] se padded taaki
+/// mono Grid me columns align rahen. Pure; unit-tested.
+pub fn folder_header_cells() -> Vec<String> {
+    let mut out = Vec::new();
+    for def in crate::tree::folder_column_defs() {
+        if def.width_chars == 0 {
+            out.push(def.header.to_string());
+        } else {
+            out.push(crate::tree::pad_folder_cell(def.header, def.width_chars));
+        }
+    }
+    out
+}
+
+/// Folder grid row cells in paint order: path (+ dir mark) raw, phir
+/// 4 padded side cells via [`crate::tree::folder_cell_text`] +
+/// [`crate::tree::pad_folder_cell`]. Missing sides `-` padded dikhte
+/// hain, isliye orphan rows bhi align rehti hain. Path cell par paint
+/// `tree_indent(depth)` offset lagata hai (flex column). Pure;
+/// unit-tested.
+pub fn folder_row_cells(row: &FolderRow) -> Vec<String> {
+    let mut out = Vec::new();
+    for def in crate::tree::folder_column_defs() {
+        match def.column {
+            crate::tree::FolderColumn::Path => {
+                let mut path = crate::tree::folder_cell_text(row, def.column);
+                if row.is_dir {
+                    path.push('/');
+                }
+                out.push(path);
+            }
+            _ => {
+                let text = crate::tree::folder_cell_text(row, def.column);
+                out.push(crate::tree::pad_folder_cell(&text, def.width_chars));
+            }
+        }
+    }
+    out
+}
+
+/// Folder grid columns: glyph column plus har data column.
+/// Pure; unit-tested.
+pub fn folder_grid_columns() -> usize {
+    crate::tree::folder_column_defs().len().saturating_add(1)
 }
 
 // ----------------------------------------------------------------------------
@@ -1849,12 +1931,40 @@ pub fn paint_folder_dual(
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.set_width(left_w);
-            ui.label(RichText::new("left").small().weak());
+            let headers = folder_header_cells();
+            let mut lsize = String::new();
+            if let Some(text) = headers.get(1) {
+                lsize = text.clone();
+            }
+            let mut ltime = String::new();
+            if let Some(text) = headers.get(3) {
+                ltime = text.clone();
+            }
+            ui.label(
+                RichText::new(format!("left: Path  {lsize} | {ltime}"))
+                    .monospace()
+                    .small()
+                    .weak(),
+            );
         });
         paint_split_handle(ui, split, avail);
         ui.vertical(|ui| {
             ui.set_width(right_w);
-            ui.label(RichText::new("right").small().weak());
+            let headers = folder_header_cells();
+            let mut rsize = String::new();
+            if let Some(text) = headers.get(2) {
+                rsize = text.clone();
+            }
+            let mut rtime = String::new();
+            if let Some(text) = headers.get(4) {
+                rtime = text.clone();
+            }
+            ui.label(
+                RichText::new(format!("right: Path  {rsize} | {rtime}"))
+                    .monospace()
+                    .small()
+                    .weak(),
+            );
         });
     });
     ui.add_space(TIGHT_GAP);
@@ -3630,5 +3740,111 @@ mod tests {
         };
         assert!(dual_left_line(&dir_node).contains("src/"));
         assert!(dual_right_line(&dir_node).contains("src/"));
+    }
+
+    #[test]
+    fn folder_header_cells_match_defs() {
+        let headers = folder_header_cells();
+        let defs = crate::tree::folder_column_defs();
+        assert_eq!(headers.len(), defs.len());
+        let Some(first) = headers.first() else {
+            return;
+        };
+        assert_eq!(first, "Path");
+        // Sides padded fixed widths tak.
+        let Some(lsize) = headers.get(1) else {
+            return;
+        };
+        assert_eq!(lsize.chars().count(), crate::tree::FOLDER_SIZE_CHARS);
+        assert!(lsize.contains("L size"));
+        let Some(ltime) = headers.get(3) else {
+            return;
+        };
+        assert_eq!(ltime.chars().count(), crate::tree::FOLDER_TIME_CHARS);
+    }
+
+    #[test]
+    fn folder_row_cells_keep_sides_fixed_width() {
+        let row = FolderRow {
+            rel_path: "a/b.txt".to_string(),
+            is_dir: false,
+            glyph: '!',
+            left_size: Some("10".to_string()),
+            right_size: None,
+            left_time: Some("2026-01-02 03:04".to_string()),
+            right_time: None,
+            changed: true,
+        };
+        let cells = folder_row_cells(&row);
+        assert_eq!(cells.len(), 5);
+        let Some(path) = cells.first() else {
+            return;
+        };
+        assert_eq!(path, "a/b.txt");
+        // Sides padded: orphan `-` bhi fixed width.
+        let Some(lsize) = cells.get(1) else {
+            return;
+        };
+        assert_eq!(lsize.chars().count(), crate::tree::FOLDER_SIZE_CHARS);
+        assert!(lsize.contains("10"));
+        let Some(rsize) = cells.get(2) else {
+            return;
+        };
+        assert_eq!(rsize.chars().count(), crate::tree::FOLDER_SIZE_CHARS);
+        assert!(rsize.contains('-'));
+        let Some(ltime) = cells.get(3) else {
+            return;
+        };
+        assert_eq!(ltime.chars().count(), crate::tree::FOLDER_TIME_CHARS);
+        // Dir mark judta hai.
+        let dir = FolderRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            ..row
+        };
+        let dir_cells = folder_row_cells(&dir);
+        let Some(dir_path) = dir_cells.first() else {
+            return;
+        };
+        assert_eq!(dir_path, "src/");
+    }
+
+    #[test]
+    fn folder_grid_columns_counts_glyph_plus_five() {
+        assert_eq!(
+            folder_grid_columns(),
+            crate::tree::folder_column_defs().len().saturating_add(1)
+        );
+        assert_eq!(folder_grid_columns(), 6);
+    }
+
+    #[test]
+    fn dual_lines_use_padded_side_cells() {
+        let node = crate::tree::FolderTreeNode {
+            row: FolderRow {
+                rel_path: "a/b.txt".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: Some("10".to_string()),
+                right_size: None,
+                left_time: Some("2026-01-02 03:04".to_string()),
+                right_time: None,
+                changed: true,
+            },
+            depth: 0,
+            is_expanded: false,
+            has_children: false,
+        };
+        let left = dual_left_line(&node);
+        assert!(left.contains("a/b.txt"));
+        assert!(left.contains("10"));
+        assert!(left.contains("2026-01-02 03:04"));
+        // Padded separator barkarar: size | time.
+        assert!(left.contains(" | "));
+        let right = dual_right_line(&node);
+        assert!(right.contains("a/b.txt"));
+        // Missing right sides dash padded dikhte hain.
+        assert!(right.contains('-'));
+        assert!(right.contains(" | "));
     }
 }

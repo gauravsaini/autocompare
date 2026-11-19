@@ -1634,20 +1634,36 @@ pub fn dual_row_actions(row: &FolderRow) -> Vec<DualRowAction> {
 }
 
 /// Left pane cell: left size + left time, missing side `-`.
+/// Fixed widths via [`pad_folder_cell`] taaki mono paint me side
+/// columns align rahen (orphan `-` bhi padded).
 pub fn dual_left_cell(row: &FolderRow) -> String {
     format!(
         "{} | {}",
-        folder_cell_text(row, FolderColumn::LeftSize),
-        folder_cell_text(row, FolderColumn::LeftTime)
+        pad_folder_cell(
+            &folder_cell_text(row, FolderColumn::LeftSize),
+            FOLDER_SIZE_CHARS
+        ),
+        pad_folder_cell(
+            &folder_cell_text(row, FolderColumn::LeftTime),
+            FOLDER_TIME_CHARS
+        )
     )
 }
 
 /// Right pane cell: right size + right time, missing side `-`.
+/// Fixed widths via [`pad_folder_cell`] taaki mono paint me side
+/// columns align rahen (orphan `-` bhi padded).
 pub fn dual_right_cell(row: &FolderRow) -> String {
     format!(
         "{} | {}",
-        folder_cell_text(row, FolderColumn::RightSize),
-        folder_cell_text(row, FolderColumn::RightTime)
+        pad_folder_cell(
+            &folder_cell_text(row, FolderColumn::RightSize),
+            FOLDER_SIZE_CHARS
+        ),
+        pad_folder_cell(
+            &folder_cell_text(row, FolderColumn::RightTime),
+            FOLDER_TIME_CHARS
+        )
     )
 }
 
@@ -1830,6 +1846,50 @@ mod dual_tree_tests {
         let right = dual_right_cell(&both);
         assert!(right.contains("34"));
         assert!(right.contains("2026-01-03 04:05"));
+    }
+
+    #[test]
+    fn dual_side_cells_are_fixed_width() {
+        let orphan = glyph_row("only-left.txt", false, 'L');
+        // `size | time`: padded size + separator + padded time.
+        let left = dual_left_cell(&orphan);
+        let mut parts = left.split(" | ");
+        let Some(size) = parts.next() else {
+            return;
+        };
+        let Some(time) = parts.next() else {
+            return;
+        };
+        assert_eq!(size.chars().count(), FOLDER_SIZE_CHARS);
+        assert_eq!(time.chars().count(), FOLDER_TIME_CHARS);
+        // Dono sides wali row me values padded widths me rehti hain.
+        let mut both = glyph_row("both.txt", false, '=');
+        both.left_size = Some("12".to_string());
+        both.left_time = Some("2026-01-02 03:04".to_string());
+        both.right_size = Some("34".to_string());
+        both.right_time = Some("2026-01-03 04:05".to_string());
+        let left_text = dual_left_cell(&both);
+        let mut left_parts = left_text.split(" | ");
+        let Some(lsize) = left_parts.next() else {
+            return;
+        };
+        let Some(ltime) = left_parts.next() else {
+            return;
+        };
+        assert_eq!(lsize.chars().count(), FOLDER_SIZE_CHARS);
+        assert_eq!(ltime.chars().count(), FOLDER_TIME_CHARS);
+        assert!(lsize.contains("12"));
+        assert!(ltime.contains("2026-01-02 03:04"));
+        let right_text = dual_right_cell(&both);
+        let mut right_parts = right_text.split(" | ");
+        let Some(rsize) = right_parts.next() else {
+            return;
+        };
+        let Some(rtime) = right_parts.next() else {
+            return;
+        };
+        assert_eq!(rsize.chars().count(), FOLDER_SIZE_CHARS);
+        assert_eq!(rtime.chars().count(), FOLDER_TIME_CHARS);
     }
 }
 
