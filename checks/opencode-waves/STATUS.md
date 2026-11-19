@@ -1117,3 +1117,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - SYNCPAINT `4387fd1` folder sync badge + selection paint adoption — OWNS views.rs (+290 paint, +130 tests).
 - Verify combined: 473 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AS (hex gutter parity, table key-col UX, text find highlight polish).
+
+## 2026-11-20 — Wave AS plan (2 parallel: hex gutter parity + table key-col UX)
+- AS-HEXGUTTER `sess-hexgutter-as`: OWNS views_hex.rs+gutter.rs+checks/gui-hexgutter-as (hex gutter click-jump).
+- AS-TABLEKEY `sess-tablekey-as`: OWNS views_table.rs+checks/gui-tablekey-as (key-col UX).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
