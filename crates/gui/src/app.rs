@@ -62,6 +62,48 @@ enum CompareResult {
     Audio(Result<AudioChecklist, String>),
 }
 
+/// Merge Apply action ka progress/result state (Gap #8 state half).
+/// Paint agle wave me isi se Apply section banayega: Idle se start,
+/// har `run_merge_apply` branch ek honest terminal state deta hai.
+/// `Copy` + `Default(Idle)` taaki headless tests saste rahen.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MergeApplyState {
+    /// Koi apply report abhi tak nahi (fresh compare / swap / error).
+    #[default]
+    Idle,
+    /// Dry-run report bana, kuch likha nahi.
+    DryRunReported,
+    /// Real write ho gaya, `wrote_lines` summary me.
+    Wrote,
+    /// Dry-run off par output path khali tha.
+    NeedsPath,
+    /// Model bina compare ke apply manga gaya.
+    NoModel,
+    /// Resolve ya I/O fail, model untouched (retry safe).
+    Failed,
+}
+
+/// Last merge apply ka structured summary (Gap #8 state half).
+/// `merge_apply_last_report` string line ka judvaan: ye ginti rakhta
+/// hai taaki paint agle wave me real numbers dikhaye, jhooth kabhi nahi.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MergeApplySummary {
+    /// Dry-run tha (true) ya real write (false).
+    pub dry_run: bool,
+    /// Resolved output lines (markers samait jab pending ho).
+    pub resolved_lines: usize,
+    /// Staged picks se decided hunks.
+    pub decided: usize,
+    /// Live lines me kul conflict hunks.
+    pub total: usize,
+    /// Abhi bhi undecided hunks.
+    pub pending: usize,
+    /// Real write par likhi lines (dry-run par 0).
+    pub wrote_lines: usize,
+    /// Output path (dry-run/no-model par khali ho sakta hai).
+    pub out: String,
+}
+
 /// The GUI's whole state.
 pub struct App {
     pub tab: Tab,
@@ -98,6 +140,17 @@ pub struct App {
     /// Last merge dry-run ya real apply outcome line.
     /// `None` until a dry-run or real apply reports one.
     pub merge_apply_last_report: Option<String>,
+    /// Apply button intent (Gap #8 state half): paint Apply click par
+    /// `request_merge_apply` se true karta hai, `run_merge_apply` har
+    /// branch me consume karke false karta hai. Naya compare / swap /
+    /// error par clear hota hai. Paint adoption agle wave ka hai.
+    pub merge_apply_requested: bool,
+    /// Last apply action ka progress/result state. `Idle` jab tak koi
+    /// report na bane; har `run_merge_apply` branch honest state deta hai.
+    pub merge_apply_state: MergeApplyState,
+    /// Last apply ka structured summary (real counts). `None` jab tak
+    /// koi report na bane; naya compare / swap / error par clear.
+    pub merge_apply_last_summary: Option<MergeApplySummary>,
     pub table_model: Option<TableModel>,
     pub table_view: views_table::TableKeyView,
     pub table_tolerance_text: String,
@@ -201,6 +254,9 @@ impl Default for App {
             merge_dry_run: true,
             merge_output_path: String::new(),
             merge_apply_last_report: None,
+            merge_apply_requested: false,
+            merge_apply_state: MergeApplyState::Idle,
+            merge_apply_last_summary: None,
             table_model: None,
             table_view: views_table::TableKeyView::new(),
             table_tolerance_text: String::new(),
@@ -486,6 +542,9 @@ impl App {
                 self.merge_model = None;
                 self.merge_picks.clear();
                 self.merge_apply_last_report = None;
+                self.merge_apply_requested = false;
+                self.merge_apply_state = MergeApplyState::Idle;
+                self.merge_apply_last_summary = None;
                 true
             }
             Tab::Table => {
@@ -1353,13 +1412,35 @@ impl App {
     /// decisions se output ginta hai aur kuch nahi likhta; real run
     /// output path par resolved text likhta hai. Har I/O ya resolve
     /// failure graceful message banta hai, model untouched rehta hai
-    /// taaki user retry kar sake. Returns true jab report line bani ho.
-    /// Never panics; roots missing file error ek message hai.
+    /// taaki user retry kar sake. Har branch report ke saath
+    /// `merge_apply_state` + `merge_apply_last_summary` bhi set karta
+    /// hai aur button intent consume karta hai. Returns true jab report
+    /// line bani ho. Never panics; roots missing file error ek message hai.
     pub fn run_merge_apply(&mut self) -> bool {
+        self.merge_apply_requested = false;
         let resolved = match self.merge_resolved_lines() {
             Ok(lines) => lines,
             Err(err) => {
                 self.merge_apply_last_report = Some(err.clone());
+                self.merge_apply_state = MergeApplyState::NoModel;
+                let has_model = self.merge_model.is_some();
+                self.merge_apply_last_summary = Some(MergeApplySummary {
+                    dry_run: self.merge_dry_run,
+                    resolved_lines: 0,
+                    decided: 0,
+                    total: if has_model {
+                        self.merge_pick_summary().total
+                    } else {
+                        0
+                    },
+                    pending: if has_model {
+                        self.merge_pick_summary().pending
+                    } else {
+                        0
+                    },
+                    wrote_lines: 0,
+                    out: String::new(),
+                });
                 self.status = format!("merge apply: {err}");
                 return false;
             }
@@ -1373,6 +1454,16 @@ impl App {
                 summary.pending,
             );
             self.merge_apply_last_report = Some(line.clone());
+            self.merge_apply_state = MergeApplyState::DryRunReported;
+            self.merge_apply_last_summary = Some(MergeApplySummary {
+                dry_run: true,
+                resolved_lines: resolved.len(),
+                decided: summary.resolved,
+                total: summary.total,
+                pending: summary.pending,
+                wrote_lines: 0,
+                out: String::new(),
+            });
             self.status = format!("merge apply {line}");
             return true;
         }
@@ -1380,6 +1471,16 @@ impl App {
         if out.is_empty() {
             let msg = String::from("merge apply: type an output path first");
             self.merge_apply_last_report = Some(msg.clone());
+            self.merge_apply_state = MergeApplyState::NeedsPath;
+            self.merge_apply_last_summary = Some(MergeApplySummary {
+                dry_run: false,
+                resolved_lines: resolved.len(),
+                decided: summary.resolved,
+                total: summary.total,
+                pending: summary.pending,
+                wrote_lines: 0,
+                out: String::new(),
+            });
             self.status = msg;
             return false;
         }
@@ -1388,14 +1489,103 @@ impl App {
             Ok(wrote) => {
                 let line = Self::describe_merge_apply_report(wrote, &out);
                 self.merge_apply_last_report = Some(line.clone());
+                self.merge_apply_state = MergeApplyState::Wrote;
+                self.merge_apply_last_summary = Some(MergeApplySummary {
+                    dry_run: false,
+                    resolved_lines: resolved.len(),
+                    decided: summary.resolved,
+                    total: summary.total,
+                    pending: summary.pending,
+                    wrote_lines: wrote,
+                    out: out.clone(),
+                });
                 self.status = format!("merge apply done: {line}");
                 true
             }
             Err(err) => {
                 self.merge_apply_last_report = Some(err.clone());
+                self.merge_apply_state = MergeApplyState::Failed;
+                self.merge_apply_last_summary = Some(MergeApplySummary {
+                    dry_run: false,
+                    resolved_lines: resolved.len(),
+                    decided: summary.resolved,
+                    total: summary.total,
+                    pending: summary.pending,
+                    wrote_lines: 0,
+                    out: out.clone(),
+                });
                 self.status = format!("merge apply: {err}");
                 false
             }
+        }
+    }
+
+    /// Apply button intent stage karta hai (Gap #8 state half). Paint ka
+    /// Apply click agle wave me isi ko chalayega; headless core sirf flag
+    /// + status deta hai, koi I/O nahi. Hamesha true (intent noted).
+    pub fn request_merge_apply(&mut self) -> bool {
+        self.merge_apply_requested = true;
+        self.status = String::from("merge apply requested");
+        true
+    }
+
+    /// Staged Apply intent saaf karta hai (naya compare / user cancel).
+    pub fn clear_merge_apply_request(&mut self) {
+        self.merge_apply_requested = false;
+    }
+
+    /// Staged Apply intent consume karta hai: true tha to false karke
+    /// true deta hai, nahi to false. Paint dispatch isi se one-shot chalta hai.
+    pub fn take_merge_apply_request(&mut self) -> bool {
+        if self.merge_apply_requested {
+            self.merge_apply_requested = false;
+            return true;
+        }
+        false
+    }
+
+    /// Paint Apply enable gate: model maujood jab Apply dabane layak hai.
+    /// Dry-run/path gate `merge_should_write` alag rehta hai (write vs
+    /// report ka faisla wahi karta hai). Pure; headless-tested.
+    pub fn merge_apply_enabled(&self) -> bool {
+        self.merge_model.is_some()
+    }
+
+    /// Apply state + structured summary + report ko ek saath reset karta
+    /// hai. Naya compare / swap / validation-fail par purani intent ya
+    /// stale summary inherit nahi hota. Paint adoption agle wave ka hai.
+    pub fn clear_merge_apply_state(&mut self) {
+        self.merge_apply_requested = false;
+        self.merge_apply_state = MergeApplyState::Idle;
+        self.merge_apply_last_summary = None;
+        self.merge_apply_last_report = None;
+    }
+
+    /// Last apply ka honest summary line (Gap #8 state half). State +
+    /// structured summary se banti hai taaki ginti kabhi jhooth na bole:
+    /// no-model par compare-first, Idle par dry-run line ya idle note,
+    /// baaki par last report reuse. Pure-headless core; paint agle wave
+    /// me Apply section isi se dikhayega.
+    pub fn merge_apply_summary_line(&self) -> String {
+        match self.merge_model.as_ref() {
+            None => String::from("merge apply: compare first"),
+            Some(_) => match self.merge_apply_state {
+                MergeApplyState::Idle => {
+                    if self.merge_apply_requested {
+                        String::from("merge apply: requested, compare done")
+                    } else {
+                        self.merge_dry_run_line()
+                    }
+                }
+                MergeApplyState::DryRunReported
+                | MergeApplyState::Wrote
+                | MergeApplyState::NeedsPath
+                | MergeApplyState::NoModel
+                | MergeApplyState::Failed => match self.merge_apply_last_report.as_ref() {
+                    Some(line) => line.clone(),
+                    None => self.merge_dry_run_line(),
+                },
+            },
         }
     }
 
@@ -2427,6 +2617,7 @@ impl App {
         if !self.require_triple(&base, &left, &right, "file") {
             self.merge_model = None;
             self.merge_picks.clear();
+            self.clear_merge_apply_state();
             return;
         }
         let (tx, rx) = channel();
@@ -3599,7 +3790,7 @@ impl eframe::App for App {
                             let conflicted = model.conflicted;
                             self.merge_model = Some(model);
                             self.merge_picks.clear();
-                            self.merge_apply_last_report = None;
+                            self.clear_merge_apply_state();
                             self.error = None;
                             self.status = format!(
                                 "merge done: {n} line(s){}",
@@ -3609,7 +3800,7 @@ impl eframe::App for App {
                         Err(err) => {
                             self.merge_model = None;
                             self.merge_picks.clear();
-                            self.merge_apply_last_report = None;
+                            self.clear_merge_apply_state();
                             self.status = format!("merge failed: {err}");
                             self.error = Some(err);
                         }
@@ -5193,6 +5384,177 @@ mod tests {
             App::join_merge_output(&["a".to_string(), "b".to_string()]),
             "a\nb\n"
         );
+    }
+
+    #[test]
+    fn merge_apply_state_defaults_idle_without_request() {
+        let app = App::default();
+        assert!(!app.merge_apply_requested);
+        assert_eq!(app.merge_apply_state, MergeApplyState::Idle);
+        assert!(app.merge_apply_last_summary.is_none());
+        assert!(app.merge_apply_last_report.is_none());
+        assert!(!app.merge_apply_enabled());
+        assert_eq!(app.merge_apply_summary_line(), "merge apply: compare first");
+    }
+
+    #[test]
+    fn merge_apply_request_take_roundtrip() {
+        let mut app = App::default();
+        assert!(app.request_merge_apply());
+        assert!(app.merge_apply_requested);
+        assert!(app.take_merge_apply_request());
+        assert!(!app.merge_apply_requested);
+        assert!(!app.take_merge_apply_request());
+        app.request_merge_apply();
+        app.clear_merge_apply_request();
+        assert!(!app.merge_apply_requested);
+    }
+
+    #[test]
+    fn merge_apply_enabled_needs_model() {
+        let mut app = App::default();
+        assert!(!app.merge_apply_enabled());
+        app.merge_model = Some(merge_apply_fixture());
+        assert!(app.merge_apply_enabled());
+    }
+
+    #[test]
+    fn merge_apply_dry_run_sets_reported_state_and_summary() {
+        let Some((dir, out)) = merge_apply_test_path("an-dry") else {
+            return;
+        };
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        app.set_merge_output_path(out.to_string_lossy().into_owned());
+        assert!(app.request_merge_apply());
+        assert!(app.run_merge_apply());
+        assert!(!app.merge_apply_requested);
+        assert_eq!(app.merge_apply_state, MergeApplyState::DryRunReported);
+        let Some(summary) = app.merge_apply_last_summary.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert!(summary.dry_run);
+        assert_eq!((summary.decided, summary.total, summary.pending), (1, 1, 0));
+        assert_eq!(summary.resolved_lines, 3);
+        assert_eq!(summary.wrote_lines, 0);
+        let Some(report) = app.merge_apply_last_report.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert_eq!(app.merge_apply_summary_line(), report);
+        assert!(report.contains("no writes"));
+        assert_eq!(read_merge_apply_file(&out), "<missing>");
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_apply_real_write_sets_wrote_state_and_summary() {
+        let Some((dir, out)) = merge_apply_test_path("an-wrote") else {
+            return;
+        };
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Both));
+        app.set_merge_output_path(out.to_string_lossy().into_owned());
+        app.set_merge_dry_run(false);
+        assert!(app.run_merge_apply());
+        assert_eq!(app.merge_apply_state, MergeApplyState::Wrote);
+        let Some(summary) = app.merge_apply_last_summary.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert!(!summary.dry_run);
+        assert_eq!(summary.wrote_lines, 4);
+        assert_eq!(summary.resolved_lines, 4);
+        assert_eq!(
+            read_merge_apply_file(&out),
+            "header\nleft change\nright change\nfooter\n"
+        );
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_apply_missing_path_sets_needs_path() {
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Right));
+        app.set_merge_dry_run(false);
+        assert!(!app.run_merge_apply());
+        assert_eq!(app.merge_apply_state, MergeApplyState::NeedsPath);
+        let Some(summary) = app.merge_apply_last_summary.clone() else {
+            return;
+        };
+        assert!(!summary.dry_run);
+        assert_eq!(summary.wrote_lines, 0);
+        assert!(summary.out.is_empty());
+        assert!(app.merge_apply_summary_line().contains("output path"));
+    }
+
+    #[test]
+    fn merge_apply_without_model_sets_no_model() {
+        let mut app = App::default();
+        assert!(app.request_merge_apply());
+        assert!(!app.run_merge_apply());
+        assert_eq!(app.merge_apply_state, MergeApplyState::NoModel);
+        assert!(!app.merge_apply_requested);
+        assert!(app.merge_apply_last_summary.is_some());
+        assert_eq!(app.merge_apply_summary_line(), "merge apply: compare first");
+    }
+
+    #[test]
+    fn merge_apply_io_error_sets_failed_state() {
+        let Some((dir, _out)) = merge_apply_test_path("an-fail") else {
+            return;
+        };
+        let clash = dir.join("clash");
+        if std::fs::create_dir_all(&clash).is_err() {
+            remove_merge_apply_tree(&dir);
+            return;
+        }
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Base));
+        app.set_merge_output_path(clash.to_string_lossy().into_owned());
+        app.set_merge_dry_run(false);
+        assert!(!app.run_merge_apply());
+        assert_eq!(app.merge_apply_state, MergeApplyState::Failed);
+        let Some(summary) = app.merge_apply_last_summary.clone() else {
+            remove_merge_apply_tree(&dir);
+            return;
+        };
+        assert_eq!(summary.wrote_lines, 0);
+        assert!(!summary.out.is_empty());
+        remove_merge_apply_tree(&dir);
+    }
+
+    #[test]
+    fn merge_apply_state_clears_on_swap_and_retry() {
+        let mut app = App {
+            merge_model: Some(merge_apply_fixture()),
+            ..Default::default()
+        };
+        app.set_tab(Tab::Merge);
+        app.set_merge_paths("b.txt", "l.txt", "r.txt");
+        assert!(app.decide_merge_hunk(0, viewmodel::TakeChoice::Left));
+        assert!(app.run_merge_apply());
+        assert_eq!(app.merge_apply_state, MergeApplyState::DryRunReported);
+        assert!(app.swap_sides());
+        assert!(!app.merge_apply_requested);
+        assert_eq!(app.merge_apply_state, MergeApplyState::Idle);
+        assert!(app.merge_apply_last_summary.is_none());
+        assert!(app.merge_apply_last_report.is_none());
+        app.clear_merge_apply_state();
+        assert_eq!(app.merge_apply_state, MergeApplyState::Idle);
     }
 
     #[test]
