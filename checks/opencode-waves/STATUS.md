@@ -153,3 +153,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - OWNS respected (app/screenshot + gui-folder-vis + round-D-1). 8/8 expects inside mod tests — clean.
 - round-D-1: console PASS + visual PASS (9914, magic ok, non-blank). Folder-visual doc describes wired UI.
 - Hooks agent still working (views/gutter/viewmodel uncommitted) — full green re-verify at its land.
+
+## Wave D poll 11
+- Hooks confirming workspace lint source (expect_used deny), still working. Its 3 files uncommitted. Folder proc gone (landed), hooks proc alive.
