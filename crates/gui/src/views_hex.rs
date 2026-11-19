@@ -19,6 +19,7 @@
 
 use autocompare_compare::{BinaryComparison, HexAlignment};
 use autocompare_diff::hex::{HexOp, diff_hex};
+use eframe::egui;
 
 /// Per-file byte cap for aligned hex compare, mirroring the engine's
 /// 16 MiB limit. Aligned modes hold both inputs in memory, so files
@@ -790,6 +791,135 @@ pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
 }
 
 // ----------------------------------------------------------------------------
+// Hex find bar (paint; caller wiring orchestrator ke paas, is file me sirf
+// paint fn + local-state helpers). Gap #12 hex hissa: hex window ke andar
+// find row — table `paint_table_find_bar` precedent ka geometry/typo mirror
+// (wahi bar height, wahi needle chaudai, wahi Prev/Next labels, badge right
+// me ek pad ke saath small weak typo me). Paint caller ke locals
+// (`&mut String` needle + badge `&str`) par chalti hai, isliye App/viewer
+// struct me koi field edit nahi hota; returns `(prev_clicked, next_clicked)`
+// taaki cursor/badge advance caller ke paas rahe. No I/O; colors frozen
+// (koi Color32/Visuals/.size nahi, sirf small/weak/small_button).
+// ----------------------------------------------------------------------------
+
+/// Hex find bar ki height (table precedent reuse, koi naya token nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const HEX_FIND_BAR_H: f32 = 28.0;
+/// Hex find needle field ki chaudai (table precedent reuse).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const HEX_FIND_NEEDLE_W: f32 = 120.0;
+/// Hex find badge ka right-end pad (table precedent reuse).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub const HEX_FIND_BADGE_PAD: f32 = 4.0;
+
+/// Needle text se bytes: separators hatakar hex jode decode hota hai,
+/// warna raw utf-8 bytes. Khali par khali vec. App-side
+/// `parse_hex_needle` ka views_hex-local mirror hai (views_hex app par
+/// depend nahi kar sakta, isliye same semantics yahin rehti hai taaki
+/// agla wiring wave dono taraf ek jaisi needle samjhe). Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn parse_hex_needle_text(text: &str) -> Vec<u8> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    let mut compact = String::new();
+    for ch in trimmed.chars() {
+        if ch == ' ' || ch == '\t' || ch == ',' || ch == ';' || ch == '_' || ch == '-' || ch == ':'
+        {
+            continue;
+        }
+        compact.push(ch);
+    }
+    let even = compact.len().is_multiple_of(2);
+    let all_hex = !compact.is_empty() && compact.chars().all(|c| c.is_ascii_hexdigit());
+    if even && all_hex {
+        let bytes = compact.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            let hi = bytes.get(i).copied().unwrap_or(b'0');
+            let lo = bytes.get(i.saturating_add(1)).copied().unwrap_or(b'0');
+            let hex = [hi, lo];
+            let mut ok = false;
+            if let Ok(pair) = std::str::from_utf8(&hex)
+                && let Ok(byte) = u8::from_str_radix(pair, 16)
+            {
+                out.push(byte);
+                ok = true;
+            }
+            if !ok {
+                return trimmed.as_bytes().to_vec();
+            }
+            i = i.saturating_add(2);
+        }
+        return out;
+    }
+    trimmed.as_bytes().to_vec()
+}
+
+/// Needle ki sab overlapping occurrences offset order me (ek-ek byte
+/// aage badhkar, taaki koi hit chhute nahi). Khali needle/haystack ya
+/// badi needle par khali vec. `hex_find_count` ka poora-hit judvaan
+/// (`len()` count ke barabar aata hai); N/M total + Next/Prev nav isi
+/// par chalta hai. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn hex_find_match_offsets(haystack: &[u8], needle: &[u8]) -> Vec<u64> {
+    let mut out = Vec::new();
+    if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
+        return out;
+    }
+    let mut idx: usize = 0;
+    while let Some(window) = haystack.get(idx..idx.saturating_add(needle.len())) {
+        if window == needle {
+            out.push(idx as u64);
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Hex window ke andar find row: needle field + Prev/Next + N/M badge.
+/// Table `paint_table_find_bar` ka geometry/typo mirror (wahi bar height,
+/// wahi needle chaudai, wahi button labels, badge right me ek pad ke
+/// saath small weak typo me). Returns `(prev_clicked, next_clicked)` —
+/// cursor/badge advance caller ke locals me hota hai (App fields untouched).
+/// Caller signature same rehti hai (hex tab wiring isi ko chalaye, KEVL
+/// caller me koi edit nahi).
+/// Wiring-pending until orchestrator wires the hex tab caller.
+#[allow(dead_code)]
+pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    let avail = ui.available_width();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), HEX_FIND_BAR_H));
+        ui.label(egui::RichText::new("Find:").small().weak());
+        ui.add(
+            egui::TextEdit::singleline(needle)
+                .desired_width(HEX_FIND_NEEDLE_W)
+                .hint_text("needle"),
+        );
+        if ui.small_button("◀ Prev").clicked() {
+            prev = true;
+        }
+        if ui.small_button("Next ▶").clicked() {
+            next = true;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(HEX_FIND_BADGE_PAD);
+            ui.label(egui::RichText::new(badge).small().weak());
+        });
+    });
+    (prev, next)
+}
+
+// ----------------------------------------------------------------------------
 // Per-hunk merge (headless; paint wiring stays with the orchestrator).
 // Gap local-run-l #10: product view-only hai, comparable tools har hunk
 // par take-left/take-right dete hain. Ye pure byte choice hai: hunk ke
@@ -1421,6 +1551,58 @@ mod tests {
         assert_eq!(hex_find_count_label(Some(2), 5), "2/5");
         assert_eq!(hex_find_count_label(Some(1), 1), "1/1");
         assert_eq!(hex_find_count_label(None, 5), "0/5");
+        assert_eq!(hex_find_count_label(None, 0), "0/0");
+    }
+
+    #[test]
+    fn hex_find_needle_text_parses_hex_pairs_or_raw_bytes() {
+        assert!(parse_hex_needle_text("").is_empty());
+        assert!(parse_hex_needle_text("   ").is_empty());
+        // Hex jode: separators hatkar decode hota hai.
+        assert_eq!(parse_hex_needle_text("14 1e"), vec![0x14u8, 0x1e]);
+        assert_eq!(parse_hex_needle_text("14:1e"), vec![0x14u8, 0x1e]);
+        assert_eq!(parse_hex_needle_text("14-1e"), vec![0x14u8, 0x1e]);
+        assert_eq!(parse_hex_needle_text("14,1e"), vec![0x14u8, 0x1e]);
+        assert_eq!(parse_hex_needle_text("FF 00"), vec![0xFFu8, 0x00]);
+        assert_eq!(parse_hex_needle_text("ff"), vec![0xFFu8]);
+        // Odd length ya gair-hex par raw utf-8 bytes girte hain.
+        assert_eq!(parse_hex_needle_text("abc"), b"abc".to_vec());
+        assert_eq!(parse_hex_needle_text("zz"), b"zz".to_vec());
+        assert_eq!(parse_hex_needle_text("banana"), b"banana".to_vec());
+        // Bahar ki space trim hoti hai, andar wali separator hai.
+        assert_eq!(parse_hex_needle_text("  14 1e  "), vec![0x14u8, 0x1e]);
+    }
+
+    #[test]
+    fn hex_find_match_offsets_collects_all_hits_in_order() {
+        let hay = vec![10u8, 20, 30, 20, 30, 40];
+        let needle = vec![20u8, 30];
+        assert_eq!(hex_find_match_offsets(&hay, &needle), vec![1u64, 3]);
+        // Overlapping: 3 same bytes me 2-wide needle do baar.
+        assert_eq!(
+            hex_find_match_offsets(&[7u8, 7, 7], &[7u8, 7]),
+            vec![0u64, 1]
+        );
+        // Poora-hit judvaan: len count ke barabar.
+        assert_eq!(
+            hex_find_match_offsets(&hay, &needle).len(),
+            hex_find_count(&hay, &needle)
+        );
+        // Khali needle/haystack, badi ya missing needle: khali.
+        assert!(hex_find_match_offsets(&hay, &[]).is_empty());
+        assert!(hex_find_match_offsets(&[], &needle).is_empty());
+        assert!(hex_find_match_offsets(&hay, &[99u8]).is_empty());
+        assert!(hex_find_match_offsets(&[1u8], &[1u8, 2u8]).is_empty());
+    }
+
+    #[test]
+    fn hex_find_bar_geometry_reuses_table_precedent() {
+        // Table precedent values reuse hote hain, koi naya token nahi.
+        assert_eq!(HEX_FIND_BAR_H, 28.0);
+        assert_eq!(HEX_FIND_NEEDLE_W, 120.0);
+        assert_eq!(HEX_FIND_BADGE_PAD, 4.0);
+        // Badge label shape count label jaisa hai.
+        assert_eq!(hex_find_count_label(Some(2), 5), "2/5");
         assert_eq!(hex_find_count_label(None, 0), "0/0");
     }
 }
