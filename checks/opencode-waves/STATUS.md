@@ -760,3 +760,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - O-PAINT ses-paint-o (opencode default): OWNS views.rs+app.rs+checks/gui-paint-o/**. Consume pagers in paint (HexPager/TablePager/RowPager next/prev/bring_into_view in scroll paths; gutter-jump + find-box into input handlers). Smallest diff, gates, REPORT. Commit NO push.
 - O-VERIFY ses-verify-o (opencode default, report-only): OWNS checks/wave-o-verify/**, zero source edits. Release rebuild + harness + workspace tests + clippy/fmt + PNG metrics vs baselines (204/11022272B/9914B). Commit NO push.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
+
+## Wave O poll 01 recheck+verify landed, paint fixing
+- RECHECK 971197f landed+pushed? (verify at end): OWNS clean (wave-o-gaps REPORT 41 lines).
+- VERIFY f539a04 landed: release metrics + proof PNGs + REPORT 45 lines, OWNS clean.
+- PAINT +579 (app 308 + views 298) working: hex/table/folder pager wiring + find-box fields + tests (208 green). Orchestrator unblocked 5x set_total->total_rows+clamp_top (PAINT-owned files only, agent circling 6 polls; agent acknowledged green, continued). Remaining: ~13 clippy lints (dead_code/collapsible/let-else/indexing/field_assign) in agent fix-loop. No land yet.
