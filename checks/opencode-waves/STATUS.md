@@ -382,3 +382,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - B ses-hex-table-exq OWNS ONLY crates/gui/src/views_hex.rs crates/gui/src/views_table.rs checks/parity-hex-table/** (NEW files only, no app.rs/views.rs edits; integration as .patch in checks dir for orchestrator): hex editor UI + table key alignment UI headless-first, craft-anything validate per feature.
 - C ses-exq-geo-typo2 OWNS ONLY crates/gui/src/theme.rs crates/gui/src/gutter.rs crates/gui/src/tree.rs checks/gui-exquisite/**: geometry-first (width/height/margins/padding/alignment) + typography (family/weight/line-height/letter-spacing), colors frozen from COLOR wave. Harness tools/gui-polish/run-geo-typo.sh + gui tests 122 baseline.
 - Rules: commit locally NO push, English conventional commits, Hinglish Roman logs, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room outside observation.
+
+## Wave H poll 01 relaunched live
+- First spawn shell-quoting fail (0B logs, procs dead, sessions missing). Respwaned via python Popen cwd=repo, no repo positional, default model: PIDs 36891/36892/36893.
+- All 3 live 02:08, logs growing. Next verify OWNS + tests + push.
