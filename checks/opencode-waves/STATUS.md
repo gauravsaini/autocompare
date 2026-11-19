@@ -264,3 +264,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave F poll 05 wiring near done
 - INT views.rs 44 lines, clippy 3->1 (only gutter_bar_width unused left, replace done). Tests 115 green. Live, final cleanup next.
+
+## Wave F poll 06 REL landed INT final
+- 408b41d docs(release) landed: binary 10851744B + smoke 9914B + 115 pass. Pushed.
+- INT live 22935, views 68 lines, tests 117 green, clippy 1 unused + fmt 30 RED final cleanup pending. REL terminal done.
