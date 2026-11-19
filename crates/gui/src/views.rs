@@ -338,43 +338,118 @@ pub fn parse_tolerance_text(text: &str) -> Option<f64> {
     }
 }
 
+/// Parses a gutter row number the way the hex jump box sanitizes:
+/// only finite integers `>= 0` count; anything else means no jump.
+/// Pure; unit-tested.
+pub fn parse_gutter_row_text(text: &str) -> Option<u64> {
+    text.trim().parse::<u64>().ok()
+}
+
+/// Adapts a painted [`TableModel`] to the headless find API
+/// [`views_table::table_find_next`]: each painted row becomes one
+/// single-cell row carrying its display text (`label | text`), so the
+/// find-box searches exactly what paint shows. Pure; unit-tested.
+#[allow(dead_code)]
+pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
+    model
+        .rows
+        .iter()
+        .map(|row| vec![format!("{} | {}", row.label, row.text)])
+        .collect()
+}
+
+/// Adapts folder rows to the headless find API
+/// [`crate::tree::folder_find_next`]: paths in paint order. Pure;
+/// unit-tested.
+#[allow(dead_code)]
+pub fn folder_path_rows(rows: &[FolderRow]) -> Vec<String> {
+    rows.iter().map(|row| row.rel_path.clone()).collect()
+}
+
 /// The model-driven hex view: status line, hunk navigation (Prev /
-/// Next plus jump to first difference), the hunk grid with offsets,
-/// then the legacy engine summary lines for byte context.
-pub fn paint_hex(ui: &mut Ui, view: &mut views_hex::HexCompareView, lines: &[String]) {
+/// Next plus jump to first difference), pager-driven hunk window, then
+/// the legacy engine summary lines for byte context. `pager` ka total
+/// hunks se sync hota hai; Prev/Next page aur PageUp/PageDown
+/// `next_page`/`prev_page` chalate hain, selection
+/// `bring_into_view` se visible rehta hai.
+pub fn paint_hex(
+    ui: &mut Ui,
+    view: &mut views_hex::HexCompareView,
+    pager: &mut views_hex::HexPager,
+    lines: &[String],
+) {
     ui.label(RichText::new(view.status_line()).monospace().weak());
     if view.over_cap {
         paint_note(ui, "inputs exceed the 16 MiB aligned cap: compare skipped");
         return;
     }
+    pager.set_total(view.hunks.len() as u64);
+    let (page_up, page_down) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::PageUp),
+            input.key_pressed(egui::Key::PageDown),
+        )
+    });
+    if page_up {
+        pager.prev_page();
+    }
+    if page_down {
+        pager.next_page();
+    }
     ui.horizontal(|ui| {
         if ui.small_button("◀ Prev hunk").clicked() {
             view.select_prev_hunk();
+            if let Some(idx) = view.selected {
+                pager.bring_into_view(idx as u64);
+            }
         }
         if ui.small_button("Next hunk ▶").clicked() {
             view.select_next_hunk();
+            if let Some(idx) = view.selected {
+                pager.bring_into_view(idx as u64);
+            }
         }
         if ui.small_button("First diff").clicked()
             && let Some(off) = view.first_diff
+            && view.navigate_to_offset(off).is_some()
+            && let Some(idx) = view.selected
         {
-            view.navigate_to_offset(off);
+            pager.bring_into_view(idx as u64);
         }
-        // Parity-m wiring (orchestrator): gutter row-click `row` par
-        // `views_hex::hex_row_to_hunk(row, &view.hunks)` se hunk idx
-        // lekar `view.selected = Some(idx)` kare; page keys
-        // `App::hex_pager` (`next_page`/`prev_page`/`bring_into_view`)
-        // chalaye. Grid paint khud parity-l F1 WIRING ke saath aayega.
+        if ui.small_button("◀ Prev page").clicked() {
+            pager.prev_page();
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            pager.next_page();
+        }
     });
+    ui.label(
+        RichText::new(format!(
+            "page {} of {}, showing {} row(s)",
+            pager.top / pager.rows_per_page.max(1) + 1,
+            pager.page_count().max(1),
+            pager
+                .visible_range()
+                .1
+                .saturating_sub(pager.visible_range().0),
+        ))
+        .small()
+        .weak(),
+    );
     if view.hunks.is_empty() {
         ui.label(RichText::new("(no differing hunks)").weak());
     } else {
         let row_height = text_row_height(ui);
-        let count = view.hunks.len();
+        let (wstart, wend) = pager.visible_range();
+        let wstart = wstart as usize;
+        let wend = (wend as usize).min(view.hunks.len());
+        let count = wend.saturating_sub(wstart);
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .max_height(220.0)
             .show_rows(ui, row_height, count, |ui, range| {
-                for i in range {
+                for pos in range {
+                    let i = wstart.saturating_add(pos);
                     let Some(hunk) = view.hunks.get(i) else {
                         break;
                     };
@@ -386,6 +461,10 @@ pub fn paint_hex(ui: &mut Ui, view: &mut views_hex::HexCompareView, lines: &[Str
                         .clicked()
                     {
                         view.selected = Some(i);
+                        pager.bring_into_view(i as u64);
+                    }
+                    if Some(i) == view.selected {
+                        ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
                     }
                 }
             });
@@ -401,13 +480,19 @@ pub fn paint_hex_over_cap(ui: &mut Ui, view: &views_hex::HexCompareView) {
 }
 
 /// The model-driven table view: keyed summary line, the positional
-/// note when no key columns are selected, then the legacy row paint.
-pub fn paint_table_keyed(ui: &mut Ui, view: &views_table::TableKeyView, model: &TableModel) {
+/// note when no key columns are selected, pager-driven row window,
+/// then the legacy row paint.
+pub fn paint_table_keyed(
+    ui: &mut Ui,
+    view: &views_table::TableKeyView,
+    model: &TableModel,
+    pager: &mut views_table::TablePager,
+) {
     ui.label(RichText::new(view.status_line()).monospace().weak());
     if let Some(note) = view.positional_note() {
         paint_note(ui, note);
     }
-    paint_table(ui, model);
+    paint_table(ui, model, pager);
 }
 /// The three-way merge output: conflict blocks highlighted, notes
 /// for conflicts and truncation first, with Take resolution actions.
@@ -467,8 +552,11 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
 }
 
 /// The table comparison rows: changed rows highlighted, changed cells
-/// already marked `[old => new]` by the view model.
-pub fn paint_table(ui: &mut Ui, model: &TableModel) {
+/// already marked `[old => new]` by the view model. `pager` ka total
+/// rows se sync hota hai; Prev/Next page aur PageUp/PageDown
+/// `next_page`/`prev_page` chalate hain, find result
+/// `bring_into_view` se visible rehta hai.
+pub fn paint_table(ui: &mut Ui, model: &TableModel, pager: &mut views_table::TablePager) {
     let dark = ui.visuals().dark_mode;
     if model.truncated {
         paint_note(ui, "showing the first rows only; the rest is cut off");
@@ -477,11 +565,51 @@ pub fn paint_table(ui: &mut Ui, model: &TableModel) {
         ui.label(RichText::new("(both tables are empty)").weak());
         return;
     }
+    pager.total_rows = model.rows.len();
+    pager.clamp_top();
+    let (page_up, page_down) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::PageUp),
+            input.key_pressed(egui::Key::PageDown),
+        )
+    });
+    if page_up {
+        pager.prev_page();
+    }
+    if page_down {
+        pager.next_page();
+    }
+    ui.horizontal(|ui| {
+        if ui.small_button("◀ Prev page").clicked() {
+            pager.prev_page();
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            pager.next_page();
+        }
+        ui.label(
+            RichText::new(format!(
+                "page {} of {}, showing {} row(s)",
+                pager.top / pager.rows_per_page.max(1) + 1,
+                pager.page_count().max(1),
+                pager
+                    .visible_range()
+                    .1
+                    .saturating_sub(pager.visible_range().0),
+            ))
+            .small()
+            .weak(),
+        );
+    });
+    ui.add_space(TIGHT_GAP);
     let row_height = text_row_height(ui);
+    let (wstart, wend) = pager.visible_range();
+    let wend = wend.min(model.rows.len());
+    let count = wend.saturating_sub(wstart);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .show_rows(ui, row_height, model.rows.len(), |ui, range| {
-            for i in range {
+        .show_rows(ui, row_height, count, |ui, range| {
+            for pos in range {
+                let i = wstart.saturating_add(pos);
                 let Some(row) = model.rows.get(i) else {
                     break;
                 };
@@ -947,14 +1075,16 @@ fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(Stri
 
 /// The folder listing: the summary line (with its truncation note)
 /// above the monospace tree grid with expand/collapse drill-down.
-/// Rows are virtualized the same way as the text view.
-/// Kept for the pending App rewiring (see the note on theme blues).
+/// Rows are virtualized the same way as the text view. `pager` ka
+/// total visible nodes se sync hota hai; page buttons aur
+/// PageUp/PageDown `next_page`/`prev_page` chalate hain.
 #[allow(dead_code)]
 pub fn paint_folder(
     ui: &mut Ui,
     rows: &[FolderRow],
     summary: &str,
     expanded: &mut std::collections::BTreeSet<String>,
+    pager: &mut crate::tree::RowPager,
 ) {
     ui.label(RichText::new(summary).monospace().weak());
     ui.add_space(TIGHT_GAP);
@@ -963,13 +1093,53 @@ pub fn paint_folder(
         return;
     }
     let tree_nodes = viewmodel::folder_tree(rows, expanded);
+    pager.total_rows = tree_nodes.len();
+    pager.clamp_top();
+    let (page_up, page_down) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::PageUp),
+            input.key_pressed(egui::Key::PageDown),
+        )
+    });
+    if page_up {
+        pager.prev_page();
+    }
+    if page_down {
+        pager.next_page();
+    }
+    ui.horizontal(|ui| {
+        if ui.small_button("◀ Prev page").clicked() {
+            pager.prev_page();
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            pager.next_page();
+        }
+        ui.label(
+            RichText::new(format!(
+                "page {} of {}, showing {} row(s)",
+                pager.top / pager.rows_per_page.max(1) + 1,
+                pager.page_count().max(1),
+                pager
+                    .visible_range()
+                    .1
+                    .saturating_sub(pager.visible_range().0),
+            ))
+            .small()
+            .weak(),
+        );
+    });
+    ui.add_space(TIGHT_GAP);
     let row_height = text_row_height(ui);
     let mut toggle_dir = None;
 
+    let (wstart, wend) = pager.visible_range();
+    let wend = wend.min(tree_nodes.len());
+    let count = wend.saturating_sub(wstart);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .show_rows(ui, row_height, tree_nodes.len(), |ui, range| {
-            for i in range {
+        .show_rows(ui, row_height, count, |ui, range| {
+            for pos in range {
+                let i = wstart.saturating_add(pos);
                 let Some(node) = tree_nodes.get(i) else {
                     break;
                 };
@@ -1988,5 +2158,98 @@ mod tests {
             audio_row_color(AudioCheckKind::LeftConfig, false, false, true),
             dim_for(true)
         );
+    }
+
+    #[test]
+    fn gutter_row_text_parses_only_nonnegative_ints() {
+        assert_eq!(parse_gutter_row_text("2"), Some(2));
+        assert_eq!(parse_gutter_row_text("  10 "), Some(10));
+        assert_eq!(parse_gutter_row_text("0"), Some(0));
+        assert_eq!(parse_gutter_row_text(""), None);
+        assert_eq!(parse_gutter_row_text("abc"), None);
+        assert_eq!(parse_gutter_row_text("-1"), None);
+        assert_eq!(parse_gutter_row_text("1.5"), None);
+    }
+
+    #[test]
+    fn table_model_text_rows_carry_painted_text_for_find() {
+        let model = TableModel {
+            rows: vec![
+                crate::viewmodel::TableRow {
+                    glyph: '=',
+                    label: "   1".to_string(),
+                    text: "a | b".to_string(),
+                    changed: false,
+                },
+                crate::viewmodel::TableRow {
+                    glyph: '!',
+                    label: "   2".to_string(),
+                    text: "needle here".to_string(),
+                    changed: true,
+                },
+            ],
+            truncated: false,
+        };
+        let texts = table_model_text_rows(&model);
+        assert_eq!(texts.len(), 2);
+        assert_eq!(
+            crate::views_table::table_find_next(&texts, "needle", 0, false),
+            Some((1, 0))
+        );
+        assert_eq!(
+            crate::views_table::table_find_next(&texts, "missing", 0, false),
+            None
+        );
+    }
+
+    #[test]
+    fn folder_path_rows_keep_paint_order_for_find() {
+        let rows = vec![
+            FolderRow {
+                rel_path: "src/lib.rs".to_string(),
+                is_dir: false,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            FolderRow {
+                rel_path: "README.md".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+        ];
+        let paths = folder_path_rows(&rows);
+        assert_eq!(
+            paths,
+            vec!["src/lib.rs".to_string(), "README.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn pager_windows_drive_visible_rows() {
+        let mut hex_pager = crate::views_hex::HexPager::new(50, 16);
+        assert_eq!(hex_pager.visible_range(), (0, 16));
+        hex_pager.next_page();
+        assert_eq!(hex_pager.top, 16);
+        assert!(hex_pager.bring_into_view(40));
+        assert_eq!(hex_pager.top, 25);
+        let mut table_pager = crate::views_table::TablePager::new(25, 10);
+        assert_eq!(table_pager.visible_range(), (0, 10));
+        table_pager.next_page();
+        assert_eq!(table_pager.top, 10);
+        assert!(table_pager.bring_into_view(24));
+        let mut folder_pager = crate::tree::RowPager::new(25, 10);
+        folder_pager.next_page();
+        assert_eq!(folder_pager.top, 10);
+        folder_pager.prev_page();
+        assert_eq!(folder_pager.top, 0);
     }
 }

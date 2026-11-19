@@ -93,6 +93,11 @@ pub struct App {
     pub hex_pager: views_hex::HexPager,
     pub table_pager: views_table::TablePager,
     pub folder_pager: tree::RowPager,
+    pub hex_gutter_row_text: String,
+    pub table_find_needle: String,
+    pub table_find_from: usize,
+    pub folder_find_needle: String,
+    pub folder_cursor: usize,
     pub word_wrap: bool,
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
@@ -137,6 +142,11 @@ impl Default for App {
             hex_pager: views_hex::HexPager::new(0, 16),
             table_pager: views_table::TablePager::new(0, 20),
             folder_pager: tree::RowPager::new(0, 20),
+            hex_gutter_row_text: String::new(),
+            table_find_needle: String::new(),
+            table_find_from: 0,
+            folder_find_needle: String::new(),
+            folder_cursor: 0,
             word_wrap: false,
             show_line_numbers: true,
             syntax_highlight: true,
@@ -471,10 +481,57 @@ impl App {
         match views_hex::hex_row_to_hunk(row, &self.hex_view.hunks) {
             Some(idx) => {
                 self.hex_view.selected = Some(idx);
+                self.hex_pager.set_total(self.hex_view.hunks.len() as u64);
+                self.hex_pager.bring_into_view(idx as u64);
                 self.status = format!("hex: {}", self.hex_view.status_line());
                 true
             }
             None => false,
+        }
+    }
+
+    /// Syncs the hex pager total to the current hunk count.
+    pub fn sync_hex_pager(&mut self) {
+        self.hex_pager.set_total(self.hex_view.hunks.len() as u64);
+    }
+
+    /// One page forward in the hex hunk window.
+    pub fn hex_page_next(&mut self) {
+        self.sync_hex_pager();
+        self.hex_pager.next_page();
+        self.status = format!(
+            "hex page: top {} of {}",
+            self.hex_pager.top,
+            self.hex_view.hunks.len()
+        );
+    }
+
+    /// One page back in the hex hunk window.
+    pub fn hex_page_prev(&mut self) {
+        self.sync_hex_pager();
+        self.hex_pager.prev_page();
+        self.status = format!(
+            "hex page: top {} of {}",
+            self.hex_pager.top,
+            self.hex_view.hunks.len()
+        );
+    }
+
+    /// Selection-aware next: hunk select + pager bring-into-view.
+    pub fn hex_select_next_paged(&mut self) {
+        self.hex_select_next();
+        if let Some(idx) = self.hex_view.selected {
+            self.sync_hex_pager();
+            self.hex_pager.bring_into_view(idx as u64);
+        }
+    }
+
+    /// Selection-aware prev: hunk select + pager bring-into-view.
+    pub fn hex_select_prev_paged(&mut self) {
+        self.hex_select_prev();
+        if let Some(idx) = self.hex_view.selected {
+            self.sync_hex_pager();
+            self.hex_pager.bring_into_view(idx as u64);
         }
     }
 
@@ -539,6 +596,52 @@ impl App {
         ignore_case: bool,
     ) -> Option<(usize, usize)> {
         views_table::table_find_next(rows, needle, from_row, ignore_case)
+    }
+
+    /// Syncs the table pager total to the current model rows.
+    pub fn sync_table_pager(&mut self) {
+        let total = self.table_model.as_ref().map_or(0, |m| m.rows.len());
+        self.table_pager.total_rows = total;
+        self.table_pager.clamp_top();
+    }
+
+    /// One page forward in the table row window.
+    pub fn table_page_next(&mut self) {
+        self.sync_table_pager();
+        self.table_pager.next_page();
+    }
+
+    /// One page back in the table row window.
+    pub fn table_page_prev(&mut self) {
+        self.sync_table_pager();
+        self.table_pager.prev_page();
+    }
+
+    /// Paged find-box: painted `label | text` rows par needle dhoondhkar
+    /// pager ko `bring_into_view(row)` se visible karta hai. `from`
+    /// cursor aage badhta hai taaki Next dabane par agla match mile.
+    pub fn table_find_next_paged(&mut self) -> Option<(usize, usize)> {
+        let needle = self.table_find_needle.clone();
+        if needle.is_empty() {
+            return None;
+        }
+        let model = self.table_model.as_ref()?;
+        let texts: Vec<Vec<String>> = model
+            .rows
+            .iter()
+            .map(|row| vec![format!("{} | {}", row.label, row.text)])
+            .collect();
+        let found = Self::table_find_next_cell(
+            &texts,
+            &needle,
+            self.table_find_from,
+            self.table_view.ignore_case,
+        )?;
+        self.sync_table_pager();
+        self.table_pager.bring_into_view(found.0);
+        self.table_find_from = found.0.saturating_add(1) % texts.len().max(1);
+        self.status = format!("table find: row {} col {}", found.0 + 1, found.1 + 1);
+        Some(found)
     }
 
     /// Table per-hunk merge (parity-m F3 model): chosen side ki row.
@@ -629,6 +732,80 @@ impl App {
             Some(rows) => tree::folder_prev_changed(rows, from),
             None => None,
         }
+    }
+
+    /// Syncs the folder pager total to the current visible tree.
+    pub fn sync_folder_pager(&mut self) {
+        let total = self.folder_visible_tree().len();
+        self.folder_pager.total_rows = total;
+        self.folder_pager.clamp_top();
+    }
+
+    /// One page forward in the folder tree window.
+    pub fn folder_page_next(&mut self) {
+        self.sync_folder_pager();
+        self.folder_pager.next_page();
+    }
+
+    /// One page back in the folder tree window.
+    pub fn folder_page_prev(&mut self) {
+        self.sync_folder_pager();
+        self.folder_pager.prev_page();
+    }
+
+    /// Paged next-change: agla changed row + pager bring-into-view.
+    pub fn folder_next_changed_paged(&mut self) -> Option<usize> {
+        let from = self.folder_cursor;
+        let found = self.folder_next_changed_index(from)?;
+        self.sync_folder_pager();
+        // Visible-tree index par map: raw rows index se visible index
+        // nikaalna zaroori hai kyunki filter/collapse chhupa sakta hai.
+        let nodes = self.folder_visible_tree();
+        let visible_idx = nodes.iter().position(|n| {
+            self.folder_rows().is_some_and(|rows| {
+                rows.iter().position(|r| r.rel_path == n.row.rel_path) == Some(found)
+            })
+        })?;
+        self.folder_pager.bring_into_view(visible_idx);
+        self.folder_cursor = found.saturating_add(1);
+        self.status = format!("folder next change: row {}", found + 1);
+        Some(found)
+    }
+
+    /// Paged prev-change: pichhla changed row + pager bring-into-view.
+    pub fn folder_prev_changed_paged(&mut self) -> Option<usize> {
+        let from = self.folder_cursor;
+        let found = self.folder_prev_changed_index(from)?;
+        self.sync_folder_pager();
+        let nodes = self.folder_visible_tree();
+        let visible_idx = nodes.iter().position(|n| {
+            self.folder_rows().is_some_and(|rows| {
+                rows.iter().position(|r| r.rel_path == n.row.rel_path) == Some(found)
+            })
+        })?;
+        self.folder_pager.bring_into_view(visible_idx);
+        self.folder_cursor = found;
+        self.status = format!("folder prev change: row {}", found + 1);
+        Some(found)
+    }
+
+    /// Paged find-box: path me needle + pager bring-into-view.
+    pub fn folder_find_next_paged(&mut self) -> Option<usize> {
+        let needle = self.folder_find_needle.clone();
+        if needle.is_empty() {
+            return None;
+        }
+        let rows = self.folder_rows()?.clone();
+        let found = tree::folder_find_next(&rows, &needle, self.folder_cursor, true)?;
+        self.sync_folder_pager();
+        let nodes = self.folder_visible_tree();
+        let wanted = rows.get(found)?.rel_path.clone();
+        if let Some(visible_idx) = nodes.iter().position(|n| n.row.rel_path == wanted) {
+            self.folder_pager.bring_into_view(visible_idx);
+        }
+        self.folder_cursor = found.saturating_add(1) % rows.len().max(1);
+        self.status = format!("folder find: row {}", found + 1);
+        Some(found)
     }
 
     /// Stages a double-clicked node and routes via
@@ -2137,7 +2314,65 @@ impl eframe::App for App {
                         }
                         // Honest counts line via FolderCounts::summary.
                         ui.label(RichText::new(self.folder_counts_summary()).monospace().weak());
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.small_button("◀ Prev page").clicked() {
+                                self.folder_page_prev();
+                            }
+                            if ui.small_button("Next page ▶").clicked() {
+                                self.folder_page_next();
+                            }
+                            if ui.small_button("◀ Prev change").clicked()
+                                && self.folder_prev_changed_paged().is_none()
+                            {
+                                self.status = String::from("folder: no changed rows");
+                            }
+                            if ui.small_button("Next change ▶").clicked()
+                                && self.folder_next_changed_paged().is_none()
+                            {
+                                self.status = String::from("folder: no changed rows");
+                            }
+                            ui.label(RichText::new("Find:").small().weak());
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.folder_find_needle)
+                                    .desired_width(120.0)
+                                    .hint_text("path needle"),
+                            );
+                            if ui.small_button("Next match ▶").clicked()
+                                && self.folder_find_next_paged().is_none()
+                            {
+                                self.status = String::from("folder find: no match");
+                            }
+                        });
+                        self.sync_folder_pager();
+                        let (folder_page_up, folder_page_down) = ui.input(|input| {
+                            (
+                                input.key_pressed(egui::Key::PageUp),
+                                input.key_pressed(egui::Key::PageDown),
+                            )
+                        });
+                        if folder_page_up {
+                            self.folder_page_prev();
+                        }
+                        if folder_page_down {
+                            self.folder_page_next();
+                        }
                         let nodes = self.folder_visible_tree();
+                        self.folder_pager.total_rows = nodes.len();
+                        self.folder_pager.clamp_top();
+                        let (wstart, wend) = self.folder_pager.visible_range();
+                        let wend = wend.min(nodes.len());
+                        ui.label(
+                            RichText::new(format!(
+                                "page {} of {}, showing {} row(s)",
+                                self.folder_pager.top
+                                    / self.folder_pager.rows_per_page.max(1)
+                                    + 1,
+                                self.folder_pager.page_count().max(1),
+                                wend.saturating_sub(wstart),
+                            ))
+                            .small()
+                            .weak(),
+                        );
                         if nodes.is_empty() {
                             ui.label(
                                 RichText::new(home::folder_empty_hint(
@@ -2148,7 +2383,8 @@ impl eframe::App for App {
                         } else {
                             let mut toggle_dir: Option<String> = None;
                             let mut double_clicked: Vec<tree::FolderTreeNode> = Vec::new();
-                            for node in &nodes {
+                            let window = nodes.get(wstart..wend).unwrap_or(&[]);
+                            for node in window {
                                 ui.horizontal(|ui| {
                                     if node.depth > 0 {
                                         ui.add_space(views::tree_indent(node.depth));
@@ -2261,8 +2497,39 @@ impl eframe::App for App {
                         }
                     }
                     if self.hex_model.is_some() {
-                        if let Some(lines) = self.hex_model.as_ref() {
-                            views::paint_hex(ui, &mut self.hex_view, lines);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Gutter row:").small().weak());
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.hex_gutter_row_text)
+                                    .desired_width(60.0)
+                                    .hint_text("e.g. 2"),
+                            );
+                            if ui.small_button("Jump to row").clicked() {
+                                match views::parse_gutter_row_text(&self.hex_gutter_row_text) {
+                                    Some(row) => {
+                                        if !self.hex_gutter_jump_to_row(row) {
+                                            self.status = format!(
+                                                "hex gutter: row {row} has no covering hunk"
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        self.status = String::from(
+                                            "hex gutter: type a row number >= 0",
+                                        );
+                                    }
+                                }
+                            }
+                            if ui.small_button("◀ Prev change").clicked() {
+                                self.hex_select_prev_paged();
+                            }
+                            if ui.small_button("Next change ▶").clicked() {
+                                self.hex_select_next_paged();
+                            }
+                        });
+                        if let Some(lines) = self.hex_model.clone() {
+                            let (view, pager) = (&mut self.hex_view, &mut self.hex_pager);
+                            views::paint_hex(ui, view, pager, &lines);
                         }
                     } else if self.hex_view.over_cap {
                         views::paint_hex_over_cap(ui, &self.hex_view);
@@ -2366,8 +2633,30 @@ impl eframe::App for App {
                     if rerun {
                         self.run_table();
                     }
-                    if let Some(model) = self.table_model.as_ref() {
-                        views::paint_table_keyed(ui, &self.table_view, model);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Find:").small().weak());
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.table_find_needle)
+                                .desired_width(120.0)
+                                .hint_text("needle"),
+                        );
+                        if ui.small_button("Next match ▶").clicked()
+                            && self.table_find_next_paged().is_none()
+                        {
+                            self.status = String::from("table find: no match");
+                        }
+                        if ui.small_button("◀ Prev page").clicked() {
+                            self.table_page_prev();
+                        }
+                        if ui.small_button("Next page ▶").clicked() {
+                            self.table_page_next();
+                        }
+                    });
+                    if self.table_model.is_some() {
+                        if let Some(model) = self.table_model.clone() {
+                            let (view, pager) = (&self.table_view, &mut self.table_pager);
+                            views::paint_table_keyed(ui, view, &model, pager);
+                        }
                     } else {
                         ui.label(
                             RichText::new("no table results yet: type both table paths and Compare.")
@@ -3152,5 +3441,111 @@ mod tests {
         app.set_tab(Tab::Audio);
         app.audio_model = Some(toggled);
         assert!(app.status_line().contains("0.500s"));
+    }
+
+    #[test]
+    fn hex_pager_syncs_and_pages_with_selection() {
+        let mut app = App {
+            hex_view: views_hex::HexCompareView::build_from_slices(
+                &[0u8; 64],
+                &[1u8; 64],
+                views_hex::HexCompareMode::None,
+                8,
+            ),
+            ..Default::default()
+        };
+        app.sync_hex_pager();
+        assert_eq!(app.hex_pager.total_rows, app.hex_view.hunks.len() as u64);
+        let top_before = app.hex_pager.top;
+        app.hex_page_next();
+        assert!(app.hex_pager.top >= top_before);
+        app.hex_page_prev();
+        // Gutter jump selects covering hunk and brings into view.
+        let row = 1u64;
+        if views_hex::hex_row_to_hunk(row, &app.hex_view.hunks).is_some() {
+            assert!(app.hex_gutter_jump_to_row(row));
+            let idx = app.hex_view.selected.unwrap_or(0) as u64;
+            let (start, end) = app.hex_pager.visible_range();
+            assert!(idx >= start && idx < end.max(start + 1));
+        }
+        app.hex_select_next_paged();
+        assert!(app.hex_view.selected.is_some());
+        app.hex_select_prev_paged();
+        assert!(app.hex_view.selected.is_some());
+    }
+
+    #[test]
+    fn table_pager_syncs_and_find_brings_into_view() {
+        use crate::viewmodel::{TableModel, TableRow};
+        let mut app = App {
+            table_model: Some(TableModel {
+                rows: vec![
+                    TableRow {
+                        glyph: '=',
+                        label: "   1".to_string(),
+                        text: "apple".to_string(),
+                        changed: false,
+                    },
+                    TableRow {
+                        glyph: '!',
+                        label: "   2".to_string(),
+                        text: "banana".to_string(),
+                        changed: true,
+                    },
+                ],
+                truncated: false,
+            }),
+            table_find_needle: String::from("banana"),
+            ..Default::default()
+        };
+        app.sync_table_pager();
+        assert_eq!(app.table_pager.total_rows, 2);
+        let found = app.table_find_next_paged();
+        assert_eq!(found, Some((1, 0)));
+        let (start, end) = app.table_pager.visible_range();
+        assert!(1 >= start && 1 < end.max(start + 1));
+        app.table_page_next();
+        app.table_page_prev();
+        assert_eq!(app.table_pager.top, 0);
+    }
+
+    #[test]
+    fn folder_pager_syncs_and_find_brings_into_view() {
+        use crate::viewmodel::FolderRow;
+        let rows = vec![
+            FolderRow {
+                rel_path: "same.txt".to_string(),
+                is_dir: false,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            FolderRow {
+                rel_path: "diff.txt".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+        ];
+        let mut app = App {
+            folder_model: Some((rows, String::from("summary"))),
+            ..Default::default()
+        };
+        app.sync_folder_pager();
+        assert_eq!(app.folder_pager.total_rows, 2);
+        assert_eq!(app.folder_next_changed_paged(), Some(1));
+        app.folder_find_needle = String::from("diff");
+        app.folder_cursor = 0;
+        assert_eq!(app.folder_find_next_paged(), Some(1));
+        app.folder_page_next();
+        app.folder_page_prev();
+        assert_eq!(app.folder_pager.top, 0);
     }
 }
