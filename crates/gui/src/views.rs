@@ -443,35 +443,50 @@ pub fn hunk_covers_offset(offset: u64, hunks: &[views_hex::HexHunkView]) -> bool
     false
 }
 
+/// One grid row split into three paint cells: ruler address, 16-byte
+/// hex marks, and 16-char ASCII marks. Model me byte values nahi
+/// (sirf offset/len), isliye covered byte hex me `??` aur ASCII me
+/// `?` dikhta hai, uncovered slot blank rehta hai; 8 ke baad midline
+/// gap (extra space) taaki 8+8 aadhe alag dikhen. [`format_hex_grid_row`]
+/// inhi cells ko single-string me jodta hai; `paint_hex` teen-column
+/// `egui::Grid` me inhi cells ko paint karta hai. Pure; unit-tested.
+pub fn format_hex_grid_cells(
+    row_start: u64,
+    hunks: &[views_hex::HexHunkView],
+) -> (String, String, String) {
+    use views_hex::{HEX_BYTES_PER_ROW, format_hex_offset};
+    let addr = format_hex_offset(row_start);
+    let mut hex = String::new();
+    let mut ascii = String::with_capacity(HEX_BYTES_PER_ROW);
+    for col in 0..HEX_BYTES_PER_ROW {
+        if col == HEX_BYTES_PER_ROW / 2 {
+            hex.push(' ');
+        }
+        let off = row_start.saturating_add(col as u64);
+        let inside = hunk_covers_offset(off, hunks);
+        if inside {
+            hex.push_str("??");
+        } else {
+            hex.push_str("  ");
+        }
+        hex.push(' ');
+        ascii.push(if inside { '?' } else { ' ' });
+    }
+    (addr, hex, ascii)
+}
+
 /// One grid row of the hex byte view: ruler offset plus per-byte
 /// marks for the 16-byte row starting at `row_start`. Model me byte
 /// values nahi (sirf offset/len), isliye covered byte `??` dikhta hai
 /// aur uncovered slot blank rehta hai; ASCII column me covered `?`
 /// aur bahar blank. 8 ke baad midline gap (extra space) taaki 8+8
-/// aadhe alag dikhen. Pure; unit-tested.
+/// aadhe alag dikhen. [`format_hex_grid_cells`] ka single-string join;
+/// shape wahi hai jo Grid cells paint karte hain. Back-compat wrapper
+/// (logs/tests); Grid paint cells use karta hai. Pure; unit-tested.
+#[allow(dead_code)] // Grid paint cells use karta hai; ye join logs/tests ke liye hai
 pub fn format_hex_grid_row(row_start: u64, hunks: &[views_hex::HexHunkView]) -> String {
-    use views_hex::{HEX_BYTES_PER_ROW, format_hex_offset};
-    let mut out = format_hex_offset(row_start);
-    out.push_str("  ");
-    let mut ascii = String::with_capacity(HEX_BYTES_PER_ROW);
-    for col in 0..HEX_BYTES_PER_ROW {
-        if col == HEX_BYTES_PER_ROW / 2 {
-            out.push(' ');
-        }
-        let off = row_start.saturating_add(col as u64);
-        let inside = hunk_covers_offset(off, hunks);
-        if inside {
-            out.push_str("??");
-        } else {
-            out.push_str("  ");
-        }
-        out.push(' ');
-        ascii.push(if inside { '?' } else { ' ' });
-    }
-    out.push_str(" |");
-    out.push_str(&ascii);
-    out.push('|');
-    out
+    let (addr, hex, ascii) = format_hex_grid_cells(row_start, hunks);
+    format!("{addr}  {hex} |{ascii}|")
 }
 
 /// Grid rows (row-start offsets) jo `hunk` ko cover karte hain:
@@ -745,9 +760,11 @@ pub fn paint_hex(
                 }
             }
         });
-        // Byte grid: visible hunk window ki 16-byte rows — address +
-        // 8+8 hex marks + ASCII column, 8 ke baad midline gap. Model me
-        // byte values nahi, isliye `??` = diff byte (offset/len se).
+        // Byte grid: visible hunk window ki 16-byte rows — teen-column
+        // Grid (address | 8+8 hex marks + midline gap | ASCII column).
+        // Model me byte values nahi, isliye `??`/`?` = diff byte
+        // (offset/len se). Monospace cells, GEO spacing reuse
+        // (`SECTION_GAP` x, `TIGHT_GAP` y), koi naya token/color nahi.
         ui.add_space(TIGHT_GAP);
         ui.label(
             RichText::new("byte grid (offsets only: ?? = diff byte)")
@@ -768,9 +785,18 @@ pub fn paint_hex(
                 break;
             }
         }
-        for row in grid_rows {
-            ui.label(RichText::new(format_hex_grid_row(row, &view.hunks)).monospace());
-        }
+        egui::Grid::new("hex_byte_grid")
+            .num_columns(3)
+            .spacing([SECTION_GAP, TIGHT_GAP])
+            .show(ui, |ui| {
+                for row in grid_rows {
+                    let (addr, hex, ascii) = format_hex_grid_cells(row, &view.hunks);
+                    ui.label(RichText::new(addr).monospace());
+                    ui.label(RichText::new(hex).monospace());
+                    ui.label(RichText::new(format!("|{ascii}|")).monospace());
+                    ui.end_row();
+                }
+            });
     }
     ui.add_space(TIGHT_GAP);
     paint_lines(ui, lines);
@@ -3063,6 +3089,38 @@ mod tests {
         assert!(!empty.contains("??"));
         assert!(!empty.contains('?'));
         assert_eq!(empty.len(), line.len());
+    }
+
+    #[test]
+    fn hex_grid_cells_split_address_hex_ascii() {
+        let hunks = vec![crate::views_hex::HexHunkView {
+            offset: 20,
+            left_len: 2,
+            right_len: 2,
+        }];
+        let (addr, hex, ascii) = format_hex_grid_cells(16, &hunks);
+        assert_eq!(addr, crate::views_hex::format_hex_offset(16));
+        // Hex me 2 covered cells; midline gap se extra space.
+        assert_eq!(hex.matches("??").count(), 2);
+        assert!(hex.contains("  "));
+        // ASCII: 16 chars, covered at cols 4-5.
+        assert_eq!(ascii, "    ??          ");
+        // Single-string join wahi shape hai jo Grid paint karta hai.
+        assert_eq!(
+            format_hex_grid_row(16, &hunks),
+            format!("{addr}  {hex} |{ascii}|")
+        );
+        // Empty row same width, koi `?` nahi.
+        let (e_addr, e_hex, e_ascii) = format_hex_grid_cells(32, &[]);
+        assert_eq!(e_addr, crate::views_hex::format_hex_offset(32));
+        assert!(!e_hex.contains("??"));
+        assert!(!e_ascii.contains('?'));
+        assert_eq!(e_ascii.len(), 16);
+        assert_eq!(hex.len(), e_hex.len());
+        assert_eq!(
+            format_hex_grid_row(32, &[]),
+            format!("{e_addr}  {e_hex} |{e_ascii}|")
+        );
     }
 
     #[test]
