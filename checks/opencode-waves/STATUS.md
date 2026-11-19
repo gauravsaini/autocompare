@@ -582,3 +582,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave J poll 01 all live
 - PIDs 49716/49717/49718 live. A mapping dead-code refs. B starting. C release ok + reading.
+
+## Wave J poll 02 planning phase
+- All 3 live, tree clean. A planning real-use wiring (reading app/views read-only ok). B reading audio model. C release check.
+- No edits yet. Wait.
