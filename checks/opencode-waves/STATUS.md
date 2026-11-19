@@ -549,3 +549,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 26 table options UI
 - A live, app 450 (table ignore-case/tolerance UI wiring). Tests green, clippy pending.
 - No commit. Wait.
+
+## Wave I poll 27 dead-code decision
+- A live, diff steady 540. Dead-code lint decision (real-use vs allow) in progress.
+- No commit. Wait.
