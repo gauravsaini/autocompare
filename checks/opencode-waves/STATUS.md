@@ -668,3 +668,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave K poll 01 all live scoping
 - K-A reading callers (viewmodel/app/picture REPORT). K-B reading gaps REPORT, round-dir next. A2 slice 3 noting 3 viewmodel errors (K-A owns, disjoint respected).
 - Tree clean. Wait.
+
+## Wave K poll 02 working no edits
+- K-A grepping structured models in viewmodel (31 matches, removal plan). K-B release+metrics next. A2 tracing total() uses (app live use found).
+- Tree clean. Wait.
