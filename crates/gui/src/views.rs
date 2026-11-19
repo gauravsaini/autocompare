@@ -1693,9 +1693,10 @@ pub fn picture_status_line(model: &PictureCompareModel) -> String {
 }
 
 /// Display size of the heatmap under the current zoom: natural size
-/// scaled by the zoom factor. Pure; unit-tested.
+/// scaled by the zoom factor helper (0.25..=8.0), shared by both
+/// [`crate::app::PictureMode`]s. Pure; unit-tested.
 pub fn picture_display_size(natural_w: f32, natural_h: f32, view: &PictureViewState) -> (f32, f32) {
-    let scale = view.zoom_factor().max(0.25);
+    let scale = viewmodel::picture_zoom_factor(view.zoom_pct);
     ((natural_w * scale).max(1.0), (natural_h * scale).max(1.0))
 }
 
@@ -1782,8 +1783,40 @@ pub fn paint_picture_compare(
         }
     }
     ui.add_space(TIGHT_GAP);
+    // Zoom controls: keyboard (+/-/0) and buttons share the headless
+    // step helpers, so both modes zoom identically; the slider keeps
+    // the `App` range (read-only) while the math already spans 8x.
+    let (zoom_in_key, zoom_out_key, zoom_reset_key) = ui.input(|input| {
+        (
+            input.key_pressed(egui::Key::Plus) || input.key_pressed(egui::Key::Equals),
+            input.key_pressed(egui::Key::Minus),
+            input.key_pressed(egui::Key::Num0),
+        )
+    });
+    if zoom_in_key {
+        view.set_zoom_pct(viewmodel::picture_zoom_in(view.zoom_pct));
+    }
+    if zoom_out_key {
+        view.set_zoom_pct(viewmodel::picture_zoom_out(view.zoom_pct));
+    }
+    if zoom_reset_key {
+        view.set_zoom_pct(viewmodel::picture_zoom_reset());
+    }
     ui.horizontal(|ui| {
         ui.label(RichText::new(zoom_label(view.zoom_pct)).small().weak());
+        if ui.small_button("+").on_hover_text("zoom in (+)").clicked() {
+            view.set_zoom_pct(viewmodel::picture_zoom_in(view.zoom_pct));
+        }
+        if ui.small_button("-").on_hover_text("zoom out (-)").clicked() {
+            view.set_zoom_pct(viewmodel::picture_zoom_out(view.zoom_pct));
+        }
+        if ui
+            .small_button("1:1")
+            .on_hover_text("reset zoom (0)")
+            .clicked()
+        {
+            view.set_zoom_pct(viewmodel::picture_zoom_reset());
+        }
         let mut zoom = clamp_zoom_pct(view.zoom_pct);
         ui.add(
             egui::Slider::new(
@@ -1821,20 +1854,50 @@ pub fn paint_picture_compare(
     ui.add_space(SECTION_GAP);
     match heatmap {
         Some(handle) => {
+            // Both modes share this zoomed heatmap frame; the
+            // side-by-side split above stays the layout authority
+            // (Wave U GEO) and never reads the zoom factor.
             let natural = handle.size_vec2();
             let (dw, dh) = picture_display_size(natural.x, natural.y, view);
-            egui::ScrollArea::both()
+            // Clamp stale state to the content bounds (App is
+            // read-only, so nudge by the delta instead of setting).
+            let limit = crate::app::PICTURE_PAN_LIMIT;
+            let (cx, cy) = viewmodel::clamp_picture_pan(view.pan_x, view.pan_y, dw, dh, limit);
+            view.nudge_pan(cx.saturating_sub(view.pan_x), cy.saturating_sub(view.pan_y));
+            let output = egui::ScrollArea::both()
                 .auto_shrink([false, false])
                 .scroll_offset(egui::vec2(
-                    view.pan_x.clamp(0, crate::app::PICTURE_PAN_LIMIT) as f32,
-                    view.pan_y.clamp(0, crate::app::PICTURE_PAN_LIMIT) as f32,
+                    view.pan_x.max(0) as f32,
+                    view.pan_y.max(0) as f32,
                 ))
                 .show(ui, |ui| {
                     ui.add(
                         egui::Image::new((handle.id(), handle.size_vec2()))
-                            .fit_to_exact_size(egui::vec2(dw, dh)),
-                    );
+                            .fit_to_exact_size(egui::vec2(dw, dh))
+                            .sense(egui::Sense::click_and_drag()),
+                    )
                 });
+            // Drag to pan: the image follows the cursor (grabbing right
+            // scrolls left), clamped to the content bounds. The forced
+            // scroll_offset above keeps state the single authority, so
+            // the area's own transient drag never fights back.
+            if output.inner.dragged() {
+                let delta = output.inner.drag_delta();
+                let (nx, ny) = viewmodel::picture_pan_drag(
+                    view.pan_x,
+                    view.pan_y,
+                    -delta.x.round() as i32,
+                    -delta.y.round() as i32,
+                    dw,
+                    dh,
+                    limit,
+                );
+                view.nudge_pan(nx.saturating_sub(view.pan_x), ny.saturating_sub(view.pan_y));
+            }
+            // Double-click resets zoom+pan (same as Reset view).
+            if output.inner.double_clicked() {
+                view.reset_view();
+            }
         }
         None => paint_note(ui, "heatmap unavailable for these inputs"),
     }
@@ -2579,6 +2642,28 @@ mod tests {
         assert_eq!(picture_display_size(100.0, 50.0, &view), (200.0, 100.0));
         view.set_zoom_pct(25);
         assert_eq!(picture_display_size(0.0, 0.0, &view), (1.0, 1.0));
+    }
+
+    #[test]
+    fn picture_display_size_spans_8x_for_both_modes() {
+        // The zoom math (not the App setter) spans 0.25..=8.0, so both
+        // SideBySide and Overlay share one zoomed heatmap frame; the
+        // pub field lets paint-side state reach 800 headlessly.
+        let mut view = crate::app::PictureViewState {
+            zoom_pct: 800,
+            ..crate::app::PictureViewState::default()
+        };
+        assert_eq!(viewmodel::picture_zoom_factor(view.zoom_pct), 8.0);
+        assert_eq!(picture_display_size(100.0, 50.0, &view), (800.0, 400.0));
+        view.mode = crate::app::PictureMode::Overlay;
+        assert_eq!(picture_display_size(100.0, 50.0, &view), (800.0, 400.0));
+        view.zoom_pct = 25;
+        assert_eq!(picture_display_size(100.0, 50.0, &view), (25.0, 12.5));
+        // Split stays the side-by-side layout authority (Wave U GEO):
+        // zoom never changes column widths.
+        let (left, right) = split_picture_widths(800.0, 0.50);
+        assert_eq!(left + right, 800.0 - SECTION_GAP);
+        assert_eq!((left, right), (396.0, 396.0));
     }
 
     #[test]

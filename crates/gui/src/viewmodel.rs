@@ -831,6 +831,97 @@ pub fn build_heatmap_rgba(heatmap: &RgbaImage) -> (Vec<u8>, u32, u32) {
 }
 
 // ----------------------------------------------------------------------------
+// Picture zoom + pan (headless math; wiring owned by views.rs)
+// ----------------------------------------------------------------------------
+
+/// Zoom percent bounds paint honors: 25% (= 0.25x) ..= 800% (= 8.0x).
+/// Wider than `App`'s current 25..=400 setter clamp on purpose: the
+/// math already supports 8x so a later `app.rs` widening needs no
+/// paint change; `App` state stays the source of truth today.
+pub const PICTURE_ZOOM_MIN_PCT: u32 = 25;
+/// See [`PICTURE_ZOOM_MIN_PCT`].
+pub const PICTURE_ZOOM_MAX_PCT: u32 = 800;
+/// One zoom step: 25 percentage points.
+pub const PICTURE_ZOOM_STEP_PCT: u32 = 25;
+/// Zoom the Reset actions restore.
+pub const PICTURE_ZOOM_RESET_PCT: u32 = 100;
+
+/// Clamps a raw zoom percent into 25..=800. Pure; unit-tested.
+pub fn clamp_picture_zoom(pct: u32) -> u32 {
+    pct.clamp(PICTURE_ZOOM_MIN_PCT, PICTURE_ZOOM_MAX_PCT)
+}
+
+/// One zoom-in step (+25pp), saturating at 800. Pure; unit-tested.
+pub fn picture_zoom_in(pct: u32) -> u32 {
+    clamp_picture_zoom(pct.saturating_add(PICTURE_ZOOM_STEP_PCT))
+}
+
+/// One zoom-out step (-25pp), saturating at 25. Pure; unit-tested.
+pub fn picture_zoom_out(pct: u32) -> u32 {
+    clamp_picture_zoom(pct.saturating_sub(PICTURE_ZOOM_STEP_PCT))
+}
+
+/// Zoom the keyboard/button Reset restores (100%). Pure; unit-tested.
+pub fn picture_zoom_reset() -> u32 {
+    PICTURE_ZOOM_RESET_PCT
+}
+
+/// Zoom percent as a 0.25..=8.0 scale factor (clamped first, so wild
+/// state never feeds NaN geometry into paint). Pure; unit-tested.
+pub fn picture_zoom_factor(pct: u32) -> f32 {
+    f32::from(clamp_picture_zoom(pct) as u16) / 100.0
+}
+
+/// Clamps a pan offset to the content bounds: each axis stays inside
+/// `+/-content` (ceiled, non-finite/empty content pins to 0) and
+/// inside `+/-limit` (`App::PICTURE_PAN_LIMIT` at the paint site), so
+/// drag/nudge never parks the image outside its own frame. Pure;
+/// unit-tested.
+pub fn clamp_picture_pan(
+    pan_x: i32,
+    pan_y: i32,
+    content_w: f32,
+    content_h: f32,
+    limit: i32,
+) -> (i32, i32) {
+    let bound = |content: f32| -> i32 {
+        let nonneg = if content.is_finite() && content > 0.0 {
+            content.ceil().clamp(0.0, i32::MAX as f32) as i32
+        } else {
+            0
+        };
+        nonneg.min(limit.max(0))
+    };
+    let bx = bound(content_w);
+    let by = bound(content_h);
+    (
+        pan_x.clamp(bx.saturating_neg(), bx),
+        pan_y.clamp(by.saturating_neg(), by),
+    )
+}
+
+/// Drag-to-pan accumulation: adds the drag delta (paint passes the
+/// negated grab delta so the image follows the cursor), then clamps
+/// to the content bounds. Pure; unit-tested.
+pub fn picture_pan_drag(
+    pan_x: i32,
+    pan_y: i32,
+    dx: i32,
+    dy: i32,
+    content_w: f32,
+    content_h: f32,
+    limit: i32,
+) -> (i32, i32) {
+    clamp_picture_pan(
+        pan_x.saturating_add(dx),
+        pan_y.saturating_add(dy),
+        content_w,
+        content_h,
+        limit,
+    )
+}
+
+// ----------------------------------------------------------------------------
 // Hex
 // ----------------------------------------------------------------------------
 
@@ -2544,5 +2635,52 @@ mod tests {
         let fallback = PageCursor::new(9_000, 0);
         assert_eq!(fallback.page_size, PAGE_SIZE);
         assert_eq!(fallback.window(), (0, PAGE_SIZE.min(9_000)));
+    }
+
+    #[test]
+    fn picture_zoom_steps_clamp_quarter_to_8x() {
+        assert_eq!((PICTURE_ZOOM_MIN_PCT, PICTURE_ZOOM_MAX_PCT), (25, 800));
+        assert_eq!(clamp_picture_zoom(0), 25);
+        assert_eq!(clamp_picture_zoom(100), 100);
+        assert_eq!(clamp_picture_zoom(9_000), 800);
+        assert_eq!(picture_zoom_in(100), 125);
+        assert_eq!(picture_zoom_in(800), 800);
+        assert_eq!(picture_zoom_out(100), 75);
+        assert_eq!(picture_zoom_out(25), 25);
+        assert_eq!(picture_zoom_reset(), 100);
+        assert_eq!(picture_zoom_factor(25), 0.25);
+        assert_eq!(picture_zoom_factor(100), 1.0);
+        assert_eq!(picture_zoom_factor(800), 8.0);
+        assert_eq!(picture_zoom_factor(9_000), 8.0);
+    }
+
+    #[test]
+    fn picture_pan_drag_clamps_to_content_bounds() {
+        // Inside content passes through; overshoot pins to +/-content.
+        assert_eq!(clamp_picture_pan(10, -20, 400.0, 300.0, 4096), (10, -20));
+        assert_eq!(
+            clamp_picture_pan(500, -500, 400.0, 300.0, 4096),
+            (400, -300)
+        );
+        // The hard limit caps even huge content.
+        assert_eq!(
+            clamp_picture_pan(9_000, 0, 100_000.0, 100_000.0, 4096),
+            (4096, 0)
+        );
+        // Empty/non-finite content pins to zero (never NaN geometry).
+        assert_eq!(clamp_picture_pan(5, 5, 0.0, 0.0, 4096), (0, 0));
+        assert_eq!(
+            clamp_picture_pan(5, 5, f32::NAN, f32::INFINITY, 4096),
+            (0, 0)
+        );
+        // Drag accumulates then clamps.
+        assert_eq!(
+            picture_pan_drag(0, 0, 50, -30, 400.0, 300.0, 4096),
+            (50, -30)
+        );
+        assert_eq!(
+            picture_pan_drag(390, 0, 50, 0, 400.0, 300.0, 4096),
+            (400, 0)
+        );
     }
 }
