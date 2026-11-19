@@ -642,3 +642,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 16 A2 landed B paint
 - A2 10c8928 verified+pushed: OWNS clean (views_hex only), tests 189 green. Remaining clippy 7 in viewmodel (landed Wave I) + views (B mid-edit) — not A2 scope. REPORT deferred to slice 2 (A2 live).
 - B live (app/views paint). Wait for B land + A2 slice 2.
+
+## Wave J poll 17 slice2 + clippy 3
+- A2 slice 2 (views_table 48 + REPORT untracked + hex 10). B clippy down to 3. Diff 1429.
+- No commits. Wait for lands.
