@@ -50,7 +50,7 @@ struct TriplePaths {
 enum CompareResult {
     Text(Result<viewmodel::TextRows, String>),
     Folder(Result<(Vec<FolderRow>, String), String>),
-    Hex(Result<(Vec<String>, views_hex::HexCompareView), String>),
+    Hex(Result<(Vec<String>, views_hex::HexCompareView, Option<HexByteSnap>), String>),
     Merge(Result<MergeSummary, String>),
     Table(Result<(TableModel, views_table::TableKeySummary), String>),
     Sync(Result<SyncChecklist, String>),
@@ -104,6 +104,58 @@ pub struct MergeApplySummary {
     pub out: String,
 }
 
+/// App-owned hex byte snapshot behind the nibble-accent callsite.
+///
+/// Engine ka `BinaryComparison` sirf badle runs rakhta hai (offset/len),
+/// isliye `views_hex::HexCompareView` me byte values nahi hain. Ye snap
+/// dono inputs ko aligned engine cap tak rakhta hai taaki paint
+/// `hex_diff_nibble_cells(row, left, right)` me REAL slices de sake
+/// (absolute-offset indexing ke liye poori-file slices chahiye).
+/// Caller-side ownership: App rakhta hai, `paint_hex` sirf udhaar leta
+/// hai (`views_hex.rs` FROZEN, koi change nahi).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HexByteSnap {
+    /// Left input bytes, aligned cap tak.
+    pub left: Vec<u8>,
+    /// Right input bytes, aligned cap tak.
+    pub right: Vec<u8>,
+}
+
+impl HexByteSnap {
+    /// Callsite slices: `paint_hex` inhe `hex_diff_nibble_cells` me deta
+    /// hai. Khali snap par khali slices (purana offset-only behavior).
+    /// Pure; unit-tested.
+    pub fn as_slices(&self) -> (&[u8], &[u8]) {
+        (self.left.as_slice(), self.right.as_slice())
+    }
+}
+
+/// Ek hex input ko aligned engine cap tak padhta hai. Missing /
+/// unreadable / over-cap input par khali (paint offset-only marks par
+/// rehta hai — purana behavior, kabhi jhooth nahi). No panic.
+fn read_hex_input_capped(path: &Path) -> Vec<u8> {
+    let cap = views_hex::ALIGNED_HEX_MAX_BYTES;
+    let too_big = std::fs::metadata(path)
+        .map(|meta| meta.len() > cap as u64)
+        .unwrap_or(false);
+    if too_big {
+        return Vec::new();
+    }
+    let mut bytes = std::fs::read(path).unwrap_or_default();
+    bytes.truncate(cap);
+    bytes
+}
+
+/// Dono hex inputs ka callsite snap. Compare safal hone par banta hai;
+/// dobara padhne me nakam file khali rehti hai (TOCTOU par accent nahi,
+/// grid marks rehte hain). No panic.
+fn read_hex_inputs_capped(left: &Path, right: &Path) -> Option<HexByteSnap> {
+    Some(HexByteSnap {
+        left: read_hex_input_capped(left),
+        right: read_hex_input_capped(right),
+    })
+}
+
 /// The GUI's whole state.
 pub struct App {
     pub tab: Tab,
@@ -131,6 +183,10 @@ pub struct App {
     pub folder_model: Option<(Vec<FolderRow>, String)>,
     pub hex_model: Option<Vec<String>>,
     pub hex_view: views_hex::HexCompareView,
+    /// Nibble-accent callsite ka App-owned byte snap (`paint_hex` ko
+    /// udhaar slices; `None` = offset-only marks, purana behavior).
+    /// Naya compare / swap / mode / error par clear hota hai.
+    pub hex_bytes: Option<HexByteSnap>,
     pub merge_model: Option<MergeSummary>,
     /// App-owned per-hunk staged merge picks (Gap #13 App half).
     /// AI-MERGEPICK temp-store intent ka App truth: `decide_merge_hunk`
@@ -263,6 +319,7 @@ impl Default for App {
                 views_hex::HexCompareMode::default(),
                 views_hex::HEX_DEFAULT_MAX_HUNKS,
             ),
+            hex_bytes: None,
             merge_model: None,
             merge_picks: Vec::new(),
             merge_dry_run: true,
@@ -739,9 +796,7 @@ impl App {
                 self.reset_folder_dual();
             }
             Tab::Hex => {
-                self.hex_model = None;
-                let max_hunks = self.hex_view.max_hunks;
-                self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+                self.clear_hex_results();
             }
             Tab::Merge => {
                 self.merge_model = None;
@@ -839,9 +894,7 @@ impl App {
             }
             Tab::Hex => {
                 std::mem::swap(&mut self.hex.left, &mut self.hex.right);
-                self.hex_model = None;
-                let max_hunks = self.hex_view.max_hunks;
-                self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+                self.clear_hex_results();
                 true
             }
             Tab::Merge => {
@@ -1140,6 +1193,33 @@ impl App {
         self.sync_folder_dual();
     }
 
+    /// Clears hex results (model + view + byte snap), keeping mode and
+    /// max_hunks. Har stale-wipe site yahi chalata hai taaki snap kabhi
+    /// purane hunks ke saath na rahe. Pure state, no panic.
+    fn clear_hex_results(&mut self) {
+        self.hex_model = None;
+        let max_hunks = self.hex_view.max_hunks;
+        self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+        self.hex_bytes = None;
+    }
+
+    /// Adopts a finished hex compare: lines + view + callsite byte snap.
+    /// Snap `None` (ya khali sides) par paint offset-only marks par rehta
+    /// hai — purana behavior, kabhi jhooth nahi. Pure state, no panic.
+    fn set_hex_success(
+        &mut self,
+        lines: Vec<String>,
+        view: views_hex::HexCompareView,
+        bytes: Option<HexByteSnap>,
+    ) {
+        let n = view.hunks.len();
+        self.hex_model = Some(lines);
+        self.hex_view = view;
+        self.hex_bytes = bytes;
+        self.error = None;
+        self.status = format!("hex compare done: {n} hunk(s)");
+    }
+
     /// Sets the hex alignment mode, clearing stale hunks so the next
     /// Compare runs with the new strategy.
     pub fn set_hex_mode(&mut self, mode: views_hex::HexCompareMode) {
@@ -1149,6 +1229,7 @@ impl App {
         let max_hunks = self.hex_view.max_hunks;
         self.hex_view = views_hex::HexCompareView::empty(mode, max_hunks);
         self.hex_model = None;
+        self.hex_bytes = None;
         self.status = format!("hex mode: {}", mode.label());
     }
 
@@ -3125,9 +3206,7 @@ impl App {
     fn run_hex(&mut self) {
         let (left, right) = self.paths();
         if !self.require_paths(&left, &right, "file") {
-            self.hex_model = None;
-            let max_hunks = self.hex_view.max_hunks;
-            self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+            self.clear_hex_results();
             return;
         }
         let (tx, rx) = channel();
@@ -3148,7 +3227,8 @@ impl App {
             .map(|cmp| {
                 let view = views_hex::HexCompareView::from_comparison(&cmp, mode, max_hunks);
                 let lines = viewmodel::build_hex_summary(&cmp);
-                (lines, view)
+                let bytes = read_hex_inputs_capped(Path::new(&left), Path::new(&right));
+                (lines, view, bytes)
             })
             .map_err(|err| err.to_string());
             if cancel.load(Ordering::Relaxed) {
@@ -4315,22 +4395,15 @@ impl eframe::App for App {
                         }
                     },
                     CompareResult::Hex(res) => match res {
-                        Ok((lines, view)) => {
-                            let n = view.hunks.len();
-                            self.hex_model = Some(lines);
-                            self.hex_view = view;
-                            self.error = None;
-                            self.status = format!("hex compare done: {n} hunk(s)");
+                        Ok((lines, view, bytes)) => {
+                            self.set_hex_success(lines, view, bytes);
                         }
                         Err(err) => {
-                            self.hex_model = None;
+                            self.clear_hex_results();
                             if let Some(view) = self.hex_over_cap_view() {
                                 self.hex_view = view;
                                 self.status = self.hex_view.status_line();
                             } else {
-                                let max_hunks = self.hex_view.max_hunks;
-                                self.hex_view =
-                                    views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
                                 self.status = format!("hex compare failed: {err}");
                             }
                             self.error = Some(err);
@@ -5022,8 +5095,9 @@ impl eframe::App for App {
                             }
                         });
                         if let Some(lines) = self.hex_model.clone() {
+                            let bytes = self.hex_bytes.as_ref().map(HexByteSnap::as_slices);
                             let (view, pager) = (&mut self.hex_view, &mut self.hex_pager);
-                            views::paint_hex(ui, view, pager, &lines);
+                            views::paint_hex(ui, view, pager, &lines, bytes);
                         }
                     } else if self.hex_view.over_cap {
                         views::paint_hex_over_cap(ui, &self.hex_view);
@@ -6712,12 +6786,92 @@ mod tests {
         app.set_hex_mode(HexCompareMode::Fast);
         assert_eq!(app.hex_view.mode, HexCompareMode::Fast);
         assert!(app.hex_model.is_none());
+        assert!(app.hex_bytes.is_none());
         assert!(app.hex_view.hunks.is_empty());
         assert!(app.status.contains("Fast"));
         // Same mode again: no wipe, no-op.
         app.hex_model = Some(vec![String::from("left: 1 bytes")]);
         app.set_hex_mode(HexCompareMode::Fast);
         assert!(app.hex_model.is_some());
+    }
+
+    #[test]
+    fn hex_byte_snap_slices_feed_nibble_cells() {
+        // REAL slices: low nibble alag (0xAB vs 0xAC), high ek jaisa.
+        let snap = HexByteSnap {
+            left: vec![0xAB],
+            right: vec![0xAC],
+        };
+        let (left, right) = snap.as_slices();
+        let cells = crate::views_hex::hex_diff_nibble_cells(0, left, right);
+        assert_eq!(cells.len(), 1);
+        assert!(
+            cells
+                .first()
+                .is_some_and(|cell| cell.col == 0 && !cell.high_diff && cell.low_diff)
+        );
+        // Barabar bytes par koi cell nahi.
+        let same = crate::views_hex::hex_diff_nibble_cells(0, left, left);
+        assert!(same.is_empty());
+    }
+
+    #[test]
+    fn hex_byte_snap_none_keeps_old_empty_path() {
+        // `None` snap = purana offset-only behavior: khali slices se koi
+        // accent cell nahi (callsite fallback parity).
+        let bytes: Option<HexByteSnap> = None;
+        let (left, right): (&[u8], &[u8]) = match bytes.as_ref().map(HexByteSnap::as_slices) {
+            Some((l, r)) => (l, r),
+            None => (&[], &[]),
+        };
+        assert!(crate::views_hex::hex_diff_nibble_cells(0, left, right).is_empty());
+    }
+
+    #[test]
+    fn hex_success_sets_and_resets_clear_byte_snap() {
+        use crate::views_hex::{HexCompareMode, HexCompareView};
+        let mut app = App::default();
+        let view = HexCompareView::build_from_slices(&[1u8, 2], &[1u8, 3], HexCompareMode::None, 8);
+        let snap = HexByteSnap {
+            left: vec![1u8, 2],
+            right: vec![1u8, 3],
+        };
+        app.set_hex_success(vec![String::from("hex: 1 hunk")], view, Some(snap));
+        assert!(app.hex_model.is_some());
+        assert_eq!(app.hex_view.hunks.len(), 1);
+        assert!(app.hex_bytes.is_some());
+        assert!(app.status.contains("1 hunk(s)"));
+        // Har stale-wipe site snap bhi saaf karta hai.
+        app.clear_hex_results();
+        assert!(app.hex_model.is_none());
+        assert!(app.hex_bytes.is_none());
+        assert!(app.hex_view.hunks.is_empty());
+    }
+
+    #[test]
+    fn hex_swap_clears_byte_snap() {
+        let mut app = App::default();
+        app.set_tab(Tab::Hex);
+        app.hex_model = Some(vec![String::from("x")]);
+        app.hex_bytes = Some(HexByteSnap {
+            left: vec![1u8],
+            right: vec![2u8],
+        });
+        assert!(app.swap_sides());
+        assert!(app.hex_model.is_none());
+        assert!(app.hex_bytes.is_none());
+    }
+
+    #[test]
+    fn read_hex_input_capped_round_trips_small_file() {
+        let path = std::env::temp_dir().join("nibble-bg-capped-probe.bin");
+        let _ = std::fs::write(&path, [9u8, 8, 7]);
+        let bytes = read_hex_input_capped(&path);
+        assert_eq!(bytes, vec![9u8, 8, 7]);
+        let _ = std::fs::remove_file(&path);
+        // Missing path: khali, kabhi panic nahi.
+        let missing = std::env::temp_dir().join("nibble-bg-definitely-missing.bin");
+        assert!(read_hex_input_capped(&missing).is_empty());
     }
 
     #[test]

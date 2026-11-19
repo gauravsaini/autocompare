@@ -1173,6 +1173,7 @@ pub fn paint_hex(
     view: &mut views_hex::HexCompareView,
     pager: &mut views_hex::HexPager,
     lines: &[String],
+    hex_bytes: Option<(&[u8], &[u8])>,
 ) {
     ui.label(chrome_status_role().rich(view.status_line()));
     if view.over_cap {
@@ -1383,12 +1384,17 @@ pub fn paint_hex(
                     ui.label(nibble_role.rich(addr));
                     ui.label(nibble_role.rich(hex));
                     ui.label(nibble_role.rich(format!("|{ascii}|")));
-                    // OPEN nibble accent: byte slices App/engine side se
-                    // aayengi (model me sirf offset/len); tab tak khali
-                    // slices se cells khali, accent rects kuch nahi paint
-                    // karte — `??` whole-row marks rehte hain. Slices milte
-                    // hi yahi rects changed nibble halves par lagenge.
-                    let cells = views_hex::hex_diff_nibble_cells(row, &[], &[]);
+                    // Nibble accent: caller-side byte slices App-owned snap
+                    // se aate hain (model me sirf offset/len); `None` par
+                    // khali slices se cells khali, accent rects kuch nahi
+                    // paint karte — `??` whole-row marks rehte hain. REAL
+                    // slices milte hi yahi rects changed nibble halves par
+                    // lagte hain (caller-side ownership, snap `app.rs` me).
+                    let (left_slice, right_slice): (&[u8], &[u8]) = match hex_bytes {
+                        Some((left, right)) => (left, right),
+                        None => (&[], &[]),
+                    };
+                    let cells = views_hex::hex_diff_nibble_cells(row, left_slice, right_slice);
                     for accent in views_hex::hex_row_nibble_accent_rects(ui.min_rect(), &cells) {
                         ui.painter().rect_filled(accent, 0.0, CHANGED_BG);
                     }
