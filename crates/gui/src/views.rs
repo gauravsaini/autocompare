@@ -17,7 +17,9 @@ use eframe::egui::{
 };
 
 use crate::app::Tab;
-use crate::viewmodel::{self, FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
+use crate::gutter::gutter_bar_width;
+use crate::viewmodel::{self, TextViewPrefs, view_text_with_prefs};
+use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
 
 // The fixed diff palette (semantic colors, own contrast).
 const DELETED_FG: Color32 = Color32::from_rgb(255, 170, 170);
@@ -31,6 +33,11 @@ const CHANGED_BG: Color32 = Color32::from_rgb(122, 102, 20);
 /// egui's own notion of strong: a brighter color, plus the underline.
 const ACCENT_FG: Color32 = Color32::from_rgb(255, 255, 210);
 const DIM: Color32 = Color32::from_rgb(150, 150, 150);
+// Kept for the pending App rewiring back to `views::paint_folder`
+// (the Folder tab currently paints inline in `app.rs`, read-only
+// here); the allow keeps the tree clippy-clean without deleting the
+// tested paint API.
+#[allow(dead_code)]
 const NEWER_BLUE: Color32 = Color32::from_rgb(130, 170, 255);
 const RED: Color32 = Color32::from_rgb(255, 100, 100);
 const GREEN: Color32 = Color32::from_rgb(120, 220, 130);
@@ -367,10 +374,29 @@ fn paint_note(ui: &mut Ui, text: &str) {
 // Text view
 // ----------------------------------------------------------------------------
 
-/// The side-by-side text comparison: notes first, then the toolbar
-/// (Prev/Next diff, display filter, copy section/line), the aligned
-/// grid with live copy buttons and thumbnail gutter geometry.
+/// The side-by-side text comparison with default view prefs
+/// (word wrap off, line numbers on, syntax on). Kept so the existing
+/// `App` call-site compiles; new code should prefer
+/// [`paint_text_with_prefs`].
 pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
+    let prefs = TextViewPrefs::default();
+    paint_text_with_prefs(ui, model, &prefs);
+}
+
+/// The side-by-side text comparison honoring `prefs`: word wrap caps
+/// panes at 80 chars with wrapping, hiding line numbers blanks the
+/// number gutter and narrows chrome, hiding syntax clears inline
+/// accents. Counts come from [`viewmodel::filter_counts`] so they stay
+/// honest under any toggle combination.
+pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextViewPrefs) {
+    ui.style_mut().wrap_mode = Some(if prefs.word_wrap {
+        egui::TextWrapMode::Wrap
+    } else {
+        egui::TextWrapMode::Extend
+    });
+    let prefs_view = view_text_with_prefs(model, prefs);
+    let pane_chars = prefs_view.pane_chars;
+    let gutter_chars = prefs_view.gutter_chars;
     if model.coarse {
         paint_note(
             ui,
@@ -540,7 +566,19 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
                             }
                             let (fg, bg) = kind_palette(row.kind, base_text);
                             let bg = if is_selected { CHANGED_BG } else { bg };
-                            ui.label(side_job(Side::Left, row, model, font_id.clone(), fg, bg));
+                            let layout = TextPaneLayout {
+                                pane_chars,
+                                gutter_chars,
+                                prefs,
+                            };
+                            ui.label(side_job_with_prefs(
+                                Side::Left,
+                                row,
+                                &layout,
+                                font_id.clone(),
+                                fg,
+                                bg,
+                            ));
 
                             if row.kind != TextRowKind::Equal {
                                 if ui
@@ -563,7 +601,14 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
                                 ui.label(RichText::new(" | ").monospace().color(DIM));
                             }
 
-                            ui.label(side_job(Side::Right, row, model, font_id.clone(), fg, bg));
+                            ui.label(side_job_with_prefs(
+                                Side::Right,
+                                row,
+                                &layout,
+                                font_id.clone(),
+                                fg,
+                                bg,
+                            ));
                             if scroll_to == Some(orig) {
                                 ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
                             }
@@ -572,10 +617,13 @@ pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
                 });
         });
 
-        // Thumbnail overview gutter on the right
+        // Thumbnail overview gutter on the right; narrows when line
+        // numbers hide so chrome stays in sync while counts stay honest.
         let avail_h = ui.available_height().max(100.0);
         let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
-        let (rect, _resp) = ui.allocate_exact_size(egui::vec2(12.0, avail_h), egui::Sense::hover());
+        let bar_w = gutter_bar_width(prefs.show_line_numbers);
+        let (rect, _resp) =
+            ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::hover());
         ui.painter()
             .rect_filled(rect, 0.0, Color32::from_rgb(32, 32, 32));
 
@@ -611,22 +659,40 @@ enum Side {
     Right,
 }
 
-/// One pane of one row as a single styled job: a dim line-number
-/// gutter, the text with accent runs, and padding so every pane is
-/// exactly `pane_chars` wide and the two columns stay aligned.
-/// `keep_trailing_whitespace` keeps the padding (and blank sides)
-/// from collapsing.
-fn side_job(
+/// Prefs-effective paint widths for one text pane: widths come from
+/// [`view_text_with_prefs`] (wrap caps `pane_chars` at 80, hidden
+/// numbers narrow `gutter_chars` to 1) while `prefs` drives the
+/// per-row hiding. Bundled so pane painters stay under the
+/// argument-count lint.
+pub struct TextPaneLayout<'a> {
+    /// Prefs-effective pane width.
+    pub pane_chars: usize,
+    /// Prefs-effective gutter width.
+    pub gutter_chars: usize,
+    /// Toggles the pane honors.
+    pub prefs: &'a TextViewPrefs,
+}
+
+/// One pane of one row honoring `layout`: line numbers blank when off,
+/// accent spans cleared when syntax is off, width from the
+/// prefs-effective `pane_chars`/`gutter_chars`. Counts are untouched:
+/// hiding only changes paint, never the model.
+fn side_job_with_prefs(
     side: Side,
     row: &TextRow,
-    model: &TextRows,
+    layout: &TextPaneLayout<'_>,
     font_id: FontId,
     fg: Color32,
     bg: Color32,
 ) -> LayoutJob {
-    let (no, line, spans) = match side {
+    let (raw_no, line, raw_spans) = match side {
         Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
         Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    };
+    let no = if layout.prefs.show_line_numbers {
+        raw_no
+    } else {
+        None
     };
     let mut job = LayoutJob {
         keep_trailing_whitespace: true,
@@ -634,8 +700,9 @@ fn side_job(
     };
     let mut gutter = TextFormat::simple(font_id.clone(), DIM);
     gutter.background = bg;
-    job.append(&gutter_text(no, model.gutter_chars), 0.0, gutter);
-    for (segment, accented) in pane_segments(line, spans, model.pane_chars) {
+    job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+    for (segment, accented) in prefs_pane_segments(line, raw_spans, layout.pane_chars, layout.prefs)
+    {
         let mut fmt = TextFormat::simple(font_id.clone(), fg);
         fmt.background = bg;
         if accented {
@@ -645,6 +712,22 @@ fn side_job(
         job.append(&segment, 0.0, fmt);
     }
     job
+}
+
+/// Prefs-aware pane split: syntax off clears accents before delegating
+/// to [`pane_segments`], so wrap/syntax toggles show in panes while the
+/// model keeps honest counts. Pure; unit-tested.
+pub fn prefs_pane_segments(
+    line: &str,
+    spans: &[(usize, usize)],
+    pane: usize,
+    prefs: &TextViewPrefs,
+) -> Vec<(String, bool)> {
+    if prefs.syntax_highlight {
+        pane_segments(line, spans, pane)
+    } else {
+        pane_segments(line, &[], pane)
+    }
 }
 
 /// (text color, row background) for one row kind. Equal rows keep the
@@ -704,6 +787,8 @@ fn pane_segments(line: &str, spans: &[(usize, usize)], pane: usize) -> Vec<(Stri
 /// The folder listing: the summary line (with its truncation note)
 /// above the monospace tree grid with expand/collapse drill-down.
 /// Rows are virtualized the same way as the text view.
+/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+#[allow(dead_code)]
 pub fn paint_folder(
     ui: &mut Ui,
     rows: &[FolderRow],
@@ -761,6 +846,8 @@ pub fn paint_folder(
 
 /// The glyph column color: same/dim, different and left-only/red,
 /// newer/blue, right-only/green, like the CLI's coloring.
+/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+#[allow(dead_code)]
 fn glyph_color(row: &FolderRow) -> Color32 {
     match row.glyph {
         '=' => DIM,
@@ -773,6 +860,9 @@ fn glyph_color(row: &FolderRow) -> Color32 {
 
 /// The columns after the glyph, shaped like the CLI's row: sizes,
 /// times, then the path with the directory mark.
+/// Kept for the pending App rewiring (see the note on `NEWER_BLUE`).
+/// Covered by the `folder_columns_match_the_cli_shape` unit test.
+#[allow(dead_code)]
 fn folder_columns(row: &FolderRow) -> String {
     let ls = row.left_size.as_deref().unwrap_or("-");
     let rs = row.right_size.as_deref().unwrap_or("-");
@@ -996,10 +1086,16 @@ mod tests {
             selected: None,
             filter: viewmodel::TextFilter::All,
         };
-        let job = side_job(
+        let shown = TextViewPrefs::default();
+        let layout = TextPaneLayout {
+            pane_chars: model.pane_chars,
+            gutter_chars: model.gutter_chars,
+            prefs: &shown,
+        };
+        let job = side_job_with_prefs(
             Side::Left,
             &row,
-            &model,
+            &layout,
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
@@ -1012,14 +1108,129 @@ mod tests {
         assert_eq!(job.sections.len(), 4);
         // The blank right side is all spaces: gutter (5) plus the
         // padded empty pane (4).
-        let blank = side_job(
+        let blank = side_job_with_prefs(
             Side::Right,
             &row,
-            &model,
+            &layout,
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
         );
         assert_eq!(blank.text, "         ");
+    }
+
+    #[test]
+    fn prefs_syntax_off_clears_accents_but_keeps_text() {
+        let on = TextViewPrefs {
+            syntax_highlight: true,
+            ..TextViewPrefs::default()
+        };
+        let off = TextViewPrefs {
+            syntax_highlight: false,
+            ..TextViewPrefs::default()
+        };
+        let with_accents = prefs_pane_segments("abc", &[(1, 2)], 3, &on);
+        assert!(with_accents.iter().any(|(_, acc)| *acc));
+        let cleared = prefs_pane_segments("abc", &[(1, 2)], 3, &off);
+        assert!(cleared.iter().all(|(_, acc)| !acc));
+        // Same visible text, only accents differ.
+        let text_of =
+            |segs: &[(String, bool)]| -> String { segs.iter().map(|(s, _)| s.clone()).collect() };
+        assert_eq!(text_of(&with_accents), text_of(&cleared));
+    }
+
+    #[test]
+    fn prefs_line_numbers_off_blanks_gutter_and_narrows() {
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(7),
+            right_no: Some(7),
+            left: "hi".to_string(),
+            right: "hi!".to_string(),
+            accent_a: vec![(0, 1)],
+            accent_b: vec![(0, 1)],
+        };
+        let shown = TextViewPrefs::default();
+        let hidden = TextViewPrefs {
+            show_line_numbers: false,
+            syntax_highlight: false,
+            ..TextViewPrefs::default()
+        };
+        let shown_layout = TextPaneLayout {
+            pane_chars: 4,
+            gutter_chars: 4,
+            prefs: &shown,
+        };
+        let with_numbers = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &shown_layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        assert!(with_numbers.text.starts_with("   7 "));
+        // Gutter + accented head + plain tail (tail and padding may
+        // merge in LayoutJob, so at least 3 sections).
+        assert!(with_numbers.sections.len() >= 3);
+        let hidden_layout = TextPaneLayout {
+            pane_chars: 4,
+            gutter_chars: 1,
+            prefs: &hidden,
+        };
+        let without_numbers = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &hidden_layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        // Gutter width 1 blanks to two spaces, no accent sections.
+        assert!(without_numbers.text.starts_with("  "));
+        assert!(
+            without_numbers
+                .sections
+                .iter()
+                .skip(1)
+                .all(|s| s.format.color == Color32::WHITE)
+        );
+        // Thumbnail chrome narrows in sync.
+        assert!(gutter_bar_width(false) < gutter_bar_width(true));
+    }
+
+    #[test]
+    fn prefs_word_wrap_caps_pane_at_80() {
+        let long = "x".repeat(200);
+        let on = TextViewPrefs {
+            word_wrap: true,
+            ..TextViewPrefs::default()
+        };
+        let off = TextViewPrefs::default();
+        let wrapped: String = prefs_pane_segments(&long, &[], 80, &on)
+            .into_iter()
+            .map(|(segment, _)| segment)
+            .collect();
+        assert_eq!(wrapped, "x".repeat(80));
+        assert_eq!(
+            prefs_pane_segments(&long, &[], 200, &off)
+                .into_iter()
+                .map(|(s, _)| s)
+                .collect::<String>()
+                .len(),
+            200
+        );
+        // Model-level cap matches the paint width.
+        let model = TextRows {
+            rows: Vec::new(),
+            truncated: false,
+            coarse: false,
+            pane_chars: 200,
+            gutter_chars: 4,
+            selected: None,
+            filter: viewmodel::TextFilter::All,
+        };
+        assert_eq!(view_text_with_prefs(&model, &on).pane_chars, 80);
+        assert_eq!(view_text_with_prefs(&model, &off).pane_chars, 200);
     }
 }

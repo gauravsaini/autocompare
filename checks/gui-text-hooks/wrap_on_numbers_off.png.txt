@@ -1,0 +1,4 @@
+paint_text_with_prefs -- prefs proof
+  left : xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  right: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done

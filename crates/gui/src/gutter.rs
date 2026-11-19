@@ -77,6 +77,13 @@ pub fn gutter_geometry(total_rows: usize, height: f32, rows: &[TextRow]) -> Gutt
     }
 }
 
+/// Width of the thumbnail gutter bar in logical pixels. Hiding line
+/// numbers narrows the chrome (12.0 to 6.0) while row counts stay
+/// honest; the geometry itself still comes from `gutter_geometry`.
+pub fn gutter_bar_width(show_line_numbers: bool) -> f32 {
+    if show_line_numbers { 12.0 } else { 6.0 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +138,12 @@ mod tests {
         assert_eq!(second.kind, TextRowKind::Inserted);
         assert_eq!(second.y_start, 300.0);
         assert_eq!(second.y_end, 400.0);
+    }
+
+    #[test]
+    fn bar_width_narrows_when_line_numbers_hide() {
+        assert_eq!(gutter_bar_width(true), 12.0);
+        assert_eq!(gutter_bar_width(false), 6.0);
+        assert!(gutter_bar_width(false) < gutter_bar_width(true));
     }
 }

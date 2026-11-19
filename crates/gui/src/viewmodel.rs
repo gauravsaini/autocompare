@@ -621,6 +621,82 @@ pub fn filter_counts(rows: &[TextRow], filter: TextFilter) -> FilterCounts {
 }
 
 // ----------------------------------------------------------------------------
+// Text view prefs (paint-side hook, headless)
+// ----------------------------------------------------------------------------
+
+/// Paint-side view prefs for the text panes. Mirrors the `App` toggle
+/// state (`word_wrap`, `show_line_numbers`, `syntax_highlight`) without
+/// importing egui, so both `views::paint_text_with_prefs` and the
+/// `App::view_text_for_paint` clone-hook can share one implementation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextViewPrefs {
+    /// Cap panes at 80 chars with wrapping.
+    pub word_wrap: bool,
+    /// Show the line-number gutter; off means numbers are hidden and
+    /// the gutter narrows to width 1.
+    pub show_line_numbers: bool,
+    /// Show inline diff accents; off means accent spans are cleared.
+    pub syntax_highlight: bool,
+}
+
+impl Default for TextViewPrefs {
+    /// Matches `App::default`: full-width panes, numbers and accents on.
+    fn default() -> Self {
+        Self {
+            word_wrap: false,
+            show_line_numbers: true,
+            syntax_highlight: true,
+        }
+    }
+}
+
+/// Width panes paint at under `prefs`. Word wrap caps the model width
+/// at 80 so long lines stay readable without horizontal scrolling.
+pub fn effective_pane_chars_for(pane_chars: usize, word_wrap: bool) -> usize {
+    if word_wrap {
+        pane_chars.min(80)
+    } else {
+        pane_chars
+    }
+}
+
+/// Gutter width panes paint at under `prefs`. Hiding line numbers
+/// narrows the gutter to 1 so counts stay honest while chrome shrinks.
+pub fn effective_gutter_chars_for(gutter_chars: usize, show_line_numbers: bool) -> usize {
+    if show_line_numbers { gutter_chars } else { 1 }
+}
+
+/// Returns a paint-ready copy of text rows with `prefs` applied: line
+/// numbers hidden when off, inline accents cleared when syntax
+/// highlighting is off, pane width capped when word wrap is on.
+/// Selection and display filter pass through untouched, so counts
+/// (`filter_counts`) stay honest under any toggle combination.
+pub fn view_text_with_prefs(model: &TextRows, prefs: &TextViewPrefs) -> TextRows {
+    let mut out = TextRows {
+        rows: model.rows.clone(),
+        truncated: model.truncated,
+        coarse: model.coarse,
+        pane_chars: effective_pane_chars_for(model.pane_chars, prefs.word_wrap),
+        gutter_chars: effective_gutter_chars_for(model.gutter_chars, prefs.show_line_numbers),
+        selected: model.selected,
+        filter: model.filter,
+    };
+    if !prefs.show_line_numbers {
+        for row in &mut out.rows {
+            row.left_no = None;
+            row.right_no = None;
+        }
+    }
+    if !prefs.syntax_highlight {
+        for row in &mut out.rows {
+            row.accent_a.clear();
+            row.accent_b.clear();
+        }
+    }
+    out
+}
+
+// ----------------------------------------------------------------------------
 // Folder
 // ----------------------------------------------------------------------------
 
@@ -2011,5 +2087,74 @@ mod tests {
             filtered_indices(&long, TextFilter::Context),
             vec![3, 4, 5, 6, 7]
         );
+    }
+
+    #[test]
+    fn text_prefs_default_matches_app_toggles() {
+        let prefs = TextViewPrefs::default();
+        assert!(!prefs.word_wrap);
+        assert!(prefs.show_line_numbers);
+        assert!(prefs.syntax_highlight);
+    }
+
+    #[test]
+    fn text_prefs_effective_widths_cap_and_narrow() {
+        assert_eq!(effective_pane_chars_for(200, true), 80);
+        assert_eq!(effective_pane_chars_for(200, false), 200);
+        assert_eq!(effective_pane_chars_for(10, true), 10);
+        assert_eq!(effective_gutter_chars_for(4, true), 4);
+        assert_eq!(effective_gutter_chars_for(4, false), 1);
+    }
+
+    #[test]
+    fn text_prefs_view_hides_numbers_accents_and_keeps_counts() {
+        let model = TextRows {
+            rows: vec![TextRow {
+                kind: TextRowKind::Changed,
+                left_no: Some(3),
+                right_no: Some(3),
+                left: "alpha".to_string(),
+                right: "alphi".to_string(),
+                accent_a: vec![(4, 5)],
+                accent_b: vec![(4, 5)],
+            }],
+            truncated: false,
+            coarse: false,
+            pane_chars: 200,
+            gutter_chars: 4,
+            selected: Some(0),
+            filter: TextFilter::Differences,
+        };
+        let prefs = TextViewPrefs {
+            word_wrap: true,
+            show_line_numbers: false,
+            syntax_highlight: false,
+        };
+        let view = view_text_with_prefs(&model, &prefs);
+        let Some(row) = view.rows.first() else {
+            return;
+        };
+        assert_eq!(row.left_no, None);
+        assert_eq!(row.right_no, None);
+        assert!(row.accent_a.is_empty());
+        assert!(row.accent_b.is_empty());
+        assert_eq!(view.pane_chars, 80);
+        assert_eq!(view.gutter_chars, 1);
+        // Selection + filter pass through so counts stay honest.
+        assert_eq!(view.selected, Some(0));
+        assert_eq!(view.filter, TextFilter::Differences);
+        assert_eq!(
+            filter_counts(&view.rows, view.filter),
+            filter_counts(&model.rows, model.filter)
+        );
+        // Default prefs leave the model untouched.
+        let plain = view_text_with_prefs(&model, &TextViewPrefs::default());
+        assert_eq!(plain.pane_chars, 200);
+        assert_eq!(plain.gutter_chars, 4);
+        let Some(kept) = plain.rows.first() else {
+            return;
+        };
+        assert_eq!(kept.left_no, Some(3));
+        assert_eq!(kept.accent_a, vec![(4, 5)]);
     }
 }
