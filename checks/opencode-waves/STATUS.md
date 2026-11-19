@@ -489,3 +489,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 11 A app wiring
 - A+B live. A M app.rs 11 lines (model wiring started) + main 2. B gutter/tree/viewmodel pure models (611). Disjoint holds, diff 914.
 - No commits. Wait.
+
+## Wave I poll 12 wiring deepens
+- A+B live. A app.rs 34 lines (merge/table wiring). B reading A wiring refs (read-only ok). Diff 933.
+- No commits. Wait.
