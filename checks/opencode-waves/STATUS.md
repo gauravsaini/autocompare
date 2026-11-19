@@ -1094,3 +1094,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - SESSION `9cd183b` session restore with recent history + graceful reopen — OWNS home.rs+app.rs.
 - Verify combined: 440 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AQ (text wrap parity, folder sync, home recent polish).
+
+## 2026-11-20 — Wave AQ plan (2 parallel: text wrap parity + folder sync)
+- AQ-WRAP `sess-wrap-aq`: OWNS views.rs+checks/gui-wrap-aq (word-wrap paint parity).
+- AQ-FOLDERSYNC `sess-foldersync-aq`: OWNS tree.rs+app.rs+checks/gui-foldersync-aq (sync direction wiring).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
