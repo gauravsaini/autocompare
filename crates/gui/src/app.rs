@@ -1615,9 +1615,11 @@ impl App {
         self.merge_picks = kept;
     }
 
-    /// Paint ke baad App picks ka hisab: lines badli hon (global Take ne
-    /// conflict order badla) to staged indices purane hunks naam lenge,
-    /// isliye clear + status; nahi to staged adopt. Headless-tested.
+    /// Paint ke baad App picks ka hisab: lines badli hon (naya compare /
+    /// swap) to staged indices purane hunks naam lenge, isliye clear +
+    /// status; nahi to staged adopt. Paint lines mutate nahi karta
+    /// (global row apply-all stage karta hai), isliye aam frame me adopt
+    /// chalta hai. Headless-tested.
     fn reconcile_merge_picks(
         &mut self,
         before: &[String],
@@ -5136,6 +5138,32 @@ impl eframe::App for App {
                             })
                             .unwrap_or_default();
                         self.reconcile_merge_picks(&before, &after, staged);
+                        // Apply gate: dry-run + output path + Apply button live.
+                        let enabled = self.merge_apply_enabled();
+                        let state = self.merge_apply_state;
+                        let summary = self.merge_apply_last_summary.clone();
+                        let summary_line = self.merge_apply_summary_line();
+                        let mut dry_run = self.merge_dry_run;
+                        let mut out_path = self.merge_output_path.clone();
+                        let apply_clicked = views::paint_merge_apply(
+                            ui,
+                            enabled,
+                            &mut dry_run,
+                            &mut out_path,
+                            state,
+                            summary.as_ref(),
+                            &summary_line,
+                        );
+                        if dry_run != self.merge_dry_run {
+                            self.set_merge_dry_run(dry_run);
+                        }
+                        if out_path != self.merge_output_path {
+                            self.set_merge_output_path(out_path);
+                        }
+                        if apply_clicked {
+                            self.request_merge_apply();
+                            self.run_merge_apply();
+                        }
                     } else {
                         ui.label(
                             RichText::new("no merge results yet: type base + both sides and Compare.")

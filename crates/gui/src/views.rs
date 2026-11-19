@@ -1640,6 +1640,30 @@ pub fn stage_merge_pick(
     out
 }
 
+/// Sab hunks ko ek side par stage karta hai (apply-all): har index
+/// `0..total` usi `choice` se judta hai, out-of-range stale picks chhoote
+/// nahi (adopt unhe prune karta hai). [`viewmodel::apply_merge_picks`]
+/// dedup rule ka paint-side mirror. Pure; unit-tested.
+pub fn stage_merge_pick_all(
+    picks: &[viewmodel::MergeHunkPick],
+    total: usize,
+    choice: viewmodel::TakeChoice,
+) -> Vec<viewmodel::MergeHunkPick> {
+    let mut out: Vec<viewmodel::MergeHunkPick> = Vec::new();
+    for pick in picks {
+        if pick.conflict_index >= total {
+            out.push(*pick);
+        }
+    }
+    for index in 0..total {
+        out.push(viewmodel::MergeHunkPick {
+            conflict_index: index,
+            choice,
+        });
+    }
+    out
+}
+
 /// Ek hunk ka decision display staged pick ke saath: pick ho to
 /// "take <side>" intent, nahi to honest pending. Pure; unit-tested.
 pub fn format_merge_hunk_decision_with_pick(
@@ -1669,11 +1693,13 @@ pub fn merge_three_pane_summary_line(total: usize, pending: usize, conflicted: b
 /// read-only hai ([`viewmodel::merge_conflict_hunks`] +
 /// [`viewmodel::merge_pick_summary`]); picks egui temp store me stage hote
 /// hain ([`merge_pick_id`], live lines se scoped) aur decision display
-/// pending se "take <side>" intent me badalta hai — decision ka App wiring
-/// agli wave ka hai, is wave me pick intent local state/display tak.
+/// pending se "take <side>" intent me badalta hai — Merge tab har frame
+/// App picks seed karta hai aur paint ke baad staged wapas adopt karta
+/// hai (App-side `reconcile_merge_picks` bridge).
 /// Har card par Take Left / Take Right (plus Take Base / Take Both) real
-/// buttons hain, koi stub nahi. Global Take `paint_merge` me functional
-/// rehta hai. Signature unchanged (KEVL `app.rs` call-site compat).
+/// buttons hain, koi stub nahi. Global apply-all row `paint_merge` me
+/// staged picks me likhta hai (model lines untouched). Signature unchanged
+/// (KEVL `app.rs` call-site compat).
 pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
     let hunks = viewmodel::merge_conflict_hunks(lines);
     let mut picks: Vec<viewmodel::MergeHunkPick> = ui
@@ -1772,31 +1798,43 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
 }
 
 /// The three-way merge output: conflict blocks highlighted, notes
-/// for conflicts and truncation first, with Take resolution actions.
+/// for conflicts and truncation first, with per-hunk Take staging plus
+/// an apply-all row. Global row kabhi model lines mutate nahi karta —
+/// har click staged picks me jata hai (App adopt karta hai), isliye
+/// multi-hunk par har hunk ka faisla lagta hai (purana index-0-only
+/// `resolve_take` hata diya). Resolution text [`paint_merge_apply`] +
+/// App `run_merge_apply` se likha jata hai.
 pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
     let dark = ui.visuals().dark_mode;
     if model.conflicted {
-        paint_note(ui, "the merge has conflicts; choose an action to resolve:");
-        let mut resolve_choice = None;
+        paint_note(
+            ui,
+            "the merge has conflicts; choose per hunk below, or take one side for all hunks:",
+        );
+        let hunks = viewmodel::merge_conflict_hunks(&model.lines);
+        let mut apply_all_choice: Option<viewmodel::TakeChoice> = None;
         ui.horizontal(|ui| {
-            if ui.button("Take Left").clicked() {
-                resolve_choice = Some(viewmodel::TakeChoice::Left);
+            if ui.button("Take Left (all)").clicked() {
+                apply_all_choice = Some(viewmodel::TakeChoice::Left);
             }
-            if ui.button("Take Right").clicked() {
-                resolve_choice = Some(viewmodel::TakeChoice::Right);
+            if ui.button("Take Right (all)").clicked() {
+                apply_all_choice = Some(viewmodel::TakeChoice::Right);
             }
-            if ui.button("Take Base").clicked() {
-                resolve_choice = Some(viewmodel::TakeChoice::Base);
+            if ui.button("Take Base (all)").clicked() {
+                apply_all_choice = Some(viewmodel::TakeChoice::Base);
             }
-            if ui.button("Take Both").clicked() {
-                resolve_choice = Some(viewmodel::TakeChoice::Both);
+            if ui.button("Take Both (all)").clicked() {
+                apply_all_choice = Some(viewmodel::TakeChoice::Both);
             }
         });
-        if let Some(choice) = resolve_choice
-            && let Ok(resolved) = viewmodel::resolve_take(&model.lines, 0, choice)
-        {
-            model.conflicted = resolved.iter().any(|l| l.starts_with("<<<<<<<"));
-            model.lines = resolved;
+        if let Some(choice) = apply_all_choice {
+            let id = merge_pick_id(&model.lines);
+            let picks: Vec<viewmodel::MergeHunkPick> =
+                ui.data_mut(|data| data.get_temp(id)).unwrap_or_default();
+            let staged = stage_merge_pick_all(&picks, hunks.len(), choice);
+            ui.data_mut(|data| {
+                data.insert_temp(id, staged);
+            });
         }
         ui.add_space(TIGHT_GAP);
     }
@@ -1842,14 +1880,12 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
 
 /// Apply section title: hunk-card title precedent (small-strong paint).
 /// Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn merge_apply_section_title() -> &'static str {
     "Apply"
 }
 
 /// Output path field hint: dry-run par honest "not written" note, real run
 /// par seedha label. Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn merge_apply_path_hint(dry_run: bool) -> &'static str {
     if dry_run {
         "output path (dry-run: not written)"
@@ -1861,7 +1897,6 @@ pub fn merge_apply_path_hint(dry_run: bool) -> &'static str {
 /// Progress display ke liye state label: har `MergeApplyState` variant ka
 /// honest ek-shabd sthiti, sab distinct, koi fake percent nahi. Pure;
 /// unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn merge_apply_state_label(state: MergeApplyState) -> &'static str {
     match state {
         MergeApplyState::Idle => "idle",
@@ -1878,7 +1913,6 @@ pub fn merge_apply_state_label(state: MergeApplyState) -> &'static str {
 /// par honest no-path note. `None` jab koi report nahi (Idle fresh).
 /// Caller `summary_line` (App real line) ke saath ise dikhata hai. Pure;
 /// unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn format_merge_apply_result(summary: Option<&MergeApplySummary>) -> Option<String> {
     let s = summary?;
     if s.dry_run {
@@ -1908,7 +1942,6 @@ pub fn format_merge_apply_result(summary: Option<&MergeApplySummary>) -> Option<
 /// Returns true jab Apply daba (caller `request_merge_apply` phir
 /// `run_merge_apply` chalata hai; button disabled par kabhi true nahi).
 /// Geometry/typo callee tokens me (28/4 reuse), koi naya token/color nahi.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai (merge tab); tab tak tests live rakhte hain
 pub fn paint_merge_apply(
     ui: &mut Ui,
     enabled: bool,
@@ -8488,6 +8521,41 @@ mod tests {
             merge_pick_for_hunk(&two, 1),
             Some(viewmodel::TakeChoice::Base)
         );
+    }
+
+    #[test]
+    fn stage_merge_pick_all_covers_every_hunk() {
+        let lines = vec![
+            "<<<<<<< left".to_string(),
+            "L1".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>> right".to_string(),
+            "mid".to_string(),
+            "<<<<<<< left".to_string(),
+            "L2".to_string(),
+            "=======".to_string(),
+            "R2".to_string(),
+            ">>>>>>> right".to_string(),
+        ];
+        let total = viewmodel::merge_conflict_hunks(&lines).len();
+        assert_eq!(total, 2);
+        let one = stage_merge_pick(&[], 0, viewmodel::TakeChoice::Left);
+        let all = stage_merge_pick_all(&one, total, viewmodel::TakeChoice::Right);
+        assert_eq!(all.len(), 2);
+        assert_eq!(
+            merge_pick_for_hunk(&all, 0),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        assert_eq!(
+            merge_pick_for_hunk(&all, 1),
+            Some(viewmodel::TakeChoice::Right)
+        );
+        let done = viewmodel::merge_pick_summary(&lines, &all);
+        assert_eq!((done.total, done.resolved, done.pending), (2, 2, 0));
+        assert!(!done.conflicted);
+        let empty = stage_merge_pick_all(&[], 0, viewmodel::TakeChoice::Both);
+        assert!(empty.is_empty());
     }
 
     #[test]
