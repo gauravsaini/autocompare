@@ -664,3 +664,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - K-B ses-finalverify-k OWNS checks/wave-k-final: release+harness+PNG+gap recheck report-only.
 - A2 slice 3 continues views_table (disjoint).
 - Rules: commit locally NO push, English conventional, Hinglish Roman, forbid unsafe, no unwrap non-test.
+
+## Wave K poll 01 all live scoping
+- K-A reading callers (viewmodel/app/picture REPORT). K-B reading gaps REPORT, round-dir next. A2 slice 3 noting 3 viewmodel errors (K-A owns, disjoint respected).
+- Tree clean. Wait.
