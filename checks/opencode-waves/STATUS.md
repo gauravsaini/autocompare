@@ -373,3 +373,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 26 workspace checks
 - PCOMP live 06:22 compiling full workspace (cli+gui) pre-commit. Diff 8 files, fmt 10 left, proof pending.
+
+## Wave G poll 27 pcomp report ready
+- REPORT.md claims 291 green. Verified diff/compare tests green in log. fmt 10 RED left, commit pending. Live.
