@@ -911,3 +911,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AA-TABLE `sess-table-aa`: OWNS views_table.rs+views.rs+checks/gui-table-aa (Gap #3 header bar + cell grid paint).
 - AA-MERGE `sess-merge-aa`: OWNS tree.rs+viewmodel.rs+checks/gui-merge-aa (Gap #7 model half; views paint next wave).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AA complete (2 parallel: table-grid + merge-model)
+- MERGE `277987b` 3-pane merge-plan model with per-hunk decisions — OWNS tree.rs+viewmodel.rs+checks/gui-merge-aa (Gap #7 model half; paint next).
+- TABLE `06487e8` table grid as proper header-plus-cell columns — OWNS views_table.rs+views.rs+checks/gui-table-aa (Gap #3 paint).
+- Staged-index discipline dono ne nibhayi; koi cross-contamination nahi.
+- Verify combined: 289 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok.
+- Pushed. Next: Wave AB (minimap-click, find-paint, 3-pane paint, intra-spans next steps).
