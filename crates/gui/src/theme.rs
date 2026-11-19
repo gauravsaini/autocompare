@@ -70,6 +70,72 @@ pub const TYPO_LETTER_SPACING: f32 = 0.0;
 pub const TYPO_LINE_HEIGHT_SOURCE: &str = "ui.text_style_height(Monospace)";
 
 // ----------------------------------------------------------------------------
+// Font zoom model (headless): step table over TypoRole sizes.
+// ----------------------------------------------------------------------------
+
+/// Lowest zoom step: two ticks below default.
+pub const ZOOM_MIN_LEVEL: i8 = -2;
+/// Highest zoom step: four ticks above default.
+pub const ZOOM_MAX_LEVEL: i8 = 4;
+/// Default zoom step: base [`TypoRole::size`] values unchanged.
+pub const ZOOM_DEFAULT_LEVEL: i8 = 0;
+/// Size delta per step in px: one point per level keeps role gaps intact.
+pub const ZOOM_STEP_PX: f32 = 1.0;
+/// Clamp floor for any zoomed size so small text never vanishes.
+pub const ZOOM_MIN_SIZE: f32 = 8.0;
+/// Clamp ceiling for any zoomed size so headings never blow out layout.
+pub const ZOOM_MAX_SIZE: f32 = 24.0;
+/// Every accepted step from MIN..=MAX, in order, for docs plus tests.
+pub const ZOOM_LEVELS: [i8; 7] = [-2, -1, 0, 1, 2, 3, 4];
+
+/// Clamps a raw zoom step into MIN..=MAX; out-of-range input sticks.
+pub const fn clamp_zoom_level(level: i8) -> i8 {
+    if level < ZOOM_MIN_LEVEL {
+        ZOOM_MIN_LEVEL
+    } else if level > ZOOM_MAX_LEVEL {
+        ZOOM_MAX_LEVEL
+    } else {
+        level
+    }
+}
+
+/// Pixel offset for a step: clamped level times STEP (level 0 gives 0.0).
+pub fn zoom_offset_px(level: i8) -> f32 {
+    f32::from(clamp_zoom_level(level)) * ZOOM_STEP_PX
+}
+
+/// Zoomed point size for `role` at `level`, clamped to MIN..MAX size.
+/// The level clamps first, so very low/high input behaves like the
+/// nearest edge. Base comes from [`TypoRole::size`]; zoom never moves
+/// geometry or color tokens.
+pub fn zoomed_size(role: TypoRole, level: i8) -> f32 {
+    let stepped = role.size() + zoom_offset_px(level);
+    stepped.clamp(ZOOM_MIN_SIZE, ZOOM_MAX_SIZE)
+}
+
+impl TypoRole {
+    /// Zoomed point size for this role at `level` (see [`zoomed_size`]).
+    pub fn zoomed_point_size(self, level: i8) -> f32 {
+        zoomed_size(self, level)
+    }
+
+    /// Zoom-aware text builder: same family, weight and style as
+    /// [`TypoRole::rich`] but the point size comes from [`zoomed_size`].
+    /// Line-height stays the shared measured mono row height.
+    pub fn rich_zoomed(self, text: impl Into<String>, level: i8) -> egui::RichText {
+        let styled = egui::RichText::new(text)
+            .text_style(self.text_style())
+            .size(self.zoomed_point_size(level))
+            .extra_letter_spacing(TYPO_LETTER_SPACING);
+        match self {
+            Self::Heading | Self::HomeTitle => styled.strong(),
+            Self::Small | Self::HomeDesc => styled.weak(),
+            Self::Body | Self::Mono | Self::HomeButton => styled,
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Geometry scale (headless, px): canonical spacing 4/8/12/16/24.
 // ----------------------------------------------------------------------------
 
@@ -593,5 +659,102 @@ mod tests {
         assert_eq!(DARK_GREEN_RGB, [120, 220, 130]);
         assert_eq!(DARK_BLUE_RGB, [130, 170, 255]);
         assert_eq!(DARK_TRACK_RGB, [32, 32, 32]);
+    }
+
+    #[test]
+    fn zoom_steps_cover_min_to_max_in_order() {
+        assert_eq!(ZOOM_MIN_LEVEL, -2);
+        assert_eq!(ZOOM_MAX_LEVEL, 4);
+        assert_eq!(ZOOM_DEFAULT_LEVEL, 0);
+        assert_eq!(ZOOM_LEVELS, [-2, -1, 0, 1, 2, 3, 4]);
+        assert_eq!(ZOOM_STEP_PX, 1.0);
+        assert_eq!(ZOOM_MIN_SIZE, 8.0);
+        assert_eq!(ZOOM_MAX_SIZE, 24.0);
+        const {
+            assert!(ZOOM_MIN_SIZE < TYPO_SMALL_SIZE);
+            assert!(TYPO_HEADING_SIZE < ZOOM_MAX_SIZE);
+        }
+    }
+
+    #[test]
+    fn zoom_level_clamps_to_table_edges() {
+        assert_eq!(clamp_zoom_level(0), 0);
+        assert_eq!(clamp_zoom_level(-2), -2);
+        assert_eq!(clamp_zoom_level(4), 4);
+        assert_eq!(clamp_zoom_level(-100), ZOOM_MIN_LEVEL);
+        assert_eq!(clamp_zoom_level(100), ZOOM_MAX_LEVEL);
+        assert_eq!(zoom_offset_px(0), 0.0);
+        assert_eq!(zoom_offset_px(1), 1.0);
+        assert_eq!(zoom_offset_px(-2), -2.0);
+        assert_eq!(zoom_offset_px(4), 4.0);
+        assert_eq!(zoom_offset_px(100), zoom_offset_px(ZOOM_MAX_LEVEL));
+        assert_eq!(zoom_offset_px(-100), zoom_offset_px(ZOOM_MIN_LEVEL));
+    }
+
+    #[test]
+    fn zoomed_size_zero_level_is_base() {
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert_eq!(zoomed_size(role, 0), role.size());
+            assert_eq!(role.zoomed_point_size(0), role.size());
+            assert_eq!(role.zoomed_point_size(ZOOM_DEFAULT_LEVEL), role.size());
+        }
+    }
+
+    #[test]
+    fn zoomed_size_steps_one_px_per_level_then_clamps() {
+        assert_eq!(zoomed_size(TypoRole::Body, 1), TYPO_BODY_SIZE + 1.0);
+        assert_eq!(zoomed_size(TypoRole::Body, -1), TYPO_BODY_SIZE - 1.0);
+        assert_eq!(zoomed_size(TypoRole::Mono, 2), TYPO_MONO_SIZE + 2.0);
+        assert_eq!(zoomed_size(TypoRole::Small, -2), TYPO_SMALL_SIZE - 2.0);
+        // Level clamps before sizing: huge input behaves like the edge.
+        assert_eq!(
+            zoomed_size(TypoRole::Body, 100),
+            zoomed_size(TypoRole::Body, ZOOM_MAX_LEVEL)
+        );
+        assert_eq!(
+            zoomed_size(TypoRole::Body, -100),
+            zoomed_size(TypoRole::Body, ZOOM_MIN_LEVEL)
+        );
+        // Size clamps to MIN..MAX even for extreme roles.
+        assert!(zoomed_size(TypoRole::Small, -100) >= ZOOM_MIN_SIZE);
+        assert!(zoomed_size(TypoRole::Heading, 100) <= ZOOM_MAX_SIZE);
+        // Full step table stays inside MIN..MAX for every role.
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            for level in ZOOM_LEVELS {
+                let sized = zoomed_size(role, level);
+                assert!(sized >= ZOOM_MIN_SIZE);
+                assert!(sized <= ZOOM_MAX_SIZE);
+            }
+        }
+    }
+
+    #[test]
+    fn zoomed_rich_carries_zoomed_size_per_role() {
+        let debug =
+            |role: TypoRole, level: i8| format!("{role:?}::{:?}", role.rich_zoomed("x", level));
+        assert!(debug(TypoRole::Body, 0).contains("13.0"));
+        assert!(debug(TypoRole::Body, 2).contains("15.0"));
+        assert!(debug(TypoRole::Mono, 1).contains("13.0"));
+        assert!(debug(TypoRole::Small, -1).contains("10.0"));
+        // Weight carriers survive the zoomed applicator.
+        assert!(debug(TypoRole::Heading, 1).contains("strong: true"));
+        assert!(debug(TypoRole::HomeDesc, -1).contains("weak: true"));
+        assert!(debug(TypoRole::Mono, 0).contains("strong: false"));
     }
 }

@@ -1,0 +1,22 @@
+# Zoom report (round-R-1)
+- steps: MIN -2, MAX 4, STEP 1.0, SIZE 8.0..24.0
+- levels table: [-2, -1, 0, 1, 2, 3, 4]
+- resolver: free zoomed_size ok, method zoomed_point_size ok, rich_zoomed ok
+- theme tests: 5 zoom fns ok
+- cargo test: 229 passed, 0 failed
+- INTEGRATION.patch apply --check: ok (crates/gui/src/app.rs |   49 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 49 insertions(+))
+- PNG: 9914 bytes (min 8192: ok), magic ok, distinct ok
+- paint-neutral: geometry tokens untouched (refs 49, info), Color32::from_rgb count 18 (frozen, no new hues)
+
+| level | Body (13+lv) | Mono (12+lv) |
+| --- | --- | --- |
+| -2 | 11.0 | 10.0 |
+| -1 | 12.0 | 11.0 |
+| +0 | 13.0 | 12.0 |
+| +1 | 14.0 | 13.0 |
+| +2 | 15.0 | 14.0 |
+| +3 | 16.0 | 15.0 |
+| +4 | 17.0 | 16.0 |
+
+RESULT: PASS
