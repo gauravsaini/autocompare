@@ -1356,3 +1356,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Baseline 606 green with uncommitted bin-agent files present (README/.gitignore + untracked install script).
 - BO-BIN OWNS scope clarify: scripts/ + tools/packaging/ + checks/bin-bo/ + README.md (install section per task) + .gitignore (/dist artifact dir). crates/** still NO-TOUCH.
 - GEO agent ScrollArea P0 par hai (views.rs show_rows + egui 0.37 probe), TYPO theme tokens padh raha hai, LOCALRUN setup/build verify kar raha hai. Koi landing nahi, push nahi.
+
+## 2026-11-20 - BO-BIN landed (install path + tarball proof)
+- e96b46f verify ok: OWNS scripts/install-macos.sh + README install section + .gitignore /dist + checks/bin-bo/, zero crates edits, STATUS untouched, sh -n SYNTAX_OK, 606 green. Pushed.
+- Tarball dist/autocompare-gui-0.5.0-macos-arm64.tar.gz (5MB, binary+VERSION, smoke-ok) gitignored, user early feedback ready: scripts/install-macos.sh --install.
+- Baaki in-flight: BN-GEO, BN-TYPO, BO-LOCALRUN.
