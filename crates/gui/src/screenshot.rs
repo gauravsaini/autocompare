@@ -24,7 +24,24 @@ const CHANGED_FG: [u8; 4] = [255, 235, 160, 255];
 const ACCENT_TAB: [u8; 4] = [50, 70, 105, 255];
 
 /// Renders the Text comparison session fixture to a PNG at the given path.
+///
+/// Paths whose file name contains `folder` render the Folder session
+/// fixture instead (same size/shape, folder tree + sync preview), so
+/// `--screenshot <folder-png>` proves the folder UI without touching
+/// the CLI flags.
 pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
+    let is_folder = out_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.to_lowercase().contains("folder"));
+    if is_folder {
+        return render_folder_fixture_png(out_path);
+    }
+    render_text_fixture_png(out_path)
+}
+
+/// Renders the Text comparison session fixture to a PNG at the given path.
+pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     let width = 960u32;
     let height = 600u32;
     let dims = (width, height);
@@ -287,6 +304,277 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Renders the Folder comparison session fixture: filter checkboxes,
+/// honest counts, tree rows with glyphs, and the sync preview panel
+/// (mode labels, dry-run options, consent hint, Apply gate). All
+/// strings come from the headless `tree`/`home` logic so the shot
+/// proves the wired UI, not a mock.
+pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
+    use crate::home::{folder_empty_hint, sync_consent_hint};
+    use crate::tree::{SyncModeChoice, count_folder_rows, folder_tree_filtered, sync_preview};
+    use crate::viewmodel::FolderRow;
+
+    let width = 960u32;
+    let height = 600u32;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+
+    let mut pixels = vec![0u8; byte_count];
+    fill_rect(&mut pixels, dims, (0, 0, width, height), BG_DARK);
+
+    // Title bar
+    fill_rect(&mut pixels, dims, (0, 0, width, 36), BG_PANEL);
+    fill_rect(&mut pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
+    fill_rect(&mut pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
+    fill_rect(&mut pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
+    draw_string(
+        &mut pixels,
+        dims,
+        80,
+        14,
+        "fixtures/left-dir <--> fixtures/right-dir - Folder",
+        FG_TEXT,
+    );
+
+    // Tab bar with Folder highlighted
+    fill_rect(&mut pixels, dims, (0, 36, width, 32), [32, 32, 32, 255]);
+    draw_string(&mut pixels, dims, 16, 46, "Home", FG_DIM);
+    draw_string(&mut pixels, dims, 64, 46, "Text", FG_DIM);
+    fill_rect(&mut pixels, dims, (118, 40, 66, 24), ACCENT_TAB);
+    draw_string(&mut pixels, dims, 130, 46, "Folder", FG_TEXT);
+    draw_string(&mut pixels, dims, 200, 46, "Hex", FG_DIM);
+    draw_string(&mut pixels, dims, 244, 46, "Merge", FG_DIM);
+    draw_string(&mut pixels, dims, 300, 46, "Table", FG_DIM);
+    draw_string(&mut pixels, dims, 356, 46, "Sync", FG_DIM);
+    draw_string(&mut pixels, dims, 404, 46, "Picture", FG_DIM);
+    draw_string(&mut pixels, dims, 474, 46, "FolderMerge", FG_DIM);
+    draw_string(&mut pixels, dims, 574, 46, "Audio", FG_DIM);
+
+    // Path row
+    fill_rect(&mut pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
+    draw_string(&mut pixels, dims, 20, 82, "fixtures/left-dir", FG_TEXT);
+    fill_rect(&mut pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
+    draw_string(&mut pixels, dims, 412, 82, "Browse...", FG_TEXT);
+    fill_rect(&mut pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
+    draw_string(&mut pixels, dims, 498, 82, "fixtures/right-dir", FG_TEXT);
+    fill_rect(&mut pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
+    draw_string(&mut pixels, dims, 890, 82, "Browse...", FG_TEXT);
+
+    // Session toolbar
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        104,
+        "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
+        FG_TEXT,
+    );
+
+    // Fixture rows: headless truth, same glyphs the engine paints.
+    let rows = vec![
+        FolderRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "src/a.txt".to_string(),
+            is_dir: false,
+            glyph: '>',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        },
+        FolderRow {
+            rel_path: "src/b.txt".to_string(),
+            is_dir: false,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        },
+        FolderRow {
+            rel_path: "orphan.txt".to_string(),
+            is_dir: false,
+            glyph: 'R',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        },
+    ];
+    let counts = count_folder_rows(&rows);
+    let expanded: std::collections::BTreeSet<String> = ["src".to_string()].into_iter().collect();
+    let display = crate::tree::FolderDisplay::default();
+    let nodes = folder_tree_filtered(&rows, &expanded, &display);
+    let preview = sync_preview(&rows, SyncModeChoice::UpdateBoth);
+    let consent_hint = sync_consent_hint(false, preview.steps.len());
+    let empty_hint = folder_empty_hint(false, false);
+    let _ = empty_hint;
+
+    // Filter checkboxes line (labels mirror app.rs Folder tab).
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        122,
+        "[ ] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten",
+        FG_TEXT,
+    );
+    // Honest counts line.
+    draw_string(&mut pixels, dims, 16, 138, &counts.summary(), FG_DIM);
+
+    // Tree panel.
+    let pane_top = 158u32;
+    let pane_height = 260u32;
+    let pane_bottom = pane_top.saturating_add(pane_height);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, pane_top, 936, pane_height),
+        [22, 22, 22, 255],
+    );
+    let row_h = 24u32;
+    for (i, node) in nodes.iter().enumerate() {
+        let y = pane_top.saturating_add((i as u32).saturating_mul(row_h));
+        if y.saturating_add(row_h) > pane_bottom {
+            break;
+        }
+        let (bg, fg) = match node.row.glyph {
+            '=' => (BG_DARK, FG_TEXT),
+            '!' | 'L' => (DELETED_BG, DELETED_FG),
+            '>' | '<' => (CHANGED_BG, CHANGED_FG),
+            'R' => (INSERTED_BG, INSERTED_FG),
+            _ => (BG_DARK, FG_DIM),
+        };
+        fill_rect(&mut pixels, dims, (12, y, 936, row_h), bg);
+        if node.row.is_dir {
+            let icon = if node.is_expanded { "v" } else { ">" };
+            draw_string(&mut pixels, dims, 18, y.saturating_add(6), icon, FG_DIM);
+        }
+        let indent = (node.depth as u32).saturating_mul(4u32);
+        let gx = 34u32.saturating_add(indent.saturating_mul(7));
+        draw_string(
+            &mut pixels,
+            dims,
+            gx,
+            y.saturating_add(6),
+            &node.row.glyph.to_string(),
+            fg,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            gx.saturating_add(16),
+            y.saturating_add(6),
+            &node.row.rel_path,
+            fg,
+        );
+    }
+
+    // Sync preview panel.
+    let panel_y = pane_bottom.saturating_add(8);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (12, panel_y, 936, 116),
+        [28, 28, 28, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(6),
+        "Sync preview (dry-run)",
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(22),
+        &format!(
+            "({})  ({})",
+            SyncModeChoice::UpdateBoth.label(),
+            SyncModeChoice::Mirror.label()
+        ),
+        FG_TEXT,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(38),
+        &preview.summary(),
+        FG_DIM,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        panel_y.saturating_add(54),
+        consent_hint,
+        FG_DIM,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (20, panel_y.saturating_add(72), 150, 24),
+        [60, 60, 60, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        32,
+        panel_y.saturating_add(78),
+        "Apply sync plan",
+        FG_TEXT,
+    );
+
+    // Status bar.
+    fill_rect(&mut pixels, dims, (0, 570, width, 30), [32, 32, 32, 255]);
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        578,
+        "folder: 4 entries, 0 pruned | staged src/a.txt for text compare",
+        FG_DIM,
+    );
+
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), color: [u8; 4]) {
     let (img_w, img_h) = dims;
     let (x, y, w, h) = rect;
@@ -439,5 +727,48 @@ fn glyph_pattern(ch: u8) -> [u8; 5] {
         b'}' => [0x00, 0x41, 0x36, 0x08, 0x00],
         b'~' => [0x08, 0x04, 0x08, 0x10, 0x08],
         _ => [0x7f, 0x7f, 0x7f, 0x7f, 0x7f],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn png_magic_ok(bytes: &[u8]) -> bool {
+        bytes.len() >= 8 && bytes[0..8] == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+    }
+
+    #[test]
+    fn text_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-folder-text-fixture.png");
+        render_text_fixture_png(&out).expect("text fixture renders");
+        let bytes = std::fs::read(&out).expect("text fixture readable");
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+    }
+
+    #[test]
+    fn folder_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-folder-folder-fixture.png");
+        render_folder_fixture_png(&out).expect("folder fixture renders");
+        let bytes = std::fs::read(&out).expect("folder fixture readable");
+        assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+    }
+
+    #[test]
+    fn dispatcher_routes_by_file_name() {
+        let dir = std::env::temp_dir();
+        let text_out = dir.join("vis-dispatch-text.png");
+        let folder_out = dir.join("vis-dispatch-folder.png");
+        render_fixture_png(&text_out).expect("text dispatch renders");
+        render_fixture_png(&folder_out).expect("folder dispatch renders");
+        let text_bytes = std::fs::read(&text_out).expect("text readable");
+        let folder_bytes = std::fs::read(&folder_out).expect("folder readable");
+        assert!(png_magic_ok(&text_bytes));
+        assert!(png_magic_ok(&folder_bytes));
+        assert_ne!(text_bytes, folder_bytes);
     }
 }

@@ -26,6 +26,7 @@ use autocompare_compare::{
 pub use crate::viewmodel::Tab;
 use crate::viewmodel::{self, FolderRow, MergeSummary, TableModel};
 use crate::views;
+use crate::{home, tree};
 
 /// The two path strings of one tab, persisted across tab switches.
 #[derive(Debug, Default, Clone)]
@@ -79,6 +80,7 @@ pub struct App {
     heatmap: Option<TextureHandle>,
     pub dark_mode: bool,
     pub folder_expanded: BTreeSet<String>,
+    pub folder_session: tree::FolderSessionState,
     pub word_wrap: bool,
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
@@ -112,6 +114,7 @@ impl Default for App {
             heatmap: None,
             dark_mode: true,
             folder_expanded: BTreeSet::new(),
+            folder_session: tree::FolderSessionState::default(),
             word_wrap: false,
             show_line_numbers: true,
             syntax_highlight: true,
@@ -401,6 +404,90 @@ impl App {
     /// Records user-visible status feedback.
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status = msg.into();
+    }
+
+    /// Folder rows behind the active model, if compared.
+    fn folder_rows(&self) -> Option<&Vec<FolderRow>> {
+        self.folder_model.as_ref().map(|(rows, _)| rows)
+    }
+
+    /// Honest counts line for the Folder tab via [`tree::FolderCounts`].
+    /// Empty model reports no results yet so the view never lies.
+    pub fn folder_counts_summary(&self) -> String {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.counts(rows).summary(),
+            None => String::from("folder: no results yet"),
+        }
+    }
+
+    /// Toggles one directory in the folder tree. Keeps the legacy
+    /// `folder_expanded` set mirrored so older callers stay correct.
+    pub fn toggle_folder_dir(&mut self, dir: &str) {
+        self.folder_session.toggle(dir);
+        tree::toggle_expanded(&mut self.folder_expanded, dir);
+    }
+
+    /// Rows the folder tree paints: filtered, then hierarchical/flat.
+    pub fn folder_visible_tree(&self) -> Vec<tree::FolderTreeNode> {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.visible_tree(rows),
+            None => Vec::new(),
+        }
+    }
+
+    /// Stages a double-clicked node and routes via
+    /// [`home::resolve_compare_tab`]. Directory clicks stage nothing
+    /// and keep the tab; file clicks stage the path and move to Text.
+    /// Returns the tab the host should show.
+    pub fn stage_folder_double_click(&mut self, node: &tree::FolderTreeNode) -> Tab {
+        let staged_file = self.folder_session.stage_double_click(node);
+        let target = home::resolve_compare_tab(&self.folder_session.staged);
+        if staged_file {
+            self.tab = target;
+            if let Some(rel) = self.folder_session.staged.clone() {
+                self.status = format!("staged {rel} for text compare");
+            }
+        }
+        target
+    }
+
+    /// Switches the folder sync preview mode (drops Apply consent).
+    pub fn set_folder_sync_mode(&mut self, mode: tree::SyncModeChoice) {
+        self.folder_session.set_sync_mode(mode);
+        self.status = format!("sync preview: {}", mode.label());
+    }
+
+    /// Sets explicit Apply consent for the folder sync preview.
+    pub fn set_folder_consent(&mut self, consented: bool) {
+        self.folder_session.consented = consented;
+        self.status = if consented {
+            String::from("sync consent on: Apply enabled when steps exist")
+        } else {
+            String::from("sync consent off: preview only")
+        };
+    }
+
+    /// Dry-run preview for the current folder sync mode over compared rows.
+    pub fn folder_sync_preview(&self) -> tree::SyncPreview {
+        match self.folder_rows() {
+            Some(rows) => self.folder_session.preview(rows),
+            None => tree::SyncPreview::default(),
+        }
+    }
+
+    /// Whether folder Apply may run now: consented and steps planned.
+    pub fn folder_can_apply(&self) -> bool {
+        self.folder_session
+            .can_apply_now(&self.folder_sync_preview())
+    }
+
+    /// Engine sync options behind the current preview mode (same mapping
+    /// `plan_sync` uses: Both = NewerWins/no-prune, Mirror =
+    /// LeftToRight/prune). Shown as dry-run text; preview itself never
+    /// touches the filesystem.
+    pub fn folder_sync_options_label(&self) -> String {
+        let opts = tree::sync_options_for(self.folder_session.sync_mode);
+        format!("options: {opts:?} (plan_sync parity, dry-run only)")
     }
 
     /// Width panes paint at. Word wrap caps the model width at 80 so
@@ -1201,15 +1288,133 @@ impl eframe::App for App {
                     }
                 }
                 Tab::Folder => {
-                    if let Some((rows, summary)) = self.folder_model.as_ref() {
-                        views::paint_folder(ui, rows, summary, &mut self.folder_expanded);
-                    } else {
+                    let has_rows = self.folder_rows().is_some_and(|r| !r.is_empty());
+                    let has_error = self.error.is_some();
+                    if self.folder_model.is_none() {
                         ui.label(
-                            RichText::new(
-                                "no folder results yet: type both folder paths and Compare.",
-                            )
-                            .weak(),
+                            RichText::new(home::folder_empty_hint(false, has_error)).weak(),
                         );
+                    } else {
+                        // 4 display-filter checkboxes from FolderDisplay.
+                        let mut display = self.folder_session.display;
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut display.hide_orphans, "Hide orphans");
+                            ui.checkbox(&mut display.left_newer_only, "Left newer only");
+                            ui.checkbox(&mut display.right_newer_only, "Right newer only");
+                            ui.checkbox(&mut display.flatten, "Flatten");
+                        });
+                        if display != self.folder_session.display {
+                            self.folder_session.display = display;
+                            self.status = String::from("folder filter updated");
+                        }
+                        // Honest counts line via FolderCounts::summary.
+                        ui.label(RichText::new(self.folder_counts_summary()).monospace().weak());
+                        let nodes = self.folder_visible_tree();
+                        if nodes.is_empty() {
+                            ui.label(
+                                RichText::new(home::folder_empty_hint(
+                                    has_rows, has_error,
+                                ))
+                                .weak(),
+                            );
+                        } else {
+                            let mut toggle_dir: Option<String> = None;
+                            let mut double_clicked: Vec<tree::FolderTreeNode> = Vec::new();
+                            for node in &nodes {
+                                ui.horizontal(|ui| {
+                                    if node.depth > 0 {
+                                        ui.add_space((node.depth as f32) * 14.0);
+                                    }
+                                    if node.row.is_dir && node.has_children {
+                                        let icon =
+                                            if node.is_expanded { "▼" } else { "▶" };
+                                        if ui.small_button(icon).clicked() {
+                                            toggle_dir = Some(node.row.rel_path.clone());
+                                        }
+                                    } else if node.row.is_dir {
+                                        ui.label(RichText::new("  ").monospace());
+                                    }
+                                    let glyph = node.row.glyph.to_string();
+                                    ui.label(RichText::new(glyph).monospace().weak());
+                                    let mark =
+                                        if node.row.is_dir { "/" } else { "" };
+                                    let text =
+                                        format!("{}{}", node.row.rel_path, mark);
+                                    let resp = ui.selectable_label(false, text);
+                                    if resp.double_clicked() {
+                                        double_clicked.push(node.clone());
+                                    }
+                                });
+                            }
+                            if let Some(dir) = toggle_dir {
+                                self.toggle_folder_dir(&dir);
+                            }
+                            for node in &double_clicked {
+                                self.stage_folder_double_click(node);
+                            }
+                        }
+                        // Sync preview: mode select, dry-run options,
+                        // consent gate, Apply button.
+                        ui.add_space(4.0);
+                        ui.separator();
+                        ui.label(RichText::new("Sync preview (dry-run)").strong());
+                        let mode = self.folder_session.sync_mode;
+                        ui.horizontal(|ui| {
+                            let mut next = mode;
+                            ui.radio_value(
+                                &mut next,
+                                tree::SyncModeChoice::UpdateBoth,
+                                tree::SyncModeChoice::UpdateBoth.label(),
+                            );
+                            ui.radio_value(
+                                &mut next,
+                                tree::SyncModeChoice::Mirror,
+                                tree::SyncModeChoice::Mirror.label(),
+                            );
+                            if next != mode {
+                                self.set_folder_sync_mode(next);
+                            }
+                        });
+                        ui.label(
+                            RichText::new(self.folder_sync_options_label()).small().weak(),
+                        );
+                        let preview = self.folder_sync_preview();
+                        ui.label(
+                            RichText::new(preview.summary()).monospace().weak(),
+                        );
+                        for step in preview.steps.iter().take(8) {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{:?} {}",
+                                    step.action, step.rel_path
+                                ))
+                                .monospace()
+                                .small(),
+                            );
+                        }
+                        let mut consented = self.folder_session.consented;
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut consented, "I understand Apply runs the plan");
+                            ui.label(
+                                RichText::new(home::sync_consent_hint(
+                                    consented,
+                                    preview.steps.len(),
+                                ))
+                                .small()
+                                .weak(),
+                            );
+                        });
+                        if consented != self.folder_session.consented {
+                            self.set_folder_consent(consented);
+                        }
+                        let can_apply = self.folder_can_apply();
+                        let apply = ui.add_enabled(can_apply, egui::Button::new("Apply sync plan"));
+                        if apply.clicked() {
+                            let n = preview.steps.len();
+                            self.status = format!(
+                                "sync apply approved: {n} step(s) (preview only, no filesystem writes)"
+                            );
+                        }
                     }
                 }
                 Tab::Hex => {
@@ -1523,5 +1728,104 @@ mod tests {
         assert!(line.contains("2 rows"));
         assert!(line.contains("1 equal"));
         assert!(line.contains("1 deleted"));
+    }
+
+    fn folder_row(path: &str, is_dir: bool, glyph: char) -> crate::viewmodel::FolderRow {
+        crate::viewmodel::FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    fn folder_app_with_rows() -> App {
+        let mut app = App::default();
+        app.set_tab(Tab::Folder);
+        app.folder_model = Some((
+            vec![
+                folder_row("src", true, '='),
+                folder_row("src/a.txt", false, '>'),
+                folder_row("orphan.txt", false, 'R'),
+            ],
+            String::from("3 entries"),
+        ));
+        app
+    }
+
+    #[test]
+    fn folder_counts_line_uses_honest_summary() {
+        let app = folder_app_with_rows();
+        let line = app.folder_counts_summary();
+        assert!(line.contains("3 entries"));
+        assert!(line.contains("1 newer left"));
+        assert!(line.contains("1 right-only"));
+        let mut empty = App::default();
+        empty.set_tab(Tab::Folder);
+        assert!(empty.folder_counts_summary().contains("no results yet"));
+    }
+
+    #[test]
+    fn folder_dir_toggle_expands_and_mirrors_legacy_set() {
+        let mut app = folder_app_with_rows();
+        assert!(app.folder_visible_tree().len() < 3);
+        app.toggle_folder_dir("src");
+        assert!(app.folder_session.expanded.contains("src"));
+        assert!(app.folder_expanded.contains("src"));
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        app.toggle_folder_dir("src");
+        assert!(!app.folder_session.expanded.contains("src"));
+    }
+
+    #[test]
+    fn folder_filters_narrow_visible_tree() {
+        let mut app = folder_app_with_rows();
+        app.toggle_folder_dir("src");
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        app.folder_session.display.hide_orphans = true;
+        assert_eq!(app.folder_visible_tree().len(), 2);
+        app.folder_session.display.left_newer_only = true;
+        assert_eq!(app.folder_visible_tree().len(), 1);
+    }
+
+    #[test]
+    fn folder_double_click_stages_file_and_routes_to_text() {
+        use crate::tree::FolderTreeNode;
+        let mut app = folder_app_with_rows();
+        let dir_node = FolderTreeNode {
+            row: folder_row("src", true, '='),
+            depth: 0,
+            is_expanded: false,
+            has_children: true,
+        };
+        assert_eq!(app.stage_folder_double_click(&dir_node), Tab::Folder);
+        assert_eq!(app.current_tab(), Tab::Folder);
+        let file_node = FolderTreeNode {
+            row: folder_row("src/a.txt", false, '>'),
+            depth: 1,
+            is_expanded: false,
+            has_children: false,
+        };
+        assert_eq!(app.stage_folder_double_click(&file_node), Tab::Text);
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert!(app.status.contains("src/a.txt"));
+    }
+
+    #[test]
+    fn folder_sync_preview_consent_gates_apply() {
+        use crate::tree::SyncModeChoice;
+        let mut app = folder_app_with_rows();
+        assert_eq!(app.folder_session.sync_mode, SyncModeChoice::UpdateBoth);
+        assert!(!app.folder_can_apply());
+        app.set_folder_consent(true);
+        assert!(app.folder_can_apply());
+        assert!(app.folder_sync_options_label().contains("plan_sync"));
+        app.set_folder_sync_mode(SyncModeChoice::Mirror);
+        assert!(!app.folder_can_apply());
+        assert!(app.status.contains("Mirror"));
     }
 }
