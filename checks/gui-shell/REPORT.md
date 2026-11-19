@@ -56,6 +56,22 @@ Fmt:
 MS rust rules:
 - Owned files me `unsafe`, `unwrap()`/`expect()`, `panic!`/`todo!`/`unimplemented!`/`unreachable!` nahi; indexing/slicing nahi (sab `.get()`/`.first()`).
 
+## Addendum — second pass (2026-11-20, ~01:10 UTC)
+
+Parallel same-mission agent ne upar ka base banaya tha; is pass me ye delta joda:
+
+1. Compile fix: `view_text_for_paint()` me sibling TEXT agent ke naye `TextRows::{selected, filter}` fields passthrough kiye (bina iske crate build hi nahi ho raha tha).
+2. Copy-back: `paint_text` view-clone par chalta hai — copy buttons ka asar wapas real model me propagate hota (`LeftToRight`/`RightToLeft` detect karke `apply_copy`), status me `copied row N left->right` aata.
+3. Selection/filter propagation: nav selection aur segmented filter clone par nahi marte — wapas real model me likhe jaate, filter change par status (`text filter: differences only` ...).
+4. Word wrap ka real pane effect: `wrap_mode` Wrap/Extend ke saath 80-char cap barkarar.
+5. Swap Sides ab auto-recompare karta (BC jaisa); `main.rs` me initial viewport title `Home - autocompare`.
+6. Naye tests (2): `swap_sides_text_exchanges_paths_and_clears_model`, `view_clone_preserves_selection_and_filter`.
+
+Final gate (is pass): `cargo test -p autocompare-gui` 92 passed / 0 failed;
+`cargo clippy -p autocompare-gui --all-targets -- -D warnings` exit 0, zero warnings;
+`rustfmt --check` owned files (`app.rs`, `main.rs`, `screenshot.rs`, `theme.rs`) clean.
+Proof PNGs: `before.png` 9174 bytes vs `after.png` 9914 bytes, dono PNG-OK, content different.
+
 ## Note (cross-agent)
 
 - `views::paint_text` signature TEXT agent ke paas hai; full wrap/syntax ke liye wahan hook chahiye. Tab tak shell ne `view_text_for_paint()` clone-hook diya jo bina `views.rs` chhue asar dikhata. TEXT agent jab `paint_text(ui, model, &prefs)` jode to is helper ko seedha plug kar sakta.

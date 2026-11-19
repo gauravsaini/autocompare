@@ -97,3 +97,11 @@
 2. **Tests** (before → after): 0 → 29 tests passing (11 unit tests, 7 corrupt-input tests, 8 migration tests, 3 round-trip tests, 0 failed); strict workspace lints passed (`forbid(unsafe_code)`, `unwrap_used=deny`, `expect_used=deny`, `panic=deny`, `indexing_slicing=deny`).
 3. **Files changed**: `crates/sessions/Cargo.toml`, `crates/sessions/src/{lib,session,workspace,settings,error}.rs`, `crates/sessions/tests/{round_trip,migration,corrupt_input}.rs`.
 
+
+## UPDATED ON : 2026-11-20
+
+### Feature (2026-11-20) — GUI-SHELL P0 shell polish
+
+1. **Shell**: session toolbar (Swap Sides + auto-recompare, Reload/Recompare), window/tab session identity (`left <--> right - Text`), view toggles (Word Wrap / Line Numbers / Syntax Highlighting) persisted in `App` state and applied to text panes via `view_text_for_paint()` clone-hook, copy-back + selection/filter propagation so sibling TEXT agent's nav/filter keep working, honest per-tab counts + action status bar, empty-result guidance on every tab.
+2. **Tests** (before → after): gui crate 90 → 92 passed, 0 failed; `cargo clippy -p autocompare-gui --all-targets -- -D warnings` exit 0; `rustfmt --check` clean on owned files.
+3. **Files changed**: `crates/gui/src/app.rs`, `crates/gui/src/main.rs`, `crates/gui/src/screenshot.rs`, `checks/gui-shell/{before,after}.png`, `checks/gui-shell/REPORT.md`.
