@@ -265,6 +265,23 @@ sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 \
   libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
 ```
 
+### Reports, VCS flags and headless screenshot
+
+```sh
+autocompare text left.txt right.txt --report html:report.html
+autocompare text base.txt left.txt --ro
+cargo run -p autocompare-gui -- --screenshot gui-smoke.png
+```
+
+Every subcommand accepts `--report <fmt:path>` (`html`, `text`,
+`xml`, `patch`) alongside the normal exit code. The `-ro`,
+`-automerge`, `-mergeoutput <path>` and `-vcs1..-vcs4` flags mirror
+the original's VCS invocation shape: `-ro` forces read-only mode,
+`-automerge` writes the merged output only when conflict-free. The
+GUI stays a thin client but supports a clean-room check contract:
+`--screenshot <path>` renders the Text fixture session offscreen,
+writes a valid PNG and exits 0 without opening a window.
+
 ## Exit codes
 
 `0` no differences · `1` differences found (or merge conflicts) ·
@@ -288,12 +305,12 @@ sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 \
 
 ## Tests
 
-264 workspace tests: replay validity for every diff case, brute-force
+406 workspace tests: replay validity for every diff case, brute-force
 minimality on random pairs, budget fallback, symlink-safe folder
 fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
 sync plan and apply semantics, three-way tree merge rules, PNG and
 audio decode totality sweeps (every prefix truncation of a valid WAV,
-random buffers, hostile headers), plus 43 headless GUI view-model
+random buffers, hostile headers), plus 57 headless GUI view-model
 tests covering all nine tabs. Five exhaustive sweeps (~430k pairs, each checked for replay,
 canonical form and minimal edit count) run separately in release
 mode:
