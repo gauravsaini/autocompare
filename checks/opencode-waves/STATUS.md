@@ -799,3 +799,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - R-SPLIT ses-split-r (opencode default): OWNS views.rs+app.rs+checks/gui-split-r/**. Draggable pane splitter: split fraction state (0.20..=0.80 clamp) in App, drag handle between panes (replaces static half_field_width :56 / picture_column_width :1509 call sites), persists per session run. Tests headless + harness. No color/typo edits.
 - R-ZOOM ses-zoom-r (opencode default): OWNS theme.rs+checks/gui-zoom-r/** (gutter.rs/home.rs read-only for passthrough shape). Font zoom model: zoom step table + resolver fns over TypoRole sizes (body/mono/small clamp MIN..MAX, MAX already 13.0 :57); Cmd +/-/0 keybinding wiring as INTEGRATION.patch for app.rs (apply-check OK, no app.rs edits). Tests + harness. No geometry/color edits.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
+
+## Wave R poll 01 ALL LANDED wave complete
+- SPLIT f7621ec verified+pushed: OWNS clean (app 52 + views 149 + split-r REPORT 58 + proof). Draggable splitter, fraction 0.20..=0.80 clamp, replaces static halves.
+- ZOOM 0d137a3 verified+pushed: OWNS clean (theme 163 + zoom-r REPORT 62 + INTEGRATION.patch 77 apply-check OK on post-SPLIT HEAD + proof). Steps -2..+4 per-role clamp, Cmd +/-/0 wiring as patch.
+- Post-land verify: 229 green, clippy zero, fmt clean, disjoint held. All pushed. Wave R complete. Gap #1 PARTIAL (paint done, dual-file single agent worked), #9 PARTIAL (model+patch, app wiring pending).
