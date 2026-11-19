@@ -386,3 +386,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 01 relaunched live
 - First spawn shell-quoting fail (0B logs, procs dead, sessions missing). Respwaned via python Popen cwd=repo, no repo positional, default model: PIDs 36891/36892/36893.
 - All 3 live 02:08, logs growing. Next verify OWNS + tests + push.
+
+## Wave H poll 02 resumed on background service
+- Standalone Popen procs die on turn boundary; sessions persist server-side. Resumed all 3 without --standalone (shared server): PIDs 37231/37232/37233 live 02:09.
+- A reading screenshot/main, release binary 10851744 found. B grepping hex/table APIs + viewmodel. C baseline gui 122 green done, into geometry/typo edits.
+- Lesson: prefer background-service resume for multi-turn survival; standalone only for single-shot probes.
