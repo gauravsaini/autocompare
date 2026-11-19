@@ -1128,3 +1128,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TABLEKEY `aaba56b` key-column affordance + positional-note clarity — OWNS views_table.rs.
 - Verify combined: 481 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: Wave AT (text find highlight polish, folder filter UX, picture zoom parity).
+
+## 2026-11-20 — Wave AT plan (2 parallel: find highlight polish + folder filter UX)
+- AT-FINDHL `sess-findhl-at`: OWNS views.rs+checks/gui-findhl-at (current/other match highlight distinction).
+- AT-FOLDERFILTER `sess-folderfilter-at`: OWNS tree.rs+app.rs+checks/gui-folderfilter-at (real filtering + counts).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
