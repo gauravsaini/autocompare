@@ -36,7 +36,7 @@ sirf inversion + 1.0 underline se, line-height untouched).
 - EXPECT: green, kam se kam ye tests:
   + `normalize_intra_spans_sorts_and_merges` (unsorted + overlapping merge hokar ek range)
   + `normalize_intra_spans_clamps_and_drops_empty` (out-of-range clamp, zero-length drop)
-  + `pane_segments_refinement_stays_three_segments` (unsorted/overlapping input par bhi wahi 3 segments)
+  + `pane_segments_refinement_stays_deterministic` (unsorted/overlapping input par bhi wahi 3 segments)
   + `side_job_intra_spans_keep_mono_size_and_underline` (accented + plain ka `FontId` size same,
     accented par underline width `INTRA_SPAN_UNDERLINE_W == 1.0`, plain par none)
   + `intra_spans_visible_on_real_diff_words` (e.g. `hello world` vs `hello earth` jaisi line
