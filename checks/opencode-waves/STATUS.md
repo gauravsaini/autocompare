@@ -118,3 +118,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave D poll 02
 - Both alive, reading phase (folder 610B unchanged, hooks into app.rs tail/main/theme). Tree clean. CI backlog persists (all queued).
+
+## Wave D poll 03
+- Hooks already at build+fmt stage, folder still reading. Tree clean.
