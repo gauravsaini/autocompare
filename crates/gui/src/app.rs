@@ -65,6 +65,9 @@ enum CompareResult {
 /// The GUI's whole state.
 pub struct App {
     pub tab: Tab,
+    /// Session-start recent list (Home): `open_home_session` yahan record
+    /// karta hai, naya sabse upar, cap [`home::HOME_RECENT_MAX`] tak.
+    pub home_recent: home::RecentSessions,
     text: Paths,
     folder: Paths,
     hex: Paths,
@@ -160,6 +163,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             tab: Tab::Home,
+            home_recent: home::RecentSessions::new(),
             text: Paths::default(),
             folder: Paths::default(),
             hex: Paths::default(),
@@ -361,6 +365,29 @@ impl App {
     /// Returns the active tab.
     pub fn current_tab(&self) -> Tab {
         self.tab
+    }
+
+    /// Opens one Home session card: tab switch + recent me record (Home
+    /// khud record nahi hota). Returns true jab koi session khula ho.
+    /// Pure state; paint card click isi ko chalata hai. Headless-tested.
+    pub fn open_home_session(&mut self, tab: Tab) -> bool {
+        if tab == Tab::Home {
+            return false;
+        }
+        self.tab = tab;
+        self.home_recent.push(tab.title());
+        self.status = format!("opened {}", tab.title());
+        true
+    }
+
+    /// Session-start recent entries, naya-sabse-pehle order me.
+    pub fn recent_sessions(&self) -> &[String] {
+        self.home_recent.list()
+    }
+
+    /// Recent list saaf karta hai.
+    pub fn clear_recent_sessions(&mut self) {
+        self.home_recent.clear();
     }
 
     /// Human identity of the active session for tab/window titles.
@@ -4264,6 +4291,24 @@ mod tests {
         assert_eq!(app.split_fraction(), 0.20);
         app.drag_split_by(800.0, 800.0);
         assert_eq!(app.split_fraction(), 0.80);
+    }
+
+    #[test]
+    fn home_session_open_records_recent() {
+        let mut app = App::default();
+        assert!(app.recent_sessions().is_empty());
+        assert!(!app.open_home_session(Tab::Home));
+        assert_eq!(app.current_tab(), Tab::Home);
+        assert!(app.open_home_session(Tab::Text));
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert!(app.open_home_session(Tab::Folder));
+        assert_eq!(app.current_tab(), Tab::Folder);
+        let recent = app.recent_sessions();
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent.first().map(String::as_str), Some("Folder"));
+        assert_eq!(recent.get(1).map(String::as_str), Some("Text"));
+        app.clear_recent_sessions();
+        assert!(app.recent_sessions().is_empty());
     }
 
     #[test]
