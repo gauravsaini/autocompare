@@ -4926,7 +4926,9 @@ pub fn dual_tree_pane_widths(avail: f32, fraction: f32) -> (f32, f32) {
 }
 
 /// Left pane row line: glyph + naam (+ dir mark) + left side cell.
-/// Pure; unit-tested.
+/// Frozen contract (G-F2 grid paint `dual_grid_row_left` par gaya hai;
+/// ye line helper + uske tests rakhe hain). Pure; unit-tested.
+#[allow(dead_code)] // frozen contract; grid paint `dual_grid_row_left` use karta hai
 pub fn dual_left_line(node: &crate::tree::FolderTreeNode) -> String {
     let dir_mark = if node.row.is_dir { "/" } else { "" };
     format!(
@@ -4939,7 +4941,9 @@ pub fn dual_left_line(node: &crate::tree::FolderTreeNode) -> String {
 }
 
 /// Right pane row line: glyph + naam (+ dir mark) + right side cell.
-/// Pure; unit-tested.
+/// Frozen contract (G-F2 grid paint `dual_grid_row_right` par gaya hai;
+/// ye line helper + uske tests rakhe hain). Pure; unit-tested.
+#[allow(dead_code)] // frozen contract; grid paint `dual_grid_row_right` use karta hai
 pub fn dual_right_line(node: &crate::tree::FolderTreeNode) -> String {
     let dir_mark = if node.row.is_dir { "/" } else { "" };
     format!(
@@ -4949,6 +4953,72 @@ pub fn dual_right_line(node: &crate::tree::FolderTreeNode) -> String {
         dir_mark,
         crate::tree::dual_right_cell(&node.row)
     )
+}
+
+/// Dual-pane grid headers, left side: Path + L size + L modified.
+/// `tree::folder_column_defs` se reuse (Path flex, sides padded fixed).
+/// Pure; unit-tested.
+pub fn dual_grid_headers_left() -> [String; 3] {
+    let defs = crate::tree::folder_column_defs();
+    [
+        defs[0].header.to_string(),
+        crate::tree::pad_folder_cell(defs[1].header, defs[1].width_chars),
+        crate::tree::pad_folder_cell(defs[3].header, defs[3].width_chars),
+    ]
+}
+
+/// Dual-pane grid headers, right side: Path + R size + R modified.
+/// `tree::folder_column_defs` se reuse. Pure; unit-tested.
+pub fn dual_grid_headers_right() -> [String; 3] {
+    let defs = crate::tree::folder_column_defs();
+    [
+        defs[0].header.to_string(),
+        crate::tree::pad_folder_cell(defs[2].header, defs[2].width_chars),
+        crate::tree::pad_folder_cell(defs[4].header, defs[4].width_chars),
+    ]
+}
+
+/// Dual-pane grid row cells, left side: naam (+ dir mark), size, time.
+/// Text `tree::folder_cell_text` se reuse; missing side `-` rakhta hai
+/// taaki orphan rows bhi align rahen. Pure; unit-tested.
+pub fn dual_grid_row_left(row: &FolderRow) -> [String; 3] {
+    use crate::tree::FolderColumn;
+    let mut name = crate::tree::folder_cell_text(row, FolderColumn::Path);
+    if row.is_dir {
+        name.push('/');
+    }
+    [
+        name,
+        crate::tree::folder_cell_text(row, FolderColumn::LeftSize),
+        crate::tree::folder_cell_text(row, FolderColumn::LeftTime),
+    ]
+}
+
+/// Dual-pane grid row cells, right side: naam (+ dir mark), size, time.
+/// Text `tree::folder_cell_text` se reuse. Pure; unit-tested.
+pub fn dual_grid_row_right(row: &FolderRow) -> [String; 3] {
+    use crate::tree::FolderColumn;
+    let mut name = crate::tree::folder_cell_text(row, FolderColumn::Path);
+    if row.is_dir {
+        name.push('/');
+    }
+    [
+        name,
+        crate::tree::folder_cell_text(row, FolderColumn::RightSize),
+        crate::tree::folder_cell_text(row, FolderColumn::RightTime),
+    ]
+}
+
+/// Dual grid body-cell role: `content_grid` (Mono 12 regular mono).
+/// Pure; unit-tested.
+pub fn dual_grid_cell_role() -> TypoRole {
+    TypoRole::content_grid()
+}
+
+/// Dual grid header role: `caption` (Small 11). Paint `.strong()` jodkar
+/// caption-strong banata hai, koi naya size nahi. Pure; unit-tested.
+pub fn dual_grid_header_role() -> TypoRole {
+    TypoRole::caption()
 }
 
 /// Staged stub action ki ek line: label + path, I/O-free warning ke
@@ -5021,40 +5091,28 @@ pub fn paint_folder_dual(
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.set_width(left_w);
-            let headers = folder_header_cells();
-            let mut lsize = String::new();
-            if let Some(text) = headers.get(1) {
-                lsize = text.clone();
-            }
-            let mut ltime = String::new();
-            if let Some(text) = headers.get(3) {
-                ltime = text.clone();
-            }
-            ui.label(
-                RichText::new(format!("left: Path  {lsize} | {ltime}"))
-                    .monospace()
-                    .small()
-                    .weak(),
-            );
+            egui::Grid::new("folder_dual_header_left")
+                .num_columns(3)
+                .spacing([SECTION_GAP, TIGHT_GAP])
+                .show(ui, |ui| {
+                    for header in dual_grid_headers_left() {
+                        ui.label(dual_grid_header_role().rich(header).strong());
+                    }
+                    ui.end_row();
+                });
         });
         paint_split_handle(ui, split, avail);
         ui.vertical(|ui| {
             ui.set_width(right_w);
-            let headers = folder_header_cells();
-            let mut rsize = String::new();
-            if let Some(text) = headers.get(2) {
-                rsize = text.clone();
-            }
-            let mut rtime = String::new();
-            if let Some(text) = headers.get(4) {
-                rtime = text.clone();
-            }
-            ui.label(
-                RichText::new(format!("right: Path  {rsize} | {rtime}"))
-                    .monospace()
-                    .small()
-                    .weak(),
-            );
+            egui::Grid::new("folder_dual_header_right")
+                .num_columns(3)
+                .spacing([SECTION_GAP, TIGHT_GAP])
+                .show(ui, |ui| {
+                    for header in dual_grid_headers_right() {
+                        ui.label(dual_grid_header_role().rich(header).strong());
+                    }
+                    ui.end_row();
+                });
         });
     });
     ui.add_space(TIGHT_GAP);
@@ -5087,15 +5145,24 @@ pub fn paint_folder_dual(
                                     .monospace()
                                     .color(glyph_color(&node.row, dark)),
                             );
-                            if ui
-                                .selectable_label(
-                                    selected,
-                                    RichText::new(dual_left_line(node)).monospace(),
-                                )
-                                .clicked()
-                            {
-                                state.select(&node.row.rel_path);
-                            }
+                            let [name, size, time] = dual_grid_row_left(&node.row);
+                            egui::Grid::new(("folder_dual_left_cells", i))
+                                .num_columns(3)
+                                .spacing([SECTION_GAP, 0.0])
+                                .show(ui, |ui| {
+                                    if ui
+                                        .selectable_label(
+                                            selected,
+                                            dual_grid_cell_role().rich(name),
+                                        )
+                                        .clicked()
+                                    {
+                                        state.select(&node.row.rel_path);
+                                    }
+                                    ui.label(dual_grid_cell_role().rich(size));
+                                    ui.label(dual_grid_cell_role().rich(time));
+                                    ui.end_row();
+                                });
                         });
                     });
                     ui.vertical(|ui| {
@@ -5126,15 +5193,24 @@ pub fn paint_folder_dual(
                                     .monospace()
                                     .color(glyph_color(&node.row, dark)),
                             );
-                            if ui
-                                .selectable_label(
-                                    selected,
-                                    RichText::new(dual_right_line(node)).monospace(),
-                                )
-                                .clicked()
-                            {
-                                state.select(&node.row.rel_path);
-                            }
+                            let [name, size, time] = dual_grid_row_right(&node.row);
+                            egui::Grid::new(("folder_dual_right_cells", i))
+                                .num_columns(3)
+                                .spacing([SECTION_GAP, 0.0])
+                                .show(ui, |ui| {
+                                    if ui
+                                        .selectable_label(
+                                            selected,
+                                            dual_grid_cell_role().rich(name),
+                                        )
+                                        .clicked()
+                                    {
+                                        state.select(&node.row.rel_path);
+                                    }
+                                    ui.label(dual_grid_cell_role().rich(size));
+                                    ui.label(dual_grid_cell_role().rich(time));
+                                    ui.end_row();
+                                });
                         });
                     });
                 });
@@ -8628,6 +8704,79 @@ mod tests {
         // Missing right sides dash padded dikhte hain.
         assert!(right.contains('-'));
         assert!(right.contains(" | "));
+    }
+
+    #[test]
+    fn dual_grid_headers_match_column_defs() {
+        // Header text tree model se reuse, koi nayi wording nahi.
+        let defs = crate::tree::folder_column_defs();
+        let left = dual_grid_headers_left();
+        assert_eq!(left[0], defs[0].header);
+        assert_eq!(
+            left[1],
+            crate::tree::pad_folder_cell(defs[1].header, defs[1].width_chars)
+        );
+        assert_eq!(
+            left[2],
+            crate::tree::pad_folder_cell(defs[3].header, defs[3].width_chars)
+        );
+        assert!(left[1].contains("L size"));
+        assert!(left[2].contains("L modified"));
+        let right = dual_grid_headers_right();
+        assert_eq!(right[0], defs[0].header);
+        assert!(right[1].contains("R size"));
+        assert!(right[2].contains("R modified"));
+        // Per-side 3 columns (Name/Size/Modified).
+        assert_eq!(left.len(), 3);
+        assert_eq!(right.len(), 3);
+    }
+
+    #[test]
+    fn dual_grid_row_cells_carry_name_size_time() {
+        let row = FolderRow {
+            rel_path: "a/b.txt".to_string(),
+            is_dir: false,
+            glyph: '!',
+            left_size: Some("10".to_string()),
+            right_size: None,
+            left_time: Some("2026-01-02 03:04".to_string()),
+            right_time: None,
+            changed: true,
+        };
+        let left = dual_grid_row_left(&row);
+        assert_eq!(left[0], "a/b.txt");
+        assert!(left[1].contains("10"));
+        assert!(left[2].contains("2026-01-02 03:04"));
+        let right = dual_grid_row_right(&row);
+        assert_eq!(right[0], "a/b.txt");
+        // Missing right sides dash dikhte hain (orphan align).
+        assert!(right[1].contains('-'));
+        assert!(right[2].contains('-'));
+        // Dir mark judta hai.
+        let dir = FolderRow {
+            rel_path: "src".to_string(),
+            is_dir: true,
+            ..row
+        };
+        assert_eq!(dual_grid_row_left(&dir)[0], "src/");
+        assert_eq!(dual_grid_row_right(&dir)[0], "src/");
+    }
+
+    #[test]
+    fn dual_grid_roles_reuse_typo_aliases() {
+        // Cells content_grid (Mono 12), headers caption (Small 11):
+        // koi naya size nahi.
+        assert_eq!(dual_grid_cell_role(), TypoRole::content_grid());
+        assert_eq!(dual_grid_cell_role(), TypoRole::Mono);
+        assert!(dual_grid_cell_role().is_mono());
+        assert_eq!(dual_grid_cell_role().size(), crate::theme::TYPO_MONO_SIZE);
+        assert_eq!(dual_grid_header_role(), TypoRole::caption());
+        assert_eq!(dual_grid_header_role(), TypoRole::Small);
+        assert!(dual_grid_header_role().is_small());
+        assert_eq!(
+            dual_grid_header_role().size(),
+            crate::theme::TYPO_SMALL_SIZE
+        );
     }
 
     #[test]
