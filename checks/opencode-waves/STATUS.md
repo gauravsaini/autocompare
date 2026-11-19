@@ -961,3 +961,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AE-FINDPAINT `sess-findpaint-ae`: OWNS views.rs+viewmodel.rs+checks/gui-findpaint-ae (Gap #12 text find box + N/M badge paint).
 - AE-HEXFIND `sess-hexfind-ae`: OWNS views_hex.rs+checks/gui-hexfind-ae (Gap #12 hex find model; paint next wave).
 - Agents commit locally, NO push, fmt sirf OWNS files par. Nudge protocol active. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AE complete (2 parallel: text-find paint + hex-find model)
+- HEXFIND `fc0459e` hex find position + count-label model — OWNS views_hex.rs+checks/gui-hexfind-ae (Gap #12 hex half; paint next).
+- FINDPAINT `ae79e22` FindState text find box with count badge in paint — OWNS viewmodel.rs+views.rs+checks/gui-findpaint-ae (Gap #12 text paint; App text-tab wiring next wave, allow(dead_code) precedent-noted).
+- Verify combined: 324 green, clippy 0, fmt clean, banned 0.
+- Pushed. Next: Wave AF (App text-tab find wiring, 3-pane paint, header/chrome).
