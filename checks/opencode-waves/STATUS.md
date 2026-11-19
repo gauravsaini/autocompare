@@ -1176,3 +1176,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - GUTTER `ae79a1a` widen overview ruler with min-height segments + slop hit-test — OWNS gutter.rs.
 - Verify combined: 537 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
 - Pushed. Next: fresh localrun feedback on AW state + Wave AX (merge view geometry, sync view).
+
+## 2026-11-20 — Wave AX plan (2 parallel: paint wiring + harness sync)
+- AX-PAINTWIRE `sess-paintwire-ax`: OWNS views.rs+checks/gui-paintwire-ax (gutter width wiring + paint_home contract adoption; AW2 REPORT §9.1/9.2).
+- AX-HARNESS `sess-harness-ax`: OWNS screenshot.rs+checks/gui-harness-ax (fixtures sync with live contracts + picture branch; others read-only).
+- Agents commit locally, NO push. Orchestrator verifies then pushes.
