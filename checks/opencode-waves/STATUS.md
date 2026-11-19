@@ -1209,3 +1209,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - EMPTYHINT `3e4e5e7` filter-pruned empty hint variant + model-aware classifier — OWNS tree.rs.
 - Verify combined: 561 green, clippy 0, fmt clean, banned 0, PNG magic-ok.
 - Pushed. Next: Wave BA (table Grid P2-P4 + toolbar chrome) + fresh localrun.
+
+## 2026-11-20 — Wave BA plan (2 parallel: table P2-P4 wiring + typography tokens)
+- BA-TABLEP234 `sess-tablep234-ba`: OWNS views.rs+checks/gui-tablep234-ba (apply AY spec P2-P4: header/data grid IDs, spacing, indexed data-cell loop, painter overlays).
+- BA-TYPOTOKENS `sess-typotokens-ba`: OWNS theme.rs+checks/gui-typotokens-ba (TypoRole→FontId resolution helpers + proportional stack for non-diff UI + tests + views.rs wiring spec; no paint edits).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
