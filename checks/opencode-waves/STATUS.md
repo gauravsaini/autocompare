@@ -833,3 +833,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave U poll RUN landed (2/4)
 - RUN ab24114 verified+pushed: OWNS clean (checks/gui-run-u 13 files, zero source edits). Release 11074592B (-32B), PNG 9914 exact + folder 10300 magic-ok, harness PASS, workspace 601 passed, gui 245, top-3 BC deltas documented (toolbar density, minimap width, glyph smoothing). Dead_code warnings + fmt diffs flagged as in-flight GEO/LAYOUT uncommitted work, honestly scoped.
 - GEO/LAYOUT live, both source files modified uncommitted, tree 245 green.
+
+## Wave U poll LAYOUT landed (3/4)
+- LAYOUT fd1d60b verified+pushed: OWNS clean (app.rs 383 + layout-u GATES/REPORT/round-U-1). Split fraction in all content paths, min-width floors + h-scroll, docked find-bar + badge-right, 24px nav hits, <900 min-scroll, scroll clamps. 245 green, clippy zero, fmt clean, banned 0 (app.rs non-test).
+- GEO last one live, clippy/fmt/banned green on its side, commit pending. Its const-assertion error resolved itself after restructure.
