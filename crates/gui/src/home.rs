@@ -245,6 +245,187 @@ impl RecentSessions {
 }
 
 // ----------------------------------------------------------------------------
+// Session restore model (Wave AP-SESSION): recent list se purana session
+// reopen — last state (tab, paths, cursor) snapshot me rehta hai.
+// Geometry first (recent list rows), typography second, colors untouched.
+// Paint (`views.rs` owner) isko read-only dikhata hai; record/restore pure
+// headless hai taaki empty/missing paths graceful rahen, koi panic nahi.
+// ----------------------------------------------------------------------------
+
+/// Ek saved session ka last state: kaun sa tab, dono (ya teenon) paths,
+/// aur us tab ka find cursor. `base` two-path tabs par khali rehta hai.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSnapshot {
+    /// Kaun sa session tab tha.
+    pub tab: Tab,
+    /// Left path (trimmed, khali ho sakta hai).
+    pub left: String,
+    /// Right path (trimmed, khali ho sakta hai).
+    pub right: String,
+    /// Base path (three-way tabs par, warna khali).
+    pub base: String,
+    /// Us tab ka cursor (text/table find cursor, folder cursor, hex offset
+    /// cursor ka `usize` roop; baaki tabs par 0).
+    pub cursor: usize,
+}
+
+impl SessionSnapshot {
+    /// Snapshot banata hai; paths trim hote hain, cursor jaisa hai waisa.
+    pub fn new(
+        tab: Tab,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        base: impl Into<String>,
+        cursor: usize,
+    ) -> Self {
+        Self {
+            tab,
+            left: left.into().trim().to_string(),
+            right: right.into().trim().to_string(),
+            base: base.into().trim().to_string(),
+            cursor,
+        }
+    }
+
+    /// Three-way session hai ya nahi (Merge / FolderMerge).
+    pub const fn is_three_way(&self) -> bool {
+        matches!(self.tab, Tab::Merge | Tab::FolderMerge)
+    }
+
+    /// Koi zaroori path khali hai ya nahi. Three-way par base bhi chahiye,
+    /// two-path par sirf left/right. Paint isi se graceful hint dikhata hai.
+    pub fn has_empty_paths(&self) -> bool {
+        if self.left.trim().is_empty() || self.right.trim().is_empty() {
+            return true;
+        }
+        if self.is_three_way() && self.base.trim().is_empty() {
+            return true;
+        }
+        false
+    }
+}
+
+/// Session-start recent history: snapshots, naya sabse upar, cap tak.
+/// `RecentSessions` (titles) paint-compat ke liye rehta hai; ye full state
+/// restore ke liye hai. Dono cap [`HOME_RECENT_MAX`] share karte hain.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionHistory {
+    entries: Vec<SessionSnapshot>,
+}
+
+impl SessionHistory {
+    /// Khali history.
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Snapshot sabse upar rakhta hai: Home tab kabhi record nahi hota,
+    /// same (tab, paths) dedupe hokar upar aata hai, cap se zyada girta hai.
+    pub fn push(&mut self, snapshot: SessionSnapshot) {
+        if snapshot.tab == Tab::Home {
+            return;
+        }
+        self.entries.retain(|existing| {
+            existing.tab != snapshot.tab
+                || existing.left != snapshot.left
+                || existing.right != snapshot.right
+                || existing.base != snapshot.base
+        });
+        self.entries.insert(0, snapshot);
+        self.entries.truncate(HOME_RECENT_MAX);
+    }
+
+    /// Naya-sabse-pehle order me snapshots.
+    pub fn list(&self) -> &[SessionSnapshot] {
+        &self.entries
+    }
+
+    /// Entry ginti.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Khali hai ya nahi.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Sab entries hatata hai.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// Index par snapshot, out-of-range par `None` (graceful, koi panic nahi).
+    pub fn get(&self, index: usize) -> Option<&SessionSnapshot> {
+        self.entries.get(index)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Recent list geometry (first): rows, gaps, pad — sab maujooda rhythm tokens
+// se derive, koi magic number nahi, colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Recent row gap px: card inner gap (`HOME_CARD_INNER_GAP` = 4) reuse.
+pub const RECENT_ROW_GAP: f32 = HOME_CARD_INNER_GAP;
+/// Recent list outer pad px: card outer pad (`HOME_CARD_PAD` = 8) reuse.
+pub const RECENT_LIST_PAD: f32 = HOME_CARD_PAD;
+
+/// Recent row min height px: ek desc-role line + inner gap + outer pad.
+/// Single-line row text kabhi clip na ho, button floor (24px) se upar rahe.
+pub fn recent_row_min_height() -> f32 {
+    use crate::theme::TypoRole;
+    TypoRole::HomeDesc.line_height_px() + HOME_CARD_INNER_GAP + HOME_CARD_PAD
+}
+
+/// `count` rows wali recent list ki kul height px: rows + beech gaps +
+/// upar-neeche pad. Khali par 0 (paint khali list chhupata hai).
+pub fn recent_list_height(count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    let rows = count as f32 * recent_row_min_height();
+    let gaps = count.saturating_sub(1) as f32 * RECENT_ROW_GAP;
+    rows + gaps + RECENT_LIST_PAD * 2.0
+}
+
+/// Row `index` ka top offset px (list pad ke andar). Pure; paint row isi se lagaye.
+pub fn recent_row_top(index: usize) -> f32 {
+    RECENT_LIST_PAD + index as f32 * (recent_row_min_height() + RECENT_ROW_GAP)
+}
+
+// ----------------------------------------------------------------------------
+// Recent list typography (second): row text role reuse, koi naya size nahi.
+// ----------------------------------------------------------------------------
+
+/// Recent row text role: chhota kamzor proportional (secondary list text).
+pub const fn recent_row_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeDesc
+}
+
+/// Recent row text size px (single source: desc role).
+pub fn recent_row_text_size() -> f32 {
+    crate::theme::TypoRole::HomeDesc.size()
+}
+
+/// Recent row text line-height px (body 1.40 x desc size): row stack isi se.
+pub fn recent_row_text_line_height_px() -> f32 {
+    crate::theme::TypoRole::HomeDesc.line_height_px()
+}
+
+/// Recent row text tracking em (headers wala halka failao nahi, zero).
+pub fn recent_row_text_tracking_em() -> f32 {
+    crate::theme::TypoRole::HomeDesc.letter_spacing_em()
+}
+
+/// Recent row text numeric weight (regular 400).
+pub fn recent_row_text_weight_value() -> u16 {
+    crate::theme::TypoRole::HomeDesc.weight_value()
+}
+
+// ----------------------------------------------------------------------------
 // Home typography layer-2 (second): family/weight/line-height/tracking —
 // sab `TypoRole` precedent reuse, koi naya point size nahi, colors untouched.
 // ----------------------------------------------------------------------------
@@ -493,5 +674,99 @@ mod tests {
         // Button body scale.
         assert_eq!(home_card_button_size(), TYPO_BODY_SIZE);
         assert_eq!(TypoRole::HomeButton.size(), TYPO_BODY_SIZE);
+    }
+
+    #[test]
+    fn session_snapshot_trims_and_flags_empty_paths() {
+        let full = super::SessionSnapshot::new(super::Tab::Text, "  left.txt ", "right.txt", "", 2);
+        assert_eq!(full.left.as_str(), "left.txt");
+        assert!(!full.has_empty_paths());
+        assert!(!full.is_three_way());
+        let empty = super::SessionSnapshot::new(super::Tab::Text, "", "right.txt", "", 0);
+        assert!(empty.has_empty_paths());
+        let no_base = super::SessionSnapshot::new(super::Tab::Merge, "l", "r", "   ", 0);
+        assert!(no_base.is_three_way());
+        assert!(no_base.has_empty_paths());
+    }
+
+    #[test]
+    fn session_history_push_dedupes_caps_and_skips_home() {
+        let mut history = super::SessionHistory::new();
+        assert!(history.is_empty());
+        history.push(super::SessionSnapshot::new(
+            super::Tab::Home,
+            "a",
+            "b",
+            "",
+            0,
+        ));
+        assert!(history.is_empty());
+        for idx in 0..10 {
+            history.push(super::SessionSnapshot::new(
+                super::Tab::Text,
+                format!("left {idx}"),
+                "right",
+                "",
+                idx,
+            ));
+        }
+        assert_eq!(history.len(), super::HOME_RECENT_MAX);
+        assert_eq!(history.list().first().map(|s| s.cursor), Some(9));
+        assert!(history.get(100).is_none());
+        history.push(super::SessionSnapshot::new(
+            super::Tab::Text,
+            "left 5",
+            "right",
+            "",
+            55,
+        ));
+        assert_eq!(history.len(), super::HOME_RECENT_MAX);
+        assert_eq!(history.list().first().map(|s| s.cursor), Some(55));
+        history.clear();
+        assert!(history.is_empty());
+    }
+
+    #[test]
+    fn recent_list_geometry_stacks_rows_with_pad_and_gap() {
+        assert_eq!(super::RECENT_ROW_GAP, super::HOME_CARD_INNER_GAP);
+        assert_eq!(super::RECENT_LIST_PAD, super::HOME_CARD_PAD);
+        let row = super::recent_row_min_height();
+        assert!(row > super::HOME_CARD_BUTTON_MIN_H);
+        assert_eq!(super::recent_list_height(0), 0.0);
+        let one = super::recent_list_height(1);
+        assert!((one - (row + super::RECENT_LIST_PAD * 2.0)).abs() < 0.001);
+        let two = super::recent_list_height(2);
+        assert!(
+            (two - (row * 2.0 + super::RECENT_ROW_GAP + super::RECENT_LIST_PAD * 2.0)).abs()
+                < 0.001
+        );
+        assert_eq!(super::recent_row_top(0), super::RECENT_LIST_PAD);
+        assert!(
+            (super::recent_row_top(1) - (super::RECENT_LIST_PAD + row + super::RECENT_ROW_GAP))
+                .abs()
+                < 0.001
+        );
+    }
+
+    #[test]
+    fn recent_row_typo_reuses_desc_role() {
+        use crate::theme::TypoRole;
+        assert_eq!(super::recent_row_text_role(), TypoRole::HomeDesc);
+        assert_eq!(super::recent_row_text_size(), TypoRole::HomeDesc.size());
+        assert_eq!(
+            super::recent_row_text_line_height_px(),
+            TypoRole::HomeDesc.line_height_px()
+        );
+        assert_eq!(
+            super::recent_row_text_tracking_em(),
+            TypoRole::HomeDesc.letter_spacing_em()
+        );
+        assert_eq!(
+            super::recent_row_text_weight_value(),
+            TypoRole::HomeDesc.weight_value()
+        );
+        assert!(super::recent_row_text_role().is_small());
+        assert!(super::recent_row_text_role().is_weak());
+        assert_eq!(super::recent_row_text_role().family(), "proportional");
     }
 }

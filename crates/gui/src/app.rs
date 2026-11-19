@@ -110,6 +110,10 @@ pub struct App {
     /// Session-start recent list (Home): `open_home_session` yahan record
     /// karta hai, naya sabse upar, cap [`home::HOME_RECENT_MAX`] tak.
     pub home_recent: home::RecentSessions,
+    /// Session restore history: last state (tab, paths, cursor) snapshots,
+    /// naya sabse upar. `home_recent` titles paint-compat ke liye rehta hai;
+    /// ye reopen ke liye full state deta hai. Empty/missing paths graceful.
+    pub session_history: home::SessionHistory,
     text: Paths,
     folder: Paths,
     hex: Paths,
@@ -233,6 +237,7 @@ impl Default for App {
         Self {
             tab: Tab::Home,
             home_recent: home::RecentSessions::new(),
+            session_history: home::SessionHistory::new(),
             text: Paths::default(),
             folder: Paths::default(),
             hex: Paths::default(),
@@ -452,6 +457,8 @@ impl App {
         }
         self.tab = tab;
         self.home_recent.push(tab.title());
+        let snapshot = self.current_snapshot();
+        self.session_history.push(snapshot);
         self.status = format!("opened {}", tab.title());
         true
     }
@@ -464,6 +471,237 @@ impl App {
     /// Recent list saaf karta hai.
     pub fn clear_recent_sessions(&mut self) {
         self.home_recent.clear();
+    }
+
+    /// Current viewmodel tab ka home-tab roop (snapshot mapping).
+    fn home_tab_of(tab: Tab) -> home::Tab {
+        match tab {
+            Tab::Home => home::Tab::Home,
+            Tab::Text => home::Tab::Text,
+            Tab::Folder => home::Tab::Folder,
+            Tab::Hex => home::Tab::Hex,
+            Tab::Merge => home::Tab::Merge,
+            Tab::Table => home::Tab::Table,
+            Tab::Sync => home::Tab::Sync,
+            Tab::Picture => home::Tab::Picture,
+            Tab::FolderMerge => home::Tab::FolderMerge,
+            Tab::Audio => home::Tab::Audio,
+        }
+    }
+
+    /// Home snapshot tab ka viewmodel roop (restore mapping).
+    fn app_tab_of(tab: home::Tab) -> Tab {
+        match tab {
+            home::Tab::Home => Tab::Home,
+            home::Tab::Text => Tab::Text,
+            home::Tab::Folder => Tab::Folder,
+            home::Tab::Hex => Tab::Hex,
+            home::Tab::Merge => Tab::Merge,
+            home::Tab::Table => Tab::Table,
+            home::Tab::Sync => Tab::Sync,
+            home::Tab::Picture => Tab::Picture,
+            home::Tab::FolderMerge => Tab::FolderMerge,
+            home::Tab::Audio => Tab::Audio,
+        }
+    }
+
+    /// Active tab ka find/scroll cursor `usize` me. Hex `u64` yahan
+    /// saturate hokar aata hai (`as` cast, koi `unwrap` nahi).
+    fn current_cursor(&self) -> usize {
+        match self.tab {
+            Tab::Text => self.text_find_cursor,
+            Tab::Folder => self.folder_cursor,
+            Tab::Table => self.table_find_cursor,
+            Tab::Hex => {
+                let cursor = self.hex_find_cursor;
+                let max = usize::MAX as u64;
+                if cursor > max {
+                    usize::MAX
+                } else {
+                    cursor as usize
+                }
+            }
+            Tab::Home | Tab::Merge | Tab::Sync | Tab::Picture | Tab::FolderMerge | Tab::Audio => 0,
+        }
+    }
+
+    /// Restore par cursor wapas lagata hai; doosre tabs untouched.
+    fn set_current_cursor(&mut self, cursor: usize) {
+        match self.tab {
+            Tab::Text => {
+                self.text_find_cursor = cursor;
+            }
+            Tab::Folder => {
+                self.folder_cursor = cursor;
+            }
+            Tab::Table => {
+                self.table_find_cursor = cursor;
+                self.table_find_from = cursor;
+            }
+            Tab::Hex => {
+                self.hex_find_cursor = cursor as u64;
+            }
+            Tab::Home | Tab::Merge | Tab::Sync | Tab::Picture | Tab::FolderMerge | Tab::Audio => {}
+        }
+    }
+
+    /// Active session ka snapshot: tab + paths + cursor. Triple tabs par
+    /// base samait, two-path par base khali. Pure; headless-tested.
+    pub fn current_snapshot(&self) -> home::SessionSnapshot {
+        let tab = Self::home_tab_of(self.tab);
+        match self.tab {
+            Tab::Merge | Tab::FolderMerge => {
+                let (base, left, right) = self.triple_paths();
+                home::SessionSnapshot::new(tab, left, right, base, self.current_cursor())
+            }
+            Tab::Home => home::SessionSnapshot::new(tab, "", "", "", 0),
+            _ => {
+                let (left, right) = self.paths();
+                home::SessionSnapshot::new(tab, left, right, "", self.current_cursor())
+            }
+        }
+    }
+
+    /// Active session ko history me record karta hai (Home kabhi nahi).
+    /// Returns true jab record hua. Compare/switch ke baad caller isi se
+    /// last state bachata hai. Headless-tested.
+    pub fn record_current_session(&mut self) -> bool {
+        if self.tab == Tab::Home {
+            return false;
+        }
+        self.home_recent.push(self.tab.title());
+        let snapshot = self.current_snapshot();
+        self.session_history.push(snapshot);
+        true
+    }
+
+    /// Restore history entries, naya-sabse-pehle order me.
+    pub fn session_entries(&self) -> &[home::SessionSnapshot] {
+        self.session_history.list()
+    }
+
+    /// Restore history ginti.
+    pub fn session_count(&self) -> usize {
+        self.session_history.len()
+    }
+
+    /// Restore history saaf karta hai (titles untouched rehte hain).
+    pub fn clear_session_history(&mut self) {
+        self.session_history.clear();
+    }
+
+    /// Restore history se purana session reopen: tab + paths + cursor wapas.
+    /// Stale model clear hota hai taaki purana result jhooth na bole.
+    /// Empty paths par bhi session khulta hai (graceful hint + compare-first
+    /// model), out-of-range index par false. Koi panic nahi. Headless-tested.
+    pub fn reopen_session(&mut self, index: usize) -> bool {
+        let snapshot = match self.session_history.get(index) {
+            Some(entry) => entry.clone(),
+            None => {
+                self.status = String::from("no saved session at that position");
+                return false;
+            }
+        };
+        let tab = Self::app_tab_of(snapshot.tab);
+        if tab == Tab::Home {
+            self.status = String::from("no saved session at that position");
+            return false;
+        }
+        self.tab = tab;
+        if snapshot.is_three_way() {
+            let (base_target, left_target, right_target) = match self.tab {
+                Tab::Merge => (
+                    &mut self.merge.base,
+                    &mut self.merge.left,
+                    &mut self.merge.right,
+                ),
+                _ => (
+                    &mut self.folder_merge.base,
+                    &mut self.folder_merge.left,
+                    &mut self.folder_merge.right,
+                ),
+            };
+            *base_target = snapshot.base.clone();
+            *left_target = snapshot.left.clone();
+            *right_target = snapshot.right.clone();
+        } else {
+            let (left_target, right_target) = match self.tab {
+                Tab::Text => (&mut self.text.left, &mut self.text.right),
+                Tab::Folder => (&mut self.folder.left, &mut self.folder.right),
+                Tab::Hex => (&mut self.hex.left, &mut self.hex.right),
+                Tab::Table => (&mut self.table.left, &mut self.table.right),
+                Tab::Sync => (&mut self.sync.left, &mut self.sync.right),
+                Tab::Picture => (&mut self.picture.left, &mut self.picture.right),
+                Tab::Audio => (&mut self.audio.left, &mut self.audio.right),
+                Tab::Home | Tab::Merge | Tab::FolderMerge => {
+                    self.status = String::from("no saved session at that position");
+                    return false;
+                }
+            };
+            *left_target = snapshot.left.clone();
+            *right_target = snapshot.right.clone();
+        }
+        self.clear_restored_tab_model();
+        self.set_current_cursor(snapshot.cursor);
+        self.error = None;
+        if snapshot.has_empty_paths() {
+            self.status = format!(
+                "reopened {}: saved paths empty, type both paths then Compare",
+                tab.title()
+            );
+        } else {
+            self.status = format!(
+                "reopened {}: paths restored, Compare to refresh",
+                tab.title()
+            );
+        }
+        true
+    }
+
+    /// Reopen ke baad us tab ka stale model hatata hai. Report/consent bhi
+    /// girta hai taaki purana result naye paths par jhooth na bole.
+    fn clear_restored_tab_model(&mut self) {
+        match self.tab {
+            Tab::Text => {
+                self.text_model = None;
+            }
+            Tab::Folder => {
+                self.folder_model = None;
+                self.folder_sync_last_report = None;
+                self.reset_folder_dual();
+            }
+            Tab::Hex => {
+                self.hex_model = None;
+                let max_hunks = self.hex_view.max_hunks;
+                self.hex_view = views_hex::HexCompareView::empty(self.hex_view.mode, max_hunks);
+            }
+            Tab::Merge => {
+                self.merge_model = None;
+                self.clear_merge_picks();
+                self.clear_merge_apply_state();
+            }
+            Tab::Table => {
+                self.table_model = None;
+                self.table_view.summary = views_table::TableKeySummary::default();
+            }
+            Tab::Sync => {
+                self.sync_model = None;
+                self.sync_last_report = None;
+                self.sync_confirmed = false;
+            }
+            Tab::Picture => {
+                self.picture_model = None;
+                self.picture_view = PictureViewState::default();
+                self.heatmap = None;
+            }
+            Tab::FolderMerge => {
+                self.folder_merge_model = None;
+            }
+            Tab::Audio => {
+                self.audio_model = None;
+            }
+            Tab::Home => {}
+        }
     }
 
     /// Human identity of the active session for tab/window titles.
@@ -4849,6 +5087,66 @@ mod tests {
         assert_eq!(recent.get(1).map(String::as_str), Some("Text"));
         app.clear_recent_sessions();
         assert!(app.recent_sessions().is_empty());
+    }
+
+    #[test]
+    fn session_restore_reopens_paths_and_cursor_gracefully() {
+        let mut app = App::default();
+        assert_eq!(app.session_count(), 0);
+        assert!(!app.reopen_session(0));
+        app.set_tab(Tab::Text);
+        app.set_text_paths("left.txt", "right.txt");
+        app.text_find_cursor = 3;
+        assert!(app.record_current_session());
+        assert_eq!(app.session_count(), 1);
+        app.set_text_paths("", "");
+        app.text_find_cursor = 0;
+        assert!(app.reopen_session(0));
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert_eq!(
+            app.text_paths(),
+            ("left.txt".to_string(), "right.txt".to_string())
+        );
+        assert_eq!(app.text_find_cursor, 3);
+        assert!(app.text_model.is_none());
+        assert!(app.error.is_none());
+        assert!(!app.reopen_session(7));
+        app.clear_session_history();
+        assert_eq!(app.session_count(), 0);
+    }
+
+    #[test]
+    fn session_restore_empty_paths_opens_with_hint() {
+        let mut app = App::default();
+        app.set_tab(Tab::Folder);
+        app.set_folder_paths("", "");
+        assert!(app.record_current_session());
+        app.set_folder_paths("dir_a", "dir_b");
+        assert!(app.reopen_session(0));
+        assert_eq!(app.current_tab(), Tab::Folder);
+        assert_eq!(app.folder_paths(), (String::new(), String::new()));
+        assert!(app.folder_model.is_none());
+        assert!(app.status.contains("empty"));
+    }
+
+    #[test]
+    fn session_restore_triple_paths_round_trip() {
+        let mut app = App::default();
+        app.set_tab(Tab::Merge);
+        app.set_merge_paths("base.txt", "l.txt", "r.txt");
+        assert!(app.record_current_session());
+        app.set_merge_paths("", "", "");
+        assert!(app.reopen_session(0));
+        assert_eq!(app.current_tab(), Tab::Merge);
+        assert_eq!(
+            app.merge_paths(),
+            (
+                "base.txt".to_string(),
+                "l.txt".to_string(),
+                "r.txt".to_string()
+            )
+        );
+        assert!(app.merge_model.is_none());
     }
 
     #[test]
