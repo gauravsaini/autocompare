@@ -598,3 +598,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave J poll 05 nudge worked
 - B egui image/scroll APIs (zoom/pan impl starting). C tests 172 + harness exit 0, REPORT writing. A still planning.
 - No commits yet (C REPORT untracked). Wait.
+
+## Wave J poll 06 B editing A nudged slice
+- B M app.rs (19+/12-), mid-edit red (AudioChecklist E0425, fixing). C gates catching (expected). A 6 polls planning — nudged to land first small slice + commit.
+- Wait.
