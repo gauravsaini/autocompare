@@ -19,6 +19,15 @@ cargo build --release        # binary at target/release/autocompare
 cargo test --workspace       # 72 tests
 ```
 
+## Install (macOS, GUI early feedback — cargo sirf ek baar build machine par)
+
+```sh
+scripts/install-macos.sh
+# tarball: dist/autocompare-gui-<version>-macos-<arch>.tar.gz (binary + VERSION)
+tar -xzf dist/autocompare-gui-*.tar.gz -C /tmp/ac && /tmp/ac/autocompare-gui
+scripts/install-macos.sh --install   # PREFIX me copy (default $HOME/.local/bin)
+```
+
 ## Usage
 
 ### Text compare, side by side
