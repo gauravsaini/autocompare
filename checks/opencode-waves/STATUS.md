@@ -493,3 +493,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 12 wiring deepens
 - A+B live. A app.rs 34 lines (merge/table wiring). B reading A wiring refs (read-only ok). Diff 933.
 - No commits. Wait.
+
+## Wave I poll 13 folder cols app 82
+- A+B live. A app.rs 82 lines wiring. B tree folder columns (column defs + cell text). Diff 974.
+- No commits. Wait.
