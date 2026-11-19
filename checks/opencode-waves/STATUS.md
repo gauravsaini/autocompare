@@ -203,3 +203,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TYPO implemented theme.rs +94 TypoRole scale, tests 109 green (was 107), clippy/fmt clean, no colors touch. Uncommitted, agent loop ongoing.
 - GEO started edits: Write checks/gui-geo/GATES.md + Edit views.rs seen in log, diff pending. Still live PID 17032.
 - BIN early report drafted in log, PNG 9914B valid, no source edits. All 3 live, OWNS respected.
+
+## Wave E poll 03
+- Combined tree: tests 109 green, fmt clean, clippy RED 9 dead-code (GEO helpers defined not yet wired: FOOTER_GAP TREE_INDENT BROWSE_RESERVE MIN_HALF MIN_THIRD half/third/tree_indent/text_row_height). Expected mid-loop, GEO live editing views.rs to wire them.
+- GEO diff +33 tokens + centered cards, TYPO +138 scale, BIN report +57 PNG 960x600 valid. OWNS respected, no color touch. No interrupt, agents fix own files.
