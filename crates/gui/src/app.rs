@@ -58,7 +58,7 @@ enum CompareResult {
         Result<PictureCompareModel, String>,
         Option<(Vec<u8>, u32, u32)>,
     ),
-    FolderMerge(Result<FolderMergeChecklist, String>),
+    FolderMerge(Result<FolderMergeOutcome, String>),
     Audio(Result<AudioChecklist, String>),
 }
 
@@ -227,6 +227,19 @@ pub struct App {
     pub picture_model: Option<PictureCompareModel>,
     pub picture_view: PictureViewState,
     pub folder_merge_model: Option<FolderMergeChecklist>,
+    /// FolderMerge tree ke teen presence snapshots (base/left/right).
+    /// Worker har safal plan ke saath banata hai; rows
+    /// `tree::three_way_tree_rows` isi se bante hain. Naya compare /
+    /// swap / error par clear hote hain (model ke saath).
+    pub folder_merge_base: Vec<FolderRow>,
+    /// Left root ka presence snapshot (tree rows ke liye).
+    pub folder_merge_left: Vec<FolderRow>,
+    /// Right root ka presence snapshot (tree rows ke liye).
+    pub folder_merge_right: Vec<FolderRow>,
+    /// Tree par staged Take decisions (last-wins). Naya compare / swap /
+    /// error par clear hoti hain; paint `views::paint_three_way_tree`
+    /// click par isi me likhta hai.
+    pub folder_merge_decisions: Vec<tree::ThreeWayDecision>,
     pub audio_model: Option<AudioChecklist>,
     pub error: Option<String>,
     heatmap: Option<TextureHandle>,
@@ -338,6 +351,10 @@ impl Default for App {
             picture_model: None,
             picture_view: PictureViewState::default(),
             folder_merge_model: None,
+            folder_merge_base: Vec::new(),
+            folder_merge_left: Vec::new(),
+            folder_merge_right: Vec::new(),
+            folder_merge_decisions: Vec::new(),
             audio_model: None,
             error: None,
             heatmap: None,
@@ -818,7 +835,7 @@ impl App {
                 self.heatmap = None;
             }
             Tab::FolderMerge => {
-                self.folder_merge_model = None;
+                self.clear_folder_merge_results();
             }
             Tab::Audio => {
                 self.audio_model = None;
@@ -929,7 +946,7 @@ impl App {
             }
             Tab::FolderMerge => {
                 std::mem::swap(&mut self.folder_merge.left, &mut self.folder_merge.right);
-                self.folder_merge_model = None;
+                self.clear_folder_merge_results();
                 true
             }
             Tab::Audio => {
@@ -3451,10 +3468,21 @@ impl App {
         self.note_job_started(rx, handle);
     }
 
+    /// FolderMerge ke saare natije saaf karta hai: plan, teen snapshots
+    /// aur staged decisions. Naya compare / swap / error / path-change
+    /// par model ke saath hi clear hota hai.
+    fn clear_folder_merge_results(&mut self) {
+        self.folder_merge_model = None;
+        self.folder_merge_base = Vec::new();
+        self.folder_merge_left = Vec::new();
+        self.folder_merge_right = Vec::new();
+        self.folder_merge_decisions = Vec::new();
+    }
+
     fn run_folder_merge(&mut self) {
         let (base, left, right) = self.triple_paths();
         if !self.require_triple(&base, &left, &right, "folder") {
-            self.folder_merge_model = None;
+            self.clear_folder_merge_results();
             return;
         }
         let (tx, rx) = channel();
@@ -3467,7 +3495,12 @@ impl App {
                 return Ok(());
             }
             let res = plan_tree_merge(Path::new(&base), Path::new(&left), Path::new(&right))
-                .map(|plan| FolderMergeChecklist::from_plan(&plan))
+                .map(|plan| FolderMergeOutcome {
+                    plan: FolderMergeChecklist::from_plan(&plan),
+                    base: snapshot_folder_presence(Path::new(&base)),
+                    left: snapshot_folder_presence(Path::new(&left)),
+                    right: snapshot_folder_presence(Path::new(&right)),
+                })
                 .map_err(|err| err.to_string());
             if cancel.load(Ordering::Relaxed) {
                 let _ = tx.send(CompareResult::FolderMerge(Err(String::from(
@@ -3994,6 +4027,22 @@ pub fn sync_dry_run_summary(copy_steps: usize, checked_total: usize) -> String {
     )
 }
 
+/// Folder-merge worker ka poora natija: engine plan se bana checklist
+/// plus teen roots ke presence snapshots (tree rows isi se bante hain).
+/// Snapshots khali ho sakte hain (roots khali hon ya walk skip ho), plan
+/// tab bhi honest rehta hai.
+#[derive(Debug, Clone, Default)]
+pub struct FolderMergeOutcome {
+    /// Engine plan se bana per-file checklist.
+    pub plan: FolderMergeChecklist,
+    /// Base root ka presence snapshot.
+    pub base: Vec<FolderRow>,
+    /// Left root ka presence snapshot.
+    pub left: Vec<FolderRow>,
+    /// Right root ka presence snapshot.
+    pub right: Vec<FolderRow>,
+}
+
 /// One planned folder-merge step as a checklist row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FolderMergeCheckRow {
@@ -4108,6 +4157,47 @@ impl FolderMergeChecklist {
             row.checked = on;
         }
     }
+}
+
+/// Ek root ka presence snapshot: har entry ka relative path + dir mark,
+/// sorted. Sirf tree presence ke liye hai (glyph/size/time khali rehte
+/// hain). Walk errors skip hote hain — plan engine honest fail karta hai,
+/// snapshot kabhi worker ko nahi rokta. Headless; unit-tested.
+fn snapshot_folder_presence(root: &Path) -> Vec<FolderRow> {
+    let mut out = Vec::new();
+    let mut stack = vec![(String::new(), root.to_path_buf())];
+    while let Some((rel, dir)) = stack.pop() {
+        let Ok(children) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for child in children {
+            let Ok(entry) = child else {
+                continue;
+            };
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let child_rel = if rel.is_empty() {
+                name.to_string()
+            } else {
+                format!("{rel}/{name}")
+            };
+            let is_dir = std::fs::symlink_metadata(entry.path())
+                .map(|meta| meta.is_dir())
+                .unwrap_or_default();
+            if is_dir {
+                stack.push((child_rel.clone(), entry.path()));
+            }
+            out.push(FolderRow {
+                rel_path: child_rel,
+                is_dir,
+                ..Default::default()
+            });
+        }
+    }
+    out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    out
 }
 
 /// Which audio fact one checklist row carries.
@@ -4508,14 +4598,18 @@ impl eframe::App for App {
                         }
                     }
                     CompareResult::FolderMerge(res) => match res {
-                        Ok(model) => {
-                            let n = model.rows.len();
-                            self.folder_merge_model = Some(model);
+                        Ok(outcome) => {
+                            let n = outcome.plan.rows.len();
+                            self.folder_merge_model = Some(outcome.plan);
+                            self.folder_merge_base = outcome.base;
+                            self.folder_merge_left = outcome.left;
+                            self.folder_merge_right = outcome.right;
+                            self.folder_merge_decisions = Vec::new();
                             self.error = None;
                             self.status = format!("folder merge done: {n} step(s)");
                         }
                         Err(err) => {
-                            self.folder_merge_model = None;
+                            self.clear_folder_merge_results();
                             self.status = format!("folder merge failed: {err}");
                             self.error = Some(err);
                         }
@@ -5435,8 +5529,26 @@ impl eframe::App for App {
                     }
                 }
                 Tab::FolderMerge => {
-                    if let Some(list) = self.folder_merge_model.as_mut() {
-                        views::paint_folder_merge_checklist(ui, list);
+                    if self.folder_merge_model.is_some() {
+                        let rows = tree::three_way_tree_rows(
+                            &self.folder_merge_base,
+                            &self.folder_merge_left,
+                            &self.folder_merge_right,
+                        );
+                        if rows.is_empty() {
+                            // Khali union par flat plan hi honest hai (koi
+                            // tree row nahi); snapshots aate hi tree paint
+                            // hota hai. Dono painters live rehte hain.
+                            if let Some(list) = self.folder_merge_model.as_mut() {
+                                views::paint_folder_merge_checklist(ui, list);
+                            }
+                        } else {
+                            views::paint_three_way_tree(
+                                ui,
+                                &rows,
+                                &mut self.folder_merge_decisions,
+                            );
+                        }
                     } else {
                         ui.label(
                             RichText::new(
@@ -7464,6 +7576,139 @@ mod tests {
         app.set_tab(Tab::FolderMerge);
         app.folder_merge_model = Some(list);
         assert!(app.status_line().contains("1 conflict(s)"));
+    }
+
+    static FOLDER_MERGE_WIRE_SEQ: std::sync::atomic::AtomicU64 =
+        std::sync::atomic::AtomicU64::new(0);
+
+    fn folder_merge_wire_dirs(
+        tag: &str,
+    ) -> Option<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf)> {
+        let n = FOLDER_MERGE_WIRE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("fm-wire-{}-{n}-{tag}", std::process::id()));
+        let dir_base = root.join("base");
+        let dir_left = root.join("left");
+        let dir_right = root.join("right");
+        if std::fs::create_dir_all(&dir_base).is_err() {
+            return None;
+        }
+        if std::fs::create_dir_all(&dir_left).is_err() {
+            return None;
+        }
+        if std::fs::create_dir_all(&dir_right).is_err() {
+            return None;
+        }
+        Some((dir_base, dir_left, dir_right))
+    }
+
+    fn remove_folder_merge_wire_dirs(dir_base: &std::path::Path) {
+        if let Some(root) = dir_base.parent() {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    fn write_wire_file(dir: &std::path::Path, name: &str, sub: Option<&str>) -> bool {
+        let target = match sub {
+            Some(folder) => {
+                let folder_path = dir.join(folder);
+                if std::fs::create_dir_all(&folder_path).is_err() {
+                    return false;
+                }
+                folder_path.join(name)
+            }
+            None => dir.join(name),
+        };
+        std::fs::write(target, b"wire").is_ok()
+    }
+
+    #[test]
+    fn folder_merge_snapshot_lists_sorted_presence() {
+        let Some((dir_base, dir_left, dir_right)) = folder_merge_wire_dirs("snap") else {
+            return;
+        };
+        let setup = write_wire_file(&dir_base, "keep.txt", None)
+            && write_wire_file(&dir_base, "nested.txt", Some("sub"))
+            && write_wire_file(&dir_left, "keep.txt", None)
+            && write_wire_file(&dir_right, "keep.txt", None);
+        if !setup {
+            remove_folder_merge_wire_dirs(&dir_base);
+            return;
+        }
+        let base = snapshot_folder_presence(&dir_base);
+        let names: Vec<&str> = base.iter().map(|row| row.rel_path.as_str()).collect();
+        assert_eq!(names, vec!["keep.txt", "sub", "sub/nested.txt"]);
+        let Some(sub) = base.iter().find(|row| row.rel_path == "sub") else {
+            remove_folder_merge_wire_dirs(&dir_base);
+            return;
+        };
+        assert!(sub.is_dir);
+        let Some(keep) = base.iter().find(|row| row.rel_path == "keep.txt") else {
+            remove_folder_merge_wire_dirs(&dir_base);
+            return;
+        };
+        assert!(!keep.is_dir);
+        assert!(snapshot_folder_presence(&dir_left.join("nope")).is_empty());
+        let _ = (dir_right,);
+        remove_folder_merge_wire_dirs(&dir_base);
+    }
+
+    #[test]
+    fn folder_merge_wiring_builds_tree_rows_and_stages_decisions() {
+        let Some((dir_base, dir_left, dir_right)) = folder_merge_wire_dirs("tree") else {
+            return;
+        };
+        // del.txt: base + left me hai, right ne hataya (delete-vs-keep
+        // conflict). new.txt: base me nahi, dono ne joda (added-both
+        // conflict). keep.txt: teeno me (clean).
+        let setup = write_wire_file(&dir_base, "keep.txt", None)
+            && write_wire_file(&dir_base, "del.txt", None)
+            && write_wire_file(&dir_left, "keep.txt", None)
+            && write_wire_file(&dir_left, "del.txt", None)
+            && write_wire_file(&dir_left, "new.txt", None)
+            && write_wire_file(&dir_right, "keep.txt", None)
+            && write_wire_file(&dir_right, "new.txt", None);
+        if !setup {
+            remove_folder_merge_wire_dirs(&dir_base);
+            return;
+        }
+        let mut app = App::default();
+        app.set_tab(Tab::FolderMerge);
+        app.folder_merge_model = Some(FolderMergeChecklist::from_plan(&merge_plan_fixture()));
+        app.folder_merge_base = snapshot_folder_presence(&dir_base);
+        app.folder_merge_left = snapshot_folder_presence(&dir_left);
+        app.folder_merge_right = snapshot_folder_presence(&dir_right);
+        let rows = tree::three_way_tree_rows(
+            &app.folder_merge_base,
+            &app.folder_merge_left,
+            &app.folder_merge_right,
+        );
+        assert!(!rows.is_empty());
+        let conflicts = tree::three_way_conflicts(&rows);
+        assert!(conflicts.contains(&"del.txt".to_string()));
+        assert!(conflicts.contains(&"new.txt".to_string()));
+        assert!(!conflicts.contains(&"keep.txt".to_string()));
+        assert!(app.folder_merge_decisions.is_empty());
+        app.folder_merge_decisions = views::stage_three_way_decision(
+            &app.folder_merge_decisions,
+            "del.txt",
+            tree::ThreeWaySide::Right,
+        );
+        assert_eq!(
+            views::three_way_decision_for_row(&app.folder_merge_decisions, "del.txt"),
+            Some(tree::ThreeWaySide::Right)
+        );
+        let summary = tree::three_way_tree_summary(&rows, &app.folder_merge_decisions);
+        assert_eq!(summary.decided, 1);
+        assert!(summary.conflicted);
+        // Swap sides ko stale manta hai: model + snapshots + decisions
+        // sab clear hote hain.
+        assert!(app.swap_sides());
+        assert!(app.folder_merge_model.is_none());
+        assert!(app.folder_merge_base.is_empty());
+        assert!(app.folder_merge_left.is_empty());
+        assert!(app.folder_merge_right.is_empty());
+        assert!(app.folder_merge_decisions.is_empty());
+        remove_folder_merge_wire_dirs(&dir_base);
     }
 
     fn audio_diff_fixture(
