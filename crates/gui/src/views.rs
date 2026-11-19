@@ -367,8 +367,11 @@ pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
 pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), header_bar_height()));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(chrome_section_role().rich("autocompare"));
-        ui.label(RichText::new("desktop client").weak());
+        ui.label(
+            chrome_status_role().rich(header_note_line("drag & drop or browse | pure engines")),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let label = if *dark_mode {
                 "☀ Light Mode"
@@ -385,10 +388,7 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
             }
         });
     });
-    ui.label(chrome_status_role().rich(header_note_line(
-        "drag & drop paths or browse via native dialogs | pure background engines",
-    )));
-    ui.add_space(TAB_BOTTOM_GAP);
+    ui.add_space(TIGHT_GAP);
 }
 
 /// The Home View launcher screen displaying cards for all 9 comparison session types.
@@ -511,7 +511,8 @@ pub fn paint_home_recent(ui: &mut Ui, history: &SessionHistory, now_secs: u64) {
 /// Labels paint at the tab chrome scale ([`chrome_tab_role`]: Body 13
 /// default proportional) so the tab bar reads as chrome, not code.
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.selectable_value(tab, Tab::Home, chrome_tab_role().rich("Home"));
         ui.selectable_value(tab, Tab::Text, chrome_tab_role().rich("Text"));
         ui.selectable_value(tab, Tab::Folder, chrome_tab_role().rich("Folder"));
@@ -523,7 +524,7 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
         ui.selectable_value(tab, Tab::FolderMerge, chrome_tab_role().rich("FolderMerge"));
         ui.selectable_value(tab, Tab::Audio, chrome_tab_role().rich("Audio"));
     });
-    ui.add_space(TAB_BOTTOM_GAP);
+    ui.add_space(TIGHT_GAP);
 }
 
 /// Two path text fields with native file/folder picker buttons plus Compare.
@@ -544,6 +545,7 @@ pub fn paint_paths(
     let (browse_w, browse_h) = path_browse_button_size();
     let (compare_w, compare_h) = path_browse_button_size();
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.add(
             TextEdit::singleline(left)
@@ -586,21 +588,17 @@ pub fn paint_paths(
                 *right = file.display().to_string();
             }
         }
-    });
-    let clicked = ui
-        .horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-            ui.add_sized(
+        if ui
+            .add_sized(
                 egui::vec2(compare_w, compare_h),
                 egui::Button::new(format!("Compare {noun}s")),
             )
             .clicked()
-        })
-        .inner;
-    if clicked {
-        *compare = true;
-    }
-    ui.add_space(TAB_BOTTOM_GAP);
+        {
+            *compare = true;
+        }
+    });
+    ui.add_space(TIGHT_GAP);
 }
 
 /// Three path text fields with native dialog pickers for three-way tabs.
@@ -616,6 +614,7 @@ pub fn paint_triple_paths(
     let (browse_w, browse_h) = path_browse_button_size();
     let (compare_w, compare_h) = path_browse_button_size();
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         let third = third_field_width(ui.available_width());
         ui.add(
@@ -678,21 +677,17 @@ pub fn paint_triple_paths(
                 *right = file.display().to_string();
             }
         }
-    });
-    let clicked = ui
-        .horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-            ui.add_sized(
+        if ui
+            .add_sized(
                 egui::vec2(compare_w, compare_h),
                 egui::Button::new(format!("Compare {noun}s")),
             )
             .clicked()
-        })
-        .inner;
-    if clicked {
-        *compare = true;
-    }
-    ui.add_space(TAB_BOTTOM_GAP);
+        {
+            *compare = true;
+        }
+    });
+    ui.add_space(TIGHT_GAP);
 }
 
 /// Generic scrollable summary lines for the plan/stat tabs
@@ -704,6 +699,7 @@ pub fn paint_lines(ui: &mut Ui, lines: &[String]) {
     }
     let row_height = row_height_for_line(text_row_height(ui));
     egui::ScrollArea::vertical()
+        .id_salt("plan_lines_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, lines.len(), |ui, range| {
             for i in range {
@@ -1288,6 +1284,7 @@ pub fn paint_hex(
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 egui::ScrollArea::vertical()
+                    .id_salt("hex_hunk_rows")
                     .auto_shrink([false, false])
                     .max_height(HEX_MINIMAP_H)
                     .show_rows(ui, row_height, count, |ui, range| {
@@ -1849,6 +1846,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
     ui.add_space(TIGHT_GAP);
     let row_height = row_height_for_line(text_row_height(ui));
     egui::ScrollArea::vertical()
+        .id_salt("merge_output_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, model.lines.len(), |ui, range| {
             for i in range {
@@ -2141,6 +2139,7 @@ pub fn paint_table(
     let first_cell: std::cell::Cell<Option<(egui::Pos2, usize)>> = std::cell::Cell::new(None);
     if widths.is_empty() {
         egui::ScrollArea::vertical()
+            .id_salt("table_single_rows")
             .auto_shrink([false, false])
             .show_rows(ui, row_height, count, |ui, range| {
                 for pos in range {
@@ -2165,6 +2164,7 @@ pub fn paint_table(
         return;
     }
     egui::ScrollArea::vertical()
+        .id_salt("table_cell_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
             egui::Grid::new(views_table::TABLE_CELL_GRID_ID)
@@ -2179,6 +2179,7 @@ pub fn paint_table(
                         let Some(row) = model.rows.get(i) else {
                             break;
                         };
+                        ui.set_row_height(row_height);
                         let mut glyph = TypoRole::Mono.rich(row.glyph.to_string());
                         glyph = match row.glyph {
                             '=' => glyph.color(dim_for(dark)),
@@ -2286,7 +2287,8 @@ pub fn paint_error(ui: &mut Ui, message: &str) {
     let mut frame = egui::Frame::group(ui.style());
     frame.fill = ERROR_BG;
     frame.show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
             ui.label(TypoRole::Mono.rich("error:").strong().color(DELETED_FG));
             ui.label(RichText::new(message).color(DELETED_FG));
         });
@@ -2414,8 +2416,9 @@ fn paint_text_body(
     let mut copy_section_action = None;
     let mut copy_line_action = None;
     let nav_avail = ui.available_width();
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(nav_avail, HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev").clicked() {
             nav_action = Some(false);
         }
@@ -2546,6 +2549,7 @@ fn paint_text_body(
                 // plain mono, wahi `span_text_format` (T1); koi naya size,
                 // weight, hue ya token nahi (T2, colors frozen).
                 egui::ScrollArea::both()
+                    .id_salt("text_wrap_list")
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let mut vis_pos = 0usize;
@@ -2731,6 +2735,7 @@ fn paint_text_body(
                     });
             } else {
                 egui::ScrollArea::both()
+                    .id_salt("text_diff_rows")
                     .auto_shrink([false, false])
                     .show_rows(ui, row_height, visible.len(), |ui, range| {
                         for vis_pos in range {
@@ -4391,6 +4396,7 @@ pub fn paint_folder(
     let wend = wend.min(tree_nodes.len());
     let count = wend.saturating_sub(wstart);
     egui::ScrollArea::vertical()
+        .id_salt("folder_tree_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
             egui::Grid::new("folder_data_grid")
@@ -4402,6 +4408,7 @@ pub fn paint_folder(
                         let Some(node) = tree_nodes.get(i) else {
                             break;
                         };
+                        ui.set_row_height(row_height);
                         // Glyph column: frozen palette, mode-following dim/blue/red/green.
                         ui.label(
                             RichText::new(node.row.glyph.to_string())
@@ -4761,6 +4768,7 @@ pub fn paint_folder_sync(
     let wend = wend.min(tree_nodes.len());
     let count = wend.saturating_sub(wstart);
     egui::ScrollArea::vertical()
+        .id_salt("folder_sync_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
             egui::Grid::new("folder_sync_data_grid")
@@ -4772,6 +4780,7 @@ pub fn paint_folder_sync(
                         let Some(node) = tree_nodes.get(i) else {
                             break;
                         };
+                        ui.set_row_height(row_height);
                         // Glyph + sync badge: frozen palette,
                         // mode-following dim/blue/red/green; badge mono
                         // caption (delete strong).
@@ -5003,6 +5012,7 @@ pub fn paint_folder_dual(
     let wend = wend.min(tree_nodes.len());
     let count = wend.saturating_sub(wstart);
     egui::ScrollArea::both()
+        .id_salt("folder_dual_rows")
         .auto_shrink([false, false])
         .show_rows(ui, row_height, count, |ui, range| {
             for pos in range {
@@ -5438,6 +5448,7 @@ pub fn paint_picture_compare(
             // centering offsets below are measured against this frame.
             let viewport = ui.available_size();
             let output = egui::ScrollArea::both()
+                .id_salt("picture_heatmap_frame")
                 .auto_shrink([false, false])
                 .scroll_offset(egui::vec2(
                     view.pan_x.max(0) as f32,
@@ -5893,8 +5904,9 @@ pub fn paint_text_find_bar(
     let mut prev = false;
     let mut next = false;
     let avail = ui.available_width();
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(RichText::new("Find:").small().weak());
         ui.add(
             egui::TextEdit::singleline(needle)
@@ -5957,8 +5969,9 @@ pub fn paint_text_find_state_bar(
     // precedent).
     let mut needle = find.query().to_string();
     let mut ignore_case = find.ignore_case();
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(RichText::new("Find:").small().weak());
         let edit = ui.add(
             egui::TextEdit::singleline(&mut needle)

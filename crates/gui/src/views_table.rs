@@ -291,8 +291,9 @@ pub fn table_key_badge_label(view: &TableKeyView) -> String {
 pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
     let avail = ui.available_width();
     let mut clicked: Option<usize> = None;
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
+        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
         ui.label(egui::RichText::new("Key:").small().weak());
         for (col, name) in header.iter().enumerate() {
             let selected = is_key_column(view, col);
@@ -621,8 +622,9 @@ pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str)
     let mut prev = false;
     let mut next = false;
     let avail = ui.available_width();
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
+        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
         ui.label(egui::RichText::new("Find:").small().weak());
         ui.add(
             egui::TextEdit::singleline(needle)
