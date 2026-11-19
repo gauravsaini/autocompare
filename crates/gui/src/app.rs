@@ -98,6 +98,11 @@ pub struct App {
     pub table_find_from: usize,
     pub folder_find_needle: String,
     pub folder_cursor: usize,
+    pub text_find_needle: String,
+    pub text_find_cursor: usize,
+    pub text_find_ignore_case: bool,
+    pub hex_find_needle: String,
+    pub hex_find_cursor: u64,
     pub word_wrap: bool,
     pub show_line_numbers: bool,
     pub syntax_highlight: bool,
@@ -147,6 +152,11 @@ impl Default for App {
             table_find_from: 0,
             folder_find_needle: String::new(),
             folder_cursor: 0,
+            text_find_needle: String::new(),
+            text_find_cursor: 0,
+            text_find_ignore_case: true,
+            hex_find_needle: String::new(),
+            hex_find_cursor: 0,
             word_wrap: false,
             show_line_numbers: true,
             syntax_highlight: true,
@@ -806,6 +816,230 @@ impl App {
         self.folder_cursor = found.saturating_add(1) % rows.len().max(1);
         self.status = format!("folder find: row {}", found + 1);
         Some(found)
+    }
+
+    /// Text find-box (Wave Q model): needle row text me hai ya nahi.
+    /// Case flag par ascii folding hota hai; khali needle kabhi hit nahi.
+    pub fn text_find_contains(hay: &str, needle: &str, ignore_case: bool) -> bool {
+        if needle.is_empty() {
+            return false;
+        }
+        if ignore_case {
+            hay.to_lowercase().contains(&needle.to_lowercase())
+        } else {
+            hay.contains(needle)
+        }
+    }
+
+    /// Text find-box scan: dono panes par needle wale model row idx.
+    /// Khali needle par khali vec; pure, paint se alag test hota hai.
+    pub fn text_find_match_rows(
+        rows: &[viewmodel::TextRow],
+        needle: &str,
+        ignore_case: bool,
+    ) -> Vec<usize> {
+        let mut out = Vec::new();
+        if needle.trim().is_empty() {
+            return out;
+        }
+        let mut idx = 0usize;
+        for row in rows {
+            if Self::text_find_contains(&row.left, needle, ignore_case)
+                || Self::text_find_contains(&row.right, needle, ignore_case)
+            {
+                out.push(idx);
+            }
+            idx = idx.saturating_add(1);
+        }
+        out
+    }
+
+    /// Current needle par text matches (model order me row idx).
+    pub fn text_find_matches(&self) -> Vec<usize> {
+        match self.text_model.as_ref() {
+            Some(model) => Self::text_find_match_rows(
+                &model.rows,
+                &self.text_find_needle,
+                self.text_find_ignore_case,
+            ),
+            None => Vec::new(),
+        }
+    }
+
+    /// Total matches ("M" badge ke liye).
+    pub fn text_find_total(&self) -> usize {
+        self.text_find_matches().len()
+    }
+
+    /// 1-based cursor position ("N" badge ke liye), match na ho par None.
+    pub fn text_find_position(&self) -> Option<usize> {
+        let total = self.text_find_total();
+        if total == 0 {
+            return None;
+        }
+        let at = self.text_find_cursor % total.max(1);
+        Some(at.saturating_add(1))
+    }
+
+    /// N/M badge text: "2/5", koi match nahi par "0/0".
+    pub fn text_find_badge(&self) -> String {
+        let total = self.text_find_total();
+        match self.text_find_position() {
+            Some(pos) => format!("{pos}/{total}"),
+            None => format!("0/{total}"),
+        }
+    }
+
+    /// Needle badalne par cursor pehle match par; khali par 0 rehta hai.
+    pub fn text_find_set_needle(&mut self, needle: impl Into<String>) {
+        self.text_find_needle = needle.into();
+        self.text_find_cursor = 0;
+    }
+
+    /// Agla text match: cursor wrap, model selection + status update.
+    /// Khali needle ya zero matches par None.
+    pub fn text_find_next_row(&mut self) -> Option<usize> {
+        let matches = self.text_find_matches();
+        if matches.is_empty() {
+            self.status = String::from("text find: no match");
+            return None;
+        }
+        let at = self.text_find_cursor % matches.len().max(1);
+        let row = matches.get(at).copied()?;
+        self.text_find_cursor = at.saturating_add(1) % matches.len().max(1);
+        if let Some(model) = self.text_model.as_mut() {
+            model.selected = Some(row);
+        }
+        let pos = at.saturating_add(1);
+        self.status = format!(
+            "text find: row {} ({pos}/{})",
+            row.saturating_add(1),
+            matches.len()
+        );
+        Some(row)
+    }
+
+    /// Pichhla text match: cursor peeche wrap, selection + status update.
+    pub fn text_find_prev_row(&mut self) -> Option<usize> {
+        let matches = self.text_find_matches();
+        if matches.is_empty() {
+            self.status = String::from("text find: no match");
+            return None;
+        }
+        let len = matches.len();
+        let at = if self.text_find_cursor == 0 {
+            len.saturating_sub(1)
+        } else {
+            (self.text_find_cursor.saturating_sub(1)) % len.max(1)
+        };
+        let row = matches.get(at).copied()?;
+        self.text_find_cursor = at;
+        if let Some(model) = self.text_model.as_mut() {
+            model.selected = Some(row);
+        }
+        let pos = at.saturating_add(1);
+        self.status = format!("text find: row {} ({pos}/{})", row.saturating_add(1), len);
+        Some(row)
+    }
+
+    /// Hex needle text se bytes: separators hatakar hex jode decode hota
+    /// hai, warna raw utf-8 bytes. Khali par khali vec.
+    pub fn parse_hex_needle(text: &str) -> Vec<u8> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Vec::new();
+        }
+        let mut compact = String::new();
+        for ch in trimmed.chars() {
+            if ch == ' '
+                || ch == '\t'
+                || ch == ','
+                || ch == ';'
+                || ch == '_'
+                || ch == '-'
+                || ch == ':'
+            {
+                continue;
+            }
+            compact.push(ch);
+        }
+        let even = compact.len().is_multiple_of(2);
+        let all_hex = !compact.is_empty() && compact.chars().all(|c| c.is_ascii_hexdigit());
+        if even && all_hex {
+            let mut out = Vec::new();
+            let bytes = compact.as_bytes();
+            let mut i = 0usize;
+            while i < bytes.len() {
+                let hi = bytes.get(i).copied().unwrap_or(b'0');
+                let lo = bytes.get(i.saturating_add(1)).copied().unwrap_or(b'0');
+                let hex = [hi, lo];
+                if let Ok(pair) = std::str::from_utf8(&hex)
+                    && let Ok(byte) = u8::from_str_radix(pair, 16)
+                {
+                    out.push(byte);
+                } else {
+                    return trimmed.as_bytes().to_vec();
+                }
+                i = i.saturating_add(2);
+            }
+            return out;
+        }
+        trimmed.as_bytes().to_vec()
+    }
+
+    /// Hex needle ke occurrences ki ginti (non-overlapping aage scan).
+    pub fn hex_find_count(haystack: &[u8], needle_text: &str) -> usize {
+        let needle = Self::parse_hex_needle(needle_text);
+        if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
+            return 0;
+        }
+        let mut count = 0usize;
+        let mut from = 0u64;
+        let total = haystack.len() as u64;
+        while from < total {
+            let Some(hit) = views_hex::hex_find_next(haystack, &needle, from) else {
+                break;
+            };
+            count = count.saturating_add(1);
+            let step = hit.saturating_add(needle.len() as u64);
+            if step <= from {
+                break;
+            }
+            from = step;
+            if count > haystack.len() {
+                break;
+            }
+        }
+        count
+    }
+
+    /// Hex needle ki agli occurrence `from` se (wrap, views_hex reuse).
+    pub fn hex_find_next_from(haystack: &[u8], needle_text: &str, from: u64) -> Option<u64> {
+        let needle = Self::parse_hex_needle(needle_text);
+        views_hex::hex_find_next(haystack, &needle, from)
+    }
+
+    /// Hex needle ki pichhli occurrence `from` se peeche (views_hex reuse).
+    pub fn hex_find_prev_from(haystack: &[u8], needle_text: &str, from: u64) -> Option<u64> {
+        let needle = Self::parse_hex_needle(needle_text);
+        views_hex::hex_find_prev(haystack, &needle, from)
+    }
+
+    /// App cursor se hex agli occurrence; milne par cursor aage badhta hai.
+    pub fn hex_find_advance(&mut self, haystack: &[u8]) -> Option<u64> {
+        let hit = Self::hex_find_next_from(haystack, &self.hex_find_needle, self.hex_find_cursor)?;
+        let step = hit.saturating_add(1) % (haystack.len() as u64).max(1);
+        self.hex_find_cursor = step;
+        self.status = format!("hex find: offset {hit:#010x}");
+        Some(hit)
+    }
+
+    /// App cursor se hex pichhli occurrence; milne par cursor wahin tikta hai.
+    pub fn hex_find_retreat(&mut self, haystack: &[u8]) -> Option<u64> {
+        let hit = Self::hex_find_prev_from(haystack, &self.hex_find_needle, self.hex_find_cursor)?;
+        self.hex_find_cursor = hit;
+        self.status = format!("hex find: offset {hit:#010x}");
+        Some(hit)
     }
 
     /// Stages a double-clicked node and routes via
@@ -2212,6 +2446,33 @@ impl eframe::App for App {
             match tab {
                 Tab::Home => {}
                 Tab::Text => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Find:").small().weak());
+                        let needle_changed = ui
+                            .add(
+                                egui::TextEdit::singleline(&mut self.text_find_needle)
+                                    .desired_width(120.0)
+                                    .hint_text("needle"),
+                            )
+                            .changed();
+                        if needle_changed {
+                            self.text_find_cursor = 0;
+                        }
+                        ui.checkbox(&mut self.text_find_ignore_case, "Ignore case");
+                        if ui.small_button("◀ Prev").clicked()
+                            && self.text_find_prev_row().is_none()
+                            && !self.text_find_needle.trim().is_empty()
+                        {
+                            self.status = String::from("text find: no match");
+                        }
+                        if ui.small_button("Next ▶").clicked()
+                            && self.text_find_next_row().is_none()
+                            && !self.text_find_needle.trim().is_empty()
+                        {
+                            self.status = String::from("text find: no match");
+                        }
+                        ui.label(RichText::new(self.text_find_badge()).small().weak());
+                    });
                     if let Some(snapshot) = self.text_model.clone() {
                         ui.style_mut().wrap_mode = Some(if self.word_wrap {
                             egui::TextWrapMode::Wrap
@@ -3547,5 +3808,138 @@ mod tests {
         app.folder_page_next();
         app.folder_page_prev();
         assert_eq!(app.folder_pager.top, 0);
+    }
+
+    #[test]
+    fn text_find_box_tracks_matches_and_badge() {
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: String::from("alpha line"),
+                right: String::from("alpha line"),
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left: String::from("banana split"),
+                right: String::from("Banana bread"),
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left: String::from("plain"),
+                right: String::from("plain"),
+                ..Default::default()
+            },
+        ];
+        // Pure matcher: case flag decides hit count.
+        assert_eq!(App::text_find_match_rows(&rows, "banana", true), vec![1]);
+        assert_eq!(App::text_find_match_rows(&rows, "BANANA", true), vec![1]);
+        assert_eq!(App::text_find_match_rows(&rows, "BANANA", false).len(), 0);
+        assert!(App::text_find_match_rows(&rows, "   ", true).is_empty());
+        assert!(App::text_find_contains("Hello", "ell", true));
+        assert!(!App::text_find_contains("Hello", "", true));
+        // Badge + navigation through App state.
+        let mut app = App {
+            text_model: Some(TextRows {
+                rows,
+                truncated: false,
+                coarse: false,
+                pane_chars: 12,
+                gutter_chars: 4,
+                selected: None,
+                filter: TextFilter::All,
+            }),
+            ..Default::default()
+        };
+        app.text_find_set_needle("banana");
+        assert_eq!(app.text_find_total(), 1);
+        assert_eq!(app.text_find_badge(), "1/1");
+        assert_eq!(app.text_find_next_row(), Some(1));
+        assert_eq!(app.text_find_badge(), "1/1");
+        assert_eq!(app.text_find_prev_row(), Some(1));
+        // Empty needle reports 0/0 and no navigation.
+        app.text_find_set_needle("");
+        assert_eq!(app.text_find_total(), 0);
+        assert_eq!(app.text_find_badge(), "0/0");
+        assert_eq!(app.text_find_position(), None);
+        assert_eq!(app.text_find_next_row(), None);
+    }
+
+    #[test]
+    fn text_find_next_prev_wrap_over_many_matches() {
+        use crate::viewmodel::{TextFilter, TextRow, TextRowKind, TextRows};
+        let mut rows = Vec::new();
+        for i in 0..4 {
+            rows.push(TextRow {
+                kind: TextRowKind::Changed,
+                left: format!("needle row {i}"),
+                right: String::new(),
+                ..Default::default()
+            });
+        }
+        let mut app = App {
+            text_model: Some(TextRows {
+                rows,
+                truncated: false,
+                coarse: false,
+                pane_chars: 11,
+                gutter_chars: 4,
+                selected: None,
+                filter: TextFilter::All,
+            }),
+            ..Default::default()
+        };
+        app.text_find_set_needle("needle");
+        assert_eq!(app.text_find_total(), 4);
+        assert_eq!(app.text_find_badge(), "1/4");
+        assert_eq!(app.text_find_next_row(), Some(0));
+        assert_eq!(app.text_find_badge(), "2/4");
+        assert_eq!(app.text_find_next_row(), Some(1));
+        assert_eq!(app.text_find_prev_row(), Some(1));
+        assert_eq!(app.text_find_badge(), "2/4");
+        // Wrap: cursor end se shuru par.
+        app.text_find_cursor = 3;
+        assert_eq!(app.text_find_next_row(), Some(3));
+        assert_eq!(app.text_find_badge(), "1/4");
+        // Case-sensitive needle misses upper-case text.
+        app.text_find_ignore_case = false;
+        app.text_find_set_needle("NEEDLE");
+        assert_eq!(app.text_find_total(), 0);
+        assert_eq!(app.text_find_badge(), "0/0");
+    }
+
+    #[test]
+    fn hex_find_needle_parses_and_reuses_model_search() {
+        // Hex text with spaces decodes to bytes.
+        assert_eq!(App::parse_hex_needle("0a ff"), vec![0x0au8, 0xffu8]);
+        assert_eq!(App::parse_hex_needle("0AFF"), vec![0x0au8, 0xffu8]);
+        assert!(App::parse_hex_needle("   ").is_empty());
+        // Plain ascii falls back to raw bytes.
+        assert_eq!(App::parse_hex_needle("banana"), b"banana".to_vec());
+        let hay = vec![10u8, 20, 30, 20, 30, 40];
+        // Byte needle via hex text wraps forward and backward.
+        assert_eq!(App::hex_find_next_from(&hay, "14 1e", 0), Some(1));
+        assert_eq!(App::hex_find_next_from(&hay, "14 1e", 2), Some(3));
+        assert_eq!(App::hex_find_next_from(&hay, "14 1e", 4), Some(1));
+        assert_eq!(App::hex_find_prev_from(&hay, "14 1e", 4), Some(3));
+        assert_eq!(App::hex_find_prev_from(&hay, "14 1e", 0), Some(3));
+        // Ascii needle reuses the same byte search.
+        assert_eq!(App::hex_find_next_from(b"xxbananaYY", "banana", 0), Some(2));
+        assert_eq!(App::hex_find_count(b"xxbananaYYbanana", "banana"), 2);
+        // Empty or missing needle never hits.
+        assert_eq!(App::hex_find_next_from(&hay, "", 0), None);
+        assert_eq!(App::hex_find_next_from(&hay, "ff", 0), None);
+        assert_eq!(App::hex_find_count(&hay, ""), 0);
+        // App cursor wrappers advance and retreat.
+        let mut app = App {
+            hex_find_needle: String::from("14 1e"),
+            ..Default::default()
+        };
+        assert_eq!(app.hex_find_advance(&hay), Some(1));
+        assert_eq!(app.hex_find_retreat(&hay), Some(1));
+        app.hex_find_needle = String::from("");
+        assert_eq!(app.hex_find_advance(&hay), None);
     }
 }
