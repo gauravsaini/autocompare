@@ -1341,3 +1341,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BM-TABWIRE `sess-tabwire-bm`: OWNS app.rs+checks/gui-tabwire-bm (FolderMerge tab checklist -> paint_three_way_tree wiring per mergemulti REPORT §4 callsite spec; views.rs NO-TOUCH).
 - BM-LIVECOMP `sess-livecomp-bm`: OWNS checks/gui-livecomp-bm ONLY (running app + BC ke `screencapture` screenshots, side-by-side visual gap REPORT + exact follow-up specs; zero .rs edits, koi window automate-manipulate nahi — sirf capture + observe).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 - Wave BM partial (tabwire landed + pushed, livecomp in-flight)
+- TABWIRE 586394d FolderMerge tab -> paint_three_way_tree wiring - verify ok: 606 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok. Pushed to origin main.
+- LIVECOMP sess-livecomp-bm running: live PNGs captured home/text/folder/table + BC folder, REPORT pending. Untracked checks/gui-livecomp-bm/ untouched by orchestrator.
+- Next: Wave BN exquisite geometry+typo (2 parallel) + Wave BO binary+localrun (2 parallel) = 4 parallel via opencode default + agyx. Probe strategy: no tight timer, one-shot screencapture after osascript + outer recurring harness loop.
