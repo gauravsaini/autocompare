@@ -1203,3 +1203,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AZ-TABLEWIRE `sess-tablewire-az`: OWNS views.rs+checks/gui-tablewire-az (apply AY wiring spec P1-P4 from checks/gui-tablecell-ay/REPORT.md §spec).
 - AZ-EMPTYHINT `sess-emptyhint-az`: OWNS tree.rs+checks/gui-emptyhint-az (filter-specific empty variant; AX2 §10.5).
 - Agents commit locally, NO push (push karna MANA hai — orchestrator karega). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AZ complete (2 parallel: table Grid wiring P1 + empty-hint variant)
+- TABLEWIRE `3166ace` wire key-column bar into paint_table_keyed (P1 only; +1-line app.rs caller `&mut view`) — OWNS views.rs.
+- EMPTYHINT `3e4e5e7` filter-pruned empty hint variant + model-aware classifier — OWNS tree.rs.
+- Verify combined: 561 green, clippy 0, fmt clean, banned 0, PNG magic-ok.
+- Pushed. Next: Wave BA (table Grid P2-P4 + toolbar chrome) + fresh localrun.
