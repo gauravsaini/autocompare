@@ -862,3 +862,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - W-PIC sess-pic-w (opencode default): OWNS views.rs+viewmodel.rs+checks/gui-pic-w/**. Gap #4 picture zoom/pan: zoom 0.25..=8 +/-, drag-pan clamped, dbl-click reset, both PictureModes, split widths authority kept. Commit NO push.
 - W-PROG sess-prog-w (opencode default): OWNS app.rs+checks/gui-prog-w/**. Gap #15: wire 8 JobRunner spawn sites (cancel/progress today ignored) into status-bar progress + cancel path, throttled repaints, no leaks. Commit NO push.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, colors frozen, unlazy gates + ponytail minimal, disjoint OWNS, STATUS orch-only.
+
+## 2026-11-20 — Wave W complete (PIC + PROG both landed, 2 parallel)
+- PIC `481188b` feat(gui): picture zoom to 8x math with drag pan and keyboard reset — OWNS views.rs+viewmodel.rs+checks/gui-pic-w (Gap #4). Zoom 0.25..=8, drag-pan, dbl-click reset, both PictureModes.
+- PROG `474942d` feat(gui): wire job progress and cancel across compare runs — OWNS app.rs+checks/gui-prog-w (Gap #15). All 9 run paths keep JobHandle, chunk-boundary progress throttled to status bar, cancel honored with channel-reported abort.
+- Verify combined: gui tests 257 green (249 base +8), clippy zero warnings, fmt clean, banned 0, PNG 9914B magic-ok 960x600.
+- Pushed 895671e..474942d. OPEN gaps now #10 PNG glyphs, #19 dual-tree. Next: Wave X.
