@@ -330,3 +330,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 12 pcomp clippy color waiting
 - PCOMP clippy-checking vfs/compare, COLOR 03:32 no diff. Both live.
+
+## Wave G poll 13 color editing
+- COLOR theme.rs +22/-9 typed palette same hues, docs frozen geo/typo. Tests 117 green. Views wiring + commit pending. PCOMP live reading.
