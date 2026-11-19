@@ -391,3 +391,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Standalone Popen procs die on turn boundary; sessions persist server-side. Resumed all 3 without --standalone (shared server): PIDs 37231/37232/37233 live 02:09.
 - A reading screenshot/main, release binary 10851744 found. B grepping hex/table APIs + viewmodel. C baseline gui 122 green done, into geometry/typo edits.
 - Lesson: prefer background-service resume for multi-turn survival; standalone only for single-shot probes.
+
+## Wave H poll 03 all live progressing
+- PIDs 37231/37232/37233 live. A wrote checks/local-run-exq/ untracked (picture-tab reading). B baseline 122 green, into Hex/Table pure models. C baseline 122 green, geometry token grep + views.rs reading.
+- No agent commits yet, tree otherwise clean. Wait next poll.
