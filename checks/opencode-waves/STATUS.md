@@ -748,3 +748,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - LOCALBIN 8213faa (orch-committed orphan, enriched BC-window report 199 lines, zero source edits) pushed.
 - Orchestrator verify post-land: 204 green, clippy zero, fmt clean. All pushed. Wave M complete.
 - Next: Wave N orchestrator applies INTEGRATION.patch (paint wiring) + release rebuild + local re-run + gap recheck.
+
+## Wave N poll 01 integration applied wave complete
+- Orchestrator applied checks/parity-m/INTEGRATION.patch (app.rs 59 + views.rs 5: hex/table/folder pagers state, gutter-jump, find-box, per-hunk merge wiring). Patch pre-verified apply-check OK.
+- Pre-existing fmt drift fixed (compare lib import order + binary.rs + diff table.rs/tests, fmt-only, no logic change).
+- Verify: 43 suites 0 failed, gui 204 green, clippy workspace zero, fmt clean, layers ok, secrets ok, release 11022272B, PNG 9914B magic ok distinct 256, harness round-N-1 PASS.
+- Committed feat(gui) wiring + proof. Wave N complete. Next: gap recheck vs BC window + remaining paint work.
