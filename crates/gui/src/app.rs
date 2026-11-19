@@ -4968,6 +4968,32 @@ impl eframe::App for App {
                             self.folder_expanded =
                                 self.folder_session.expanded.clone();
                         }
+                        // Sync badges + selection (BI-S1 wiring): live
+                        // Folder view me paint_folder_sync, mode +
+                        // selection + expanded + pager ke saath taaki
+                        // badge/selection dikhe. Mode radios neeche
+                        // preview section me rehte hain.
+                        if self.folder_model.is_some() {
+                            let sync_rows = self.folder_dual_rows();
+                            let sync_summary = self.folder_counts_summary();
+                            let sync_mode = self.folder_session.sync_mode;
+                            {
+                                let selection = &mut self.folder_sync_selection;
+                                let expanded = &mut self.folder_session.expanded;
+                                let pager = &mut self.folder_pager;
+                                views::paint_folder_sync(
+                                    ui,
+                                    &sync_rows,
+                                    sync_summary.as_str(),
+                                    sync_mode,
+                                    selection,
+                                    expanded,
+                                    pager,
+                                );
+                            }
+                            self.folder_expanded =
+                                self.folder_session.expanded.clone();
+                        }
                         // Sync preview: mode select, dry-run options,
                         // consent gate, Apply button.
                         ui.add_space(views::TIGHT_GAP);
