@@ -94,6 +94,10 @@ pub struct App {
     pub hex_pager: views_hex::HexPager,
     pub table_pager: views_table::TablePager,
     pub folder_pager: tree::RowPager,
+    /// Shared select + scroll + stub-action state behind the dual-tree
+    /// folder panes (`views::paint_folder_dual`). Page size mirrors
+    /// `folder_pager` (20); totals sync from compare results.
+    pub folder_dual: tree::DualTreeState,
     pub hex_gutter_row_text: String,
     pub table_find_needle: String,
     pub table_find_from: usize,
@@ -167,6 +171,7 @@ impl Default for App {
             hex_pager: views_hex::HexPager::new(0, 16),
             table_pager: views_table::TablePager::new(0, 20),
             folder_pager: tree::RowPager::new(0, 20),
+            folder_dual: tree::DualTreeState::new(20),
             hex_gutter_row_text: String::new(),
             table_find_needle: String::new(),
             table_find_from: 0,
@@ -389,6 +394,7 @@ impl App {
             Tab::Folder => {
                 std::mem::swap(&mut self.folder.left, &mut self.folder.right);
                 self.folder_model = None;
+                self.reset_folder_dual();
                 true
             }
             Tab::Hex => {
@@ -684,6 +690,7 @@ impl App {
         self.sync_hex_pager();
         self.sync_table_pager();
         self.sync_folder_pager();
+        self.sync_folder_dual();
     }
 
     /// Sets the hex alignment mode, clearing stale hunks so the next
@@ -983,6 +990,22 @@ impl App {
         let total = self.folder_visible_tree().len();
         self.folder_pager.total_rows = total;
         self.folder_pager.clamp_top();
+    }
+
+    /// Syncs the dual-tree shared scroll total to the current visible
+    /// tree (same rows `paint_folder_dual` paints). Select/pending
+    /// rehta hai; top clamp hota hai. Headless-tested.
+    pub fn sync_folder_dual(&mut self) {
+        let total = self.folder_visible_tree().len();
+        self.folder_dual.sync_total(total);
+    }
+
+    /// Clears dual-tree select + stub action and zeroes its scroll
+    /// total; page size rehta hai. Fresh compare / swap / error par
+    /// stale stub line na dikhe isliye. Headless-tested.
+    pub fn reset_folder_dual(&mut self) {
+        let per_page = self.folder_dual.pager.rows_per_page;
+        self.folder_dual = tree::DualTreeState::new(per_page);
     }
 
     /// One page forward in the folder tree window.
@@ -1556,6 +1579,7 @@ impl App {
         let (left, right) = self.paths();
         if !self.require_paths(&left, &right, "folder") {
             self.folder_model = None;
+            self.reset_folder_dual();
             return;
         }
         let (tx, rx) = channel();
@@ -2647,11 +2671,13 @@ impl eframe::App for App {
                         Ok(model) => {
                             let n = model.0.len();
                             self.folder_model = Some(model);
+                            self.sync_folder_dual();
                             self.error = None;
                             self.status = format!("folder compare done: {n} entries");
                         }
                         Err(err) => {
                             self.folder_model = None;
+                            self.reset_folder_dual();
                             self.status = format!("folder compare failed: {err}");
                             self.error = Some(err);
                         }
@@ -3214,6 +3240,22 @@ impl eframe::App for App {
                                 }
                             }
                         });
+                        // Dual-tree panes (Gap #19 kadam 2): same rows,
+                        // counts summary, shared select/scroll/action.
+                        // Single-list paint upar untouched hai.
+                        if let Some((rows, _)) = self.folder_model.clone() {
+                            let summary = self.folder_counts_summary();
+                            views::paint_folder_dual(
+                                ui,
+                                &rows,
+                                summary.as_str(),
+                                &mut self.folder_session.expanded,
+                                &mut self.folder_dual,
+                                &mut self.split_fraction,
+                            );
+                            self.folder_expanded =
+                                self.folder_session.expanded.clone();
+                        }
                         // Sync preview: mode select, dry-run options,
                         // consent gate, Apply button.
                         ui.add_space(views::TIGHT_GAP);
@@ -3884,6 +3926,63 @@ mod tests {
         assert_eq!(app.stage_folder_double_click(&file_node), Tab::Text);
         assert_eq!(app.current_tab(), Tab::Text);
         assert!(app.status.contains("src/a.txt"));
+    }
+
+    #[test]
+    fn folder_dual_default_empty_and_synced_shape() {
+        let app = App::default();
+        assert_eq!(app.folder_dual.selected, None);
+        assert_eq!(app.folder_dual.pending, None);
+        assert_eq!(app.folder_dual.visible_range(), (0, 0));
+        assert_eq!(app.folder_dual.pager.rows_per_page, 20);
+    }
+
+    #[test]
+    fn folder_dual_syncs_total_from_results() {
+        let mut app = folder_app_with_rows();
+        app.toggle_folder_dir("src");
+        app.sync_folder_dual();
+        assert_eq!(app.folder_visible_tree().len(), 3);
+        assert_eq!(app.folder_dual.pager.total_rows, 3);
+        assert_eq!(app.folder_dual.visible_range(), (0, 3));
+    }
+
+    #[test]
+    fn folder_dual_select_shows_in_both_panes() {
+        let mut app = folder_app_with_rows();
+        app.folder_dual.select("src/a.txt");
+        assert!(app.folder_dual.is_selected("src/a.txt"));
+        assert!(!app.folder_dual.is_selected("orphan.txt"));
+        app.folder_dual.clear_selection();
+        assert!(!app.folder_dual.is_selected("src/a.txt"));
+    }
+
+    #[test]
+    fn folder_dual_resets_on_swap() {
+        let mut app = folder_app_with_rows();
+        app.set_folder_paths("left-dir", "right-dir");
+        app.sync_folder_dual();
+        app.folder_dual.select("src/a.txt");
+        app.folder_dual
+            .stage_action(crate::tree::DualRowAction::Compare, "src/a.txt");
+        assert!(app.swap_sides());
+        assert_eq!(app.folder_dual.selected, None);
+        assert_eq!(app.folder_dual.pending, None);
+        assert_eq!(app.folder_dual.pager.total_rows, 0);
+        assert_eq!(app.folder_dual.pager.rows_per_page, 20);
+    }
+
+    #[test]
+    fn folder_dual_reset_clears_stale_stub() {
+        let mut app = folder_app_with_rows();
+        app.sync_folder_dual();
+        assert_eq!(app.folder_dual.pager.total_rows, 2);
+        app.folder_dual
+            .stage_action(crate::tree::DualRowAction::CopyLeftToRight, "orphan.txt");
+        app.reset_folder_dual();
+        assert_eq!(app.folder_dual.pending, None);
+        assert_eq!(app.folder_dual.pager.total_rows, 0);
+        assert_eq!(app.folder_dual.visible_range(), (0, 0));
     }
 
     #[test]
