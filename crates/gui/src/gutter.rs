@@ -84,6 +84,21 @@ pub fn gutter_bar_width(show_line_numbers: bool) -> f32 {
     if show_line_numbers { 12.0 } else { 6.0 }
 }
 
+/// Gutter width scaled from the mono font size. Calibrated so
+/// [`crate::theme::TYPO_MONO_SIZE`] (12.0) reproduces
+/// [`gutter_bar_width`]; other sizes scale linearly. Non-finite or
+/// non-positive sizes fall back to the unscaled width so paint never
+/// feeds NaN into layout. Pure; unit-tested.
+pub fn gutter_bar_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
+    use crate::theme::TYPO_MONO_SIZE;
+    let base = gutter_bar_width(show_line_numbers);
+    if font_size.is_finite() && font_size > 0.0 && TYPO_MONO_SIZE > 0.0 {
+        base * (font_size / TYPO_MONO_SIZE)
+    } else {
+        base
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +160,21 @@ mod tests {
         assert_eq!(gutter_bar_width(true), 12.0);
         assert_eq!(gutter_bar_width(false), 6.0);
         assert!(gutter_bar_width(false) < gutter_bar_width(true));
+    }
+
+    #[test]
+    fn bar_width_for_font_scales_from_mono_size() {
+        use crate::theme::{TYPO_MONO_SIZE, TYPO_MONO_SIZE_MAX};
+        // Calibrated: mono size reproduces the unscaled widths.
+        assert_eq!(gutter_bar_width_for_font(TYPO_MONO_SIZE, true), 12.0);
+        assert_eq!(gutter_bar_width_for_font(TYPO_MONO_SIZE, false), 6.0);
+        // Upper mono bound (13px) scales linearly.
+        assert_eq!(gutter_bar_width_for_font(TYPO_MONO_SIZE_MAX, true), 13.0);
+        assert_eq!(gutter_bar_width_for_font(TYPO_MONO_SIZE_MAX, false), 6.5);
+        // Bad sizes fall back instead of poisoning layout.
+        assert_eq!(gutter_bar_width_for_font(0.0, true), 12.0);
+        assert_eq!(gutter_bar_width_for_font(-4.0, false), 6.0);
+        assert_eq!(gutter_bar_width_for_font(f32::NAN, true), 12.0);
+        assert_eq!(gutter_bar_width_for_font(f32::INFINITY, false), 6.0);
     }
 }

@@ -106,6 +106,33 @@ pub fn home_model() -> HomeModel {
     }
 }
 
+/// Home card typography (family, weight, size only; colors out of
+/// scope). Matches `views::paint_home`: title strong 14, description
+/// small weak, button body scale. GEO/integration wave applies these
+/// in paint; this module stays headless so the contract is testable.
+pub const HOME_CARD_TITLE_SIZE: f32 = 14.0;
+/// Home card title is strong.
+pub const HOME_CARD_TITLE_STRONG: bool = true;
+/// Home card description is small + weak.
+pub const HOME_CARD_DESC_SMALL_WEAK: bool = true;
+/// Home card button uses the body scale (default size, no small/strong).
+pub const HOME_CARD_BUTTON_BODY_SIZE: f32 = crate::theme::TYPO_BODY_SIZE;
+
+/// Title point size for Home cards.
+pub const fn home_card_title_size() -> f32 {
+    HOME_CARD_TITLE_SIZE
+}
+
+/// Whether the Home card description paints small + weak.
+pub const fn home_card_desc_is_small_weak() -> bool {
+    HOME_CARD_DESC_SMALL_WEAK
+}
+
+/// Button point size for Home cards (body scale).
+pub const fn home_card_button_size() -> f32 {
+    HOME_CARD_BUTTON_BODY_SIZE
+}
+
 /// Empty-state guidance for the Folder tab so the view never looks
 /// blank: rows win, then errors, then the idle hint.
 pub const fn folder_empty_hint(has_rows: bool, has_error: bool) -> &'static str {
@@ -180,5 +207,25 @@ mod tests {
             Tab::Text
         );
         assert_eq!(resolve_compare_tab(&None), Tab::Folder);
+    }
+
+    #[test]
+    fn home_card_typo_matches_paint_contract() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        // Title strong 14 = the single `.size(14.0)` in paint_home.
+        assert_eq!(home_card_title_size(), 14.0);
+        assert_eq!(HOME_CARD_TITLE_SIZE, 14.0);
+        assert!(HOME_CARD_TITLE_STRONG);
+        assert_eq!(TypoRole::HomeTitle.size(), 14.0);
+        assert!(TypoRole::HomeTitle.is_strong());
+        // Description small weak.
+        assert!(home_card_desc_is_small_weak());
+        assert!(HOME_CARD_DESC_SMALL_WEAK);
+        assert_eq!(TypoRole::HomeDesc.size(), TYPO_SMALL_SIZE);
+        assert!(TypoRole::HomeDesc.is_small());
+        assert!(TypoRole::HomeDesc.is_weak());
+        // Button body scale.
+        assert_eq!(home_card_button_size(), TYPO_BODY_SIZE);
+        assert_eq!(TypoRole::HomeButton.size(), TYPO_BODY_SIZE);
     }
 }

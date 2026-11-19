@@ -20,14 +20,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[allow(unused_imports)]
 pub use crate::copy::{CopyDirection, CopyError, apply_copy, copy_line, copy_section};
 #[allow(unused_imports)]
-pub use crate::gutter::{GutterGeometry, GutterSegment, gutter_geometry};
+pub use crate::gutter::{
+    GutterGeometry, GutterSegment, gutter_bar_width, gutter_bar_width_for_font, gutter_geometry,
+};
 #[allow(unused_imports)]
-pub use crate::home::{HomeItem, HomeModel, Tab, home_model};
+pub use crate::home::{
+    HomeItem, HomeModel, Tab, home_card_button_size, home_card_desc_is_small_weak,
+    home_card_title_size, home_model,
+};
 #[allow(unused_imports)]
 pub use crate::take::{TakeChoice, TakeError, resolve_take};
 #[allow(unused_imports)]
 pub use crate::theme::{
-    relative_luminance, theme_contrast_ok, theme_contrast_ratio, theme_mode_contrast_ok,
+    TYPO_BODY_SIZE, TYPO_FULL_PANE_CHARS, TYPO_HEADING_SIZE, TYPO_HOME_TITLE_SIZE,
+    TYPO_LETTER_SPACING, TYPO_MONO_SIZE, TYPO_MONO_SIZE_MAX, TYPO_SMALL_SIZE, TYPO_WRAP_PANE_CHARS,
+    TypoRole, relative_luminance, theme_contrast_ok, theme_contrast_ratio, theme_mode_contrast_ok,
 };
 #[allow(unused_imports)]
 pub use crate::tree::{FolderTreeNode, folder_tree};
@@ -651,10 +658,13 @@ impl Default for TextViewPrefs {
 }
 
 /// Width panes paint at under `prefs`. Word wrap caps the model width
-/// at 80 so long lines stay readable without horizontal scrolling.
+/// at [`crate::theme::TYPO_WRAP_PANE_CHARS`] (80) so long lines stay
+/// readable without horizontal scrolling; wrap off keeps the full
+/// model width (200 in the documented dense case, see
+/// [`crate::theme::TYPO_FULL_PANE_CHARS`]).
 pub fn effective_pane_chars_for(pane_chars: usize, word_wrap: bool) -> usize {
     if word_wrap {
-        pane_chars.min(80)
+        pane_chars.min(crate::theme::TYPO_WRAP_PANE_CHARS)
     } else {
         pane_chars
     }
@@ -2099,6 +2109,9 @@ mod tests {
 
     #[test]
     fn text_prefs_effective_widths_cap_and_narrow() {
+        use crate::theme::{TYPO_FULL_PANE_CHARS, TYPO_WRAP_PANE_CHARS};
+        assert_eq!(TYPO_WRAP_PANE_CHARS, 80);
+        assert_eq!(TYPO_FULL_PANE_CHARS, 200);
         assert_eq!(effective_pane_chars_for(200, true), 80);
         assert_eq!(effective_pane_chars_for(200, false), 200);
         assert_eq!(effective_pane_chars_for(10, true), 10);
