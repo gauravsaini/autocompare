@@ -3388,13 +3388,17 @@ fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), co
 // Colors frozen: this module only moves the pen and picks bits, never hues.
 //
 // Advance table: default 6px (5 cols + 1 gap, was 7) so fixture rows fit the
-// 460px panes without clipping; single-stem / punctuation glyphs take 4px.
-// `kern_adjust` tucks known overhang pairs by 1px (never more, never pushes).
+// 460px panes without clipping; single-stem / punctuation glyphs take 4px,
+// except `t` (5px exact pattern width). `t` ka col4 active hai (0x20): 4px par
+// agle glyph ke col0 se double-draw block banta tha — toolbar "ta" me dikha.
+// Baaki narrow glyphs ka col4 khaali hai, isliye 4px par sirf touch, overlap
+// nahi. `kern_adjust` tuck sirf wide prev (T/Y/V/r/f) par lagta hai, isliye
+// `t` fix ke baad kahin bhi shared-pixel overlap nahi bachta.
 fn glyph_advance(ch: u8) -> u32 {
     match ch {
+        b't' => 5,
         b' ' => 4,
-        b'\'' | b',' | b'.' | b':' | b';' | b'!' | b'I' | b'i' | b'j' | b'l' | b't' | b'|'
-        | b'`' => 4,
+        b'\'' | b',' | b'.' | b':' | b';' | b'!' | b'I' | b'i' | b'j' | b'l' | b'|' | b'`' => 4,
         _ => 6,
     }
 }
@@ -3709,9 +3713,12 @@ mod tests {
 
     #[test]
     fn narrow_glyphs_use_tighter_advance() {
-        for ch in *b" ',.:;!Iijlt|`" {
+        for ch in *b" ',.:;!Iijl|`" {
             assert_eq!(glyph_advance(ch), 4);
         }
+        // `t` ka col4 active hai — exact 5px, warna agle col0 se overlap.
+        assert_eq!(glyph_advance(b't'), 5);
+        assert!(glyph_advance(b't') < glyph_advance(b'M'));
         for ch in *b"MWaen=>/" {
             assert_eq!(glyph_advance(ch), 6);
         }
