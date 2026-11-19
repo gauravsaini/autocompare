@@ -2288,6 +2288,26 @@ fn paint_text_body(
                             }
                             let mut pairs = left_jobs.into_iter().zip(right_jobs);
                             let mut sub = 0usize;
+                            // AW-WRAPNAV: current-row scroll matched sub par
+                            // rehta hai — lambi wrapped row me match
+                            // continuation me ho to row head par nahi, hit
+                            // wale sub par scroll hota hai. Bina find par
+                            // 0 (purana head behavior). Geometry first:
+                            // `wrap_find_scroll_sub` clamped rehta hai.
+                            let scroll_sub = match find {
+                                Some(ctx) if !ctx.needle.is_empty() && scroll_to == Some(orig) => {
+                                    wrap_find_scroll_sub(
+                                        row,
+                                        ctx.needle,
+                                        ctx.ignore_case,
+                                        wrap_width,
+                                        count,
+                                    )
+                                }
+                                _ => 0,
+                            };
+                            let want_scroll = scroll_to == Some(orig)
+                                && wrap_visual_offset(&wrap_counts, vis_pos, scroll_sub).is_some();
                             while sub < count {
                                 let Some((left_job, right_job)) = pairs.next() else {
                                     break;
@@ -2328,9 +2348,7 @@ fn paint_text_body(
                                             );
                                         }
                                         ui.label(right_job);
-                                        let do_scroll = scroll_to == Some(orig)
-                                            && wrap_model_to_visual_start(&wrap_counts, vis_pos)
-                                                .is_some();
+                                        let do_scroll = want_scroll && sub == scroll_sub;
                                         if do_scroll {
                                             ui.scroll_to_rect(
                                                 ui.min_rect(),
@@ -2350,6 +2368,12 @@ fn paint_text_body(
                                             RichText::new(" | ").monospace().color(gutter_dim),
                                         );
                                         ui.label(right_job);
+                                        if want_scroll && sub == scroll_sub {
+                                            ui.scroll_to_rect(
+                                                ui.min_rect(),
+                                                Some(egui::Align::Center),
+                                            );
+                                        }
                                     });
                                 }
                                 sub = sub.saturating_add(1);
@@ -3535,6 +3559,179 @@ fn wrap_blank_sub_job(
     body.background = bg;
     job.append(&" ".repeat(width), 0.0, body);
     job
+}
+
+// ----------------------------------------------------------------------------
+// Wrap-continuation navigation parity (AW-WRAPNAV).
+//
+// Geometry first: find spans char indices me hain (same
+// `normalize_intra_spans` clamp/merge), wrap continuations me
+// `wrap_chunk_spans` reuse se map hote hain — match wrapping geometry
+// `pane_segments`/wrap precedent jaisi hai. Next/Prev-match jump wrap
+// rows ko flat visual offset par map karta hai
+// (`wrap_find_jump_visual`), current-row scroll matched sub-row par
+// rehta hai (`wrap_find_scroll_sub`) taaki lambi wrapped rows me match
+// viewport se bahar na rahe. Viewport math
+// (`wrap_viewport_window`) clamped rehta hai. Typography second:
+// continuations plain mono, wahi `FontId`, koi naya size/weight nahi
+// (`span_text_format`/`find_segment_format` reuse). Colors frozen: koi
+// naya hue/token nahi. `word_wrap` state read-only use hota hai;
+// toggle KEVL `viewmodel.rs` me rehta hai (untouched).
+// ----------------------------------------------------------------------------
+
+/// Ek line ke kin sub-rows me needle ka kam-se-kam ek hit hai.
+/// Khali needle par khali (koi fake hit nahi). Har sub-row ka faisla
+/// `wrap_chunk_spans` intersect se hota hai, isliye continuations par
+/// ke hits sahi sub me track rehte hain (split matches dono sides me
+/// dikhte hain). Pure; unit-tested.
+pub fn wrap_find_sub_rows(line: &str, needle: &str, ignore_case: bool, width: usize) -> Vec<usize> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let find_raw = find_line_spans(line, needle, ignore_case);
+    if find_raw.is_empty() {
+        return Vec::new();
+    }
+    let chunks = wrap_chunks(line, width);
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    while idx < chunks.len() {
+        let hit = match chunks.get(idx) {
+            Some(chunk) => !wrap_chunk_spans(&find_raw, chunk).is_empty(),
+            None => false,
+        };
+        if hit {
+            out.push(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Ek model row (dono panes) ka pehla matched sub-row: left/right me jo
+/// chhota ho, koi hit na ho ya khali needle par `None`. Paint scroll
+/// target isi se nikalta hai taaki Next/Prev-match jump continuation
+/// par sahi sub par land kare. Pure; unit-tested.
+pub fn wrap_row_find_sub(
+    row: &TextRow,
+    needle: &str,
+    ignore_case: bool,
+    width: usize,
+) -> Option<usize> {
+    if needle.is_empty() {
+        return None;
+    }
+    let left = wrap_find_sub_rows(&row.left, needle, ignore_case, width);
+    let right = wrap_find_sub_rows(&row.right, needle, ignore_case, width);
+    let left_first = left.first().copied();
+    let right_first = right.first().copied();
+    match (left_first, right_first) {
+        (Some(l), Some(r)) => Some(l.min(r)),
+        (Some(l), None) => Some(l),
+        (None, Some(r)) => Some(r),
+        (None, None) => None,
+    }
+}
+
+/// Current-row scroll target sub-row: matched row par pehla hit sub,
+/// `pair_count` me clamped; bina hit/khali needle par 0 (row head).
+/// Wrap-off path isko nahi chhoota. Pure; unit-tested.
+pub fn wrap_find_scroll_sub(
+    row: &TextRow,
+    needle: &str,
+    ignore_case: bool,
+    width: usize,
+    pair_count: usize,
+) -> usize {
+    let count = pair_count.max(1);
+    let last = count.saturating_sub(1);
+    match wrap_row_find_sub(row, needle, ignore_case, width) {
+        Some(sub) => sub.min(last),
+        None => 0,
+    }
+}
+
+/// Flat visual offset for `(vis_pos, sub)`: row start plus sub, sub
+/// row height se bahar ho to `None`. Next/Prev-match jump isi se flat
+/// list offset nikalta hai. Paint `want_scroll` isi se guard karta hai.
+/// Pure; unit-tested.
+pub fn wrap_visual_offset(counts: &[usize], vis_pos: usize, sub: usize) -> Option<usize> {
+    let start = wrap_model_to_visual_start(counts, vis_pos)?;
+    let height = counts.get(vis_pos).copied().unwrap_or(0);
+    if sub < height {
+        Some(start.saturating_add(sub))
+    } else {
+        None
+    }
+}
+
+/// Visible position for one model row: `visible` (model order) me
+/// pehla index jahan `visible[i] == model_row`. Filtered-out par
+/// `None`. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this for jump
+pub fn wrap_vis_pos_for_model(visible: &[usize], model_row: usize) -> Option<usize> {
+    let mut idx = 0usize;
+    while idx < visible.len() {
+        if visible.get(idx).copied() == Some(model_row) {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1);
+    }
+    None
+}
+
+/// Next/Prev-match jump ka flat visual target: model row ka visible
+/// start plus matched sub (clamped). Bina hit par row head (sub 0).
+/// Filtered-out ya OOB par `None` (koi fake scroll nahi). Pure;
+/// unit-tested.
+#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this for jump
+pub fn wrap_find_jump_visual(
+    counts: &[usize],
+    visible: &[usize],
+    rows: &[TextRow],
+    model_row: usize,
+    needle: &str,
+    ignore_case: bool,
+    width: usize,
+) -> Option<usize> {
+    let vis_pos = wrap_vis_pos_for_model(visible, model_row)?;
+    let row = rows.get(model_row)?;
+    let height = counts.get(vis_pos).copied().unwrap_or(0).max(1);
+    let last = height.saturating_sub(1);
+    let sub = match wrap_row_find_sub(row, needle, ignore_case, width) {
+        Some(s) => s.min(last),
+        None => 0,
+    };
+    let start = wrap_model_to_visual_start(counts, vis_pos)?;
+    Some(start.saturating_add(sub))
+}
+
+/// Viewport window over flat visual rows: `[top, top+viewport)` ko
+/// `[0, total]` me clamp karta hai. Khali viewport par empty window.
+/// Pure; unit-tested.
+#[allow(dead_code)] // contract-only: paint scroll math isi window par hai (dual precedent)
+pub fn wrap_viewport_window(
+    total_visual: usize,
+    top_visual: usize,
+    viewport_rows: usize,
+) -> (usize, usize) {
+    if viewport_rows == 0 || total_visual == 0 {
+        return (top_visual.min(total_visual), top_visual.min(total_visual));
+    }
+    let start = top_visual.min(total_visual);
+    let end = start.saturating_add(viewport_rows).min(total_visual);
+    (start, end)
+}
+
+/// Ek sub-row ka continuation indent (chars): pehle sub par 0, baad
+/// me chunk indent. OOB par 0. Geometry review ke liye (paint indent
+/// carry ka headless contract). Pure; unit-tested.
+#[allow(dead_code)] // contract-only: indent-carry geometry ka headless lock
+pub fn wrap_sub_indent_chars(line: &str, width: usize, sub: usize) -> usize {
+    match wrap_chunks(line, width).get(sub) {
+        Some(chunk) => chunk.indent,
+        None => 0,
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -8003,5 +8200,183 @@ mod tests {
                 assert_eq!(section.format.font_id.size, 12.0);
             }
         }
+    }
+
+    #[test]
+    fn wrapnav_find_sub_rows_tracks_head_and_continuation() {
+        let line = "    alpha beta gamma delta epsilon zeta ".repeat(2);
+        let width = 12;
+        let chunks = wrap_chunks(&line, width);
+        assert!(chunks.len() > 2);
+        // Head hit: "alpha" lives in the first chunk.
+        let head = wrap_find_sub_rows(&line, "alpha", false, width);
+        assert!(head.contains(&0));
+        // Tail hit: "zeta" lives past the head, so at least one
+        // continuation sub-row tracks it.
+        let tail = wrap_find_sub_rows(&line, "zeta", false, width);
+        assert!(!tail.is_empty());
+        assert!(tail.iter().all(|s| *s > 0));
+        // Empty needle tracks nothing; missing needle tracks nothing.
+        assert!(wrap_find_sub_rows(&line, "", false, width).is_empty());
+        assert!(wrap_find_sub_rows(&line, "qqqzzz", false, width).is_empty());
+        // Case flag honored the same way `find_line_spans` does.
+        assert!(!wrap_find_sub_rows("Alpha", "alpha", true, 80).is_empty());
+        assert!(wrap_find_sub_rows("Alpha", "alpha", false, 80).is_empty());
+    }
+
+    #[test]
+    fn wrapnav_row_find_sub_picks_earliest_pane_hit() {
+        let row = TextRow {
+            left: "    alpha beta gamma delta epsilon zeta ".repeat(2),
+            right: "short".to_string(),
+            ..TextRow::default()
+        };
+        let width = 12;
+        // Left-only hit on a continuation.
+        let left_hit = wrap_row_find_sub(&row, "zeta", false, width);
+        assert!(left_hit.is_some_and(|s| s > 0));
+        // Right-only hit on the head.
+        let right_hit = wrap_row_find_sub(&row, "short", false, width);
+        assert_eq!(right_hit, Some(0));
+        // Both panes hit: earliest sub wins.
+        let both = TextRow {
+            left: row.left.clone(),
+            right: "zeta tail here and more words to wrap around".to_string(),
+            ..TextRow::default()
+        };
+        let both_hit = wrap_row_find_sub(&both, "zeta", false, width);
+        assert_eq!(both_hit, Some(0));
+        // No hit / empty needle: no scroll target.
+        assert_eq!(wrap_row_find_sub(&row, "qqqzzz", false, width), None);
+        assert_eq!(wrap_row_find_sub(&row, "", false, width), None);
+    }
+
+    #[test]
+    fn wrapnav_scroll_sub_clamps_to_pair_height() {
+        let row = TextRow {
+            left: "    alpha beta gamma delta epsilon zeta ".repeat(2),
+            right: "short".to_string(),
+            ..TextRow::default()
+        };
+        let width = 12;
+        let count = wrap_pane_pair_count(&row.left, &row.right, width);
+        assert!(count > 1);
+        let sub = wrap_find_scroll_sub(&row, "zeta", false, width, count);
+        assert!(sub > 0);
+        assert!(sub < count);
+        // No hit falls back to the row head; oversized subs clamp.
+        assert_eq!(wrap_find_scroll_sub(&row, "qqqzzz", false, width, count), 0);
+        assert_eq!(wrap_find_scroll_sub(&row, "", false, width, count), 0);
+        assert_eq!(wrap_find_scroll_sub(&row, "zeta", false, width, 1), 0);
+    }
+
+    #[test]
+    fn wrapnav_visual_offset_and_vis_pos_map_jumps() {
+        let counts = vec![1, 3, 2];
+        assert_eq!(wrap_visual_offset(&counts, 1, 0), Some(1));
+        assert_eq!(wrap_visual_offset(&counts, 1, 2), Some(3));
+        assert_eq!(wrap_visual_offset(&counts, 1, 3), None);
+        assert_eq!(wrap_visual_offset(&counts, 5, 0), None);
+        let visible = vec![10, 20, 30];
+        assert_eq!(wrap_vis_pos_for_model(&visible, 20), Some(1));
+        assert_eq!(wrap_vis_pos_for_model(&visible, 99), None);
+        assert_eq!(wrap_vis_pos_for_model(&[], 10), None);
+    }
+
+    #[test]
+    fn wrapnav_jump_visual_lands_on_matched_continuation() {
+        let long = "    alpha beta gamma delta epsilon zeta ".repeat(2);
+        let rows = vec![
+            TextRow {
+                left: "head".to_string(),
+                ..TextRow::default()
+            },
+            TextRow {
+                left: long.clone(),
+                right: "short".to_string(),
+                ..TextRow::default()
+            },
+        ];
+        let width = 12;
+        let visible = vec![0, 1];
+        let row0_left = rows.first().map_or(String::new(), |r| r.left.clone());
+        let row0_right = rows.first().map_or(String::new(), |r| r.right.clone());
+        let row1_left = rows.get(1).map_or(String::new(), |r| r.left.clone());
+        let row1_right = rows.get(1).map_or(String::new(), |r| r.right.clone());
+        let counts = vec![
+            wrap_pane_pair_count(&row0_left, &row0_right, width),
+            wrap_pane_pair_count(&row1_left, &row1_right, width),
+        ];
+        let target = wrap_find_jump_visual(&counts, &visible, &rows, 1, "zeta", false, width);
+        let start = wrap_model_to_visual_start(&counts, 1).unwrap_or(0);
+        assert!(target.is_some_and(|v| v > start));
+        // Row head fallback when the needle misses.
+        assert_eq!(
+            wrap_find_jump_visual(&counts, &visible, &rows, 1, "qqqzzz", false, width),
+            wrap_model_to_visual_start(&counts, 1)
+        );
+        // Filtered-out model row maps to no jump.
+        assert_eq!(
+            wrap_find_jump_visual(&counts, &[0], &rows, 1, "zeta", false, width),
+            None
+        );
+        // OOB model row maps to no jump.
+        assert_eq!(
+            wrap_find_jump_visual(&counts, &visible, &rows, 9, "zeta", false, width),
+            None
+        );
+    }
+
+    #[test]
+    fn wrapnav_viewport_window_clamps_without_panic() {
+        assert_eq!(wrap_viewport_window(6, 2, 3), (2, 5));
+        assert_eq!(wrap_viewport_window(6, 5, 3), (5, 6));
+        assert_eq!(wrap_viewport_window(6, 9, 3), (6, 6));
+        assert_eq!(wrap_viewport_window(0, 0, 3), (0, 0));
+        assert_eq!(wrap_viewport_window(6, 2, 0), (2, 2));
+    }
+
+    #[test]
+    fn wrapnav_sub_indent_matches_chunk_indent() {
+        let line = "    alpha beta gamma delta";
+        let width = 12;
+        let chunks = wrap_chunks(line, width);
+        assert!(chunks.len() > 1);
+        assert_eq!(wrap_sub_indent_chars(line, width, 0), 0);
+        assert_eq!(
+            wrap_sub_indent_chars(line, width, 1),
+            chunks.get(1).map_or(0, |c| c.indent)
+        );
+        assert_eq!(wrap_sub_indent_chars(line, width, 99), 0);
+        assert_eq!(wrap_sub_indent_chars("hi", 80, 0), 0);
+    }
+
+    #[test]
+    fn wrapnav_continuation_find_format_stays_mono_size() {
+        let line = "    alpha beta gamma delta epsilon zeta ".repeat(2);
+        let width = 12;
+        let chunks = wrap_chunks(&line, width);
+        assert!(chunks.len() > 1);
+        let find_raw = find_line_spans(&line, "zeta", false);
+        assert!(!find_raw.is_empty());
+        let mut hit_subs = 0usize;
+        for chunk in chunks.iter() {
+            let segs = find_chunk_segments(chunk, &[], &find_raw, true, width);
+            let has_current = segs.iter().any(|(_, kind)| *kind == FindHl::Current);
+            if has_current {
+                hit_subs = hit_subs.saturating_add(1);
+                for (text, kind) in segs.iter() {
+                    assert!(!text.is_empty());
+                    let fmt = find_segment_format(
+                        FontId::monospace(12.0),
+                        Color32::WHITE,
+                        Color32::BLACK,
+                        *kind,
+                    );
+                    assert_eq!(fmt.font_id.size, 12.0);
+                }
+            }
+        }
+        assert!(hit_subs > 0);
     }
 }
