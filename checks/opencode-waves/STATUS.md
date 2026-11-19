@@ -529,3 +529,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave I poll 21 A fixing 2 errors
 - A live (B/C done). M app/main/views only (disjoint holds). 2 errors left (field_reassign 2138 + 1), fixing.
 - No A commit yet. Wait.
+
+## Wave I poll 22 A same 2 errors
+- A live, diff steady 504, same 2 errors (field_reassign 2138 + 1). Working through.
+- No commit. Wait (nudge already active, no repeat).
