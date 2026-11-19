@@ -1181,3 +1181,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AX-PAINTWIRE `sess-paintwire-ax`: OWNS views.rs+checks/gui-paintwire-ax (gutter width wiring + paint_home contract adoption; AW2 REPORT §9.1/9.2).
 - AX-HARNESS `sess-harness-ax`: OWNS screenshot.rs+checks/gui-harness-ax (fixtures sync with live contracts + picture branch; others read-only).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AX complete (2 parallel: paint wiring + harness sync)
+- PAINTWIRE `1a7a572` adopt gutter ruler + home contracts in live paint — OWNS views.rs.
+- HARNESS `62a1c6f` sync fixtures to live contracts + picture/wrap/table-find scenes — OWNS screenshot.rs.
+- Verify combined: 547 green, clippy 0, fmt clean, banned 0, PNG magic-ok x3.
+- Pushed. Next: fresh localrun on AX state (harness now live) + Wave AY.
