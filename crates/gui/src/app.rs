@@ -4467,9 +4467,10 @@ impl eframe::App for App {
             let toolbar_active = self.tab != Tab::Home;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = toolbar_item_gap();
+                let (tool_w, tool_h) = views::session_toolbar_button_size();
                 let swap_resp = ui.add_enabled(
                     toolbar_active,
-                    egui::Button::new("Swap Sides"),
+                    egui::Button::new("Swap Sides").min_size(egui::vec2(tool_w, tool_h)),
                 );
                 if swap_resp.clicked() {
                     // Swap, then re-run so both sides refresh like
@@ -4480,7 +4481,8 @@ impl eframe::App for App {
                 }
                 let reload_resp = ui.add_enabled(
                     toolbar_active,
-                    egui::Button::new("Reload / Recompare"),
+                    egui::Button::new("Reload / Recompare")
+                        .min_size(egui::vec2(tool_w, tool_h)),
                 );
                 if reload_resp.clicked() {
                     self.run_active_tab();

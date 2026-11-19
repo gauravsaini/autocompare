@@ -83,6 +83,9 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
         Some(name) => name.to_lowercase(),
         None => String::new(),
     };
+    if lower.contains("accent") {
+        return render_text_accent_fixture_png(out_path);
+    }
     if lower.contains("hex") {
         return render_hex_fixture_png(out_path);
     }
@@ -234,7 +237,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             left: "    let content = read_to_string(path)?;".to_string(),
             right: "    let content = std::fs::read_to_string(path)?;".to_string(),
             accent_a: Vec::new(),
-            accent_b: Vec::new(),
+            accent_b: vec![(18, 27)],
         },
         TextRow {
             kind: TextRowKind::Deleted,
@@ -308,6 +311,24 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &row.left,
             left_fg,
         );
+        // Word-level accent blocks: changed row ke `accent_a` spans
+        // inverted (block) me — poore-row band par kaun sa shabd badla.
+        for (start, end) in row.accent_a.iter() {
+            let prefix: String = row.left.chars().take(*start).collect();
+            let span: String = row
+                .left
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = 44u32.saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
+            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, left_bg);
+        }
 
         // Right pane row
         fill_rect(&mut pixels, dims, (476, y, 460, row_h), right_bg);
@@ -329,6 +350,22 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &row.right,
             right_fg,
         );
+        for (start, end) in row.accent_b.iter() {
+            let prefix: String = row.right.chars().take(*start).collect();
+            let span: String = row
+                .right
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = 508u32.saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
+            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, right_bg);
+        }
     }
 
     // Thumbnail overview gutter geometry: live ruler contract
@@ -375,6 +412,225 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     }
     std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+/// Renders the Text intra-line accent scene: dono panes par Changed row
+/// ke word spans (`accent_a`/`accent_b`) inverted blocks me — wrap/find
+/// precedent jaisa naya route (`accent` naam se chunta hai). Poore-row
+/// band par kaun sa shabd badla wahi block dikhta hai. Colors frozen.
+pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left.rs <--> fixtures/right.rs - Text (accent)",
+        1,
+    );
+
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    let pane_height = pane_bottom.saturating_sub(pane_top);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_LEFT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (TEXT_RIGHT_X, pane_top, TEXT_PANE_W, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (GUTTER_X, pane_top, GUTTER_W, pane_height),
+        [32, 32, 32, 255],
+    );
+
+    let rows = vec![
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(1),
+            right_no: Some(1),
+            left: "use std::path::Path;".to_string(),
+            right: "use std::path::Path;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(2),
+            right_no: Some(2),
+            left: "    let old = load(left)?;".to_string(),
+            right: "    let new = load(right)?;".to_string(),
+            accent_a: vec![(8, 11), (19, 23)],
+            accent_b: vec![(8, 11), (19, 24)],
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: "    let content = read_to_string(path)?;".to_string(),
+            right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: vec![(18, 27)],
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(4),
+            right_no: Some(4),
+            left: "    Ok(content.len())".to_string(),
+            right: "    Ok(content.len())".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+    ];
+
+    let row_h = ROW_H;
+    for (i, row) in rows.iter().enumerate() {
+        let y = pane_top.saturating_add((i as u32).saturating_mul(row_h));
+        if y.saturating_add(row_h) > pane_bottom {
+            break;
+        }
+        let (left_bg, left_fg, right_bg, right_fg) = match row.kind {
+            TextRowKind::Equal => (BG_DARK, FG_TEXT, BG_DARK, FG_TEXT),
+            TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
+            TextRowKind::Deleted => (DELETED_BG, DELETED_FG, BG_DARK, FG_DIM),
+            TextRowKind::Inserted => (BG_DARK, FG_DIM, INSERTED_BG, INSERTED_FG),
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (TEXT_LEFT_X, y, TEXT_PANE_W, row_h),
+            left_bg,
+        );
+        if let Some(no) = row.left_no {
+            draw_string(
+                &mut pixels,
+                dims,
+                TEXT_LEFT_X.saturating_add(4),
+                y.saturating_add(6),
+                &format!("{no:>2} "),
+                FG_DIM,
+            );
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            TEXT_LEFT_X.saturating_add(32),
+            y.saturating_add(6),
+            &row.left,
+            left_fg,
+        );
+        for (start, end) in row.accent_a.iter() {
+            let prefix: String = row.left.chars().take(*start).collect();
+            let span: String = row
+                .left
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = TEXT_LEFT_X
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
+            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, left_bg);
+        }
+        fill_rect(
+            &mut pixels,
+            dims,
+            (TEXT_RIGHT_X, y, TEXT_PANE_W, row_h),
+            right_bg,
+        );
+        if let Some(no) = row.right_no {
+            draw_string(
+                &mut pixels,
+                dims,
+                TEXT_RIGHT_X.saturating_add(4),
+                y.saturating_add(6),
+                &format!("{no:>2} "),
+                FG_DIM,
+            );
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            TEXT_RIGHT_X.saturating_add(32),
+            y.saturating_add(6),
+            &row.right,
+            right_fg,
+        );
+        for (start, end) in row.accent_b.iter() {
+            let prefix: String = row.right.chars().take(*start).collect();
+            let span: String = row
+                .right
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = TEXT_RIGHT_X
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
+            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, right_bg);
+        }
+    }
+
+    let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
+    for seg in geom.segments {
+        let seg_y = pane_top.saturating_add(seg.y_start as u32);
+        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
+        let seg_color = match seg.kind {
+            TextRowKind::Equal => BG_PANEL,
+            TextRowKind::Changed => CHANGED_BG,
+            TextRowKind::Deleted => DELETED_BG,
+            TextRowKind::Inserted => INSERTED_BG,
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (GUTTER_X, seg_y, GUTTER_W, seg_h),
+            seg_color,
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "accent: 4 rows, 2 changed word spans inverted | intra-line proof",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
     Ok(())
 }
 

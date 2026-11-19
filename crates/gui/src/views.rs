@@ -331,6 +331,20 @@ pub fn home_paint_cta_size() -> (f32, f32) {
     (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
 }
 
+/// Session toolbar button size: home CTA floor ka reuse (120x28), taaki
+/// Swap/Reload poori ungli se lagen — path-row Browse/Compare bhi isi
+/// floor par hain (spacing `toolbar_item_gap`/`toolbar_group_gap` se).
+/// Koi naya size nahi; pure; unit-tested.
+pub fn session_toolbar_button_size() -> (f32, f32) {
+    home_paint_cta_size()
+}
+
+/// Path-row Browse/Compare button size: home CTA floor ka reuse (120x28).
+/// Pure; unit-tested.
+pub fn path_browse_button_size() -> (f32, f32) {
+    home_paint_cta_size()
+}
+
 /// Paint-applied Home grid columns: 3 per row, so the 9 session cards
 /// tile into 3 full rows on the section rhythm. Pure; unit-tested.
 pub fn home_paint_grid_columns() -> usize {
@@ -527,13 +541,22 @@ pub fn paint_paths(
     *split = clamp_split_fraction(*split);
     let avail = ui.available_width();
     let (left_w, right_w) = split_field_widths(avail, *split);
+    let (browse_w, browse_h) = path_browse_button_size();
+    let (compare_w, compare_h) = path_browse_button_size();
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.add(
             TextEdit::singleline(left)
                 .desired_width(left_w)
                 .hint_text(format!("left {noun} path")),
         );
-        if ui.button("Browse...").clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(browse_w, browse_h),
+                egui::Button::new("Browse..."),
+            )
+            .clicked()
+        {
             if is_dir {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     *left = folder.display().to_string();
@@ -548,7 +571,13 @@ pub fn paint_paths(
                 .desired_width(right_w)
                 .hint_text(format!("right {noun} path")),
         );
-        if ui.button("Browse...").clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(browse_w, browse_h),
+                egui::Button::new("Browse..."),
+            )
+            .clicked()
+        {
             if is_dir {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     *right = folder.display().to_string();
@@ -559,7 +588,14 @@ pub fn paint_paths(
         }
     });
     let clicked = ui
-        .horizontal(|ui| ui.button(format!("Compare {noun}s")).clicked())
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+            ui.add_sized(
+                egui::vec2(compare_w, compare_h),
+                egui::Button::new(format!("Compare {noun}s")),
+            )
+            .clicked()
+        })
         .inner;
     if clicked {
         *compare = true;
@@ -577,14 +613,23 @@ pub fn paint_triple_paths(
     right: &mut String,
     compare: &mut bool,
 ) {
+    let (browse_w, browse_h) = path_browse_button_size();
+    let (compare_w, compare_h) = path_browse_button_size();
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         let third = third_field_width(ui.available_width());
         ui.add(
             TextEdit::singleline(base)
                 .desired_width(third)
                 .hint_text(format!("base {noun} path")),
         );
-        if ui.button("Browse...").clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(browse_w, browse_h),
+                egui::Button::new("Browse..."),
+            )
+            .clicked()
+        {
             if is_dir {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     *base = folder.display().to_string();
@@ -598,7 +643,13 @@ pub fn paint_triple_paths(
                 .desired_width(third)
                 .hint_text(format!("left {noun} path")),
         );
-        if ui.button("Browse...").clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(browse_w, browse_h),
+                egui::Button::new("Browse..."),
+            )
+            .clicked()
+        {
             if is_dir {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     *left = folder.display().to_string();
@@ -612,7 +663,13 @@ pub fn paint_triple_paths(
                 .desired_width(third)
                 .hint_text(format!("right {noun} path")),
         );
-        if ui.button("Browse...").clicked() {
+        if ui
+            .add_sized(
+                egui::vec2(browse_w, browse_h),
+                egui::Button::new("Browse..."),
+            )
+            .clicked()
+        {
             if is_dir {
                 if let Some(folder) = rfd::FileDialog::new().pick_folder() {
                     *right = folder.display().to_string();
@@ -623,7 +680,14 @@ pub fn paint_triple_paths(
         }
     });
     let clicked = ui
-        .horizontal(|ui| ui.button(format!("Compare {noun}s")).clicked())
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+            ui.add_sized(
+                egui::vec2(compare_w, compare_h),
+                egui::Button::new(format!("Compare {noun}s")),
+            )
+            .clicked()
+        })
         .inner;
     if clicked {
         *compare = true;
@@ -873,6 +937,9 @@ pub fn find_cursor_step(
 /// badalta hai. Fraction `y / height` se `[0, total_rows)`; kharab
 /// input par `None`. [`crate::gutter::gutter_row_at_y`] jaisa, par u64
 /// hex grid rows ke liye. Pure; unit-tested.
+/// Legacy path (paint ab track-relative `hex_minimap_row_at_pos` par hai —
+/// BD spec §4 point 3); ruler parity tests isi par hain.
+#[allow(dead_code)] // legacy paint path; tests + ruler parity live rakhte hain
 pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64> {
     if total_rows == 0 || !height.is_finite() || height <= 0.0 {
         return None;
@@ -888,6 +955,9 @@ pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64>
 /// pad ([`ROW_PAD`]) so hits stay visible/clickable; mapping stays
 /// exact (only paint height changes, never the row math). Pure;
 /// unit-tested.
+/// Legacy floor (paint ab `hex_minimap_band_rects` floor par hai —
+/// BD spec §4 point 2); band parity tests isi par hain.
+#[allow(dead_code)] // legacy paint floor; tests live rakhte hain
 pub fn hex_minimap_seg_end(y0: f32, y1: f32) -> f32 {
     y1.max(y0 + ROW_PAD)
 }
@@ -1248,48 +1318,35 @@ pub fn paint_hex(
             let total = views_hex::hex_row_count(view.left_size.max(view.right_size));
             if total > 0 {
                 let dark = ui.visuals().dark_mode;
-                // Double-wide strip by token: `HEX_MINIMAP_W`
-                // (`2 * GUTTER_W`); the gutter itself never changes
-                // (locked by `gutter_widths_stay_uniform`).
-                let bar_w = HEX_MINIMAP_W;
+                // Double-wide strip by token: `hex_minimap_strip_width`
+                // (gutter double, 24px hit-rect); height by
+                // `hex_minimap_alloc_height` (paint token judvaan).
+                let bar_w = views_hex::hex_minimap_strip_width();
                 let (rect, resp) = ui.allocate_exact_size(
-                    egui::vec2(bar_w, HEX_MINIMAP_H),
+                    egui::vec2(bar_w, views_hex::hex_minimap_alloc_height()),
                     egui::Sense::click_and_drag(),
                 );
-                debug_assert_eq!(rect.width(), HEX_MINIMAP_W);
+                debug_assert_eq!(rect.width(), views_hex::hex_minimap_strip_width());
+                // Legacy token parity lock (BD spec §4 point 1): paint helpers
+                // par hai, tokens tests me bandhe hain.
+                debug_assert_eq!(HEX_MINIMAP_W, views_hex::hex_minimap_strip_width());
+                debug_assert_eq!(HEX_MINIMAP_H, views_hex::hex_minimap_alloc_height());
                 let resp = resp.on_hover_text(hex_minimap_accessibility_label(
                     view.selected,
                     view.hunks.len(),
                 ));
                 ui.painter().rect_filled(rect, 0.0, track_for(dark));
-                let step = views_hex::HEX_BYTES_PER_ROW as u64;
-                for hunk in view.hunks.iter() {
-                    let run = (hunk.left_len).max(hunk.right_len) as u64;
-                    if run == 0 {
-                        continue;
-                    }
-                    let first = hunk.offset.saturating_div(step);
-                    let last = hunk
-                        .offset
-                        .saturating_add(run.saturating_sub(1))
-                        .saturating_div(step);
-                    let y0 = rect.min.y + (first as f32 / total as f32) * rect.height();
-                    let y1 = hex_minimap_seg_end(
-                        y0,
-                        rect.min.y
-                            + ((last.saturating_add(1)) as f32 / total as f32) * rect.height(),
-                    );
-                    let seg = egui::Rect::from_min_max(
-                        egui::pos2(rect.min.x, y0),
-                        egui::pos2(rect.max.x, y1.min(rect.max.y)),
-                    );
+                for seg in views_hex::hex_minimap_band_rects(
+                    rect,
+                    view.left_size.max(view.right_size),
+                    &view.hunks,
+                ) {
                     ui.painter().rect_filled(seg, 0.0, CHANGED_BG);
                 }
                 let minimap_pressed = resp.clicked() || resp.dragged();
                 if minimap_pressed
                     && let Some(pos) = resp.interact_pointer_pos()
-                    && let Some(row) =
-                        hex_minimap_row_at_y(pos.y - rect.min.y, rect.height(), total)
+                    && let Some(row) = views_hex::hex_minimap_row_at_pos(rect, total, pos.y)
                 {
                     hex_minimap_jump_to_row(view, pager, row);
                 }
@@ -1320,11 +1377,21 @@ pub fn paint_hex(
             .num_columns(3)
             .spacing([SECTION_GAP, TIGHT_GAP])
             .show(ui, |ui| {
+                let nibble_role = views_hex::hex_nibble_text_role();
                 for row in grid_rows {
                     let (addr, hex, ascii) = format_hex_grid_cells(row, &view.hunks);
-                    ui.label(TypoRole::Mono.rich(addr));
-                    ui.label(TypoRole::Mono.rich(hex));
-                    ui.label(TypoRole::Mono.rich(format!("|{ascii}|")));
+                    ui.label(nibble_role.rich(addr));
+                    ui.label(nibble_role.rich(hex));
+                    ui.label(nibble_role.rich(format!("|{ascii}|")));
+                    // OPEN nibble accent: byte slices App/engine side se
+                    // aayengi (model me sirf offset/len); tab tak khali
+                    // slices se cells khali, accent rects kuch nahi paint
+                    // karte — `??` whole-row marks rehte hain. Slices milte
+                    // hi yahi rects changed nibble halves par lagenge.
+                    let cells = views_hex::hex_diff_nibble_cells(row, &[], &[]);
+                    for accent in views_hex::hex_row_nibble_accent_rects(ui.min_rect(), &cells) {
+                        ui.painter().rect_filled(accent, 0.0, CHANGED_BG);
+                    }
                     ui.end_row();
                 }
             });
@@ -2843,6 +2910,23 @@ fn span_colors(fg: Color32, bg: Color32, accented: bool) -> (Color32, Color32) {
     if accented { (bg, fg) } else { (fg, bg) }
 }
 
+/// Changed-row word span pair (left, right): half-open char ranges.
+pub type WordSpanPair<'a> = (&'a [(usize, usize)], &'a [(usize, usize)]);
+
+/// Changed-row word spans: sirf `Changed` kind par model ke
+/// `accent_a`/`accent_b` (viewmodel `inline_diff` se), baaki kind par
+/// khali — Deleted/Inserted poore-row band rehte hain, Equal par koi
+/// accent nahi. Paint ke chaaron side-job sites isi se spans lete hain
+/// taaki kaun sa shabd badla wahi block+underline me dikhe. Pure;
+/// unit-tested.
+pub fn changed_row_word_spans(row: &TextRow) -> WordSpanPair<'_> {
+    if row.kind == TextRowKind::Changed {
+        (row.accent_a.as_slice(), row.accent_b.as_slice())
+    } else {
+        (&[], &[])
+    }
+}
+
 /// Normalized intra-line spans: sort + clamp + merge, taaki paint
 /// rects chipke hue aayen (koi overlap/gap/overflow nahi).
 /// `line_len` line ke chars hain, `pane` paint width hai — limit dono
@@ -3180,9 +3264,14 @@ fn side_job_with_prefs(
     fg: Color32,
     bg: Color32,
 ) -> LayoutJob {
-    let (raw_no, line, raw_spans) = match side {
-        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
-        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    let (raw_no, line) = match side {
+        Side::Left => (row.left_no, row.left.as_str()),
+        Side::Right => (row.right_no, row.right.as_str()),
+    };
+    let (accent_left, accent_right) = changed_row_word_spans(row);
+    let raw_spans: &[(usize, usize)] = match side {
+        Side::Left => accent_left,
+        Side::Right => accent_right,
     };
     let no = if layout.prefs.show_line_numbers {
         raw_no
@@ -3222,9 +3311,14 @@ fn side_job_with_prefs_and_find_current(
     if find.needle.is_empty() {
         return side_job_with_prefs(side, row, layout, font_id, fg, bg);
     }
-    let (raw_no, line, raw_spans) = match side {
-        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
-        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    let (raw_no, line) = match side {
+        Side::Left => (row.left_no, row.left.as_str()),
+        Side::Right => (row.right_no, row.right.as_str()),
+    };
+    let (accent_left, accent_right) = changed_row_word_spans(row);
+    let raw_spans: &[(usize, usize)] = match side {
+        Side::Left => accent_left,
+        Side::Right => accent_right,
     };
     let accents: &[(usize, usize)] = if layout.prefs.syntax_highlight {
         raw_spans
@@ -3682,9 +3776,14 @@ fn side_jobs_wrapped_with_prefs(
     fg: Color32,
     bg: Color32,
 ) -> Vec<LayoutJob> {
-    let (raw_no, line, raw_spans) = match side {
-        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
-        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    let (raw_no, line) = match side {
+        Side::Left => (row.left_no, row.left.as_str()),
+        Side::Right => (row.right_no, row.right.as_str()),
+    };
+    let (accent_left, accent_right) = changed_row_word_spans(row);
+    let raw_spans: &[(usize, usize)] = match side {
+        Side::Left => accent_left,
+        Side::Right => accent_right,
     };
     let width = wrap_width_for(layout.pane_chars, layout.prefs.word_wrap).max(1);
     let chunks = wrap_chunks(line, width);
@@ -3741,9 +3840,14 @@ fn side_jobs_wrapped_with_find_current(
     if find.needle.is_empty() {
         return side_jobs_wrapped_with_prefs(side, row, layout, font_id, fg, bg);
     }
-    let (raw_no, line, raw_spans) = match side {
-        Side::Left => (row.left_no, row.left.as_str(), row.accent_a.as_slice()),
-        Side::Right => (row.right_no, row.right.as_str(), row.accent_b.as_slice()),
+    let (raw_no, line) = match side {
+        Side::Left => (row.left_no, row.left.as_str()),
+        Side::Right => (row.right_no, row.right.as_str()),
+    };
+    let (accent_left, accent_right) = changed_row_word_spans(row);
+    let raw_spans: &[(usize, usize)] = match side {
+        Side::Left => accent_left,
+        Side::Right => accent_right,
     };
     let accents: &[(usize, usize)] = if layout.prefs.syntax_highlight {
         raw_spans
@@ -5909,6 +6013,104 @@ mod tests {
             })
             .collect();
         assert_eq!(body, vec![(fg, bg, false), (bg, fg, true), (fg, bg, false)]);
+    }
+
+    #[test]
+    fn changed_row_word_spans_only_changed_rows_carry_accents() {
+        let changed = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: "    let content = read_to_string(path)?;".to_string(),
+            right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: vec![(18, 27)],
+        };
+        let (left_spans, right_spans) = changed_row_word_spans(&changed);
+        assert!(left_spans.is_empty());
+        assert_eq!(right_spans, &[(18, 27)]);
+        // Deleted/Inserted/Equal par spans khali — poora-row band rehta hai.
+        for kind in [
+            TextRowKind::Deleted,
+            TextRowKind::Inserted,
+            TextRowKind::Equal,
+        ] {
+            let row = TextRow {
+                kind,
+                left_no: Some(1),
+                right_no: Some(1),
+                left: "ab".to_string(),
+                right: "ab".to_string(),
+                accent_a: vec![(0, 1)],
+                accent_b: vec![(0, 1)],
+            };
+            let (left, right) = changed_row_word_spans(&row);
+            assert!(left.is_empty());
+            assert!(right.is_empty());
+        }
+    }
+
+    #[test]
+    fn changed_row_word_spans_paint_only_changed_word_block() {
+        // Fixture jaisi insertion-only Changed row: right par ek accent
+        // block, left plain — wahi jo paint me block+underline banta hai.
+        let row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: "    let content = read_to_string(path)?;".to_string(),
+            right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: vec![(18, 27)],
+        };
+        let shown = TextViewPrefs::default();
+        let layout = TextPaneLayout {
+            pane_chars: 60,
+            gutter_chars: 4,
+            prefs: &shown,
+            dim: crate::theme::DARK_DIM,
+        };
+        let left_job = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        assert!(
+            left_job
+                .sections
+                .iter()
+                .skip(1)
+                .all(|s| s.format.underline == Stroke::NONE)
+        );
+        let right_job = side_job_with_prefs(
+            Side::Right,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            Color32::WHITE,
+            Color32::BLACK,
+        );
+        assert!(
+            right_job
+                .sections
+                .iter()
+                .skip(1)
+                .any(|s| s.format.underline != Stroke::NONE)
+        );
+    }
+
+    #[test]
+    fn session_toolbar_and_path_buttons_reuse_home_cta_floor() {
+        // Home CTA precedent: 120x28 hit floor (area 3360).
+        assert_eq!(session_toolbar_button_size(), home_paint_cta_size());
+        assert_eq!(path_browse_button_size(), home_paint_cta_size());
+        assert_eq!(session_toolbar_button_size(), (120.0, 28.0));
+        let (w, h) = session_toolbar_button_size();
+        assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
+        assert_eq!(w * h, 3360.0);
     }
 
     #[test]
