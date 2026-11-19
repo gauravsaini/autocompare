@@ -1,0 +1,18 @@
+== status ==
+ M crates/gui/src/app.rs
+ M crates/gui/src/gutter.rs
+ M crates/gui/src/home.rs
+ M crates/gui/src/views_table.rs
+?? checks/gui-tablewire-bs/
+?? checks/gui-typo-bs/
+== stat ==
+ crates/gui/src/app.rs         |  33 ++++++----
+ crates/gui/src/gutter.rs      |  46 +++++++------
+ crates/gui/src/home.rs        |  77 +++++++++++++++-------
+ crates/gui/src/views_table.rs | 149 +++++++++++++++++++++++++++++-------------
+ 4 files changed, 203 insertions(+), 102 deletions(-)
+== non-owns check ==
+crates/gui/src/gutter.rs
+crates/gui/src/home.rs
+== status-file check ==
+STATUS-UNTOUCHED

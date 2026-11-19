@@ -5375,34 +5375,39 @@ impl eframe::App for App {
                     if rerun {
                         self.run_table();
                     }
-                    // Table find row table window ke andar `views_table` paint fn
-                    // se (text/folder precedent reuse): needle + Prev/Next +
-                    // N/M badge; cursor advance App state me hota hai.
+                    // Table toolbar single row me (G-B2 dedup, `views_table`
+                    // single source): Find + Prev/Next + page Prev/Next +
+                    // page label + N/M badge; cursor/page advance App state
+                    // me hota hai. `views.rs paint_table` apna temp-needle
+                    // Find + page row abhi bhi chalata hai (BR wave usko
+                    // single call me layega — exact spec REPORT me).
+                    self.sync_table_pager();
                     let old_table_needle = self.table_find_needle.clone();
                     let table_badge = self.table_find_badge();
-                    let (table_prev, table_next) = views_table::paint_table_find_bar(
+                    let table_page_label =
+                        views_table::format_table_page_label(self.table_pager);
+                    let table_action = views_table::paint_table_toolbar(
                         ui,
                         &mut self.table_find_needle,
                         &table_badge,
+                        &table_page_label,
                     );
                     if self.table_find_needle != old_table_needle {
                         self.table_find_cursor = 0;
                         self.table_find_from = 0;
                     }
-                    if table_next && self.table_find_next_row().is_none() {
+                    if table_action.find_next && self.table_find_next_row().is_none() {
                         self.status = String::from("table find: no match");
                     }
-                    if table_prev && self.table_find_prev_row().is_none() {
+                    if table_action.find_prev && self.table_find_prev_row().is_none() {
                         self.status = String::from("table find: no match");
                     }
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.small_button("◀ Prev page").clicked() {
-                            self.table_page_prev();
-                        }
-                        if ui.small_button("Next page ▶").clicked() {
-                            self.table_page_next();
-                        }
-                    });
+                    if table_action.page_next {
+                        self.table_page_next();
+                    }
+                    if table_action.page_prev {
+                        self.table_page_prev();
+                    }
                     if self.table_model.is_some() {
                         // Split-aware rows: row keeps the split
                         // min-widths and h-scrolls instead of crushing.

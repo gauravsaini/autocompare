@@ -612,39 +612,50 @@ pub fn table_find_badge_label(position: Option<usize>, total: usize) -> String {
     }
 }
 
-/// Table window ke andar find row: needle field + Prev/Next + N/M
-/// badge. Text find bar precedent ka geometry/typo reuse (wahi bar
-/// height, wahi needle chaudai, wahi button labels, badge right me
-/// ek pad ke saath small weak typo me). Returns
-/// `(prev_clicked, next_clicked)`; cursor/badge advance App state
-/// (`table_find_next_row` / `table_find_prev_row`) me hota hai.
+/// Table window ke andar Find controls ka single source: needle field +
+/// Prev/Next + N/M badge (text find-bar precedent ka geometry/typo reuse:
+/// wahi bar height, wahi needle chaudai, wahi button labels, badge right me
+/// ek pad ke saath small weak me). `paint_table_find_bar` aur
+/// `paint_table_toolbar` dono isi ko chalate hain taaki do Find
+/// implementations kabhi drift na karen (G-B2 dedup). Returns
+/// `(prev_clicked, next_clicked)`; cursor/badge advance caller App state
+/// (`table_find_next_row` / `table_find_prev_row`) me hota hai. Private:
+/// callers stable signatures rakhte hain (`views.rs` caller untouched).
+fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
+    ui.label(egui::RichText::new("Find:").small().weak());
+    ui.add(
+        egui::TextEdit::singleline(needle)
+            .desired_width(TABLE_FIND_NEEDLE_W)
+            .hint_text("needle"),
+    );
+    if ui.small_button("◀ Prev").clicked() {
+        prev = true;
+    }
+    if ui.small_button("Next ▶").clicked() {
+        next = true;
+    }
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.add_space(TABLE_FIND_BADGE_PAD);
+        ui.label(egui::RichText::new(badge).small().weak());
+    });
+    (prev, next)
+}
+
+/// Table window ke andar find row: single-source Find controls
+/// (`paint_table_find_controls` — toolbar wahi body chalata hai).
 /// Caller signature same rehti hai (table tab wiring isi ko chalati
 /// hai, `views.rs` caller untouched).
 pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
-    let mut prev = false;
-    let mut next = false;
     let avail = ui.available_width();
+    let mut out = (false, false);
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
-        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
-        ui.label(egui::RichText::new("Find:").small().weak());
-        ui.add(
-            egui::TextEdit::singleline(needle)
-                .desired_width(TABLE_FIND_NEEDLE_W)
-                .hint_text("needle"),
-        );
-        if ui.small_button("◀ Prev").clicked() {
-            prev = true;
-        }
-        if ui.small_button("Next ▶").clicked() {
-            next = true;
-        }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(TABLE_FIND_BADGE_PAD);
-            ui.label(egui::RichText::new(badge).small().weak());
-        });
+        out = paint_table_find_controls(ui, needle, badge);
     });
-    (prev, next)
+    out
 }
 
 // ----------------------------------------------------------------------------
@@ -1142,7 +1153,11 @@ pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[us
     if header.is_empty() {
         return;
     }
-    let cols = header.len().saturating_add(1);
+    // Column count data Grid wala single source hai (`widths` hamesha
+    // `table_column_widths(header, rows)` se banta hai, jo har header cell
+    // ke liye ek slot rakhta hai — isliye ye `header.len() + 1` ke barabar
+    // hai, drift-proof).
+    let cols = table_cell_grid_columns(widths);
     egui::Grid::new(TABLE_CELL_HEADER_GRID_ID)
         .num_columns(cols)
         .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
@@ -1153,6 +1168,34 @@ pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[us
             }
             ui.end_row();
         });
+}
+
+/// Column letters (G-B4 groundwork): 0->A ... 25->Z, 26->AA, 27->AB —
+/// spreadsheet order. Header-letter row ka label text hai; paint-side
+/// [`table_header_text_role`] strong me (BR wave me, `views.rs`
+/// NO-TOUCH is wave me). Koi naya size/token nahi. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_column_letter(col: usize) -> String {
+    let mut out = String::new();
+    let mut n = col.saturating_add(1);
+    while n > 0 {
+        let rem = n.saturating_sub(1) % 26;
+        out.insert(0, (b'A'.saturating_add(rem as u8)) as char);
+        n = n.saturating_sub(1) / 26;
+    }
+    out
+}
+
+/// Row-number gutter label (G-B4 groundwork): 0-based data row -> 1-based
+/// label ("1", "2", ...). Glyph-pad gutter column
+/// ([`TABLE_CELL_GLYPH_PAD`] precedent) ka text hai; paint-side Mono me
+/// (gutter `gutter_text_role` precedent — wahan se copy nahi, sirf role
+/// reuse). Koi naya size/token nahi. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[allow(dead_code)]
+pub fn table_row_gutter_label(row: usize) -> String {
+    row.saturating_add(1).to_string()
 }
 
 /// Page label text pager se: `views.rs` paint wording reuse
@@ -1190,10 +1233,12 @@ pub struct TableToolbarAction {
 /// Compact table toolbar: Find needle + Prev/Next + page Prev/Next +
 /// page label + N/M badge — sab ek [`TABLE_FIND_BAR_H`] row me (G-B2: ab do
 /// Find bars / do nav rows nahi — caller ek hi toolbar chalata hai).
-/// Button labels existing wording reuse (`paint_table_find_bar` Find pair +
-/// page pair, koi naya wording nahi); bar height, needle chaudai, col gap,
-/// badge pad find-bar precedent reuse. Badge right-end small weak me,
-/// page label Small role me (status precedent). Returns find + page clicks.
+/// Find segment [`paint_table_find_bar`] wali single-source body hai (koi
+/// duplicate Find row/badge nahi); button labels existing wording reuse
+/// karte hain (page pair, koi naya wording nahi); bar height, needle
+/// chaudai, col gap, badge pad find-bar precedent reuse. Badge right-end
+/// small weak me, page label Small role me (status precedent). Returns
+/// find + page clicks.
 /// Test-only until paint wiring lands (orchestrator owns paint).
 #[allow(dead_code)]
 pub fn paint_table_toolbar(
@@ -1206,17 +1251,11 @@ pub fn paint_table_toolbar(
     let avail = ui.available_width();
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
-        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
-        ui.label(egui::RichText::new("Find:").small().weak());
-        ui.add(
-            egui::TextEdit::singleline(needle)
-                .desired_width(TABLE_FIND_NEEDLE_W)
-                .hint_text("needle"),
-        );
-        if ui.small_button("◀ Prev").clicked() {
+        let (find_prev, find_next) = paint_table_find_controls(ui, needle, badge);
+        if find_prev {
             action.find_prev = true;
         }
-        if ui.small_button("Next ▶").clicked() {
+        if find_next {
             action.find_next = true;
         }
         if ui.small_button("◀ Prev page").clicked() {
@@ -1226,10 +1265,6 @@ pub fn paint_table_toolbar(
             action.page_next = true;
         }
         ui.label(TypoRole::Small.rich(page_label));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(TABLE_FIND_BADGE_PAD);
-            ui.label(egui::RichText::new(badge).small().weak());
-        });
     });
     action
 }
@@ -2456,6 +2491,32 @@ mod tests {
             format_table_page_label(empty),
             "page 1 of 1, showing 0 row(s)"
         );
+    }
+
+    #[test]
+    fn table_column_letters_follow_spreadsheet_order() {
+        assert_eq!(table_column_letter(0), "A");
+        assert_eq!(table_column_letter(1), "B");
+        assert_eq!(table_column_letter(25), "Z");
+        assert_eq!(table_column_letter(26), "AA");
+        assert_eq!(table_column_letter(27), "AB");
+        // Har letter non-empty uppercase ASCII hai (paint-side Mono strong).
+        for col in 0..60usize {
+            let label = table_column_letter(col);
+            assert!(!label.is_empty());
+            assert!(label.chars().all(|c| c.is_ascii_uppercase()));
+        }
+    }
+
+    #[test]
+    fn table_row_gutter_labels_are_one_based_and_grids_share_columns() {
+        assert_eq!(table_row_gutter_label(0), "1");
+        assert_eq!(table_row_gutter_label(9), "10");
+        // Header/data Grid column count ek hi source se (dedup: header Grid
+        // ab `table_cell_grid_columns` reuse karta hai).
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let widths = table_column_widths(&header, &[]);
+        assert_eq!(table_cell_grid_columns(&widths), header.len() + 1);
     }
 
     #[test]
