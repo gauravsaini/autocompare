@@ -395,3 +395,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 03 all live progressing
 - PIDs 37231/37232/37233 live. A wrote checks/local-run-exq/ untracked (picture-tab reading). B baseline 122 green, into Hex/Table pure models. C baseline 122 green, geometry token grep + views.rs reading.
 - No agent commits yet, tree otherwise clean. Wait next poll.
+
+## Wave H poll 04 slow steady
+- All 3 PIDs live. A into views.rs + old report gap analysis (build.log only so far). B reading main/viewmodel, pure models next. C harness re-ran (after.png 9914B same scale, tests green), exquisite proof dir pending.
+- No agent commits yet. Untracked only checks/local-run-exq/. Wait.
