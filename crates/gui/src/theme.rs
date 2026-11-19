@@ -26,7 +26,9 @@
 //! Exquisite intent (headless, paint-neutral this wave):
 //! [`TypoRole::font_stack`] (UI sans vs mono stack),
 //! [`TypoRole::weight_value`] (400 regular / 500 medium / 600 semibold),
-//! [`TypoRole::line_height`] (chrome 1.2 / body 1.45 / mono 1.35),
+//! [`TypoRole::line_height`] (chrome 1.2 / body 1.40 / mono 1.30;
+//! Wave V retune: tighter vertical rhythm so raster rows feel less tall;
+//! paint still adopts via the shared measured mono row height),
 //! [`TypoRole::letter_spacing_em`] (headers 0.02em, rest 0.0) and
 //! [`TypoRole::is_tabular`] (gutter/hex/counts) record the target
 //! hierarchy; paint adopts them in a later wave.
@@ -96,10 +98,12 @@ pub const TYPO_WEIGHT_MEDIUM: u16 = 500;
 pub const TYPO_WEIGHT_SEMIBOLD: u16 = 600;
 /// Compact chrome line-height multiplier (~1.2).
 pub const TYPO_LINE_HEIGHT_CHROME: f32 = 1.2;
-/// Reading body line-height multiplier (~1.45).
-pub const TYPO_LINE_HEIGHT_BODY: f32 = 1.45;
-/// Dense mono line-height multiplier (~1.35).
-pub const TYPO_LINE_HEIGHT_MONO: f32 = 1.35;
+/// Reading body line-height multiplier (~1.40; Wave V: tightened from
+/// 1.45 so 13px body rows feel less tall next to dense mono diffs).
+pub const TYPO_LINE_HEIGHT_BODY: f32 = 1.40;
+/// Dense mono line-height multiplier (~1.30; Wave V: tightened from 1.35
+/// so 12px diff rows read lighter and the 24px raster row feels airier).
+pub const TYPO_LINE_HEIGHT_MONO: f32 = 1.30;
 /// Slight header tracking as em ratio (0.02em; egui has no tracking).
 pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 
@@ -145,6 +149,15 @@ pub fn zoom_offset_px(level: i8) -> f32 {
 pub fn zoomed_size(role: TypoRole, level: i8) -> f32 {
     let stepped = role.size() + zoom_offset_px(level);
     stepped.clamp(ZOOM_MIN_SIZE, ZOOM_MAX_SIZE)
+}
+
+/// Zoom-aware line-height in px for `role` at `level`: the clamped
+/// zoomed point size times the role multiplier (Wave V row-feel knob).
+/// Reuses [`zoomed_size`] + [`TypoRole::line_height`] so zoom never
+/// escapes the MIN..MAX size clamp; level 0 equals
+/// [`TypoRole::line_height_px`]. Pure; unit-tested.
+pub fn zoomed_line_height_px(role: TypoRole, level: i8) -> f32 {
+    zoomed_size(role, level) * role.line_height()
 }
 
 impl TypoRole {
@@ -305,9 +318,10 @@ impl TypoRole {
         }
     }
 
-    /// Line-height multiplier for this role: chrome ~1.2, body ~1.45,
-    /// mono ~1.35. Paint still measures the shared mono row height
-    /// ([`TYPO_LINE_HEIGHT_SOURCE`]); this is headless intent.
+    /// Line-height multiplier for this role: chrome ~1.2, body ~1.40,
+    /// mono ~1.30 (Wave V retune, tighter rows). Paint still measures
+    /// the shared mono row height ([`TYPO_LINE_HEIGHT_SOURCE`]); this is
+    /// headless intent.
     pub const fn line_height(self) -> f32 {
         match self {
             Self::Heading | Self::HomeTitle | Self::HomeButton | Self::Small => {
@@ -879,11 +893,11 @@ mod tests {
         assert_eq!(TypoRole::Body.line_height(), TYPO_LINE_HEIGHT_BODY);
         assert_eq!(TypoRole::HomeDesc.line_height(), TYPO_LINE_HEIGHT_BODY);
         assert!((TYPO_LINE_HEIGHT_CHROME - 1.2).abs() < 0.001);
-        assert!((TYPO_LINE_HEIGHT_BODY - 1.45).abs() < 0.001);
-        assert!((TYPO_LINE_HEIGHT_MONO - 1.35).abs() < 0.001);
+        assert!((TYPO_LINE_HEIGHT_BODY - 1.40).abs() < 0.001);
+        assert!((TYPO_LINE_HEIGHT_MONO - 1.30).abs() < 0.001);
         // px height follows size * multiplier.
-        assert!((TypoRole::Body.line_height_px() - 13.0 * 1.45).abs() < 0.01);
-        assert!((TypoRole::Mono.line_height_px() - 12.0 * 1.35).abs() < 0.01);
+        assert!((TypoRole::Body.line_height_px() - 13.0 * 1.40).abs() < 0.01);
+        assert!((TypoRole::Mono.line_height_px() - 12.0 * 1.30).abs() < 0.01);
         assert!((TypoRole::Heading.line_height_px() - 18.0 * 1.2).abs() < 0.01);
         // Tracking: headers slight, rest zero; paint stays 0.0 no-op.
         assert_eq!(TYPO_LETTER_SPACING, 0.0);
@@ -899,6 +913,44 @@ mod tests {
         assert!(!TypoRole::Body.is_tabular());
         assert!(!TypoRole::Heading.is_tabular());
         assert!(!TypoRole::HomeTitle.is_tabular());
+    }
+
+    #[test]
+    fn glyph_zoomed_line_height_clamps() {
+        // Level 0 is the base passthrough for every role.
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert!((zoomed_line_height_px(role, 0) - role.line_height_px()).abs() < 0.001);
+            // One px step up grows the row by exactly one multiplier.
+            assert!(
+                (zoomed_line_height_px(role, 1)
+                    - zoomed_line_height_px(role, 0)
+                    - role.line_height())
+                .abs()
+                    < 0.001
+            );
+            // Extreme input clamps through the existing zoom resolver.
+            assert_eq!(
+                zoomed_line_height_px(role, 100),
+                zoomed_line_height_px(role, ZOOM_MAX_LEVEL)
+            );
+            assert_eq!(
+                zoomed_line_height_px(role, -100),
+                zoomed_line_height_px(role, ZOOM_MIN_LEVEL)
+            );
+        }
+        // Wave V feel numbers: mono row tightens 16.2 -> 15.6px,
+        // body row tightens 18.85 -> 18.2px, chrome unchanged at 21.6px.
+        assert!((TypoRole::Mono.line_height_px() - 15.6).abs() < 0.01);
+        assert!((TypoRole::Body.line_height_px() - 18.2).abs() < 0.01);
+        assert!((TypoRole::Heading.line_height_px() - 21.6).abs() < 0.01);
     }
 
     #[test]
