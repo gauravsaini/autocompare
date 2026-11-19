@@ -814,3 +814,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - T-CALL ses-paintcall-t (opencode default): OWNS views.rs+app.rs+checks/gui-paintcall-t/**. Wire paint_text_find_bar + text_find_badge_label into text-view paint (near views.rs:712 F3 loop; App text find state from Wave Q f2a41a9: needle/cursor/N-M badge model). Remove allow(dead_code) once called (keep if partial with note). No color/geometry/token changes.
 - Zoom Cmd +/-/0 already live in app.rs:2183-2210 (verified in worktree) — no work needed, agent confirms + tests.
 - Rules: Hinglish Roman, English conventional NO push, forbid unsafe, no unwrap/expect/panic/todo non-test, clean-room, STATUS orch-only.
+
+## Wave T poll 01 ALL LANDED wave complete
+- CALL 410d7a6 verified+pushed: OWNS clean (app.rs +109, views.rs 8, paintcall-t REPORT 45 + round-T-1 proof). Find bar + N/M badge wired into text paint, dead_code removed, 231 green, clippy zero, fmt clean. Orchestrator verified + pushed (ahead 1 -> origin/main 410d7a6).
+- Gap #12 now FIXED (find bar painted, badge live). Remaining OPEN: #4 picture zoom/pan, #10 PNG glyphs, #15 progress/cancel, #19 dual-tree.
