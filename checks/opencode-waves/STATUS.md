@@ -699,3 +699,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - PARITY baseline 182, editing views_hex grid slices (one identical-edit retry, normal loop). K-B re-checking release warnings post-K-A (touch+rebuild, no content edit).
 - LOCALBIN agyx log still 0B (~5 min, startup slow; probe also slow). Not blocking: K-B covers release+PNG+gaps + orch harness PASS already green. If agyx still 0B next poll, fallback respawn via opencode default report-only same OWNS.
 - No commits from agents yet. Disjoint holds (M none, all untracked in own dirs). Wait.
+
+## Wave L poll 03 agyx fallback, parity 3 files
+- agyx single-shot 0B after ~10 min (startup stall, PID 59748 killed). LOCALBIN respawned as ses-localbin-L2 via opencode default model (PID 60692), same OWNS checks/local-run-l/** report-only, now scoping (BC app + tools + gui dirs). Agyx attempt documented, no work lost (report-only).
+- PARITY M all 3 owned files (views_hex + views_table + tree), log 38KB writing. GEO/TYPO growing (9.5/9.8KB), K-B steady. 5 live total (GEO/TYPO/PARITY/LOCALBIN2/K-B).
+- Disjoint holds: M files map 1:1 to PARITY OWNS, untracked dirs per-agent. No commits yet. Wait.
