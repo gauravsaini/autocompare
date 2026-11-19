@@ -425,3 +425,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - A 58e143c landed+pushed: OWNS clean (9 files checks/local-run-exq only), release 10851744B 52s, harness PASS, 123 green, PNG 9914B, 15 gaps (hex grid/table grid/gutter-click/find/merge-hunk/paging).
 - B tolerance fixed (NaN never match), scratch parity-check 22 green; repo gates + REPORT + patch pending. C gates running (theme/gutter/tree 162+/15-).
 - B+C live, no OWNS overlap with A. Wait.
+
+## Wave H poll 11 C proof B edges
+- A done (proc gone, landed). B+C live. B tolerance edges (inf sanitized). C checks/gui-exquisite/ proof written, before/after 9914 identical (tokens only, paint adoption pending as designed — verify REPORT honesty at land).
+- No agent commits yet for B/C. Wait.
