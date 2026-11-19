@@ -76,7 +76,7 @@ pub const MERGE_X2: u32 = 638;
 /// `accent` -> text accent scene, `allsame` -> folder identical
 /// (AllSame) scene, `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
 /// `merge` -> merge (foldermerge bhi), `merge-take` -> merge take-row scene,
-/// `sync` -> sync, `folder` + `empty` -> folder filtered
+/// `three-way`/`threeway` -> three-way tree scene, `sync` -> sync, `folder` + `empty` -> folder filtered
 /// empty scene, `folder` -> folder, `home` -> home, `picture` -> picture,
 /// `wrap` -> wrap-on + find-active text scene, warna text.
 /// Har route same 960x600 canvas par tikta hai, colors frozen.
@@ -99,6 +99,9 @@ pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
     }
     if lower.contains("table") {
         return render_table_fixture_png(out_path);
+    }
+    if lower.contains("three-way") || lower.contains("threeway") {
+        return render_three_way_fixture_png(out_path);
     }
     if lower.contains("merge-take") {
         return render_merge_take_fixture_png(out_path);
@@ -1554,6 +1557,211 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
         &mut pixels,
         dims,
         "merge-take: 1 hunk, take left staged | resolved 1 line(s)",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Renders the three-way tree scene: header me live
+/// `three_way_header_line` (== `three_way_tree_summary().summary_line()`),
+/// har row par `three_way_presence_marks` (BLR/B-R/-LR) + `three_way_row_line`
+/// (dir par `/`) + `three_way_row_decision_text`, conflict rows ke neeche
+/// `Take:` strip me teen live buttons (`ThreeWaySide::label()`: Take Left /
+/// Take Base / Take Right). Snapshots + decisions headless truth se
+/// (`tree::three_way_tree_rows`, `is_three_way_conflict`,
+/// `views::stage_three_way_decision`); koi mock string nahi. Accent-scene
+/// precedent par naya dispatcher route (`three-way`/`threeway`). Colors frozen.
+pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
+    use crate::viewmodel::FolderRow;
+
+    fn snap_row(path: &str, is_dir: bool) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph: '=',
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: false,
+        }
+    }
+
+    let base = vec![
+        snap_row("a.txt", false),
+        snap_row("del.txt", false),
+        snap_row("src", true),
+    ];
+    let left = vec![
+        snap_row("a.txt", false),
+        snap_row("new.txt", false),
+        snap_row("one.txt", false),
+        snap_row("src", true),
+    ];
+    let right = vec![
+        snap_row("a.txt", false),
+        snap_row("del.txt", false),
+        snap_row("new.txt", false),
+        snap_row("src", true),
+    ];
+    let rows = crate::tree::three_way_tree_rows(&base, &left, &right);
+    let decisions =
+        crate::views::stage_three_way_decision(&[], "del.txt", crate::tree::ThreeWaySide::Right);
+    let header = crate::views::three_way_header_line(&rows, &decisions);
+
+    let width = SNAP_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/base + left + right - FolderMerge (three-way)",
+        4,
+    );
+
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    fill_rect(
+        &mut pixels,
+        dims,
+        (
+            OUTER_PAD,
+            pane_top,
+            SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+            pane_bottom.saturating_sub(pane_top),
+        ),
+        [22, 22, 22, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        pane_top.saturating_add(6),
+        &header,
+        FG_TEXT,
+    );
+
+    let mut row_y = pane_top.saturating_add(ROW_H);
+    for row in &rows {
+        if row_y.saturating_add(ROW_H) > pane_bottom {
+            break;
+        }
+        let conflict = crate::tree::is_three_way_conflict(row);
+        let decided = crate::views::three_way_decision_for_row(&decisions, row.rel_path.as_str());
+        let marks = crate::views::three_way_presence_marks(row);
+        let line = crate::views::three_way_row_line(row);
+        let text = crate::views::three_way_row_decision_text(conflict, decided);
+        let (bg, fg) = if conflict {
+            (CHANGED_BG, CHANGED_FG)
+        } else {
+            (BG_DARK, FG_TEXT)
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (
+                OUTER_PAD,
+                row_y,
+                SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+                ROW_H,
+            ),
+            bg,
+        );
+        let mut pen = draw_string(&mut pixels, dims, 20, row_y.saturating_add(6), &marks, fg);
+        pen = draw_string(
+            &mut pixels,
+            dims,
+            pen.saturating_add(8),
+            row_y.saturating_add(6),
+            &line,
+            fg,
+        );
+        let decision_fg = if decided.is_some() { FG_TEXT } else { FG_DIM };
+        draw_string(
+            &mut pixels,
+            dims,
+            pen.saturating_add(8),
+            row_y.saturating_add(6),
+            &text,
+            decision_fg,
+        );
+        row_y = row_y.saturating_add(ROW_H);
+        if conflict {
+            if row_y.saturating_add(ROW_H) > pane_bottom {
+                break;
+            }
+            fill_rect(
+                &mut pixels,
+                dims,
+                (
+                    OUTER_PAD,
+                    row_y,
+                    SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
+                    ROW_H,
+                ),
+                [28, 28, 28, 255],
+            );
+            let mut pen_x = draw_string(
+                &mut pixels,
+                dims,
+                20,
+                row_y.saturating_add(6),
+                "Take:",
+                FG_DIM,
+            )
+            .saturating_add(8);
+            for side in [
+                crate::tree::ThreeWaySide::Left,
+                crate::tree::ThreeWaySide::Base,
+                crate::tree::ThreeWaySide::Right,
+            ] {
+                let label = side.label();
+                let btn_w = text_width(label).saturating_add(16);
+                fill_rect(
+                    &mut pixels,
+                    dims,
+                    (pen_x, row_y.saturating_add(3), btn_w, 18),
+                    [60, 60, 60, 255],
+                );
+                draw_string(
+                    &mut pixels,
+                    dims,
+                    pen_x.saturating_add(8),
+                    row_y.saturating_add(6),
+                    label,
+                    FG_TEXT,
+                );
+                pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
+                if pen_x.saturating_add(60) > SNAP_W.saturating_sub(OUTER_PAD) {
+                    break;
+                }
+            }
+            row_y = row_y.saturating_add(ROW_H);
+        }
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        &format!("threeway: {header} | take left/base/right live"),
     );
     let image = RgbaImage {
         width,
@@ -4262,5 +4470,172 @@ mod tests {
         assert!(render_fixture_png(&merge_direct).is_ok());
         let merge_bytes = std::fs::read(&merge_direct).unwrap_or_default();
         assert_eq!(fm_bytes, merge_bytes);
+    }
+
+    #[test]
+    fn three_way_scene_proves_live_tree() {
+        use crate::viewmodel::FolderRow;
+        fn snap_row(path: &str, is_dir: bool) -> FolderRow {
+            FolderRow {
+                rel_path: path.to_string(),
+                is_dir,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            }
+        }
+        // Fixture wale snapshots: 5 rows, 2 conflicts.
+        let base = vec![
+            snap_row("a.txt", false),
+            snap_row("del.txt", false),
+            snap_row("src", true),
+        ];
+        let left = vec![
+            snap_row("a.txt", false),
+            snap_row("new.txt", false),
+            snap_row("one.txt", false),
+            snap_row("src", true),
+        ];
+        let right = vec![
+            snap_row("a.txt", false),
+            snap_row("del.txt", false),
+            snap_row("new.txt", false),
+            snap_row("src", true),
+        ];
+        let rows = crate::tree::three_way_tree_rows(&base, &left, &right);
+        assert_eq!(rows.len(), 5);
+        let paths: Vec<String> = rows.iter().map(|row| row.rel_path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                "a.txt".to_string(),
+                "del.txt".to_string(),
+                "new.txt".to_string(),
+                "one.txt".to_string(),
+                "src".to_string(),
+            ]
+        );
+        assert_eq!(
+            crate::tree::three_way_conflicts(&rows),
+            vec!["del.txt".to_string(), "new.txt".to_string()]
+        );
+        // Presence marks + dir line live helpers se.
+        let marks: Vec<String> = rows
+            .iter()
+            .map(crate::views::three_way_presence_marks)
+            .collect();
+        assert_eq!(marks, vec!["BLR", "B-R", "-LR", "-L-", "BLR"]);
+        let src_row = match rows.iter().find(|row| row.rel_path == "src") {
+            Some(row) => row,
+            None => {
+                assert!(!rows.is_empty());
+                return;
+            }
+        };
+        assert_eq!(crate::views::three_way_row_line(src_row), "src/");
+        // Decisions: del staged right, new pending, a clean.
+        let decisions = crate::views::stage_three_way_decision(
+            &[],
+            "del.txt",
+            crate::tree::ThreeWaySide::Right,
+        );
+        assert_eq!(
+            crate::views::three_way_decision_for_row(&decisions, "del.txt"),
+            Some(crate::tree::ThreeWaySide::Right)
+        );
+        assert_eq!(
+            crate::views::three_way_decision_for_row(&decisions, "ghost.txt"),
+            None
+        );
+        assert_eq!(
+            crate::views::three_way_row_decision_text(true, Some(crate::tree::ThreeWaySide::Right)),
+            "take right"
+        );
+        assert_eq!(
+            crate::views::three_way_row_decision_text(true, None),
+            "needs a decision"
+        );
+        assert_eq!(
+            crate::views::three_way_row_decision_text(false, None),
+            "clean"
+        );
+        // Header live summary se, unresolved kyunki new.txt pending hai.
+        let header = crate::views::three_way_header_line(&rows, &decisions);
+        assert_eq!(
+            header,
+            "5 path(s), 1 decided, 4 pending, 2 conflict(s) (unresolved)"
+        );
+        assert_eq!(
+            header,
+            crate::tree::three_way_tree_summary(&rows, &decisions).summary_line()
+        );
+        // Take labels live `ThreeWaySide::label()` se.
+        assert_eq!(crate::tree::ThreeWaySide::Left.label(), "Take Left");
+        assert_eq!(crate::tree::ThreeWaySide::Base.label(), "Take Base");
+        assert_eq!(crate::tree::ThreeWaySide::Right.label(), "Take Right");
+        // Fixture strings apne fields me fit honi chahiye.
+        assert!(text_width(&header) < 928);
+        assert!(text_width("Take Left") < 309);
+        assert!(text_width("Take Base") < 309);
+        assert!(text_width("Take Right") < 309);
+        assert!(
+            text_width(
+                "threeway: 5 path(s), 1 decided, 4 pending, 2 conflict(s) (unresolved) | take left/base/right live"
+            ) < 928
+        );
+        // PNG valid, non-blank, merge fixture se alag bytes.
+        let dir = std::env::temp_dir();
+        let three_out = dir.join("vis-bl-dispatch-threeway-direct.png");
+        assert!(render_three_way_fixture_png(&three_out).is_ok());
+        let three_bytes = std::fs::read(&three_out).unwrap_or_default();
+        assert!(!three_bytes.is_empty());
+        assert!(png_magic_ok(&three_bytes));
+        assert!(three_bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = three_bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+        let merge_out = dir.join("vis-bl-dispatch-merge.png");
+        assert!(render_fixture_png(&merge_out).is_ok());
+        let merge_bytes = std::fs::read(&merge_out).unwrap_or_default();
+        assert_ne!(three_bytes, merge_bytes);
+    }
+
+    #[test]
+    fn dispatcher_routes_threeway_scene() {
+        // Accent-precedent twin-guard: three-way naam apne scene par jana
+        // chahiye, fallback text/merge se byte-alag hona chahiye.
+        let dir = std::env::temp_dir();
+        let three_out = dir.join("vis-bl-dispatch-after-threeway.png");
+        assert!(render_fixture_png(&three_out).is_ok());
+        let three_bytes = std::fs::read(&three_out).unwrap_or_default();
+        assert!(!three_bytes.is_empty());
+        assert!(png_magic_ok(&three_bytes));
+        assert!(three_bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = three_bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+        // Hyphen aur bina-hyphen dono spelling same scene par.
+        let nospace_out = dir.join("vis-bl-dispatch-threeway.png");
+        assert!(render_fixture_png(&nospace_out).is_ok());
+        let nospace_bytes = std::fs::read(&nospace_out).unwrap_or_default();
+        assert_eq!(three_bytes, nospace_bytes);
+        // Purane scenes se sab alag (twin nahi).
+        for name in [
+            "vis-bl-dispatch-text.png",
+            "vis-bl-dispatch-folder.png",
+            "vis-bl-dispatch-merge.png",
+            "vis-bl-dispatch-table.png",
+            "vis-bl-dispatch-home.png",
+            "vis-bl-dispatch-sync.png",
+            "vis-bl-dispatch-merge-take.png",
+            "vis-bl-dispatch-allsame.png",
+        ] {
+            let out = dir.join(name);
+            assert!(render_fixture_png(&out).is_ok());
+            let bytes = std::fs::read(&out).unwrap_or_default();
+            assert!(!bytes.is_empty());
+            assert_ne!(three_bytes, bytes);
+        }
     }
 }
