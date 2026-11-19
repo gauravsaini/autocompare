@@ -1380,3 +1380,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - TABLE d0a1881 isolated-verify ok: 610 green + clippy 0 + fmt clean + banned 0 + colors 0 + PNG magic-ok, OWNS views_table.rs+own checks. TABLE session done.
 - GUTTER 9fb01be combined-verify ok: 611 green + clippy 0 + fmt clean + banned 0 + colors 0 + harness PASS in-commit, OWNS views.rs+own checks. Gutter session done.
 - Pushed. Next: folder grid columns G-F2 + table wiring follow-up (paint_table dedup via paint_table_toolbar, dashed rule removal) + TypoRole paint adoption.
+
+## 2026-11-20 - Wave BR plan (folder grid P0, single wave)
+- BR-FOLDERGRID sess-foldergrid-br: OWNS views.rs+checks/gui-foldergrid-br (G-F2 Name/Size/Modified columns; tree.rs NO-TOUCH, model spec REPORT me).
+- Single wave (table wiring bhi views.rs mangta hai — uske baad). Agent commits locally, NO PUSH.
