@@ -412,3 +412,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## Wave H poll 07 A build pass C gutter
 - All 3 live. A release PASS 10851744B (52s), harness bg running, REPORT next. C M gutter+theme (110+/10): spacing tokens applied, paint aligned. B writing view-models.
 - No agent commits yet. Wait.
+
+## Wave H poll 08 hex file harness done
+- All 3 live. B wrote crates/gui/src/views_hex.rs untracked (views_table + REPORT + patch next). A harness done: after.png 9914B, tests 123 green (+1 vs 122 baseline, likely C theme test), REPORT + commit next. C gutter expanded (22 lines token application), theme 115, still OWNS.
+- No agent commits yet. Verify tests/clippy/fmt + OWNS at land time.
