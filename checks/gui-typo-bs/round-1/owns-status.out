@@ -1,0 +1,6 @@
+ M crates/gui/src/app.rs
+ M crates/gui/src/gutter.rs
+ M crates/gui/src/home.rs
+ M crates/gui/src/views_table.rs
+?? checks/gui-tablewire-bs/
+?? checks/gui-typo-bs/

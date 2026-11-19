@@ -110,13 +110,15 @@ pub fn home_model() -> HomeModel {
 /// scope). Matches `views::paint_home`: title strong 14, description
 /// small weak, button body scale. GEO/integration wave applies these
 /// in paint; this module stays headless so the contract is testable.
-pub const HOME_CARD_TITLE_SIZE: f32 = 14.0;
+/// Sizes single-source from [`crate::theme::TypoRole`] (no literals).
+pub const HOME_CARD_TITLE_SIZE: f32 = crate::theme::TypoRole::HomeTitle.size();
 /// Home card title is strong.
 pub const HOME_CARD_TITLE_STRONG: bool = true;
 /// Home card description is small + weak.
 pub const HOME_CARD_DESC_SMALL_WEAK: bool = true;
 /// Home card button uses the body scale (default size, no small/strong).
-pub const HOME_CARD_BUTTON_BODY_SIZE: f32 = crate::theme::TYPO_BODY_SIZE;
+/// Single-source from the button role (== [`crate::theme::TYPO_BODY_SIZE`]).
+pub const HOME_CARD_BUTTON_BODY_SIZE: f32 = crate::theme::TypoRole::HomeButton.size();
 
 /// Title point size for Home cards (via role, single source: 14.0).
 pub const fn home_card_title_size() -> f32 {
@@ -160,20 +162,20 @@ pub const fn home_card_button_role() -> crate::theme::TypoRole {
 pub const HOME_GRID_COLUMNS: usize = 3;
 /// Card min width px: `views::CARD_W` parity (paint wahi rakhta hai).
 pub const HOME_CARD_MIN_W: f32 = 240.0;
-/// Card outer pad px: section rhythm (`views::SECTION_GAP` = 8).
-pub const HOME_CARD_PAD: f32 = 8.0;
-/// Card inner gap px: tight rhythm (`views::TIGHT_GAP` = 4, title/desc/button beech).
-pub const HOME_CARD_INNER_GAP: f32 = 4.0;
-/// Card button min hit height px: standard hit row (`views::HEADER_H` /
-/// `FIND_BAR_H` = 28 rhythm parity — paging bars/find bar wala dabane layak
+/// Card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8).
+pub const HOME_CARD_PAD: f32 = crate::theme::GEO_SECTION_GAP;
+/// Card inner gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4, title/desc/button beech).
+pub const HOME_CARD_INNER_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Card button min hit height px: standard hit row ([`crate::theme::CHROME_HEADER_BAR_H`] = 28
+/// rhythm parity — paging bars/find bar wala dabane layak
 /// row; purana 24px find-nav floor is primary CTA ke liye chhota tha —
 /// taaki "Open …" report wale 120x22 dabav se bache).
-pub const HOME_CARD_BUTTON_MIN_H: f32 = 28.0;
+pub const HOME_CARD_BUTTON_MIN_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
 /// Description wrap budget: do lines tak sab cards ek jaisi height rakhen.
 pub const HOME_CARD_DESC_LINES: usize = 2;
-/// Session-card grid gap px: section rhythm (`views::SECTION_GAP` = 8
+/// Session-card grid gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8
 /// parity) — cards aur rows dono isi beat par, koi naya gap nahi.
-pub const HOME_GRID_GAP: f32 = 8.0;
+pub const HOME_GRID_GAP: f32 = crate::theme::GEO_SECTION_GAP;
 /// Card button min hit width px: card aadha (report ka 120-wide "Open …"
 /// label budget; `HOME_CARD_MIN_W` se derive, koi magic number nahi).
 pub const HOME_CARD_BUTTON_MIN_W: f32 = HOME_CARD_MIN_W * 0.5;
@@ -578,13 +580,13 @@ pub fn recent_row_columns(total_w: f32) -> (f32, f32, f32) {
 /// Home launcher path picker dikhata hai ya nahi: kabhi nahi (false).
 /// Report section 2: Home par path row 82px chrome waste karta hai.
 pub const HOME_SHOWS_PATH_PICKER: bool = false;
-/// Path row height px: standard hit row (`views::HEADER_H` = 28 parity).
-pub const HOME_PATH_ROW_H: f32 = 28.0;
-/// Path row neeche gap px: tight rhythm (`views::TIGHT_GAP` = 4 parity).
-pub const HOME_PATH_ROW_GAP: f32 = 4.0;
-/// Section beech gap px: section rhythm (`views::SECTION_GAP` = 8 parity) —
+/// Path row height px: standard hit row ([`crate::theme::CHROME_HEADER_BAR_H`] = 28 parity).
+pub const HOME_PATH_ROW_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Path row neeche gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4 parity).
+pub const HOME_PATH_ROW_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Section beech gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8 parity) —
 /// card grid aur recent list isi beat par alag hote hain.
-pub const HOME_SECTION_GAP: f32 = 8.0;
+pub const HOME_SECTION_GAP: f32 = crate::theme::GEO_SECTION_GAP;
 
 /// Path picker chhupane se bachta chrome px: row + uska gap = 32.
 pub fn home_saved_chrome_height() -> f32 {
@@ -615,16 +617,19 @@ pub fn home_recent_section_top(cards_h: f32) -> f32 {
 // ----------------------------------------------------------------------------
 
 /// Recent row text role: chhota kamzor proportional (secondary list text).
+/// Adopts the [`crate::theme::TypoRole::caption`] alias (== HomeDesc, value-stable).
 pub const fn recent_row_text_role() -> crate::theme::TypoRole {
-    crate::theme::TypoRole::HomeDesc
+    crate::theme::TypoRole::caption()
 }
 
-/// Recent row text size px (single source: desc role).
+/// Recent row text size px (single source: caption alias, 11.0).
 pub fn recent_row_text_size() -> f32 {
-    crate::theme::TypoRole::HomeDesc.size()
+    crate::theme::TypoRole::caption().size()
 }
 
 /// Recent row text line-height px (body 1.40 x desc size): row stack isi se.
+/// HomeDesc par rehta hai taaki row numbers value-stable rahen (caption alias ka
+/// multiplier alag hai — G-T7 pixel tightening views.rs follow-up me).
 pub fn recent_row_text_line_height_px() -> f32 {
     crate::theme::TypoRole::HomeDesc.line_height_px()
 }
@@ -634,7 +639,7 @@ pub fn recent_row_text_tracking_em() -> f32 {
     crate::theme::TypoRole::HomeDesc.letter_spacing_em()
 }
 
-/// Recent row text numeric weight (regular 400).
+/// Recent row text numeric weight (regular 400, desc role se).
 pub fn recent_row_text_weight_value() -> u16 {
     crate::theme::TypoRole::HomeDesc.weight_value()
 }
@@ -650,9 +655,11 @@ pub const fn recent_row_title_role() -> crate::theme::TypoRole {
 }
 
 /// Row meta/timestamp role: secondary line (small weak proportional).
-/// Single-line legacy row text ke barabar, taaki purana paint na jhoothe.
+/// Adopts the [`crate::theme::TypoRole::caption`] alias (== HomeDesc, paint-identical:
+/// dono Small style 11 weak). Single-line legacy row text ke barabar, taaki purana
+/// paint na jhoothe. Numbers HomeDesc par rehte hain (value-stable).
 pub const fn recent_row_meta_role() -> crate::theme::TypoRole {
-    crate::theme::TypoRole::HomeDesc
+    crate::theme::TypoRole::caption()
 }
 
 /// Row title size px (single source: body role).
@@ -1072,7 +1079,10 @@ mod tests {
     #[test]
     fn recent_row_typo_reuses_desc_role() {
         use crate::theme::TypoRole;
-        assert_eq!(super::recent_row_text_role(), TypoRole::HomeDesc);
+        // caption() == Small; HomeDesc se variant alag par paint-identical
+        // (Small.rich == HomeDesc.rich, dono 11 weak proportional).
+        assert_eq!(super::recent_row_text_role(), TypoRole::caption());
+        assert_eq!(super::recent_row_text_size(), TypoRole::caption().size());
         assert_eq!(super::recent_row_text_size(), TypoRole::HomeDesc.size());
         assert_eq!(
             super::recent_row_text_line_height_px(),
@@ -1184,7 +1194,8 @@ mod tests {
     fn homerecent_title_meta_typo_reuses_roles() {
         use crate::theme::TypoRole;
         assert_eq!(super::recent_row_title_role(), TypoRole::HomeButton);
-        assert_eq!(super::recent_row_meta_role(), TypoRole::HomeDesc);
+        // caption() == Small; HomeDesc se variant alag par paint-identical.
+        assert_eq!(super::recent_row_meta_role(), TypoRole::caption());
         assert_eq!(super::recent_row_title_size(), TypoRole::HomeButton.size());
         assert_eq!(
             super::recent_row_title_line_height_px(),
@@ -1227,6 +1238,20 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn homegeo_card_hit_target_beats_cramped_button() {
+        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP, TypoRole};
+        // G-C1: card/pad/gap/hit-row consts theme tokens se single-source
+        // (values wahi: pad/grid/section 8, inner/path-gap 4, hit-row 28).
+        assert_eq!(super::HOME_CARD_PAD, GEO_SECTION_GAP);
+        assert_eq!(super::HOME_GRID_GAP, GEO_SECTION_GAP);
+        assert_eq!(super::HOME_CARD_INNER_GAP, GEO_TIGHT_GAP);
+        assert_eq!(super::HOME_PATH_ROW_GAP, GEO_TIGHT_GAP);
+        assert_eq!(super::HOME_CARD_BUTTON_MIN_H, CHROME_HEADER_BAR_H);
+        assert_eq!(super::HOME_PATH_ROW_H, CHROME_HEADER_BAR_H);
+        assert_eq!(super::HOME_CARD_TITLE_SIZE, TypoRole::HomeTitle.size());
+        assert_eq!(
+            super::HOME_CARD_BUTTON_BODY_SIZE,
+            TypoRole::HomeButton.size()
+        );
         assert_eq!(super::HOME_CARD_BUTTON_MIN_H, 28.0);
         assert_eq!(super::HOME_GRID_GAP, 8.0);
         assert_eq!(super::HOME_CARD_BUTTON_MIN_W, 120.0);
@@ -1265,11 +1290,13 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn homegeo_home_hides_picker_and_keeps_section_rhythm() {
+        use crate::theme::GEO_SECTION_GAP;
         assert!(!super::HOME_SHOWS_PATH_PICKER);
         assert_eq!(super::home_saved_chrome_height(), 32.0);
         assert_eq!(super::home_content_top_offset(false), 0.0);
         assert_eq!(super::home_content_top_offset(true), 32.0);
         assert_eq!(super::HOME_SECTION_GAP, 8.0);
+        assert_eq!(super::HOME_SECTION_GAP, GEO_SECTION_GAP);
         assert!((super::home_recent_section_top(200.0) - 208.0).abs() < 0.001);
         assert!(super::home_recent_section_top(f32::NAN).is_nan());
     }

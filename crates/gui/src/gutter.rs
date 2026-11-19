@@ -18,29 +18,33 @@
 use crate::viewmodel::{TextRow, TextRowKind};
 
 /// Overview-ruler track width with line numbers: one LG step.
+/// Reuses [`crate::theme::SPACE_LG`] so the ruler never drifts off scale.
 ///
 /// Layout budget (960px canvas): 12 margin + 460 pane + 4 gap + 460
 /// pane + 16 ruler + 8 margin = 960. The ruler absorbs the old 4px
 /// inter-chrome gap plus 2px of right margin, so panes keep 460px.
-pub const GUTTER_RULER_WIDE: f32 = 16.0;
+pub const GUTTER_RULER_WIDE: f32 = crate::theme::SPACE_LG;
 
 /// Overview-ruler track width without line numbers: one SM step.
+/// Reuses [`crate::theme::SPACE_SM`].
 ///
 /// Same budget as [`GUTTER_RULER_WIDE`]: +2px over the legacy 6px bar,
 /// absorbed by the right margin. Narrow stays under wide.
-pub const GUTTER_RULER_NARROW: f32 = 8.0;
+pub const GUTTER_RULER_NARROW: f32 = crate::theme::SPACE_SM;
 
 /// Minimum overview-ruler segment height: one XS step.
+/// Reuses [`crate::theme::SPACE_XS`].
 ///
 /// Single-row hunks in tall files used to collapse to 2px dots with no
 /// click target; 4px keeps every hunk visible and pointer-hittable.
 /// Consecutive diff rows still fuse via the merge gap below.
-pub const GUTTER_SEGMENT_MIN_H: f32 = 4.0;
+pub const GUTTER_SEGMENT_MIN_H: f32 = crate::theme::SPACE_XS;
 
 /// Hit-test slop: each segment grows by this many px per side so
 /// adjacent 4px bands stay separately clickable with an ~8px target.
-/// Geometry only; colors untouched.
-pub const GUTTER_HIT_SLOP: f32 = 2.0;
+/// Reuses [`crate::theme::GUTTER_MERGE_GAP`] (same 2px beat as segment
+/// fusion). Geometry only; colors untouched.
+pub const GUTTER_HIT_SLOP: f32 = crate::theme::GUTTER_MERGE_GAP;
 
 /// A vertical span in the thumbnail gutter representing a difference hunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -143,30 +147,31 @@ pub fn gutter_ruler_width(show_line_numbers: bool) -> f32 {
 }
 
 /// Ruler width scaled from the mono font size. Calibrated so
-/// [`crate::theme::TYPO_MONO_SIZE`] (12.0) reproduces
+/// [`crate::theme::TypoRole::content_grid`] (12.0) reproduces
 /// [`gutter_ruler_width`]; other sizes scale linearly. Non-finite or
 /// non-positive sizes fall back to the unscaled width so paint never
 /// feeds NaN into layout. Pure; unit-tested.
 pub fn gutter_ruler_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
-    use crate::theme::TYPO_MONO_SIZE;
+    let grid_size = crate::theme::TypoRole::content_grid().size();
     let base = gutter_ruler_width(show_line_numbers);
-    if font_size.is_finite() && font_size > 0.0 && TYPO_MONO_SIZE > 0.0 {
-        base * (font_size / TYPO_MONO_SIZE)
+    if font_size.is_finite() && font_size > 0.0 && grid_size > 0.0 {
+        base * (font_size / grid_size)
     } else {
         base
     }
 }
-/// Gutter text role: regular monospace so gutter-adjacent chrome reads
-/// in the same family as pane rows. Typography only; bar widths stay
+/// Gutter text role: grid content (fixed mono 12) so gutter-adjacent chrome reads
+/// in the same family as pane rows. Adopts the [`crate::theme::TypoRole::content_grid`]
+/// alias (== Mono, value-stable). Typography only; bar widths stay
 /// in [`gutter_bar_width`]/[`gutter_bar_width_for_font`], ruler widths
 /// in [`gutter_ruler_width`]/[`gutter_ruler_width_for_font`].
 pub const fn gutter_text_role() -> crate::theme::TypoRole {
-    crate::theme::TypoRole::Mono
+    crate::theme::TypoRole::content_grid()
 }
 
-/// Gutter text size: the shared mono token via role (single source).
+/// Gutter text size: the shared grid token via alias (single source, 12.0).
 pub const fn gutter_text_size() -> f32 {
-    crate::theme::TypoRole::Mono.size()
+    crate::theme::TypoRole::content_grid().size()
 }
 
 /// Gutter line-height source: the shared measured mono row height.
@@ -175,15 +180,15 @@ pub const fn gutter_line_height_source() -> &'static str {
 }
 
 /// Gutter width scaled from the mono font size. Calibrated so
-/// [`crate::theme::TYPO_MONO_SIZE`] (12.0) reproduces
+/// [`crate::theme::TypoRole::content_grid`] (12.0) reproduces
 /// [`gutter_bar_width`]; other sizes scale linearly. Non-finite or
 /// non-positive sizes fall back to the unscaled width so paint never
 /// feeds NaN into layout. Pure; unit-tested.
 pub fn gutter_bar_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
-    use crate::theme::TYPO_MONO_SIZE;
+    let grid_size = crate::theme::TypoRole::content_grid().size();
     let base = gutter_bar_width(show_line_numbers);
-    if font_size.is_finite() && font_size > 0.0 && TYPO_MONO_SIZE > 0.0 {
-        base * (font_size / TYPO_MONO_SIZE)
+    if font_size.is_finite() && font_size > 0.0 && grid_size > 0.0 {
+        base * (font_size / grid_size)
     } else {
         base
     }
@@ -400,9 +405,11 @@ mod tests {
     #[test]
     fn gutter_text_typo_follows_mono_tokens() {
         use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TypoRole};
+        assert_eq!(gutter_text_role(), TypoRole::content_grid());
         assert_eq!(gutter_text_role(), TypoRole::Mono);
         assert!(gutter_text_role().is_mono());
         assert!(!gutter_text_role().is_strong());
+        assert_eq!(gutter_text_size(), TypoRole::content_grid().size());
         assert_eq!(gutter_text_size(), TYPO_MONO_SIZE);
         assert_eq!(gutter_text_size(), 12.0);
         assert_eq!(gutter_line_height_source(), TYPO_LINE_HEIGHT_SOURCE);
@@ -540,13 +547,14 @@ mod tests {
 
     #[test]
     fn ruler_tokens_match_spacing_scale() {
-        use crate::theme::{SPACE_LG, SPACE_SM, SPACE_XS};
+        use crate::theme::{GUTTER_MERGE_GAP, SPACE_LG, SPACE_SM, SPACE_XS};
         assert_eq!(GUTTER_RULER_WIDE, SPACE_LG);
         assert_eq!(GUTTER_RULER_WIDE, 16.0);
         assert_eq!(GUTTER_RULER_NARROW, SPACE_SM);
         assert_eq!(GUTTER_RULER_NARROW, 8.0);
         assert_eq!(GUTTER_SEGMENT_MIN_H, SPACE_XS);
         assert_eq!(GUTTER_SEGMENT_MIN_H, 4.0);
+        assert_eq!(GUTTER_HIT_SLOP, GUTTER_MERGE_GAP);
         assert_eq!(GUTTER_HIT_SLOP, 2.0);
         // Ladder: narrow bar < narrow ruler < wide bar < wide ruler,
         // segments above the old 2px dot floor.
