@@ -324,3 +324,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 10 color still analyzing pcomp reading
 - COLOR 02:58 no diff, PCOMP 00:12 reading. Both live, tree clean.
+
+## Wave G poll 11 color long-analysis pcomp table tests
+- COLOR 03:14 no diff (lints re-read), PCOMP 00:28 table tests reading. Both live.
