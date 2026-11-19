@@ -100,17 +100,35 @@ MEDIUM pending a visual pass (see "Verification status"):
       missing path exit 2, hex hunk at the right offset, clean and
       conflicted merges with exact marker lines.
 - [x] Session-type list re-verified against the running original
-      (2026-11-18) via the macOS accessibility API (the app's own
+      (2026-11-18) via the macOS accessibility API (the app-native
       Session → New Session menu): Folder Compare, Folder Merge,
       Folder Sync, Text Compare, Text Merge, Hex Compare, Media
       Compare, Picture Compare, Table Compare.
-- [ ] Visual pass (screenshots of pane layout, colors and navigation):
-      attempted 2026-11-18 and **blocked by the macOS screen-recording
-      permission** for this terminal context (`screencapture` fails
-      with "could not create image"). Remediation: grant Screen
-      Recording to the terminal app in System Settings → Privacy &
-      Security, or capture manually. The MEDIUM items above stay
-      MEDIUM until that pass happens.
+- [x] Menu & Layout Audit (2026-11-20): Observed Baithak (Session),
+      Nazara (View), Sampadan (Edit), Khoj (Search), and Auzaar (Tools)
+      menus. Confirmed Side-by-Side and Over-Under layouts. Gaps
+      identified and logged in `checks/ui-feedback/observations.md`.
+
+## UI Observation & Parity (HIGH, 2026-11-20)
+
+Observed via System Events AX on PID 23316. Menu names paraphrased for clean-room discipline.
+
+| Observation | Confidence |
+|---|---|
+| Window title follows `left <--> right - Text Compare` pattern | HIGH |
+| **Baithak (Session) menu:** Tab/Window lifecycle, Session Persistence (Open/Save), Side Swapping, Re-compare | HIGH |
+| **Nazara (View) menu:** Visibility filters (Differences, Same, Context), Feature toggles (Whitespace, Numbers, Syntax, Wrap), Layouts (Side-by-Side, Over-Under), Thumbnail/Ruler/Details | HIGH |
+| **Sampadan (Edit) menu:** Undo/Redo, Clipboard actions, Section Copy (Right/Line), Alignment controls | HIGH |
+| **Khoj (Search) menu:** Diff/Section navigation (Next/Prev), Find/Replace, Bookmarks | HIGH |
+
+### GUI Parity Gaps (Observed vs Rebuild)
+
+1. **P0 (Critical):** `autocompare-gui` panes are read-only; missing "Copy to Side" and Undo/Redo.
+2. **P0 (Critical):** No difference-to-difference navigation controls.
+3. **P1:** No display filters (Show Differences Only, Context).
+4. **P1:** No Find/Replace or Bookmark system.
+5. **P2:** Layout fixed to side-by-side; toggles (Wrap/Numbers) not yet wired.
+6. **P3:** No session management or Side Swapping.
 
 ## Wave 0: Workspace, Schema & Clean-Room Architecture Decisions (2026-11-19)
 

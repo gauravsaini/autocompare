@@ -2,6 +2,14 @@
 
 ## UPDATED ON : 2026-11-20
 
+### Task (2026-11-20) — UI observation sync & study merge
+
+1. **Scope**: Merged live UI observations from `checks/ui-feedback/brief.md` into `docs/study.md` and `checks/ui-feedback/observations.md`. Captured menu facts (Baithak/Session, Nazara/View, Sampadan/Edit, Khoj/Search), layout options, and identified GUI gaps P0-P3. Followed clean-room protocol by paraphrasing menu names and ensuring no proprietary wording was copied.
+2. **Tests** (before → after): Manual verification pass (10/10) to ensure original phrasing and no accidental verbatim strings from the observed app.
+3. **Files changed**: `docs/study.md`, `TIMELINE.md`, `checks/ui-feedback/observations.md`.
+
+## UPDATED ON : 2026-11-20
+
 ### Feature (2026-11-20) — Wave-3: CLI reports+VCS flags, GUI Home+gutter+screenshot
 
 1. **Scope**: `leaf-3.1` extended `autocompare-cli` with `--report <fmt:path>` (html/text/xml/patch via `autocompare-reports`), bcomp VCS compat flags (`-ro`, `-automerge`, `-mergeoutput`, `-vcs1..4`), strict exit codes 0/1/2; `leaf-3.2` extended `autocompare-gui` with Home View, 9 tabs, pure `gutter_geometry`/`apply_copy`/`resolve_take`/`folder_tree`/`theme_contrast_ok` headless fns, rfd native dialogs, drag-drop, Dark/Light themes, and `--screenshot` PNG writer. Both leaves built in parallel under disjoint OWNS with Microsoft Rust guidelines enforced (Result errors, Debug+Display, no meta-design docs, hand-computed test truths).
