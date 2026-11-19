@@ -55,3 +55,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Git state confirmed sane: 1d2ae61 touches only checks/local-run/run-proof.md (+153, inside agent OWNS) — pushed.
 - Folder agent: 84 tests green (baseline was 57, +27 new). Land approaching.
 - Text agent writing viewmodel tests; shell agent in screenshot code.
+
+## Poll 08
+- Shared-crate breakage: all 3 edit autocompare-gui, mid-edit states break cargo for everyone (folder 21 errors, shell 11 + TextViewState never-constructed in viewmodel). Both agents correctly diagnosing own-vs-other errors, no interrupt.
+- Threshold: if still red after 2 more polls, orchestrator pauses 2 agents and lands them one by one (text -> folder -> shell).
