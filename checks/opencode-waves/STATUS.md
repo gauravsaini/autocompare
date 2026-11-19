@@ -1319,3 +1319,14 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BK-SYNCWIRE `sess-syncwire-bk`: OWNS app.rs+checks/gui-syncwire-bk (BI-S1 Folder tab paint_folder_sync rewiring: mode + selection + expanded + pager; views.rs NO-TOUCH).
 - BK-MERGEMULTI `sess-mergemulti-bk`: OWNS views.rs+checks/gui-mergemulti-bk (BI-M2 paint_three_way_tree: rows + per-conflict Take + summary header; tree three_way_* reuse; app.rs wiring NOT this wave).
 - Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave BK complete (2 parallel: syncwire app-only + three-way tree paint)
+- SYNCWIRE `9edae77` Folder-tab paint_folder_sync wiring (badges live) — OWNS app.rs only.
+- MERGEMULTI `9f3eb4c` paint_three_way_tree + per-conflict Take + summary header — OWNS views.rs.
+- Verify combined: 601 green, clippy 0, fmt clean, banned 0, colors 0 new, PNG magic-ok x4. Tree clean.
+- Pushed. Next: Wave BL (sync mode+gate S2/S3 + three-way fixture; then FolderMerge tab wiring).
+
+## 2026-11-20 — Wave BL plan (2 parallel: sync mode+gate + three-way fixture)
+- BL-SYNC `sess-sync-bl`: OWNS views.rs+app.rs+checks/gui-sync-bl (BI-S2 mode radio wiring + BI-S3 consent-gate unify can_apply_now; sequential same owner).
+- BL-MERGEFIX3 `sess-mergefix3-bl`: OWNS screenshot.rs+checks/gui-mergefix3-bl (three-way tree fixture scene + dispatcher route per mergemulti REPORT §4 spec; paint files NO-TOUCH).
+- Agents commit locally, NO PUSH (push MANA hai). Orchestrator verifies then pushes.
