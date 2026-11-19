@@ -918,3 +918,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Staged-index discipline dono ne nibhayi; koi cross-contamination nahi.
 - Verify combined: 289 green, clippy zero, fmt clean, banned 0, PNG 9624B magic-ok.
 - Pushed. Next: Wave AB (minimap-click, find-paint, 3-pane paint, intra-spans next steps).
+
+## 2026-11-20 — Wave AB plan (2 parallel: minimap-click + dual-tree-app)
+- AB-MINI `sess-mini-ab`: OWNS views.rs+gutter.rs+checks/gui-mini-ab (Gap #5 minimap click-to-jump).
+- AB-DUALAPP `sess-dualapp-ab`: OWNS app.rs+checks/gui-dualapp-ab (Gap #19 step 2: dual-tree App wiring).
+- Agents commit locally, NO push, fmt sirf OWNS files par. Orchestrator verifies then pushes.
