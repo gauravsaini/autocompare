@@ -212,3 +212,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BIN DONE terminal (PID gone, commit d1b6a41 pushed with early PNG 9914B + report, OWNS respected, no source edits). Verified PNG magic ok 960x600.
 - Combined: tests 110 green, clippy down 9->4->1 (only text_row_height unused left), fmt clean. GEO wiring FOOTER_GAP done, TYPO gutter+home helpers + tests landed.
 - GEO+TYPO still live PIDs 17032/17049, disjoint OWNS, no colors touch. GEO to wire text_row_height next.
+
+## Wave E poll 05 GREEN
+- Combined tree GREEN: tests 111, clippy -D warnings clean (1 left fixed), fmt clean, harness gui-geo RESULT PASS (PNG 9914B, spaces 4-value set shrunk to 2 values, mono x19).
+- GEO: app.rs central inner_margin OUTER_MARGIN + single toolbar row + gaps tokens, views.rs 75 lines tokens wiring. TYPO: theme 138 + gutter 37 + home 47 + viewmodel 7 typography scale. OWNS respected, colors untouched (scan only pre-existing consts).
+- Agents still live 17032/17049 to commit NO push, orchestrator to verify commits then push + binary refresh.
