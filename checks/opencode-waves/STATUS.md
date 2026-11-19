@@ -309,3 +309,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## Wave G poll 05 sess report staged
 - SESS REPORT.md 7714B written + staged, source edits next. COLOR contrast analysis done, edits pending. Both live.
+
+## Wave G poll 06 SESS report-only done
+- 745f7db report only (no source), 46 tests baseline green across 4 crates. Gap implementation still open, next wave to build persistence+reports. COLOR live 01:35 no diff yet.
