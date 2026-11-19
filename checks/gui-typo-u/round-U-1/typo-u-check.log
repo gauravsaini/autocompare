@@ -1,0 +1,23 @@
+   Compiling autocompare-gui v0.5.0 (/Users/ektasaini/autocompare/crates/gui)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.40s
+# Typo-U report (round-U-1)
+- TYPO_UI_SANS_STACK: ok
+- TYPO_MONO_STACK: ok
+- W400/500/600: ok
+- LH 1.2/1.45/1.35: ok
+- TRACKING_EM: ok
+- font_stack: ok
+- weight_value: ok
+- line_height: ok
+- line_height_px: ok
+- letter_spacing_em: ok
+- is_tabular: ok
+- exq_test: ok
+- zoom_clamp_test: ok
+- paint-neutral rich() 0.0 tracking x2: ok
+- frozen removals: 0 ok
+- banned in non-test code: 0 ok
+- cargo test: 233 passed, 0 failed (expect >=233/0)
+- PNG: 9914 bytes, magic ok, distinct 256 (ok), bit-identical to zoom-r baseline: yes
+
+RESULT: PASS

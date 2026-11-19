@@ -23,6 +23,14 @@
 //! `views.rs`; there is no per-role override
 //! ([`TYPO_LINE_HEIGHT_SOURCE`]).
 //!
+//! Exquisite intent (headless, paint-neutral this wave):
+//! [`TypoRole::font_stack`] (UI sans vs mono stack),
+//! [`TypoRole::weight_value`] (400 regular / 500 medium / 600 semibold),
+//! [`TypoRole::line_height`] (chrome 1.2 / body 1.45 / mono 1.35),
+//! [`TypoRole::letter_spacing_em`] (headers 0.02em, rest 0.0) and
+//! [`TypoRole::is_tabular`] (gutter/hex/counts) record the target
+//! hierarchy; paint adopts them in a later wave.
+//!
 //! Pane hierarchy: app header -> Heading; Home cards ->
 //! HomeTitle/HomeDesc/HomeButton; diff panes, summaries, status lines
 //! -> Mono; hints, subtitles, counts -> Small; plain labels, buttons
@@ -68,6 +76,32 @@ pub const TYPO_LETTER_SPACING: f32 = 0.0;
 /// Line-height source: always the measured monospace row height.
 /// Every [`TypoRole`] paints with this; no per-role override.
 pub const TYPO_LINE_HEIGHT_SOURCE: &str = "ui.text_style_height(Monospace)";
+
+// ----------------------------------------------------------------------------
+// Exquisite type tokens (headless intent, paint-neutral this wave).
+// Paint still uses `rich()` / `rich_zoomed()` unchanged (0.0 tracking,
+// shared measured mono row height) so PNG stays bit-identical; the
+// tokens below record the intended hierarchy for a future paint pass.
+// ----------------------------------------------------------------------------
+
+/// UI sans stack for body/small/chrome roles (system sans first).
+pub const TYPO_UI_SANS_STACK: &str = "system-ui, sans-serif";
+/// Monospace stack for hex/text-cells/table-cells/gutter (system mono first).
+pub const TYPO_MONO_STACK: &str = "ui-monospace, monospace";
+/// Regular body weight (400).
+pub const TYPO_WEIGHT_REGULAR: u16 = 400;
+/// Medium headers/chrome weight (500).
+pub const TYPO_WEIGHT_MEDIUM: u16 = 500;
+/// Semibold badge/counts weight, used sparingly (600).
+pub const TYPO_WEIGHT_SEMIBOLD: u16 = 600;
+/// Compact chrome line-height multiplier (~1.2).
+pub const TYPO_LINE_HEIGHT_CHROME: f32 = 1.2;
+/// Reading body line-height multiplier (~1.45).
+pub const TYPO_LINE_HEIGHT_BODY: f32 = 1.45;
+/// Dense mono line-height multiplier (~1.35).
+pub const TYPO_LINE_HEIGHT_MONO: f32 = 1.35;
+/// Slight header tracking as em ratio (0.02em; egui has no tracking).
+pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 
 // ----------------------------------------------------------------------------
 // Font zoom model (headless): step table over TypoRole sizes.
@@ -246,6 +280,63 @@ impl TypoRole {
             Self::Mono => "monospace",
             _ => "proportional",
         }
+    }
+
+    /// Font stack for this role: UI sans for body/small/chrome,
+    /// monospace stack for hex/text-cells/table-cells/gutter
+    /// (which all paint as [`TypoRole::Mono`]). Headless intent;
+    /// egui resolves the family via [`TypoRole::text_style`].
+    pub const fn font_stack(self) -> &'static str {
+        match self {
+            Self::Mono => TYPO_MONO_STACK,
+            _ => TYPO_UI_SANS_STACK,
+        }
+    }
+
+    /// Numeric weight for this role: regular body, medium
+    /// headers/chrome, semibold badge+counts sparingly (only
+    /// [`TypoRole::Small`]). [`TypoRole::weight`] keeps the egui
+    /// strong/weak spelling so paint stays unchanged.
+    pub const fn weight_value(self) -> u16 {
+        match self {
+            Self::Heading | Self::HomeTitle | Self::HomeButton => TYPO_WEIGHT_MEDIUM,
+            Self::Small => TYPO_WEIGHT_SEMIBOLD,
+            Self::Body | Self::Mono | Self::HomeDesc => TYPO_WEIGHT_REGULAR,
+        }
+    }
+
+    /// Line-height multiplier for this role: chrome ~1.2, body ~1.45,
+    /// mono ~1.35. Paint still measures the shared mono row height
+    /// ([`TYPO_LINE_HEIGHT_SOURCE`]); this is headless intent.
+    pub const fn line_height(self) -> f32 {
+        match self {
+            Self::Heading | Self::HomeTitle | Self::HomeButton | Self::Small => {
+                TYPO_LINE_HEIGHT_CHROME
+            }
+            Self::Mono => TYPO_LINE_HEIGHT_MONO,
+            Self::Body | Self::HomeDesc => TYPO_LINE_HEIGHT_BODY,
+        }
+    }
+
+    /// Line-height in px for this role: size * multiplier.
+    pub const fn line_height_px(self) -> f32 {
+        self.size() * self.line_height()
+    }
+
+    /// Letter-tracking as em ratio: slight for headers, zero elsewhere.
+    /// Headless intent (egui `extra_letter_spacing` stays 0.0 in paint).
+    pub const fn letter_spacing_em(self) -> f32 {
+        match self {
+            Self::Heading | Self::HomeTitle => TYPO_TRACKING_HEADING_EM,
+            _ => 0.0,
+        }
+    }
+
+    /// Whether this role uses tabular numerals: gutter/hex/counts.
+    /// Mono covers gutter/hex/text-cells/table-cells, Small covers counts.
+    /// Headless intent (egui has no tabular toggle).
+    pub const fn is_tabular(self) -> bool {
+        matches!(self, Self::Mono | Self::Small)
     }
 
     /// egui text style carrying this role's family. Explicit
@@ -756,5 +847,89 @@ mod tests {
         assert!(debug(TypoRole::Heading, 1).contains("strong: true"));
         assert!(debug(TypoRole::HomeDesc, -1).contains("weak: true"));
         assert!(debug(TypoRole::Mono, 0).contains("strong: false"));
+    }
+
+    #[test]
+    fn typo_exquisite_tokens_carry_hierarchy() {
+        // Stacks: UI sans everywhere except mono cells.
+        assert_eq!(TypoRole::Mono.font_stack(), TYPO_MONO_STACK);
+        assert_eq!(TypoRole::Body.font_stack(), TYPO_UI_SANS_STACK);
+        assert_eq!(TypoRole::Small.font_stack(), TYPO_UI_SANS_STACK);
+        assert_eq!(TypoRole::Heading.font_stack(), TYPO_UI_SANS_STACK);
+        assert_eq!(TypoRole::HomeTitle.font_stack(), TYPO_UI_SANS_STACK);
+        assert_eq!(TypoRole::HomeButton.font_stack(), TYPO_UI_SANS_STACK);
+        assert_eq!(TypoRole::HomeDesc.font_stack(), TYPO_UI_SANS_STACK);
+        // Weights: regular body, medium headers/chrome, semibold counts only.
+        assert_eq!(TYPO_WEIGHT_REGULAR, 400);
+        assert_eq!(TYPO_WEIGHT_MEDIUM, 500);
+        assert_eq!(TYPO_WEIGHT_SEMIBOLD, 600);
+        assert_eq!(TypoRole::Body.weight_value(), TYPO_WEIGHT_REGULAR);
+        assert_eq!(TypoRole::Mono.weight_value(), TYPO_WEIGHT_REGULAR);
+        assert_eq!(TypoRole::HomeDesc.weight_value(), TYPO_WEIGHT_REGULAR);
+        assert_eq!(TypoRole::Heading.weight_value(), TYPO_WEIGHT_MEDIUM);
+        assert_eq!(TypoRole::HomeTitle.weight_value(), TYPO_WEIGHT_MEDIUM);
+        assert_eq!(TypoRole::HomeButton.weight_value(), TYPO_WEIGHT_MEDIUM);
+        assert_eq!(TypoRole::Small.weight_value(), TYPO_WEIGHT_SEMIBOLD);
+        // Line-height multipliers per role family.
+        assert_eq!(TypoRole::Heading.line_height(), TYPO_LINE_HEIGHT_CHROME);
+        assert_eq!(TypoRole::HomeTitle.line_height(), TYPO_LINE_HEIGHT_CHROME);
+        assert_eq!(TypoRole::HomeButton.line_height(), TYPO_LINE_HEIGHT_CHROME);
+        assert_eq!(TypoRole::Small.line_height(), TYPO_LINE_HEIGHT_CHROME);
+        assert_eq!(TypoRole::Mono.line_height(), TYPO_LINE_HEIGHT_MONO);
+        assert_eq!(TypoRole::Body.line_height(), TYPO_LINE_HEIGHT_BODY);
+        assert_eq!(TypoRole::HomeDesc.line_height(), TYPO_LINE_HEIGHT_BODY);
+        assert!((TYPO_LINE_HEIGHT_CHROME - 1.2).abs() < 0.001);
+        assert!((TYPO_LINE_HEIGHT_BODY - 1.45).abs() < 0.001);
+        assert!((TYPO_LINE_HEIGHT_MONO - 1.35).abs() < 0.001);
+        // px height follows size * multiplier.
+        assert!((TypoRole::Body.line_height_px() - 13.0 * 1.45).abs() < 0.01);
+        assert!((TypoRole::Mono.line_height_px() - 12.0 * 1.35).abs() < 0.01);
+        assert!((TypoRole::Heading.line_height_px() - 18.0 * 1.2).abs() < 0.01);
+        // Tracking: headers slight, rest zero; paint stays 0.0 no-op.
+        assert_eq!(TYPO_LETTER_SPACING, 0.0);
+        assert!((TYPO_TRACKING_HEADING_EM - 0.02).abs() < 0.0001);
+        assert_eq!(TypoRole::Heading.letter_spacing_em(), 0.02);
+        assert_eq!(TypoRole::HomeTitle.letter_spacing_em(), 0.02);
+        assert_eq!(TypoRole::Body.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Mono.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Small.letter_spacing_em(), 0.0);
+        // Tabular: gutter/hex/counts only (Mono + Small).
+        assert!(TypoRole::Mono.is_tabular());
+        assert!(TypoRole::Small.is_tabular());
+        assert!(!TypoRole::Body.is_tabular());
+        assert!(!TypoRole::Heading.is_tabular());
+        assert!(!TypoRole::HomeTitle.is_tabular());
+    }
+
+    #[test]
+    fn typo_exquisite_zoom_clamps_every_role() {
+        let roles = [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ];
+        for role in roles {
+            // Level 0 is the base passthrough.
+            assert_eq!(zoomed_size(role, 0), role.size());
+            // Full step table stays inside MIN..MAX.
+            for level in ZOOM_LEVELS {
+                let sized = zoomed_size(role, level);
+                assert!(sized >= ZOOM_MIN_SIZE);
+                assert!(sized <= ZOOM_MAX_SIZE);
+            }
+            // Extreme input clamps to the edge, then to MIN..MAX.
+            assert_eq!(zoomed_size(role, 100), zoomed_size(role, ZOOM_MAX_LEVEL));
+            assert_eq!(zoomed_size(role, -100), zoomed_size(role, ZOOM_MIN_LEVEL));
+            assert!(zoomed_size(role, 100) <= ZOOM_MAX_SIZE);
+            assert!(zoomed_size(role, -100) >= ZOOM_MIN_SIZE);
+            assert_eq!(
+                role.zoomed_point_size(100),
+                role.zoomed_point_size(ZOOM_MAX_LEVEL)
+            );
+        }
     }
 }
