@@ -1122,3 +1122,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AS-HEXGUTTER `sess-hexgutter-as`: OWNS views_hex.rs+gutter.rs+checks/gui-hexgutter-as (hex gutter click-jump).
 - AS-TABLEKEY `sess-tablekey-as`: OWNS views_table.rs+checks/gui-tablekey-as (key-col UX).
 - Agents commit locally, NO push. Orchestrator verifies then pushes.
+
+## 2026-11-20 — Wave AS complete (2 parallel: hex gutter parity + table key-col UX)
+- HEXGUTTER `eb5461b` hex gutter parity + offsets + click-to-jump — OWNS views_hex.rs (gutter.rs untouched).
+- TABLEKEY `aaba56b` key-column affordance + positional-note clarity — OWNS views_table.rs.
+- Verify combined: 481 green, clippy 0, fmt clean, banned 0, PNG magic-ok x2.
+- Pushed. Next: Wave AT (text find highlight polish, folder filter UX, picture zoom parity).
