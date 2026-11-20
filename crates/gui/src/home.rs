@@ -2496,6 +2496,228 @@ pub fn chrome3_hierarchy_ok() -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Wave CHROME4 exquisite: card grid gaps + symmetric button hit-slop at 960px.
+// BC pattern, outside observation only: canonical 960px wide window
+// with 3 columns evenly flexed across 936px available width (8px gaps,
+// 306.67px cards). Button hit-slop symmetric via SPACE_XS (4.0) giving
+// 104x32 hit target on 96x24 buttons.
+// Geometry first: SECTION_GAP (8.0, SPACE_SM parity) for card grid gaps,
+// SPACE_XS (4.0) for symmetric button hit-slop, SPACE_MD (12.0) for side
+// margins, SPACE_XL (24.0) for button height. Header height 21.6 from
+// TypoRole Heading line-height, status height 21.2.
+// Typography second: Heading/Body/Small reuse, koi naya size nahi.
+// Colors frozen: zero Color32/Visuals.
+// Edge fixture: `checks/gui-exq-chrome4/round-1/comparison/chrome-wide-960.json`
+// ----------------------------------------------------------------------------
+
+/// Chrome4 header bar height px: TypoRole Heading chrome line-height
+/// (`18.0 * 1.2 = 21.6`) single-source. Purane 28 hit-row se compact.
+pub const CHROME4_HEADER_H: f32 = CHROME3_HEADER_H;
+
+/// Chrome4 status bar height px: Small line-height (13.2) + 2 * SPACE_XS (8.0) = 21.2.
+pub const CHROME4_STATUS_H: f32 = CHROME3_STATUS_H;
+
+/// Chrome4 card grid gap px: SECTION_GAP / SPACE_SM (8.0 parity).
+pub const CHROME4_CARD_GRID_GAP: f32 = crate::theme::SPACE_SM;
+
+/// Chrome4 content outer margin px: SPACE_MD (12.0 parity).
+pub const CHROME4_CONTENT_MARGIN_X: f32 = crate::theme::SPACE_MD;
+
+/// Chrome4 button hit-slop px: SPACE_XS (4.0 parity).
+pub const CHROME4_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+
+/// Chrome4 toolbar button uniform width px: 96.0.
+pub const CHROME4_TOOLBAR_BUTTON_W: f32 = CHROME3_TOOLBAR_BUTTON_W;
+
+/// Chrome4 toolbar button height px: SPACE_XL (24.0).
+pub const CHROME4_TOOLBAR_BUTTON_H: f32 = CHROME3_TOOLBAR_BUTTON_H;
+
+/// Chrome4 toolbar item gap px: SPACE_XS (4.0).
+pub const CHROME4_TOOLBAR_ITEM_GAP: f32 = CHROME3_TOOLBAR_ITEM_GAP;
+
+/// Chrome4 toolbar group gap px: SPACE_SM (8.0).
+pub const CHROME4_TOOLBAR_GROUP_GAP: f32 = CHROME3_TOOLBAR_GROUP_GAP;
+
+/// Chrome4 toolbar inter-button gap px: SPACE_XS (4.0).
+pub const CHROME4_TOOLBAR_GAP: f32 = CHROME3_TOOLBAR_GAP;
+
+/// Chrome4 button padded width px: button width + 2 * hit-slop (96 + 2 * 4 = 104.0).
+pub const CHROME4_BUTTON_PADDED_W: f32 = CHROME4_TOOLBAR_BUTTON_W + 2.0 * CHROME4_BUTTON_HIT_SLOP;
+
+/// Chrome4 button padded height px: button height + 2 * hit-slop (24 + 2 * 4 = 32.0).
+pub const CHROME4_BUTTON_PADDED_H: f32 = CHROME4_TOOLBAR_BUTTON_H + 2.0 * CHROME4_BUTTON_HIT_SLOP;
+
+/// Chrome4 header height px (single source: [`CHROME4_HEADER_H`]).
+/// Pure; headless-tested.
+pub fn chrome4_header_height() -> f32 {
+    CHROME4_HEADER_H
+}
+
+/// Chrome4 status height px (single source: [`CHROME4_STATUS_H`]).
+/// Pure; headless-tested.
+pub fn chrome4_status_height() -> f32 {
+    CHROME4_STATUS_H
+}
+
+/// Chrome4 card grid gap px (single source: [`CHROME4_CARD_GRID_GAP`]).
+/// Pure; headless-tested.
+pub fn chrome4_card_grid_gap() -> f32 {
+    CHROME4_CARD_GRID_GAP
+}
+
+/// Chrome4 button hit-slop px (single source: [`CHROME4_BUTTON_HIT_SLOP`]).
+/// Pure; headless-tested.
+pub fn chrome4_button_hit_slop() -> f32 {
+    CHROME4_BUTTON_HIT_SLOP
+}
+
+/// Chrome4 button padded width px (single source: [`CHROME4_BUTTON_PADDED_W`]).
+/// Pure; headless-tested.
+pub fn chrome4_button_padded_width() -> f32 {
+    CHROME4_BUTTON_PADDED_W
+}
+
+/// Chrome4 button padded height px (single source: [`CHROME4_BUTTON_PADDED_H`]).
+/// Pure; headless-tested.
+pub fn chrome4_button_padded_height() -> f32 {
+    CHROME4_BUTTON_PADDED_H
+}
+
+/// Chrome4 symmetric button hit target rect: expands (x0, y0, x1, y1) by
+/// `CHROME4_BUTTON_HIT_SLOP` (4.0) on all four edges.
+/// Returns None on non-finite or inverted rects. Pure; headless-tested.
+pub fn chrome4_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    Some((
+        x0 - CHROME4_BUTTON_HIT_SLOP,
+        y0 - CHROME4_BUTTON_HIT_SLOP,
+        x1 + CHROME4_BUTTON_HIT_SLOP,
+        y1 + CHROME4_BUTTON_HIT_SLOP,
+    ))
+}
+
+/// Chrome4 content available width px: total minus side margins (2 x 12.0 = 24.0).
+/// At 960px total_w: 936.0px. Pure; headless-tested.
+pub fn chrome4_content_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - CHROME4_CONTENT_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Chrome4 card grid columns for width:
+/// At 960px (avail 936px): 3 columns fit. Non-finite par canonical 3.
+/// Pure; headless-tested.
+pub fn chrome4_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = chrome4_content_avail_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME_CARD_MIN_W + cols as f32 * CHROME4_CARD_GRID_GAP <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Chrome4 card grid rows for item count at total width.
+/// Pure; headless-tested.
+pub fn chrome4_grid_rows(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(chrome4_grid_columns(total_w).max(1))
+}
+
+/// Chrome4 evenly flexed card width px across available width:
+/// (avail - (cols - 1) * gap) / cols, with `HOME_CARD_MIN_W` floor.
+/// At 960px wide (936 avail): 3 cols -> (936 - 2 * 8) / 3 = 920 / 3 = 306.66666...
+/// Pure; headless-tested.
+pub fn chrome4_grid_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME_CARD_MIN_W;
+    }
+    let cols = HOME_GRID_COLUMNS as f32;
+    let gaps = (cols - 1.0) * CHROME4_CARD_GRID_GAP;
+    ((avail - gaps) / cols).max(HOME_CARD_MIN_W)
+}
+
+/// Chrome4 card grid content height px for item count at total width:
+/// rows * card_min_height + (rows - 1) * gap.
+/// At 960px (9 items -> 3 rows): 3 * 99.6 + 2 * 8 = 314.8.
+/// Pure; headless-tested.
+pub fn chrome4_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    let rows = chrome4_grid_rows(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * CHROME4_CARD_GRID_GAP
+}
+
+/// Chrome4 toolbar width px: 10 uniform buttons + 9 gaps = 996.0.
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_width() -> f32 {
+    chrome3_toolbar_width()
+}
+
+/// Chrome4 toolbar available width px: total minus side margins.
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_avail_width(total_w: f32) -> f32 {
+    chrome3_toolbar_avail_width(total_w)
+}
+
+/// Chrome4 toolbar visible buttons count at total_w.
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_visible_count(total_w: f32) -> usize {
+    chrome3_toolbar_visible_count(total_w)
+}
+
+/// Chrome4 toolbar overflow buttons count at total_w.
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_overflow_count(total_w: f32) -> usize {
+    chrome3_toolbar_overflow_count(total_w)
+}
+
+/// Chrome4 toolbar button width px (96.0).
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_button_width() -> f32 {
+    CHROME4_TOOLBAR_BUTTON_W
+}
+
+/// Chrome4 toolbar button height px (24.0).
+/// Pure; headless-tested.
+pub fn chrome4_toolbar_button_height() -> f32 {
+    CHROME4_TOOLBAR_BUTTON_H
+}
+
+/// Chrome4 hierarchy contract: header 21.6 from TypoRole Heading chrome line-height,
+/// status 21.2 from Small line-height + 2 * tight pad, card grid gap 8.0 (SPACE_SM parity),
+/// button hit-slop 4.0 (SPACE_XS parity) giving 104x32 hit area on 96x24 buttons.
+/// Pure; headless-tested.
+pub fn chrome4_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    let heading_lh = TypoRole::Heading.line_height_px();
+    (heading_lh - CHROME4_HEADER_H).abs() < 0.001
+        && CHROME4_CARD_GRID_GAP == crate::theme::SPACE_SM
+        && CHROME4_CARD_GRID_GAP == crate::theme::GEO_SECTION_GAP
+        && CHROME4_BUTTON_HIT_SLOP == crate::theme::SPACE_XS
+        && (TypoRole::Small.line_height_px() + crate::theme::SPACE_XS * 2.0 - CHROME4_STATUS_H)
+            .abs()
+            < 0.001
+        && CHROME4_TOOLBAR_BUTTON_W == 96.0
+        && CHROME4_TOOLBAR_BUTTON_H == crate::theme::SPACE_XL
+        && CHROME4_BUTTON_PADDED_W == 104.0
+        && CHROME4_BUTTON_PADDED_H == 32.0
+}
+
+// ----------------------------------------------------------------------------
 // Wave HOME5 exquisite (first): session tree vs cards — new-session CTA,
 // session row height, grid margins. BC pattern, outside observation only:
 // left session tree (groups + rows) beside the 3-col card grid; tree top par
@@ -3976,5 +4198,86 @@ mod tests {
         assert_eq!(super::chrome3_toolbar_avail_width(1024.0), 1000.0);
         assert_eq!(super::chrome3_toolbar_visible_count(1024.0), 10);
         assert_eq!(super::chrome3_toolbar_overflow_count(1024.0), 0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn chrome4_cards_grid_gaps_symmetric_hit_slop_wide960_edge() {
+        // Edge fixture: `checks/gui-exq-chrome4/round-1/comparison/chrome-wide-960.json`.
+        // Geometry first: header 21.6, status 21.2, card grid gap 8.0 via SECTION_GAP
+        // (SPACE_SM parity), 3 columns evenly flexed at 960px (avail 936px: 3 cols of 306.67px with 8px gaps),
+        // button hit-slop symmetric via SPACE_XS (4.0) giving 104x32 hit area on 96x24 buttons.
+        use crate::theme::{SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS, TypoRole};
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-chrome4/round-1/comparison/chrome-wide-960.json");
+        assert!(fixture_raw.contains("\"card_grid_gap\":8.0"));
+        assert!(fixture_raw.contains("\"button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"button_padded_w\":104.0"));
+        assert!(fixture_raw.contains("\"button_padded_h\":32.0"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_960\":306.66666"));
+        assert!(fixture_raw.contains("\"grid_cols_at_960\":3"));
+        assert!(fixture_raw.contains("\"grid_rows_9_at_960\":3"));
+        assert!(fixture_raw.contains("\"grid_content_h_9_at_960\":314.8"));
+
+        // Header and status heights
+        assert_eq!(super::CHROME4_HEADER_H, 21.6);
+        assert_eq!(super::chrome4_header_height(), 21.6);
+        assert!((TypoRole::Heading.line_height_px() - 21.6).abs() < 0.001);
+        assert_eq!(super::CHROME4_STATUS_H, 21.2);
+        assert_eq!(super::chrome4_status_height(), 21.2);
+
+        // Card grid gap via SECTION_GAP / SPACE_SM (8.0)
+        assert_eq!(super::CHROME4_CARD_GRID_GAP, SPACE_SM);
+        assert_eq!(super::CHROME4_CARD_GRID_GAP, 8.0);
+        assert_eq!(super::chrome4_card_grid_gap(), 8.0);
+        assert_eq!(super::CHROME4_CARD_GRID_GAP, crate::theme::GEO_SECTION_GAP);
+
+        // Available content width at 960px: 960 - 2 * 12 = 936
+        assert_eq!(super::CHROME4_CONTENT_MARGIN_X, SPACE_MD);
+        assert_eq!(super::chrome4_content_avail_width(960.0), 936.0);
+
+        // 3 columns evenly flexed at 960px:
+        // avail = 936.0, 3 cols with 2 gaps of 8.0 = 16.0 -> 920.0 / 3 = 306.66666...
+        assert_eq!(super::chrome4_grid_columns(960.0), 3);
+        assert_eq!(super::chrome4_grid_rows(9, 960.0), 3);
+        let card_w = super::chrome4_grid_card_width(936.0);
+        assert!((card_w - 306.66666).abs() < 0.001);
+        assert!((card_w - (920.0 / 3.0)).abs() < 0.0001);
+
+        // Grid content height for 9 items at 960px:
+        // 3 rows x 99.6 + 2 x 8.0 gap = 298.8 + 16.0 = 314.8
+        let grid_h = super::chrome4_grid_content_height(9, 960.0);
+        assert!((grid_h - 314.8).abs() < 0.01);
+
+        // Button hit-slop symmetric via SPACE_XS (4.0):
+        assert_eq!(super::CHROME4_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(super::CHROME4_BUTTON_HIT_SLOP, 4.0);
+        assert_eq!(super::chrome4_button_hit_slop(), 4.0);
+        assert_eq!(super::CHROME4_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(super::CHROME4_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::CHROME4_TOOLBAR_BUTTON_H, 24.0);
+        assert_eq!(super::CHROME4_BUTTON_PADDED_W, 104.0);
+        assert_eq!(super::chrome4_button_padded_width(), 104.0);
+        assert_eq!(super::CHROME4_BUTTON_PADDED_H, 32.0);
+        assert_eq!(super::chrome4_button_padded_height(), 32.0);
+
+        // Hit rect expansion is symmetric:
+        let hit_rect = super::chrome4_button_hit_rect(10.0, 20.0, 106.0, 44.0);
+        assert_eq!(hit_rect, Some((6.0, 16.0, 110.0, 48.0)));
+        assert_eq!(
+            super::chrome4_button_hit_rect(f32::NAN, 0.0, 10.0, 10.0),
+            None
+        );
+        assert_eq!(super::chrome4_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
+
+        // Toolbar at 960px:
+        assert_eq!(super::chrome4_toolbar_avail_width(960.0), 936.0);
+        assert_eq!(super::chrome4_toolbar_width(), 996.0);
+        assert_eq!(super::chrome4_toolbar_visible_count(960.0), 9);
+        assert_eq!(super::chrome4_toolbar_overflow_count(960.0), 1);
+
+        // Hierarchy contract passes
+        assert!(super::chrome4_hierarchy_ok());
     }
 }
