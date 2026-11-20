@@ -2140,6 +2140,150 @@ pub fn topchrome_hierarchy_ok() -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Wave CHROME2 exquisite (first): header + tabs chrome-side only.
+// BC pattern, outside observation only: header/tab spacing tight vs BC —
+// header bar CHROME rhythm par, tab labels section/outer margins par, toolbar
+// buttons ek-jaisi width par, status line Small role par. Geometry first:
+// sab maujooda rhythm tokens se derive; purane paint-lock consts
+// (`HOME_TAB_BAR_H`, `TOPCHROME_*`, `HOME_STATUS_BAR_H`) untouched rehte
+// hain taaki paint-lock tests green rahen. Typography second: Body/Mono/
+// Small reuse, koi naya size nahi. Paint adoption paint-owner wave ka hai;
+// colors untouched (zero Color32/Visuals).
+// Edge fixture: `checks/gui-exq-chrome2/round-1/comparison/home-narrow-720.json`
+// (720px narrow fallback: 7 toolbar buttons fit + 3 overflow, 9 cards 2 cols).
+// ----------------------------------------------------------------------------
+
+/// Chrome2 header bar height px: CHROME token single-source
+/// ([`crate::theme::CHROME_HEADER_BAR_H`] = 28 parity, [`HOME_TAB_BAR_H`] barabar).
+pub const CHROME2_HEADER_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Chrome2 tab label side pad px: section rhythm
+/// ([`crate::theme::GEO_SECTION_GAP`] = 8 parity, [`HOME_TAB_PAD_X`] barabar).
+pub const CHROME2_TAB_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Chrome2 tab beech gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4
+/// parity, [`HOME_TAB_GAP`] barabar).
+pub const CHROME2_TAB_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Chrome2 tab strip side chrome px: outer margin
+/// ([`crate::theme::GEO_OUTER_MARGIN`] = 12 parity,
+/// [`HOME_TAB_STRIP_SIDE_CHROME`] barabar).
+pub const CHROME2_TAB_STRIP_SIDE: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Chrome2 toolbar button uniform width px: sabse lambe toolbar label ka
+/// content need ([`TOPCHROME_TOOLBAR_ACTIONS`] max) floor
+/// ([`HOME_TOOLBAR_BUTTON_W`] = 96) se — sab buttons ek-jaisi width, koi
+/// crush/clip nahi, content-driven asimetri nahi.
+pub const CHROME2_TOOLBAR_BUTTON_W: f32 = HOME_TOOLBAR_BUTTON_W;
+/// Chrome2 toolbar button height px: compact hit floor
+/// ([`HOME_TOOLBAR_BUTTON_H`] = 24 parity).
+pub const CHROME2_TOOLBAR_BUTTON_H: f32 = HOME_TOOLBAR_BUTTON_H;
+/// Chrome2 toolbar button gap px: tight rhythm (4 parity).
+pub const CHROME2_TOOLBAR_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Chrome2 status bar height px: ek Small line
+/// (`TypoRole::Small.line_height_px()` = 13.2) + upar-neeche tight pad
+/// (2 x 4) = 21.2 — purane 28 hit-row se tight, Small role se derive.
+pub const CHROME2_STATUS_H: f32 = 21.2;
+
+/// Chrome2 header height px (single source: [`CHROME2_HEADER_H`]).
+/// Pure; headless-tested.
+pub fn chrome2_header_height() -> f32 {
+    CHROME2_HEADER_H
+}
+
+/// Chrome2 status height px (single source: [`CHROME2_STATUS_H`]).
+/// Small line-height se derive (13.2 + 8 pad); purane 28 se tight.
+/// Pure; headless-tested.
+pub fn chrome2_status_height() -> f32 {
+    CHROME2_STATUS_H
+}
+
+/// Ek toolbar button ki uniform width px: label se independent, sab barabar
+/// ([`CHROME2_TOOLBAR_BUTTON_W`]). Content need floor se neeche kabhi nahi
+/// (sabse lamba label single-line fit). Pure; headless-tested.
+pub fn chrome2_toolbar_button_width() -> f32 {
+    CHROME2_TOOLBAR_BUTTON_W
+}
+
+/// Toolbar kul width px: 10 uniform buttons + 9 gaps. Pure; headless-tested.
+pub fn chrome2_toolbar_width() -> f32 {
+    TOPCHROME_TOOLBAR_ACTIONS.len() as f32 * CHROME2_TOOLBAR_BUTTON_W
+        + TOPCHROME_TOOLBAR_ACTIONS.len().saturating_sub(1) as f32 * CHROME2_TOOLBAR_GAP
+}
+
+/// Toolbar avail width px: window minus do taraf outer margin. Non-finite
+/// passthrough, tang par 0 floor. Pure; headless-tested.
+pub fn chrome2_toolbar_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - CHROME2_TAB_STRIP_SIDE * 2.0).max(0.0)
+}
+
+/// Toolbar me kitne buttons `total_w` par fit hote hain (uniform widths,
+/// order me, gap samet). Non-finite par sab. Pure; headless-tested.
+pub fn chrome2_toolbar_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return TOPCHROME_TOOLBAR_ACTIONS.len();
+    }
+    let avail = chrome2_toolbar_avail_width(total_w);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    for _ in TOPCHROME_TOOLBAR_ACTIONS {
+        let need = CHROME2_TOOLBAR_BUTTON_W + if count == 0 { 0.0 } else { CHROME2_TOOLBAR_GAP };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// Toolbar overflow count: kul minus visible. Pure; headless-tested.
+pub fn chrome2_toolbar_overflow_count(total_w: f32) -> usize {
+    TOPCHROME_TOOLBAR_ACTIONS
+        .len()
+        .saturating_sub(chrome2_toolbar_visible_count(total_w))
+}
+
+/// Tab strip avail width px chrome2 side chrome par: window minus do taraf
+/// outer margin. Non-finite passthrough, tang par 0 floor. Pure; headless-tested.
+pub fn chrome2_tab_bar_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - CHROME2_TAB_STRIP_SIDE * 2.0).max(0.0)
+}
+
+/// Chrome2 tab strip ko scroll chahiye ya nahi (10 tabs content vs avail).
+/// Non-finite par jhooth nahi. Pure; headless-tested.
+pub fn chrome2_tab_bar_needs_scroll(titles: &[&str], total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    home_tab_bar_width(titles) > chrome2_tab_bar_avail_width(total_w)
+}
+
+/// Chrome2 status section width px: kul ka teesra hissa. Pure; headless-tested.
+pub fn chrome2_status_section_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    (total_w / TOPCHROME_STATUS_SECTIONS as f32).max(0.0)
+}
+
+/// Chrome2 hierarchy: header/tab Body, status Small — purane paint-lock
+/// roles ke barabar, koi naya size nahi. Pure; headless-tested.
+pub fn chrome2_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    CHROME2_HEADER_H == crate::theme::CHROME_HEADER_BAR_H
+        && CHROME2_TAB_PAD_X == crate::theme::GEO_SECTION_GAP
+        && CHROME2_TAB_STRIP_SIDE == crate::theme::GEO_OUTER_MARGIN
+        && CHROME2_TAB_GAP == crate::theme::GEO_TIGHT_GAP
+        && TypoRole::Small.line_height_px() + crate::theme::GEO_TIGHT_GAP * 2.0 == CHROME2_STATUS_H
+        && CHROME2_TOOLBAR_BUTTON_W == HOME_TOOLBAR_BUTTON_W
+        && TypoRole::Small.is_small()
+        && TypoRole::Body.size() > TypoRole::Small.size()
+}
+
+// ----------------------------------------------------------------------------
 // Wave HOME5 exquisite (first): session tree vs cards — new-session CTA,
 // session row height, grid margins. BC pattern, outside observation only:
 // left session tree (groups + rows) beside the 3-col card grid; tree top par
@@ -3437,5 +3581,69 @@ mod tests {
         assert_eq!(super::session_tree_group_size(), 13.0);
         assert_eq!(super::session_tree_meta_size(), 11.0);
         assert_eq!(super::home_card_title_size(), 14.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn chrome2_header_tabs_equal_toolbar_small_status_narrow720_edge() {
+        // Edge fixture: `checks/gui-exq-chrome2/round-1/comparison/home-narrow-720.json`.
+        // Geometry first: header CHROME token, tab pad section/outer margins,
+        // toolbar uniform widths, status Small line-height. Typography second:
+        // Body/Small reuse, koi naya size nahi.
+        use crate::theme::{
+            CHROME_HEADER_BAR_H, GEO_OUTER_MARGIN, GEO_SECTION_GAP, GEO_TIGHT_GAP, TypoRole,
+        };
+        // Header bar CHROME token se: 28, purane tab bar ke barabar.
+        assert_eq!(super::CHROME2_HEADER_H, 28.0);
+        assert_eq!(super::CHROME2_HEADER_H, CHROME_HEADER_BAR_H);
+        assert_eq!(super::CHROME2_HEADER_H, super::HOME_TAB_BAR_H);
+        assert_eq!(super::chrome2_header_height(), 28.0);
+        // Tab padding: label pad section gap (8), strip side outer margin (12),
+        // beech gap tight (4) — sab rhythm tokens, koi magic number nahi.
+        assert_eq!(super::CHROME2_TAB_PAD_X, 8.0);
+        assert_eq!(super::CHROME2_TAB_PAD_X, GEO_SECTION_GAP);
+        assert_eq!(super::CHROME2_TAB_STRIP_SIDE, 12.0);
+        assert_eq!(super::CHROME2_TAB_STRIP_SIDE, GEO_OUTER_MARGIN);
+        assert_eq!(super::CHROME2_TAB_GAP, 4.0);
+        assert_eq!(super::CHROME2_TAB_GAP, GEO_TIGHT_GAP);
+        // Toolbar buttons equal: uniform 96 (sabse lamba label need 72 se upar),
+        // kul 10x96 + 9x4 = 996.
+        assert_eq!(super::CHROME2_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(super::chrome2_toolbar_button_width(), 96.0);
+        assert!((super::chrome2_toolbar_width() - 996.0).abs() < 0.001);
+        // Narrow 720: avail 696 par 7 fit + 3 overflow (scroll, clip nahi).
+        assert!((super::chrome2_toolbar_avail_width(720.0) - 696.0).abs() < 0.001);
+        assert_eq!(super::chrome2_toolbar_visible_count(720.0), 7);
+        assert_eq!(super::chrome2_toolbar_overflow_count(720.0), 3);
+        assert_eq!(super::chrome2_toolbar_visible_count(f32::NAN), 10);
+        assert_eq!(super::chrome2_toolbar_avail_width(20.0), 0.0);
+        // Status bar Small line-height se: 11 x 1.2 = 13.2 + 2 x 4 pad = 21.2,
+        // purane 28 hit-row se tight.
+        assert!((TypoRole::Small.line_height_px() - 13.2).abs() < 0.001);
+        assert!((super::CHROME2_STATUS_H - 21.2).abs() < 0.001);
+        assert!((super::chrome2_status_height() - 21.2).abs() < 0.001);
+        assert!(super::CHROME2_STATUS_H < super::HOME_STATUS_BAR_H);
+        assert!((super::chrome2_status_section_width(720.0) - 240.0).abs() < 0.001);
+        // 10-tab strip 720 par fit (574 <= 696, scroll nahi).
+        let tabs = [
+            "Home",
+            "Text",
+            "Folder",
+            "Hex",
+            "Merge",
+            "Table",
+            "Sync",
+            "Picture",
+            "FolderMerge",
+            "Audio",
+        ];
+        assert!(!super::chrome2_tab_bar_needs_scroll(&tabs, 720.0));
+        assert!(super::chrome2_tab_bar_needs_scroll(&tabs, 300.0));
+        assert!(!super::chrome2_tab_bar_needs_scroll(&tabs, f32::NAN));
+        // 9 cards 720 par 2 cols x 5 rows (clip nahi).
+        assert_eq!(super::home_grid_columns_for_width(720.0), 2);
+        assert_eq!(super::home_grid_rows_for_width(9, 720.0), 5);
+        // Typography second: Body > Small, Small small + weak + chrome.
+        assert!(super::chrome2_hierarchy_ok());
     }
 }

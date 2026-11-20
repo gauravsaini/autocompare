@@ -4196,6 +4196,44 @@ pub fn chrome_toolbar_needs_hscroll(avail: f32) -> bool {
     views::action_bar_needs_hscroll(avail)
 }
 
+/// CHROME2 caller half (exquisite, chrome-side only): header + tabs.
+/// Header CHROME token, tab pad section/outer margins, toolbar uniform,
+/// status Small line-height — sab [`home::CHROME2_*`] single-source reuse,
+/// koi naya size/token/color nahi. Pure; headless-tested.
+pub fn chrome2_header_h() -> f32 {
+    home::chrome2_header_height()
+}
+
+/// CHROME2 status bar height (Small line-height se, 21.2). Pure; headless-tested.
+pub fn chrome2_status_h() -> f32 {
+    home::chrome2_status_height()
+}
+
+/// CHROME2 toolbar uniform button width (sab barabar, 96). Pure; headless-tested.
+pub fn chrome2_toolbar_button_w() -> f32 {
+    home::chrome2_toolbar_button_width()
+}
+
+/// CHROME2 toolbar kul width (10 uniform + gaps, 996). Pure; headless-tested.
+pub fn chrome2_toolbar_w() -> f32 {
+    home::chrome2_toolbar_width()
+}
+
+/// CHROME2 content avail height px: viewport minus header, uska gap,
+/// caller chrome (filter + dual) aur Small-derived status line. Tang par
+/// 0 floor, non-finite par 0. Pure; headless-tested.
+pub fn chrome2_content_avail_height(viewport_h: f32, chrome_h: f32) -> f32 {
+    if !viewport_h.is_finite() || !chrome_h.is_finite() {
+        return 0.0;
+    }
+    (viewport_h
+        - home::CHROME2_HEADER_H
+        - home::CHROME2_TAB_GAP
+        - chrome_h
+        - home::CHROME2_STATUS_H)
+        .max(0.0)
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -9729,6 +9767,20 @@ mod tests {
         assert!(chrome_mode_tabs_need_hscroll(899.0));
         assert!(!chrome_mode_tabs_need_hscroll(900.0));
         assert!(!chrome_mode_tabs_need_hscroll(1280.0));
+    }
+
+    #[test]
+    fn chrome2_header_tabs_toolbar_small_status_narrow720() {
+        // Edge fixture: `checks/gui-exq-chrome2/round-1/comparison/home-narrow-720.json`.
+        // Caller half: sab `home::CHROME2_*` reuse, koi naya size/token/color nahi.
+        assert_eq!(chrome2_header_h(), crate::home::CHROME2_HEADER_H);
+        assert_eq!(chrome2_status_h(), crate::home::CHROME2_STATUS_H);
+        assert_eq!(chrome2_toolbar_button_w(), 96.0);
+        assert_eq!(chrome2_toolbar_w(), 996.0);
+        // 450 viewport, 120 folder chrome: 450 - 28 - 4 - 120 - 21.2 = 276.8.
+        assert!((chrome2_content_avail_height(450.0, 120.0) - 276.8).abs() < 0.01);
+        assert_eq!(chrome2_content_avail_height(100.0, 120.0), 0.0);
+        assert_eq!(chrome2_content_avail_height(f32::NAN, 120.0), 0.0);
     }
 
     #[test]
