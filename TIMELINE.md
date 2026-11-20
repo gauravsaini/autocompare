@@ -457,3 +457,9 @@
 1. **Text Gutter & Markers at 960px**: center gutter 48 to 20px via SPACE_LG+XS, single => marker 16px symmetric inset changed-only, row height Mono lock 17.6, per-pane status 15.2, 462+462+20+16 math.
 2. **Tests** (before → after): autocompare-gui 987 green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0 (1 panic test-only); exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text11/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter9 markers plus slop
+
+1. **Gutter Markers & Slop at 960px**: side column 20px via SPACE_LG+XS, marker box 16px, inset 2px + hit slop 2px symmetric, changed-only gating, layout 12+458+20+458+12 math.
+2. **Tests** (before → after): autocompare-gui 993 green; clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0 (3 panics test-only); exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter9/**`, `TIMELINE.md`.
