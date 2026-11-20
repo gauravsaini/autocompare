@@ -916,6 +916,21 @@ impl App {
         }
     }
 
+    /// T7 bridge: session label rename karta hai (trimmed; blank ya
+    /// unknown id par no-op false). Model `SessionList::rename` reuse,
+    /// slots untouched. Pure caller wiring; headless-tested.
+    pub fn rename_session(&mut self, id: u64, title: impl Into<String>) -> bool {
+        if !self.sessions.rename(id, title) {
+            return false;
+        }
+        self.error = None;
+        self.status = match self.sessions.get(id) {
+            Some(item) => format!("renamed session: {}", item.title),
+            None => String::from("renamed session"),
+        };
+        true
+    }
+
     /// Opens one Home session card: live session open + recent me record
     /// (Home khud record nahi hota). Returns true jab koi session khula ho.
     /// Pure state; paint card click isi ko chalata hai. Headless-tested.
@@ -5038,7 +5053,15 @@ impl eframe::App for App {
             let mut strip_action = views::SessionAction::None;
             views::paint_session_tab_strip(ui, &self.sessions, &mut strip_action);
             self.apply_session_action(strip_action);
-            views::paint_tabs(ui, &mut self.tab);
+            // Mode-tab click session adopt: paint pick alag buffer me, badla
+            // to `set_tab` se adopt (same-kind switch / fresh-kind open,
+            // switch se pehle T5/T6 save andar). Direct `&mut self.tab`
+            // bypass ab nahi (CALLER 07a8db8 follow-up).
+            let mut picked_tab = self.tab;
+            views::paint_tabs(ui, &mut picked_tab);
+            if picked_tab != self.tab {
+                self.set_tab(picked_tab);
+            }
             ui.label(RichText::new(self.session_identity()).small().weak());
             ui.add_space(views::TAB_BOTTOM_GAP);
 
@@ -9504,5 +9527,54 @@ mod tests {
         };
         assert!(app.apply_session_action(views::SessionAction::Switch(text_id)));
         assert_eq!(app.text_find_cursor, 7);
+    }
+
+    #[test]
+    fn modet7_rename_session_trims_and_rejects_blank_unknown() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        let id = match app.sessions.active_id() {
+            Some(id) => id,
+            None => return,
+        };
+        assert!(app.rename_session(id, "  custom  "));
+        assert_eq!(
+            app.sessions.get(id).map(|item| item.title.clone()),
+            Some(String::from("custom"))
+        );
+        assert!(app.status.contains("renamed session"));
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert!(!app.rename_session(id, "   "));
+        assert!(!app.rename_session(999_999, "zed"));
+        assert_eq!(
+            app.sessions.get(id).map(|item| item.title.clone()),
+            Some(String::from("custom"))
+        );
+    }
+
+    #[test]
+    fn modet7_modetab_click_adopts_session() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_text_paths("a.txt", "b.txt");
+        app.set_tab(Tab::Folder);
+        assert_eq!(app.sessions.len(), 2);
+        // Mode-tab click simulation (update wiring jaisa): paint pick
+        // buffer me, badla to `set_tab` adopt — same-kind par switch,
+        // duplicate open nahi, paths load hote hain.
+        let mut picked = Tab::Text;
+        if picked != app.tab {
+            app.set_tab(picked);
+        }
+        assert_eq!(app.sessions.len(), 2);
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert_eq!(app.text_paths(), ("a.txt".to_string(), "b.txt".to_string()));
+        // Fresh kind par click: naya session khulta hai (adopt-open).
+        picked = Tab::Hex;
+        if picked != app.tab {
+            app.set_tab(picked);
+        }
+        assert_eq!(app.sessions.len(), 3);
+        assert_eq!(app.current_tab(), Tab::Hex);
     }
 }

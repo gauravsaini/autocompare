@@ -714,7 +714,7 @@ impl SessionList {
     }
 
     /// T7: tab label badalta hai (trimmed); blank par no-op false.
-    /// Future double-click rename ke liye hook.
+    /// Caller (`App::rename_session`) isi ko chalata hai.
     pub fn rename(&mut self, id: u64, title: impl Into<String>) -> bool {
         let title: String = title.into();
         if title.trim().is_empty() {
