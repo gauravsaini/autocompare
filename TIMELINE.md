@@ -347,3 +347,12 @@
 1. **Hex Grid & ASCII Sync at 960px**: BC parity for hex compare: nibble group gap from single-source midline helper, ASCII pane x from grid origin, ruler tick spacing via `SPACE_SM`, row height locked to `TypoRole::Mono` line-height. Follow-up `fix(gui)`: 4 new `let...else` clippy lints rewritten with `?` operator, zero behavior change (70 hex tests green). Colors frozen at 33. Edge fixture `comparison/hex-wide-960.json` added; exquisite harness PASS (PNG 10401B).
 2. **Tests** (before → after): autocompare-gui all green (70 hex tests); clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0 (1 unwrap is test-only); exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex5/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-home3 search plus indent
+
+1. **Home Search & Indent at 720-960px**: second home pass: search field height from `TypoRole` chrome line-height, tree indent reusing tree indent step, empty-state margins via `OUTER_MARGIN`, hit-slop symmetric. Colors frozen at 33. Edge fixture `comparison/home-narrow-720.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `home.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home3/**`, `TIMELINE.md`.
