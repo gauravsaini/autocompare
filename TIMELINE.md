@@ -704,3 +704,9 @@
 1. **Live Bottom Legend (views.rs egui overlay)**: per-pane status labels (cursor/format/counts, honest fallback) + thin 4-segment legend row mirroring status20 fixture geometry. Toolbar22 glyphs, gutter23 track/markers intact. Fixture pxdiff IDENTICAL (egui-only, before/after byte-identical 11213B) — ABANDONED with reason. Live-pixel gate PASS: per-pane label ink in both halves + 4/4 legend cells marker-distinct, crop round-1/live-crop.png.
 2. **Tests** (before -> after): autocompare-gui 1049 -> 1050 green (including legend25_narrow720_no_overlap + legend-narrow-720.json edge fixture); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-legend25/**, TIMELINE.md.
+
+### Chore (2026-11-21) — chore(localrun): exq-localrun4 early feedback bundle
+
+1. **Early feedback bundle**: CLI 10 cmds PASS, 3 PNGs default 11098B / dark 11200B / light 11098B magic ok, dist tarball 5.5M + sha refreshed (VERSION 0.5.0 3d33e80), tail-insertion edge fixture, GAPS-TOP10. Release LTO link ok (13Gi free).
+2. **Tests**: REPORT RESULT: PASS; owned scope fmt clean; banned 0; no crates touch.
+3. **Files changed**: checks/ac-loop/round-lr4/**, dist/VERSION + tarball + sha, TIMELINE.md.
