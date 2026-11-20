@@ -85,12 +85,15 @@ pub struct InlineSpan {
 
 /// Changed character spans for one pair of lines, usually per word.
 ///
+/// Hierarchical word-and-character diffing: replaced words that share
+/// substantial character structure are refined to the exact changed
+/// characters, while wholly rewritten words keep one coarse span.
 /// Indices are character offsets into the raw lines, half-open
 /// `[start, end)`. Empty when the lines are equal. This is a visual
 /// aid: highlighting is computed on the raw lines, whatever the
 /// comparison options were.
 pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
-    word_diff::inline_diff(a, b)
+    word_diff::word_char_diff(a, b)
 }
 
 /// Three-way merge of `base`, `left` and `right` line sequences.

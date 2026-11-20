@@ -273,6 +273,30 @@ impl TextBuffer {
     pub fn mark_clean(&mut self) {
         self.is_dirty = false;
     }
+
+    /// Clears all lines from the buffer, recording the change in the undo stack.
+    pub fn clear(&mut self) {
+        if self.lines.is_empty() {
+            return;
+        }
+        let count = self.lines.len();
+        let _ = self.splice_lines(0, count, Vec::new());
+    }
+
+    /// Appends a new line at the end of the buffer.
+    pub fn append_line(&mut self, content: String) {
+        self.insert_line(self.lines.len(), content);
+    }
+
+    /// Returns the number of edit actions stored in the undo stack.
+    pub fn undo_count(&self) -> usize {
+        self.undo_stack.len()
+    }
+
+    /// Returns the number of undone actions available in the redo stack.
+    pub fn redo_count(&self) -> usize {
+        self.redo_stack.len()
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -379,6 +403,151 @@ impl MergeSession {
                 )
             })
             .count()
+    }
+
+    /// Number of conflict blocks that have been resolved.
+    pub fn resolved_count(&self) -> usize {
+        self.conflict_count()
+            .saturating_sub(self.unresolved_count())
+    }
+
+    /// Returns a list of all conflict IDs in appearance order.
+    pub fn conflict_ids(&self) -> Vec<usize> {
+        self.blocks
+            .iter()
+            .filter_map(|b| match b {
+                MergeBlock::Conflict { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// ID of the first unresolved conflict block, if any.
+    pub fn first_unresolved(&self) -> Option<usize> {
+        self.blocks.iter().find_map(|b| match b {
+            MergeBlock::Conflict {
+                id,
+                resolution: None,
+                ..
+            } => Some(*id),
+            _ => None,
+        })
+    }
+
+    /// Finds the next unresolved conflict strictly after `from_id`.
+    pub fn next_unresolved(&self, from_id: usize) -> Option<usize> {
+        self.blocks.iter().find_map(|b| match b {
+            MergeBlock::Conflict {
+                id,
+                resolution: None,
+                ..
+            } if *id > from_id => Some(*id),
+            _ => None,
+        })
+    }
+
+    /// Finds the previous unresolved conflict strictly before `from_id`.
+    pub fn prev_unresolved(&self, from_id: usize) -> Option<usize> {
+        self.blocks.iter().rev().find_map(|b| match b {
+            MergeBlock::Conflict {
+                id,
+                resolution: None,
+                ..
+            } if *id < from_id => Some(*id),
+            _ => None,
+        })
+    }
+
+    /// Returns a reference to a conflict block by `conflict_id`.
+    pub fn conflict_by_id(&self, conflict_id: usize) -> Option<&MergeBlock> {
+        self.blocks.iter().find(|b| match b {
+            MergeBlock::Conflict { id, .. } => *id == conflict_id,
+            _ => false,
+        })
+    }
+
+    /// Returns a mutable reference to a conflict block by `conflict_id`.
+    pub fn conflict_by_id_mut(&mut self, conflict_id: usize) -> Option<&mut MergeBlock> {
+        self.blocks.iter_mut().find(|b| match b {
+            MergeBlock::Conflict { id, .. } => *id == conflict_id,
+            _ => false,
+        })
+    }
+
+    /// Resolves conflict `conflict_id` by taking Left.
+    pub fn take_left(&mut self, conflict_id: usize) -> bool {
+        self.resolve_conflict(conflict_id, TakeResolution::Choice(TakeChoice::Left))
+    }
+
+    /// Resolves conflict `conflict_id` by taking Right.
+    pub fn take_right(&mut self, conflict_id: usize) -> bool {
+        self.resolve_conflict(conflict_id, TakeResolution::Choice(TakeChoice::Right))
+    }
+
+    /// Resolves conflict `conflict_id` by taking Base.
+    pub fn take_base(&mut self, conflict_id: usize) -> bool {
+        self.resolve_conflict(conflict_id, TakeResolution::Choice(TakeChoice::Base))
+    }
+
+    /// Resolves conflict `conflict_id` by taking Both with Left lines first.
+    pub fn take_both_left_first(&mut self, conflict_id: usize) -> bool {
+        self.resolve_conflict(
+            conflict_id,
+            TakeResolution::Choice(TakeChoice::BothLeftFirst),
+        )
+    }
+
+    /// Resolves conflict `conflict_id` by taking Both with Right lines first.
+    pub fn take_both_right_first(&mut self, conflict_id: usize) -> bool {
+        self.resolve_conflict(
+            conflict_id,
+            TakeResolution::Choice(TakeChoice::BothRightFirst),
+        )
+    }
+
+    /// Resolves conflict `conflict_id` with custom lines.
+    pub fn take_custom(&mut self, conflict_id: usize, lines: Vec<String>) -> bool {
+        self.resolve_conflict(conflict_id, TakeResolution::Custom(lines))
+    }
+
+    /// Reverts a conflict's resolution back to unresolved (`None`).
+    pub fn clear_resolution(&mut self, conflict_id: usize) -> bool {
+        for block in &mut self.blocks {
+            if let MergeBlock::Conflict { id, resolution, .. } = block
+                && *id == conflict_id
+            {
+                *resolution = None;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Bulk action: resolve all conflicts by taking Both (Left first).
+    pub fn take_all_both_left_first(&mut self) {
+        for block in &mut self.blocks {
+            if let MergeBlock::Conflict { resolution, .. } = block {
+                *resolution = Some(TakeResolution::Choice(TakeChoice::BothLeftFirst));
+            }
+        }
+    }
+
+    /// Bulk action: resolve all conflicts by taking Both (Right first).
+    pub fn take_all_both_right_first(&mut self) {
+        for block in &mut self.blocks {
+            if let MergeBlock::Conflict { resolution, .. } = block {
+                *resolution = Some(TakeResolution::Choice(TakeChoice::BothRightFirst));
+            }
+        }
+    }
+
+    /// Bulk action: clears all conflict resolutions, returning them to unresolved.
+    pub fn clear_all_resolutions(&mut self) {
+        for block in &mut self.blocks {
+            if let MergeBlock::Conflict { resolution, .. } = block {
+                *resolution = None;
+            }
+        }
     }
 
     /// Returns true if all conflict blocks have been resolved.
@@ -610,5 +779,88 @@ mod tests {
         assert_eq!(buf.lines(), &["a", "x", "y", "c"]);
         assert!(buf.undo());
         assert_eq!(buf.lines(), &["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_merge_session_navigation_and_take_helpers() {
+        let base = ["header", "conf1_base", "mid", "conf2_base", "footer"];
+        let left = ["header", "conf1_left", "mid", "conf2_left", "footer"];
+        let right = ["header", "conf1_right", "mid", "conf2_right", "footer"];
+
+        let mut session = MergeSession::new(&base, &left, &right);
+        assert_eq!(session.conflict_count(), 2);
+        assert_eq!(session.unresolved_count(), 2);
+        assert_eq!(session.resolved_count(), 0);
+        assert_eq!(session.conflict_ids(), vec![0, 1]);
+        assert_eq!(session.first_unresolved(), Some(0));
+        assert_eq!(session.next_unresolved(0), Some(1));
+        assert_eq!(session.next_unresolved(1), None);
+        assert_eq!(session.prev_unresolved(1), Some(0));
+        assert_eq!(session.prev_unresolved(0), None);
+
+        // Take left on 0
+        assert!(session.take_left(0));
+        assert_eq!(session.resolved_count(), 1);
+        assert_eq!(session.first_unresolved(), Some(1));
+
+        // Take right on 1
+        assert!(session.take_right(1));
+        assert_eq!(session.resolved_count(), 2);
+        assert!(session.is_fully_resolved());
+        assert_eq!(
+            session.render_lines(),
+            vec!["header", "conf1_left", "mid", "conf2_right", "footer"]
+        );
+
+        // Clear resolution on 0
+        assert!(session.clear_resolution(0));
+        assert_eq!(session.unresolved_count(), 1);
+        assert_eq!(session.first_unresolved(), Some(0));
+
+        // Take both on 0
+        assert!(session.take_both_left_first(0));
+        assert_eq!(
+            session.render_lines(),
+            vec![
+                "header",
+                "conf1_left",
+                "conf1_right",
+                "mid",
+                "conf2_right",
+                "footer"
+            ]
+        );
+
+        // Clear all and bulk take both right first
+        session.take_all_both_right_first();
+        assert_eq!(
+            session.render_lines(),
+            vec![
+                "header",
+                "conf1_right",
+                "conf1_left",
+                "mid",
+                "conf2_right",
+                "conf2_left",
+                "footer"
+            ]
+        );
+
+        session.clear_all_resolutions();
+        assert_eq!(session.unresolved_count(), 2);
+    }
+
+    #[test]
+    fn test_text_buffer_clear_and_append() {
+        let mut buf = TextBuffer::from_text("one\ntwo");
+        assert_eq!(buf.len_lines(), 2);
+        buf.append_line("three".to_string());
+        assert_eq!(buf.lines(), &["one", "two", "three"]);
+        assert_eq!(buf.undo_count(), 1);
+
+        buf.clear();
+        assert!(buf.is_empty());
+        assert!(buf.undo());
+        assert_eq!(buf.lines(), &["one", "two", "three"]);
     }
 }

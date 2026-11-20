@@ -209,18 +209,6 @@ pub(crate) fn merge3_blocks(base: &[&str], left: &[&str], right: &[&str]) -> Vec
             let mut side_out = Vec::new();
             emit_side(&mut side_out, base, ctx_to, ge, lslice);
             out.push(Merge3Block::Clean(side_out));
-        } else if nl == 1
-            && nr == 1
-            && lslice.first().is_some_and(|a| {
-                rslice
-                    .first()
-                    .is_some_and(|b| a.bs == b.bs && a.be == b.be && a.repl == b.repl)
-            })
-        {
-            // The same edit on both sides applies once.
-            if let Some(a) = lslice.first() {
-                out.push(Merge3Block::Clean(a.repl.clone()));
-            }
         } else {
             let mut l_out = Vec::new();
             emit_side(&mut l_out, base, ctx_to, ge, lslice);
@@ -232,11 +220,22 @@ pub(crate) fn merge3_blocks(base: &[&str], left: &[&str], right: &[&str]) -> Vec
                 .iter()
                 .map(|s| s.to_string())
                 .collect();
-            out.push(Merge3Block::Conflict {
-                base: base_slice,
-                left: l_out,
-                right: r_out,
-            });
+            if l_out == r_out {
+                // Both sides produced identical lines: cleanly take them once.
+                out.push(Merge3Block::Clean(l_out));
+            } else if l_out == base_slice {
+                // Left made no net change: take right cleanly.
+                out.push(Merge3Block::Clean(r_out));
+            } else if r_out == base_slice {
+                // Right made no net change: take left cleanly.
+                out.push(Merge3Block::Clean(l_out));
+            } else {
+                out.push(Merge3Block::Conflict {
+                    base: base_slice,
+                    left: l_out,
+                    right: r_out,
+                });
+            }
         }
         p = ge;
     }

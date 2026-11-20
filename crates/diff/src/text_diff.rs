@@ -708,6 +708,69 @@ pub fn apply_diff(old_lines: &[&str], ops: &[Op]) -> Option<Vec<String>> {
     Some(out)
 }
 
+/// Replays a diff script across both old and new lines, reconstructing `new_lines`.
+///
+/// Returns `Some(reconstructed)` when the script matches both inputs exactly,
+/// or `None` if an operation overflows or encounters a mismatch.
+pub fn apply_diff_slices(
+    old_lines: &[&str],
+    new_lines: &[&str],
+    ops: &[Op],
+) -> Option<Vec<String>> {
+    let mut out = Vec::new();
+    let mut a_pos = 0usize;
+    let mut b_pos = 0usize;
+
+    for op in ops {
+        match op {
+            Op::Equal { len } => {
+                let a_end = a_pos.saturating_add(*len);
+                let b_end = b_pos.saturating_add(*len);
+                if a_end > old_lines.len() || b_end > new_lines.len() {
+                    return None;
+                }
+                for i in 0..*len {
+                    let a_curr = a_pos.saturating_add(i);
+                    let b_curr = b_pos.saturating_add(i);
+                    let a = old_lines.get(a_curr)?;
+                    let b = new_lines.get(b_curr)?;
+                    if a != b {
+                        return None;
+                    }
+                    out.push(a.to_string());
+                }
+                a_pos = a_end;
+                b_pos = b_end;
+            }
+            Op::Delete { len } => {
+                let a_end = a_pos.saturating_add(*len);
+                if a_end > old_lines.len() {
+                    return None;
+                }
+                a_pos = a_end;
+            }
+            Op::Insert { len } => {
+                let b_end = b_pos.saturating_add(*len);
+                if b_end > new_lines.len() {
+                    return None;
+                }
+                for i in 0..*len {
+                    let b_curr = b_pos.saturating_add(i);
+                    let b = new_lines.get(b_curr)?;
+                    out.push(b.to_string());
+                }
+                b_pos = b_end;
+            }
+        }
+    }
+
+    if a_pos != old_lines.len() || b_pos != new_lines.len() {
+        return None;
+    }
+
+    Some(out)
+}
+
 /// Formats a complete unified diff text including file headers.
 pub fn format_unified_diff(
     a: &[&str],

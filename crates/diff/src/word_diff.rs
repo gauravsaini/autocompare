@@ -155,7 +155,6 @@ pub(crate) fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
 }
 
 /// Character-level changed spans between two lines.
-#[allow(dead_code)]
 pub(crate) fn char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
     if a == b {
         return Vec::new();
@@ -220,6 +219,73 @@ pub(crate) fn char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
     spans
 }
 
+/// Hierarchical word-and-character inline diffing (Beyond Compare parity).
+///
+/// Computes word-level spans first. For replaced words that share substantial
+/// character structure (e.g. prefix/suffix like `foo_old_bar` vs `foo_new_bar`),
+/// character-level diffing is applied inside the word to isolate the exact
+/// changed characters rather than highlighting the entire token.
+pub(crate) fn word_char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    if a == b {
+        return Vec::new();
+    }
+    let word_spans = inline_diff(a, b);
+    let mut refined = Vec::new();
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+
+    for span in word_spans {
+        let a_len = span.a_end.saturating_sub(span.a_start);
+        let b_len = span.b_end.saturating_sub(span.b_start);
+
+        if a_len == 0 || b_len == 0 || (a_len < 3 && b_len < 3) {
+            refined.push(span);
+            continue;
+        }
+
+        let sub_a: String = a_chars
+            .get(span.a_start..span.a_end)
+            .unwrap_or(&[])
+            .iter()
+            .collect();
+        let sub_b: String = b_chars
+            .get(span.b_start..span.b_end)
+            .unwrap_or(&[])
+            .iter()
+            .collect();
+
+        let sub_spans = char_diff(&sub_a, &sub_b);
+        let total_sub_a_diff: usize = sub_spans
+            .iter()
+            .map(|s| s.a_end.saturating_sub(s.a_start))
+            .sum();
+        let total_sub_b_diff: usize = sub_spans
+            .iter()
+            .map(|s| s.b_end.saturating_sub(s.b_start))
+            .sum();
+
+        // Refine only when both sides keep the majority of their characters;
+        // wholly rewritten words (e.g. `cat` vs `elephant`) keep one coarse span.
+        if !sub_spans.is_empty()
+            && total_sub_a_diff.saturating_mul(2) < a_len
+            && total_sub_b_diff.saturating_mul(2) < b_len
+        {
+            for sub in sub_spans {
+                refined.push(InlineSpan {
+                    a_start: span.a_start.saturating_add(sub.a_start),
+                    a_end: span.a_start.saturating_add(sub.a_end),
+                    b_start: span.b_start.saturating_add(sub.b_start),
+                    b_end: span.b_start.saturating_add(sub.b_end),
+                });
+            }
+        } else {
+            refined.push(span);
+        }
+    }
+
+    refined
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,6 +300,33 @@ mod tests {
                 a_end: 3,
                 b_start: 2,
                 b_end: 3,
+            }]
+        );
+    }
+
+    #[test]
+    fn test_word_char_diff_refinement() {
+        // "my_variable_old" vs "my_variable_new" shares prefix "my_variable_"
+        let spans = word_char_diff("let my_variable_old = 1;", "let my_variable_new = 1;");
+        assert_eq!(
+            spans,
+            vec![InlineSpan {
+                a_start: 16,
+                a_end: 19,
+                b_start: 16,
+                b_end: 19,
+            }]
+        );
+
+        // Completely different words retain coarse span
+        let spans_coarse = word_char_diff("cat", "elephant");
+        assert_eq!(
+            spans_coarse,
+            vec![InlineSpan {
+                a_start: 0,
+                a_end: 3,
+                b_start: 0,
+                b_end: 8,
             }]
         );
     }

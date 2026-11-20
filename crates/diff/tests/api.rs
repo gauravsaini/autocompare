@@ -532,7 +532,8 @@ fn inline_offsets_are_character_not_byte_offsets() {
     let a = "héllo wörld";
     let b = "héllo wörLD";
     let spans = inline_diff(a, b);
-    assert_eq!(spans, vec![span(6, 11, 6, 11)]);
+    // Hierarchical refinement: only `ld` -> `LD` differs, still char offsets.
+    assert_eq!(spans, vec![span(9, 11, 9, 11)]);
     assert_spans_wellformed(a, b, &spans);
 }
 
@@ -543,7 +544,8 @@ fn inline_prefix_and_suffix_never_highlighted() {
     let a = "alpha middle gamma";
     let b = "alpha middle-xyz gamma";
     let spans = inline_diff(a, b);
-    assert_eq!(spans, vec![span(6, 12, 6, 16)]);
+    // Hierarchical refinement: `middle` is a shared prefix, only `-xyz` is new.
+    assert_eq!(spans, vec![span(12, 12, 12, 16)]);
     assert_spans_wellformed(a, b, &spans);
 }
 
