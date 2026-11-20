@@ -1,0 +1,67 @@
+{
+  "name": "tree-narrow-720",
+  "intent": "Even row rhythm plus indent guides plus char-boundary orphan ellipsis at 720px narrow width",
+  "width_px": 720.0,
+  "row_rhythm": {
+    "line_role": "Mono",
+    "line_height_px": 15.6,
+    "pad_y_px": 1.0,
+    "row_height_px": 17.6,
+    "row_tops_px": [0.0, 17.6, 35.2, 52.8],
+    "legacy_frozen_row_height_px": 24.0
+  },
+  "columns": {
+    "col_gap_px": 8.0,
+    "name": {
+      "col": "Name",
+      "align": "Left",
+      "min_px": 184.0,
+      "x_px": 0.0,
+      "avail_w_px": 490.0
+    },
+    "size": {
+      "col": "Size",
+      "align": "Right",
+      "min_px": 86.0,
+      "x_px": 498.0,
+      "w_px": 86.0
+    },
+    "modified": {
+      "col": "Modified",
+      "align": "Left",
+      "min_px": 128.0,
+      "x_px": 592.0,
+      "w_px": 128.0
+    },
+    "fixed_cols_total_w_px": 222.0,
+    "canvas_right_edge_px": 720.0
+  },
+  "indent_depths": {
+    "indent_step_px": 12.0,
+    "guide_center_dx_px": 8.0,
+    "status_mark_w_px": 16.0,
+    "status_gap_px": 8.0,
+    "path_x_separated": {
+      "0": 40.0,
+      "1": 52.0,
+      "2": 64.0,
+      "3": 76.0,
+      "4": 88.0,
+      "5": 100.0
+    },
+    "guide_xs_depth2": [8.0, 20.0],
+    "size_x_across_depths": 498.0,
+    "mod_x_across_depths": 592.0
+  },
+  "orphan_ellipsis": {
+    "advance_px": 7.0,
+    "max_chars_depth2_at_720": 60,
+    "max_chars_depth0_at_960": 98,
+    "long_label": "src/gui/narrow-orphan-very-long-filename-that-must-clip-at-720px-width.rs",
+    "clipped_chars": 60,
+    "ends_with": "…",
+    "char_boundary": true,
+    "mid_word_safe": true
+  },
+  "notes": "tree_row_height() 17.6 == Mono 15.6 + 2x1.0 pad; guides level*12.0+8.0 from SPACE_MD/SM; folder_table_column_xs(720.0) -> (0.0, 498.0, 592.0); 592.0+128.0=720.0; orphan ellipsis clamps to char count with separator backtrack plus single ellipsis"
+}

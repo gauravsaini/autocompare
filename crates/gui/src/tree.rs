@@ -6616,3 +6616,279 @@ mod exq_foldertable10_tests {
         );
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE3 (round-3): even row rhythm + SPACE guides + char-boundary ellipsis.
+// BC folder compare rows have even rhythm with indent guides and ellipsis
+// that never cuts mid-word; ours had uneven row gaps and truncation
+// artifacts. Geometry FIRST: row height locked to TypoRole Mono
+// line-height, guide x-positions from SPACE tokens, orphan label ellipsis
+// clamps to char boundaries at 960px wide. Typography SECOND: Mono content
+// role reuse, Small weak for missing sides (tree2 precedent), no new sizes.
+// Colors FROZEN: no hue moves here.
+// WIRING (paint): har visible node ke liye row `tree_row_top(i)` se
+// `tree_row_height()` tak, guides `tree_guide_xs_from_space(depth)` par,
+// orphan path `tree_orphan_ellipsis_label(label, avail_w, depth)` se.
+// ----------------------------------------------------------------------------
+
+/// Tree row content role: Mono (12pt tabular, 15.6px line-height).
+pub const TREE_ROW_LINE_ROLE: crate::theme::TypoRole = crate::theme::TypoRole::Mono;
+
+/// Tree row vertical pad (px): symmetric 1.0 top + bottom (table parity).
+pub const TREE_ROW_PAD_Y: f32 = FOLDERTABLE_ROW_PAD_Y;
+
+/// Tree indent guide center offset (px): one SM step (expander 16 / 2).
+pub const TREE_GUIDE_CENTER_DX: f32 = crate::theme::SPACE_SM;
+
+/// Content line-height px locked to TypoRole Mono (12.0 * 1.30 = 15.6).
+/// Pure; unit-tested.
+pub fn tree_row_line_height_px() -> f32 {
+    TREE_ROW_LINE_ROLE.line_height_px()
+}
+
+/// Even tree row height px locked to Mono line-height + symmetric pad:
+/// 15.6 + 2.0 = 17.6. Legacy [`FOLDER_ROW_HEIGHT`] (24.0) frozen hai;
+/// paint adopt kare to yahi even rhythm deta hai. Pure; unit-tested.
+pub fn tree_row_height() -> f32 {
+    folder_table_row_height()
+}
+
+/// Row height from an explicit line height (pad reuse, non-finite guard).
+/// Pure; unit-tested.
+pub fn tree_row_height_for_line(line_h: f32) -> f32 {
+    folder_table_row_height_for_line(line_h)
+}
+
+/// Row top px for `row_idx`: `idx * tree_row_height()` — even rhythm,
+/// koi gap drift nahi. Non-finite risk nahi (saturating cast). Pure.
+pub fn tree_row_top(row_idx: usize) -> f32 {
+    row_idx as f32 * tree_row_height()
+}
+
+/// Row vertical span `(y0, y1)` px for `row_idx`: poori locked height.
+/// Pure; unit-tested.
+pub fn tree_row_span(row_idx: usize) -> (f32, f32) {
+    let top = tree_row_top(row_idx);
+    (top, top + tree_row_height())
+}
+
+/// Indent step px from SPACE tokens (MD step, 12.0). Pure; unit-tested.
+pub fn tree_guide_step_px() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// Ek ancestor level ki guide x px SPACE tokens se:
+/// `level * SPACE_MD + SPACE_SM` (expander-center parity 8.0).
+/// [`tree_indent_guide_x`] ka token-spelled twin. Pure; unit-tested.
+pub fn tree_guide_x_from_space(level: usize) -> f32 {
+    (level as f32) * tree_guide_step_px() + TREE_GUIDE_CENTER_DX
+}
+
+/// Saare ancestor guides ke x px SPACE tokens se (`0..depth`).
+/// Pure; unit-tested.
+pub fn tree_guide_xs_from_space(depth: usize) -> Vec<f32> {
+    let mut xs = Vec::new();
+    let mut level = 0usize;
+    while level < depth {
+        xs.push(tree_guide_x_from_space(level));
+        level = level.saturating_add(1);
+    }
+    xs
+}
+
+/// Orphan/name label ke liye max chars (char-boundary budget):
+/// `(name_avail - indent) / mono_advance`, floor, min 0.
+/// Non-finite `avail_w` par 0. Pure; unit-tested.
+pub fn tree_label_max_chars(avail_w: f32, depth: usize) -> usize {
+    if !avail_w.is_finite() {
+        return 0;
+    }
+    let name_avail = folder_table_name_avail_w(avail_w);
+    let indent = folder_table_name_indent_px(depth);
+    if name_avail <= indent {
+        return 0;
+    }
+    ((name_avail - indent) / FOLDER_MONO_ADVANCE) as usize
+}
+
+/// Kya orphan label ko ellipsis chahiye (char count budget se bahar).
+/// Khali label par kabhi nahi. Pure; unit-tested.
+pub fn tree_orphan_label_needs_ellipsis(label: &str, avail_w: f32, depth: usize) -> bool {
+    if label.is_empty() || !avail_w.is_finite() {
+        return false;
+    }
+    label.chars().count() > tree_label_max_chars(avail_w, depth)
+}
+
+/// Word-safe separator: path/label word boundary (mid-word cut se bachao).
+fn tree_label_is_sep(ch: char) -> bool {
+    matches!(ch, '/' | ' ' | '-' | '_' | '.')
+}
+
+/// Orphan label ellipsis (`…`) jo char boundaries par clamp hota hai aur
+/// mid-word cut se bachta hai: budget-1 chars lekar aakhri separator par
+/// wapas (agar upper half me mile), warna char clamp; ek-char `…` jodta
+/// hai taaki paint kabhi surrogate/byte beech me na kaate. Khali label ya
+/// fit hone par as-is; budget 0 par khaali; budget 1 par sirf `…`.
+/// Pure; unit-tested.
+pub fn tree_orphan_ellipsis_label(label: &str, avail_w: f32, depth: usize) -> String {
+    let max = tree_label_max_chars(avail_w, depth);
+    if label.is_empty() {
+        return String::new();
+    }
+    if !avail_w.is_finite() || max == 0 {
+        if label.chars().count() == 0 {
+            return String::new();
+        }
+        if tree_label_max_chars(avail_w, depth) == 0 && avail_w.is_finite() {
+            return String::new();
+        }
+        return label.to_string();
+    }
+    let total = label.chars().count();
+    if total <= max {
+        return label.to_string();
+    }
+    if max <= 1 {
+        return "…".to_string();
+    }
+    let budget = max.saturating_sub(1);
+    let prefix: String = label.chars().take(budget).collect();
+    let prefix_len = prefix.chars().count();
+    let mut cut: Option<usize> = None;
+    let mut idx = 0usize;
+    for ch in prefix.chars() {
+        if tree_label_is_sep(ch) {
+            cut = Some(idx.saturating_add(1));
+        }
+        idx = idx.saturating_add(1);
+    }
+    let half = budget / 2;
+    let mut keep = prefix_len;
+    if let Some(c) = cut
+        && c >= half
+        && c < prefix_len
+    {
+        keep = c;
+    }
+    let head: String = prefix.chars().take(keep).collect();
+    let mut out = head;
+    out.push('…');
+    out
+}
+
+#[cfg(test)]
+mod exq_tree3_tests {
+    use super::*;
+
+    #[test]
+    fn tree3_row_height_locked_to_mono_line_height() {
+        assert!((tree_row_line_height_px() - 15.6).abs() < 0.01);
+        assert_eq!(
+            tree_row_line_height_px(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((tree_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(tree_row_height(), folder_table_row_height());
+        assert!((tree_row_height_for_line(15.6) - 17.6).abs() < 0.001);
+        assert_eq!(tree_row_height_for_line(f32::NAN), FOLDER_ROW_HEIGHT);
+        assert_eq!(TREE_ROW_PAD_Y, FOLDERTABLE_ROW_PAD_Y);
+        assert_eq!(TREE_ROW_PAD_Y, 1.0);
+        // Even rhythm: tops tile without drift.
+        assert_eq!(tree_row_top(0), 0.0);
+        assert_eq!(tree_row_top(1), tree_row_height());
+        assert_eq!(tree_row_span(0), (0.0, tree_row_height()));
+        let span = tree_row_span(2);
+        assert!((span.1 - span.0 - tree_row_height()).abs() < 0.001);
+        assert_eq!(span.0, tree_row_top(2));
+    }
+
+    #[test]
+    fn tree3_guides_from_space_tokens() {
+        assert_eq!(tree_guide_step_px(), crate::theme::SPACE_MD);
+        assert_eq!(tree_guide_step_px(), 12.0);
+        assert_eq!(TREE_GUIDE_CENTER_DX, crate::theme::SPACE_SM);
+        assert_eq!(TREE_GUIDE_CENTER_DX, 8.0);
+        assert_eq!(tree_guide_x_from_space(0), 8.0);
+        assert_eq!(tree_guide_x_from_space(1), 20.0);
+        assert_eq!(tree_guide_x_from_space(2), 32.0);
+        assert_eq!(tree_guide_x_from_space(0), tree_indent_guide_x(0));
+        assert_eq!(tree_guide_x_from_space(3), tree_indent_guide_x(3));
+        assert_eq!(tree_guide_xs_from_space(0), tree_indent_guide_xs(0));
+        assert_eq!(tree_guide_xs_from_space(3), tree_indent_guide_xs(3));
+        assert_eq!(tree_guide_xs_from_space(3), vec![8.0, 20.0, 32.0]);
+    }
+
+    #[test]
+    fn tree3_orphan_ellipsis_char_boundary_at_960() {
+        // 960 canonical: name_avail 730; depth0 budget (730-40)/7 = 98.
+        assert_eq!(folder_table_name_avail_w(960.0), 730.0);
+        assert_eq!(tree_label_max_chars(960.0, 0), 98);
+        assert_eq!(tree_label_max_chars(960.0, 2), 95);
+        assert_eq!(tree_label_max_chars(f32::NAN, 0), 0);
+        let short = "orphan-left.txt";
+        assert!(!tree_orphan_label_needs_ellipsis(short, 960.0, 0));
+        assert_eq!(tree_orphan_ellipsis_label(short, 960.0, 0), short);
+        let long_label = "src/gui/very-long-orphan-left-filename-that-keeps-going-and-going-and-going-past-ninety-chars.rs";
+        assert!(tree_orphan_label_needs_ellipsis(long_label, 960.0, 5));
+        let clipped = tree_orphan_ellipsis_label(long_label, 960.0, 5);
+        // Char boundary: char count within budget, ends with single ellipsis.
+        let max5 = tree_label_max_chars(960.0, 5);
+        assert!(clipped.chars().count() <= max5);
+        assert!(clipped.chars().count() >= max5 / 2);
+        assert!(clipped.ends_with('…'));
+        // Mid-word safe: separator par cut, beech me word nahi tootta.
+        let mid = "aaa-bbb-ccc-ddd-eee-fff-ggg-hhh-iii-jjj-kkk-lll-mmm-nnn-ooo-ppp-qqq-rrr-sss-ttt-uuu-vvv-www-xxx-yyy-zzz-end.rs";
+        let mid_clip = tree_orphan_ellipsis_label(mid, 960.0, 5);
+        assert!(mid_clip.ends_with('…'));
+        let body = mid_clip.trim_end_matches('…');
+        let next_ch = mid.chars().nth(body.chars().count());
+        let last_kept = body.chars().last();
+        let boundary_ok =
+            next_ch.is_none_or(tree_label_is_sep) || last_kept.is_none_or(tree_label_is_sep);
+        assert!(boundary_ok);
+        // Non-finite budget never truncates, empty stays empty.
+        assert_eq!(
+            tree_orphan_ellipsis_label(long_label, f32::NAN, 0),
+            long_label
+        );
+        assert_eq!(tree_orphan_ellipsis_label("", 960.0, 0), "");
+    }
+
+    #[test]
+    fn exq_tree3_round1_tree_narrow_720_and_row_rhythm() {
+        // Headless test proving edge fixture comparison/tree-narrow-720.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree3/round-1/comparison/tree-narrow-720.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-narrow-720\""));
+        assert!(fixture_raw.contains("\"width_px\": 720.0"));
+        assert!(fixture_raw.contains("\"line_height_px\": 15.6"));
+        assert!(fixture_raw.contains("\"row_height_px\": 17.6"));
+        assert!(fixture_raw.contains("\"indent_step_px\": 12.0"));
+        assert!(fixture_raw.contains("\"x_px\": 498.0"));
+        assert!(fixture_raw.contains("\"x_px\": 592.0"));
+        // Narrow geometry: name_avail 490, size 498, mod 592, right edge 720.
+        assert_eq!(folder_table_name_avail_w(720.0), 490.0);
+        let (name_x, size_x, mod_x) = folder_table_column_xs(720.0);
+        assert_eq!((name_x, size_x, mod_x), (0.0, 498.0, 592.0));
+        assert_eq!(
+            mod_x + folder_table_col_min_px(FolderTableCol::Modified),
+            720.0
+        );
+        // Row rhythm even at narrow width: tops tile by 17.6.
+        assert!((tree_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(tree_row_top(3), tree_row_height() * 3.0);
+        // Guides unchanged narrow: SPACE tokens, depth rhythm intact.
+        assert_eq!(tree_guide_xs_from_space(2), vec![8.0, 20.0]);
+        assert_eq!(folder_row_path_x_separated(2), 64.0);
+        // Narrow ellipsis budget: (490-64)/7 = 60 chars at depth 2.
+        assert_eq!(tree_label_max_chars(720.0, 2), 60);
+        let long_label =
+            "src/gui/narrow-orphan-very-long-filename-that-must-clip-at-720px-width.rs";
+        assert!(tree_orphan_label_needs_ellipsis(long_label, 720.0, 2));
+        let clipped = tree_orphan_ellipsis_label(long_label, 720.0, 2);
+        assert!(clipped.chars().count() <= 60);
+        assert!(clipped.chars().count() >= 30);
+        assert!(clipped.ends_with('…'));
+    }
+}
