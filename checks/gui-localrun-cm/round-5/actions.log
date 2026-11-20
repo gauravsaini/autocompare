@@ -1,0 +1,35 @@
+13:26:08 launch: nohup target/debug/autocompare-gui
+13:26:15 capture: live-desktop full + live-home region R320,91,800,632 (baseline Home, no clicks yet)
+13:26:38 click-1: Text mode tab at {412,212} (est from live-home 1600x1264: tab-row y~242/2+91, Text x~185/2+320)
+13:27:22 probe: osascript click BLOCKED (-25211 assistive access); live-text.png is stale-Home (click never fired)
+13:27:31 click-2: /tmp/clicker 412 212 (CGSessionEventTap, Text tab)
+13:28:42 probe-typer: Tab posted to frontmost (autocompare Text tab, harmless focus move)
+13:28:47 click-3: left file field at {470,347}
+13:28:48 type-1: left path /tmp/cm_left.txt
+13:28:50 click-4: right file field at {820,347}
+13:28:51 type-2: right path /tmp/cm_right.txt
+13:29:06 click-5: left field refocus {470,347}, then hid-type ABC marker
+13:29:20 click-6: left field corrected {482,315} (probe-hid measured)
+13:29:36 restart: kill PID 66217 (dirty ABC state), fresh launch for clean typing
+13:29:47 click-7: Text tab {412,212} (fresh instance)
+13:29:57 click-8: left field {470,314}
+13:29:59 type-3: CmdA + left path
+13:30:10 type-4: typer3-hid left path (fix: old typer was session-tap)
+13:30:25 debug: click {483,313} + single Z
+13:30:44 debug2: click {483,313} + slow Q
+13:31:01 incident: app process gone (pgrep empty), frontmost=ChatGPT; checking cargo-run.log
+13:31:13 relaunch-2: PID 67577 after silent exit (cause TBD, crashreport checked above)
+13:31:40 click-9: left field {485,354} (fresh layout, img-measured)
+13:31:41 type-5: slow-hid left path
+13:31:46 click-10: right field {933,354}
+13:31:47 type-6: slow-hid right path
+13:32:47 drag-1: l.txt {1300,280} -> left field {485,354}
+13:33:17 probe: Finder icon click-select test {1300,300}
+13:33:35 atomic: hid-click {485,354} + hid-type MARKER
+13:33:52 click-11: Folder tab {458,212}
+13:33:54 click-12: Table tab {615,212}
+13:34:19 capture: toolbar close-up + strip close-up (observe crops, no clicks)
+13:34:24 capture: BC observe-only -R720,31,720,869 (zero clicks in BC)
+13:34:24 capture: final desktop full
+13:35:00 capture: BC window-id 1394 via screencapture -l (obscured, zero focus change)
+13:35:16 cleanup: kill live instance, close Finder cmdrop
