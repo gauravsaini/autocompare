@@ -177,7 +177,7 @@
   "AGYX-REPROBE": "agyx still fail 2026-11-20 23:11 probe model gemini-4-neon not available in catalog -> opencode default-model only, mix when fixed",
   "POLL-STRATEGY": "exponential backoff 10s/20s/40s/80s, no fixed 8s, via opencode session export",
   "WAVE-TOOLBAR": "running opencode sess-opencode-toolbar OWNS views.rs + checks/gui-exq-toolbar (session tabs + action bar + jump, launched 23:20)",
-  "WAVE-PATHMETA": "running opencode sess-opencode-pathmeta OWNS screenshot.rs+viewmodel.rs + checks/gui-exq-pathmeta (path strip + segmented status, launched 23:20)",
-  "WAVE-HOME3": "running opencode sess-opencode-home3 OWNS home.rs+theme.rs + checks/gui-exq-home3 (card gaps + type steps, launched 23:20)",
-  "WAVE-TREE2": "running opencode sess-opencode-tree2 OWNS tree.rs+gutter.rs+copy.rs + checks/gui-exq-tree2 (indent + marks + arrows, launched 23:20)"
+  "WAVE-PATHMETA": "landed+pushed ce74d5c REPORT PASS 778 green path-strip segmented-status (screenshot+viewmodel)",
+  "WAVE-HOME3": "landed+pushed 502e404 REPORT PASS 773 green card-gaps type-steps (home.rs 137 + theme.rs 35)",
+  "WAVE-TREE2": "landed+pushed abcf36c REPORT PASS 773 green indent-guides status-marks gutter-arrows (tree+gutter+copy)"
 }
