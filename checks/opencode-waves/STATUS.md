@@ -1535,3 +1535,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CH-TOOLBAR (sess-tool-ch): P2-1 toolbar icon parity, OWNS views.rs + checks/gui-toolbar-ch.
 - CI-DARKC (sess-dark-ci): dark C full (persist + fixture mode-param, default dark), OWNS main.rs + app.rs + screenshot.rs + checks/gui-darkfull-ci.
 - Queue: round-4 re-verify (dono ke baad).
+
+## 2026-11-20 — Waves CH-TOOLBAR + CI-DARKC landed + pushed
+- `68620d1` feat(gui): adopt toolbar icon parity contract in views (OWNS views.rs + checks/gui-toolbar-ch). P2-1 DONE (contract + tests-live; call-site wiring follow-up).
+- `262eb58` feat(gui): persist dark_mode across runs and add fixture light mode (OWNS app.rs + main.rs + screenshot.rs + checks/gui-darkfull-ci). Dark C DONE: persist (storage roundtrip tests) + fixture mode param (default dark, byte-stable) + startup visuals dark_mode se.
+- Gates: 669 green (663 -> +5... wait 664/669 mix: CH 664, CI 669), clippy/fmt/banned clean, colors: CH zero, CI 6 touches sab existing Visuals::dark/light reuse (naya palette zero), PNGs valid, byte-stable vs CE baseline, OWNS clean.
+- CI ne beech ka self-recursion stack-overflow bug (fixture_palette replaceAll `of()` cycle) pakad kar fix kiya.
+- Queue: round-4 re-verify (dark C ke baad live-vs-fixture alignment + P1/P2 closure proof).
