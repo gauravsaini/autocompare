@@ -8,11 +8,11 @@
     "AGYX-B-sessions": "landed",
     "AGYX-C-diff": "landed",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
-    "VFS-D": "retry running (sess-vfs-d2 opencode, agyx backend fail -> fallback)",
+    "VFS-D": "progressing (sess-vfs-d2, 6 files touched OWNS-clean, uncommitted)",
     "SYNC-E": "running (agyx-e-sync)",
     "MEDIA-F": "running (agyx-f-media)",
     "CLI-G": "running (agyx-g-cli)",
-    "EXQ-GEO": "launching (sess-exq-geo, geometry, views/tree/app)",
-    "EXQ-TYPO": "launching (sess-exq-typo, typography, views_hex/views_table/gutter/home/viewmodel)"
+    "EXQ-GEO": "running (sess-exq-geo)",
+    "EXQ-TYPO": "running gate-passed (sess-exq-typo2, R7 path fixed)"
   }
 }
