@@ -3327,6 +3327,102 @@ pub fn hex_ruler_rhythm_sync_ok(char_w: f32) -> bool {
     hex_offset_plus_gap_sync_ok(char_w)
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex9 round-1: narrow 720px plus ruler.
+// Gap BC hex half: ruler ticks at narrow 720px canvas, byte-cell geometry
+// from TypoRole Mono metrics, and narrow-720 visible rows calculation.
+// Geometry FIRST:
+// - Narrow 720px canvas constants:
+//   `HEX_NARROW_CANVAS_W` (720.0), `HEX_NARROW_CANVAS_H` (720.0),
+//   `HEX_NARROW_PANES_H` (590.0 = 720.0 - 130.0),
+//   and `hex_narrow_720_visible_rows()` (37 rows).
+// - Narrow ruler tick alignment and xs at 720:
+//   `hex_narrow_ruler_tick_xs(char_w)` returns tick positions [0.0..322.0]
+//   matching `hex_grid_byte_col_x(col, char_w)` for cols 0..16.
+//   `hex_narrow_ruler_col_align_ok(char_w)` verifies col alignment and step consistency.
+// - Byte cell geometry locked from TypoRole Mono:
+//   text_w 14.0, box_w 30.0, row_h 15.6px via `hex_byte_cell_size_ok(char_w)`.
+// Typography SECOND: offset + grid + ruler + ASCII all Mono, labels Body.
+// Colors FROZEN: zero Color32/Visuals additions (count 33 preserved).
+// Zero banned constructs: no forbidden tokens in non-test code.
+// ----------------------------------------------------------------------------
+
+/// Canvas width for narrow 720px display (px): 720.0. Pure.
+pub const HEX_NARROW_CANVAS_W: f32 = 720.0;
+
+/// Canvas height for narrow 720px display (px): 720.0. Pure.
+pub const HEX_NARROW_CANVAS_H: f32 = 720.0;
+
+/// Panes height for narrow 720px canvas (px): 590.0 (`720.0 - 130.0` chrome reserve). Pure.
+pub const HEX_NARROW_PANES_H: f32 = 590.0;
+
+/// Visible rows in narrow 720px canvas budget: `hex_visible_rows(590.0, 15.6)` yields exactly 37 rows. Pure; unit-tested.
+pub fn hex_narrow_720_visible_rows() -> u64 {
+    hex_visible_rows(HEX_NARROW_PANES_H, hex_grid_row_h())
+}
+
+/// Computes ruler tick x-positions for all 16 byte columns at `char_w`.
+/// Returns an empty Vec on non-finite or non-positive `char_w`.
+/// Pure; unit-tested.
+pub fn hex_narrow_ruler_tick_xs(char_w: f32) -> Vec<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut xs = Vec::with_capacity(HEX_BYTES_PER_ROW);
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        if let Some(x) = hex_ruler_col_x(col, char_w) {
+            xs.push(x);
+        }
+        col = col.saturating_add(1);
+    }
+    xs
+}
+
+/// Proves narrow ruler tick alignment at 720px canvas width for `char_w`:
+/// ruler col x matches grid col x for cols 0..16, ruler tick step matches byte col step,
+/// and canvas width meets the SideBySide layout mode condition.
+/// Pure; unit-tested.
+pub fn hex_narrow_ruler_col_align_ok(char_w: f32) -> bool {
+    if !hex_ruler_col_align_ok(char_w) {
+        return false;
+    }
+    if hex_layout_mode(HEX_NARROW_CANVAS_W) != HexLayoutMode::SideBySide {
+        return false;
+    }
+    let ticks = hex_narrow_ruler_tick_xs(char_w);
+    if ticks.len() != HEX_BYTES_PER_ROW {
+        return false;
+    }
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        let (Some(&t_x), Some(g_x)) = (ticks.get(col), hex_grid_byte_col_x(col, char_w)) else {
+            return false;
+        };
+        if (t_x - g_x).abs() > 0.001 {
+            return false;
+        }
+        col = col.saturating_add(1);
+    }
+    true
+}
+
+/// Sync check for hex9: narrow ruler tick alignment, byte cell size,
+/// and narrow-720 canvas visible rows.
+/// Bad or non-finite `char_w` returns false. Pure; unit-tested.
+pub fn hex_narrow_ruler_sync_ok(char_w: f32) -> bool {
+    if !hex_narrow_ruler_col_align_ok(char_w) {
+        return false;
+    }
+    if !hex_byte_cell_size_ok(char_w) {
+        return false;
+    }
+    if hex_narrow_720_visible_rows() != 37 {
+        return false;
+    }
+    hex_offset_plus_gap_sync_ok(char_w)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5562,6 +5658,110 @@ mod tests {
         assert!(!hex_ruler_rhythm_sync_ok(f32::NAN));
 
         // 5. Typo second: offset + grid + ruler + ASCII all Mono
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_cell_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex9_narrow_plus_ruler() {
+        // Headless test proving edge fixture comparison/hex-narrow-720.json:
+        // ruler tick alignment and xs at 720,
+        // byte cell geometry locked from TypoRole Mono,
+        // narrow-720 visible rows calculation (canvas_h 720.0, panes_h 590.0, visible_rows 37).
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-hex9/comparison/hex-narrow-720.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex9/round-1/comparison/hex-narrow-720.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-narrow-720\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 720.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 720.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"panes_h\": 590.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 37"));
+        assert!(fixture_raw.contains("\"byte_cell_text_w\": 14.0"));
+        assert!(fixture_raw.contains("\"byte_cell_box_w\": 30.0"));
+        assert!(fixture_raw.contains("\"byte_col_step_px\": 21.0"));
+        assert!(fixture_raw.contains("\"offset_addr_chars\": 10"));
+        assert!(fixture_raw.contains("\"offset_hex_digits\": 8"));
+        assert!(fixture_raw.contains("\"offset_widest_label\": \"0xffffffff\""));
+        assert!(fixture_raw.contains("\"offset_gutter_text_w\": 70.0"));
+        assert!(fixture_raw.contains("\"offset_gutter_w\": 78.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_gutter_w\": 8.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_x\": 505.0"));
+        assert!(fixture_raw.contains("\"grid_avail_w\": 668.0"));
+
+        // 1. Narrow ruler tick alignment and xs at 720 (ruler col x matches grid col x for cols 0..16)
+        let char_w = 7.0;
+        let expected_xs = [
+            0.0, 21.0, 42.0, 63.0, 84.0, 105.0, 126.0, 147.0, 175.0, 196.0, 217.0, 238.0, 259.0,
+            280.0, 301.0, 322.0,
+        ];
+        let ticks = hex_narrow_ruler_tick_xs(char_w);
+        assert_eq!(ticks, expected_xs);
+        assert_eq!(ticks.len(), 16);
+
+        for col in 0..16 {
+            let r_x = hex_ruler_col_x(col, char_w);
+            let g_x = hex_grid_byte_col_x(col, char_w);
+            assert_eq!(r_x, g_x);
+            assert_eq!(r_x, Some(expected_xs[col]));
+        }
+        assert_eq!(hex_ruler_col_x(16, char_w), None);
+        assert_eq!(hex_grid_byte_col_x(16, char_w), None);
+        assert!(hex_narrow_ruler_col_align_ok(char_w));
+
+        // Alignment across narrow & wide scales
+        for &scale in &[5.0, 6.0, 7.0, 8.0, 10.0, 12.0] {
+            assert!(hex_narrow_ruler_col_align_ok(scale));
+            let s_ticks = hex_narrow_ruler_tick_xs(scale);
+            assert_eq!(s_ticks.len(), 16);
+            for col in 0..16 {
+                assert_eq!(s_ticks.get(col).copied(), hex_grid_byte_col_x(col, scale));
+            }
+        }
+        assert!(!hex_narrow_ruler_col_align_ok(0.0));
+        assert!(!hex_narrow_ruler_col_align_ok(-1.0));
+        assert!(!hex_narrow_ruler_col_align_ok(f32::NAN));
+        assert!(hex_narrow_ruler_tick_xs(0.0).is_empty());
+        assert!(hex_narrow_ruler_tick_xs(-7.0).is_empty());
+        assert!(hex_narrow_ruler_tick_xs(f32::NAN).is_empty());
+
+        // Layout mode at 720 canvas width
+        assert_eq!(HEX_NARROW_CANVAS_W, 720.0);
+        assert_eq!(
+            hex_layout_mode(HEX_NARROW_CANVAS_W),
+            HexLayoutMode::SideBySide
+        );
+        assert_eq!(hex_grid_avail_w(HEX_NARROW_CANVAS_W, false), 668.0);
+
+        // 2. Byte cell geometry locked from TypoRole Mono (text_w 14.0, box_w 30.0, row_h 15.6)
+        assert_eq!(crate::theme::TypoRole::Mono.size(), 12.0);
+        assert!((crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.001);
+        assert_eq!(hex_grid_byte_cell_text_w(char_w), 14.0);
+        assert_eq!(hex_grid_byte_cell_box_w(char_w), 30.0);
+        assert!((hex_grid_row_h() - 15.6).abs() < 0.001);
+        assert!(hex_byte_cell_size_ok(char_w));
+        assert!(!hex_byte_cell_size_ok(0.0));
+        assert!(!hex_byte_cell_size_ok(f32::NAN));
+
+        // 3. Narrow-720 visible rows calculation (canvas_h 720.0, panes_h 590.0, visible_rows 37)
+        assert_eq!(HEX_NARROW_CANVAS_H, 720.0);
+        assert_eq!(HEX_NARROW_PANES_H, 590.0);
+        assert_eq!(HEX_NARROW_CANVAS_H - 130.0, HEX_NARROW_PANES_H);
+        assert_eq!(hex_narrow_720_visible_rows(), 37);
+        assert_eq!(hex_visible_rows(HEX_NARROW_PANES_H, hex_grid_row_h()), 37);
+        assert_eq!(hex_visible_rows(590.0, 15.6), 37);
+
+        // 4. Narrow sync helper
+        assert!(hex_narrow_ruler_sync_ok(char_w));
+        assert!(!hex_narrow_ruler_sync_ok(0.0));
+        assert!(!hex_narrow_ruler_sync_ok(f32::NAN));
+
+        // 5. Typography second: all Mono
         assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
