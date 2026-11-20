@@ -360,6 +360,45 @@ pub fn session_toolbar_button_size() -> (f32, f32) {
     (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
 }
 
+/// Toolbar swap glyph: `↔` reuse ([`home_recent_row_title`] precedent) —
+/// BC-style icon-led action, koi naya asset nahi. Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub const TOOLBAR_SWAP_GLYPH: &str = "\u{2194}";
+
+/// Toolbar reload glyph: `▶` reuse (paging-nav `Next hunk ▶` precedent:
+/// forward/run affordance) — koi naya asset nahi. Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub const TOOLBAR_RELOAD_GLYPH: &str = "▶";
+
+/// Icon-to-label gap (px): [`TIGHT_GAP`] reuse taaki glyph + label
+/// toolbar item rhythm par baithe. Koi naya size nahi; pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn toolbar_icon_gap() -> f32 {
+    TIGHT_GAP
+}
+
+/// Toolbar button typo role: [`chrome_tab_role`] (Body 13 proportional)
+/// reuse — buttons chrome me rahen, mono me na jaen. Koi naya
+/// size/weight nahi; pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn toolbar_button_role() -> TypoRole {
+    chrome_tab_role()
+}
+
+/// Icon-led Swap label: glyph + space + existing English label (label
+/// text unchanged, sirf glyph prefix). Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn toolbar_swap_label() -> String {
+    format!("{TOOLBAR_SWAP_GLYPH} Swap Sides")
+}
+
+/// Icon-led Reload label: glyph + space + existing English label (label
+/// text unchanged, sirf glyph prefix). Pure; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn toolbar_reload_label() -> String {
+    format!("{TOOLBAR_RELOAD_GLYPH} Reload / Recompare")
+}
+
 /// Path-row Browse/Compare button size: 120x28 floor reuse ([`HOME_CARD_BUTTON_MIN_W`]
 /// x [`HOME_CARD_BUTTON_MIN_H`]). Home CTA widen (224) se untouched.
 /// Pure; unit-tested.
@@ -6893,6 +6932,21 @@ mod tests {
         let (w, h) = session_toolbar_button_size();
         assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
         assert_eq!(w * h, 3360.0);
+    }
+
+    #[test]
+    fn toolbar_icon_parity_reuses_chrome_and_glyphs() {
+        // P2-1 icon parity: glyphs codebase me pehle se (↔ recent-title,
+        // ▶ paging-nav), gap TIGHT_GAP, role chrome_tab (Body 13).
+        assert_eq!(TOOLBAR_SWAP_GLYPH, "\u{2194}");
+        assert_eq!(TOOLBAR_RELOAD_GLYPH, "▶");
+        assert_eq!(toolbar_icon_gap(), TIGHT_GAP);
+        assert_eq!(toolbar_button_role(), chrome_tab_role());
+        assert_eq!(toolbar_swap_label(), "\u{2194} Swap Sides");
+        assert_eq!(toolbar_reload_label(), "▶ Reload / Recompare");
+        // Labels English text unchanged rakhte hain (sirf glyph prefix).
+        assert!(toolbar_swap_label().ends_with("Swap Sides"));
+        assert!(toolbar_reload_label().ends_with("Reload / Recompare"));
     }
 
     #[test]
