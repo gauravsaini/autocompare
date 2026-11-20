@@ -2097,3 +2097,236 @@ mod exq_gutter10_tests {
         assert_eq!(gutter_viewport_rect_padded(6, 600.0, 99, 2), None);
     }
 }
+
+// ----------------------------------------------------------------------------
+// TEXT5: separate number gutter + icon column + symmetric center divider.
+// BC text compare me line numbers alag column me, change icons alag column
+// me, aur beech me arrows wala divider dono panes se barabar gap par rehta
+// hai; yahan numbers code ke andar inline paint hote the, icon ke liye koi
+// reserve nahi tha, aur panes divider se chipke lagte the. Geometry first:
+// number column (digits se chauda, SPACE scale) + icon reserve (arrow-box
+// parity) = poora text gutter; center divider side gaps barabar (arrow box
+// + 2 * side gap = center width); 960 par panes barabar. Hit-slop dono
+// taraf barabar. Row center Mono line-height pitch par lock. Typography
+// second: sab wahi content_grid (Mono 12 tabular) role, koi naya size nahi.
+// Colors frozen: sirf shape.
+// WIRING (paint owner ke paas): number column
+// `gutter_linenum_column_width(..)` chaudi, icon strip
+// `gutter_icon_column_width()` chaudi, poora gutter
+// `gutter_text_gutter_width(..)` chauda; center column
+// `gutter_center_width()` me arrow `gutter_arrow_box()` ka, side gaps
+// `gutter_center_side_gap()` ke; clicks `gutter_slop_band(..)` se.
+// ----------------------------------------------------------------------------
+
+/// Change-icon column reserve px: one LG step (arrow-box parity, 16.0).
+///
+/// Numbers ke baad icons ke liye alag fixed strip taaki number column
+/// digits ke saath chauda ho par icon kabhi number/code se na takraye.
+/// [`crate::theme::SPACE_LG`] reuse, koi naya literal nahi.
+pub const GUTTER_ICON_COL_W: f32 = crate::theme::SPACE_LG;
+
+/// Center-divider side gap px per side: one XS step (4.0).
+///
+/// Divider ke dono taraf barabar gap taaki panes divider se chipke na
+/// lagen: `GUTTER_ARROW_BOX + 2 * side gap == GUTTER_CENTER_W`
+/// (16 + 2*4 == 24). [`crate::theme::SPACE_XS`] reuse.
+pub const GUTTER_CENTER_SIDE_GAP: f32 = crate::theme::SPACE_XS;
+
+/// Icon column reserve px (single source). Pure.
+pub fn gutter_icon_column_width() -> f32 {
+    GUTTER_ICON_COL_W
+}
+
+/// Center-divider side gap px per side (single source). Pure.
+pub fn gutter_center_side_gap() -> f32 {
+    GUTTER_CENTER_SIDE_GAP
+}
+
+/// Poora text gutter width px: number column + icon reserve.
+///
+/// Numbers alag, icons alag — dono judkar ek tabular gutter banate hain
+/// taaki paint numbers inline na ghole. Pure; unit-tested.
+pub fn gutter_text_gutter_width(max_line_no: usize, show_line_numbers: bool) -> f32 {
+    gutter_linenum_column_width(max_line_no, show_line_numbers) + GUTTER_ICON_COL_W
+}
+
+/// Mono line-height px (measured Mono row pitch, 12 * 1.30 = 15.6).
+///
+/// Row center math isi pitch par lock hai taaki gutter markers text rows
+/// se ek beat par rahen. Pure; unit-tested.
+pub fn gutter_mono_line_height_px() -> f32 {
+    crate::theme::TypoRole::content_grid().line_height_px()
+}
+
+/// Mono pitch par row center y px: `(row + 0.5) * line_h`.
+///
+/// [`gutter_row_center_y`] viewport-fraction math ka line-pitch twin:
+/// paint text rows isi pitch par bichhata hai, isliye markers yahi se
+/// align hote hain. `None`: out-of-range row ya non-finite/non-positive
+/// pitch. Pure; unit-tested.
+pub fn gutter_row_center_y_for_line_height(row: usize, total_rows: usize, line_h: f32) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows {
+        return None;
+    }
+    if !line_h.is_finite() || line_h <= 0.0 {
+        return None;
+    }
+    let y = (row as f32 + 0.5) * line_h;
+    if y.is_finite() && y >= 0.0 {
+        Some(y)
+    } else {
+        None
+    }
+}
+
+/// Slop-expanded band `(lo, hi)` px: dono taraf barabar `slop`.
+///
+/// Hit-slop symmetric hai — low side `0.0` par clamp ke siwa dono taraf
+/// same pad, taaki click target badhe par paint na hile. Non-finite ya
+/// non-positive slop par band jaisa-ka-taisa. Pure; unit-tested.
+pub fn gutter_slop_band(seg: &GutterSegment, slop: f32) -> Option<(f32, f32)> {
+    if !seg.y_start.is_finite() || !seg.y_end.is_finite() {
+        return None;
+    }
+    if seg.y_end < seg.y_start {
+        return None;
+    }
+    let pad = if slop.is_finite() && slop > 0.0 {
+        slop
+    } else {
+        0.0
+    };
+    let lo = (seg.y_start - pad).max(0.0);
+    let hi = seg.y_end + pad;
+    if lo.is_finite() && hi.is_finite() && lo <= hi {
+        Some((lo, hi))
+    } else {
+        None
+    }
+}
+
+/// 960px canvas par symmetric text layout `(margin, left, center, right,
+/// margin)` px: bahari margins barabar, dono panes barabar, divider
+/// beech me barabar gaps samet.
+///
+/// `margin` = [`crate::theme::GEO_OUTER_MARGIN`] (12), `center` =
+/// [`GUTTER_CENTER_W`] (24), panes me bachi jagah aadhi-aadhi:
+/// (960 - 2*12 - 24) / 2 = 456. Panes divider se chipakte nahi (side
+/// gaps center ke andar symmetric). Pure; unit-tested.
+pub fn gutter_text5_layout_960() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 960.0)
+}
+
+/// Kisi bhi canvas width par symmetric text layout: margins bahar barabar,
+/// panes andar barabar. Na-mumkin budget (center + margins se chhota
+/// canvas, kharab input) par panes zero. Pure; unit-tested.
+pub fn gutter_text_layout(margin: f32, center: f32, avail_w: f32) -> (f32, f32, f32, f32, f32) {
+    if !margin.is_finite() || !center.is_finite() || !avail_w.is_finite() {
+        return (0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+    if margin < 0.0 || center < 0.0 || avail_w <= 0.0 {
+        return (0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+    let rest = avail_w - 2.0 * margin - center;
+    if !rest.is_finite() || rest <= 0.0 {
+        return (margin.max(0.0), 0.0, center, 0.0, margin.max(0.0));
+    }
+    let pane = rest / 2.0;
+    (margin, pane, center, pane, margin)
+}
+
+#[cfg(test)]
+mod exq_text5_tests {
+    use super::*;
+
+    #[test]
+    fn text5_gutter_splits_numbers_and_icons_on_space_scale() {
+        // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json.
+        assert_eq!(GUTTER_ICON_COL_W, crate::theme::SPACE_LG);
+        assert_eq!(GUTTER_ICON_COL_W, 16.0);
+        assert_eq!(gutter_icon_column_width(), 16.0);
+        // 1-digit number col 16 + icon 16 = 32; 3-digit 24 + 16 = 40.
+        assert_eq!(gutter_linenum_column_width(9, true), 16.0);
+        assert_eq!(gutter_text_gutter_width(9, true), 32.0);
+        assert_eq!(gutter_linenum_column_width(120, true), 24.0);
+        assert_eq!(gutter_text_gutter_width(120, true), 40.0);
+        // Numbers chhupe par bhi icon reserve rehta hai (narrow 8 + 16 = 24).
+        assert_eq!(gutter_text_gutter_width(120, false), 24.0);
+    }
+
+    #[test]
+    fn text5_center_divider_gaps_are_symmetric_on_space_scale() {
+        // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json.
+        assert_eq!(GUTTER_CENTER_SIDE_GAP, crate::theme::SPACE_XS);
+        assert_eq!(GUTTER_CENTER_SIDE_GAP, 4.0);
+        assert_eq!(gutter_center_side_gap(), 4.0);
+        // Arrow box + 2 * side gap == center width (16 + 8 == 24).
+        assert_eq!(gutter_arrow_box(), crate::theme::SPACE_LG);
+        assert!((gutter_arrow_box() + 2.0 * gutter_center_side_gap() - gutter_center_width()).abs() < 0.001);
+        assert_eq!(gutter_center_width(), crate::theme::SPACE_XL);
+        assert_eq!(gutter_center_width(), 24.0);
+    }
+
+    #[test]
+    fn text5_layout_960_is_symmetric_with_equal_panes() {
+        // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json:
+        // 12 + 456 + 24 + 456 + 12 = 960.
+        assert_eq!(
+            gutter_text5_layout_960(),
+            (12.0, 456.0, 24.0, 456.0, 12.0)
+        );
+        let (m0, left, center, right, m1) = gutter_text5_layout_960();
+        assert_eq!(m0, m1);
+        assert_eq!(left, right);
+        assert!((m0 + left + center + right + m1 - 960.0).abs() < 0.001);
+        // Generic twin bhi symmetric rehta hai; na-mumkin par zero panes.
+        assert_eq!(gutter_text_layout(12.0, 24.0, 960.0), gutter_text5_layout_960());
+        assert_eq!(gutter_text_layout(12.0, 24.0, 40.0), (12.0, 0.0, 24.0, 0.0, 12.0));
+        assert_eq!(gutter_text_layout(12.0, 24.0, f32::NAN), (0.0, 0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn text5_hit_slop_expands_symmetrically() {
+        // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json:
+        // band 200..204 + slop 2 -> 198..206 (dono taraf 2).
+        let seg = GutterSegment {
+            y_start: 200.0,
+            y_end: 204.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(gutter_slop_band(&seg, crate::theme::GUTTER_MERGE_GAP), Some((198.0, 206.0)));
+        let Some((lo, hi)) = gutter_slop_band(&seg, GUTTER_HIT_SLOP) else {
+            panic!("band must exist");
+        };
+        assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
+        assert_eq!(GUTTER_HIT_SLOP, 2.0);
+        // Zero/kharab slop par band jaisa-ka-taisa; ulta band None.
+        assert_eq!(gutter_slop_band(&seg, 0.0), Some((200.0, 204.0)));
+        assert_eq!(gutter_slop_band(&seg, f32::NAN), Some((200.0, 204.0)));
+        let bad = GutterSegment {
+            y_start: 300.0,
+            y_end: 100.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(gutter_slop_band(&bad, 2.0), None);
+    }
+
+    #[test]
+    fn text5_row_center_locks_to_mono_line_height() {
+        // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json:
+        // Mono 12 @1.30 = 15.6 pitch; row 1 center = 1.5 * 15.6 = 23.4.
+        assert!((gutter_mono_line_height_px() - 15.6).abs() < 0.001);
+        assert_eq!(
+            gutter_mono_line_height_px(),
+            crate::theme::TypoRole::content_grid().line_height_px()
+        );
+        assert!(gutter_row_center_y_for_line_height(1, 4, 15.6).is_some_and(|v| (v - 23.4).abs() < 0.01));
+        assert!(gutter_row_center_y_for_line_height(0, 4, 15.6).is_some_and(|v| (v - 7.8).abs() < 0.01));
+        // Pitch badle to center usi pitch par (19.6 text-row pitch par row 0 = 9.8).
+        assert!(gutter_row_center_y_for_line_height(0, 4, 19.6).is_some_and(|v| (v - 9.8).abs() < 0.01));
+        assert_eq!(gutter_row_center_y_for_line_height(4, 4, 15.6), None);
+        assert_eq!(gutter_row_center_y_for_line_height(0, 0, 15.6), None);
+        assert_eq!(gutter_row_center_y_for_line_height(0, 4, 0.0), None);
+        assert_eq!(gutter_row_center_y_for_line_height(0, 4, f32::NAN), None);
+    }
+}
