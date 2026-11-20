@@ -30,7 +30,7 @@ use crate::gutter::{
 use crate::home::{
     HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
     HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, RECENT_COL_GAP, RECENT_ROW_GAP, Session,
-    SessionHistory, SessionList, SessionSnapshot, home_card_button_size,
+    SessionHistory, SessionList, SessionSnapshot, home_card_button_size, home_card_cta_width,
     home_card_desc_is_small_weak, home_card_min_height, home_card_title_size,
     recent_list_empty_hint, recent_row_columns, recent_row_meta_role, recent_row_meta_text,
     recent_row_title_role, recent_row_two_line_height,
@@ -343,25 +343,28 @@ pub fn home_paint_card_height() -> f32 {
     home_card_min_height().max(CARD_H)
 }
 
-/// Paint-applied Home CTA size: 120x28 hit floor (area 3360 vs the old
-/// 120x22 = 2640) from the card contract. Paint feeds it to `add_sized`
-/// so the whole floor stays clickable. Pure; unit-tested.
+/// Paint-applied Home CTA size: 224x28 single-line budget (area 6272)
+/// from the card contract ([`home_card_cta_width`] x [`HOME_CARD_BUTTON_MIN_H`]).
+/// Paint feeds it to `add_sized` so the whole single-line floor stays clickable.
+/// Pure; unit-tested.
 pub fn home_paint_cta_size() -> (f32, f32) {
+    (home_card_cta_width(), HOME_CARD_BUTTON_MIN_H)
+}
+
+/// Session toolbar button size: 120x28 floor ([`HOME_CARD_BUTTON_MIN_W`] x
+/// [`HOME_CARD_BUTTON_MIN_H`]) taaki Swap/Reload poori ungli se lagen.
+/// Home CTA (224) se alag floor hai — toolbar labels chhote hain, isliye
+/// wahi purana floor reuse hota hai (spacing `toolbar_item_gap`/`toolbar_group_gap` se).
+/// Koi naya size nahi; pure; unit-tested.
+pub fn session_toolbar_button_size() -> (f32, f32) {
     (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
 }
 
-/// Session toolbar button size: home CTA floor ka reuse (120x28), taaki
-/// Swap/Reload poori ungli se lagen — path-row Browse/Compare bhi isi
-/// floor par hain (spacing `toolbar_item_gap`/`toolbar_group_gap` se).
-/// Koi naya size nahi; pure; unit-tested.
-pub fn session_toolbar_button_size() -> (f32, f32) {
-    home_paint_cta_size()
-}
-
-/// Path-row Browse/Compare button size: home CTA floor ka reuse (120x28).
+/// Path-row Browse/Compare button size: 120x28 floor reuse ([`HOME_CARD_BUTTON_MIN_W`]
+/// x [`HOME_CARD_BUTTON_MIN_H`]). Home CTA widen (224) se untouched.
 /// Pure; unit-tested.
 pub fn path_browse_button_size() -> (f32, f32) {
-    home_paint_cta_size()
+    (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
 }
 
 /// Path meta role: caption (Small 11 weak proportional) reuse — BC meta
@@ -464,8 +467,8 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
 /// Geometry: cards sit on the contract minimum ([`home_paint_card_height`]
 /// = 99.6, never below legacy [`CARD_H`]), the grid tiles
 /// [`home_paint_grid_columns`] = 3 per row on the section rhythm
-/// ([`HOME_GRID_GAP`]), and the CTA fills the 120x28 hit floor
-/// ([`home_paint_cta_size`], area 3360). Typography: title strong-14 vs
+/// ([`HOME_GRID_GAP`]), and the CTA fills the 224x28 single-line budget
+/// ([`home_paint_cta_size`], area 6272). Typography: title strong-14 vs
 /// desc small-weak-11 hierarchy ([`home_title_paint_size`] /
 /// [`home_desc_paint_is_small_weak`]), button body scale — same sizes and
 /// weights, koi naya size nahi. Home shows no path picker
@@ -6876,10 +6879,17 @@ mod tests {
 
     #[test]
     fn session_toolbar_and_path_buttons_reuse_home_cta_floor() {
-        // Home CTA precedent: 120x28 hit floor (area 3360).
-        assert_eq!(session_toolbar_button_size(), home_paint_cta_size());
-        assert_eq!(path_browse_button_size(), home_paint_cta_size());
+        // Toolbar/path-row floor: 120x28 (area 3360) — Home CTA (224x28)
+        // se alag, chhote labels ke liye purana floor intact.
+        assert_eq!(session_toolbar_button_size(), path_browse_button_size());
         assert_eq!(session_toolbar_button_size(), (120.0, 28.0));
+        assert_eq!(
+            session_toolbar_button_size(),
+            (
+                crate::home::HOME_CARD_BUTTON_MIN_W,
+                crate::home::HOME_CARD_BUTTON_MIN_H
+            )
+        );
         let (w, h) = session_toolbar_button_size();
         assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
         assert_eq!(w * h, 3360.0);
@@ -8525,22 +8535,23 @@ mod tests {
     #[allow(clippy::assertions_on_constants)]
     fn home_paint_adopts_home_contract() {
         use crate::home::{
-            HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_SHOWS_PATH_PICKER,
-            RECENT_COL_AGE_W, RECENT_COL_KIND_W, home_card_hierarchy_ok, home_card_min_height,
-            home_recent_section_top, home_saved_chrome_height, recent_row_columns,
+            HOME_CARD_BUTTON_MIN_H, HOME_SHOWS_PATH_PICKER, RECENT_COL_AGE_W, RECENT_COL_KIND_W,
+            home_card_hierarchy_ok, home_card_min_height, home_recent_section_top,
+            home_saved_chrome_height, recent_row_columns,
         };
         // Card min-h: contract 99.6, legacy 75 clip se mehfooz.
         assert_eq!(home_paint_card_height(), home_card_min_height());
         assert!((home_paint_card_height() - 99.6).abs() < 0.01);
         assert!(home_paint_card_height() > CARD_H);
-        // CTA min-h 28 (hit 3360 vs purana 2640).
+        // CTA single-line budget 224x28 (area 6272): contract width adopt.
         assert_eq!(
             home_paint_cta_size(),
-            (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
+            (crate::home::home_card_cta_width(), HOME_CARD_BUTTON_MIN_H)
         );
-        assert_eq!(home_paint_cta_size(), (120.0, 28.0));
+        assert_eq!(home_paint_cta_size(), (224.0, 28.0));
         let (cta_w, cta_h) = home_paint_cta_size();
-        assert!((cta_w * cta_h - 3_360.0).abs() < 0.001);
+        assert!((cta_w * cta_h - 6_272.0).abs() < 0.001);
+        assert!(crate::home::home_card_cta_single_line_ok());
         // Grid: 3 columns, section rhythm gap.
         assert_eq!(home_paint_grid_columns(), 3);
         assert_eq!(HOME_GRID_GAP, SECTION_GAP);
