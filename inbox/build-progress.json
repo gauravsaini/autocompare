@@ -10,7 +10,7 @@
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "VFS-D": "D3 compile-fix done (cargo check green), gates running",
     "SYNC-E": "progressing (folder+sync+folder_merge+jobs M)",
-    "MEDIA-F": "progressing (compare/table.rs + diff/table.rs M)",
+    "MEDIA-F": "progressing (compare/table + diff/table+image M)",
     "CLI-G": "process ended, 5 files M uncommitted preserved, rescue after E/F/D3 land",
     "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
     "EXQ-TYPO": "viewmodel zone-role helpers (views_hex+views_table+viewmodel M)"
