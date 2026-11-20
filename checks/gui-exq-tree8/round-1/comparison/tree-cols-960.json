@@ -1,0 +1,38 @@
+{
+  "name": "tree-cols-960",
+  "intent": "Size/date column widths from char metrics, right-aligned via grid origin, selected-row highlight full width at 960px wide",
+  "width_px": 960.0,
+  "char_metrics": {
+    "mono_advance_px": 7.0,
+    "cell_pad_x_px": 8.0,
+    "size_chars": 10,
+    "modified_chars": 16
+  },
+  "size_col_w_px": 86.0,
+  "modified_col_w_px": 128.0,
+  "fixed_cols_total_w_px": 222.0,
+  "columns_960": {
+    "name_x_px": 0.0,
+    "size_x_px": 738.0,
+    "modified_x_px": 832.0,
+    "size_right_edge_px": 824.0,
+    "canvas_right_edge_px": 960.0
+  },
+  "align": {
+    "size": "Right",
+    "modified": "Left",
+    "size_text_x_origin_plus_w_minus_pad_minus_text": true
+  },
+  "selected_row": {
+    "span_x0_px": 0.0,
+    "span_x1_px": 960.0,
+    "full_width": true,
+    "row_height_px": 17.6
+  },
+  "depths_steady": {
+    "0": { "size_x_px": 738.0, "modified_x_px": 832.0 },
+    "2": { "size_x_px": 738.0, "modified_x_px": 832.0 },
+    "5": { "size_x_px": 738.0, "modified_x_px": 832.0 }
+  },
+  "notes": "size 10*7+16=86, modified 16*7+16=128, fixed 86+8+128=222; grid origins (0.0, 738.0, 832.0) steady across depths; size Right-aligned to grid origin right edge minus pad; selected-row highlight spans 0..960 regardless of depth"
+}

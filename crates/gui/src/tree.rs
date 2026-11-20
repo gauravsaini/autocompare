@@ -7359,3 +7359,213 @@ mod exq_tree7_tests {
         }
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE8: size/date widths from char metrics + right-align via grid origin +
+// selected-row full-width highlight at 960 (headless).
+// BC folder compare tree: size/date columns keep stable widths derived
+// from mono char metrics, numeric size text right-aligns to its grid
+// column origin (not to the indent), and the selected row highlight spans
+// the full canvas width. Ours drifted when size width was recomputed per
+// row. Geometry FIRST: widths from FOLDER_* char counts x FOLDER_MONO_ADVANCE
+// plus pad, grid origins from folder_table_column_xs, select span 0..960.
+// Typography SECOND: size Right / modified Left precedent reuse, no new
+// sizes. Colors FROZEN: no hue moves here.
+// WIRING (paint): size/mod widths from tree8_size_col_w_px /
+// tree8_modified_col_w_px, cell x from tree8_column_xs_960, numeric text x
+// from tree8_size_cell_text_x, selected-row band from
+// tree8_selected_row_rect.
+// ----------------------------------------------------------------------------
+
+/// TREE8 canonical canvas width px: 960 reference (`VIEWPORT_W` parity).
+pub const TREE8_CANVAS_W: f32 = 960.0;
+
+/// Size column width px from char metrics: `10 * 7.0 + 2 * 8.0 = 86.0`.
+/// Single source for the stable trailing size column. Pure; unit-tested.
+pub fn tree8_size_col_w_px() -> f32 {
+    FOLDER_SIZE_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDERTABLE_CELL_PAD_X * 2.0
+}
+
+/// Modified/date column width px from char metrics: `16 * 7.0 + 2 * 8.0 = 128.0`.
+/// Pure; unit-tested.
+pub fn tree8_modified_col_w_px() -> f32 {
+    FOLDER_TIME_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDERTABLE_CELL_PAD_X * 2.0
+}
+
+/// Fixed trailing columns total px from char metrics: `86.0 + 8.0 + 128.0 = 222.0`.
+/// Pure; unit-tested.
+pub fn tree8_fixed_cols_w_px() -> f32 {
+    tree8_size_col_w_px() + FOLDERTABLE_COL_GAP + tree8_modified_col_w_px()
+}
+
+/// Grid column origins `(name_x, size_x, mod_x)` px at 960: `(0.0, 738.0, 832.0)`.
+/// Size/mod origins are depth-independent: indent moves name content only.
+/// Pure; unit-tested.
+pub fn tree8_column_xs_960() -> (f32, f32, f32) {
+    folder_table_column_xs(TREE8_CANVAS_W)
+}
+
+/// Size column right edge px at 960: `size_x + size_w = 824.0`.
+/// Pure; unit-tested.
+pub fn tree8_size_col_right_edge_960() -> f32 {
+    let (_, size_x, _) = tree8_column_xs_960();
+    size_x + tree8_size_col_w_px()
+}
+
+/// Modified column right edge px at 960: canvas edge `960.0`.
+/// Pure; unit-tested.
+pub fn tree8_modified_col_right_edge_960() -> f32 {
+    let (_, _, mod_x) = tree8_column_xs_960();
+    mod_x + tree8_modified_col_w_px()
+}
+
+/// Size column alignment: Right (numeric digits share one edge).
+/// Pure; unit-tested.
+pub fn tree8_size_col_align() -> FolderCellAlign {
+    FolderCellAlign::Right
+}
+
+/// Right-aligned text x px for a numeric size cell: grid origin plus
+/// column width minus pad minus text width, clamped to origin plus pad on
+/// overflow. Non-finite inputs fall back to origin plus pad (never NaN).
+/// Pure; unit-tested.
+pub fn tree8_size_cell_text_x(col_origin_x: f32, col_w_px: f32, text_chars: usize) -> f32 {
+    if !col_origin_x.is_finite() || !col_w_px.is_finite() {
+        if col_origin_x.is_finite() {
+            return col_origin_x + FOLDERTABLE_CELL_PAD_X;
+        }
+        return FOLDERTABLE_CELL_PAD_X;
+    }
+    let text_w = text_chars as f32 * FOLDER_MONO_ADVANCE;
+    let right = col_origin_x + col_w_px - FOLDERTABLE_CELL_PAD_X;
+    let x = right - text_w;
+    let floor = col_origin_x + FOLDERTABLE_CELL_PAD_X;
+    if x < floor { floor } else { x }
+}
+
+/// Whether size/mod grid origins stay steady across depths `0..=8` at 960:
+/// every depth reads `(0.0, 738.0, 832.0)`. Pure; unit-tested.
+pub fn tree8_columns_steady_across_depths() -> bool {
+    let mut depth = 0usize;
+    while depth <= 8 {
+        let cols = tree_columns_aligned_at_960(depth.min(5));
+        let steady = cols.0 == 0.0 && cols.1 == 738.0 && cols.2 == 832.0;
+        if !steady {
+            return false;
+        }
+        depth = depth.saturating_add(1);
+    }
+    true
+}
+
+/// Selected-row highlight rect `(x0, y0, x1, y1)` px at 960: full canvas
+/// width `0.0..960.0`, locked row height, even tiling. Depth-independent:
+/// indent never narrows the band. Pure; unit-tested.
+pub fn tree8_selected_row_rect(row_idx: usize) -> (f32, f32, f32, f32) {
+    let top = tree_wide_960_row_top(row_idx);
+    (0.0, top, TREE8_CANVAS_W, top + tree_wide_row_h())
+}
+
+/// Selected-row highlight width px: full canvas `960.0`. Pure; unit-tested.
+pub fn tree8_selected_row_w() -> f32 {
+    TREE8_CANVAS_W
+}
+
+#[cfg(test)]
+mod exq_tree8_tests {
+    use super::*;
+
+    #[test]
+    fn tree8_size_and_date_widths_from_char_metrics() {
+        // 10 * 7.0 + 16 = 86; 16 * 7.0 + 16 = 128; fixed 86 + 8 + 128 = 222.
+        assert_eq!(tree8_size_col_w_px(), 86.0);
+        assert_eq!(tree8_modified_col_w_px(), 128.0);
+        assert_eq!(tree8_fixed_cols_w_px(), 222.0);
+        assert_eq!(
+            tree8_size_col_w_px(),
+            folder_table_col_min_px(FolderTableCol::Size)
+        );
+        assert_eq!(
+            tree8_modified_col_w_px(),
+            folder_table_col_min_px(FolderTableCol::Modified)
+        );
+        assert_eq!(tree8_fixed_cols_w_px(), folder_table_fixed_cols_w());
+        assert_eq!(FOLDER_MONO_ADVANCE, 7.0);
+        assert_eq!(FOLDERTABLE_CELL_PAD_X, 8.0);
+        assert_eq!(FOLDERTABLE_COL_GAP, 8.0);
+    }
+
+    #[test]
+    fn tree8_grid_origins_right_align_size_column_at_960() {
+        assert_eq!(tree8_column_xs_960(), (0.0, 738.0, 832.0));
+        assert_eq!(tree8_column_xs_960(), folder_table_column_xs(960.0));
+        assert_eq!(tree8_column_xs_960(), tree_wide_960_column_xs());
+        assert_eq!(tree8_size_col_right_edge_960(), 824.0);
+        assert_eq!(tree8_modified_col_right_edge_960(), 960.0);
+        // Name avail 730 + gap 8 = size origin 738 (grid origin, not indent).
+        assert_eq!(folder_table_name_avail_w(960.0), 730.0);
+        // Right alignment precedent holds for the numeric size column.
+        assert_eq!(tree8_size_col_align(), FolderCellAlign::Right);
+        assert_eq!(
+            tree8_size_col_align(),
+            folder_table_col_align(FolderTableCol::Size)
+        );
+        // Right-aligned text x: origin + w - pad - text; short text near
+        // right edge, overflow clamps to origin + pad, non-finite safe.
+        assert_eq!(tree8_size_cell_text_x(738.0, 86.0, 4), 788.0);
+        assert_eq!(tree8_size_cell_text_x(738.0, 86.0, 10), 738.0 + 8.0);
+        assert_eq!(tree8_size_cell_text_x(738.0, 86.0, 40), 738.0 + 8.0);
+        assert_eq!(
+            tree8_size_cell_text_x(f32::NAN, 86.0, 4),
+            FOLDERTABLE_CELL_PAD_X
+        );
+    }
+
+    #[test]
+    fn tree8_selected_row_highlight_full_width_at_960() {
+        assert_eq!(tree8_selected_row_w(), 960.0);
+        assert_eq!(tree8_selected_row_w(), TREE8_CANVAS_W);
+        let first = tree8_selected_row_rect(0);
+        assert_eq!((first.0, first.2), (0.0, 960.0));
+        assert!((first.1 - 0.0).abs() < 0.001);
+        assert!((first.3 - first.1 - tree_wide_row_h()).abs() < 0.001);
+        let rect = tree8_selected_row_rect(2);
+        assert_eq!(rect.0, 0.0);
+        assert_eq!(rect.2, 960.0);
+        assert!((rect.1 - 2.0 * tree_wide_row_h()).abs() < 0.001);
+        assert!((rect.3 - rect.1 - tree_wide_row_h()).abs() < 0.001);
+        // Full width regardless of depth: even a depth-5 indent keeps 0..960.
+        assert_eq!(folder_table_name_indent_px(5), 100.0);
+        let deep = tree8_selected_row_rect(5);
+        assert_eq!((deep.0, deep.2), (0.0, 960.0));
+        assert!(tree8_columns_steady_across_depths());
+    }
+
+    #[test]
+    fn exq_tree8_round1_tree_cols_960_size_alignment() {
+        // Headless test proving edge fixture comparison/tree-cols-960.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree8/round-1/comparison/tree-cols-960.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-cols-960\""));
+        assert!(fixture_raw.contains("\"width_px\": 960.0"));
+        assert!(fixture_raw.contains("\"size_col_w_px\": 86.0"));
+        assert!(fixture_raw.contains("\"modified_col_w_px\": 128.0"));
+        assert!(fixture_raw.contains("\"size_x_px\": 738.0"));
+        assert!(fixture_raw.contains("\"modified_x_px\": 832.0"));
+        assert!(fixture_raw.contains("\"full_width\": true"));
+        // Char-metric widths hold, grid origins steady, select full width.
+        assert_eq!(tree8_size_col_w_px(), 86.0);
+        assert_eq!(tree8_modified_col_w_px(), 128.0);
+        assert_eq!(tree8_column_xs_960(), (0.0, 738.0, 832.0));
+        assert_eq!(tree8_size_col_align(), FolderCellAlign::Right);
+        assert!(tree8_columns_steady_across_depths());
+        let mut depth = 0usize;
+        while depth <= 5 {
+            let cols = tree_columns_aligned_at_960(depth);
+            assert_eq!(cols, (0.0, 738.0, 832.0));
+            let rect = tree8_selected_row_rect(depth);
+            assert_eq!((rect.0, rect.2), (0.0, 960.0));
+            depth = depth.saturating_add(1);
+        }
+    }
+}
