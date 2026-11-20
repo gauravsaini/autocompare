@@ -23,6 +23,10 @@
     "LOCALRUN-early": "landed a6bb8e8 pushed (docs-only, zero source)",
     "BINARY-early": "landed c8b491e pushed + draft release v0.5.0-early (tarballs attached)",
     "MEDIA-F-diff": "landed 3e3352b verified+pushed (strict: 203 green, fmt+clippy 0)",
-    "MEDIA-F-compare": "landed fbcbc88 verified+pushed (strict: 110 green, clippy 0)"
+    "MEDIA-F-compare": "landed fbcbc88 verified+pushed (strict: 110 green, clippy 0)",
+    "SWARM-SESS-H": "running pid 40892 (OWNS sessions, checks/agyx-sess-h)",
+    "SWARM-REP-H": "running pid 40893 (OWNS reports, checks/agyx-rep-h)",
+    "SWARM-GUI-T": "running pid 40894 (OWNS views/copy/take/gutter, checks/gui-text-h)",
+    "SWARM-GUI-F": "running pid 40895 (OWNS tree/home, checks/gui-folder-h)"
   }
 }

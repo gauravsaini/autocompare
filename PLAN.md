@@ -258,3 +258,10 @@ PLAN.md, GATES-release.md, scripts/verify-*.mjs only.
 - GUI-T (text): OWNS views.rs, copy.rs, take.rs, gutter.rs, viewmodel.rs, checks/gui-text/**.
 - GUI-F (folder): OWNS tree.rs, home.rs, checks/gui-folder/** (viewmodel.rs read-only).
 - Wave-B + local-verify continue unchanged.
+
+## Dispatch update (2026-11-20) - 4 parallel agyx swarms
+- SWARM-SESS-H pid 40892 OWNS sessions + checks/agyx-sess-h (leaf-2.1 harden)
+- SWARM-REP-H pid 40893 OWNS reports + checks/agyx-rep-h (leaf-2.2 harden)
+- SWARM-GUI-T pid 40894 OWNS views/copy/take/gutter + checks/gui-text-h (exquisite text)
+- SWARM-GUI-F pid 40895 OWNS tree/home + checks/gui-folder-h (exquisite folder)
+- CLI-G2 pid 21129 still running (OWNS cli, untouched). All NO PUSH, pathspec-only, MS rust rules, colors FROZEN.
