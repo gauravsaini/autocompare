@@ -248,21 +248,28 @@ fn paint_pathmeta_strip(
     }
 }
 
-/// TopChrome toolbar proof (exq-topchrome): action buttons 96x24 floor par,
-/// 28px row budget me, overflow par ">>" marker (clip ka jhooth nahi).
-/// Geometry headless contract (`home::topchrome_*`) se aati hai; hues
-/// existing fixture tones reuse, koi naya palette zero. Colors frozen.
+/// TopChrome toolbar proof (exq-topchrome + exq-chrome17 mirror): two
+/// stacked 24px action rows + 8px inter-row gap = 56 band (live
+/// `views::action_bar_row_gap` SECTION_GAP rhythm, intra-row TIGHT_GAP stays).
+/// Row 1: `home::topchrome_*` actions; row 2: Prev/Next nav pair with
+/// 8px cluster air (`views::action_nav_arrow_gap`) + right-docked cursor.
+/// Geometry headless contract se aati hai; hues existing fixture tones
+/// reuse, koi naya palette zero. Colors frozen.
 fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
     use crate::home::{
         TOPCHROME_BUTTON_GAP, TOPCHROME_SIDE_PAD, TOPCHROME_TOOLBAR_ACTIONS,
         topchrome_toolbar_button_width, topchrome_toolbar_visible_count,
     };
     use crate::viewmodel::clip_to_width;
+    use crate::views::{action_bar_row_gap, action_bar_row_height, action_nav_arrow_gap};
     let width = dims.0;
+    let row_h = action_bar_row_height() as u32;
+    let row_gap = action_bar_row_gap() as u32;
+    let band_h = row_h.saturating_add(row_gap).saturating_add(row_h);
     fill_rect(
         pixels,
         dims,
-        (0, PATH_TOOLBAR_Y, width, 24),
+        (0, PATH_TOOLBAR_Y, width, band_h),
         [32, 32, 32, 255],
     );
     let visible = topchrome_toolbar_visible_count(width as f32);
@@ -280,7 +287,12 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
         if vw < 8 {
             break;
         }
-        fill_rect(pixels, dims, (x, PATH_TOOLBAR_Y, vw, 24), [45, 45, 45, 255]);
+        fill_rect(
+            pixels,
+            dims,
+            (x, PATH_TOOLBAR_Y, vw, row_h),
+            [45, 45, 45, 255],
+        );
         let label = clip_to_width(action, vw.saturating_sub(8), text_width);
         draw_string(
             pixels,
@@ -302,6 +314,49 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
             width.saturating_sub(24),
             PATH_TOOLBAR_Y.saturating_add(8),
             ">>",
+            fixture_palette().dim,
+        );
+    }
+    // Row 2: nav pair (Prev/Next 96x24 floor) with 8px cluster air, cursor docked right.
+    let row2_y = PATH_TOOLBAR_Y.saturating_add(row_h).saturating_add(row_gap);
+    let nav_gap = action_nav_arrow_gap() as u32;
+    let btn_w = 96u32;
+    let side = TOPCHROME_SIDE_PAD as u32;
+    if width
+        > side
+            .saturating_mul(2)
+            .saturating_add(btn_w.saturating_mul(2))
+    {
+        fill_rect(
+            pixels,
+            dims,
+            (side, row2_y, btn_w, row_h),
+            [45, 45, 45, 255],
+        );
+        draw_string(
+            pixels,
+            dims,
+            side.saturating_add(4),
+            row2_y.saturating_add(8),
+            "[Prev]",
+            fixture_palette().text,
+        );
+        let nx = side.saturating_add(btn_w).saturating_add(nav_gap);
+        fill_rect(pixels, dims, (nx, row2_y, btn_w, row_h), [45, 45, 45, 255]);
+        draw_string(
+            pixels,
+            dims,
+            nx.saturating_add(4),
+            row2_y.saturating_add(8),
+            "[Next]",
+            fixture_palette().text,
+        );
+        draw_string(
+            pixels,
+            dims,
+            width.saturating_sub(48),
+            row2_y.saturating_add(8),
+            "3:1",
             fixture_palette().dim,
         );
     }
@@ -502,26 +557,29 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         fixture_palette().text,
     );
 
-    // Tab bar
+    // Tab bar (exq-chrome17 mirror): padded tabs — 8px inter-tab rhythm
+    // (SECTION_GAP) + 6px trailing air (TAB_BOTTOM_GAP); boxes 22px tall
+    // so the strip bottom breathes (68-62=6). Picture box covers the live
+    // 20px center x-range so the shot15 gutter stays in the diff bbox.
     fill_rect(&mut pixels, dims, (0, 36, width, 32), [32, 32, 32, 255]);
     draw_string(&mut pixels, dims, 16, 46, "Home", fixture_palette().dim);
-    fill_rect(&mut pixels, dims, (64, 40, 60, 24), ACCENT_TAB);
-    draw_string(&mut pixels, dims, 76, 46, "Text", fixture_palette().text);
-    draw_string(&mut pixels, dims, 138, 46, "Folder", fixture_palette().dim);
-    draw_string(&mut pixels, dims, 200, 46, "Hex", fixture_palette().dim);
-    draw_string(&mut pixels, dims, 244, 46, "Merge", fixture_palette().dim);
-    draw_string(&mut pixels, dims, 300, 46, "Table", fixture_palette().dim);
-    draw_string(&mut pixels, dims, 356, 46, "Sync", fixture_palette().dim);
-    draw_string(&mut pixels, dims, 404, 46, "Picture", fixture_palette().dim);
+    fill_rect(&mut pixels, dims, (68, 40, 60, 22), ACCENT_TAB);
+    draw_string(&mut pixels, dims, 80, 46, "Text", fixture_palette().text);
+    draw_string(&mut pixels, dims, 148, 46, "Folder", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 222, 46, "Hex", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 278, 46, "Merge", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 346, 46, "Table", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 410, 46, "Sync", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 474, 46, "Picture", fixture_palette().dim);
     draw_string(
         &mut pixels,
         dims,
-        474,
+        544,
         46,
         "FolderMerge",
         fixture_palette().dim,
     );
-    draw_string(&mut pixels, dims, 574, 46, "Audio", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 644, 46, "Audio", fixture_palette().dim);
 
     // Per-pane path strip + second metadata line (exq-pathmeta parity).
     paint_pathmeta_strip(
@@ -533,13 +591,13 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         "2026-01-02 03:05 | 132 B | Text: exact | wrap:off",
     );
 
-    // TopChrome toolbar: action buttons 96x24 floor (headless contract proof),
-    // overflow par ">>" marker. Row 114..138, panes 142 se (4px rhythm gap).
+    // TopChrome toolbar: two stacked 24px rows + 8px gap = 56 band (chrome17
+    // `action_bar_row_gap` rhythm), panes 174 se (4px rhythm gap intact).
     paint_topchrome_toolbar(&mut pixels, dims);
 
     // Main diff pane borders: two equal panes with a live 20px center
     // gutter between them (BC parity), overview ruler still at GUTTER_X.
-    let pane_top = 142u32;
+    let pane_top = 174u32;
     let pane_bottom = 560u32;
     let pane_height = pane_bottom.saturating_sub(pane_top);
     let gutter_x = GUTTER_X;
@@ -4220,17 +4278,18 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(pixels, dims, 80, 14, &title_shown, fixture_palette().text);
 
     fill_rect(pixels, dims, (0, TITLE_H, width, TAB_H), [32, 32, 32, 255]);
-    // Highlight box per active tab.
+    // Highlight box per active tab (exq-chrome17 mirror: 8px inter-tab
+    // rhythm + 22px boxes so the trailing air reads 6px).
     let hl = match active {
-        0 => (8u32, 40u32, 52u32, 24u32),
-        1 => (64, 40, 60, 24),
-        2 => (118, 40, 66, 24),
-        3 => (190, 40, 48, 24),
-        4 => (234, 40, 60, 24),
-        5 => (290, 40, 56, 24),
-        6 => (348, 40, 56, 24),
-        7 => (392, 40, 66, 24),
-        _ => (64, 40, 60, 24),
+        0 => (8u32, 40u32, 52u32, 22u32),
+        1 => (68, 40, 60, 22),
+        2 => (136, 40, 66, 22),
+        3 => (210, 40, 48, 22),
+        4 => (266, 40, 60, 22),
+        5 => (334, 40, 56, 22),
+        6 => (398, 40, 56, 22),
+        7 => (462, 40, 66, 22),
+        _ => (68, 40, 60, 22),
     };
     fill_rect(pixels, dims, hl, ACCENT_TAB);
     draw_string(
@@ -4248,7 +4307,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        76,
+        80,
         46,
         "Text",
         if active == 1 {
@@ -4260,7 +4319,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        130,
+        148,
         46,
         "Folder",
         if active == 2 {
@@ -4272,7 +4331,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        200,
+        222,
         46,
         "Hex",
         if active == 3 {
@@ -4284,7 +4343,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        244,
+        278,
         46,
         "Merge",
         if active == 4 {
@@ -4296,7 +4355,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        300,
+        346,
         46,
         "Table",
         if active == 5 {
@@ -4308,7 +4367,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        356,
+        410,
         46,
         "Sync",
         if active == 6 {
@@ -4320,7 +4379,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(
         pixels,
         dims,
-        404,
+        474,
         46,
         "Picture",
         if active == 7 {
@@ -4329,8 +4388,8 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
             fixture_palette().dim
         },
     );
-    draw_string(pixels, dims, 474, 46, "FolderMerge", fixture_palette().dim);
-    draw_string(pixels, dims, 574, 46, "Audio", fixture_palette().dim);
+    draw_string(pixels, dims, 544, 46, "FolderMerge", fixture_palette().dim);
+    draw_string(pixels, dims, 644, 46, "Audio", fixture_palette().dim);
 
     // Per-pane path strip + second metadata line (exq-pathmeta parity).
     if dims.0 >= SNAP_W {
@@ -5232,6 +5291,69 @@ mod tests {
         // 1200-wide edge: same 20px center, panes grow symmetric (12/578/20/578/12).
         let wide = crate::gutter::gutter_text_layout(12.0, 20.0, 1200.0);
         assert_eq!(wide, (12.0, 578.0, 20.0, 578.0, 12.0));
+    }
+
+    #[test]
+    fn shot18_chrome720_no_overlap() {
+        // Mirrors checks/gui-exq-shot18/round-1/comparison/shot-chrome-720.json.
+        // Fixture chrome17 mirror: taller 56 band + padded tabs hold at 720
+        // without overlap; shot15 center gutter untouched.
+        let raw =
+            include_str!("../../../checks/gui-exq-shot18/round-1/comparison/shot-chrome-720.json");
+        assert!(raw.contains("\"name\":\"shot-chrome-720\""));
+        use crate::views::{
+            HEADER_H, TEXT_STACK_BREAKPOINT_W, TextLayout, action_bar_row_gap,
+            action_bar_row_height, chrome17_narrow720_no_overlap_gate,
+            chrome17_toolbar_side_air_720, path_browse_button_size,
+            session_tab_strip_needs_hscroll, session_tab_strip_width, split_field_widths,
+            text_layout_for_width, text_meta_line_height_px, toolbar_button_pair_width,
+        };
+        // Live chrome17 gate still green (parallel wave owns views.rs).
+        assert_eq!(action_bar_row_height(), 24.0);
+        assert_eq!(action_bar_row_gap(), 8.0);
+        assert_eq!(
+            action_bar_row_height() + action_bar_row_gap() + action_bar_row_height(),
+            56.0
+        );
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(chrome17_toolbar_side_air_720(), 260.0);
+        assert!(chrome17_narrow720_no_overlap_gate());
+        assert_eq!(session_tab_strip_width(10), 1572.0);
+        assert!(session_tab_strip_needs_hscroll(10, TEXT_STACK_BREAKPOINT_W));
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        let inner = TEXT_STACK_BREAKPOINT_W - 2.0 * f32::from(crate::views::OUTER_MARGIN);
+        assert_eq!(inner, 696.0);
+        assert_eq!(
+            split_field_widths(inner, crate::viewmodel::SPLIT_DEFAULT_FRACTION),
+            (180.0, 180.0)
+        );
+        assert_eq!(path_browse_button_size(), (120.0, 28.0));
+        assert_eq!(HEADER_H, 28.0);
+        assert!((text_meta_line_height_px() - 15.2).abs() < 0.01);
+        assert!(text_meta_line_height_px() < HEADER_H);
+        // Fixture narrow panes: 340/340 + 16 gutter + 8 margin = 720, no overlap.
+        assert_eq!(crate::viewmodel::dual_pane_widths(720, 0.50), (340, 340));
+        assert_eq!(
+            crate::viewmodel::dual_pane_x_positions(720, 0.50),
+            (12, 356, 696)
+        );
+        let (lx, rx, gx) = crate::viewmodel::dual_pane_x_positions(720, 0.50);
+        assert_eq!(lx, OUTER_PAD);
+        assert_eq!(rx, lx.saturating_add(340).saturating_add(PANE_GAP));
+        assert_eq!(gx, rx.saturating_add(340));
+        assert_eq!(gx.saturating_add(GUTTER_W).saturating_add(8), 720);
+        // Fixture chrome18 band: 114 + 56 + 4 air = 174 pane_top, panes 174..560.
+        assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+        assert_eq!(560u32.saturating_sub(174), 386);
+        // Padded tabstrip: 8px inter-tab gaps, 22px boxes (6px trailing air).
+        assert_eq!(68u32.saturating_sub(8u32.saturating_add(52)), 8);
+        assert_eq!(136u32.saturating_sub(68u32.saturating_add(60)), 8);
+        assert_eq!(68u32.saturating_add(60).saturating_add(8), 136);
+        // Shot15 center gutter untouched (markers still fit the 20px gap).
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
     }
 
     #[test]
