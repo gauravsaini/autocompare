@@ -764,3 +764,9 @@
 1. **Hex geometry**: offset gutter SPACE_* reuse, row TypoRole Mono, hex dump columns alignment, ascii pane gap, 1200px no h-scroll + narrow700 edge.
 2. **Tests**: 1065 green (+1 hex), exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Leaf committed correct OWNS, sessions edits left uncommitted and reverted, no contamination landed.
 3. **Files changed**: crates/gui/src/views_hex.rs, checks/gui-exq-hex31/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-take33 live merge take (opencode default)
+
+1. **Merge geometry**: Take buttons SPACE_* reuse, 3-way center alignment, conflict badge, 1200px no h-scroll + narrow700 edge.
+2. **Tests**: 1070 green (+5 take), exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Sessions edits left uncommitted and reverted, no contamination.
+3. **Files changed**: crates/gui/src/take.rs, checks/gui-exq-take33/**, TIMELINE.md.
