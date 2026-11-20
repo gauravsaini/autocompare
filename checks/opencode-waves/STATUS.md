@@ -1524,3 +1524,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CF-P14 (sess-cta-cf): P1-4 home CTA width adoption, OWNS views.rs + checks/gui-ctawidth-cf.
 - CG-MODET7 (sess-mode-cg): mode-tab adopt + T7 rename, OWNS app.rs + home.rs + checks/gui-modet7-cg.
 - Queue: P2-1 toolbar (views, CF ke baad), dark C full, round-4 re-verify.
+
+## 2026-11-20 — Waves CF-P14 + CG-MODET7 landed + pushed
+- `aabc07c` feat(gui): adopt BT CTA width contract in paint_home (OWNS views.rs + checks/gui-ctawidth-cf). P1-4 DONE.
+- `799c949` feat(gui): adopt mode-tab clicks into sessions and wire T7 rename bridge (OWNS app.rs + home.rs + checks/gui-modet7-cg). P0-1 follow-ups DONE.
+- Gates: 663 green, clippy/fmt/banned/colors/PNG clean, OWNS clean. CF ka ek `git add -m` slip tha (recovered, sibling sweep nahi hua — verify me dono commits OWNS-clean).
+- Queue: P2-1 toolbar, dark C full (A+B persist+fixture param), round-4 re-verify.
