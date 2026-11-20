@@ -4145,6 +4145,73 @@ mod tests {
 
     #[test]
     #[allow(clippy::assertions_on_constants)]
+    fn home4_wide960_card_gap_consistency_edge() {
+        // Edge fixture: `checks/gui-exq-home4/comparison/home-wide-960.json`.
+        // Geometry first: square 24 gaps from SPACE tokens, uniform row
+        // height from TypoRole chrome line-height, symmetric 12 margins
+        // at 720-960px wide. Typography second: theme steps reuse.
+        use crate::theme::{GEO_CARD_GAP, GEO_OUTER_MARGIN, SPACE_XL, TypoRole};
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home4/comparison/home-wide-960.json");
+        assert!(fixture_raw.contains("\"card_gap_col\":24.0"));
+        assert!(fixture_raw.contains("\"card_gap_row\":24.0"));
+        assert!(fixture_raw.contains("\"margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"content_w_960\":936.0"));
+        assert!(fixture_raw.contains("\"origin_x_960\":84.0"));
+
+        // Card gaps single-source from SPACE tokens (square + stable).
+        assert_eq!(super::HOME_GRID_COL_GAP_HOME4, SPACE_XL);
+        assert_eq!(super::HOME_GRID_ROW_GAP_HOME4, SPACE_XL);
+        assert_eq!(super::HOME_GRID_COL_GAP_HOME4, GEO_CARD_GAP);
+        assert_eq!(
+            super::HOME_GRID_ROW_GAP_HOME4,
+            super::HOME_GRID_COL_GAP_HOME4
+        );
+        assert!(super::home_grid_gap_home4_ok());
+        // Gap steps uniform: card x rhythm 240 + 24 = 264 every column.
+        assert_eq!(super::home_card_x_for_col_home4(0, 240.0), 0.0);
+        assert!((super::home_card_x_for_col_home4(1, 240.0) - 264.0).abs() < 0.001);
+        assert!((super::home_card_x_for_col_home4(2, 240.0) - 528.0).abs() < 0.001);
+        assert!(
+            (super::home_card_x_for_col_home4(2, 240.0)
+                - super::home_card_x_for_col_home4(1, 240.0)
+                - super::HOME_GRID_COL_GAP_HOME4
+                - 240.0)
+                .abs()
+                < 0.001
+        );
+
+        // Card row height from TypoRole chrome line-height (title 16.8).
+        assert!((TypoRole::HomeTitle.line_height_px() - 16.8).abs() < 0.001);
+        assert_eq!(
+            TypoRole::HomeTitle.line_height(),
+            crate::theme::TYPO_LINE_HEIGHT_CHROME
+        );
+        assert!((super::home_card_min_height() - 99.6).abs() < 0.01);
+
+        // Section padding symmetric at 720-960px wide (12 each side).
+        assert_eq!(super::HOME_CONTENT_MARGIN_X_HOME4, GEO_OUTER_MARGIN);
+        assert_eq!(super::HOME_CONTENT_MARGIN_X_HOME4, 12.0);
+        assert!((super::home_content_width_home4(960.0) - 936.0).abs() < 0.001);
+        assert!((super::home_content_width_home4(720.0) - 696.0).abs() < 0.001);
+        // Centered grid origins prove symmetry: (936-768)/2=84, (696-504)/2=96.
+        assert!((super::home_grid_origin_x_home4(936.0, 768.0) - 84.0).abs() < 0.001);
+        assert!((super::home_grid_origin_x_home4(696.0, 504.0) - 96.0).abs() < 0.001);
+        // Grid shape at both widths: 960 -> 3 cols x 3 rows (346.8),
+        // 720 -> 2 cols x 5 rows (594.0), rows uniform height.
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 960.0), 3);
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 720.0), 5);
+        assert!((super::home_grid_content_height_home4(9, 960.0) - 346.8).abs() < 0.01);
+        assert!((super::home_grid_content_height_home4(9, 720.0) - 594.0).abs() < 0.01);
+
+        // Typography second: theme steps reuse, koi naya size nahi.
+        assert!(crate::theme::typo_home4_steps_ok());
+        assert!(super::home_card_type_scale_exq_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn topchrome_toolbar_path_status_narrow_empty_edge() {
         // Edge fixture: `checks/gui-exq-topchrome/comparison/topchrome-narrow-empty.json`.
         // Geometry first: 10-button toolbar 996px, 960 avail 936 scroll, 700
