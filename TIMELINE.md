@@ -207,3 +207,12 @@
 1. **Tree Indent Rhythm & Columns Alignment**: Beyond Compare parity for folder tree rows: indent step strictly derived from SPACE tokens (`tree_indent_step_from_space()` == `GEO_TREE_INDENT_STEP` == `SPACE_MD` = 12.0px), depth rhythm scaling across depths 0..=5 (0.0 to 60.0px; path origins 40.0 to 100.0px), orphan rows dimmed on missing sides using `TypoRole::Small` (`is_weak() == true`) with `"-"` dashes without modifying colors (colors frozen at 33), and Size/Modified columns strictly aligned at 960px wide pane (Size 738.0px, Modified 832.0px; fixed trailing cols 222.0px). Edge fixture `comparison/tree-wide-960.json` added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 909 → 913 passed, 0 failed; clippy clean on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree2/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-hex3 ruler plus grid
+
+1. **Hex Ruler Ticks & Grid Geometry at 960px**: Beyond Compare visual parity for hex compare: ruler tick spacing symmetric via SPACE tokens (`hex_ruler_tick_spacing()` = `GEO_SECTION_GAP` = `SPACE_SM` = 8.0px, `hex_ruler_tick_sym_pad()` = `GEO_TIGHT_GAP` = `SPACE_XS` = 4.0px), ruler column x-positions (`hex_ruler_col_x`) 1:1 aligned with byte grid columns (`hex_grid_byte_col_x`), nibble group gap between byte 7 and 8 derived from single-source midline helper (`hex_nibble_group_gap_w(char_w)`), and row height locked to `TypoRole::Mono` line-height (15.6px) at 960px wide (`HEX_CANVAS_W` = 960.0px, SideBySide mode, 30 visible rows in 470px panes height, 52px chrome reserve, 908px grid avail, (52.0, 19.6) grid origin). Colors frozen at 33. Edge fixture `comparison/hex-wide-960.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 919 → 922 passed, 0 failed; clippy clean on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex3/**`, `TIMELINE.md`.
