@@ -1513,3 +1513,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CD-P12 (sess-status-cd): P1-2 status 3-zone paint, OWNS views.rs + checks/gui-status-cd.
 - CE-DARKFIX (sess-dark-ce): option A startup visuals, OWNS main.rs + checks/gui-darkfix-ce.
 - Queue: P1-3 cursor strip, P1-4 CTA width (views serial, CD ke baad), mode-tab adopt + T7 rename (app.js serial, CE ke baad).
+
+## 2026-11-20 — Waves CD-P12 + CE-DARKFIX landed + pushed
+- `162069c` feat(gui): adopt BT 3-zone status paint with cursor strip (OWNS views.rs + checks/gui-status-cd). P1-2 DONE + P1-3 DONE (cursor strip bonus, viewmodel NO-TOUCH). Gates: 661 green, all clean.
+- `9e7b25b` feat(gui): apply dark visuals at startup in main (OWNS main.rs + checks/gui-darkfix-ce). Option A (1-line Visuals::dark, existing API). Gates: 661 green (clean-tree verify), all clean.
+- Colors: CE ka 1 Visuals touch fix khud hai (existing dark API, naya palette nahi). CD zero new.
+- Queue: P1-4 CTA width, mode-tab adopt + T7 rename, P2-1 toolbar, dark C full.
