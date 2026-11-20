@@ -1196,11 +1196,22 @@ pub fn paint_table_cell_grid(
         return;
     }
     let cols = table_cell_grid_columns(&widths);
-    paint_table_header_row(ui, header, &widths);
+    // Single Grid me header + data: ek hi Grid column widths share karta
+    // hai, isliye header cells data columns se align rehte hain (do alag
+    // Grids me column widths alag compute hote — BC parity column align).
+    // Header row standalone `paint_table_header_row` jaisa hi hai (glyph +
+    // strong mono), par isi Grid me taaki geometry drift na ho.
     egui::Grid::new(TABLE_CELL_GRID_ID)
         .num_columns(cols)
         .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
         .show(ui, |ui| {
+            if !header.is_empty() {
+                ui.label(table_header_text_role().rich(TABLE_CELL_GLYPH_PAD));
+                for cell in format_table_header(header, &widths) {
+                    ui.label(table_header_text_role().rich(cell).strong());
+                }
+                ui.end_row();
+            }
             for (row_idx, cells) in rows.iter().enumerate() {
                 ui.label(egui::RichText::new(TABLE_CELL_GLYPH_PAD).monospace());
                 let padded = pad_table_row(cells, &widths);
@@ -3062,7 +3073,7 @@ mod tests {
         let widths_empty = table_column_widths(&header, &empty_rows);
         assert_eq!(widths_empty.len(), 2);
         assert_eq!(table_cell_grid_columns(&widths_empty), 3);
-        let rows = vec![vec!["only".to_string()]];
+        let rows: Vec<Vec<String>> = core::iter::once(vec!["only".to_string()]).collect();
         let widths = table_column_widths(&header, &rows);
         let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
         let padded = pad_table_row(first_row, &widths);
@@ -3107,7 +3118,7 @@ mod tests {
             vec![String::from("x")]
         );
         // Ragged row: missing key col `-` se, panic nahi.
-        let ragged = vec![vec!["only".to_string()]];
+        let ragged: Vec<Vec<String>> = core::iter::once(vec!["only".to_string()]).collect();
         let first_ragged: &[String] = ragged.first().map(Vec::as_slice).unwrap_or(&[]);
         assert_eq!(
             table_sort_key_for_row(first_ragged, &[1], false, false),
