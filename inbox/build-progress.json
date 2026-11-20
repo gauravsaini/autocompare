@@ -23,6 +23,7 @@
   "ORCH-OBSERVE2": "capture/live-observe-orch-2.md written, 4 waves idle but alive, no kill",
   "ORCH-OBSERVE3": "capture/live-observe-orch-3.md bottom waste pointers views.rs:2261,3409 app.rs:5505",
   "ORCH-RESCUE-EXQ7": "2026-11-20 22:24 AEDT exq7 24m idle killed slot freed WIP +1983 preserved, home1 launched sess-opencode-guihome1 OWNS home.rs+tree.rs+checks/gui-home1",
+  "ORCH-RESCUE-EXQ8": "2026-11-20 22:35 AEDT exq8 17m zero-edit stall killed, exq8b retry launched same OWNS views+viewmodel",
   "ORCH-STEER-FMT": "agents must run cargo fmt scoped (-p own-crate); workspace-wide fmt touches cross-OWNS files (cli runner/session_cmd reverted)",
   "ORCH-SWEEP-NOTE": "orchestrator commits must use pathspec (git commit <paths>) not bare commit, else staged agent work gets swept; corrected going forward",
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
