@@ -656,3 +656,9 @@
 1. **Fixture Toolbar Icons**: screenshot.rs toolbar buttons now carry original 12px geometric glyph marks (fill_rect only, existing palette) left of labels; second nav row adds two chevron triangles on Prev/Next rhythm. Gutter/markers/chrome/typo/status intact. pxdiff vs baseline: 1995 of 576000 DIFFERENT, bbox (16,120)-(866,162) toolbar band only, VERDICT DIFFERENT (independently re-verified).
 2. **Tests** (before -> after): autocompare-gui 1044 green (including toolbar21_narrow720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Note: leaf also drafted out-of-OWNS crates/sessions edits in its worktree — deliberately left uncommitted and excluded from landing.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-toolbar21/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-mirror22 live gutter status mirror
+
+1. **Live Gutter+Status Mirror (root-cause fix)**: diagnosis proved width was never the bug (all 6 live call-sites already 20px) — two visual bugs: (a) hunk-head marker used framed small_button pill on changed row only, (b) unselected rows painted transparent (no fill), so the 20px column was invisible. Fix: frameless gap-rect arrows via text_center_marker_fg on changed rows, continuous track fill (track_for when unselected, CHANGED_BG band when selected) on every live center cell incl. floors. Plus live bottom bar mirror of status20 (per-pane labels with honest fallback, 4-segment legend). Colors frozen at 33.
+2. **Tests** (before -> after): autocompare-gui 1045 green (including mirror22_live_gutter_path); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate ABANDONED honestly (fixture path cannot see egui pixels).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-mirror22/**, TIMELINE.md.
