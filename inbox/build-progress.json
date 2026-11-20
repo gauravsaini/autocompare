@@ -46,7 +46,7 @@
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
-    "ORCH-POLL-BACKOFF": "level 1 holding (ledger commit on WIP-delta>100 met: +589 since last)",
+    "ORCH-POLL-BACKOFF": "level 2 exponential (30s>60s>120s>240s>480s cap, reset on log-growth; 8s fixed retired 2026-11-20)",
     "ORCH-WORKSPACE-GATE": "pass 2026-11-20 (cargo test --workspace DONE_EXIT 0, 1145 passed, /tmp/ws-tests.log)",
     "ORCH-WAVE-GUI": "landed+pushed 06c0e04 (strict: 703 green, clippy 0, fmt clean, banned 0 non-test, OWNS clean)",
     "ORCH-WAVE-CMP": "landed+pushed b64ae9a (strict: 193 green, clippy 0, fmt clean, banned 0 non-test, OWNS clean)",
@@ -56,6 +56,7 @@
     "ORCH-WAVE-REL": "landed+pushed ab69c6d (evidence-only: 14 gates 13 pass + 1 gap-doc, wasm env gap + 6 more gaps in v0.6.0 draft, scope perfect)",
     "ORCH-ENV-GAP": "wasm32-unknown-unknown target not installed (blocks xtask wasm gate; rel wave documenting)",
     "SWARM-MEDIA": "landed+pushed 8f8bb84 (strict: 333 green, fmt/clippy per gates clean; 48 unwired helpers under 60 allows disclosed as wiring debt, tests cover them)",
-    "ORCH-WIRE": "dispatched opencode default-model (OWNS media files + lib.rs re-export-only + round-m2, 48-item hit-list, no re-masking, /tmp/sess-wave-wire.log)"
+    "ORCH-WIRE": "dispatched opencode default-model (OWNS media files + lib.rs re-export-only + round-m2, 48-item hit-list, no re-masking, /tmp/sess-wave-wire.log)",
+    "ORCH-WIRE-STATE": "2026-11-20 17:12 UTC+11 quiet 106s, log 35224B/528 lines, phase test-contracts study, no writes yet, alive"
   }
 }
