@@ -5,6 +5,8 @@
   "ORCH-BACKOFF": "increased to 120s (parity/sessrep silent since 17:51/17:59, rotator slow-mode), reset on output",
   "ORCH-BC": "BCompare pid 23316 running, outside-observe only, clean-room",
   "ORCH-DISK": "/tmp 117Mi -> 13Gi freed stale targets via python rmtree, active 4 targets preserved",
+  "ORCH-EXQ7-STALL": "2026-11-20 22:21 AEDT exq7 sess 44msgs last 671s idle log 92872B 22:09, pid 36156 alive S+ 0.0pct, WIP preserved, no kill per no-rush, next check backoff",
+  "ORCH-EXQ8-ACTIVE": "sess 14msgs last 141s idle, pid 52450 alive, reading views.rs + screenshots, progressing",
   "ORCH-FIX-SNAPSHOT": "snapshot_tests.rs 7 sites gated behind AUTOCOMPARE_SNAPSHOT=1; default cargo test side-effect free (verified clean), opt-in regenerates (verified); kills recurring rep-h/reports-a noise at root",
   "ORCH-FMT-FIX2": "ab568e2 cargo-fmt edition-2024 (plain rustfmt was wrong edition, import order + collapse fixed, 18 suites green)",
   "ORCH-GAP-ACK": "user gap confirmed via /tmp/ac-current.png 9.5K vs /tmp/bc-screen.png 888K, geometry+typo waves prioritized, colors frozen",
