@@ -258,3 +258,10 @@
 1. **Tree Rows & Indent Guides at 960px**: Beyond Compare parity for folder compare rows: even row rhythm locked to TypoRole Mono line-height (15.6 + 2.0 pad = 17.6), guide x-positions from SPACE tokens, orphan label ellipsis char-boundary clamp at 960px wide, depth rhythm intact. Colors frozen at 33. Edge fixture comparison/tree-narrow-720.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 932 → 936 passed, 0 failed; clippy clean; rustfmt clean on owned tree.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree3/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-chrome6 pathbar plus info
+
+1. **Pathbar & Info Line at 960px**: Beyond Compare parity for path chrome: equal path widths from char metrics, icon slots from SPACE tokens, info line geometry (date|bytes|filter), Browse button uniform width. Colors frozen at 33. Edge fixture comparison/pathbar-960.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 933 → 936 passed, 0 failed; clippy clean; rustfmt clean on owned app.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-chrome6/**, TIMELINE.md.
