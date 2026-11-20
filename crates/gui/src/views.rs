@@ -116,11 +116,12 @@ pub const HEX_MINIMAP_H: f32 = 220.0;
 pub const HEX_MINIMAP_W: f32 = 2.0 * GUTTER_W;
 pub const CONTENT_LEAD: &str = "  ";
 /// Text center gutter width (px): do independent panes ke beech patli
-/// fixed-width gutter jisme per-diff copy arrows rehte hain (BC pattern).
-/// Ponytail reuse: `HEADER_H + GUTTER_W + 2 * TIGHT_GAP` = 48.0 — do
-/// chhote `→/←` buttons side-by-side fit hote hain, equal rows par blank
-/// click-to-select rehta hai. Koi naya magic nahi; pure token.
-pub const TEXT_CENTER_GUTTER_W: f32 = HEADER_H + GUTTER_W + TIGHT_GAP + TIGHT_GAP;
+/// fixed-width gutter jisme per-hunk copy arrows rehte hain (BC pattern).
+/// Ponytail reuse: `2 * SPACE_XL` = 48.0 (same beat as before: 28 + 12 +
+/// 4 + 4) — do chhote `→/←` buttons side-by-side fit hote hain, equal
+/// rows par blank click-to-select rehta hai. Center divider gaps SPACE
+/// tokens se (geometry first); koi naya magic nahi; pure token.
+pub const TEXT_CENTER_GUTTER_W: f32 = crate::theme::SPACE_XL + crate::theme::SPACE_XL;
 
 /// Center gutter width accessor (paint fixed column isi se banta hai).
 /// Pure; unit-tested.
@@ -1696,11 +1697,7 @@ pub fn text_minimap_row_center_y(row: usize, total_rows: usize, height: f32) -> 
 /// center par min-segment uncha, kabhi do rows par straddle nahi karta.
 /// Paint `rect.min.y` offset jodkar marker banata hai taaki jump ke baad
 /// indicator clicked band par synced dikhe. Pure (no egui); unit-tested.
-pub fn text_minimap_marker_band(
-    row: usize,
-    total_rows: usize,
-    height: f32,
-) -> Option<(f32, f32)> {
+pub fn text_minimap_marker_band(row: usize, total_rows: usize, height: f32) -> Option<(f32, f32)> {
     crate::gutter::gutter_selection_marker_band(row, total_rows, height)
 }
 
@@ -4665,13 +4662,15 @@ pub fn filler_hatch_step() -> f32 {
     TIGHT_GAP
 }
 
-/// Filler row height (px): locked to the Mono line-height px
-/// ([`TypoRole::Mono`] = 12.0 @ 1.30 = 15.6) — filler rows carry hatch,
-/// not text, so no [`ROW_PAD`]. Left/right filler rows share this beat,
-/// keeping both panes aligned row-for-row at any width. Pure;
-/// unit-tested.
+/// Filler row height (px): locked to the content row rhythm
+/// ([`row_height_for_line`] over [`TypoRole::Mono`] = 15.6 + [`ROW_PAD`]
+/// = 17.6) — filler rows carry hatch, not text, par beat content jaisa
+/// hi rehta hai taaki left/right panes row-for-row aligned rahen aur
+/// short content ke neeche kala waste na bache (even row rhythm, BC
+/// blank-fill precedent). Line-height [`TypoRole::Mono`] se; pad SPACE
+/// scale par nahi, existing [`ROW_PAD`] par. Pure; unit-tested.
 pub fn filler_row_height() -> f32 {
-    TypoRole::Mono.line_height_px()
+    row_height_for_line(TypoRole::Mono.line_height_px())
 }
 
 /// Hatch stripes across a filler of `width` px: step-spaced ticks.
@@ -4707,11 +4706,7 @@ pub fn text_trailing_blank_rows(panes_h: f32, row_h: f32, visible_len: usize) ->
 /// even count so filler never ends on a lone orphan row — tang 720px
 /// window par dono halves visually paired rahen. Zero stays zero
 /// (full/overflow par koi extra row nahi). Pure; unit-tested.
-pub fn text_trailing_blank_rows_balanced(
-    panes_h: f32,
-    row_h: f32,
-    visible_len: usize,
-) -> usize {
+pub fn text_trailing_blank_rows_balanced(panes_h: f32, row_h: f32, visible_len: usize) -> usize {
     let n = text_trailing_blank_rows(panes_h, row_h, visible_len);
     if n == 0 { 0 } else { n + (n % 2) }
 }
@@ -4799,6 +4794,72 @@ pub fn text_wide_960_pane_pair() -> (f32, f32) {
 pub fn text_inline_960_total_w() -> f32 {
     let (left, right) = text_pane_pair_widths(960.0);
     left + right + text_center_gutter_width() + 2.0 * SECTION_GAP
+}
+
+/// Text7 rows-plus-rhythm (exq-text7): generous outer air, even row tops,
+/// SPACE-token center gaps, no truncation, synced minimap band at 960px.
+/// Geometry FIRST (margins/gaps/widths), typography SECOND (Mono lock),
+/// colors FROZEN (koi hue nahi). Sab helpers pure headless hain; paint
+/// existing call-sites reuse karte hain (koi naya paint branch nahi);
+/// fixture `comparison/text-rows-960.json` isi ko lock karti hai.
+/// Text rows outer margin (px): one MD step ([`crate::theme::SPACE_MD`]
+/// = 12) — BC outer air; App frame owns paint margins (NO-TOUCH), ye
+/// views-side budget lock hai. [`OUTER_MARGIN`] parity. Pure; unit-tested.
+pub fn text_rows_outer_margin_px() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// Center divider gap (px): one SM step ([`crate::theme::SPACE_SM`] = 8)
+/// per side — panes row head/continuation/trailing me same air rakhta
+/// hai taaki connector saans le ([`SECTION_GAP`] parity). Pure;
+/// unit-tested.
+pub fn text_center_divider_gap_px() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Row-top rhythm (px): har row (head/continuation/trailing) isi beat
+/// par khulti hai — [`row_height_for_line`] over [`TypoRole::Mono`]
+/// (15.6 + [`ROW_PAD`] = 17.6). `show_rows` + `set_row_height` dono isi
+/// par hain, isliye tops ek grid par rehte hain. Pure; unit-tested.
+pub fn text_row_top_rhythm_px() -> f32 {
+    row_height_for_line(TypoRole::Mono.line_height_px())
+}
+
+/// Text row line-height (px): locked to [`TypoRole::Mono`] (12 @ 1.30 =
+/// 15.6) — paint kabhi per-role line-height nahi leta
+/// ([`TYPO_LINE_HEIGHT_SOURCE`] parity). Pure; unit-tested.
+pub fn text_row_line_height_px() -> f32 {
+    TypoRole::Mono.line_height_px()
+}
+
+/// 960-wide minimap height (px): panes budget at 960x600 canvas
+/// (fixture `panes_h` 436 — toolbar/cursor/status chrome ke baad bacha
+/// viewport). Marker band geometry isi par lock hoti hai. Pure;
+/// unit-tested.
+pub fn text_minimap_height_960_px() -> f32 {
+    436.0
+}
+
+/// Marker band at 960 wide: [`text_minimap_marker_band`] on the 960
+/// panes height — selection tick clicked band par synced dikhta hai,
+/// kabhi do rows par straddle nahi karta. Pure (no egui); unit-tested.
+pub fn text_minimap_marker_band_960(row: usize, total_rows: usize) -> Option<(f32, f32)> {
+    text_minimap_marker_band(row, total_rows, text_minimap_height_960_px())
+}
+
+/// 960 row-alignment total (px): [`text_inline_960_total_w`] reuse
+///   (panes 448/448, center 48, air 8 per side = 960) — left/right rows
+///   960 par same beat par start/end hote hain. Pure; unit-tested.
+pub fn text_rows_960_total_w() -> f32 {
+    text_inline_960_total_w()
+}
+
+/// No-truncation gate at 960: line pane me samati hai jab char count
+/// budget (`pane`) ke andar ho — [`pane_segments`] parity (limit ke andar
+/// poori line, koi `<` cut nahi); wrap-off h-scroll isi gate ke bahar
+/// lagta hai. Pure; unit-tested.
+pub fn text_row_fits_pane(line: &str, pane: usize) -> bool {
+    line.chars().count() <= pane
 }
 
 /// Segmented pane status: selected row ke per-side line numbers —
@@ -7688,7 +7749,7 @@ mod tests {
     fn text_center_gutter_reuses_tokens_and_gates_copy() {
         assert_eq!(
             TEXT_CENTER_GUTTER_W,
-            HEADER_H + GUTTER_W + TIGHT_GAP + TIGHT_GAP
+            crate::theme::SPACE_XL + crate::theme::SPACE_XL
         );
         assert_eq!(text_center_gutter_width(), 48.0);
         assert!(text_gutter_has_copy(TextRowKind::Changed));
@@ -7802,7 +7863,10 @@ mod tests {
         assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
         assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
         assert_eq!(text_narrow_720b_stacked_width(), 712.0);
-        assert_eq!(text_narrow_720b_stacked_width(), text_stacked_pane_width(720.0));
+        assert_eq!(
+            text_narrow_720b_stacked_width(),
+            text_stacked_pane_width(720.0)
+        );
         assert_eq!(text_stacked_pane_width(f32::NAN), MIN_HALF);
         // Trailing balance at narrow: 300px budget @17.6 row, 7 visible
         // rows leave 11 raw blanks, balanced up to 12 (paired, no orphan).
@@ -7841,8 +7905,8 @@ mod tests {
     fn text6_inline_960_spans_plus_filler() {
         // Mirrors checks/gui-exq-text6/round-1/comparison/text-inline-960.json:
         // intra-line span pads symmetric via SPACE_XS, span underline
-        // weight via TYPO tokens, filler row height locked to Mono
-        // line-height, left/right row alignment at 960px wide, spans
+        // weight via TYPO tokens, filler row height locked to content
+        // row rhythm, left/right row alignment at 960px wide, spans
         // clamped to char boundaries without mid-word truncation.
         // Geometry FIRST, typography SECOND, colors frozen.
         // Intra-line span pads: one XS step total, half per side.
@@ -7863,9 +7927,13 @@ mod tests {
             span_underline_for_weight(crate::theme::TYPO_WEIGHT_SEMIBOLD),
             2.0
         );
-        // Filler row height locked to Mono line-height (15.6), no ROW_PAD.
-        assert!((filler_row_height() - TypoRole::Mono.line_height_px()).abs() < 0.001);
-        assert!((filler_row_height() - 15.6).abs() < 0.01);
+        // Filler row height locked to the content row rhythm (17.6 =
+        // Mono 15.6 + ROW_PAD), even beat row-for-row.
+        assert!(
+            (filler_row_height() - row_height_for_line(TypoRole::Mono.line_height_px())).abs()
+                < 0.001
+        );
+        assert!((filler_row_height() - 17.6).abs() < 0.01);
         assert!((row_height_for_line(TypoRole::Mono.line_height_px()) - 17.6).abs() < 0.01);
         // Left/right row alignment at 960px wide: 448 + 448 + 48 + 16.
         assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
@@ -7894,6 +7962,60 @@ mod tests {
         let segs = pane_segments(right, &[(18, 27)], 80);
         assert!(segs.iter().any(|(t, a)| *a && t == "std::fs::"));
         assert_eq!(right.chars().count() - left.chars().count(), 9);
+    }
+
+    #[test]
+    fn text7_rows_plus_rhythm_960() {
+        // Mirrors checks/gui-exq-text7/round-1/comparison/text-rows-960.json:
+        // generous outer air, even row tops, SPACE-token center gaps, no
+        // truncation, synced minimap band at 960px wide. Geometry FIRST,
+        // typography SECOND (Mono lock), colors frozen.
+        // Outer margin: one MD step (12, OUTER_MARGIN parity).
+        assert_eq!(text_rows_outer_margin_px(), crate::theme::SPACE_MD);
+        assert_eq!(text_rows_outer_margin_px(), 12.0);
+        assert_eq!(text_rows_outer_margin_px(), OUTER_MARGIN as f32);
+        // Center divider gaps: one SM step per side (8, SECTION_GAP parity).
+        assert_eq!(text_center_divider_gap_px(), crate::theme::SPACE_SM);
+        assert_eq!(text_center_divider_gap_px(), SECTION_GAP);
+        assert_eq!(TEXT_CENTER_GUTTER_W, crate::theme::SPACE_XL * 2.0);
+        assert_eq!(text_center_gutter_width(), 48.0);
+        // Line-height locked to TypoRole Mono; row tops share one beat.
+        assert!((text_row_line_height_px() - TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((text_row_line_height_px() - 15.6).abs() < 0.01);
+        assert!(
+            (text_row_top_rhythm_px() - row_height_for_line(TypoRole::Mono.line_height_px())).abs()
+                < 0.001
+        );
+        assert!((text_row_top_rhythm_px() - 17.6).abs() < 0.01);
+        assert!((filler_row_height() - text_row_top_rhythm_px()).abs() < 0.001);
+        // 960 alignment: 448 + 448 + 48 + 2 * 8 = 960, no truncation.
+        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
+        assert!((text_rows_960_total_w() - 960.0).abs() < 0.001);
+        let left = "    let content = read_to_string(path)?;";
+        let right = "    let content = std::fs::read_to_string(path)?;";
+        assert!(text_row_fits_pane(left, 80));
+        assert!(text_row_fits_pane(right, 80));
+        assert!(!text_row_fits_pane(right, 10));
+        assert!(text_row_fits_pane("", 80));
+        // Minimap marker band at 960: inside panes height, round-trips.
+        assert_eq!(text_minimap_height_960_px(), 436.0);
+        let band = text_minimap_marker_band_960(2, 7);
+        assert!(band.is_some());
+        if let Some((y0, y1)) = band {
+            assert!(y0 >= 0.0);
+            assert!(y1 <= text_minimap_height_960_px());
+            assert!(y1 > y0);
+            assert_eq!(
+                band,
+                text_minimap_marker_band(2, 7, text_minimap_height_960_px())
+            );
+            assert_eq!(
+                text_minimap_row_at_y((y0 + y1) / 2.0, text_minimap_height_960_px(), 7),
+                Some(2)
+            );
+        }
+        assert_eq!(text_minimap_marker_band_960(0, 0), None);
     }
 
     #[test]

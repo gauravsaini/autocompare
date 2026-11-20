@@ -1,0 +1,45 @@
+{
+  "name": "text-rows-960",
+  "intent": "Text-side round-7 at 960px wide: generous outer air (SPACE_MD 12), even row tops (Mono 15.6 + ROW_PAD = 17.6, filler same beat), center divider gaps from SPACE tokens (center 48 = 2x SPACE_XL, divider air 8 = SPACE_SM per side), no truncation (sample rows fit 80-char pane), minimap marker band synced at 960 (panes_h 436).",
+  "canvas_w": 960.0,
+  "canvas_h": 600.0,
+  "panes_h": 436.0,
+  "outer_margin_px": 12.0,
+  "center_gutter_px": 48.0,
+  "center_divider_gap_px": 8.0,
+  "pane_pair_px": [
+    448.0,
+    448.0
+  ],
+  "row_alignment_total_w": 960.0,
+  "mono_line_height": 15.6,
+  "row_height": 17.6,
+  "filler_row_height": 17.6,
+  "minimap_h_960": 436.0,
+  "marker_band_row_2_of_7": [
+    153.71428571428572,
+    157.71428571428572
+  ],
+  "sample_row": {
+    "left": "    let content = read_to_string(path)?;",
+    "right": "    let content = std::fs::read_to_string(path)?;",
+    "pane_chars": 80,
+    "fits_pane": true,
+    "accent_b": [
+      18,
+      27
+    ],
+    "word": "std::fs::"
+  },
+  "assertions": {
+    "outer_margin_is_space_md": true,
+    "center_gutter_is_2x_space_xl": true,
+    "divider_gap_is_space_sm": true,
+    "line_height_locked_to_mono": true,
+    "row_tops_share_one_beat": true,
+    "filler_matches_content_rhythm": true,
+    "alignment_at_960": true,
+    "no_truncation_at_960": true,
+    "marker_band_round_trips": true
+  }
+}
