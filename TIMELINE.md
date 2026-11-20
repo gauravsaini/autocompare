@@ -740,3 +740,9 @@
 1. **Table geometry**: 1200px canvas fit `needs_hscroll:false`, key-cols stable, sort markers aligned, tolerance sanitized, xlsx sheet selector 1/3 badge. Geometry first SPACE_* reuse, typo second 600 weight lock.
 2. **Tests**: 1061 green, exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen. Agyx did full work but timeout before commit (0-byte log, no DONE) — orchestrator verified OWNS and committed, mix still consistent for work but commit step inconsistent.
 3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table30/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-tree31 live folder tree (opencode default)
+
+1. **Folder tree geometry**: indent step 8.0 SPACE_SM, row 23.6 mono 15.6 + SM, expander 16x16 centered, guides at centers, 1200px no h-scroll + 700px narrow edge.
+2. **Tests**: 1063 green (+1 tree31_deepnest), exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen.
+3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree31/**, TIMELINE.md.
