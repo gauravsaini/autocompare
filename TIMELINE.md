@@ -312,3 +312,12 @@
 1. **Text Rows & Divider at 960px**: BC parity for text compare panes: row height locked to `TypoRole::Mono` line-height, inner pad via `SPACE_XS`, line-num col widths from char metrics, center gap via `SPACE_SM`, divider hit-slop symmetric, minimap marker bands plus orphan blank balance at narrow widths. No new sizes, Body/Small reuse. Colors frozen at 33. Edge fixture `comparison/text-wide-960.json` added; exquisite harness PASS (PNG 10401B).
 2. **Tests** (before → after): autocompare-gui all green; clippy clean on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text8/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-chrome7 toolbar plus pathbar
+
+1. **Chrome Toolbar & Pathbar at 960px**: BC parity for app chrome: toolbar buttons equal widths via SPACE tokens, pathbar two equal halves with file meta, tab close hit-slop symmetric, status segments from `TypoRole` chrome line-height. Tree.rs dirt from sibling leaf left untouched, only OWNS committed. Colors frozen at 33. Edge fixture `comparison/chrome-wide-960.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui all green; `cargo check` 0 warnings; rustfmt clean on owned `app.rs`; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/app.rs`, `checks/gui-exq-chrome7/**`, `TIMELINE.md`.
