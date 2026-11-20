@@ -690,3 +690,77 @@ fn folder_merge_struct_api() {
 
     cleanup(&base);
 }
+
+#[test]
+fn folder_merge_conflict_navigation_and_cancellation() {
+    use autocompare_compare::FolderMerge;
+    use std::sync::atomic::AtomicBool;
+
+    let base = temp_root();
+    let (b, l, r) = make_roots(&base);
+
+    // Conflict 1: overlapping text edits
+    write(&b.join("conflict1.txt"), "common\n");
+    write(&l.join("conflict1.txt"), "left edit\n");
+    write(&r.join("conflict1.txt"), "right edit\n");
+
+    // Conflict 2: binary conflict (bytes differ, neither matches base)
+    write_bytes(&b.join("conflict2.bin"), b"\x00\x01\x02");
+    write_bytes(&l.join("conflict2.bin"), b"\x10\x11\x12");
+    write_bytes(&r.join("conflict2.bin"), b"\x20\x21\x22");
+
+    // Clean merge file
+    write(&b.join("clean.txt"), "start\nmiddle\nend\n");
+    write(&l.join("clean.txt"), "start_L\nmiddle\nend\n");
+    write(&r.join("clean.txt"), "start\nmiddle\nend_R\n");
+
+    let merger = FolderMerge::new(&b, &l, &r);
+    let plan = merger.dry_run().unwrap();
+
+    // Conflict navigation
+    assert!(plan.has_conflicts());
+    assert_eq!(plan.conflict_count(), 2);
+    assert!(plan.is_conflict("conflict1.txt"));
+    assert!(plan.is_conflict("conflict2.bin"));
+    assert!(!plan.is_conflict("clean.txt"));
+
+    let first = plan.first_conflict();
+    assert_eq!(first, Some("conflict1.txt"));
+    let last = plan.last_conflict();
+    assert_eq!(last, Some("conflict2.bin"));
+
+    assert_eq!(plan.next_conflict(None), Some("conflict1.txt"));
+    assert_eq!(
+        plan.next_conflict(Some("conflict1.txt")),
+        Some("conflict2.bin")
+    );
+    assert_eq!(plan.next_conflict(Some("conflict2.bin")), None);
+
+    assert_eq!(plan.prev_conflict(None), Some("conflict2.bin"));
+    assert_eq!(
+        plan.prev_conflict(Some("conflict2.bin")),
+        Some("conflict1.txt")
+    );
+    assert_eq!(plan.prev_conflict(Some("conflict1.txt")), None);
+
+    // Summary and counters
+    assert_eq!(plan.conflict_step_count(), 2);
+    assert_eq!(plan.merged_text_count(), 1);
+    assert!(plan.summary().contains("TreeMergePlan:"));
+
+    // Apply with merger.run
+    let out = base.join("out_run");
+    let report = merger.run(&out).unwrap();
+    assert!(report.is_success());
+    assert_eq!(report.failure_count(), 0);
+    assert_eq!(report.total_processed(), 3);
+    assert!(report.summary().contains("TreeMergeReport:"));
+
+    // Cancellation
+    let out2 = base.join("out_cancel");
+    let cancel = AtomicBool::new(true);
+    let cancel_res = merger.run_cancellable(&out2, &cancel);
+    assert!(matches!(cancel_res, Err(Error::Cancelled)));
+
+    cleanup(&base);
+}

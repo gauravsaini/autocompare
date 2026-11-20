@@ -38,6 +38,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use autocompare_diff::merge3;
 
@@ -89,9 +90,26 @@ enum Resolved {
 /// Plans a three-way merge of two trees over their base. See the
 /// crate documentation for the resolution rules.
 pub(crate) fn plan_tree_merge(base: &Path, left: &Path, right: &Path) -> Result<TreeMergePlan> {
+    plan_tree_merge_cancellable(base, left, right, None)
+}
+
+/// Progress callback for tree merge: `(current_index, total_steps, current_rel_path)`.
+pub type TreeMergeProgressCallback<'a> = &'a dyn Fn(usize, usize, &str);
+
+/// Plans a three-way merge with cancellation support.
+pub fn plan_tree_merge_cancellable(
+    base: &Path,
+    left: &Path,
+    right: &Path,
+    cancel: Option<&AtomicBool>,
+) -> Result<TreeMergePlan> {
     require_dir(base)?;
     require_dir(left)?;
     require_dir(right)?;
+
+    if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+        return Err(Error::Cancelled);
+    }
 
     let (trees, walk_skips) = collect_trees(base, left, right)?;
     let mut plan = TreeMergePlan {
@@ -111,6 +129,9 @@ pub(crate) fn plan_tree_merge(base: &Path, left: &Path, right: &Path) -> Result<
     // come out sorted, and a directory's strict-path prefix sorts
     // before its children.
     for rel in rels.iter().copied() {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err(Error::Cancelled);
+        }
         let b = trees.base.get(rel);
         let l = trees.left.get(rel);
         let r = trees.right.get(rel);
@@ -150,9 +171,31 @@ pub(crate) fn apply_tree_merge(
     plan: &TreeMergePlan,
     output: &Path,
 ) -> Result<TreeMergeReport> {
+    apply_tree_merge_cancellable(left, right, plan, output, None, None)
+}
+
+/// Applies a merge plan with cancellation and bounded progress reporting support.
+pub fn apply_tree_merge_cancellable(
+    left: &Path,
+    right: &Path,
+    plan: &TreeMergePlan,
+    output: &Path,
+    cancel: Option<&AtomicBool>,
+    progress: Option<TreeMergeProgressCallback<'_>>,
+) -> Result<TreeMergeReport> {
     let mut report = TreeMergeReport::default();
     prepare_output(output)?;
-    for step in &plan.steps {
+    let total = plan.steps.len();
+
+    for (idx, step) in plan.steps.iter().enumerate() {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err(Error::Cancelled);
+        }
+
+        if let Some(p) = progress {
+            p(idx, total, &step.rel_path);
+        }
+
         let Some(target) = under(output, &step.rel_path) else {
             fail(&mut report, step, "unsafe path");
             continue;
@@ -170,6 +213,11 @@ pub(crate) fn apply_tree_merge(
             },
         }
     }
+
+    if let Some(p) = progress {
+        p(total, total, "complete");
+    }
+
     Ok(report)
 }
 
@@ -704,5 +752,204 @@ impl FolderMerge {
     /// Right directory root.
     pub fn right(&self) -> &Path {
         &self.right
+    }
+
+    /// Dry run generating the merge plan (alias for `plan`).
+    pub fn dry_run(&self) -> Result<TreeMergePlan> {
+        self.plan()
+    }
+
+    /// Runs planning and application to `output` in one call.
+    pub fn run(&self, output: impl AsRef<Path>) -> Result<TreeMergeReport> {
+        let plan = self.plan()?;
+        self.apply(&plan, output)
+    }
+
+    /// Runs planning and application with cancellation support.
+    pub fn run_cancellable(
+        &self,
+        output: impl AsRef<Path>,
+        cancel: &AtomicBool,
+    ) -> Result<TreeMergeReport> {
+        let plan = plan_tree_merge_cancellable(&self.base, &self.left, &self.right, Some(cancel))?;
+        apply_tree_merge_cancellable(
+            &self.left,
+            &self.right,
+            &plan,
+            output.as_ref(),
+            Some(cancel),
+            None,
+        )
+    }
+
+    /// Navigates to the next conflict in the plan.
+    pub fn next_conflict<'a>(
+        &self,
+        plan: &'a TreeMergePlan,
+        current: Option<&str>,
+    ) -> Option<&'a str> {
+        plan.next_conflict(current)
+    }
+
+    /// Navigates to the previous conflict in the plan.
+    pub fn prev_conflict<'a>(
+        &self,
+        plan: &'a TreeMergePlan,
+        current: Option<&str>,
+    ) -> Option<&'a str> {
+        plan.prev_conflict(current)
+    }
+}
+
+impl TreeMergePlan {
+    /// Whether any conflicts were detected during merge planning.
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts.is_empty()
+    }
+
+    /// Number of conflict entries.
+    pub fn conflict_count(&self) -> usize {
+        self.conflicts.len()
+    }
+
+    /// Returns the first conflict path, if any.
+    pub fn first_conflict(&self) -> Option<&str> {
+        self.conflicts.first().map(|s| s.as_str())
+    }
+
+    /// Returns the last conflict path, if any.
+    pub fn last_conflict(&self) -> Option<&str> {
+        self.conflicts.last().map(|s| s.as_str())
+    }
+
+    /// Navigates to the next conflict relative to `current`.
+    pub fn next_conflict<'a>(&'a self, current: Option<&str>) -> Option<&'a str> {
+        let Some(curr) = current else {
+            return self.conflicts.first().map(|s| s.as_str());
+        };
+        for (idx, item) in self.conflicts.iter().enumerate() {
+            if item.as_str() == curr {
+                return idx
+                    .checked_add(1)
+                    .and_then(|next_idx| self.conflicts.get(next_idx))
+                    .map(|s| s.as_str());
+            }
+        }
+        self.conflicts
+            .iter()
+            .find(|item| item.as_str() > curr)
+            .map(|s| s.as_str())
+    }
+
+    /// Navigates to the previous conflict relative to `current`.
+    pub fn prev_conflict<'a>(&'a self, current: Option<&str>) -> Option<&'a str> {
+        let Some(curr) = current else {
+            return self.conflicts.last().map(|s| s.as_str());
+        };
+        for (idx, item) in self.conflicts.iter().enumerate() {
+            if item.as_str() == curr {
+                return idx
+                    .checked_sub(1)
+                    .and_then(|prev_idx| self.conflicts.get(prev_idx))
+                    .map(|s| s.as_str());
+            }
+        }
+        self.conflicts
+            .iter()
+            .rev()
+            .find(|item| item.as_str() < curr)
+            .map(|s| s.as_str())
+    }
+
+    /// Checks if a relative path is a conflict.
+    pub fn is_conflict(&self, rel_path: &str) -> bool {
+        self.conflicts.iter().any(|c| c == rel_path)
+    }
+
+    /// Returns the planned step for a relative path.
+    pub fn step_for(&self, rel_path: &str) -> Option<&TreeMergeStep> {
+        self.steps.iter().find(|s| s.rel_path == rel_path)
+    }
+
+    /// Count of TakeLeft steps.
+    pub fn take_left_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == TreeMergeAction::TakeLeft)
+            .count()
+    }
+
+    /// Count of TakeRight steps.
+    pub fn take_right_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == TreeMergeAction::TakeRight)
+            .count()
+    }
+
+    /// Count of MergedText steps.
+    pub fn merged_text_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == TreeMergeAction::MergedText)
+            .count()
+    }
+
+    /// Count of Conflict steps.
+    pub fn conflict_step_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == TreeMergeAction::Conflict)
+            .count()
+    }
+
+    /// Count of MakeDir steps.
+    pub fn make_dir_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == TreeMergeAction::MakeDir)
+            .count()
+    }
+
+    /// Human-readable summary of the merge plan.
+    pub fn summary(&self) -> String {
+        format!(
+            "TreeMergePlan: {} steps ({} take-L, {} take-R, {} merged, {} conflict-step, {} dirs), {} conflicts, {} skipped",
+            self.steps.len(),
+            self.take_left_count(),
+            self.take_right_count(),
+            self.merged_text_count(),
+            self.conflict_step_count(),
+            self.make_dir_count(),
+            self.conflicts.len(),
+            self.skipped.len(),
+        )
+    }
+}
+
+impl TreeMergeReport {
+    /// Whether the merge operation succeeded with zero failed steps.
+    pub fn is_success(&self) -> bool {
+        self.failed.is_empty()
+    }
+
+    /// Total items written or created.
+    pub fn total_processed(&self) -> usize {
+        self.written.saturating_add(self.dirs_created)
+    }
+
+    /// Number of failed steps.
+    pub fn failure_count(&self) -> usize {
+        self.failed.len()
+    }
+
+    /// Human-readable summary of the report.
+    pub fn summary(&self) -> String {
+        format!(
+            "TreeMergeReport: {} written, {} dirs created, {} failed",
+            self.written,
+            self.dirs_created,
+            self.failed.len()
+        )
     }
 }

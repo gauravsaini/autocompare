@@ -29,19 +29,41 @@
 //!   out sorted with parents before children; no re-sort is needed.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
     Error, FolderEntry, FolderOptions, FolderStatus, Result, SyncAction, SyncDirection,
-    SyncOptions, SyncPlan, SyncReport, SyncStep, compare_folders,
+    SyncOptions, SyncPlan, SyncReport, SyncStep, compare_folders, compare_folders_cancellable,
 };
 
 /// Builds a sync plan from a folder comparison. See the crate
 /// documentation for the rules.
 pub(crate) fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result<SyncPlan> {
+    plan_sync_cancellable(left, right, opts, None)
+}
+
+/// Progress callback for sync application: `(current_index, total_steps, current_rel_path)`.
+pub type SyncProgressCallback<'a> = &'a dyn Fn(usize, usize, &str);
+
+/// Builds a sync plan with cancellation support.
+pub fn plan_sync_cancellable(
+    left: &Path,
+    right: &Path,
+    opts: &SyncOptions,
+    cancel: Option<&AtomicBool>,
+) -> Result<SyncPlan> {
     require_dir(left)?;
     require_dir(right)?;
 
-    let comparison = compare_folders(left, right, &FolderOptions::default())?;
+    let comparison = match cancel {
+        Some(c) => compare_folders_cancellable(left, right, &FolderOptions::default(), c)?,
+        None => compare_folders(left, right, &FolderOptions::default())?,
+    };
+
+    if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+        return Err(Error::Cancelled);
+    }
+
     let mut plan = SyncPlan {
         steps: Vec::new(),
         skipped: Vec::new(),
@@ -52,6 +74,9 @@ pub(crate) fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result
     let mut doomed: Vec<String> = Vec::new();
 
     for entry in &comparison.entries {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err(Error::Cancelled);
+        }
         if doomed.iter().any(|dir| is_under(&entry.rel_path, dir)) {
             continue;
         }
@@ -67,11 +92,32 @@ pub(crate) fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result
 
 /// Applies a plan. See the crate documentation for the guarantees.
 pub(crate) fn apply_sync(left: &Path, right: &Path, plan: &SyncPlan) -> Result<SyncReport> {
+    apply_sync_cancellable(left, right, plan, None, None)
+}
+
+/// Applies a plan with cancellation and bounded progress reporting support.
+pub fn apply_sync_cancellable(
+    left: &Path,
+    right: &Path,
+    plan: &SyncPlan,
+    cancel: Option<&AtomicBool>,
+    progress: Option<SyncProgressCallback<'_>>,
+) -> Result<SyncReport> {
     require_dir(left)?;
     require_dir(right)?;
 
     let mut report = SyncReport::default();
-    for step in &plan.steps {
+    let total = plan.steps.len();
+
+    for (idx, step) in plan.steps.iter().enumerate() {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Err(Error::Cancelled);
+        }
+
+        if let Some(p) = progress {
+            p(idx, total, &step.rel_path);
+        }
+
         match step.action {
             SyncAction::CopyToRight => apply_copy(left, right, step, &mut report),
             SyncAction::CopyToLeft => apply_copy(right, left, step, &mut report),
@@ -79,6 +125,11 @@ pub(crate) fn apply_sync(left: &Path, right: &Path, plan: &SyncPlan) -> Result<S
             SyncAction::DeleteLeft => apply_delete(left, step, &mut report),
         }
     }
+
+    if let Some(p) = progress {
+        p(total, total, "complete");
+    }
+
     Ok(report)
 }
 
@@ -393,5 +444,240 @@ impl SyncPlanner {
     /// Current sync mode.
     pub fn mode(&self) -> SyncMode {
         self.mode
+    }
+
+    /// Updates the sync mode.
+    pub fn set_mode(&mut self, mode: SyncMode) {
+        self.mode = mode;
+    }
+
+    /// Returns a new `SyncPlanner` with the given mode.
+    pub fn with_mode(mut self, mode: SyncMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Returns whether this planner is in mirror mode.
+    pub fn is_mirror(&self) -> bool {
+        matches!(self.mode, SyncMode::Mirror)
+    }
+
+    /// Returns whether this planner is in bi-directional mode (Both).
+    pub fn is_bidirectional(&self) -> bool {
+        matches!(self.mode, SyncMode::Both)
+    }
+
+    /// Plans and applies the sync operation in one call.
+    pub fn run(&self) -> Result<SyncReport> {
+        let plan = self.plan()?;
+        self.apply(&plan)
+    }
+
+    /// Runs planning and application with cancellation support.
+    pub fn run_cancellable(&self, cancel: &AtomicBool) -> Result<SyncReport> {
+        let plan = plan_sync_cancellable(&self.left, &self.right, &self.options(), Some(cancel))?;
+        apply_sync_cancellable(&self.left, &self.right, &plan, Some(cancel), None)
+    }
+
+    /// Returns a human-readable summary of the dry run.
+    pub fn dry_run_summary(&self, plan: &SyncPlan) -> String {
+        let mode_name = match self.mode {
+            SyncMode::UpdateRight => "Update Right",
+            SyncMode::UpdateLeft => "Update Left",
+            SyncMode::Both => "Update Both",
+            SyncMode::Mirror => "Mirror",
+        };
+        format!("Dry-run {}: {}", mode_name, plan.summary())
+    }
+
+    /// Collects conflict paths from a plan.
+    pub fn conflict_paths(&self, plan: &SyncPlan) -> Vec<String> {
+        plan.conflict_paths()
+            .into_iter()
+            .map(String::from)
+            .collect()
+    }
+
+    /// Navigates to the next conflict in the plan.
+    pub fn next_conflict<'a>(
+        &self,
+        plan: &'a SyncPlan,
+        current: Option<&str>,
+    ) -> Option<&'a (String, String)> {
+        plan.next_conflict(current)
+    }
+
+    /// Navigates to the previous conflict in the plan.
+    pub fn prev_conflict<'a>(
+        &self,
+        plan: &'a SyncPlan,
+        current: Option<&str>,
+    ) -> Option<&'a (String, String)> {
+        plan.prev_conflict(current)
+    }
+}
+
+fn is_conflict_reason(reason: &str) -> bool {
+    reason.contains("differs") || reason.contains("newer") || reason.contains("conflict")
+}
+
+impl SyncPlan {
+    /// Returns the number of conflict entries skipped during planning.
+    pub fn conflict_count(&self) -> usize {
+        self.conflicts().len()
+    }
+
+    /// Whether any conflicts were detected during planning.
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts().is_empty()
+    }
+
+    /// Returns references to all skipped entries that represent conflicts.
+    pub fn conflicts(&self) -> Vec<&(String, String)> {
+        self.skipped
+            .iter()
+            .filter(|(_, reason)| is_conflict_reason(reason))
+            .collect()
+    }
+
+    /// Returns relative paths of all conflicting entries.
+    pub fn conflict_paths(&self) -> Vec<&str> {
+        self.conflicts()
+            .iter()
+            .map(|(path, _)| path.as_str())
+            .collect()
+    }
+
+    /// Returns the first conflict, if any.
+    pub fn first_conflict(&self) -> Option<&(String, String)> {
+        self.conflicts().first().copied()
+    }
+
+    /// Returns the last conflict, if any.
+    pub fn last_conflict(&self) -> Option<&(String, String)> {
+        self.conflicts().last().copied()
+    }
+
+    /// Navigates to the next conflict relative to `current_rel_path`.
+    pub fn next_conflict<'a>(
+        &'a self,
+        current_rel_path: Option<&str>,
+    ) -> Option<&'a (String, String)> {
+        let conflicts = self.conflicts();
+        let Some(curr) = current_rel_path else {
+            return conflicts.first().copied();
+        };
+        for (idx, item) in conflicts.iter().enumerate() {
+            if item.0.as_str() == curr {
+                return idx
+                    .checked_add(1)
+                    .and_then(|next_idx| conflicts.get(next_idx).copied());
+            }
+        }
+        conflicts
+            .iter()
+            .find(|item| item.0.as_str() > curr)
+            .copied()
+    }
+
+    /// Navigates to the previous conflict relative to `current_rel_path`.
+    pub fn prev_conflict<'a>(
+        &'a self,
+        current_rel_path: Option<&str>,
+    ) -> Option<&'a (String, String)> {
+        let conflicts = self.conflicts();
+        let Some(curr) = current_rel_path else {
+            return conflicts.last().copied();
+        };
+        for (idx, item) in conflicts.iter().enumerate() {
+            if item.0.as_str() == curr {
+                return idx
+                    .checked_sub(1)
+                    .and_then(|prev_idx| conflicts.get(prev_idx).copied());
+            }
+        }
+        conflicts
+            .iter()
+            .rev()
+            .find(|item| item.0.as_str() < curr)
+            .copied()
+    }
+
+    /// Finds the planned step for a relative path, if any.
+    pub fn step_for(&self, rel_path: &str) -> Option<&SyncStep> {
+        self.steps.iter().find(|s| s.rel_path == rel_path)
+    }
+
+    /// Number of CopyToRight steps.
+    pub fn copy_to_right_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == SyncAction::CopyToRight)
+            .count()
+    }
+
+    /// Number of CopyToLeft steps.
+    pub fn copy_to_left_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == SyncAction::CopyToLeft)
+            .count()
+    }
+
+    /// Number of DeleteRight steps.
+    pub fn delete_right_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == SyncAction::DeleteRight)
+            .count()
+    }
+
+    /// Number of DeleteLeft steps.
+    pub fn delete_left_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| s.action == SyncAction::DeleteLeft)
+            .count()
+    }
+
+    /// Human-readable summary of the plan.
+    pub fn summary(&self) -> String {
+        format!(
+            "SyncPlan: {} steps ({} copy-R, {} copy-L, {} del-R, {} del-L), {} conflicts, {} skipped",
+            self.steps.len(),
+            self.copy_to_right_count(),
+            self.copy_to_left_count(),
+            self.delete_right_count(),
+            self.delete_left_count(),
+            self.conflict_count(),
+            self.skipped.len(),
+        )
+    }
+}
+
+impl SyncReport {
+    /// Whether the sync operation succeeded with zero failed steps.
+    pub fn is_success(&self) -> bool {
+        self.failed.is_empty()
+    }
+
+    /// Total actions successfully applied (copied + deleted).
+    pub fn total_applied(&self) -> usize {
+        self.copied.saturating_add(self.deleted)
+    }
+
+    /// Number of failed steps.
+    pub fn failure_count(&self) -> usize {
+        self.failed.len()
+    }
+
+    /// Human-readable summary of the report.
+    pub fn summary(&self) -> String {
+        format!(
+            "SyncReport: {} copied, {} deleted, {} failed",
+            self.copied,
+            self.deleted,
+            self.failed.len()
+        )
     }
 }

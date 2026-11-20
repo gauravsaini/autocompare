@@ -5,16 +5,23 @@
 
 #![forbid(unsafe_code)]
 
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
+use crate::folder_merge::{apply_tree_merge_cancellable, plan_tree_merge_cancellable};
+use crate::sync::{apply_sync_cancellable, plan_sync_cancellable};
 use crate::{
     Error, FolderComparison, FolderOptions, Result, SyncOptions, SyncPlan, SyncReport,
-    TreeMergePlan, TreeMergeReport, apply_sync, apply_tree_merge, compare_folders_cancellable,
-    plan_sync, plan_tree_merge,
+    TreeMergePlan, TreeMergeReport, compare_folders_cancellable,
 };
+
+pub use crate::folder::{FolderStatusCounts, FolderTreeNode};
+
+/// Maximum number of recent progress updates retained in the bounded queue.
+const MAX_PROGRESS_HISTORY: usize = 64;
 
 /// Progress update sent from a running background job.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -36,6 +43,35 @@ impl JobProgress {
             message: message.into(),
         }
     }
+
+    /// Computes the percentage completed (0.0 to 100.0), clamped if total is known.
+    pub fn percentage(&self) -> Option<f32> {
+        self.total.map(|tot| {
+            if tot == 0 {
+                100.0
+            } else {
+                let p = (self.current as f32 / tot as f32) * 100.0;
+                p.clamp(0.0, 100.0)
+            }
+        })
+    }
+
+    /// Computes the fraction completed (0.0 to 1.0), clamped if total is known.
+    pub fn fraction(&self) -> Option<f64> {
+        self.total.map(|tot| {
+            if tot == 0 {
+                1.0
+            } else {
+                let f = self.current as f64 / tot as f64;
+                f.clamp(0.0, 1.0)
+            }
+        })
+    }
+
+    /// Checks if progress is complete (current >= total).
+    pub fn is_complete(&self) -> bool {
+        self.total.is_some_and(|tot| self.current >= tot)
+    }
 }
 
 /// A handle to a background job executing on a dedicated thread.
@@ -43,6 +79,7 @@ pub struct JobHandle<T> {
     cancel_flag: Arc<AtomicBool>,
     thread: Option<JoinHandle<Result<T>>>,
     latest_progress: Arc<Mutex<Option<JobProgress>>>,
+    progress_history: Arc<Mutex<VecDeque<JobProgress>>>,
 }
 
 impl<T> JobHandle<T> {
@@ -71,6 +108,36 @@ impl<T> JobHandle<T> {
         match self.latest_progress.lock() {
             Ok(guard) => guard.clone(),
             Err(_) => None,
+        }
+    }
+
+    /// Polls the next progress update from the bounded history queue.
+    pub fn poll_progress(&self) -> Option<JobProgress> {
+        match self.progress_history.lock() {
+            Ok(mut guard) => guard.pop_front(),
+            Err(_) => None,
+        }
+    }
+
+    /// Drains all buffered progress updates from the bounded queue.
+    pub fn drain_progress(&self) -> Vec<JobProgress> {
+        match self.progress_history.lock() {
+            Ok(mut guard) => {
+                let mut items = Vec::new();
+                while let Some(item) = guard.pop_front() {
+                    items.push(item);
+                }
+                items
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Returns a copy of the current bounded progress history.
+    pub fn progress_history(&self) -> Vec<JobProgress> {
+        match self.progress_history.lock() {
+            Ok(guard) => guard.iter().cloned().collect(),
+            Err(_) => Vec::new(),
         }
     }
 
@@ -127,11 +194,19 @@ impl JobRunner {
         let cancel_for_thread = Arc::clone(&cancel_flag);
         let latest_progress = Arc::new(Mutex::new(None));
         let progress_state = Arc::clone(&latest_progress);
+        let progress_history = Arc::new(Mutex::new(VecDeque::new()));
+        let history_state = Arc::clone(&progress_history);
 
         let progress_fn: Arc<dyn Fn(JobProgress) + Send + Sync> =
             Arc::new(move |p: JobProgress| {
                 if let Ok(mut lock) = progress_state.lock() {
-                    *lock = Some(p);
+                    *lock = Some(p.clone());
+                }
+                if let Ok(mut h_lock) = history_state.lock() {
+                    if h_lock.len() >= MAX_PROGRESS_HISTORY {
+                        let _ = h_lock.pop_front();
+                    }
+                    h_lock.push_back(p);
                 }
             });
 
@@ -144,6 +219,7 @@ impl JobRunner {
             cancel_flag,
             thread,
             latest_progress,
+            progress_history,
         }
     }
 
@@ -175,9 +251,9 @@ impl JobRunner {
     ) -> JobHandle<SyncPlan> {
         let left = left.as_ref().to_path_buf();
         let right = right.as_ref().to_path_buf();
-        Self::spawn(move |_cancel, progress| {
+        Self::spawn(move |cancel, progress| {
             progress(JobProgress::new(0, None, "Planning sync..."));
-            let plan = plan_sync(&left, &right, &opts)?;
+            let plan = plan_sync_cancellable(&left, &right, &opts, Some(&cancel))?;
             progress(JobProgress::new(
                 plan.steps.len(),
                 Some(plan.steps.len()),
@@ -195,12 +271,19 @@ impl JobRunner {
     ) -> JobHandle<SyncReport> {
         let left = left.as_ref().to_path_buf();
         let right = right.as_ref().to_path_buf();
-        Self::spawn(move |_cancel, progress| {
+        Self::spawn(move |cancel, progress| {
             let total = plan.steps.len();
             progress(JobProgress::new(0, Some(total), "Applying sync..."));
-            let report = apply_sync(&left, &right, &plan)?;
+            let prog_cb = {
+                let p = Arc::clone(&progress);
+                move |done: usize, tot: usize, rel: &str| {
+                    p(JobProgress::new(done, Some(tot), format!("Syncing {rel}")));
+                }
+            };
+            let report =
+                apply_sync_cancellable(&left, &right, &plan, Some(&cancel), Some(&prog_cb))?;
             progress(JobProgress::new(
-                report.copied + report.deleted,
+                report.copied.saturating_add(report.deleted),
                 Some(total),
                 "Sync apply complete",
             ));
@@ -217,9 +300,9 @@ impl JobRunner {
         let base = base.as_ref().to_path_buf();
         let left = left.as_ref().to_path_buf();
         let right = right.as_ref().to_path_buf();
-        Self::spawn(move |_cancel, progress| {
+        Self::spawn(move |cancel, progress| {
             progress(JobProgress::new(0, None, "Planning folder merge..."));
-            let plan = plan_tree_merge(&base, &left, &right)?;
+            let plan = plan_tree_merge_cancellable(&base, &left, &right, Some(&cancel))?;
             progress(JobProgress::new(
                 plan.steps.len(),
                 Some(plan.steps.len()),
@@ -239,12 +322,25 @@ impl JobRunner {
         let left = left.as_ref().to_path_buf();
         let right = right.as_ref().to_path_buf();
         let output = output.as_ref().to_path_buf();
-        Self::spawn(move |_cancel, progress| {
+        Self::spawn(move |cancel, progress| {
             let total = plan.steps.len();
             progress(JobProgress::new(0, Some(total), "Applying folder merge..."));
-            let report = apply_tree_merge(&left, &right, &plan, &output)?;
+            let prog_cb = {
+                let p = Arc::clone(&progress);
+                move |done: usize, tot: usize, rel: &str| {
+                    p(JobProgress::new(done, Some(tot), format!("Merging {rel}")));
+                }
+            };
+            let report = apply_tree_merge_cancellable(
+                &left,
+                &right,
+                &plan,
+                &output,
+                Some(&cancel),
+                Some(&prog_cb),
+            )?;
             progress(JobProgress::new(
-                report.written + report.dirs_created,
+                report.written.saturating_add(report.dirs_created),
                 Some(total),
                 "Folder merge apply complete",
             ));

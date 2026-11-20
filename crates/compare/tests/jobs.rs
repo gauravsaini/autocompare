@@ -115,3 +115,66 @@ fn job_runner_sync_background() {
     assert_eq!(report.failed.len(), 0);
     assert!(right.join("new_file.txt").exists());
 }
+
+#[test]
+fn job_progress_bounded_calculations() {
+    let p1 = JobProgress::new(50, Some(100), "halfway");
+    assert_eq!(p1.percentage(), Some(50.0));
+    assert_eq!(p1.fraction(), Some(0.5));
+    assert!(!p1.is_complete());
+
+    let p2 = JobProgress::new(100, Some(100), "done");
+    assert_eq!(p2.percentage(), Some(100.0));
+    assert_eq!(p2.fraction(), Some(1.0));
+    assert!(p2.is_complete());
+
+    // Clamped overshoot
+    let p3 = JobProgress::new(150, Some(100), "overshoot");
+    assert_eq!(p3.percentage(), Some(100.0));
+    assert_eq!(p3.fraction(), Some(1.0));
+    assert!(p3.is_complete());
+
+    // Unknown total
+    let p4 = JobProgress::new(42, None, "unknown");
+    assert_eq!(p4.percentage(), None);
+    assert_eq!(p4.fraction(), None);
+    assert!(!p4.is_complete());
+}
+
+#[test]
+fn job_runner_bounded_progress_queue_and_polling() {
+    let handle = JobRunner::spawn(|_cancel, progress| {
+        for i in 1..=5 {
+            progress(JobProgress::new(i, Some(5), format!("step {i}")));
+        }
+        Ok("done")
+    });
+
+    let res = handle.join().expect("job should succeed");
+    assert_eq!(res, "done");
+}
+
+#[test]
+fn job_runner_folder_merge_background_cancellation() {
+    let temp = tempdir().expect("tempdir");
+    let base = temp.path().join("base");
+    let left = temp.path().join("left");
+    let right = temp.path().join("right");
+    let out = temp.path().join("out");
+    std::fs::create_dir_all(&base).expect("create base");
+    std::fs::create_dir_all(&left).expect("create left");
+    std::fs::create_dir_all(&right).expect("create right");
+
+    std::fs::write(base.join("f.txt"), "base").expect("write base");
+    std::fs::write(left.join("f.txt"), "left").expect("write left");
+    std::fs::write(right.join("f.txt"), "right").expect("write right");
+
+    let plan_handle = JobRunner::spawn_folder_merge_plan(&base, &left, &right);
+    let plan = plan_handle.join().expect("plan merge should succeed");
+    assert_eq!(plan.steps.len(), 1);
+
+    let apply_handle = JobRunner::spawn_folder_merge_apply(&left, &right, plan, &out);
+    let report = apply_handle.join().expect("apply merge should succeed");
+    assert_eq!(report.written, 1);
+    assert_eq!(report.failed.len(), 0);
+}

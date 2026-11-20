@@ -594,3 +594,214 @@ fn glob_match(name: &str, pattern: &str) -> bool {
     }
     pi == p.len()
 }
+
+/// A node in a folder tree view with depth and expansion metadata.
+#[derive(Debug, Clone)]
+pub struct FolderTreeNode<'a> {
+    /// The underlying folder entry.
+    pub entry: &'a FolderEntry,
+    /// Tree depth (0 for root items).
+    pub depth: usize,
+    /// Whether this directory is expanded in the view.
+    pub is_expanded: bool,
+    /// Whether this directory has children in the comparison.
+    pub has_children: bool,
+}
+
+impl<'a> PartialEq for FolderTreeNode<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.entry.rel_path == other.entry.rel_path
+            && self.depth == other.depth
+            && self.is_expanded == other.is_expanded
+            && self.has_children == other.has_children
+    }
+}
+
+impl<'a> Eq for FolderTreeNode<'a> {}
+
+/// Aggregate counts of entries by their comparison status.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FolderStatusCounts {
+    /// Items present and matching on both sides.
+    pub same: usize,
+    /// Items present on both sides with differing content or metadata.
+    pub different: usize,
+    /// Items present on both sides where left is newer.
+    pub newer_left: usize,
+    /// Items present on both sides where right is newer.
+    pub newer_right: usize,
+    /// Items only on the left side.
+    pub left_only: usize,
+    /// Items only on the right side.
+    pub right_only: usize,
+}
+
+impl FolderStatusCounts {
+    /// Total entries summarized.
+    pub fn total(&self) -> usize {
+        self.same
+            .saturating_add(self.different)
+            .saturating_add(self.newer_left)
+            .saturating_add(self.newer_right)
+            .saturating_add(self.left_only)
+            .saturating_add(self.right_only)
+    }
+
+    /// Number of entries with any difference (not Same).
+    pub fn difference_count(&self) -> usize {
+        self.different
+            .saturating_add(self.newer_left)
+            .saturating_add(self.newer_right)
+            .saturating_add(self.left_only)
+            .saturating_add(self.right_only)
+    }
+}
+
+impl FolderComparison {
+    /// Builds a hierarchical view of visible tree nodes given a set of expanded directory paths.
+    ///
+    /// An entry is visible if all its ancestor directories are contained in `expanded_dirs`.
+    /// Root entries (depth 0) are always visible.
+    pub fn tree_nodes<'a>(&'a self, expanded_dirs: &BTreeSet<String>) -> Vec<FolderTreeNode<'a>> {
+        let mut nodes = Vec::new();
+        for entry in &self.entries {
+            if Self::is_visible(&entry.rel_path, expanded_dirs) {
+                let depth = Self::entry_depth(&entry.rel_path);
+                let is_expanded = entry.is_dir && expanded_dirs.contains(&entry.rel_path);
+                let has_children = entry.is_dir && self.has_descendants(&entry.rel_path);
+                nodes.push(FolderTreeNode {
+                    entry,
+                    depth,
+                    is_expanded,
+                    has_children,
+                });
+            }
+        }
+        nodes
+    }
+
+    /// Returns a set containing all directory relative paths in this comparison.
+    pub fn expand_all(&self) -> BTreeSet<String> {
+        self.directory_paths()
+    }
+
+    /// Returns an empty set, collapsing all directories.
+    pub fn collapse_all(&self) -> BTreeSet<String> {
+        BTreeSet::new()
+    }
+
+    /// Toggles the expanded state of a directory path in `expanded_dirs`.
+    pub fn toggle_expanded(expanded_dirs: &mut BTreeSet<String>, dir_rel: &str) {
+        if expanded_dirs.contains(dir_rel) {
+            expanded_dirs.remove(dir_rel);
+        } else {
+            expanded_dirs.insert(dir_rel.to_string());
+        }
+    }
+
+    /// Checks if a directory is currently expanded.
+    pub fn is_dir_expanded(expanded_dirs: &BTreeSet<String>, dir_rel: &str) -> bool {
+        expanded_dirs.contains(dir_rel)
+    }
+
+    /// Collects all directory relative paths in the comparison into a set.
+    pub fn directory_paths(&self) -> BTreeSet<String> {
+        self.entries
+            .iter()
+            .filter(|e| e.is_dir)
+            .map(|e| e.rel_path.clone())
+            .collect()
+    }
+
+    /// Checks if an entry with `rel_path` is visible given `expanded_dirs`.
+    pub fn is_visible(rel_path: &str, expanded_dirs: &BTreeSet<String>) -> bool {
+        for ancestor in Self::ancestors(rel_path) {
+            if !expanded_dirs.contains(&ancestor) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Computes the depth of an entry from its relative path (0 for root items).
+    pub fn entry_depth(rel_path: &str) -> usize {
+        rel_path.chars().filter(|&c| c == '/').count()
+    }
+
+    /// Returns the immediate parent directory of `rel_path`, or `None` if at the root.
+    pub fn parent_path(rel_path: &str) -> Option<&str> {
+        rel_path.rsplit_once('/').map(|(parent, _)| parent)
+    }
+
+    /// Returns all ancestor directory relative paths for `rel_path`, shallowest first.
+    pub fn ancestors(rel_path: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        let mut current = rel_path;
+        while let Some((parent, _)) = current.rsplit_once('/') {
+            result.push(parent.to_string());
+            current = parent;
+        }
+        result.reverse();
+        result
+    }
+
+    /// Checks whether `ancestor` is an ancestor directory of `rel_path`.
+    pub fn is_ancestor_of(ancestor: &str, rel_path: &str) -> bool {
+        if ancestor.is_empty() {
+            return false;
+        }
+        if let Some(rest) = rel_path.strip_prefix(ancestor) {
+            rest.starts_with('/')
+        } else {
+            false
+        }
+    }
+
+    /// Returns whether any entry in the comparison is a descendant of `dir_rel`.
+    pub fn has_descendants(&self, dir_rel: &str) -> bool {
+        let prefix = format!("{dir_rel}/");
+        self.entries.iter().any(|e| e.rel_path.starts_with(&prefix))
+    }
+
+    /// Returns all direct children of `dir_rel` (or root items if `dir_rel` is empty).
+    pub fn direct_children<'a>(&'a self, dir_rel: &str) -> Vec<&'a FolderEntry> {
+        if dir_rel.is_empty() {
+            self.entries
+                .iter()
+                .filter(|e| Self::parent_path(&e.rel_path).is_none())
+                .collect()
+        } else {
+            self.entries
+                .iter()
+                .filter(|e| Self::parent_path(&e.rel_path) == Some(dir_rel))
+                .collect()
+        }
+    }
+
+    /// Returns all descendant entries under `dir_rel`.
+    pub fn all_descendants<'a>(&'a self, dir_rel: &str) -> Vec<&'a FolderEntry> {
+        let prefix = format!("{dir_rel}/");
+        self.entries
+            .iter()
+            .filter(|e| e.rel_path.starts_with(&prefix))
+            .collect()
+    }
+
+    /// Summarizes the count of entries by their `FolderStatus`.
+    pub fn status_counts(&self) -> FolderStatusCounts {
+        let mut counts = FolderStatusCounts::default();
+        for entry in &self.entries {
+            match entry.status {
+                FolderStatus::Same => counts.same = counts.same.saturating_add(1),
+                FolderStatus::Different => counts.different = counts.different.saturating_add(1),
+                FolderStatus::NewerLeft => counts.newer_left = counts.newer_left.saturating_add(1),
+                FolderStatus::NewerRight => {
+                    counts.newer_right = counts.newer_right.saturating_add(1);
+                }
+                FolderStatus::LeftOnly => counts.left_only = counts.left_only.saturating_add(1),
+                FolderStatus::RightOnly => counts.right_only = counts.right_only.saturating_add(1),
+            }
+        }
+        counts
+    }
+}

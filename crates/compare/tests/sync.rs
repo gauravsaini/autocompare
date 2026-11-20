@@ -628,3 +628,80 @@ fn sync_planner_all_modes_dry_run_and_apply() {
 
     cleanup(&base);
 }
+
+#[test]
+fn sync_plan_conflict_navigation_and_reports() {
+    use autocompare_compare::{SyncMode, SyncPlanner};
+    use std::sync::atomic::AtomicBool;
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+
+    // Mixed tree with conflicts
+    mixed_tree(&left, &right);
+
+    let mut planner = SyncPlanner::new(&left, &right, SyncMode::UpdateRight);
+    assert!(!planner.is_mirror());
+    assert!(!planner.is_bidirectional());
+
+    let plan = planner.plan().unwrap();
+    assert!(plan.has_conflicts());
+    assert_eq!(plan.conflict_count(), 2); // older.txt (destination is newer) + differs.txt (content differs)
+
+    let conflicts = plan.conflicts();
+    assert_eq!(conflicts.len(), 2);
+    let c_paths = plan.conflict_paths();
+    assert!(c_paths.contains(&"differs.txt"));
+    assert!(c_paths.contains(&"older.txt"));
+
+    let first = plan.first_conflict();
+    assert!(first.is_some());
+    let last = plan.last_conflict();
+    assert!(last.is_some());
+
+    // Navigation
+    let next_from_none = plan.next_conflict(None);
+    assert_eq!(next_from_none, first);
+
+    let next_from_first = plan.next_conflict(Some(&first.unwrap().0));
+    assert_eq!(next_from_first, last);
+
+    let next_from_last = plan.next_conflict(Some(&last.unwrap().0));
+    assert_eq!(next_from_last, None);
+
+    let prev_from_none = plan.prev_conflict(None);
+    assert_eq!(prev_from_none, last);
+
+    let prev_from_last = plan.prev_conflict(Some(&last.unwrap().0));
+    assert_eq!(prev_from_last, first);
+
+    // Plan step counters & summary
+    assert_eq!(plan.copy_to_right_count(), 2); // newer.txt, leftonly.txt
+    assert_eq!(plan.copy_to_left_count(), 0);
+    assert!(plan.summary().contains("SyncPlan:"));
+    assert!(
+        planner
+            .dry_run_summary(&plan)
+            .contains("Dry-run Update Right:")
+    );
+
+    // Planner helper methods
+    planner.set_mode(SyncMode::Both);
+    assert!(planner.is_bidirectional());
+    let planner = planner.with_mode(SyncMode::Mirror);
+    assert!(planner.is_mirror());
+
+    // Report
+    let report = planner.run().unwrap();
+    assert!(report.is_success());
+    assert_eq!(report.failure_count(), 0);
+    assert!(report.total_applied() > 0);
+    assert!(report.summary().contains("SyncReport:"));
+
+    // Cancellation support
+    let cancel = AtomicBool::new(true);
+    let cancel_res = planner.run_cancellable(&cancel);
+    assert!(matches!(cancel_res, Err(Error::Cancelled)));
+
+    cleanup(&base);
+}

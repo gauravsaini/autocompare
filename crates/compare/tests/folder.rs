@@ -498,3 +498,164 @@ fn folder_compare_tree_over_local_fs_and_cancellation() {
 
     cleanup(&base);
 }
+
+#[test]
+fn folder_tree_expand_collapse_and_visibility() {
+    use autocompare_compare::FolderCompare;
+    use std::collections::BTreeSet;
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    std::fs::create_dir_all(&left).expect("create left");
+    std::fs::create_dir_all(&right).expect("create right");
+
+    write(&left.join("root.txt"), "root");
+    write(&right.join("root.txt"), "root");
+
+    write(&left.join("docs/readme.md"), "readme");
+    write(&right.join("docs/readme.md"), "readme");
+
+    write(&left.join("src/main.rs"), "main");
+    write(&right.join("src/main.rs"), "main");
+
+    write(&left.join("src/utils/math.rs"), "math");
+    write(&right.join("src/utils/math.rs"), "math");
+
+    let t = fixed_time();
+    for file in [
+        "docs/readme.md",
+        "root.txt",
+        "src/main.rs",
+        "src/utils/math.rs",
+    ] {
+        set_mtime(&left.join(file), t);
+        set_mtime(&right.join(file), t);
+    }
+
+    let fc = FolderCompare::new(&left, &right, default_opts()).expect("fc new");
+    let res = fc.run().expect("fc run");
+
+    // Directory paths
+    let dir_paths = res.directory_paths();
+    assert!(dir_paths.contains("docs"));
+    assert!(dir_paths.contains("src"));
+    assert!(dir_paths.contains("src/utils"));
+    assert_eq!(res.expand_all(), dir_paths);
+    assert!(res.collapse_all().is_empty());
+
+    // Ancestor and path helpers
+    assert_eq!(
+        autocompare_compare::FolderComparison::ancestors("src/utils/math.rs"),
+        vec!["src", "src/utils"]
+    );
+    assert_eq!(
+        autocompare_compare::FolderComparison::parent_path("src/utils/math.rs"),
+        Some("src/utils")
+    );
+    assert_eq!(
+        autocompare_compare::FolderComparison::parent_path("root.txt"),
+        None
+    );
+    assert_eq!(
+        autocompare_compare::FolderComparison::entry_depth("src/utils/math.rs"),
+        2
+    );
+    assert_eq!(
+        autocompare_compare::FolderComparison::entry_depth("root.txt"),
+        0
+    );
+    assert!(autocompare_compare::FolderComparison::is_ancestor_of(
+        "src",
+        "src/utils/math.rs"
+    ));
+    assert!(!autocompare_compare::FolderComparison::is_ancestor_of(
+        "docs",
+        "src/utils/math.rs"
+    ));
+
+    // Visibility with empty expanded set: only root items visible
+    let mut expanded = BTreeSet::new();
+    let root_nodes = res.tree_nodes(&expanded);
+    let root_rels: Vec<&str> = root_nodes
+        .iter()
+        .map(|n| n.entry.rel_path.as_str())
+        .collect();
+    assert_eq!(root_rels, vec!["docs", "root.txt", "src"]);
+    let doc_node = root_nodes.first().expect("docs node");
+    assert!(!doc_node.is_expanded);
+    assert!(doc_node.has_children); // docs has children
+    let file_node = root_nodes.get(1).expect("file node");
+    assert!(!file_node.has_children); // root.txt is a file
+    let src_node = root_nodes.get(2).expect("src node");
+    assert!(src_node.has_children); // src has children
+
+    // Toggle expand src
+    autocompare_compare::FolderComparison::toggle_expanded(&mut expanded, "src");
+    assert!(autocompare_compare::FolderComparison::is_dir_expanded(
+        &expanded, "src"
+    ));
+    let src_expanded_nodes = res.tree_nodes(&expanded);
+    let src_rels: Vec<&str> = src_expanded_nodes
+        .iter()
+        .map(|n| n.entry.rel_path.as_str())
+        .collect();
+    assert_eq!(
+        src_rels,
+        vec!["docs", "root.txt", "src", "src/main.rs", "src/utils"]
+    );
+
+    // Expand src/utils
+    autocompare_compare::FolderComparison::toggle_expanded(&mut expanded, "src/utils");
+    let full_src_nodes = res.tree_nodes(&expanded);
+    let full_src_rels: Vec<&str> = full_src_nodes
+        .iter()
+        .map(|n| n.entry.rel_path.as_str())
+        .collect();
+    assert_eq!(
+        full_src_rels,
+        vec![
+            "docs",
+            "root.txt",
+            "src",
+            "src/main.rs",
+            "src/utils",
+            "src/utils/math.rs"
+        ]
+    );
+
+    // Direct children and descendants
+    let src_children = res.direct_children("src");
+    let src_child_rels: Vec<&str> = src_children.iter().map(|e| e.rel_path.as_str()).collect();
+    assert_eq!(src_child_rels, vec!["src/main.rs", "src/utils"]);
+
+    let src_descendants = res.all_descendants("src");
+    let src_desc_rels: Vec<&str> = src_descendants
+        .iter()
+        .map(|e| e.rel_path.as_str())
+        .collect();
+    assert_eq!(
+        src_desc_rels,
+        vec!["src/main.rs", "src/utils", "src/utils/math.rs"]
+    );
+
+    // Status counts
+    let counts = res.status_counts();
+    assert_eq!(counts.total(), res.entries.len());
+    assert_eq!(counts.left_only, 0);
+    assert_eq!(counts.right_only, 0);
+    assert_eq!(counts.same + counts.difference_count(), counts.total());
+
+    // Unit test FolderStatusCounts directly
+    let mock_counts = autocompare_compare::jobs::FolderStatusCounts {
+        same: 2,
+        different: 3,
+        newer_left: 1,
+        newer_right: 4,
+        left_only: 2,
+        right_only: 1,
+    };
+    assert_eq!(mock_counts.total(), 13);
+    assert_eq!(mock_counts.difference_count(), 11);
+
+    cleanup(&base);
+}
