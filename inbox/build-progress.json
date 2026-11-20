@@ -218,5 +218,8 @@
  "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest",
  "AGYX-FIX": "root cause: raw agy -p bypassed rotator, gemini-4-neon 404; agyx wrapper forces gemini-3.8-flash-high via localhost:51200, verified 200",
  "AGYX-STATUS": "inconsistent 2026-11-21 00:52 wrapper exited empty logs, no proxy START after 13:50:51; fallback to opencode to keep dev unblocked, will retry agyx swarm later",
- "DISK-FIX": "freed /tmp target-op-home4 home5 tree4 tree5 tabsapp topchrome hextable2 hextable3 agy-textcenter 2026-11-21, 11Gi avail"
+ "DISK-FIX": "freed /tmp target-op-home4 home5 tree4 tree5 tabsapp topchrome hextable2 hextable3 agy-textcenter 2026-11-21, 11Gi avail",
+ "WAVE-VTABLE7": "dispatched 2026-11-21 01:06 opencode sess-opencode-vtable7 OWNS views_table.rs clippy fix",
+ "WAVE-VIEWFILL7": "dispatched 2026-11-21 01:06 opencode sess-opencode-viewfill7 OWNS views.rs viewport fill",
+ "WAVE-STATUS7": "dispatched 2026-11-21 01:06 agyx wrapper OWNS app.rs statusbar (mix opencode+agyx)"
 }
