@@ -2139,6 +2139,93 @@ pub fn topchrome_hierarchy_ok() -> bool {
         && info.is_weak()
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME5 exquisite (first): session tree vs cards — new-session CTA,
+// session row height, grid margins. BC pattern, outside observation only:
+// left session tree (groups + rows) beside the 3-col card grid; tree top par
+// ek full-width new-session button (dabane layak hit floor), rows ek jaisi
+// height par, grid/tree dono outer margin (12) me aligned. Geometry first:
+// button/tree/row sab maujooda rhythm tokens se derive. Typography second:
+// HomeTitle/HomeDesc/HomeButton + caption reuse, koi naya size nahi. Paint
+// adoption paint-owner wave ka hai; colors untouched (zero Color32/Visuals).
+// Edge fixture: `checks/gui-exq-home5/comparison/home5-empty-8tabs.json`
+// (empty workspace + 8-tabs overflow).
+// ----------------------------------------------------------------------------
+
+/// New-session button height px HOME5: standard hit row
+/// ([`crate::theme::CHROME_HEADER_BAR_H`] = 28 parity) — card CTA floor
+/// ([`HOME_CARD_BUTTON_MIN_H`]) barabar, compact 24 floor se upar.
+pub const HOME5_NEW_SESSION_BUTTON_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// New-session button width px HOME5: tree inner width
+/// ([`SESSION_TREE_WIDTH`] minus do taraf [`SESSION_TREE_PAD_X`] = 224) —
+/// card CTA ([`HOME_CARD_CTA_W`]) parity, koi naya number nahi.
+pub const HOME5_NEW_SESSION_BUTTON_W: f32 = SESSION_TREE_WIDTH - SESSION_TREE_PAD_X * 2.0;
+/// Session row hit floor px HOME5: compact hit row
+/// ([`HOME_TOOLBAR_BUTTON_H`] = 24 parity) — tree row isi se bandha hai.
+pub const HOME5_SESSION_ROW_HIT_FLOOR: f32 = HOME_TOOLBAR_BUTTON_H;
+
+/// New-session button width px (single source: [`HOME5_NEW_SESSION_BUTTON_W`]).
+/// Pure; headless-tested.
+pub fn home5_new_session_button_width() -> f32 {
+    HOME5_NEW_SESSION_BUTTON_W
+}
+
+/// New-session button hit area px²: full tree-inner width x hit row
+/// (224x28 = 6272, card CTA parity). Pure; headless-tested.
+pub fn home5_new_session_hit_area() -> f32 {
+    HOME5_NEW_SESSION_BUTTON_W * HOME5_NEW_SESSION_BUTTON_H
+}
+
+/// New-session hit-target ok: height standard row (28), width card-CTA
+/// parity (224), area legacy 120x22 dabav (2640) se upar aur compact
+/// 24 floor se upar. Pure; headless-tested.
+pub fn home5_new_session_hit_ok() -> bool {
+    HOME5_NEW_SESSION_BUTTON_H == HOME_CARD_BUTTON_MIN_H
+        && HOME5_NEW_SESSION_BUTTON_W == HOME_CARD_CTA_W
+        && HOME5_NEW_SESSION_BUTTON_H >= HOME5_SESSION_ROW_HIT_FLOOR
+        && home5_new_session_hit_area() > 2_640.0
+}
+
+/// Session row height ok HOME5: tree row (24) compact floor (24) par tikta
+/// hai, do-line recent row (43) se chhota (single-line list), card CTA
+/// floor (28) se neeche taaki tree dense rahe. Pure; headless-tested.
+pub fn home5_session_row_height_ok() -> bool {
+    SESSION_TREE_ROW_H == HOME5_SESSION_ROW_HIT_FLOOR
+        && SESSION_TREE_ROW_H == HOME_TOOLBAR_BUTTON_H
+        && SESSION_TREE_ROW_H < recent_row_two_line_height()
+        && SESSION_TREE_ROW_H <= HOME_CARD_BUTTON_MIN_H
+}
+
+/// Tree/card grid alignment ok HOME5: sidebar card min width parity (240),
+/// content margins outer margin (12) parity, gaps card rhythm (24) parity.
+/// Pure; headless-tested.
+pub fn home5_tree_card_grid_align_ok() -> bool {
+    SESSION_TREE_WIDTH == HOME_CARD_MIN_W
+        && HOME_CONTENT_MARGIN_X_HOME4 == crate::theme::GEO_OUTER_MARGIN
+        && HOME_GRID_COL_GAP_HOME4 == crate::theme::GEO_CARD_GAP
+        && HOME_GRID_ROW_GAP_HOME4 == crate::theme::GEO_CARD_GAP
+        && HOME5_NEW_SESSION_BUTTON_W == HOME_CARD_CTA_W
+}
+
+/// Empty workspace tree height px HOME5: khali workspace par 9 collapsed
+/// groups (koi live/history nahi) — single-line rows + pad = 224.
+/// Pure; headless-tested.
+pub fn home5_empty_workspace_tree_height() -> f32 {
+    session_tree_content_height(9)
+}
+
+/// HOME5 typography: tree group/item HomeButton (13) reuse, meta caption
+/// (11) reuse, card title/desc HomeTitle/HomeDesc hierarchy barkarar —
+/// koi naya size nahi. Pure; headless-tested.
+pub fn home5_typo_reuses_home_roles() -> bool {
+    session_tree_group_role() == crate::theme::TypoRole::HomeButton
+        && session_tree_item_role() == crate::theme::TypoRole::HomeButton
+        && session_tree_meta_role() == crate::theme::TypoRole::caption()
+        && home_card_hierarchy_ok()
+        && recent_row_hierarchy_ok()
+        && session_tree_hierarchy_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3281,5 +3368,74 @@ mod tests {
         assert_eq!(super::topchrome_status_section_x(9, 960.0), 960.0);
         // Typography second: toolbar Body 13, path Mono 12, info/status Small 11.
         assert!(super::topchrome_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home5_session_tree_cards_margins_empty_8tabs_edge() {
+        // Edge fixture: `checks/gui-exq-home5/comparison/home5-empty-8tabs.json`.
+        // Geometry first: new-session CTA hit-target, session row height,
+        // tree/card margins; empty workspace + 8-tabs overflow.
+        // New-session button: tree inner 224 x hit row 28 = 6272 (card CTA parity).
+        assert_eq!(super::HOME5_NEW_SESSION_BUTTON_H, 28.0);
+        assert_eq!(
+            super::HOME5_NEW_SESSION_BUTTON_H,
+            crate::theme::CHROME_HEADER_BAR_H
+        );
+        assert_eq!(
+            super::HOME5_NEW_SESSION_BUTTON_H,
+            super::HOME_CARD_BUTTON_MIN_H
+        );
+        assert!((super::home5_new_session_button_width() - 224.0).abs() < 0.001);
+        assert_eq!(
+            super::home5_new_session_button_width(),
+            super::HOME_CARD_CTA_W
+        );
+        assert!((super::home5_new_session_hit_area() - 6_272.0).abs() < 0.001);
+        assert!(super::home5_new_session_hit_ok());
+        assert_eq!(super::HOME5_SESSION_ROW_HIT_FLOOR, 24.0);
+        assert_eq!(
+            super::HOME5_SESSION_ROW_HIT_FLOOR,
+            super::HOME_TOOLBAR_BUTTON_H
+        );
+        // Session row height: tree 24 floor par, two-line 43 se chhota.
+        assert!(super::home5_session_row_height_ok());
+        assert!((super::session_tree_row_height() - 24.0).abs() < 0.001);
+        assert!(super::session_tree_row_height() < super::recent_row_two_line_height());
+        // Tree/card alignment: 240 parity, 12 margins, 24 gaps, 224 CTA.
+        assert!(super::home5_tree_card_grid_align_ok());
+        assert_eq!(super::session_tree_width(), super::HOME_CARD_MIN_W);
+        // Empty workspace: 9 collapsed groups = 9 x 24 + 2 x 4 = 224.
+        assert!((super::home5_empty_workspace_tree_height() - 224.0).abs() < 0.001);
+        assert_eq!(
+            super::home5_empty_workspace_tree_height(),
+            super::session_tree_content_height(9)
+        );
+        let empty_live: Vec<super::Session> = Vec::new();
+        let empty_hist: Vec<super::SessionSnapshot> = Vec::new();
+        let expanded = std::collections::BTreeSet::new();
+        let tree = super::build_session_tree(&empty_live, &empty_hist, &expanded);
+        assert_eq!(tree.len(), 9);
+        assert!(tree.iter().all(|n| n.is_group && !n.has_children));
+        // 8-tabs overflow: 960 avail 936 fit, 300 avail 276 scroll (clip nahi).
+        let eight = [
+            "Home", "Text", "Folder", "Hex", "Merge", "Table", "Sync", "Picture",
+        ];
+        let content = super::home_tab_bar_width(&eight);
+        assert!((content - 422.0).abs() < 0.001);
+        assert!(!super::home_tab_bar_needs_scroll(&eight, 960.0));
+        assert!(super::home_tab_bar_needs_scroll(&eight, 300.0));
+        assert!(!super::home_tab_bar_needs_scroll(&eight, f32::NAN));
+        // 8-card grid 600px par 2 cols x 4 rows (clip nahi, scroll window).
+        assert_eq!(super::home_grid_columns_for_width(600.0), 2);
+        assert_eq!(super::home_grid_rows_for_width(8, 600.0), 4);
+        assert!(
+            super::home_grid_content_height(8, 600.0) > super::home_grid_content_height(8, 960.0)
+        );
+        // Typography second: HomeTitle/HomeDesc/HomeButton reuse, koi naya size nahi.
+        assert!(super::home5_typo_reuses_home_roles());
+        assert_eq!(super::session_tree_group_size(), 13.0);
+        assert_eq!(super::session_tree_meta_size(), 11.0);
+        assert_eq!(super::home_card_title_size(), 14.0);
     }
 }
