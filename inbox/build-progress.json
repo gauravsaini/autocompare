@@ -172,7 +172,7 @@
   "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only",
   "WAVE-EXQ-PAINT1": "landed+pushed 79c28a5 REPORT PASS 748 green fill-viewport blank-alignment segmented-status + ledger 680cf2e",
   "WAVE-FOLDER2": "running opencode sess-opencode-folder2 OWNS tree.rs+home.rs + checks/gui-exq-folder2 (dual-pane fill + filter geometry, launched 23:11)",
-  "WAVE-HEXTABLE": "running opencode sess-opencode-hextable OWNS views_hex.rs+views_table.rs+gutter.rs + checks/gui-exq-hextable (pane heights + gutter markers + cell padding, launched 23:11)",
+  "WAVE-HEXTABLE": "landed+pushed e7c3333 REPORT PASS 755 green pane-heights gutter-markers cell-padding",
   "WAVE-LOCAL6": "landed+pushed 0c9a065 REPORT PASS 5 PNGs magic ok 748 green 10/10 CLI TOP-10 gaps",
   "AGYX-REPROBE": "agyx still fail 2026-11-20 23:11 probe model gemini-4-neon not available in catalog -> opencode default-model only, mix when fixed",
   "POLL-STRATEGY": "exponential backoff 10s/20s/40s/80s, no fixed 8s, via opencode session export"
