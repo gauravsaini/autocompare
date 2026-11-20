@@ -65,6 +65,8 @@
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
     "VFS-D5": "landed caffc39 pushed (Error::other, 9 warnings fixed)",
     "VFS-D6": "landed 3164bba verified+pushed (strict: 23 green, clippy 0)",
-    "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)"
+    "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
+    "EXQ3A-round": "landed ab774fc pushed (report + narrow-720-proof.png 720x600 evidence-only)",
+    "EXQ3B-fix": "landed 5870ea7 pushed (strict: 712 green any-CWD, fmt clean, clippy -D warnings clean, banned 0, dead_code 0, clippy-allow 0 non-test; FindState::next->advance, HOME_SHOWS_PATH_PICKER const-assert removed)"
   }
 }
