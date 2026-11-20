@@ -4178,6 +4178,79 @@ pub fn toolbar_group_gap() -> f32 {
     views::SECTION_GAP
 }
 
+/// Session strip caller geometry (TABSAPP exquisite, App half).
+/// Hit-targets reuse [`views::SESSION_TAB_MAX_W`] + close edge/gap
+/// helpers, strip gap reuses [`views::SECTION_GAP`]; koi naya token,
+/// size ya color nahi. Paint [`views::paint_session_tab_strip`] me hai
+/// (FROZEN), yahan sirf caller contracts hain.
+impl App {
+    /// Khule sessions ki ginti (strip cells).
+    /// Pure; headless-tested.
+    pub fn strip_tab_count(&self) -> usize {
+        self.sessions.len()
+    }
+
+    /// Strip row width px (cells + gaps); caller h-scroll gate isi se.
+    /// Pure; headless-tested.
+    pub fn strip_width_px(&self) -> f32 {
+        views::session_tab_strip_width(self.strip_tab_count())
+    }
+
+    /// Tang window par strip h-scroll mangta hai ya nahi.
+    /// Pure; headless-tested.
+    pub fn strip_needs_hscroll(&self, avail: f32) -> bool {
+        views::session_tab_strip_needs_hscroll(self.strip_tab_count(), avail)
+    }
+
+    /// Active session ka strip index (selected-tab scroll target).
+    /// Khaali par `None`. Pure; headless-tested.
+    pub fn selected_strip_index(&self) -> Option<usize> {
+        let active = self.sessions.active_id()?;
+        self.sessions
+            .list()
+            .iter()
+            .position(|item| item.id == active)
+    }
+
+    /// Selected tab ko visible rakhne wala scroll offset (px).
+    /// Cell math [`views::session_tab_strip_width`] precedent par hai;
+    /// clamp [`clamp_scroll_offset`] reuse karta hai. Out-of-range index
+    /// ya non-finite viewport par current clamped rehta hai (no panic).
+    /// Pure; headless-tested.
+    pub fn strip_offset_for_selected(
+        index: usize,
+        tabs: usize,
+        viewport: f32,
+        current: f32,
+    ) -> f32 {
+        let content = views::session_tab_strip_width(tabs);
+        if tabs == 0 || index >= tabs {
+            return clamp_scroll_offset(current, content, viewport);
+        }
+        if !viewport.is_finite() || viewport <= 0.0 {
+            return clamp_scroll_offset(current, content, viewport);
+        }
+        let cell = views::SESSION_TAB_MAX_W
+            + views::session_tab_close_gap()
+            + views::session_tab_close_edge();
+        let start = index as f32 * (cell + views::session_tab_strip_gap());
+        let end = start + cell;
+        if start < current {
+            return clamp_scroll_offset(start, content, viewport);
+        }
+        if end > current + viewport {
+            return clamp_scroll_offset(end - viewport, content, viewport);
+        }
+        clamp_scroll_offset(current, content, viewport)
+    }
+
+    /// Strip tab typo role: [`views::chrome_tab_role`] (Body 13)
+    /// reuse, koi naya size nahi. Pure; headless-tested.
+    pub fn session_strip_tab_role() -> crate::theme::TypoRole {
+        views::chrome_tab_role()
+    }
+}
+
 /// Docked find-bar geometry: the bar spans the full width, the badge
 /// pins at the right end, prev/next hit rects keep the 24px floor.
 /// Pure; unit-tested.
@@ -9917,5 +9990,79 @@ mod tests {
         }
         assert_eq!(app.sessions.len(), 3);
         assert_eq!(app.current_tab(), Tab::Hex);
+    }
+
+    #[test]
+    fn tabsapp_strip_geometry_reuses_frozen_tokens() {
+        assert_eq!(views::session_tab_close_edge(), 24.0);
+        assert_eq!(views::session_tab_close_gap(), views::TAB_BOTTOM_GAP);
+        assert_eq!(views::session_tab_strip_gap(), views::SECTION_GAP);
+        assert_eq!(views::session_tab_strip_width(0), 0.0);
+        assert_eq!(views::session_tab_strip_width(2), 308.0);
+        assert_eq!(views::session_tab_strip_width(8), 1256.0);
+        assert!(views::session_tab_strip_needs_hscroll(8, 960.0));
+        assert!(!views::session_tab_strip_needs_hscroll(8, 1256.0));
+        assert!(!views::session_tab_strip_needs_hscroll(8, f32::NAN));
+        let app = App::default();
+        assert_eq!(app.strip_tab_count(), 0);
+        assert_eq!(app.strip_width_px(), 0.0);
+        assert!(app.selected_strip_index().is_none());
+        assert!(!app.strip_needs_hscroll(960.0));
+    }
+
+    #[test]
+    fn tabsapp_eight_tabs_overflow_and_hscroll_gate() {
+        let mut app = App::default();
+        for _ in 0..8 {
+            app.sessions.open(Tab::Text, "a", "b", "");
+        }
+        assert_eq!(app.strip_tab_count(), 8);
+        assert_eq!(app.strip_width_px(), 1256.0);
+        assert!(app.strip_needs_hscroll(960.0));
+        assert!(!app.strip_needs_hscroll(1256.0));
+        assert!(!app.strip_needs_hscroll(f32::NAN));
+        assert!(!app.strip_needs_hscroll(0.0));
+    }
+
+    #[test]
+    fn tabsapp_close_selected_moves_to_neighbour() {
+        let mut app = App::default();
+        for _ in 0..8 {
+            app.sessions.open(Tab::Text, "a", "b", "");
+        }
+        let ids: Vec<u64> = app.sessions.list().iter().map(|item| item.id).collect();
+        let mid = match ids.get(4) {
+            Some(id) => *id,
+            None => return,
+        };
+        let left = match ids.get(3) {
+            Some(id) => *id,
+            None => return,
+        };
+        assert!(app.switch_session(mid));
+        assert_eq!(app.selected_strip_index(), Some(4));
+        assert!(app.apply_session_action(views::SessionAction::Close(mid)));
+        assert_eq!(app.strip_tab_count(), 7);
+        assert_eq!(app.sessions.active_id(), Some(left));
+        assert_eq!(app.selected_strip_index(), Some(3));
+        assert_eq!(app.current_tab(), Tab::Text);
+    }
+
+    #[test]
+    fn tabsapp_selected_offset_keeps_tab_visible() {
+        let off = App::strip_offset_for_selected(7, 8, 960.0, 0.0);
+        assert_eq!(off, 1256.0 - 960.0);
+        let back = App::strip_offset_for_selected(0, 8, 960.0, 200.0);
+        assert_eq!(back, 0.0);
+        let stay = App::strip_offset_for_selected(1, 8, 960.0, 0.0);
+        assert_eq!(stay, 0.0);
+        assert_eq!(App::strip_offset_for_selected(9, 8, 960.0, 50.0), 50.0);
+        assert_eq!(App::strip_offset_for_selected(0, 0, 960.0, 30.0), 0.0);
+    }
+
+    #[test]
+    fn tabsapp_typo_reuses_chrome_tab_no_new_size() {
+        assert_eq!(App::session_strip_tab_role(), views::chrome_tab_role());
+        assert_eq!(App::session_strip_tab_role().size(), 13.0);
     }
 }

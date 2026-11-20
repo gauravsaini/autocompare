@@ -1,0 +1,41 @@
+{
+  "note": "TABSAPP edge fixture: 8-tabs overflow proves strip h-scroll gate; close-selected proves left-neighbour activation and scroll-target tracking.",
+  "geometry": {
+    "session_tab_max_w_px": 120.0,
+    "close_edge_px": 24.0,
+    "close_gap_px": 6.0,
+    "strip_gap_px": 8.0,
+    "cell_px": 150.0,
+    "strip_width_0_px": 0.0,
+    "strip_width_2_px": 308.0,
+    "strip_width_8_px": 1256.0
+  },
+  "overflow": {
+    "tabs": 8,
+    "viewport_960_needs_hscroll": true,
+    "viewport_1256_needs_hscroll": false,
+    "viewport_nan_needs_hscroll": false,
+    "selected_last_offset_from_0_px": 296.0
+  },
+  "close_selected": {
+    "close_index": 4,
+    "active_after_close_id": "ids[3]",
+    "active_after_close_index": 3,
+    "count_after_close": 7
+  },
+  "typography": {
+    "role": "chrome_tab",
+    "size_px": 13.0,
+    "new_sizes": 0
+  },
+  "colors": {
+    "new_hues": 0
+  },
+  "proved_by": [
+    "tabsapp_strip_geometry_reuses_frozen_tokens",
+    "tabsapp_eight_tabs_overflow_and_hscroll_gate",
+    "tabsapp_close_selected_moves_to_neighbour",
+    "tabsapp_selected_offset_keeps_tab_visible",
+    "tabsapp_typo_reuses_chrome_tab_no_new_size"
+  ]
+}
