@@ -1592,3 +1592,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave CN-OPENER launched (serial, opener flag)
 - Sess sess-cn-opn, OWNS main.rs + app.rs + checks/gui-opener-cn. CLI `--open <left> <right> --tab text` preload — content-row live photo-proof unblock karega (input-gate ka hal).
 - CO-TBARCALL (app.rs call-site) + CP-LIGHTFLAG (screenshot+main) iske BAAD (OWNS collide, serial). Phir round-7 verify (CP+CQ+CN land ke baad).
+
+## 2026-11-20 — Wave CN-OPENER landed + pushed (--open flag)
+- Commit `21017e1` feat(gui): CLI `--open <left> <right> --tab text` preload (main.rs +23, app.rs +264 incl. 2 opener tests). OWNS main.rs + app.rs + checks/gui-opener-cn only.
+- Gates: 673 green (+2 opener tests), clippy 0 warnings (indexing-slicing deny fix included), fmt clean, banned 0, colors 0 new (frozen), fixtures byte-stable, PNGs valid, OWNS clean, STATUS untouched.
+- Unblocks: content-row live photo-proof (accent+hatch+status3zone+cursor strip) via round-7 verify wave.
+- Queue: CO-TBARCALL (app.rs call-site, CN ke baad — ab launch-ready) -> CP-LIGHTFLAG (screenshot+main) -> round-7 verify (CP+CQ+CN live).
