@@ -211,11 +211,12 @@
   "WAVE-TABLE-XLSX": "landed+pushed 861dd28 (REPORT PASS, 96 lib + 40 table integ green, clippy 0, fmt clean, banned 0 non-test, OWNS-clean, PNG noise reverted)",
   "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)"
  },
- "WAVE-TEXT6": "REPORT PASS 2026-11-21 00:55 825 green (822+3), after.png 10401, awaiting agent pathspec-commit OWNS views.rs",
- "WAVE-CHROME6": "advancing app.rs 194 WIP, gates running",
- "WAVE-GUTTER6": "advancing gutter.rs 326 WIP, checks/gui-exq-gutter6 created",
- "WAVE-COPYTAKE6": "advancing copy.rs WIP",
+ "WAVE-TEXT6": "REPORT PASS 825 green, awaiting agent commit OWNS views.rs",
+ "WAVE-CHROME6": "REPORT PASS 2026-11-21 840 green (825+15), after.png 10401, awaiting agent commit OWNS app.rs",
+ "WAVE-GUTTER6": "advancing gutter.rs 326 WIP",
+ "WAVE-COPYTAKE6": "advancing copy.rs 163 take.rs 178 WIP",
  "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest",
  "AGYX-FIX": "root cause: raw agy -p bypassed rotator, gemini-4-neon 404; agyx wrapper forces gemini-3.8-flash-high via localhost:51200, verified 200",
- "AGYX-STATUS": "inconsistent 2026-11-21 00:52 wrapper exited empty logs, no proxy START after 13:50:51; fallback to opencode to keep dev unblocked, will retry agyx swarm later"
+ "AGYX-STATUS": "inconsistent 2026-11-21 00:52 wrapper exited empty logs, no proxy START after 13:50:51; fallback to opencode to keep dev unblocked, will retry agyx swarm later",
+ "DISK-FIX": "freed /tmp target-op-home4 home5 tree4 tree5 tabsapp topchrome hextable2 hextable3 agy-textcenter 2026-11-21, 11Gi avail"
 }
