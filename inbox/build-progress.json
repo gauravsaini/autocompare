@@ -31,7 +31,7 @@
     "SWARM-DIFF-I": "running pid 54344 (OWNS diff text/merge/grammar/word, checks/agyx-diff-i)",
     "SWARM-VCMP-J": "running pid 54345 (OWNS vfs+compare folder/sync/merge/jobs, checks/agyx-vcmp-j)",
     "SWARM-CLI-K": "running pid 54346 (OWNS cli, checks/agyx-cli-k)",
-    "SWARM-EXQ-L": "running opencode default-model (OWNS gui views_hex/views_table/viewmodel/app/theme, checks/gui-exq-l)",
+    "SWARM-EXQ-L": "landed e83b918 verified+pushed (682 green, clippy 0, fmt clean, banned 0, colors 0 code)",
     "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
     "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)",
     "RUN-M-early2": "landed 635d9d9 pushed (10 cmds PASS, 3 PNGs valid, TOP-10 gaps)",
