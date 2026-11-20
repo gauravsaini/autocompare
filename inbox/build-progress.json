@@ -180,7 +180,7 @@
   "WAVE-PATHMETA": "landed+pushed ce74d5c REPORT PASS 778 green path-strip segmented-status (screenshot+viewmodel)",
   "WAVE-HOME3": "landed+pushed 502e404 REPORT PASS 773 green card-gaps type-steps (home.rs 137 + theme.rs 35)",
   "WAVE-TREE2": "landed+pushed abcf36c REPORT PASS 773 green indent-guides status-marks gutter-arrows (tree+gutter+copy)",
-  "WAVE-TOOLBAR2": "running opencode sess-opencode-toolbar2 OWNS views.rs + checks/gui-exq-toolbar2 (tab close + icon cluster, launched 23:28)",
+  "WAVE-TOOLBAR2": "landed+pushed 32f68ed REPORT PASS tab-close icon-cluster (views.rs 174)",
   "WAVE-SYNCGUI": "running opencode sess-opencode-syncgui OWNS compare+tree.rs + checks/sync-gui (Update Both/Mirror/conflict nav/log, launched 23:28)",
   "WAVE-MERGETAKE": "running opencode sess-opencode-mergetake OWNS diff+take.rs + checks/merge-take (3-way take + stepper, launched 23:28)",
   "WAVE-LOCAL7": "landed+pushed 8395b55 REPORT PASS 5 PNGs magic 778 green 10/10 CLI TOP-10 (table/hex moved, text/folder/home stable)"
