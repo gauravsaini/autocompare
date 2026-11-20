@@ -18,4 +18,6 @@ Run: `tools/ac-loop/run.sh checks/ac-loop/round-N` -> `checks/ac-loop/round-N/RE
 - MS rust guidelines: forbid unsafe, no unwrap/expect/panic/todo non-test me, headless-first.
 - Geometry first (width/height/margin/padding/align/position), typography second (family/weight/line-height/spacing). Colors FROZEN.
 - Disjoint OWNS per agent, conventional commit English only, NO PUSH (orchestrator verifies then pushes). Chat Hinglish-Roman only.
+- Max 3-4 parallel agents per wave; future leaves poll with exponential backoff (base 30s, x2, max 10min).
+- Mix: opencode default model for edits, agyx swarm for parallel fan-out.
 - Probe strategy: event-driven + bounded on-demand harness, fixed timer nahi. File watcher trigger + idle/wall-clock deadlines, max 6 rounds.

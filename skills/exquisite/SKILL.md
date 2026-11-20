@@ -33,5 +33,7 @@ Color32 palette, Visuals, heatmap colors — report counts them info-only.
 - Clean-room outside observation: describe BC behavior in own words, never copy strings/assets.
 - MS rust guidelines: forbid unsafe, no unwrap/expect/panic/todo in non-test code, headless-first.
 - Disjoint OWNS per agent, conventional commit NO push (orchestrator verifies then pushes).
+- Max 3-4 parallel agents per wave; future leaves poll with exponential backoff (base 30s, x2, max 10min).
+- Mix: opencode default model for edits, agyx swarm for parallel fan-out.
 - `uv` for python helpers when python needed; stdlib first, no new deps.
 - `$unlazy + $ponytail`: minimal diff, reuse consts, no placeholders.
