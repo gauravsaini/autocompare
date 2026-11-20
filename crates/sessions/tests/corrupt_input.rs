@@ -6,8 +6,8 @@
 )]
 
 use autocompare_sessions::{
-    AppSettings, SessionDocument, SessionError, WorkspaceDocument, migrate, migrate_settings,
-    migrate_workspace,
+    AppSettings, SessionConfig, SessionDocument, SessionError, WorkspaceConfig, WorkspaceDocument,
+    migrate, migrate_session_config, migrate_settings, migrate_workspace, migrate_workspace_config,
 };
 
 #[test]
@@ -119,6 +119,19 @@ fn test_from_json_corrupt_workspace() {
     let bad_json = "{\"schema_version\": 1, \"name\": 999}";
     let res = WorkspaceDocument::from_json(bad_json);
     assert!(res.is_err());
+    let res_cfg = WorkspaceConfig::from_json(bad_json);
+    assert!(res_cfg.is_err());
+    let res_mig = migrate_workspace_config(bad_json);
+    assert!(res_mig.is_err());
+}
+
+#[test]
+fn test_from_json_corrupt_session_config() {
+    let bad_json = "{\"schema_version\": 1, \"tabs\": 42}";
+    let res_cfg = SessionConfig::from_json(bad_json);
+    assert!(res_cfg.is_err());
+    let res_mig = migrate_session_config(bad_json);
+    assert!(res_mig.is_err());
 }
 
 #[test]

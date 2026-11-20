@@ -7,7 +7,8 @@
 
 use autocompare_sessions::{
     AppSettings, CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
-    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionDocument, SessionTab, WindowLayout, WorkspaceDocument,
+    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, WindowLayout,
+    WorkspaceConfig, WorkspaceDocument,
 };
 use std::collections::HashMap;
 
@@ -92,6 +93,68 @@ fn test_workspace_document_round_trip() {
     let loaded_file = WorkspaceDocument::load_from_file(&file_path).expect("load from file");
     assert_eq!(doc, loaded_file);
     let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_workspace_config_round_trip() {
+    let mut config = WorkspaceConfig::new("BC5 Parity Workspace")
+        .with_session_paths(vec![
+            "/sessions/compare1.json".to_string(),
+            "/sessions/compare2.json".to_string(),
+        ])
+        .with_active_session("/sessions/compare1.json")
+        .with_window_layout(WindowLayout {
+            width: 2560,
+            height: 1440,
+            is_maximized: false,
+        })
+        .with_recent_paths(vec!["/recent/repo".to_string()]);
+
+    config.set_metadata("workspace_type", "beyond_compare_parity");
+    config.add_session_path("/sessions/compare3.json");
+    config.add_recent_path("/recent/scratch");
+
+    // JSON compact roundtrip
+    let compact_json = config.to_json().expect("serialize compact WorkspaceConfig");
+    let parsed_compact =
+        WorkspaceConfig::from_json(&compact_json).expect("deserialize compact WorkspaceConfig");
+    assert_eq!(config, parsed_compact);
+    assert_eq!(
+        parsed_compact.schema_version,
+        CURRENT_WORKSPACE_SCHEMA_VERSION
+    );
+    assert_eq!(parsed_compact.session_paths.len(), 3);
+    assert_eq!(parsed_compact.recent_paths.len(), 2);
+
+    // JSON pretty roundtrip
+    let pretty_json = config
+        .to_json_pretty()
+        .expect("serialize pretty WorkspaceConfig");
+    let parsed_pretty =
+        WorkspaceConfig::from_json(&pretty_json).expect("deserialize pretty WorkspaceConfig");
+    assert_eq!(config, parsed_pretty);
+
+    // File I/O roundtrip
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("test_ws_config_{}.json", std::process::id()));
+    config
+        .save_to_file(&file_path)
+        .expect("save WorkspaceConfig to file");
+    let loaded_config =
+        WorkspaceConfig::load_from_file(&file_path).expect("load WorkspaceConfig from file");
+    assert_eq!(config, loaded_config);
+    let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_session_config_round_trip() {
+    let tab = SessionTab::new("tab-cfg", "Config Tab")
+        .with_paths("/left", "/right")
+        .with_session_type("folder");
+    let config = SessionConfig::with_tabs(vec![tab]);
+    let json = config.to_json().expect("serialize SessionConfig");
+    let loaded = SessionConfig::from_json(&json).expect("deserialize SessionConfig");
+    assert_eq!(config, loaded);
 }
 
 #[test]

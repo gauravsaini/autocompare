@@ -7,6 +7,9 @@ use crate::error::SessionError;
 /// The current schema version for SessionDocument.
 pub const CURRENT_SESSION_SCHEMA_VERSION: u32 = 1;
 
+/// Alias for [`SessionDocument`] representing a versioned session configuration.
+pub type SessionConfig = SessionDocument;
+
 /// Represents a single tab within a compare session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionTab {
@@ -345,6 +348,11 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
     }
 
     Ok(tabs)
+}
+
+/// Migrates an arbitrary JSON string into a current [`SessionConfig`].
+pub fn migrate_session_config(old_json: &str) -> Result<SessionConfig, SessionError> {
+    migrate(old_json)
 }
 
 #[cfg(test)]

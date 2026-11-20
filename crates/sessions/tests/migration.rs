@@ -7,7 +7,8 @@
 
 use autocompare_sessions::{
     CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
-    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionError, migrate, migrate_settings, migrate_workspace,
+    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionError, migrate, migrate_session_config,
+    migrate_settings, migrate_workspace, migrate_workspace_config,
 };
 
 #[test]
@@ -183,6 +184,84 @@ fn test_migrate_workspace_v0_and_future() {
         }
         other => panic!("expected UnsupportedVersion, got {other:?}"),
     }
+}
+
+#[test]
+fn test_migrate_workspace_bare_array_of_paths_and_objects() {
+    let array_json = r#"[
+        "/workspace/sess1.json",
+        {"path": "/workspace/sess2.json"},
+        {"file": "/workspace/sess3.json"},
+        {"uri": "file:///workspace/sess4.json"},
+        {"session_path": "/workspace/sess5.json"}
+    ]"#;
+
+    let ws = migrate_workspace(array_json).expect("bare array should migrate to WorkspaceDocument");
+    assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
+    assert_eq!(ws.name, "Default Workspace");
+    assert_eq!(
+        ws.session_paths,
+        vec![
+            "/workspace/sess1.json",
+            "/workspace/sess2.json",
+            "/workspace/sess3.json",
+            "file:///workspace/sess4.json",
+            "/workspace/sess5.json"
+        ]
+    );
+
+    let config = migrate_workspace_config(array_json).expect("migrate_workspace_config bare array");
+    assert_eq!(config.session_paths.len(), 5);
+}
+
+#[test]
+fn test_migrate_workspace_legacy_aliases_and_config() {
+    let legacy_json = r#"{
+        "workspace_name": "Beyond Compare Legacy",
+        "open_sessions": [
+            "/path/s1.json",
+            {"path": "/path/s2.json"}
+        ],
+        "active": "/path/s1.json",
+        "window": {
+            "width": 1920,
+            "height": 1080,
+            "is_maximized": true
+        },
+        "recents": ["/recent1", {"path": "/recent2"}],
+        "meta": {
+            "sync_mode": "mirror",
+            "count": 5,
+            "enabled": true
+        }
+    }"#;
+
+    let ws = migrate_workspace_config(legacy_json).expect("legacy aliases should migrate cleanly");
+    assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
+    assert_eq!(ws.name, "Beyond Compare Legacy");
+    assert_eq!(ws.session_paths, vec!["/path/s1.json", "/path/s2.json"]);
+    assert_eq!(ws.active_session.as_deref(), Some("/path/s1.json"));
+    let win = ws.window_layout.expect("window layout parsed");
+    assert_eq!(win.width, 1920);
+    assert_eq!(win.height, 1080);
+    assert!(win.is_maximized);
+    assert_eq!(ws.recent_paths, vec!["/recent1", "/recent2"]);
+    assert_eq!(
+        ws.metadata.get("sync_mode").map(String::as_str),
+        Some("mirror")
+    );
+    assert_eq!(ws.metadata.get("count").map(String::as_str), Some("5"));
+    assert_eq!(ws.metadata.get("enabled").map(String::as_str), Some("true"));
+}
+
+#[test]
+fn test_migrate_session_config_helper() {
+    let v0_json = r#"[
+        {"id": "t1", "title": "Tab 1"}
+    ]"#;
+    let config = migrate_session_config(v0_json).expect("migrate_session_config");
+    assert_eq!(config.tabs.len(), 1);
+    assert_eq!(config.tabs[0].title, "Tab 1");
 }
 
 #[test]
