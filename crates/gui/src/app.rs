@@ -422,6 +422,22 @@ pub enum ZoomKey {
     None,
 }
 
+/// CN-OPENER: non-interactive `--open <left> <right> [--tab <name>]`
+/// launch request. Dono path session me preload hote hain aur tab khulta
+/// hai taaki live captures me content rows photo-proof ho saken
+/// (keyboard injection/drag-drop is env me block hai, ye flag hi
+/// input-gate ka hal hai). Sirf wiring (`set_tab` + `run_active_tab`
+/// reuse); colors/geometry/typo untouched. Headless-tested.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenRequest {
+    /// Left input path.
+    pub left: String,
+    /// Right input path.
+    pub right: String,
+    /// Kaunsa tab khulna hai (`--tab` se, default Text).
+    pub tab: Tab,
+}
+
 impl App {
     /// Resolves one zoom-key frame: reset sabse pehle, phir in, phir out.
     /// Pure; headless-tested.
@@ -1284,6 +1300,151 @@ impl App {
     /// Viewport window title carrying the session identity.
     pub fn window_title(&self) -> String {
         format!("{} - autocompare", self.session_identity())
+    }
+
+    /// CN-OPENER: tab naam se `Tab` (`--tab text` jaisa,
+    /// case-insensitive). `home` reject hota hai (paths ke saath launcher
+    /// kholna jhooth hota). Pure; headless-tested.
+    pub fn tab_from_name(name: &str) -> Option<Tab> {
+        let lowered = name.to_ascii_lowercase();
+        match lowered.as_str() {
+            "text" => Some(Tab::Text),
+            "folder" => Some(Tab::Folder),
+            "hex" => Some(Tab::Hex),
+            "merge" => Some(Tab::Merge),
+            "table" => Some(Tab::Table),
+            "sync" => Some(Tab::Sync),
+            "picture" => Some(Tab::Picture),
+            "foldermerge" | "folder-merge" | "folder_merge" => Some(Tab::FolderMerge),
+            "audio" => Some(Tab::Audio),
+            _ => None,
+        }
+    }
+
+    /// CN-OPENER: `argv` (program naam samait) se opener request nikalo.
+    /// `None` jab `--open` na ho (existing behavior untouched). `Err` jab
+    /// `--open` ke do path ya `--tab` ki value missing/unknown ho. Pure;
+    /// headless-tested, `--help`-safe (GUI nahi khulta).
+    pub fn parse_open_args(args: &[String]) -> Result<Option<OpenRequest>, String> {
+        if args.is_empty() {
+            return Ok(None);
+        }
+        let mut rest = match args.get(1..) {
+            Some(rest) => rest,
+            None => return Ok(None),
+        };
+        let mut opened: Option<(String, String)> = None;
+        let mut tab = Tab::Text;
+        while let Some((head, tail)) = rest.split_first() {
+            match head.as_str() {
+                "--open" => match tail {
+                    [left, right, after @ ..]
+                        if !left.starts_with("--") && !right.starts_with("--") =>
+                    {
+                        opened = Some((left.clone(), right.clone()));
+                        rest = after;
+                    }
+                    _ => {
+                        return Err(String::from(
+                            "--open needs two paths: --open <left> <right>",
+                        ));
+                    }
+                },
+                "--tab" => match tail {
+                    [name, after @ ..] => match Self::tab_from_name(name) {
+                        Some(parsed) => {
+                            tab = parsed;
+                            rest = after;
+                        }
+                        None => {
+                            return Err(format!(
+                                "unknown --tab '{name}': text/folder/hex/merge/table/sync/picture/foldermerge/audio"
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(String::from("--tab needs a value: --tab text"));
+                    }
+                },
+                _ => {
+                    rest = tail;
+                }
+            }
+        }
+        match opened {
+            Some((left, right)) => Ok(Some(OpenRequest { left, right, tab })),
+            None => Ok(None),
+        }
+    }
+
+    /// CN-OPENER: dono path slots me preload + tab khula, phir auto-compare
+    /// taaki content rows bina typing ke banen. Missing paths par
+    /// `require_paths` honest error panel deta hai (kabhi jhooth nahi).
+    /// Home par false (kuch nahi khulta). Headless-tested.
+    pub fn apply_open_request(&mut self, req: &OpenRequest) -> bool {
+        match req.tab {
+            Tab::Text => {
+                self.text.left = req.left.clone();
+                self.text.right = req.right.clone();
+            }
+            Tab::Folder => {
+                self.folder.left = req.left.clone();
+                self.folder.right = req.right.clone();
+            }
+            Tab::Hex => {
+                self.hex.left = req.left.clone();
+                self.hex.right = req.right.clone();
+            }
+            Tab::Merge => {
+                self.merge.left = req.left.clone();
+                self.merge.right = req.right.clone();
+            }
+            Tab::Table => {
+                self.table.left = req.left.clone();
+                self.table.right = req.right.clone();
+            }
+            Tab::Sync => {
+                self.sync.left = req.left.clone();
+                self.sync.right = req.right.clone();
+            }
+            Tab::Picture => {
+                self.picture.left = req.left.clone();
+                self.picture.right = req.right.clone();
+            }
+            Tab::FolderMerge => {
+                self.folder_merge.left = req.left.clone();
+                self.folder_merge.right = req.right.clone();
+            }
+            Tab::Audio => {
+                self.audio.left = req.left.clone();
+                self.audio.right = req.right.clone();
+            }
+            Tab::Home => return false,
+        }
+        self.set_tab(req.tab);
+        self.run_active_tab()
+    }
+
+    /// CN-OPENER: `--help`/`-h` maujood ho to usage print karke GUI bina
+    /// khole exit. Pure; headless-tested.
+    pub fn help_requested(args: &[String]) -> bool {
+        args.iter()
+            .skip(1)
+            .any(|arg| arg == "--help" || arg == "-h")
+    }
+
+    /// CN-OPENER: `--help` output (existing flags + opener flags).
+    pub fn help_text() -> &'static str {
+        "autocompare-gui: desktop client over the comparison engine.\n\
+         \n\
+         usage:\n\
+         \x20 autocompare-gui [--open <left> <right> [--tab <name>]] [--screenshot <png>]\n\
+         \n\
+         flags:\n\
+         \x20 --open <left> <right>  preload both paths and open the tab\n\
+         \x20 --tab <name>           text/folder/hex/merge/table/sync/picture/foldermerge/audio (default: text)\n\
+         \x20 --screenshot <png>     render the fixture PNG headlessly and exit\n\
+         \x20 --help, -h             print this help and exit\n"
     }
 
     /// Swaps left/right sides of the active session.
@@ -9648,6 +9809,109 @@ mod tests {
             app.sessions.get(id).map(|item| item.title.clone()),
             Some(String::from("custom"))
         );
+    }
+
+    #[test]
+    fn opener_flag_parses_and_preloads_text_tab() {
+        // CN-OPENER: `--open <left> <right> --tab text` parse + preload.
+        // Launch par dono path session me preload hote hain aur text tab
+        // khulta hai (live capture input-gate ka hal). GUI nahi khulta.
+        let args = vec![
+            String::from("autocompare-gui"),
+            String::from("--open"),
+            String::from("left.txt"),
+            String::from("right.txt"),
+            String::from("--tab"),
+            String::from("text"),
+        ];
+        let parsed = App::parse_open_args(&args);
+        assert!(parsed.is_ok(), "opener flag must parse: {parsed:?}");
+        let req = match parsed {
+            Ok(inner) => inner,
+            Err(_) => return,
+        };
+        let req = match req {
+            Some(req) => req,
+            None => return,
+        };
+        assert_eq!(req.left, String::from("left.txt"));
+        assert_eq!(req.right, String::from("right.txt"));
+        assert_eq!(req.tab, Tab::Text);
+        let mut app = App::default();
+        app.apply_open_request(&req);
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert_eq!(
+            app.text_paths(),
+            (String::from("left.txt"), String::from("right.txt"))
+        );
+        assert_eq!(app.sessions.len(), 1);
+    }
+
+    #[test]
+    fn opener_flag_defaults_rejects_and_help() {
+        // CN-OPENER: default tab text; missing/unknown values Err; flag na
+        // ho to None (existing behavior untouched); `--help` GUI-safe.
+        let prog = String::from("autocompare-gui");
+        assert_eq!(App::parse_open_args(std::slice::from_ref(&prog)), Ok(None));
+        assert_eq!(
+            App::parse_open_args(&[
+                prog.clone(),
+                String::from("--open"),
+                String::from("a.txt"),
+                String::from("b.txt"),
+            ]),
+            Ok(Some(OpenRequest {
+                left: String::from("a.txt"),
+                right: String::from("b.txt"),
+                tab: Tab::Text,
+            }))
+        );
+        assert_eq!(App::tab_from_name("TEXT"), Some(Tab::Text));
+        assert_eq!(App::tab_from_name("folderMerge"), Some(Tab::FolderMerge));
+        assert_eq!(App::tab_from_name("home"), None);
+        assert_eq!(App::tab_from_name("bogus"), None);
+        assert!(
+            App::parse_open_args(&[prog.clone(), String::from("--open")]).is_err(),
+            "lone --open must fail"
+        );
+        assert!(
+            App::parse_open_args(&[prog.clone(), String::from("--open"), String::from("a.txt"),])
+                .is_err(),
+            "single path must fail"
+        );
+        assert!(
+            App::parse_open_args(&[
+                prog.clone(),
+                String::from("--open"),
+                String::from("a.txt"),
+                String::from("--tab"),
+            ])
+            .is_err(),
+            "flag as path must fail"
+        );
+        assert!(
+            App::parse_open_args(&[
+                prog.clone(),
+                String::from("--open"),
+                String::from("a.txt"),
+                String::from("b.txt"),
+                String::from("--tab"),
+                String::from("bogus"),
+            ])
+            .is_err(),
+            "unknown tab must fail"
+        );
+        assert!(!App::help_requested(std::slice::from_ref(&prog)));
+        assert!(App::help_requested(&[prog, String::from("--help")]));
+        assert!(App::help_text().contains("--open <left> <right>"));
+        // Home par opener kuch nahi kholta (launcher jhooth hota).
+        let mut app = App::default();
+        assert!(!app.apply_open_request(&OpenRequest {
+            left: String::from("a.txt"),
+            right: String::from("b.txt"),
+            tab: Tab::Home,
+        }));
+        assert!(app.sessions.is_empty());
     }
 
     #[test]
