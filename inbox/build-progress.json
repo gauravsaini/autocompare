@@ -21,6 +21,6 @@
     "EXQ-TYPO3": "landed 5d2e389 verified+pushed (strict: 677 green, clippy 0)",
     "EXQ-GEO2": "running (OWNS views/tree/home/app)",
     "LOCALRUN-early": "landed a6bb8e8 pushed (docs-only, zero source)",
-    "BINARY-early": "landed c8b491e pushed (release tarballs + 10/10 smoke)"
+    "BINARY-early": "landed c8b491e pushed + draft release v0.5.0-early (tarballs attached)"
   }
 }
