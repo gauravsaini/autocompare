@@ -134,5 +134,6 @@
   "ORCH-FIX-SNAPSHOT": "snapshot_tests.rs 7 sites gated behind AUTOCOMPARE_SNAPSHOT=1; default cargo test side-effect free (verified clean), opt-in regenerates (verified); kills recurring rep-h/reports-a noise at root",
   "WAVE-REPORTS-H2R2": "s2 round-2 LANDED 11e3486 (122 ins OWNS-clean, fixture+snapshot tests, REPORT PASS, 3 suites green, fmt/clippy/banned clean)",
   "WAVE-CLI-AGYX": "agyx-cli landed+pushed 33912bc (REPORT PASS, 55 green cli, clippy 0, OWNS fmt clean, banned allow 0, PNG noise reverted)",
-  "ORCH-MIX5": "2026-11-20 21:42 AEDT agyx-cli done pushed, op-guiexq6 WIP views_table.rs, agyx-binmix active, rotator healthy 2-parallel consistent"
+  "ORCH-MIX5": "2026-11-20 21:44 AEDT gui-exq6 done pushed, agyx-binmix WIP checks/binary-mix, rotator healthy 2-parallel consistent",
+  "WAVE-GUI-EXQ6": "landed+pushed bbe2a1c (REPORT PASS, 728 green gui-lib, clippy 0, fmt clean, banned 0, PNG noise reverted)"
 }
