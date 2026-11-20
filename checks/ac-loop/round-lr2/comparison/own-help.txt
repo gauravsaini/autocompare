@@ -37,6 +37,12 @@ Options:
       --ro2
           Read-only mode for right input
 
+      --ro3
+          Read-only mode for base / ancestor / center input
+
+      --ro4
+          Read-only mode for output input
+
       --automerge
           Automatically merge when there are no conflicts
 
