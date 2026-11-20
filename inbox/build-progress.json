@@ -188,7 +188,7 @@
   "ORCH-MIX-STATUS": "mix partial: agyx SWARM-GUI-T alive + 3 opencode (home4 local8 hextable2), agyx /swarm TTY-blocked headless, cap4 exp-backoff",
   "WAVE-HOME4": "home4 idle succeeded nmsg21, nudge2 delivery failed, re-nudge queued",
   "WAVE-HEXTABLE2-SWARM": "dead agyx /swarm needs TTY bubbletea no-dev-tty in headless, fallback opencode sess-opencode-hextable2 OWNS views_hex+views_table running 23:52",
-  "WAVE-LOCAL8": "local8 running nmsg24, 3 PNGs valid",
+  "WAVE-LOCAL8": "landed+pushed 207298f REPORT PASS 10/10 CLI 3 PNGs 10363/10153/14991B TOP-10 gaps, compile-break flagged views_hex 3586",
   "ORCH-PARALLEL": "4 instances: agyx SWARM-GUI-T text + agyx hex2 swarm + opencode home4 + opencode local8, mix balanced, cap4, exp backoff",
   "WAVE-HEXTABLE2": "hex2 COMPILE BREAK views_hex.rs:3586 TABLE_CELL_PAD_X unresolved, fix nudged via session",
   "ORCH-DISK2": "2026-11-20 /tmp 100pct 117Mi blocked launches 0B logs, python rmtree freed 14Gi, warm target-orch-verify preserved",
