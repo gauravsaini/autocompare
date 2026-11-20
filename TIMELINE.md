@@ -386,3 +386,9 @@
 1. **Hex Nibble & ASCII at 960px**: nibble group gap from single-source helper, ASCII pane x from grid origin, ruler ticks aligned to byte columns.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex6/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-tree7 indent plus arrows
+
+1. **Tree Indent & Arrows at 960px**: indent step from space scale, arrow hit rects symmetric, row height from TypoRole Mono line-height.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree7/**`, `TIMELINE.md`.
