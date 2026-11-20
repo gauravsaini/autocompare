@@ -1,0 +1,31 @@
+{
+  "name": "edge-deep-nest",
+  "intent": "deeper indent guides + separated status marks + center arrows per hunk",
+  "tree": {
+    "depths": [0, 1, 2, 3],
+    "indent_step_px": 12.0,
+    "expander_w_px": 16.0,
+    "guide_xs": { "0": [], "1": [8.0], "2": [8.0, 20.0], "3": [8.0, 20.0, 32.0] },
+    "status_x": { "0": 16.0, "1": 28.0, "2": 40.0, "3": 52.0 },
+    "status_w_px": 16.0,
+    "status_gap_px": 8.0,
+    "path_x_separated": { "0": 40.0, "1": 52.0, "2": 64.0, "3": 76.0 },
+    "legacy_flat_path_x": { "0": 16.0, "1": 28.0 },
+    "status_typo": { "mono": true, "size": 13.0, "strong": true },
+    "notes": "guides at level*12+8 (expander centers); status 16px cell + 8px gap; legacy flat offset frozen"
+  },
+  "gutter": {
+    "center_w_px": 24.0,
+    "arrow_box_px": 16.0,
+    "segments": [
+      { "y_start": 100.0, "y_end": 300.0, "center_y": 200.0 },
+      { "y_start": 300.0, "y_end": 400.0, "center_y": 350.0 }
+    ],
+    "arrow_rect_at_12_200": [4.0, 192.0, 20.0, 208.0]
+  },
+  "copy": {
+    "rows": ["Changed", "Changed", "Equal", "Inserted"],
+    "expected_heads": [true, false, false, true],
+    "notes": "second Changed is continuation (blank click-to-select); Inserted after Equal heads again"
+  }
+}

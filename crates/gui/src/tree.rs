@@ -143,6 +143,83 @@ pub fn folder_expander_contains_x(depth: usize, x: f32) -> bool {
     x >= x0 && x <= x0 + folder_expander_width()
 }
 
+// ----------------------------------------------------------------------------
+// Folder indent guides + separated status marks (headless; paint owner ke paas).
+// BC folder tree me har depth level par vertical guide rehti hai aur status
+// mark (`=`, `>`, `R` ...) apne fixed cell me path se alag padhta hai —
+// hamara purana `glyph + space + path` flat tha. Geometry first: guides
+// existing [`tree_indent_step`] (12.0, MD scale) par, status cell
+// `SPACE_LG` (16.0) + `SPACE_SM` gap (8.0) par. Typography second: status
+// mono body-strong (path body-regular se weight se alag; colors frozen).
+// Legacy [`folder_row_x_offset`] frozen hai (dusri waves ke tests us par
+// hain); paint adopt kare to path [`folder_row_path_x_separated`] se shuru
+// kare, status [`tree_status_mark_x`] par fixed cell me.
+// WIRING (paint): har visible node ke liye `tree_indent_guide_xs(depth)`
+// par vertical guides, `tree_status_mark_x(depth)` par status glyph
+// `tree_status_typo()` me, path `folder_row_path_x_separated(depth)` se.
+// ----------------------------------------------------------------------------
+
+/// Folder status-mark cell width px: one LG step (expander parity 16.0).
+pub const TREE_STATUS_MARK_W: f32 = crate::theme::SPACE_LG;
+
+/// Folder status-mark to path gap px: one SM step.
+pub const TREE_STATUS_GAP: f32 = crate::theme::SPACE_SM;
+
+/// Status-mark cell width px (single source). Pure; unit-tested.
+pub fn tree_status_mark_width() -> f32 {
+    TREE_STATUS_MARK_W
+}
+
+/// Status-mark to path gap px (single source). Pure; unit-tested.
+pub fn tree_status_gap() -> f32 {
+    TREE_STATUS_GAP
+}
+
+/// Status-mark cell x-offset px: indent + fixed expander cell ke baad.
+/// Legacy [`folder_row_x_offset`] ka glyph origin yahi hai, par ab glyph
+/// fixed [`TREE_STATUS_MARK_W`] cell me paint hota hai taaki path se alag
+/// padhe. Pure; unit-tested.
+pub fn tree_status_mark_x(depth: usize) -> f32 {
+    tree_indent_for_depth(depth) + folder_expander_width()
+}
+
+/// Separated path-column x-offset px: status cell + gap ke baad.
+/// Legacy [`folder_row_x_offset`] frozen hai; yeh separated layout ka
+/// uttaradhikari hai (status 16px cell + 8px gap = +24px path shift).
+/// Pure; unit-tested.
+pub fn folder_row_path_x_separated(depth: usize) -> f32 {
+    tree_status_mark_x(depth) + tree_status_mark_width() + tree_status_gap()
+}
+
+/// Ek ancestor level ki indent guide x px: uss level ke expander cell ka
+/// center (`level * step + 16/2`). Guides har ancestor ke expander center
+/// se guzarti hain isliye chevron column se align rehti hain. Pure.
+pub fn tree_indent_guide_x(level: usize) -> f32 {
+    (level as f32) * tree_indent_step() + folder_expander_width() / 2.0
+}
+
+/// Saare ancestor guides ke x px (`0..depth`): depth 0 par khaali (koi
+/// guide nahi), depth N par N guides. Pure; unit-tested.
+pub fn tree_indent_guide_xs(depth: usize) -> Vec<f32> {
+    let mut xs = Vec::new();
+    let mut level = 0usize;
+    while level < depth {
+        xs.push(tree_indent_guide_x(level));
+        level = level.saturating_add(1);
+    }
+    xs
+}
+
+/// Status-mark typo: mono body-strong — path (`Body` regular) se weight se
+/// alag, rang se nahi (colors frozen). Pure; unit-tested.
+pub fn tree_status_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_BODY_SIZE,
+        strong: true,
+    }
+}
+
 /// `visible_count` rows wale ped ki kul height px: rows x row height.
 /// Khali ped par 0 (paint khali list chhupata hai). Pure; unit-tested.
 pub fn folder_tree_content_height(visible_count: usize) -> f32 {
@@ -4690,5 +4767,46 @@ mod folderfilter_tests {
         session.drill_into("gui");
         session.reset_drill_down();
         assert!(session.drill_down.is_root());
+    }
+}
+
+#[cfg(test)]
+mod exq_tree2_tests {
+    use super::*;
+
+    #[test]
+    fn tree2_guides_status_and_path_geometry() {
+        // Mirrors checks/gui-exq-tree2/round-1/comparison/edge-deep-nest.json:
+        // step 12 (MD), expander 16; guides har ancestor expander center
+        // (level*12 + 8); status cell 16 + gap 8 ke baad separated path.
+        assert_eq!(tree_status_mark_width(), 16.0);
+        assert_eq!(tree_status_mark_width(), crate::theme::SPACE_LG);
+        assert_eq!(tree_status_gap(), 8.0);
+        assert_eq!(tree_status_gap(), crate::theme::SPACE_SM);
+        assert_eq!(tree_status_mark_x(0), 16.0);
+        assert_eq!(tree_status_mark_x(1), 28.0);
+        assert_eq!(tree_status_mark_x(2), 40.0);
+        assert_eq!(folder_row_path_x_separated(0), 40.0);
+        assert_eq!(folder_row_path_x_separated(1), 52.0);
+        assert_eq!(folder_row_path_x_separated(3), 76.0);
+        // Legacy flat offset frozen rehta hai (paint adopt kare to separated).
+        assert_eq!(folder_row_x_offset(1), 28.0);
+        assert_eq!(tree_indent_guide_x(0), 8.0);
+        assert_eq!(tree_indent_guide_x(1), 20.0);
+        assert_eq!(tree_indent_guide_x(2), 32.0);
+        assert!(tree_indent_guide_xs(0).is_empty());
+        assert_eq!(tree_indent_guide_xs(1), vec![8.0]);
+        assert_eq!(tree_indent_guide_xs(3), vec![8.0, 20.0, 32.0]);
+    }
+
+    #[test]
+    fn tree2_status_typo_weight_separates_without_color() {
+        // Status strong (path regular se weight se alag); sizes frozen.
+        let status = tree_status_typo();
+        let path = folder_typo_for_column(FolderColumn::Path);
+        assert!(status.mono && status.strong);
+        assert_eq!(status.size, FOLDER_BODY_SIZE);
+        assert_eq!(status.size, path.size);
+        assert!(!path.strong);
     }
 }

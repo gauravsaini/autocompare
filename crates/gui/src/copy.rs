@@ -176,6 +176,45 @@ pub fn copy_focus_after(model: &TextRows, idx: usize) -> Option<usize> {
     crate::viewmodel::next_diff_idx(&model.rows, Some(idx))
 }
 
+// ----------------------------------------------------------------------------
+// Center-gutter per-hunk arrow visibility (headless; paint owner ke paas).
+// BC center bar har hunk par ek arrow dikhata hai, har row par nahi —
+// continuation rows blank click-to-select rehti hain. Yeh section uska
+// headless rule hai: [`copy_hunk_head`] contiguous diff block ka pehla row
+// hai (Equal ke baad ya index 0 par pehla diff); paint arrow sirf wahi
+// banata hai, geometry [`crate::gutter::gutter_arrow_rect`] se. Geometry
+// first (24px hit floor upar frozen hai), typo second (status line Small
+// weak precedent reuse — yahan koi naya size nahi), colors frozen.
+// WIRING (paint): center column me `copy_center_arrow_visible(model, idx)`
+// true par hi arrow button, false par blank (click row select karta hai).
+// ----------------------------------------------------------------------------
+
+/// Center-gutter hunk head: contiguous diff block ka pehla row.
+/// `idx` OOB ya Equal par false; pehla diff (idx 0) ya Equal ke baad wala
+/// pehla diff true. Pure; headless-tested.
+pub fn copy_hunk_head(model: &TextRows, idx: usize) -> bool {
+    let Some(row) = model.rows.get(idx) else {
+        return false;
+    };
+    if row.kind == TextRowKind::Equal {
+        return false;
+    }
+    if idx == 0 {
+        return true;
+    }
+    match model.rows.get(idx.saturating_sub(1)) {
+        Some(prev) => prev.kind == TextRowKind::Equal,
+        None => true,
+    }
+}
+
+/// Center arrow dikhe ya blank: [`copy_hunk_head`] ka paint alias.
+/// Continuations blank rehti hain taaki gutter fixed width me rahe bina
+/// per-row button clutter ke. Pure; headless-tested.
+pub fn copy_center_arrow_visible(model: &TextRows, idx: usize) -> bool {
+    copy_hunk_head(model, idx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +382,45 @@ mod tests {
         // Last diff copied: no next diff.
         copy_line(&mut model, 2, CopyDirection::LeftToRight).unwrap_or_default();
         assert_eq!(copy_focus_after(&model, 2), None);
+    }
+}
+
+#[cfg(test)]
+mod exq_tree2_tests {
+    use super::*;
+    use crate::viewmodel::{TextRow, TextRowKind};
+
+    fn hunk_row(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tree2_copy_arrows_head_each_hunk_only() {
+        // Mirrors checks/gui-exq-tree2/round-1/comparison/edge-deep-nest.json:
+        // Changed+Changed ek hunk (dusra blank), Equal kabhi head nahi,
+        // Equal ke baad diff phir head. OOB/empty kabhi head nahi.
+        let model = TextRows {
+            rows: vec![
+                hunk_row(TextRowKind::Changed),
+                hunk_row(TextRowKind::Changed),
+                hunk_row(TextRowKind::Equal),
+                hunk_row(TextRowKind::Inserted),
+            ],
+            ..Default::default()
+        };
+        assert!(copy_hunk_head(&model, 0));
+        assert!(!copy_hunk_head(&model, 1));
+        assert!(!copy_hunk_head(&model, 2));
+        assert!(copy_hunk_head(&model, 3));
+        assert!(!copy_hunk_head(&model, 4));
+        assert!(copy_center_arrow_visible(&model, 0));
+        assert!(!copy_center_arrow_visible(&model, 1));
+        assert!(!copy_center_arrow_visible(&model, 2));
+        assert!(copy_center_arrow_visible(&model, 3));
+        let empty = TextRows::default();
+        assert!(!copy_hunk_head(&empty, 0));
     }
 }

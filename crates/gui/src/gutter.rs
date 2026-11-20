@@ -532,6 +532,77 @@ pub fn gutter_geometry_from_ranges(
     }
 }
 
+// ----------------------------------------------------------------------------
+// Center-gutter arrows per hunk (headless; paint owner ke paas).
+// BC twin panes ke beech har hunk par ek directional arrow rehta hai, har
+// row par nahi — continuation rows blank click-to-select rehti hain taaki
+// gutter fixed width me rahe. Geometry first: column width one XL step
+// (24.0, [`crate::copy::COPY_HIT_MIN`] parity — koi chhota tap target
+// nahi), arrow box one LG step (16.0) center me. Har segment (= ek hunk)
+// ka ek center ([`gutter_arrow_center_y`]) hota hai; paint arrow box
+// [`gutter_arrow_rect`] me banata hai. Kaunsa row arrow pata hai yeh
+// [`crate::copy::copy_hunk_head`] batata hai (head-only visibility).
+// Colors frozen: yahan koi hue nahi, sirf shape.
+// WIRING (paint): center column `gutter_center_width()` chaudi; har
+// segment ke `gutter_arrow_center_y(&seg)` par `gutter_arrow_rect(cx, cy)`
+// me arrow; `copy_hunk_head` false wali rows blank (click-to-select).
+// ----------------------------------------------------------------------------
+
+/// Center-gutter column width px: one XL step (copy hit floor parity).
+pub const GUTTER_CENTER_W: f32 = crate::theme::SPACE_XL;
+
+/// Center arrow box size px: one LG step (24px column me 4px pad/side).
+pub const GUTTER_ARROW_BOX: f32 = crate::theme::SPACE_LG;
+
+/// Center-gutter column width px (single source). Pure; unit-tested.
+pub fn gutter_center_width() -> f32 {
+    GUTTER_CENTER_W
+}
+
+/// Center arrow box size px (single source). Pure; unit-tested.
+pub fn gutter_arrow_box() -> f32 {
+    GUTTER_ARROW_BOX
+}
+
+/// Ek hunk segment ke arrow ka center y px: band ka midpoint.
+/// Non-finite band par `None` taaki paint NaN kabhi layout me na daale.
+/// Pure; unit-tested.
+pub fn gutter_arrow_center_y(seg: &GutterSegment) -> Option<f32> {
+    if !seg.y_start.is_finite() || !seg.y_end.is_finite() {
+        return None;
+    }
+    let cy = (seg.y_start + seg.y_end) / 2.0;
+    if cy.is_finite() { Some(cy) } else { None }
+}
+
+/// Center arrow ka square rect `(x0, y0, x1, y1)` px: `GUTTER_ARROW_BOX`
+/// ka box `(center_x, center_y)` par centered. Non-finite input par
+/// `None`. Pure; unit-tested.
+pub fn gutter_arrow_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    if !center_x.is_finite() || !center_y.is_finite() {
+        return None;
+    }
+    let half = GUTTER_ARROW_BOX / 2.0;
+    Some((
+        center_x - half,
+        center_y - half,
+        center_x + half,
+        center_y + half,
+    ))
+}
+
+/// Har segment ke arrow center y px, segment order me. Non-finite band
+/// skip hota hai (paint uss hunk par arrow nahi banata). Pure; unit-tested.
+pub fn gutter_arrow_centers(segments: &[GutterSegment]) -> Vec<f32> {
+    let mut out = Vec::new();
+    for seg in segments {
+        if let Some(cy) = gutter_arrow_center_y(seg) {
+            out.push(cy);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1013,5 +1084,52 @@ mod tests {
                 .segments
                 .is_empty()
         );
+    }
+}
+
+#[cfg(test)]
+mod exq_tree2_tests {
+    use super::*;
+
+    #[test]
+    fn tree2_center_arrows_per_hunk() {
+        // Mirrors checks/gui-exq-tree2/round-1/comparison/edge-deep-nest.json.
+        assert_eq!(gutter_center_width(), 24.0);
+        assert_eq!(gutter_center_width(), crate::theme::SPACE_XL);
+        assert_eq!(gutter_arrow_box(), 16.0);
+        assert_eq!(gutter_arrow_box(), crate::theme::SPACE_LG);
+        let seg = GutterSegment {
+            y_start: 100.0,
+            y_end: 300.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(gutter_arrow_center_y(&seg), Some(200.0));
+        assert_eq!(
+            gutter_arrow_rect(12.0, 200.0),
+            Some((4.0, 192.0, 20.0, 208.0))
+        );
+        assert_eq!(gutter_arrow_rect(f32::NAN, 200.0), None);
+        assert_eq!(gutter_arrow_rect(12.0, f32::INFINITY), None);
+        let bad = GutterSegment {
+            y_start: f32::NAN,
+            y_end: 300.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(gutter_arrow_center_y(&bad), None);
+        // Har segment (= ek hunk) ka ek center, order me.
+        let segs = vec![
+            GutterSegment {
+                y_start: 100.0,
+                y_end: 300.0,
+                kind: TextRowKind::Deleted,
+            },
+            GutterSegment {
+                y_start: 300.0,
+                y_end: 400.0,
+                kind: TextRowKind::Inserted,
+            },
+        ];
+        assert_eq!(gutter_arrow_centers(&segs), vec![200.0, 350.0]);
+        assert!(gutter_arrow_centers(&[]).is_empty());
     }
 }
