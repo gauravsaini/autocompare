@@ -1613,3 +1613,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - AGYX-B SESSIONS: crates/sessions (WorkspaceConfig roundtrip + migration). OWNS crates/sessions + checks/agyx-sessions-b.
 - AGYX-C DIFF: crates/diff (one algorithm gap, pure fn). OWNS crates/diff + checks/agyx-diff-c.
 - Architecture note: L0 diff/evidence leaf, L1 vfs/sessions/reports, L2 compare, L3 cli/gui thin — plug-and-play confirmed, GUI-owned files forbidden for swarm. Agents commit locally NO PUSH, orchestrator verifies + pushes.
+
+## 2026-11-20 — AGYX-B SESSIONS landed + pushed
+- Commit `c978d2a` feat(sessions): versioned WorkspaceConfig roundtrip + migration (lib/session/workspace + 3 test files). OWNS crates/sessions + checks/agyx-sessions-b only.
+- Gates: sessions tests 14+8+11+5 green, clippy 0 warnings, fmt clean, banned only test-expects (clippy --all-targets green), colors 0. Pushed origin/main.
+- Still running: AGYX-A reports (6 files), AGYX-C diff (2 files).
