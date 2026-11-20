@@ -1377,6 +1377,61 @@ pub fn typo_home4_steps_ok() -> bool {
         && button.line_height_px() > desc.line_height_px()
 }
 
+// ----------------------------------------------------------------------------
+// TYPO8 exquisite roles plus rhythm (headless, paint-neutral): geometry FIRST
+// (paragraph/section gaps reuse the canonical SPACE scale via GEO_* aliases
+// for margins/padding rhythm), typography SECOND (every gap maps to one
+// TypoRole, no new point sizes — family/weight/line-height/letter-spacing
+// unchanged), colors FROZEN (zero Color32/Visuals). Paint adoption later wave.
+// ----------------------------------------------------------------------------
+
+/// Body paragraph gap: one SM step (== [`GEO_SECTION_GAP`], 8.0).
+pub const TYPO_PARA_GAP_BODY: f32 = GEO_SECTION_GAP;
+/// Small/hint paragraph gap: one XS step (== [`GEO_TIGHT_GAP`], 4.0).
+pub const TYPO_PARA_GAP_SMALL: f32 = GEO_TIGHT_GAP;
+/// Chrome section gap: one MD step (== [`GEO_OUTER_MARGIN`], 12.0).
+pub const TYPO_SECTION_GAP_CHROME: f32 = GEO_OUTER_MARGIN;
+/// Mono content row gap: one XS step keeps dense 12px rows airy, no new size.
+pub const TYPO_ROW_GAP_MONO: f32 = GEO_TIGHT_GAP;
+
+/// Rhythm contract: gaps reuse the geometry scale in strict order
+/// (small 4 < body 8 < section 12, mono row == small) and line-height px
+/// keeps Small < Mono < Body so vertical rhythm never inverts. Pure.
+pub fn typo_rhythm_ok() -> bool {
+    TYPO_PARA_GAP_SMALL == GEO_TIGHT_GAP
+        && TYPO_PARA_GAP_BODY == GEO_SECTION_GAP
+        && TYPO_SECTION_GAP_CHROME == GEO_OUTER_MARGIN
+        && TYPO_ROW_GAP_MONO == GEO_TIGHT_GAP
+        && TYPO_PARA_GAP_SMALL < TYPO_PARA_GAP_BODY
+        && TYPO_PARA_GAP_BODY < TYPO_SECTION_GAP_CHROME
+        && TYPO_ROW_GAP_MONO == TYPO_PARA_GAP_SMALL
+        && TypoRole::Small.line_height_px() < TypoRole::Mono.line_height_px()
+        && TypoRole::Mono.line_height_px() < TypoRole::Body.line_height_px()
+}
+
+/// Roles plus rhythm: existing ladders (home scale, text-center steps, home4
+/// steps) plus the rhythm gaps above. Single gate for TYPO8. Pure.
+pub fn typo_roles_plus_rhythm_ok() -> bool {
+    typo_exq_home_scale_ok()
+        && typo_textcenter_steps_ok()
+        && typo_home4_steps_ok()
+        && typo_rhythm_ok()
+}
+
+impl TypoRole {
+    /// Vertical gap after a paragraph/section in this role: small roles hug
+    /// (XS), body/mono breathe (SM), headers separate sections (MD). Reuses
+    /// [`TYPO_PARA_GAP_SMALL`] / [`TYPO_PARA_GAP_BODY`] /
+    /// [`TYPO_SECTION_GAP_CHROME`]; no new sizes, no colors. Pure.
+    pub const fn para_gap(self) -> f32 {
+        match self {
+            Self::Small | Self::HomeDesc => TYPO_PARA_GAP_SMALL,
+            Self::Body | Self::Mono | Self::HomeButton => TYPO_PARA_GAP_BODY,
+            Self::Heading | Self::HomeTitle => TYPO_SECTION_GAP_CHROME,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2400,5 +2455,33 @@ mod tests {
         assert_eq!(TypoRole::HomeButton.family(), "proportional");
         assert_eq!(TypoRole::HomeDesc.family(), "proportional");
         assert!(typo_exq_home_scale_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn typo8_roles_plus_rhythm_reuses_scale_without_new_sizes() {
+        // TYPO8: gaps reuse GEO_* scale only, har gap ek TypoRole se bandha,
+        // koi naya point size nahi, koi color move nahi. Paint-neutral.
+        assert!(typo_rhythm_ok());
+        assert!(typo_roles_plus_rhythm_ok());
+        assert_eq!(TYPO_PARA_GAP_SMALL, GEO_TIGHT_GAP);
+        assert_eq!(TYPO_PARA_GAP_SMALL, SPACE_XS);
+        assert_eq!(TYPO_PARA_GAP_BODY, GEO_SECTION_GAP);
+        assert_eq!(TYPO_PARA_GAP_BODY, SPACE_SM);
+        assert_eq!(TYPO_SECTION_GAP_CHROME, GEO_OUTER_MARGIN);
+        assert_eq!(TYPO_SECTION_GAP_CHROME, SPACE_MD);
+        assert_eq!(TYPO_ROW_GAP_MONO, GEO_TIGHT_GAP);
+        // Role -> gap mapping: small hug, body/mono breathe, headers separate.
+        assert_eq!(TypoRole::Small.para_gap(), TYPO_PARA_GAP_SMALL);
+        assert_eq!(TypoRole::HomeDesc.para_gap(), TYPO_PARA_GAP_SMALL);
+        assert_eq!(TypoRole::Body.para_gap(), TYPO_PARA_GAP_BODY);
+        assert_eq!(TypoRole::Mono.para_gap(), TYPO_PARA_GAP_BODY);
+        assert_eq!(TypoRole::HomeButton.para_gap(), TYPO_PARA_GAP_BODY);
+        assert_eq!(TypoRole::Heading.para_gap(), TYPO_SECTION_GAP_CHROME);
+        assert_eq!(TypoRole::HomeTitle.para_gap(), TYPO_SECTION_GAP_CHROME);
+        // Sizes untouched: rhythm gaps change no TypoRole point size.
+        assert_eq!(TypoRole::Body.size(), TYPO_BODY_SIZE);
+        assert_eq!(TypoRole::Mono.size(), TYPO_MONO_SIZE);
+        assert_eq!(TypoRole::Small.size(), TYPO_SMALL_SIZE);
     }
 }
