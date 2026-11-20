@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Chore (2026-11-21) — chore(localrun): exq-localrun3 early feedback bundle
+
+1. **Early feedback bundle**: CLI 10 cmds PASS, 3 PNGs default/dark/light, dist tarball + sha refreshed (VERSION 0.5.0 7bdf2ea), tail-insertion edge fixture, GAPS-TOP10. Low-disk fallback: CARGO_PROFILE_RELEASE_LTO=false + CODEGEN_UNITS=16 via env only.
+2. **Tests**: REPORT RESULT: PASS; owned scope fmt clean; banned 0; no crates touch.
+3. **Files changed**: checks/ac-loop/round-lr3/**, dist/*, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-theme26 light theme
 
 1. **Light Theme (single color wave, geometry-typo identical)**: theme.rs LIGHT_DELETED_BG/INSERTED_BG/CHANGED_BG/CHANGED_FG/ERROR_BG mirrors + deleted/inserted/changed/accent/error for(dark) helpers + light_diff_accents_aa; app.rs resolve_screenshot_mode (default Light, --screenshot-mode wins, AUTOCOMPARE_DARK_REF keeps dark); main.rs screenshot dispatch. pxdiff before vs after: 390933 of 576000 DIFFERENT bbox (0,0)-(959,595); dark-ref IDENTICAL to before. Edge theme-contrast-720.json AA 17.35/6.49/6.48/5.98/6.91 min 5.32.
