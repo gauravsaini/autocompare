@@ -41,6 +41,8 @@
   "WAVE-BIN-MIX": "landed+pushed e1dbe32 (REPORT PASS 6/6, tarballs fresh, png 960x600 magic-ok, OWNS dist+checks clean)",
   "WAVE-BIN-MIX-R": "landed+pushed 5d480a3 (dist refresh VERSION 4063976, sha256 -c 4/4 OK, REPORT PASS preserved)",
   "WAVE-CLI-AGYX": "agyx-cli landed+pushed 33912bc (REPORT PASS, 55 green cli, clippy 0, OWNS fmt clean, banned allow 0, PNG noise reverted)",
+  "WAVE-CLIVCS2": "landed+pushed b75aa21 REPORT PASS 37+ green cli matrix",
+  "WAVE-EXQ8B": "landed+pushed 0cb98ad/12b27d0 REPORT PASS 743 green bottom waste fixed",
   "WAVE-GUI-EXQ5B": "landed b0520b1 (30 files OWNS-clean, REPORT PASS, PNG magic ok, cargo-fmt clean, banned 0) pushed",
   "WAVE-GUI-EXQ6": "landed+pushed bbe2a1c (REPORT PASS, 728 green gui-lib, clippy 0, fmt clean, banned 0, PNG noise reverted)",
   "WAVE-HOME1": "landed+pushed faf5464/fa1478e REPORT PASS 742 green home find+narrow+tabs",
