@@ -572,3 +572,9 @@
 1. **Take Tall-1200 Markers & Hit Lock**: take marker rows aligned with hunk rows at 1200px tall canvas, hit lock over long scroll, marker rhythm steady, and edge fixture `comparison/take-tall-1200.json` (narrow-240 fixture reused).
 2. **Tests** (before → after): autocompare-gui 1027 green (including `take7_*` tall markers tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/take.rs`, `checks/gui-exq-take7/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-tree10 tall plus columns
+
+1. **Tree Tall-1200 Columns & Right-Align Lock**: size/date column widths stable at 1200px tall canvas, right-alignment locked over long scroll, selected-row full-width highlight tall, and edge fixture `comparison/tree-tall-1200.json` (narrow-720 fixture reused).
+2. **Tests** (before → after): autocompare-gui 1032 green (including `tree10_*` tall columns tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree10/**`, `TIMELINE.md`.
