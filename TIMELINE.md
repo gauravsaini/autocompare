@@ -626,3 +626,9 @@
 1. **Fixture Chrome Pixels (visual-spec-first)**: screenshot.rs fixture renderer now paints the chrome17 geometry — taller toolbar band with button rhythm, padded tabstrip tabs, file-bar rows with per-pane metadata line, segmented bottom status. Shot15 center gutter + yellow markers intact. pxdiff vs baseline: 138850 of 576000 DIFFERENT, bbox (0,40)-(959,448), VERDICT DIFFERENT (independently re-verified).
 2. **Tests** (before -> after): autocompare-gui 1039 green (including shot18_chrome720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-shot18/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-typo17 text typography
+
+1. **Text Typography**: body/mono/small role sizes from TYPO_* tokens, line-height-derived row heights, line-number column from char metrics, letter-spacing, baseline offsets. Touch ONLY text-region helpers + paint_text_body call sites (text_body_role, text_linenum_column_width_from_metrics, text_typo17_row_height, etc.). Colors frozen at 33 touches. Edge fixture comparison/typo-tall-1200.json + headless test typo17_tall1200_numbers_aligned.
+2. **Tests** (before -> after): autocompare-gui 1040 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate IDENTICAL (views.rs egui path does not feed fixture pixels — same structural block as chrome17; live-window verification pending). Note: leaf also drafted out-of-OWNS crates/sessions edits in its worktree — deliberately left uncommitted and excluded from landing.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-typo17/**, TIMELINE.md.
