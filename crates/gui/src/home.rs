@@ -3118,6 +3118,152 @@ pub fn home5_narrow_hierarchy_ok() -> bool {
         && HOME5_EMPTY_MARGIN_Y == crate::theme::GEO_SECTION_GAP
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME6 round-1 exquisite (leaf): narrow cards + CTA width + toolbar hits.
+// Geometry first:
+// 1. Card min-w from SPACE scale: 10 * SPACE_XL = 240.0.
+//    At 720px narrow window (696 avail), cards wrap from 3 cols to 2 cols
+//    (2 cols require 504 <= 696 with EXQ gap, 3 cols need 768 > 696).
+//    9 cards yield ceil(9/2) = 5 rows. Card flexes to (696 - 24) / 2 = 336.0.
+// 2. CTA width from card inner width: card_w - 2 * HOME6_CARD_PAD
+//    (224.0 at min-w, 320.0 at 720 narrow flexed card).
+// 3. Toolbar button 24px hits symmetric: 96x24 button with 4px hit-slop
+//    (SPACE_XS) on all 4 edges expands to 104x32 hit area (3328 px²).
+// Typography second: Heading, HomeTitle, HomeButton, HomeDesc reuse.
+// Colors frozen: zero new Color32 / Visuals touches.
+// Edge fixture: `checks/gui-exq-home6/comparison/home-narrow-720.json`.
+// ----------------------------------------------------------------------------
+
+/// Home6 card min width px: derived from SPACE scale (10 * [`crate::theme::SPACE_XL`] = 240.0).
+pub const HOME6_CARD_MIN_W: f32 = crate::theme::SPACE_XL * 10.0;
+/// Home6 card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME6_CARD_PAD: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home6 content side margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME6_CONTENT_MARGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home6 card grid gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME6_CARD_GRID_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home6 card grid generous gap px: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24.0).
+pub const HOME6_CARD_GRID_GAP_EXQ: f32 = crate::theme::GEO_CARD_GAP;
+/// Home6 toolbar button width px: compact floor (96.0).
+pub const HOME6_TOOLBAR_BUTTON_W: f32 = HOME_TOOLBAR_BUTTON_W;
+/// Home6 toolbar button height px: 24.0 exquisite hit floor ([`crate::theme::SPACE_XL`]).
+pub const HOME6_TOOLBAR_BUTTON_H: f32 = crate::theme::SPACE_XL;
+/// Home6 toolbar button hit-slop px: [`crate::theme::SPACE_XS`] (4.0), symmetric on all 4 sides.
+pub const HOME6_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+/// Home6 button padded hit width px: 96 + 2 * 4 = 104.
+pub const HOME6_BUTTON_PADDED_W: f32 = HOME6_TOOLBAR_BUTTON_W + 2.0 * HOME6_BUTTON_HIT_SLOP;
+/// Home6 button padded hit height px: 24 + 2 * 4 = 32.
+pub const HOME6_BUTTON_PADDED_H: f32 = HOME6_TOOLBAR_BUTTON_H + 2.0 * HOME6_BUTTON_HIT_SLOP;
+/// Home6 CTA min width px: card inner width at min card width (`HOME6_CARD_MIN_W - 2 * HOME6_CARD_PAD` = 224.0).
+pub const HOME6_CARD_CTA_MIN_W: f32 = HOME6_CARD_MIN_W - HOME6_CARD_PAD * 2.0;
+
+/// Home6 content available width px: total_w minus 2 * side margin (12.0).
+/// Tang par 0.0, non-finite passthrough. Pure; headless-tested.
+pub fn home6_content_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME6_CONTENT_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Home6 card grid columns at total width:
+/// Wide window (>= 768) returns canonical 3 cols, 720 narrow returns 2 cols,
+/// very narrow (<= 504) returns 1 col. Non-finite returns canonical 3 cols.
+/// Pure; headless-tested.
+pub fn home6_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = home6_content_avail_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME6_CARD_MIN_W + cols as f32 * HOME6_CARD_GRID_GAP_EXQ <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Home6 card grid rows for item count at total width. Pure; headless-tested.
+pub fn home6_grid_rows(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home6_grid_columns(total_w).max(1))
+}
+
+/// Home6 flexed card width px for available width at generous EXQ gap:
+/// (avail - (cols - 1) * gap) / cols, floor at [`HOME6_CARD_MIN_W`].
+/// At 720 (696 avail, 2 cols, 24 gap): (696 - 24) / 2 = 336.0.
+/// At 960 (936 avail, 3 cols, 24 gap): (936 - 48) / 3 = 296.0.
+/// Pure; headless-tested.
+pub fn home6_grid_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME6_CARD_MIN_W;
+    }
+    let cols = if avail >= 744.0 {
+        3.0
+    } else if avail >= 480.0 {
+        2.0
+    } else {
+        1.0
+    };
+    let gaps = (cols - 1.0) * HOME6_CARD_GRID_GAP_EXQ;
+    ((avail - gaps) / cols).max(HOME6_CARD_MIN_W)
+}
+
+/// Home6 card inner width px for a given card width: card_w minus 2 * padding.
+/// Non-finite yields [`HOME6_CARD_CTA_MIN_W`]. Pure; headless-tested.
+pub fn home6_card_inner_width(card_w: f32) -> f32 {
+    if !card_w.is_finite() {
+        return HOME6_CARD_CTA_MIN_W;
+    }
+    (card_w - HOME6_CARD_PAD * 2.0).max(0.0)
+}
+
+/// Home6 CTA width px derived from card inner width. Pure; headless-tested.
+pub fn home6_card_cta_width(card_w: f32) -> f32 {
+    home6_card_inner_width(card_w)
+}
+
+/// Home6 symmetric button hit rect: expands by hit-slop (4px) on all four edges.
+/// Non-finite or inverted rect yields None. Pure; headless-tested.
+pub fn home6_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    Some((
+        x0 - HOME6_BUTTON_HIT_SLOP,
+        y0 - HOME6_BUTTON_HIT_SLOP,
+        x1 + HOME6_BUTTON_HIT_SLOP,
+        y1 + HOME6_BUTTON_HIT_SLOP,
+    ))
+}
+
+/// Home6 hierarchy and contract verification helper:
+/// proves geometry from SPACE tokens, CTA width from card inner width,
+/// toolbar button symmetric hit targets, and typography reuse.
+/// Pure; headless-tested.
+pub fn home6_contract_ok() -> bool {
+    HOME6_CARD_MIN_W == crate::theme::SPACE_XL * 10.0
+        && HOME6_CARD_MIN_W == HOME_CARD_MIN_W
+        && HOME6_CARD_PAD == crate::theme::GEO_SECTION_GAP
+        && HOME6_CONTENT_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME6_CARD_GRID_GAP == crate::theme::GEO_SECTION_GAP
+        && HOME6_CARD_GRID_GAP_EXQ == crate::theme::GEO_CARD_GAP
+        && HOME6_TOOLBAR_BUTTON_W == 96.0
+        && HOME6_TOOLBAR_BUTTON_H == 24.0
+        && HOME6_BUTTON_HIT_SLOP == crate::theme::SPACE_XS
+        && HOME6_BUTTON_PADDED_W == 104.0
+        && HOME6_BUTTON_PADDED_H == 32.0
+        && HOME6_CARD_CTA_MIN_W == 224.0
+        && HOME6_CARD_CTA_MIN_W == HOME_CARD_CTA_W
+        && home_card_hierarchy_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4888,5 +5034,116 @@ mod tests {
         assert_eq!(super::home_grid_rows_for_width(9, 720.0), 5);
 
         assert!(super::home5_narrow_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home6_narrow720_cards_cta_toolbar_edge() {
+        // Edge fixture: `checks/gui-exq-home6/comparison/home-narrow-720.json`.
+        // Geometry first:
+        // 1. Card min-w from SPACE scale (240.0 = 10 * SPACE_XL).
+        // 2. CTA width from card inner width (224.0 min, 320.0 at 720 narrow).
+        // 3. Toolbar button 24px hits symmetric (96x24 + 4px slop -> 104x32, area 3328).
+        // 4. Narrow 720: 696 avail, 2 cols, 5 rows for 9 cards.
+        // Typography second: Heading/HomeTitle/HomeButton/HomeDesc reuse.
+        use crate::theme::{
+            GEO_CARD_GAP, GEO_OUTER_MARGIN, GEO_SECTION_GAP, SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS,
+        };
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home6/comparison/home-narrow-720.json");
+        assert!(fixture_raw.contains("\"card_min_w\":240.0"));
+        assert!(fixture_raw.contains("\"card_pad\":8.0"));
+        assert!(fixture_raw.contains("\"card_inner_w_min\":224.0"));
+        assert!(fixture_raw.contains("\"card_inner_w_at_720\":320.0"));
+        assert!(fixture_raw.contains("\"cta_w_min\":224.0"));
+        assert!(fixture_raw.contains("\"cta_w_at_720\":320.0"));
+        assert!(fixture_raw.contains("\"content_avail_w_at_720\":696.0"));
+        assert!(fixture_raw.contains("\"content_margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"grid_cols_at_720\":2"));
+        assert!(fixture_raw.contains("\"grid_cols_at_960\":3"));
+        assert!(fixture_raw.contains("\"grid_rows_9_at_720\":5"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_720\":336.0"));
+        assert!(fixture_raw.contains("\"toolbar_button_w\":96.0"));
+        assert!(fixture_raw.contains("\"toolbar_button_h\":24.0"));
+        assert!(fixture_raw.contains("\"button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"button_padded_w\":104.0"));
+        assert!(fixture_raw.contains("\"button_padded_h\":32.0"));
+        assert!(fixture_raw.contains("\"button_hit_area\":3328.0"));
+
+        // 1. Card min-w from SPACE scale
+        assert_eq!(super::HOME6_CARD_MIN_W, SPACE_XL * 10.0);
+        assert_eq!(super::HOME6_CARD_MIN_W, 240.0);
+        assert_eq!(super::HOME6_CARD_MIN_W, super::HOME_CARD_MIN_W);
+        assert_eq!(super::HOME6_CARD_PAD, SPACE_SM);
+        assert_eq!(super::HOME6_CARD_PAD, GEO_SECTION_GAP);
+        assert_eq!(super::HOME6_CARD_PAD, 8.0);
+        assert_eq!(super::HOME6_CARD_GRID_GAP, GEO_SECTION_GAP);
+        assert_eq!(super::HOME6_CARD_GRID_GAP, 8.0);
+        assert_eq!(super::HOME6_CARD_GRID_GAP_EXQ, GEO_CARD_GAP);
+        assert_eq!(super::HOME6_CARD_GRID_GAP_EXQ, SPACE_XL);
+        assert_eq!(super::HOME6_CARD_GRID_GAP_EXQ, 24.0);
+
+        // Content margin and available width at 720
+        assert_eq!(super::HOME6_CONTENT_MARGIN_X, SPACE_MD);
+        assert_eq!(super::HOME6_CONTENT_MARGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(super::HOME6_CONTENT_MARGIN_X, 12.0);
+        assert_eq!(super::home6_content_avail_width(720.0), 696.0);
+        assert_eq!(super::home6_content_avail_width(960.0), 936.0);
+        assert_eq!(super::home6_content_avail_width(20.0), 0.0);
+        assert!(super::home6_content_avail_width(f32::NAN).is_nan());
+
+        // Grid columns and rows at 720 vs 960
+        assert_eq!(super::home6_grid_columns(960.0), 3);
+        assert_eq!(super::home6_grid_columns(720.0), 2);
+        assert_eq!(super::home6_grid_columns(500.0), 1);
+        assert_eq!(
+            super::home6_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        assert_eq!(super::home6_grid_rows(9, 960.0), 3);
+        assert_eq!(super::home6_grid_rows(9, 720.0), 5);
+        assert_eq!(super::home6_grid_rows(9, 500.0), 9);
+        assert_eq!(super::home6_grid_rows(0, 720.0), 0);
+
+        // Narrow 720 card width
+        assert_eq!(super::home6_grid_card_width(696.0), 336.0);
+        assert_eq!(super::home6_grid_card_width(f32::NAN), 240.0);
+        assert_eq!(super::home6_grid_card_width(0.0), 240.0);
+
+        // 2. CTA width from card inner width
+        assert_eq!(super::HOME6_CARD_CTA_MIN_W, 224.0);
+        assert_eq!(super::HOME6_CARD_CTA_MIN_W, super::HOME_CARD_CTA_W);
+        assert_eq!(super::home6_card_inner_width(240.0), 224.0);
+        assert_eq!(super::home6_card_cta_width(240.0), 224.0);
+        assert_eq!(super::home6_card_inner_width(336.0), 320.0);
+        assert_eq!(super::home6_card_cta_width(336.0), 320.0);
+        assert_eq!(super::home6_card_inner_width(f32::NAN), 224.0);
+        assert_eq!(super::home6_card_inner_width(10.0), 0.0);
+
+        // 3. Toolbar button 24px hits symmetric
+        assert_eq!(super::HOME6_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(super::HOME6_TOOLBAR_BUTTON_H, 24.0);
+        assert_eq!(super::HOME6_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::HOME6_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(super::HOME6_BUTTON_HIT_SLOP, 4.0);
+        assert_eq!(super::HOME6_BUTTON_PADDED_W, 104.0);
+        assert_eq!(super::HOME6_BUTTON_PADDED_H, 32.0);
+        assert_eq!(
+            super::HOME6_BUTTON_PADDED_W * super::HOME6_BUTTON_PADDED_H,
+            3328.0
+        );
+
+        // Hit rect symmetric expansion
+        let hit_rect = super::home6_button_hit_rect(10.0, 20.0, 106.0, 44.0);
+        assert_eq!(hit_rect, Some((6.0, 16.0, 110.0, 48.0)));
+        assert_eq!(
+            super::home6_button_hit_rect(f32::NAN, 0.0, 10.0, 10.0),
+            None
+        );
+        assert_eq!(super::home6_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
+
+        // Overall contract
+        assert!(super::home6_contract_ok());
     }
 }
