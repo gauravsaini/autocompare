@@ -1581,3 +1581,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `353130a` feat(gui): header-row item_spacing.x = TIGHT_GAP unify (hex/merge/table/folder/folder_sync/folder_dual) + tree_indent scale tests. OWNS views.rs + checks/gui-geo-cp only.
 - Gates: 671 green, clippy 0 warnings, fmt clean, banned 0, colors 0 new (frozen), before==after byte-stable (paint-neutral spacing pass), PNGs valid, OWNS clean, STATUS untouched.
 - Still running: CR-LOCALRUN6 (live captures + baseline REPORT).
+
+## 2026-11-20 — Wave CR-LOCALRUN6 landed + pushed (round-6 baseline early-feedback)
+- Commit `3129cde` docs(gui): cm-to-cr DELTA (OWNS checks/gui-localrun-cr only, source ZERO touch, 26 files).
+- Findings: fixtures 4/4 cm-byte-identical, harness PASS, live DARK hold (live-home 286482 B), 3 pills strip hold, toolbar still text-only (call-site open), tests 671 green.
+- Timeline caveat CR ne khud darj kiya: binary 13:42:00 exec ka hai, CP (13:44:44) usme nahi ho sakta; CQ paint-neutral isliye live pixels unaffected. CP/CQ verify round-7 scope me.
+- Sec-8 EXQUISITE GAPS user feedback par: geometry 7 gaps (4-row chrome stack redundant, toolbar oversized, right-edge overflow, double status lines, table rows uneven density, khali-pan void, strip alignment) + typo 3 gaps (flat hierarchy, label-vs-input confuse, dim status contrast). Agle exquisite round ka input.
+- Cleanup: apna PID kill, probe PNGs delete, sibling untouched. BC observe-only, zero focus change.
