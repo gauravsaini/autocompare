@@ -596,3 +596,9 @@
 1. **Status Tall-1200 Strips & Legend**: file-bar metadata line rhythm under file bar, per-pane status strip heights + text baselines at 1200px tall canvas, bottom legend strip height, and edge fixture `comparison/status-tall-1200.json`.
 2. **Tests** (before → after): autocompare-gui 1034 green (including `status12_*` tall strips tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-status12/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-paint13 center gutter adoption
+
+1. **Paint Center-Gutter Adoption**: paint_text_body now renders the visible ~20px center gutter gap adopted from gutter geometry helpers, draws yellow changed-row markers via marker helpers, and fills floor below last row. Geometry from existing helpers only, no new widths. Edge fixture `comparison/paint-center-1200.json`.
+2. **Tests** (before → after): autocompare-gui 1035 green (including `paint13_*` gutter adoption tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-paint13/**`, `TIMELINE.md`.
