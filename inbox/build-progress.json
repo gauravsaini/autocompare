@@ -74,7 +74,7 @@
   },
   "SWARM-EXQ4": "retry live via opencode exq4-gui (default-model, OWNS gui+round-exq4, dirty-tree safe, pull ok)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
-  "SWARM-BIN3": "progress smoke/left+right fixtures present, still WIP",
+  "SWARM-BIN3": "verified+landed a2f7c52 (sha OK, 960x600 PNG, 6/6 PASS, no source edits, isolated /tmp/orch3-src build)",
   "ORCH-BACKOFF": "increased to 120s (parity/sessrep silent since 17:51/17:59, rotator slow-mode), reset on output",
   "ORCH-BC": "BCompare pid 23316 running, outside-observe only, clean-room",
   "SWARM-REP-H": "verified+landed 3b5ee6f pushed (strict: 28 green, clippy 0, fmt clean, banned 0, allow 0)",
