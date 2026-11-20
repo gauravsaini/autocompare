@@ -72,8 +72,8 @@
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
     "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace",
     "VFS-DEPTH2": "verified+landed e9dc316 pushed (symlink safety, archive extract_to, snapshot diffs; 34 green, clippy 0, fmt clean)",
-    "LOCALRUN-5": "running sess-localrun-5 REPORT.md + gui.png present, commit pending (OWNS checks/early-feedback-5, no source)",
-    "BINARY-4": "running sess-binary-4 artifacts present (tarball 5.8MB + sha256 + cli outs + gui-smoke.png 9765B, REPORT pending, no source)",
+    "LOCALRUN-5": "landed+pushed a042de1 (CLI 10/10 exit0, 960x600 PNG magic ok byte-same determinism, REPORT PASS, no source)",
+    "BINARY-4": "landed+pushed 938c669 (tarball 5.8MB sha OK, 960x600 smoke, 6/6 PASS, no source)",
     "EXQ5-GEO": "running opencode sess-exq5-geo (OWNS crates/gui + round-exq5, geometry first + typography, colors FROZEN, clean-worktree verify if dirty churn)",
     "TIMELINE-EXQ3": "landed+pushed 1b0daa7 docs(timeline) round-exq3 geometry+typo"
   },
