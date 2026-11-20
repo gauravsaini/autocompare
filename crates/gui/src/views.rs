@@ -37,8 +37,8 @@ use crate::home::{
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
-    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TypoRole,
-    blue_for, dim_for, green_for, red_for, track_for,
+    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE,
+    TYPO_WRAP_PANE_CHARS, TypoRole, blue_for, dim_for, green_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -3024,12 +3024,14 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     paint_text_body(ui, model, prefs, None);
 }
 
-/// Cursor + focused-line preview strip: status bar ke UPAR paint hota hai.
-/// Line 1 me cursor label + line_no/kind, uske neeche left/right preview
-/// text lines. Preview None (no selection/OOB) par strip skip, koi fake
-/// row nahi. Geometry: toolbar precedent (horizontal + TIGHT_GAP); typo:
-/// line 1 chrome_status_role, preview lines Mono. Koi naya size/color/
-/// Grid/add_space nahi; koi state mutate nahi.
+/// Cursor meta line: status bar ke UPAR paint hota hai — single compact
+/// row (cursor + line_no/kind). Per-pane line previews yahan nahi (woh
+/// neeche [`paint_text_pane_status`] detail me rehte hain, BC bottom-detail
+/// precedent) taaki top chrome ek row me rahe aur panes ko zyada height
+/// mile. Preview None (no selection/OOB) par strip skip, koi fake row nahi.
+/// Geometry: toolbar precedent (horizontal + TIGHT_GAP); typo:
+/// chrome_status_role; koi naya size/color/Grid/add_space nahi; koi state
+/// mutate nahi.
 pub fn paint_text_cursor_strip(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
     let preview = match viewmodel::focused_line_preview_for(rows, selected) {
         Some(found) => found,
@@ -3042,8 +3044,6 @@ pub fn paint_text_cursor_strip(ui: &mut Ui, rows: &[TextRow], selected: Option<u
             chrome_status_role().rich(format!("{} | {} {}", cursor, preview.line_no, preview.kind)),
         );
     });
-    ui.label(TypoRole::Mono.rich(preview.left.as_str()));
-    ui.label(TypoRole::Mono.rich(preview.right.as_str()));
 }
 
 /// 3-zone text status bar: left filter+counts, mid focused verdict, right
@@ -4565,6 +4565,47 @@ pub fn text_pane_cursor_labels(rows: &[TextRow], selected: Option<usize>) -> (St
     (left, right)
 }
 
+/// Bottom-detail preview budget (chars): [`TYPO_WRAP_PANE_CHARS`] (80)
+/// reuse — pane paint width parity, koi naya size nahi. Pure; unit-tested.
+pub fn text_pane_detail_budget() -> usize {
+    TYPO_WRAP_PANE_CHARS
+}
+
+/// One pane ka bottom-detail preview text: selected row ke us side ka
+/// trimmed content; missing side ya no-selection/OOB par khali (koi fake
+/// preview nahi — caller [`text_pane_detail_label`] khali par sirf label
+/// rakhta hai). Pure; unit-tested.
+pub fn text_pane_preview_side(rows: &[TextRow], selected: Option<usize>, is_left: bool) -> String {
+    let row = match selected.and_then(|idx| rows.get(idx)) {
+        Some(row) => row,
+        None => return String::new(),
+    };
+    let raw = if is_left {
+        row.left.as_str()
+    } else {
+        row.right.as_str()
+    };
+    raw.trim().to_string()
+}
+
+/// Bottom-detail half label: `label` + khali preview par label akela,
+/// warna `label | preview` jisme preview `budget` chars par `...` samet
+/// clip hota hai (pane width parity, wrap karke bar kabhi lamba nahi hota —
+/// paint `truncate` se single-row lock rakhta hai). Pure; unit-tested.
+pub fn text_pane_detail_label(label: &str, preview: &str, budget: usize) -> String {
+    let trimmed = preview.trim();
+    if trimmed.is_empty() {
+        return label.to_string();
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() <= budget {
+        format!("{label} | {trimmed}")
+    } else {
+        let head: String = chars.into_iter().take(budget).collect();
+        format!("{label} | {head}...")
+    }
+}
+
 /// Pane-status half width (px): `avail` me se ek [`TIGHT_GAP`] ghata kar
 /// aadha — dono halves barabar taaki right pane ka readout apne pane ke
 /// start par khada ho (BC per-pane left alignment), far-right dock par
@@ -4577,14 +4618,27 @@ pub fn pane_status_half_width(avail: f32) -> f32 {
     ((avail - TIGHT_GAP) / 2.0).max(0.0)
 }
 
-/// Segmented pane status bar: bottom row me left-pane cursor + right-pane
-/// cursor barabar halves me, dono left-aligned (BC per-pane `1:1`
-/// precedent — har pane ka readout apne pane ke start par). Geometry
-/// toolbar precedent (full-width `HEADER_H` row, halves beech
-/// [`TIGHT_GAP`]); typo [`chrome_status_role`] (Small weak). Koi naya
-/// size/color/Grid nahi.
+/// Segmented pane status with bottom detail: bottom row me left/right pane
+/// halves barabar, dono left-aligned (BC per-pane `1:1` precedent — har pane
+/// ka readout apne pane ke start par), har half me cursor label + selected
+/// line ka preview (`L3 | content`; missing side ya no-selection par label
+/// akela, koi fake preview nahi). Geometry toolbar precedent (full-width
+/// `HEADER_H` row, halves beech [`TIGHT_GAP`], truncate clip taaki lambi
+/// line bar ko lamba na kare — single-row lock); typo Mono (code content
+/// reuse, koi naya size nahi); colors untouched.
 pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
-    let (left, right) = text_pane_cursor_labels(rows, selected);
+    let (left_label, right_label) = text_pane_cursor_labels(rows, selected);
+    let budget = text_pane_detail_budget();
+    let left = text_pane_detail_label(
+        &left_label,
+        &text_pane_preview_side(rows, selected, true),
+        budget,
+    );
+    let right = text_pane_detail_label(
+        &right_label,
+        &text_pane_preview_side(rows, selected, false),
+        budget,
+    );
     let avail = ui.available_width();
     let half = pane_status_half_width(avail);
     ui.horizontal(|ui| {
@@ -4592,11 +4646,11 @@ pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<us
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.add_sized(
             egui::vec2(half, HEADER_H),
-            egui::Label::new(chrome_status_role().rich(left.as_str())),
+            egui::Label::new(TypoRole::Mono.rich(left.as_str())).truncate(),
         );
         ui.add_sized(
             egui::vec2(half, HEADER_H),
-            egui::Label::new(chrome_status_role().rich(right.as_str())),
+            egui::Label::new(TypoRole::Mono.rich(right.as_str())).truncate(),
         );
     });
 }
@@ -11445,6 +11499,75 @@ mod tests {
         assert_eq!(pane_status_half_width(f32::NAN), MIN_HALF);
         assert_eq!(pane_status_half_width(0.0), MIN_HALF);
         assert_eq!(pane_status_half_width(-50.0), MIN_HALF);
+    }
+
+    #[test]
+    fn textview9_pane_detail_bottom_density() {
+        // BC bottom detail: har pane ke neeche cursor + us line ka preview
+        // (`L3 | content`); missing side par label akela (koi fake nahi);
+        // lambi line 80-char budget par `...` samet clip (wrap karke bar
+        // kabhi lamba nahi hota — paint truncate se single-row lock);
+        // budget pane paint width parity (TYPO_WRAP_PANE_CHARS reuse).
+        assert_eq!(text_pane_detail_budget(), 80);
+        assert_eq!(
+            text_pane_detail_budget(),
+            crate::theme::TYPO_WRAP_PANE_CHARS
+        );
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                left_no: Some(3),
+                right_no: Some(3),
+                left: "    let content = read_to_string(path)?;".to_string(),
+                right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Deleted,
+                left_no: Some(4),
+                right_no: None,
+                left: "    let legacy_flag = true;".to_string(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+        ];
+        assert_eq!(
+            text_pane_preview_side(&rows, Some(0), true),
+            "let content = read_to_string(path)?;"
+        );
+        assert_eq!(
+            text_pane_preview_side(&rows, Some(0), false),
+            "let content = std::fs::read_to_string(path)?;"
+        );
+        assert_eq!(text_pane_preview_side(&rows, Some(1), false), String::new());
+        assert_eq!(text_pane_preview_side(&rows, None, true), String::new());
+        assert_eq!(
+            text_pane_preview_side(&rows, Some(99), false),
+            String::new()
+        );
+        assert_eq!(
+            text_pane_detail_label("L3", "let x = 1;", text_pane_detail_budget()),
+            "L3 | let x = 1;"
+        );
+        assert_eq!(
+            text_pane_detail_label("R-", "", text_pane_detail_budget()),
+            "R-"
+        );
+        assert_eq!(
+            text_pane_detail_label("L-", "   ", text_pane_detail_budget()),
+            "L-"
+        );
+        let long = "y".repeat(200);
+        assert_eq!(
+            text_pane_detail_label("L9", &long, text_pane_detail_budget()),
+            format!("L9 | {}...", "y".repeat(80))
+        );
+        // Cursor strip single-row lock: previews ab bottom detail me hain —
+        // strip ka skip gate wahi (None/OOB par koi fake row nahi).
+        assert!(viewmodel::focused_line_preview_for(&rows, None).is_none());
+        assert!(viewmodel::focused_line_preview_for(&rows, Some(99)).is_none());
     }
 
     // Scene PNG proof (screenshot.rs frozen/NO-TOUCH): live label +
