@@ -40,7 +40,7 @@
     "SWARM-GUI-F2": "running pid 80231 (OWNS tree/home, round-1 FAIL->fixing, tree.rs +521 home +321 WIP, 2 PNGs)",
     "SWARM-EXQ-M2": "running pid 80292 (OWNS app/theme/viewmodel/hex/table/screenshot, warming up)",
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
-    "SWARM-BIN-O": "running opencode default-model binary early-2 (OWNS dist+checks/binary-early-2, no source)",
+    "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
     "ORCH-HEALTH": "2026-11-20 gui WIP 690 green 1 red: tree::folderfilter_tests::drill_down_scoped_folder_tree_filtering (tree.rs:4164 left 0 right 3) \u2014 GUI-F2 OWNS, agent live, orchestrator no-touch"
   }
