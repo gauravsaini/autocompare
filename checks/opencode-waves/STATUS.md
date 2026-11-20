@@ -1562,3 +1562,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - `48946aa` feat(gui): wire toolbar reload label via paint_session_toolbar call-site (OWNS views.rs + checks/gui-toolwire-cl). dead_code 42->39. P2-1 call-site DONE.
 - Gates: 670 green, clippy/fmt/banned clean, colors: CK 2 code touches existing Visuals::dark/light reuse (naya palette zero), PNGs valid, OWNS clean.
 - Queue: round-5 interactive (tab-switch ON: Text-tab live captures + multi-session strip + toolbar pixel-verify).
+
+## 2026-11-20 — Wave CM-LOCALRUN5 launched (round-5 INTERACTIVE, tab-switch allowed)
+- Sess sess-local-cm, READ-ONLY (zero source change), OWNS checks/gui-localrun-cm. Pehli interactive wave: Text-tab live captures + multi-session strip + toolbar pixel-verify + DELTA cj -> cm.
