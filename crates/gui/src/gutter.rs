@@ -1755,3 +1755,212 @@ mod exq_gutter6_tests {
         assert!(!gutter_arrow_hit_contains(f32::NAN, 200.0, 12.0, 200.0));
     }
 }
+
+// ----------------------------------------------------------------------------
+// GUTTER10: line-number text origin + padded overview click mapping (headless).
+// BC number gutter me digits right kinare se chipakte nahi — ek fixed
+// inset par right-aligned hote hain; aur padded minimap (track pad ke
+// andar) clickable hai: pad kinaaron par click sabse najdeeki row par
+// girta hai, viewport band bhi inner track me rehta hai. Geometry first:
+// sab SPACE/GUTTER scale reuse (inset = merge-gap, pad = minimap track
+// pad), koi naya literal nahi. Typography second: numbers wahi
+// content_grid (Mono 12 tabular) role me, koi naya size nahi. Colors
+// frozen: sirf shape.
+// WIRING (paint owner ke paas): number text `gutter_linenum_text_x(..)`
+// par right-aligned; padded clicks `gutter_padded_row_at_y(..)` se,
+// markers `gutter_padded_y_for_row(..)` se, viewport band
+// `gutter_viewport_rect_padded(..)` se.
+// ----------------------------------------------------------------------------
+
+/// Line-number right inset px: merge-gap reuse (2px).
+///
+/// Digits column ke right kinare se 2px andar khatm hote hain taaki
+/// ruler edge se na chipken; column width se independent fixed beat.
+pub const GUTTER_LINENUM_INSET: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Line-number text ka right-aligned x px: `col_x + col_w - inset`.
+/// `None`: non-finite input, ya column inset se chaudi nahi (origin
+/// column ke bahar girta). Pure; unit-tested.
+pub fn gutter_linenum_text_x(col_x: f32, col_w: f32) -> Option<f32> {
+    if !col_x.is_finite() || !col_w.is_finite() {
+        return None;
+    }
+    if col_w <= GUTTER_LINENUM_INSET {
+        return None;
+    }
+    let x = col_x + col_w - GUTTER_LINENUM_INSET;
+    if x.is_finite() { Some(x) } else { None }
+}
+
+/// Padded minimap me gutter-local y (px) se model row index.
+///
+/// [`gutter_row_at_y`] ka padded twin: bands `[pad, height - pad]` inner
+/// track me hain, isliye fraction wahi se napta hai. Pad kinaaron par
+/// click (`[0, pad)` / `(height - pad, height)`) sabse najdeeki row
+/// (pehli/aakhri) par girta hai taaki poora ruler clickable rahe;
+/// ruler ke bahar (`y < 0` / `y >= height`) `None`. Pure; unit-tested.
+pub fn gutter_padded_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> {
+    if total_rows == 0 {
+        return None;
+    }
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    if !y.is_finite() || y < 0.0 || y >= height {
+        return None;
+    }
+    let inner = gutter_minimap_inner_height(height)?;
+    let pad = GUTTER_MINIMAP_TRACK_PAD;
+    let clamped = y.clamp(pad, pad + inner);
+    let frac = (clamped - pad) / inner;
+    if !frac.is_finite() {
+        return None;
+    }
+    let row = (frac * total_rows as f32).floor() as usize;
+    Some(row.min(total_rows.saturating_sub(1)))
+}
+
+/// Padded minimap me model row ka band-top y (px).
+///
+/// [`gutter_y_for_row`] ka padded twin: `pad + (row / total) * inner`.
+/// `None` contract wahi (khali total, out-of-range row, kharab height
+/// ya na-mumkin inner track). Paint isi se selection marker lagata hai.
+/// Pure; unit-tested.
+pub fn gutter_padded_y_for_row(row: usize, total_rows: usize, height: f32) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows {
+        return None;
+    }
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let inner = gutter_minimap_inner_height(height)?;
+    let y = GUTTER_MINIMAP_TRACK_PAD + (row as f32 / total_rows as f32) * inner;
+    if y.is_finite() && y >= GUTTER_MINIMAP_TRACK_PAD && y < height {
+        Some(y)
+    } else {
+        None
+    }
+}
+
+/// Padded inner track me visible scroll window ka band `(y0, y1)`.
+///
+/// [`gutter_viewport_rect`] ka padded twin: wahi row-window mapping par
+/// `[pad, pad + inner]` me, [`GUTTER_VIEWPORT_MIN_H`] floor track ke
+/// andar (neeche se katkar). `None` contract wahi. Pure; unit-tested.
+pub fn gutter_viewport_rect_padded(
+    total_rows: usize,
+    height: f32,
+    top_row: usize,
+    visible_rows: usize,
+) -> Option<(f32, f32)> {
+    if total_rows == 0 || visible_rows == 0 {
+        return None;
+    }
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let inner = gutter_minimap_inner_height(height)?;
+    let pad = GUTTER_MINIMAP_TRACK_PAD;
+    let total_f = total_rows as f32;
+    let top = top_row.min(total_rows) as f32;
+    let bottom = top_row.saturating_add(visible_rows).min(total_rows) as f32;
+    if bottom <= top {
+        return None;
+    }
+    let y0 = pad + (top / total_f) * inner;
+    let mut y1 = pad + (bottom / total_f) * inner;
+    if y1 < y0 + GUTTER_VIEWPORT_MIN_H {
+        y1 = (y0 + GUTTER_VIEWPORT_MIN_H).min(pad + inner);
+    }
+    if !y0.is_finite() || !y1.is_finite() || y0 < pad || y1 > pad + inner || y0 >= y1 {
+        return None;
+    }
+    Some((y0, y1))
+}
+
+#[cfg(test)]
+mod exq_gutter10_tests {
+    use super::*;
+
+    #[test]
+    fn gutter10_text_x_right_aligns_on_fixed_inset() {
+        // Mirrors checks/gui-exq-gutter10/round-1/comparison/edge-padded-click-viewport.json.
+        assert_eq!(GUTTER_LINENUM_INSET, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_LINENUM_INSET, 2.0);
+        // 16px column (0..16) me text x 14 par; 20px column (100..120) me 118 par.
+        assert_eq!(gutter_linenum_text_x(0.0, 16.0), Some(14.0));
+        assert_eq!(gutter_linenum_text_x(100.0, 20.0), Some(118.0));
+        // Column inset se chaudi nahi: origin bahar girta, None.
+        assert_eq!(gutter_linenum_text_x(0.0, 2.0), None);
+        assert_eq!(gutter_linenum_text_x(0.0, 0.0), None);
+        assert_eq!(gutter_linenum_text_x(f32::NAN, 16.0), None);
+        assert_eq!(gutter_linenum_text_x(0.0, f32::INFINITY), None);
+    }
+
+    #[test]
+    fn gutter10_padded_row_at_y_clamps_pad_edges() {
+        // 6 rows @600px: pad 4, inner 592, track [4, 596].
+        assert_eq!(gutter_padded_row_at_y(4.0, 6, 600.0), Some(0));
+        // Pad kinare ke andar click sabse najdeeki row par.
+        assert_eq!(gutter_padded_row_at_y(0.0, 6, 600.0), Some(0));
+        assert_eq!(gutter_padded_row_at_y(2.0, 6, 600.0), Some(0));
+        assert_eq!(gutter_padded_row_at_y(599.0, 6, 600.0), Some(5));
+        assert_eq!(gutter_padded_row_at_y(597.0, 6, 600.0), Some(5));
+        // Beech ki band seedh map hoti hai (row 1: [102.67, 201.33)).
+        assert_eq!(gutter_padded_row_at_y(150.0, 6, 600.0), Some(1));
+        // Ruler ke bahar: None (gutter_row_at_y wahi contract).
+        assert_eq!(gutter_padded_row_at_y(-1.0, 6, 600.0), None);
+        assert_eq!(gutter_padded_row_at_y(600.0, 6, 600.0), None);
+        assert_eq!(gutter_padded_row_at_y(999.0, 6, 600.0), None);
+        assert_eq!(gutter_padded_row_at_y(f32::NAN, 6, 600.0), None);
+        // Khali/kharab input: None (8px height par inner track na-mumkin).
+        assert_eq!(gutter_padded_row_at_y(4.0, 0, 600.0), None);
+        assert_eq!(gutter_padded_row_at_y(4.0, 6, 0.0), None);
+        assert_eq!(gutter_padded_row_at_y(4.0, 6, 8.0), None);
+        assert_eq!(gutter_padded_row_at_y(4.0, 6, f32::NAN), None);
+    }
+
+    #[test]
+    fn gutter10_padded_markers_round_trip_and_viewport_stays_inside() {
+        // Band-top: row 0 -> 4.0, row 5 -> 4 + 5*592/6 = 497.333.
+        assert_eq!(gutter_padded_y_for_row(0, 6, 600.0), Some(4.0));
+        let y5 = gutter_padded_y_for_row(5, 6, 600.0);
+        assert!(y5.is_some_and(|v| (v - 497.333).abs() < 0.01));
+        assert_eq!(gutter_padded_y_for_row(6, 6, 600.0), None);
+        assert_eq!(gutter_padded_y_for_row(0, 0, 600.0), None);
+        assert_eq!(gutter_padded_y_for_row(0, 6, 8.0), None);
+        // Round-trip: marker y wapas usi row par gire.
+        let mut row = 0usize;
+        while row < 6 {
+            if let Some(y) = gutter_padded_y_for_row(row, 6, 600.0) {
+                assert_eq!(gutter_padded_row_at_y(y + 0.5, 6, 600.0), Some(row));
+            }
+            row = row.saturating_add(1);
+        }
+        // Viewport: rows 1..3 -> (102.67, 300.0); poori file -> poora inner track.
+        let vp = gutter_viewport_rect_padded(6, 600.0, 1, 2);
+        assert!(
+            vp.is_some_and(|(a, b)| (a - 102.666_667).abs() < 0.01 && (b - 300.0).abs() < 0.01)
+        );
+        assert_eq!(
+            gutter_viewport_rect_padded(6, 600.0, 0, 6),
+            Some((4.0, 596.0))
+        );
+        // Chhoti window floor samet track ke andar: 1000 rows @400px me ek row 0.392px.
+        assert_eq!(
+            gutter_viewport_rect_padded(1000, 400.0, 500, 1),
+            Some((200.0, 204.0))
+        );
+        // Band hamesha inner track me, kabhi kinare clip nahi.
+        assert!(
+            gutter_viewport_rect_padded(6, 600.0, 4, 2).is_some_and(|(a, b)| {
+                a >= GUTTER_MINIMAP_TRACK_PAD && b <= 600.0 - GUTTER_MINIMAP_TRACK_PAD
+            })
+        );
+        // Khali/kharab input: None.
+        assert_eq!(gutter_viewport_rect_padded(0, 600.0, 0, 2), None);
+        assert_eq!(gutter_viewport_rect_padded(6, 600.0, 0, 0), None);
+        assert_eq!(gutter_viewport_rect_padded(6, 8.0, 0, 2), None);
+        assert_eq!(gutter_viewport_rect_padded(6, 600.0, 99, 2), None);
+    }
+}
