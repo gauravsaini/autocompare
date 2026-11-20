@@ -1,0 +1,15 @@
+Compare text, folders and bytes, and merge three ways
+
+Usage: autocompare [OPTIONS] [COMMAND]
+
+Commands:
+  text          Compare two text files line by line, side by side
+  folder        Compare two folder trees recursively by size and modified time
+  hex           Compare two files byte by byte
+  merge         Merge two files that share a common base version
+  table         Compare two delimited (CSV-style) tables cell by cell
+  sync          Plan (and optionally apply) a folder sync
+  picture       Compare two PNG images pixel by pixel
+  folder-merge  Plan (and optionally apply) a three-way folder merge
+  audio         Compare two audio files (WAV, MP3) sample by sample
+  session       Load and run a saved comparison session
