@@ -1576,3 +1576,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `183d00c` feat(gui): TypoRole central system (family/weight/line-height roles) in theme.rs +48/-1, checks/gui-typo-cq evidence (REPORT+GATES+before/after PNGs).
 - Gates: 671 green (+1 TypoRole test), clippy 0 warnings, fmt clean, banned 0, colors 0 new (frozen), PNGs valid 960x600, fixtures before==after byte-identical (paint-neutral), OWNS clean, STATUS untouched.
 - Still running: CP-GEO (views.rs audit, dir created), CR-LOCALRUN6 (live captures).
+
+## 2026-11-20 — Wave CP-GEO landed + pushed (exquisite geometry)
+- Commit `353130a` feat(gui): header-row item_spacing.x = TIGHT_GAP unify (hex/merge/table/folder/folder_sync/folder_dual) + tree_indent scale tests. OWNS views.rs + checks/gui-geo-cp only.
+- Gates: 671 green, clippy 0 warnings, fmt clean, banned 0, colors 0 new (frozen), before==after byte-stable (paint-neutral spacing pass), PNGs valid, OWNS clean, STATUS untouched.
+- Still running: CR-LOCALRUN6 (live captures + baseline REPORT).
