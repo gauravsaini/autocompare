@@ -668,10 +668,9 @@ pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str)
 // unit-tested.
 // ----------------------------------------------------------------------------
 
-/// Table find underline width (px): `INTRA_SPAN_UNDERLINE_W` precedent
-/// mirror (`views.rs`), same value — koi naya size/token nahi.
-/// Test-only until paint wiring lands (orchestrator owns paint).
-pub const TABLE_FIND_UNDERLINE_W: f32 = 1.0;
+/// Table find underline width (px): [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`]
+/// precedent reuse (same 1px value — koi naya size/token nahi).
+pub const TABLE_FIND_UNDERLINE_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
 
 /// Ek cell me needle ke char-index spans: `(start, end)` char offsets,
 /// natural order me (sorted, clamped). Khali needle par empty; overlapping
@@ -2170,6 +2169,90 @@ pub fn table_header_weight_ok() -> bool {
         && table_header_weight_value() == crate::theme::TYPO_WEIGHT_SEMIBOLD
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table2 round-2: symmetric row gap, char-metric outer
+// widths, header underline weight at 960px (headless; paint wiring stays
+// with the orchestrator).
+// Gap table panes uneven row gaps vs BC: Grid row gap ka ek hi source tha
+// par symmetric pad ka naam nahi tha, outer widths char metrics se bante
+// the par 960px budget par lock nahi the, header underline motai ad-hoc
+// 1.0 thi. Fix table-side only (app.rs/home.rs/views.rs NO-TOUCH).
+// Geometry FIRST: row gap symmetric pad `GEO_TIGHT_GAP` (SPACE_XS 4.0),
+// col spacing `GEO_SECTION_GAP` (SPACE_SM 8.0), outer widths
+// `table_col_widths_px` reuse (char metrics), 960px avail origin-se.
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W`
+// reuse (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` (600) reuse — koi
+// naya size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No
+// egui ctx, no I/O. Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table2/comparison/table-wide-960.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table canvas reference width (px): [`crate::theme::VIEWPORT_W`] reuse
+/// (960) — isi par wide fixture fit lock hota hai. Pure.
+pub const TABLE_CANVAS_W: f32 = crate::theme::VIEWPORT_W as f32;
+/// Table canvas reference height (px): [`crate::theme::VIEWPORT_H`] reuse
+/// (600). Pure.
+pub const TABLE_CANVAS_H: f32 = crate::theme::VIEWPORT_H as f32;
+
+/// Header underline width (px): [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`]
+/// reuse (1.0, find `TABLE_FIND_UNDERLINE_W` precedent — koi naya size nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_HEADER_UNDERLINE_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+
+/// Row symmetric pad (px): ek tight gap ([`crate::theme::GEO_TIGHT_GAP`] =
+/// SPACE_XS 4.0) — row ke upar/neeche ek jaisa clearance, isliye gaps
+/// uneven nahi lagte. Pure; unit-tested.
+pub fn table_row_sym_pad() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Column spacing (px): ek section gap ([`crate::theme::GEO_SECTION_GAP`] =
+/// SPACE_SM 8.0) — Grid col gap ka single source. Pure; unit-tested.
+pub fn table_col_spacing() -> f32 {
+    crate::theme::GEO_SECTION_GAP
+}
+
+/// Grid row gap single source (px): [`TABLE_GRID_ROW_GAP`] — symmetric pad
+/// [`table_row_sym_pad`] ke barabar, kabhi drift nahi. Pure; unit-tested.
+pub fn table_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Header underline width single source (px). Pure; unit-tested.
+pub fn table_header_underline_w() -> f32 {
+    TABLE_HEADER_UNDERLINE_W
+}
+
+/// Wide-960 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — 960px canvas par ruler/body desync nahi. Pure; unit-tested.
+pub fn table_wide_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Wide-960 grid avail width (px): canvas minus dono origin margins
+/// (`TABLE_CANVAS_W - 2 * TABLE_CELL_GRID_ORIGIN_X` = 936) — isi me
+/// outer widths fit hote hain. Pure; unit-tested.
+pub fn table_wide_avail_w() -> f32 {
+    TABLE_CANVAS_W - TABLE_CELL_GRID_ORIGIN_X * 2.0
+}
+
+/// Char metrics se outer widths 960px budget par: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table_wide_outer_widths(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Wide-960 visible rows: `floor(panes_h / row_h)` — kharab input par 0
+/// (paint honest empty). Pure; unit-tested.
+pub fn table_wide_960_visible_rows(panes_h: f32) -> u64 {
+    let row_h = table_wide_row_h();
+    if !panes_h.is_finite() || !row_h.is_finite() || panes_h <= 0.0 || row_h <= 0.0 {
+        return 0;
+    }
+    (panes_h / row_h).floor().max(0.0) as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3404,5 +3487,90 @@ mod tests {
             Some((12.0, 12.0, 40.0))
         );
         assert!((first.map(|r| r.h).unwrap_or(0.0) - expected_h).abs() < 0.001);
+    }
+
+    #[test]
+    fn table_exq_table2_round2_sym_rows_char_widths_header_underline_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // 960px canvas reference width; row gap symmetric via SPACE_XS,
+        // outer widths char metrics se, header underline weight TYPO tokens se.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table2/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table2/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 600.0"));
+        assert!(fixture_raw.contains("\"row_sym_pad\": 4.0"));
+        assert!(fixture_raw.contains("\"grid_gap_y\": 4.0"));
+        assert!(fixture_raw.contains("\"col_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Canvas 960x600 theme viewport reuse (koi naya literal nahi).
+        assert_eq!(TABLE_CANVAS_W, crate::theme::VIEWPORT_W as f32);
+        assert_eq!(TABLE_CANVAS_H, crate::theme::VIEWPORT_H as f32);
+        assert_eq!(TABLE_CANVAS_W, 960.0);
+        assert_eq!(TABLE_CANVAS_H, 600.0);
+
+        // 2. Row gap symmetric via SPACE_XS, col spacing via SPACE_SM.
+        assert_eq!(table_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table_row_sym_pad(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(table_row_sym_pad(), 4.0);
+        assert_eq!(table_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table_col_spacing(), 8.0);
+        assert_eq!(table_grid_gap_y(), TABLE_GRID_ROW_GAP);
+        assert_eq!(table_grid_gap_y(), table_row_sym_pad());
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::SPACE_XS);
+
+        // 3. Outer widths char metrics se: 4 cols [3,4,5,11] @8px
+        // -> outer [40,48,56,104], total 272, avail 936 me fit.
+        let header = vec![
+            "ID".to_string(),
+            "Name".to_string(),
+            "Price".to_string(),
+            "Description".to_string(),
+        ];
+        let rows = vec![vec![
+            "1".to_string(),
+            "Anna".to_string(),
+            "9.99".to_string(),
+            "on-sale".to_string(),
+        ]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 4, 5, 11]);
+        let px = table_wide_outer_widths(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 48.0, 56.0, 104.0]);
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 272.0);
+        assert_eq!(table_wide_avail_w(), 936.0);
+        assert!(table_column_grid_fit(table_wide_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE_CANVAS_W, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        assert!(table_wide_outer_widths(&widths, 0.0).is_empty());
+
+        // 4. Header underline weight via TYPO tokens, row height Mono lock.
+        assert_eq!(TABLE_HEADER_UNDERLINE_W, crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W);
+        assert_eq!(table_header_underline_w(), 1.0);
+        assert_eq!(table_header_underline_w(), TABLE_FIND_UNDERLINE_W);
+        assert_eq!(TABLE_FIND_UNDERLINE_W, crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W);
+        assert!(table_header_weight_ok());
+        assert!((table_wide_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table_wide_row_h(), table_cell_row_h());
+        assert_eq!(
+            table_wide_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+
+        // 5. Wide-960 visible rows: panes 600 / 15.6 -> 38, kharab par 0.
+        assert_eq!(table_panes_height(TABLE_CANVAS_H), 600.0);
+        assert_eq!(table_wide_960_visible_rows(600.0), 38);
+        assert_eq!(table_wide_960_visible_rows(table_panes_height(600.0)), 38);
+        assert_eq!(table_wide_960_visible_rows(0.0), 0);
+        assert_eq!(table_wide_960_visible_rows(f32::NAN), 0);
     }
 }
