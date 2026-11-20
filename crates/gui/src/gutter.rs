@@ -646,6 +646,13 @@ pub const GUTTER_ARROW_HIT_SLOP: f32 = crate::theme::GUTTER_MERGE_GAP;
 /// column bas aur chaudi nahi hoti).
 pub const GUTTER_LINENUM_MAX_EXTRA: usize = 5;
 
+/// Line-number trailing pad (chars): number column aur code ke beech
+/// do spaces ([`crate::views::CONTENT_LEAD`] two-space beat parity —
+/// number gutter code se chipke na lage). `views::gutter_text` isi se
+/// right-aligned number + trail banata hai; blank sides utne hi spaces
+/// rakhte hain taaki column rhythm na toote. Pure; unit-tested.
+pub const GUTTER_NUMBER_TRAIL_PAD: usize = 2;
+
 /// Line-number column ka decimal digit count: `max_line_no` me kitne
 /// digits hain (`0` par bhi 1, khali file me bhi ek column). Pure.
 pub fn gutter_linenum_digits(max_line_no: usize) -> usize {
@@ -1662,6 +1669,15 @@ mod exq_gutter6_tests {
             gutter_linenum_is_tabular(),
             TypoRole::content_grid().is_tabular()
         );
+    }
+
+    #[test]
+    fn gutter10_number_trail_pad_matches_lead_beat() {
+        // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
+        // number column aur code ke beech do spaces (two-space lead
+        // beat parity) taaki numbers code se chipke na lagen; blank
+        // sides utna hi blank rakhen.
+        assert_eq!(GUTTER_NUMBER_TRAIL_PAD, 2);
     }
 
     #[test]

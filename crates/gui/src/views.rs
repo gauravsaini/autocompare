@@ -24,8 +24,8 @@ use crate::app::{
     PictureCompareModel, PictureMode, PictureViewState, SyncChecklist,
 };
 use crate::gutter::{
-    GUTTER_HIT_SLOP, GutterSegment, gutter_bar_width_for_font, gutter_row_at_y,
-    gutter_row_center_y, gutter_ruler_width_for_font, gutter_segment_at_y_with_slop,
+    GUTTER_HIT_SLOP, GUTTER_NUMBER_TRAIL_PAD, GutterSegment, gutter_row_at_y, gutter_row_center_y,
+    gutter_ruler_width_for_font, gutter_segment_at_y_with_slop,
 };
 use crate::home::{
     HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
@@ -341,16 +341,15 @@ pub fn tree_indent(depth: usize) -> f32 {
     depth as f32 * TREE_INDENT
 }
 
-/// Shared monospace row height so text panes stay equal.
-/// Intent: paint measures the live `Monospace` text style height here;
-/// the per-role `TypoRole::line_height` multipliers stay headless
-/// intent (see [`text_row_height_intent`]) so every pane — text, table,
-/// folder — shares one measured beat plus [`ROW_PAD`].
-pub fn text_row_height(ui: &Ui) -> f32 {
-    // Intent lock: the measured style here must stay the documented
-    // line-height source (see [`text_row_height_intent`]).
-    debug_assert_eq!(text_row_height_intent(), TYPO_LINE_HEIGHT_SOURCE);
-    ui.text_style_height(&egui::TextStyle::Monospace)
+/// Shared text row height: the TypoRole Mono line-height px
+/// (`TypoRole::Mono.line_height_px()` = 12.0 @ 1.30 = 15.6), headless
+/// taaki har pane — text, table, folder, hex — ek deterministic beat par
+/// rahe bina font-backend measure par nirbhar hue. Per-role multipliers
+/// intent ([`text_row_height_intent`]) me rehte hain; paint yahi number
+/// [`row_height_for_line`] me daalta hai (15.6 + [`ROW_PAD`] = 17.6).
+/// Pure; unit-tested.
+pub fn text_row_height(_ui: &Ui) -> f32 {
+    TypoRole::Mono.line_height_px()
 }
 
 /// Line-height intent source: the shared measured monospace row height.
@@ -833,11 +832,13 @@ pub fn home_paint_grid_columns() -> usize {
     HOME_GRID_COLUMNS
 }
 
-/// Paint-applied gutter width at the mono scale: reproduces 12/6 via
-/// [`gutter_bar_width_for_font`]. Legacy bar lock (ruler ab 16/8 contract
-/// par hai); `GUTTER_W` parity tests isi par hain.
+/// Paint-applied gutter width at the mono scale: the overview-ruler
+/// track ([`gutter_ruler_width_for_font`] at 12.0: 16.0 numbers ke
+/// saath, 8.0 bina) taaki number column (16/20/.. cap 36) hamesha track
+/// me samae aur ruler/rows ek beat par rahen. Legacy 12/6 bar se chauda —
+/// tiny-number + no-padding gap isi se band hota hai. Pure; unit-tested.
 pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
-    gutter_bar_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
+    gutter_ruler_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
 }
 
 /// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
@@ -3355,6 +3356,7 @@ fn paint_text_body(
                 egui::ScrollArea::both()
                     .id_salt("text_wrap_list")
                     .auto_shrink([false, false])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                     .show(ui, |ui| {
                         let mut vis_pos = 0usize;
                         while vis_pos < visible.len() {
@@ -3484,10 +3486,12 @@ fn paint_text_body(
                                 if sub == 0 {
                                     ui.horizontal(|ui| {
                                         // Dual-pane: left pane column + fixed-width center
-                                        // gutter (copy arrows) + right pane column. Number
-                                        // gutter `gutter_text` me right-aligned fixed width
-                                        // hai; leading `·/▶` dot column hata di (selection
-                                        // bg + gutter click se rehti hai).
+                                        // gutter (copy arrows) + right pane column. Panes
+                                        // barabar (jobs `pane_chars` par padded = 50/50),
+                                        // beech me [`SECTION_GAP`] air taaki connector
+                                        // saans le. Number gutter `gutter_text` me
+                                        // right-aligned fixed width hai.
+                                        ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
@@ -3554,7 +3558,9 @@ fn paint_text_body(
                                 } else {
                                     ui.horizontal(|ui| {
                                         // Continuation: same dual-pane columns, center
-                                        // gutter blank fixed width (copy sirf head par).
+                                        // gutter blank fixed width (copy sirf head par);
+                                        // [`SECTION_GAP`] air head rows jaisa.
+                                        ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
@@ -3588,6 +3594,10 @@ fn paint_text_body(
                         while t < trailing_visual {
                             ui.set_row_height(wrap_reserved_height(1, row_height));
                             ui.horizontal(|ui| {
+                                // Orphan-blank balance: dono panes barabar
+                                // ([`SECTION_GAP`] air samet) taaki khaali
+                                // filler dusre pane se chhota na lage.
+                                ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                 let blank_left = wrap_blank_sub_job(
                                     font_id.clone(),
                                     base_text,
@@ -3631,11 +3641,16 @@ fn paint_text_body(
                 egui::ScrollArea::both()
                     .id_salt("text_diff_rows")
                     .auto_shrink([false, false])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                     .show_rows(ui, row_height, total, |ui, range| {
                         for vis_pos in range {
                             if vis_pos >= visible.len() {
                                 ui.set_row_height(row_height);
                                 ui.horizontal(|ui| {
+                                    // Orphan-blank balance: dono panes barabar
+                                    // ([`SECTION_GAP`] air samet), filler hatch
+                                    // wali side bhi poori chaudi.
+                                    ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                     let layout = TextPaneLayout {
                                         pane_chars,
                                         gutter_chars,
@@ -3682,9 +3697,13 @@ fn paint_text_body(
                             let is_selected = model.selected == Some(orig);
                             ui.horizontal(|ui| {
                                 // Dual-pane: left pane + fixed center gutter + right
-                                // pane. Leading `·/▶` hata; selection bg se + blank
-                                // gutter click se. Number gutter `gutter_text`
-                                // right-aligned fixed width (unchanged shape).
+                                // pane. Panes barabar (jobs `pane_chars` par
+                                // padded = 50/50), beech me [`SECTION_GAP`]
+                                // air taaki connector saans le. Leading `·/▶`
+                                // hata; selection bg se + blank gutter click
+                                // se. Number gutter `gutter_text` right-aligned
+                                // fixed width (unchanged shape).
+                                ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                 let (left_fg, left_bg0) =
                                     selective_side_palette(true, row, base_text);
                                 let (right_fg, right_bg0) =
@@ -4618,6 +4637,34 @@ pub fn pane_status_half_width(avail: f32) -> f32 {
     ((avail - TIGHT_GAP) / 2.0).max(0.0)
 }
 
+/// Equal text-pane widths (px): fixed center connector
+/// ([`text_center_gutter_width`]) aur har taraf ek [`SECTION_GAP`] air
+/// ghata kar bacha aadha-aadha — dono panes barabar taaki split 50/50
+/// par rahe. Har side [`MIN_HALF`] floor rakhta hai taaki tang window
+/// panes ko crush karne ki jagah scroll kare (pair hamesha row bharta
+/// hai, [`split_picture_widths`] precedent). Non-finite ya non-positive
+/// `avail` par floor pair (paint kabhi NaN na khaye). Pure; unit-tested.
+pub fn text_pane_pair_widths(avail: f32) -> (f32, f32) {
+    if !avail.is_finite() || avail <= 0.0 {
+        return (MIN_HALF, MIN_HALF);
+    }
+    let free = (avail - text_center_gutter_width() - 2.0 * SECTION_GAP).max(2.0 * MIN_HALF);
+    (free / 2.0, free / 2.0)
+}
+
+/// Text pane needs horizontal scroll: content px `content_w` viewport
+/// `avail_w` se chauda ho to haan. Non-finite ya non-positive viewport
+/// par false (paint kabhi NaN branch na le —
+/// [`text_layout_for_width`] precedent). ScrollArea `both` isi gate par
+/// bars dikhata hai taaki lambi lines clip hone ki jagah h-scroll me
+/// jayen (wrap-off me koi silent cut nahi). Pure; unit-tested.
+pub fn text_pane_needs_hscroll(content_w: f32, avail_w: f32) -> bool {
+    if !content_w.is_finite() || !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    content_w > avail_w
+}
+
 /// Segmented pane status with bottom detail: bottom row me left/right pane
 /// halves barabar, dono left-aligned (BC per-pane `1:1` precedent — har pane
 /// ka readout apne pane ke start par), har half me cursor label + selected
@@ -4693,12 +4740,15 @@ fn paint_filler_hatch(painter: &egui::Painter, rect: egui::Rect, color: egui::Co
     }
 }
 
-/// The line-number gutter: right-aligned number plus one separating
-/// space, or blanks when the row has no such side.
+/// The line-number gutter: right-aligned number plus separating pad,
+/// or blanks when the row has no such side. Trail pad
+/// ([`GUTTER_NUMBER_TRAIL_PAD`], two-space lead beat parity) keeps the
+/// number column off the code; tabular Mono keeps digits aligned.
 fn gutter_text(no: Option<usize>, width: usize) -> String {
+    let trail = " ".repeat(GUTTER_NUMBER_TRAIL_PAD);
     match no {
-        Some(n) => format!("{n:>width$} "),
-        None => " ".repeat(width.saturating_add(1)),
+        Some(n) => format!("{n:>width$}{trail}"),
+        None => format!("{}{trail}", " ".repeat(width)),
     }
 }
 
@@ -7392,9 +7442,9 @@ mod tests {
 
     #[test]
     fn gutter_text_right_aligns_numbers_and_blanks_sides() {
-        assert_eq!(gutter_text(Some(12), 4), "  12 ".to_string());
-        assert_eq!(gutter_text(None, 4), "     ".to_string());
-        assert_eq!(gutter_text(Some(123456), 4), "123456 ".to_string());
+        assert_eq!(gutter_text(Some(12), 4), "  12  ".to_string());
+        assert_eq!(gutter_text(None, 4), "      ".to_string());
+        assert_eq!(gutter_text(Some(123456), 4), "123456  ".to_string());
     }
 
     #[test]
@@ -7616,13 +7666,13 @@ mod tests {
             Color32::WHITE,
             Color32::BLACK,
         );
-        // Gutter "   1 ", text "ab" with "b" accented, then pane
+        // Gutter "   1  ", text "ab" with "b" accented, then pane
         // padding: the job text is exactly gutter + padded line.
-        assert_eq!(job.text, "   1 ab  ");
+        assert_eq!(job.text, "   1  ab  ");
         assert!(job.keep_trailing_whitespace);
         // Sections: gutter, plain "a", accented "b", padding.
         assert_eq!(job.sections.len(), 4);
-        // The blank right side is all spaces: gutter (5) plus the
+        // The blank right side is all spaces: gutter (6) plus the
         // padded empty pane (4).
         let blank = side_job_with_prefs(
             Side::Right,
@@ -7632,7 +7682,7 @@ mod tests {
             Color32::WHITE,
             Color32::BLACK,
         );
-        assert_eq!(blank.text, "         ");
+        assert_eq!(blank.text, "          ");
     }
 
     #[test]
@@ -8669,12 +8719,12 @@ mod tests {
     }
 
     #[test]
-    fn gutter_paint_width_reproduces_unscaled_bar() {
-        use crate::gutter::gutter_bar_width;
-        assert_eq!(text_gutter_paint_width(true), 12.0);
-        assert_eq!(text_gutter_paint_width(false), 6.0);
-        assert_eq!(text_gutter_paint_width(true), gutter_bar_width(true));
-        assert_eq!(text_gutter_paint_width(false), gutter_bar_width(false));
+    fn gutter_paint_width_reproduces_ruler_track() {
+        use crate::gutter::gutter_ruler_width;
+        assert_eq!(text_gutter_paint_width(true), 16.0);
+        assert_eq!(text_gutter_paint_width(false), 8.0);
+        assert_eq!(text_gutter_paint_width(true), gutter_ruler_width(true));
+        assert_eq!(text_gutter_paint_width(false), gutter_ruler_width(false));
     }
 
     #[test]
@@ -9598,9 +9648,16 @@ mod tests {
             GUTTER_HIT_SLOP, GUTTER_SEGMENT_MIN_H, gutter_ruler_width, gutter_segment_at_y,
         };
         use crate::viewmodel::TextRowKind;
-        // Width: ruler legacy bar se chauda, contract ke barabar.
-        assert!(text_minimap_ruler_width(true) > text_gutter_paint_width(true));
-        assert!(text_minimap_ruler_width(false) > text_gutter_paint_width(false));
+        // Width: paint gutter adopts the ruler track contract (16/8),
+        // so number column and minimap share one beat.
+        assert_eq!(
+            text_minimap_ruler_width(true),
+            text_gutter_paint_width(true)
+        );
+        assert_eq!(
+            text_minimap_ruler_width(false),
+            text_gutter_paint_width(false)
+        );
         assert_eq!(text_minimap_ruler_width(true), gutter_ruler_width(true));
         assert_eq!(text_minimap_ruler_width(false), gutter_ruler_width(false));
         // Slop: paint hit-test contract slop par hai (2px har taraf).
@@ -10001,7 +10058,10 @@ mod tests {
         use crate::theme::{GUTTER_BAR_WIDE, GUTTER_MIN_SEGMENT_H};
         assert_eq!(GUTTER_W, 12.0);
         assert_eq!(GUTTER_W, GUTTER_BAR_WIDE);
-        assert_eq!(GUTTER_W, text_gutter_paint_width(true));
+        assert_eq!(
+            text_gutter_paint_width(true),
+            crate::gutter::gutter_ruler_width(true)
+        );
         assert_eq!(HEADER_H, 28.0);
         assert_eq!(FIND_BAR_H, HEADER_H);
         assert_eq!(ROW_PAD, 2.0);
@@ -10252,12 +10312,15 @@ mod tests {
 
     #[test]
     fn gutter_widths_stay_uniform() {
-        assert_eq!(text_gutter_paint_width(true), GUTTER_W);
+        assert_eq!(
+            text_gutter_paint_width(true),
+            crate::gutter::gutter_ruler_width(true)
+        );
         assert_eq!(
             text_gutter_paint_width(false),
-            crate::gutter::gutter_bar_width(false)
+            crate::gutter::gutter_ruler_width(false)
         );
-        assert!(text_gutter_paint_width(false) < GUTTER_W);
+        assert!(text_gutter_paint_width(false) < text_gutter_paint_width(true));
     }
 
     #[test]
@@ -11044,8 +11107,8 @@ mod tests {
     #[test]
     fn wrap_continuation_gutter_keeps_column_rhythm() {
         assert_eq!(wrap_continuation_gutter(4), gutter_text(None, 4));
-        assert_eq!(wrap_continuation_gutter(4), "     ");
-        assert_eq!(wrap_continuation_gutter(1), "  ");
+        assert_eq!(wrap_continuation_gutter(4), "      ");
+        assert_eq!(wrap_continuation_gutter(1), "   ");
     }
 
     #[test]
@@ -11499,6 +11562,110 @@ mod tests {
         assert_eq!(pane_status_half_width(f32::NAN), MIN_HALF);
         assert_eq!(pane_status_half_width(0.0), MIN_HALF);
         assert_eq!(pane_status_half_width(-50.0), MIN_HALF);
+    }
+
+    #[test]
+    fn text10_panes_split_even_with_section_gap() {
+        // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
+        // center connector (48) + 2 x SECTION_GAP air ghata kar bacha
+        // aadha-aadha (960 -> 448/448); tang par MIN_HALF floor pair;
+        // kharab avail par floor (koi NaN nahi).
+        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        let (left, right) = text_pane_pair_widths(960.0);
+        assert_eq!(
+            left + right,
+            960.0 - TEXT_CENTER_GUTTER_W - 2.0 * SECTION_GAP
+        );
+        assert_eq!(text_center_gutter_width(), 48.0);
+        assert_eq!(text_pane_pair_widths(0.0), (MIN_HALF, MIN_HALF));
+        assert_eq!(text_pane_pair_widths(f32::NAN), (MIN_HALF, MIN_HALF));
+        assert_eq!(text_pane_pair_widths(-50.0), (MIN_HALF, MIN_HALF));
+        let (tiny_left, tiny_right) = text_pane_pair_widths(100.0);
+        assert_eq!((tiny_left, tiny_right), (MIN_HALF, MIN_HALF));
+    }
+
+    #[test]
+    fn text10_pane_hscroll_gate_guards_viewport() {
+        // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
+        // content viewport se chauda ho to h-scroll, warna nahi; kharab
+        // viewport par kabhi nahi (paint NaN branch na le).
+        assert!(text_pane_needs_hscroll(900.0, 448.0));
+        assert!(!text_pane_needs_hscroll(400.0, 448.0));
+        assert!(!text_pane_needs_hscroll(448.0, 448.0));
+        assert!(!text_pane_needs_hscroll(900.0, 0.0));
+        assert!(!text_pane_needs_hscroll(900.0, f32::NAN));
+        assert!(!text_pane_needs_hscroll(f32::NAN, 448.0));
+    }
+
+    #[test]
+    fn text10_row_height_comes_from_typo_mono() {
+        // Geometry SECOND nahi, FIRST: row Mono line-height px (12 @ 1.30
+        // = 15.6) + ROW_PAD (2) = 17.6; intent source string unchanged.
+        use crate::theme::{TYPO_LINE_HEIGHT_MONO, TYPO_MONO_SIZE};
+        assert_eq!(
+            TypoRole::Mono.line_height_px(),
+            TYPO_MONO_SIZE * TYPO_LINE_HEIGHT_MONO
+        );
+        assert!((TypoRole::Mono.line_height_px() - 15.6).abs() < 0.01);
+        assert!((row_height_for_line(TypoRole::Mono.line_height_px()) - 17.6).abs() < 0.01);
+    }
+
+    #[test]
+    fn text10_edge_tail_insertion_balances_orphan_blanks() {
+        // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
+        // 6 equal rows + tail par 3 inserted (left khaali orphan, right
+        // me numbers 7/8/9): hunk head insertion start par, baaki
+        // continuation blank; khaali side filler + hatch wali; trailing
+        // blanks viewport ko barabar bharte hain (koi void nahi).
+        use viewmodel::{TextRow, TextRowKind};
+        let mut rows = Vec::new();
+        let mut n = 1usize;
+        while n <= 6 {
+            rows.push(TextRow {
+                kind: TextRowKind::Equal,
+                left_no: Some(n),
+                right_no: Some(n),
+                left: "same".to_string(),
+                right: "same".to_string(),
+                ..Default::default()
+            });
+            n = n.saturating_add(1);
+        }
+        let mut m = 7usize;
+        while m <= 9 {
+            rows.push(TextRow {
+                kind: TextRowKind::Inserted,
+                left_no: None,
+                right_no: Some(m),
+                right: "tail".to_string(),
+                ..Default::default()
+            });
+            m = m.saturating_add(1);
+        }
+        assert_eq!(rows.len(), 9);
+        // Hunk head: tail start (6) head, continuations blank.
+        assert!(text_center_hunk_head(&rows, 6));
+        assert!(!text_center_hunk_head(&rows, 7));
+        assert!(!text_center_hunk_head(&rows, 8));
+        assert!(!text_center_hunk_head(&rows, 5));
+        // Copy gate: inserted par haan, equal par nahi.
+        assert!(text_gutter_has_copy(TextRowKind::Inserted));
+        assert!(!text_gutter_has_copy(TextRowKind::Equal));
+        // Orphan balance: insertion rows par left filler, right me text.
+        if let Some(tail) = rows.get(6) {
+            assert!(text_side_is_filler(tail.left.as_str()));
+            assert!(!text_side_is_filler(tail.right.as_str()));
+            assert_eq!(tail.right_no, Some(7));
+            assert_eq!(tail.left_no, None);
+        }
+        // Trailing blanks: 436px viewport @17.6 row = 25 slots - 9 = 16.
+        let row_h = row_height_for_line(TypoRole::Mono.line_height_px());
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows(436.0, row_h, rows.len()), 16);
+        assert_eq!(text_trailing_blank_rows(436.0, row_h, 25), 0);
+        // Gutter rhythm: number column right-aligned + trail pad par.
+        assert_eq!(gutter_text(Some(7), 4), "   7  ".to_string());
+        assert_eq!(gutter_text(None, 4), "      ".to_string());
     }
 
     #[test]
