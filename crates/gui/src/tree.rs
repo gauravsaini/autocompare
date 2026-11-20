@@ -6892,3 +6892,288 @@ mod exq_tree3_tests {
         assert!(clipped.ends_with('…'));
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE6: symmetric expander hit-slop + 960px-wide Mono-locked row rhythm.
+// BC folder compare rows: indent guides even on a SPACE step, expander
+// chevron easy to hit (equal slop both sides), status icon column plus name
+// column widths from mono char metrics, row height from Mono line-height at
+// 960px wide. Ours: guides uneven, indent irregular, expander slop
+// asymmetric. Geometry FIRST: indent step SPACE_MD (TREE3 twins reuse),
+// expander hit rect widened symmetrically by SPACE_XS on both x sides (full
+// locked row height already covers y, so vertical needs no extra slop and
+// adjacent rows never overlap), guide x SPACE_MD/SM, status/name widths from
+// FOLDER_MONO_ADVANCE. Typography SECOND: wide row locked to
+// TypoRole::Mono line-height + table pad (17.6), no new sizes. Colors
+// FROZEN: no hue moves here.
+// WIRING (paint): expander hit `tree_expander_hit_rect_symmetric(depth,
+// row_top)` plus `tree_expander_hit_contains_point(...)`; rows
+// `tree_wide_row_h()` rhythm at 960 wide via `tree_wide_960_row_top(i)`;
+// name budget `tree_wide_960_label_max_chars(depth)` (char metrics).
+// ----------------------------------------------------------------------------
+
+/// Expander hit-slop per x side (px): one XS step, symmetric left + right.
+pub const TREE_EXPANDER_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+
+/// Expander hit-slop px (single source: SPACE_XS = 4.0). Pure; unit-tested.
+pub fn tree_expander_hit_slop() -> f32 {
+    TREE_EXPANDER_HIT_SLOP
+}
+
+/// Expander hit rect `(x0, y0, x1, y1)` px with symmetric x slop: legacy
+/// [`folder_expander_hit_rect`] cell widened by [`TREE_EXPANDER_HIT_SLOP`]
+/// on BOTH sides (left slop == right slop, no asymmetric dead tap).
+/// Vertical span is the locked wide row height [`tree_wide_row_h`] (17.6),
+/// so stacked rows tile without overlap. Non-finite `row_top` falls back
+/// to origin (never NaN). Pure; unit-tested.
+pub fn tree_expander_hit_rect_symmetric(depth: usize, row_top: f32) -> (f32, f32, f32, f32) {
+    let top = if row_top.is_finite() { row_top } else { 0.0 };
+    let x0 = tree_indent_for_depth(depth);
+    let x1 = x0 + folder_expander_width();
+    (
+        x0 - TREE_EXPANDER_HIT_SLOP,
+        top,
+        x1 + TREE_EXPANDER_HIT_SLOP,
+        top + tree_wide_row_h(),
+    )
+}
+
+/// Symmetric x hit test for the expander cell: `x` slop-widened cell ke
+/// andar hai ya nahi. Non-finite `x` kabhi hit nahi. Pure; unit-tested.
+pub fn tree_expander_contains_x_with_slop(depth: usize, x: f32) -> bool {
+    if !x.is_finite() {
+        return false;
+    }
+    let x0 = tree_indent_for_depth(depth);
+    x >= x0 - TREE_EXPANDER_HIT_SLOP && x <= x0 + folder_expander_width() + TREE_EXPANDER_HIT_SLOP
+}
+
+/// Full 2D symmetric hit test: `(px, py)` slop-widened expander rect ke
+/// andar hai ya nahi. Non-finite point par false. Pure; unit-tested.
+pub fn tree_expander_hit_contains_point(depth: usize, row_top: f32, px: f32, py: f32) -> bool {
+    if !px.is_finite() || !py.is_finite() {
+        return false;
+    }
+    let (x0, y0, x1, y1) = tree_expander_hit_rect_symmetric(depth, row_top);
+    px >= x0 && px <= x1 && py >= y0 && py <= y1
+}
+
+/// Wide (960px reference) tree row height px: locked to
+/// `TypoRole::Mono.line_height_px` (15.6) + symmetric table pad (2 x 1.0).
+/// Same single source as [`tree_row_height`] (17.6); the 960 reference
+/// pins the rhythm paint uses at canonical width. Pure; unit-tested.
+pub fn tree_wide_row_h() -> f32 {
+    tree_row_height()
+}
+
+/// Wide row top px for `row_idx` at 960: even tiling, koi gap drift nahi.
+/// Pure; unit-tested.
+pub fn tree_wide_960_row_top(row_idx: usize) -> f32 {
+    row_idx as f32 * tree_wide_row_h()
+}
+
+/// Wide row vertical span `(y0, y1)` px for `row_idx` at 960. Pure.
+pub fn tree_wide_960_row_span(row_idx: usize) -> (f32, f32) {
+    let top = tree_wide_960_row_top(row_idx);
+    (top, top + tree_wide_row_h())
+}
+
+/// Visible wide rows in `avail_h` px at 960 wide: floor, min 0.
+/// Non-finite/empty budget par 0. Pure; unit-tested.
+pub fn tree_wide_960_visible_rows(avail_h: f32) -> usize {
+    if !avail_h.is_finite() || avail_h <= 0.0 {
+        return 0;
+    }
+    (avail_h / tree_wide_row_h()) as usize
+}
+
+/// Status icon column width in mono chars: fixed LG cell
+/// ([`TREE_STATUS_MARK_W`] = 16.0) over `char_w` advance — char metrics
+/// se prove hota hai label budget me cell kitna khata hai. Bad `char_w`
+/// par 0.0. Pure; unit-tested.
+pub fn tree_status_col_chars(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    tree_status_mark_width() / char_w
+}
+
+/// Name column avail width px at 960: table name budget (730.0), char
+/// metrics se bana ([`folder_table_name_avail_w`]). Pure; unit-tested.
+pub fn tree_wide_960_name_avail_w() -> f32 {
+    folder_table_name_avail_w(960.0)
+}
+
+/// Name label max chars at 960 for `depth`: char-boundary budget
+/// (`(730 - indent) / mono_advance`, floor). Pure; unit-tested.
+pub fn tree_wide_960_label_max_chars(depth: usize) -> usize {
+    tree_label_max_chars(960.0, depth)
+}
+
+#[cfg(test)]
+mod exq_tree6_tests {
+    use super::*;
+
+    #[test]
+    fn tree6_indent_step_via_space_tokens() {
+        // Indent step strictly SPACE-derived (MD scale, 12.0).
+        assert_eq!(tree_indent_step(), crate::theme::SPACE_MD);
+        assert_eq!(tree_indent_step(), 12.0);
+        assert_eq!(tree_indent_step_from_space(), crate::theme::SPACE_MD);
+        assert_eq!(tree_guide_step_px(), crate::theme::SPACE_MD);
+        // Depth rhythm: depth * 12.0, separated path at +40.0.
+        let expected_indents = [0.0, 12.0, 24.0, 36.0, 48.0, 60.0];
+        let expected_paths = [40.0, 52.0, 64.0, 76.0, 88.0, 100.0];
+        for (depth, (&exp_indent, &exp_path)) in expected_indents
+            .iter()
+            .zip(expected_paths.iter())
+            .enumerate()
+        {
+            assert_eq!(tree_indent_rhythm_px(depth), exp_indent);
+            assert_eq!(tree_row_path_x(depth), exp_path);
+            assert_eq!(folder_row_path_x_separated(depth), exp_path);
+        }
+    }
+
+    #[test]
+    fn tree6_guides_even_from_space_tokens() {
+        // Guide x = level * SPACE_MD + SPACE_SM (expander-center parity).
+        assert_eq!(TREE_GUIDE_CENTER_DX, crate::theme::SPACE_SM);
+        assert_eq!(TREE_GUIDE_CENTER_DX, 8.0);
+        assert_eq!(tree_indent_guide_xs(5), vec![8.0, 20.0, 32.0, 44.0, 56.0]);
+        assert_eq!(tree_guide_xs_from_space(5), tree_indent_guide_xs(5));
+        // Even spacing: har agli guide exactly 12.0 aage.
+        let guides = tree_indent_guide_xs(5);
+        let mut prev = 8.0f32;
+        for g in guides.iter().skip(1) {
+            assert_eq!(*g - prev, 12.0);
+            prev = *g;
+        }
+        // Guide span poori locked row height (rows ke beech tootti nahi).
+        let span = tree_indent_guide_row_span(0.0);
+        assert_eq!(span, (0.0, FOLDER_ROW_HEIGHT));
+    }
+
+    #[test]
+    fn tree6_expander_slop_symmetric() {
+        // Slop single source SPACE_XS, both sides equal.
+        assert_eq!(tree_expander_hit_slop(), crate::theme::SPACE_XS);
+        assert_eq!(TREE_EXPANDER_HIT_SLOP, 4.0);
+        // Depth1: cell 12.0..28.0 -> slop rect 8.0..32.0 (4.0 each side).
+        let rect = tree_expander_hit_rect_symmetric(1, 24.0);
+        assert_eq!(rect.0, 8.0);
+        assert_eq!(rect.1, 24.0);
+        assert_eq!(rect.2, 32.0);
+        assert!((rect.3 - rect.1 - tree_wide_row_h()).abs() < 0.001);
+        let legacy = folder_expander_hit_rect(1, 24.0);
+        assert_eq!(rect.0, legacy.0 - TREE_EXPANDER_HIT_SLOP);
+        assert_eq!(rect.2, legacy.2 + TREE_EXPANDER_HIT_SLOP);
+        // Slop symmetric: left widening == right widening.
+        assert_eq!(legacy.0 - rect.0, rect.2 - legacy.2);
+        // Hit test: slop edges hit, uske bahar miss; NaN kabhi hit nahi.
+        assert!(tree_expander_contains_x_with_slop(1, 8.0));
+        assert!(tree_expander_contains_x_with_slop(1, 32.0));
+        assert!(!tree_expander_contains_x_with_slop(1, 7.9));
+        assert!(!tree_expander_contains_x_with_slop(1, 32.1));
+        assert!(!tree_expander_contains_x_with_slop(1, f32::NAN));
+        // Legacy exact-cell test frozen: bina slop 17.0 miss rehta hai.
+        assert!(!folder_expander_contains_x(0, 17.0));
+        assert!(tree_expander_contains_x_with_slop(0, 17.0));
+        // 2D point: center hit, bahar miss, NaN row_top origin fallback.
+        assert!(tree_expander_hit_contains_point(1, 24.0, 20.0, 30.0));
+        assert!(!tree_expander_hit_contains_point(1, 24.0, 7.9, 30.0));
+        assert!(!tree_expander_hit_contains_point(1, 24.0, 20.0, f32::NAN));
+        let nan_rect = tree_expander_hit_rect_symmetric(0, f32::NAN);
+        assert!(nan_rect.0.is_finite() && nan_rect.1.is_finite());
+        assert_eq!(nan_rect.0, -4.0);
+    }
+
+    #[test]
+    fn tree6_wide_row_locked_to_mono_line_height() {
+        // Row height locked: Mono line-height (15.6) + symmetric pad (2x1.0).
+        assert!((tree_wide_row_h() - 17.6).abs() < 0.001);
+        assert_eq!(tree_wide_row_h(), tree_row_height());
+        let locked = crate::theme::TypoRole::Mono.line_height_px() + 2.0 * TREE_ROW_PAD_Y;
+        assert!((tree_wide_row_h() - locked).abs() < 0.001);
+        assert!((crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.01);
+        // Even tiling at 960: tops tile by 17.6, span poori height.
+        assert!((tree_wide_960_row_top(3) - 3.0 * tree_wide_row_h()).abs() < 0.001);
+        let span = tree_wide_960_row_span(2);
+        assert!((span.1 - span.0 - tree_wide_row_h()).abs() < 0.001);
+        // Visible rows: 10 locked rows + 1px me exactly 10 poori rows; bad budget 0.
+        assert_eq!(
+            tree_wide_960_visible_rows(10.0 * tree_wide_row_h() + 1.0),
+            10
+        );
+        assert_eq!(tree_wide_960_visible_rows(tree_wide_row_h() - 0.1), 0);
+        assert_eq!(tree_wide_960_visible_rows(0.0), 0);
+        assert_eq!(tree_wide_960_visible_rows(f32::NAN), 0);
+    }
+
+    #[test]
+    fn tree6_status_plus_name_widths_from_char_metrics() {
+        // Status icon column: fixed 16px LG cell = 16/7 mono chars.
+        assert_eq!(tree_wide_960_name_avail_w(), 730.0);
+        assert_eq!(
+            tree_wide_960_name_avail_w(),
+            folder_table_name_avail_w(960.0)
+        );
+        assert!((tree_status_col_chars(FOLDER_MONO_ADVANCE) - 16.0 / 7.0).abs() < 0.001);
+        assert_eq!(tree_status_col_chars(f32::NAN), 0.0);
+        assert_eq!(tree_status_col_chars(0.0), 0.0);
+        // Name budgets at 960 from char metrics: (730-indent)/7 floor.
+        assert_eq!(tree_wide_960_label_max_chars(0), 98);
+        assert_eq!(tree_wide_960_label_max_chars(2), 95);
+        assert_eq!(tree_wide_960_label_max_chars(5), 90);
+        assert_eq!(
+            tree_wide_960_label_max_chars(0),
+            tree_label_max_chars(960.0, 0)
+        );
+        // Status mark x + gap = separated path x (40.0 at depth 0).
+        assert_eq!(tree_status_mark_x(0), 16.0);
+        assert_eq!(folder_row_path_x_separated(0), 40.0);
+    }
+
+    #[test]
+    fn exq_tree6_round1_tree_wide_960_indent_plus_slop() {
+        // Headless test proving edge fixture comparison/tree-wide-960.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree6/round-1/comparison/tree-wide-960.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-wide-960\""));
+        assert!(fixture_raw.contains("\"width_px\": 960.0"));
+        assert!(fixture_raw.contains("\"indent_step_px\": 12.0"));
+        assert!(fixture_raw.contains("\"line_height_px\": 15.6"));
+        assert!(fixture_raw.contains("\"row_height_px\": 17.6"));
+        assert!(fixture_raw.contains("\"hit_slop_px\": 4.0"));
+        assert!(fixture_raw.contains("\"xs_960_depth0\""));
+        assert!(fixture_raw.contains("738.0"));
+        assert!(fixture_raw.contains("832.0"));
+        // Indent rhythm + even guides at 960.
+        for (depth, (&exp_indent, &exp_path)) in [0.0, 12.0, 24.0, 36.0, 48.0, 60.0]
+            .iter()
+            .zip([40.0, 52.0, 64.0, 76.0, 88.0, 100.0].iter())
+            .enumerate()
+        {
+            assert_eq!(tree_indent_rhythm_px(depth), exp_indent);
+            assert_eq!(tree_row_path_x(depth), exp_path);
+            assert_eq!(tree_indent_guide_xs(depth).len(), depth);
+        }
+        assert_eq!(tree_indent_guide_xs(5), vec![8.0, 20.0, 32.0, 44.0, 56.0]);
+        // Symmetric slop: depth1 rect 8.0..32.0 (cell 12.0..28.0 ± 4.0).
+        let rect = tree_expander_hit_rect_symmetric(1, 24.0);
+        assert_eq!(rect.0, 8.0);
+        assert_eq!(rect.2, 32.0);
+        assert!((rect.3 - rect.1 - tree_wide_row_h()).abs() < 0.001);
+        // Columns steady at 960 across depths; wide row Mono-locked.
+        for depth in 0..=5 {
+            let (nx, sx, mx) = tree_columns_aligned_at_960(depth);
+            assert_eq!((nx, sx, mx), (0.0, 738.0, 832.0));
+        }
+        assert!(
+            (tree_wide_row_h()
+                - (crate::theme::TypoRole::Mono.line_height_px() + 2.0 * TREE_ROW_PAD_Y))
+                .abs()
+                < 0.001
+        );
+    }
+}

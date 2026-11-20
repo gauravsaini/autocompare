@@ -1,0 +1,109 @@
+{
+ "depth_geometry": {
+  "guide_xs_depth5": [
+   8.0,
+   20.0,
+   32.0,
+   44.0,
+   56.0
+  ],
+  "hit_slop_px": 4.0,
+  "indent_step_px": 12.0,
+  "line_height_px": 15.6,
+  "name_avail_w_px": 730.0,
+  "path_x_depth0_px": 40.0,
+  "path_x_depth5_px": 100.0,
+  "row_height_px": 17.6,
+  "slop_rect_depth1_top24": [
+   8.0,
+   24.0,
+   32.0,
+   41.6
+  ],
+  "status_mark_w_px": 16.0,
+  "xs_960_depth0": [
+   0.0,
+   738.0,
+   832.0
+  ]
+ },
+ "expected": {
+  "deep_txt": {
+   "depth": 5,
+   "guides": [
+    8,
+    20,
+    32,
+    44,
+    56
+   ],
+   "label_max_chars_960": 90,
+   "orphan_dash": "-",
+   "path_x_px": 100.0
+  },
+  "gutter_note": "expander hit symmetric: cell x0..x0+16 widened by 4.0 each side (8.0..32.0 at depth1), full locked row height 17.6 \u2014 no asymmetric dead tap",
+  "orphan_newer": {
+   "glyph": "L",
+   "label_max_chars_960": 98,
+   "left_size": "2048",
+   "path_x_px": 40.0,
+   "rel_path": "orphan-newer.txt",
+   "right_size": "-"
+  }
+ },
+ "label_budgets_960": {
+  "depth0": 98,
+  "depth2": 95,
+  "depth5": 90
+ },
+ "name": "tree-wide-960",
+ "note": "TREE6 edge fixture: 5-deep chain proves indent rhythm (depth*12) plus even SPACE guides at 960px wide; orphan-newer proves status icon column (16px) plus name column (730px avail) from mono char metrics (7.0 advance) with symmetric expander slop.",
+ "rows": [
+  {
+   "depth": 0,
+   "glyph": "=",
+   "is_dir": true,
+   "rel_path": "a"
+  },
+  {
+   "depth": 1,
+   "glyph": "=",
+   "is_dir": true,
+   "rel_path": "a/d1"
+  },
+  {
+   "depth": 2,
+   "glyph": "=",
+   "is_dir": true,
+   "rel_path": "a/d1/d2"
+  },
+  {
+   "depth": 3,
+   "glyph": "=",
+   "is_dir": true,
+   "rel_path": "a/d1/d2/d3"
+  },
+  {
+   "depth": 4,
+   "glyph": "=",
+   "is_dir": true,
+   "rel_path": "a/d1/d2/d3/d4"
+  },
+  {
+   "depth": 5,
+   "glyph": ">",
+   "is_dir": false,
+   "left_size": "2048",
+   "rel_path": "a/d1/d2/d3/d4/deep.txt"
+  },
+  {
+   "depth": 0,
+   "glyph": "L",
+   "is_dir": false,
+   "left_size": "2048",
+   "rel_path": "orphan-newer.txt",
+   "right_size": null
+  }
+ ],
+ "width_px": 960.0
+}
