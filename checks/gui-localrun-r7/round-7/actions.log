@@ -1,0 +1,17 @@
+14:19:03 build: cargo build -p autocompare-gui (6.47s, fresh; pre-14:01 binary stale tha, lightflag ke baad rebuild zaroori)
+14:19:21 harness: tools/gui-polish/run-geo-typo.sh exit 0 RESULT PASS (after.png 9765 B)
+14:19:21 fixtures: --screenshot fixture-home/text/folder/table/accent + fixture-light (--screenshot-mode light) + fixture-dark (--screenshot-mode dark); sab exit 0, .out khali
+14:19:32 help-proof: --help exit 0 + usage; --open only-one exit 2 + honest error; sepia mode exit 2
+14:20:16 launch-1: nohup target/debug/autocompare-gui --open t_left.txt t_right.txt --tab text (PID 95098)
+14:20:19 alive: PID 95098 confirm; frame osascript read-only 320,91 800x632 (round-6 jaisa exact)
+14:20:35 capture: live-desktop full + live-open region R320,91,800,632; title confirm "t_left.txt <--> t_right.txt - Text - autocompare"
+14:21:xx capture: live-strip R320,180,800,80 + live-toolbar R320,255,800,130 + live-content R320,421,800,220 (observe crops, zero clicks)
+14:22:xx bc: swift winlister (/tmp, observe-only) -> BC id 1394 (round-6 wahi); screencapture -x -l1394 live-bc.png 587537 B
+14:23:xx click-1: /tmp/clicker 387 486 (row-2 beta text par) -> NO-OP nikla (labels clickable nahi); live-focus.png "no selection" barkarar (incident, neeche sec-6)
+14:23:xx click-2: /tmp/clicker 460 458 (row-1 blank center-gutter par) -> SELECT hua; live-focus2.png me row-1 band + cursor strip "1:1 | 1 Same"
+14:25:xx probe: screencapture -R320,385,800,90 probe-nav.png (Next button map karne ke liye; baad me delete)
+14:25:xx click-3: /tmp/clicker 435 412 (Next diff-nav par) -> row-2 select; live-navfocus.png me "2:1 | 2 Changed" + row-2 band + status "Changed"
+14:26:17 kill-1: PID 95098 kill (gone confirm); hatch pair /tmp me banaya (left 4 lines, right 2 lines)
+14:26:17 launch-2: --open hatch-left hatch-right --tab text (PID 98700); frame 320,91 800x632 phir exact
+14:26:xx capture: live-hatch.png + live-hatch-content.png (filler hatch ticks live); kill-2 PID 98700 (gone confirm)
+14:26:xx cleanup: probe-nav.png delete; /tmp r7 scratch (pid files, hatch txts, winlister, crops) delete; sibling BC/processes untouched
