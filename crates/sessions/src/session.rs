@@ -3,6 +3,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::SessionError;
+pub use crate::options::{
+    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, PictureCompareOptions,
+    SyncCompareOptions, TableCompareOptions, TextCompareOptions,
+};
 
 /// The current schema version for SessionDocument.
 pub const CURRENT_SESSION_SCHEMA_VERSION: u32 = 1;
@@ -17,7 +21,7 @@ pub struct SessionTab {
     pub id: String,
     /// Display title for the tab.
     pub title: String,
-    /// Type of compare session (e.g., "text", "folder", "table", "hex", "picture").
+    /// Type of compare session (e.g., "text", "folder", "table", "hex", "picture", "audio", "sync").
     #[serde(default = "default_tab_type")]
     pub session_type: String,
     /// Optional left path or URI.
@@ -56,6 +60,90 @@ impl SessionTab {
         }
     }
 
+    /// Creates a new text comparison tab.
+    pub fn new_text(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("text")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new folder comparison tab.
+    pub fn new_folder(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("folder")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new table comparison tab.
+    pub fn new_table(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("table")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new picture comparison tab.
+    pub fn new_picture(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("picture")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new hex binary comparison tab.
+    pub fn new_hex(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("hex")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new audio comparison tab.
+    pub fn new_audio(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("audio")
+            .with_paths(left, right)
+    }
+
+    /// Creates a new sync comparison tab.
+    pub fn new_sync(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("sync")
+            .with_paths(left, right)
+    }
+
     /// Builder method to set left and right paths.
     pub fn with_paths(mut self, left: impl Into<String>, right: impl Into<String>) -> Self {
         self.left_path = Some(left.into());
@@ -75,10 +163,130 @@ impl SessionTab {
         self
     }
 
+    /// Builder method to set whether this tab is read-only.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    // --- Typed Options Views ---
+
+    /// Extracts structured folder compare options.
+    pub fn folder_options(&self) -> FolderCompareOptions {
+        FolderCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured folder compare options.
+    pub fn set_folder_options(&mut self, opts: &FolderCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured folder compare options.
+    pub fn with_folder_options(mut self, opts: FolderCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured folder sync options.
+    pub fn sync_options(&self) -> SyncCompareOptions {
+        SyncCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured folder sync options.
+    pub fn set_sync_options(&mut self, opts: &SyncCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured folder sync options.
+    pub fn with_sync_options(mut self, opts: SyncCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured text compare options.
+    pub fn text_options(&self) -> TextCompareOptions {
+        TextCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured text compare options.
+    pub fn set_text_options(&mut self, opts: &TextCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured text compare options.
+    pub fn with_text_options(mut self, opts: TextCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured table compare options.
+    pub fn table_options(&self) -> TableCompareOptions {
+        TableCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured table compare options.
+    pub fn set_table_options(&mut self, opts: &TableCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured table compare options.
+    pub fn with_table_options(mut self, opts: TableCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured picture compare options.
+    pub fn picture_options(&self) -> PictureCompareOptions {
+        PictureCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured picture compare options.
+    pub fn set_picture_options(&mut self, opts: &PictureCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured picture compare options.
+    pub fn with_picture_options(mut self, opts: PictureCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured hex compare options.
+    pub fn hex_options(&self) -> HexCompareOptions {
+        HexCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured hex compare options.
+    pub fn set_hex_options(&mut self, opts: &HexCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured hex compare options.
+    pub fn with_hex_options(mut self, opts: HexCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Extracts structured audio compare options.
+    pub fn audio_options(&self) -> AudioCompareOptions {
+        AudioCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured audio compare options.
+    pub fn set_audio_options(&mut self, opts: &AudioCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured audio compare options.
+    pub fn with_audio_options(mut self, opts: AudioCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    // --- Folder & Sync individual properties ---
+
     /// Builder method to record the folder-sync mode for this tab
     /// (`"update-right"`, `"update-left"`, `"both"`, `"mirror"`).
-    /// Stored as the `sync.mode` option; free-form so future modes
-    /// load without migration.
     pub fn with_sync_mode(mut self, mode: impl Into<String>) -> Self {
         self.set_sync_mode(mode);
         self
@@ -95,8 +303,6 @@ impl SessionTab {
     }
 
     /// Returns the recorded folder depth limit, if present and valid.
-    /// Missing or corrupt values report `None` (caller falls back to
-    /// the comparison default) instead of failing the session load.
     pub fn folder_depth_limit(&self) -> Option<usize> {
         self.options
             .get("folder.depth_limit")
@@ -110,7 +316,6 @@ impl SessionTab {
     }
 
     /// Returns whether content compare was recorded for this tab.
-    /// Missing or corrupt values report `false` (the safe default).
     pub fn folder_content_compare(&self) -> bool {
         self.options
             .get("folder.content_compare")
@@ -165,6 +370,232 @@ impl SessionTab {
             self.options.insert("folder.exclude".to_string(), pattern);
         }
     }
+
+    /// Returns whether symlinks should be followed in folder comparison.
+    pub fn folder_follow_symlinks(&self) -> bool {
+        self.options
+            .get("folder.follow_symlinks")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to follow symlinks in folder comparison.
+    pub fn set_folder_follow_symlinks(&mut self, follow: bool) {
+        self.options
+            .insert("folder.follow_symlinks".to_string(), follow.to_string());
+    }
+
+    /// Returns whether archive traversal is enabled.
+    pub fn folder_archive_traversal(&self) -> bool {
+        self.options
+            .get("folder.archive_traversal")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether archive traversal is enabled.
+    pub fn set_folder_archive_traversal(&mut self, traverse: bool) {
+        self.options
+            .insert("folder.archive_traversal".to_string(), traverse.to_string());
+    }
+
+    /// Returns the recorded quick compare algorithm mode, if any.
+    pub fn folder_quick_compare(&self) -> Option<&str> {
+        self.options.get("folder.quick_compare").map(String::as_str)
+    }
+
+    /// Records the quick compare algorithm mode (e.g. "size", "timestamp", "crc").
+    pub fn set_folder_quick_compare(&mut self, mode: impl Into<String>) {
+        let mode = mode.into();
+        if mode.is_empty() {
+            self.options.remove("folder.quick_compare");
+        } else {
+            self.options
+                .insert("folder.quick_compare".to_string(), mode);
+        }
+    }
+
+    /// Returns the recorded directional sync rule, if any.
+    pub fn sync_direction(&self) -> Option<&str> {
+        self.options.get("sync.direction").map(String::as_str)
+    }
+
+    /// Records the directional sync rule (`"left_to_right"`, `"right_to_left"`, `"both"`).
+    pub fn set_sync_direction(&mut self, dir: impl Into<String>) {
+        self.options
+            .insert("sync.direction".to_string(), dir.into());
+    }
+
+    /// Returns whether sync prunes destination entries not present on source.
+    pub fn sync_prune(&self) -> bool {
+        self.options
+            .get("sync.prune")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether sync prunes destination entries.
+    pub fn set_sync_prune(&mut self, prune: bool) {
+        self.options
+            .insert("sync.prune".to_string(), prune.to_string());
+    }
+
+    // --- Text & Grammar properties ---
+
+    /// Returns whether case differences are ignored for text comparison.
+    pub fn text_ignore_case(&self) -> bool {
+        self.options
+            .get("text.ignore_case")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore letter case differences.
+    pub fn set_text_ignore_case(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_case".to_string(), ignore.to_string());
+    }
+
+    /// Returns whether whitespace differences are completely ignored.
+    pub fn text_ignore_whitespace(&self) -> bool {
+        self.options
+            .get("text.ignore_whitespace")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore whitespace differences.
+    pub fn set_text_ignore_whitespace(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_whitespace".to_string(), ignore.to_string());
+    }
+
+    /// Returns whether whitespace changes (leading, trailing, consecutive) are ignored.
+    pub fn text_ignore_space_change(&self) -> bool {
+        self.options
+            .get("text.ignore_space_change")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore whitespace changes.
+    pub fn set_text_ignore_space_change(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_space_change".to_string(), ignore.to_string());
+    }
+
+    /// Returns whether blank lines are ignored.
+    pub fn text_ignore_blank_lines(&self) -> bool {
+        self.options
+            .get("text.ignore_blank_lines")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore blank lines.
+    pub fn set_text_ignore_blank_lines(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_blank_lines".to_string(), ignore.to_string());
+    }
+
+    /// Returns whether line endings (CRLF vs LF vs CR) are ignored.
+    pub fn text_ignore_line_endings(&self) -> bool {
+        self.options
+            .get("text.ignore_line_endings")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore line endings.
+    pub fn set_text_ignore_line_endings(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_line_endings".to_string(), ignore.to_string());
+    }
+
+    /// Returns whether comment differences are ignored.
+    pub fn text_ignore_comments(&self) -> bool {
+        self.options
+            .get("text.ignore_comments")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to ignore comment differences.
+    pub fn set_text_ignore_comments(&mut self, ignore: bool) {
+        self.options
+            .insert("text.ignore_comments".to_string(), ignore.to_string());
+    }
+
+    /// Returns the applied grammar preset name, if configured.
+    pub fn grammar_preset(&self) -> Option<&str> {
+        self.options.get("grammar.preset").map(String::as_str)
+    }
+
+    /// Records the grammar preset name for this tab.
+    pub fn set_grammar_preset(&mut self, preset: impl Into<String>) {
+        let preset = preset.into();
+        if preset.is_empty() {
+            self.options.remove("grammar.preset");
+        } else {
+            self.options.insert("grammar.preset".to_string(), preset);
+        }
+    }
+
+    /// Builder method to set grammar preset name.
+    pub fn with_grammar_preset(mut self, preset: impl Into<String>) -> Self {
+        self.set_grammar_preset(preset);
+        self
+    }
+
+    // --- Table properties ---
+
+    /// Returns the table delimiter character, if set.
+    pub fn table_delimiter(&self) -> Option<char> {
+        self.options
+            .get("table.delimiter")
+            .and_then(|v| v.chars().next())
+    }
+
+    /// Records the table delimiter character.
+    pub fn set_table_delimiter(&mut self, delimiter: char) {
+        self.options
+            .insert("table.delimiter".to_string(), delimiter.to_string());
+    }
+
+    /// Returns whether the table has a header line (defaults to true).
+    pub fn table_header(&self) -> bool {
+        self.options
+            .get("table.header")
+            .map(|v| v == "true")
+            .unwrap_or(true)
+    }
+
+    /// Records whether the table has a header line.
+    pub fn set_table_header(&mut self, header: bool) {
+        self.options
+            .insert("table.header".to_string(), header.to_string());
+    }
+
+    // --- Picture properties ---
+
+    /// Returns the heatmap output path, if configured.
+    pub fn picture_heatmap_path(&self) -> Option<&str> {
+        self.options.get("picture.heatmap").map(String::as_str)
+    }
+
+    /// Records the heatmap output path.
+    pub fn set_picture_heatmap_path(&mut self, path: impl Into<String>) {
+        let path = path.into();
+        if path.is_empty() {
+            self.options.remove("picture.heatmap");
+        } else {
+            self.options.insert("picture.heatmap".to_string(), path);
+        }
+    }
+
+    /// Returns the picture pixel RGB tolerance, if configured.
+    pub fn picture_tolerance(&self) -> Option<u8> {
+        self.options
+            .get("picture.tolerance")
+            .and_then(|v| v.parse::<u8>().ok())
+    }
+
+    /// Records the picture pixel RGB tolerance threshold.
+    pub fn set_picture_tolerance(&mut self, tolerance: u8) {
+        self.options
+            .insert("picture.tolerance".to_string(), tolerance.to_string());
+    }
 }
 
 /// A serialized session document containing one or more tabs.
@@ -212,6 +643,72 @@ impl SessionDocument {
             name: None,
             locked: false,
         }
+    }
+
+    /// Returns the number of tabs in this session document.
+    pub fn tab_count(&self) -> usize {
+        self.tabs.len()
+    }
+
+    /// Returns true if the session contains no tabs.
+    pub fn is_empty(&self) -> bool {
+        self.tabs.is_empty()
+    }
+
+    /// Returns a reference to the active tab, if one exists.
+    pub fn active_tab(&self) -> Option<&SessionTab> {
+        self.tabs.get(self.active_tab_index)
+    }
+
+    /// Returns a mutable reference to the active tab, if one exists.
+    pub fn active_tab_mut(&mut self) -> Option<&mut SessionTab> {
+        self.tabs.get_mut(self.active_tab_index)
+    }
+
+    /// Sets the active tab index if valid, returning true if successfully updated.
+    pub fn set_active_tab_index(&mut self, index: usize) -> bool {
+        if index < self.tabs.len() {
+            self.active_tab_index = index;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Adds a tab to the session, returning the index of the newly added tab.
+    pub fn add_tab(&mut self, tab: SessionTab) -> usize {
+        let index = self.tabs.len();
+        self.tabs.push(tab);
+        index
+    }
+
+    /// Removes a tab by index, adjusting active_tab_index if needed.
+    pub fn remove_tab(&mut self, index: usize) -> Option<SessionTab> {
+        if index < self.tabs.len() {
+            let removed = self.tabs.remove(index);
+            if self.active_tab_index >= self.tabs.len() && !self.tabs.is_empty() {
+                self.active_tab_index = self.tabs.len().saturating_sub(1);
+            }
+            Some(removed)
+        } else {
+            None
+        }
+    }
+
+    /// Finds a tab by unique identifier.
+    pub fn find_tab(&self, id: &str) -> Option<&SessionTab> {
+        self.tabs.iter().find(|t| t.id == id)
+    }
+
+    /// Finds a tab by unique identifier (mutable).
+    pub fn find_tab_mut(&mut self, id: &str) -> Option<&mut SessionTab> {
+        self.tabs.iter_mut().find(|t| t.id == id)
+    }
+
+    /// Builder method to set session name.
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
     }
 
     /// Returns true if the session document is locked against modification.
@@ -278,17 +775,6 @@ impl SessionDocument {
 }
 
 /// Migrates an arbitrary JSON string into a current [`SessionDocument`].
-///
-/// Supports:
-/// - Version 0 (unversioned JSON, `schema_version: 0`, legacy field mappings, or bare tab arrays)
-/// - Version 1 (current schema version)
-///
-/// Errors on:
-/// - Future schema versions (`schema_version > CURRENT_SESSION_SCHEMA_VERSION`)
-/// - Malformed or corrupted JSON
-/// - Invalid data structures (e.g. non-object root where object is expected)
-///
-/// This function never panics.
 pub fn migrate(old_json: &str) -> Result<SessionDocument, SessionError> {
     if old_json.trim().is_empty() {
         return Err(SessionError::CorruptInput("Empty JSON input".to_string()));
@@ -356,7 +842,10 @@ fn migrate_v0_object(
     let raw_tabs = map
         .get("tabs")
         .or_else(|| map.get("sessions"))
-        .or_else(|| map.get("items"));
+        .or_else(|| map.get("items"))
+        .or_else(|| map.get("tab_list"))
+        .or_else(|| map.get("open_tabs"))
+        .or_else(|| map.get("comparisons"));
 
     let tabs = match raw_tabs {
         Some(serde_json::Value::Array(items)) => parse_v0_tabs(items)?,
@@ -365,11 +854,26 @@ fn migrate_v0_object(
                 "v0 tabs field must be a JSON array".to_string(),
             ));
         }
-        None => Vec::new(),
+        None => {
+            // Check if the root object itself represents a single tab
+            if map.contains_key("left_path")
+                || map.contains_key("left")
+                || map.contains_key("right_path")
+                || map.contains_key("right")
+                || map.contains_key("session_type")
+            {
+                let single_val = serde_json::Value::Object(map.clone());
+                parse_v0_tabs(&[single_val])?
+            } else {
+                Vec::new()
+            }
+        }
     };
 
     let active_tab_index = map
         .get("active_tab_index")
+        .or_else(|| map.get("active"))
+        .or_else(|| map.get("active_tab"))
         .and_then(|v| v.as_u64())
         .map(|v| v as usize)
         .unwrap_or(0);
@@ -377,6 +881,8 @@ fn migrate_v0_object(
     let name = map
         .get("name")
         .or_else(|| map.get("title"))
+        .or_else(|| map.get("session_name"))
+        .or_else(|| map.get("label"))
         .and_then(|v| v.as_str())
         .map(ToString::to_string);
 
@@ -384,6 +890,7 @@ fn migrate_v0_object(
         .get("locked")
         .or_else(|| map.get("is_locked"))
         .or_else(|| map.get("read_only_session"))
+        .or_else(|| map.get("read_only"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
@@ -416,13 +923,17 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                 let id = tab_map
                     .get("id")
                     .or_else(|| tab_map.get("uuid"))
+                    .or_else(|| tab_map.get("key"))
+                    .or_else(|| tab_map.get("identifier"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string)
-                    .unwrap_or_else(|| format!("tab-{}", idx + 1));
+                    .unwrap_or_else(|| format!("tab-{}", idx.saturating_add(1)));
 
                 let title = tab_map
                     .get("title")
                     .or_else(|| tab_map.get("name"))
+                    .or_else(|| tab_map.get("label"))
+                    .or_else(|| tab_map.get("description"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string)
                     .unwrap_or_else(|| "Untitled".to_string());
@@ -431,6 +942,7 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .get("session_type")
                     .or_else(|| tab_map.get("type"))
                     .or_else(|| tab_map.get("kind"))
+                    .or_else(|| tab_map.get("mode"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string)
                     .unwrap_or_else(default_tab_type);
@@ -439,6 +951,8 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .get("left_path")
                     .or_else(|| tab_map.get("left"))
                     .or_else(|| tab_map.get("path_left"))
+                    .or_else(|| tab_map.get("lhs"))
+                    .or_else(|| tab_map.get("source"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string);
 
@@ -446,11 +960,16 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .get("right_path")
                     .or_else(|| tab_map.get("right"))
                     .or_else(|| tab_map.get("path_right"))
+                    .or_else(|| tab_map.get("rhs"))
+                    .or_else(|| tab_map.get("target"))
+                    .or_else(|| tab_map.get("dest"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string);
 
                 let read_only = tab_map
                     .get("read_only")
+                    .or_else(|| tab_map.get("readonly"))
+                    .or_else(|| tab_map.get("ro"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
@@ -461,13 +980,157 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .unwrap_or(false);
 
                 let mut options = HashMap::new();
-                if let Some(serde_json::Value::Object(opts_map)) = tab_map.get("options") {
+                let raw_options = tab_map
+                    .get("options")
+                    .or_else(|| tab_map.get("opts"))
+                    .or_else(|| tab_map.get("settings"))
+                    .or_else(|| tab_map.get("params"));
+
+                if let Some(serde_json::Value::Object(opts_map)) = raw_options {
                     for (k, v) in opts_map {
                         if let Some(s) = v.as_str() {
                             options.insert(k.clone(), s.to_string());
+                        } else if let Some(n) = v.as_i64() {
+                            options.insert(k.clone(), n.to_string());
+                        } else if let Some(b) = v.as_bool() {
+                            options.insert(k.clone(), b.to_string());
                         }
                     }
                 }
+
+                // Check top-level legacy option keys that may have been placed directly on the tab
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["sync_mode", "sync.mode"],
+                    "sync.mode",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["folder_depth_limit", "depth_limit", "depth"],
+                    "folder.depth_limit",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["content_compare", "folder.content_compare"],
+                    "folder.content_compare",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["case_insensitive", "folder.case_insensitive"],
+                    "folder.case_insensitive",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["include", "folder.include"],
+                    "folder.include",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["exclude", "folder.exclude"],
+                    "folder.exclude",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["quick_compare", "folder.quick_compare"],
+                    "folder.quick_compare",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["follow_symlinks", "folder.follow_symlinks"],
+                    "folder.follow_symlinks",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["archive_traversal", "folder.archive_traversal"],
+                    "folder.archive_traversal",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_whitespace", "text.ignore_whitespace"],
+                    "text.ignore_whitespace",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_case", "text.ignore_case"],
+                    "text.ignore_case",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_space_change", "text.ignore_space_change"],
+                    "text.ignore_space_change",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_blank_lines", "text.ignore_blank_lines"],
+                    "text.ignore_blank_lines",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_line_endings", "text.ignore_line_endings"],
+                    "text.ignore_line_endings",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["ignore_comments", "text.ignore_comments"],
+                    "text.ignore_comments",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["grammar_preset", "grammar", "syntax", "grammar.preset"],
+                    "grammar.preset",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["delimiter", "table.delimiter"],
+                    "table.delimiter",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["header", "table.header"],
+                    "table.header",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["direction", "sync.direction"],
+                    "sync.direction",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["prune", "sync.prune"],
+                    "sync.prune",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["heatmap", "heatmap_path", "picture.heatmap"],
+                    "picture.heatmap",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["tolerance", "picture.tolerance"],
+                    "picture.tolerance",
+                    &mut options,
+                );
 
                 tabs.push(SessionTab {
                     id,
@@ -482,7 +1145,7 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
             }
             serde_json::Value::String(path_str) => {
                 tabs.push(SessionTab {
-                    id: format!("tab-{}", idx + 1),
+                    id: format!("tab-{}", idx.saturating_add(1)),
                     title: path_str.clone(),
                     session_type: default_tab_type(),
                     left_path: Some(path_str.clone()),
@@ -492,15 +1155,66 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     options: HashMap::new(),
                 });
             }
+            serde_json::Value::Array(pair) => {
+                let left = pair
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+                let right = pair
+                    .get(1)
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+                let title = match (&left, &right) {
+                    (Some(l), Some(r)) => format!("{l} vs {r}"),
+                    (Some(l), None) => l.clone(),
+                    (None, Some(r)) => r.clone(),
+                    (None, None) => format!("tab-{}", idx.saturating_add(1)),
+                };
+                tabs.push(SessionTab {
+                    id: format!("tab-{}", idx.saturating_add(1)),
+                    title,
+                    session_type: default_tab_type(),
+                    left_path: left,
+                    right_path: right,
+                    read_only: false,
+                    locked: false,
+                    options: HashMap::new(),
+                });
+            }
             _ => {
                 return Err(SessionError::CorruptInput(
-                    "Tab entry must be an object or string".to_string(),
+                    "Tab entry must be an object, string path, or path pair array".to_string(),
                 ));
             }
         }
     }
 
     Ok(tabs)
+}
+
+fn check_and_insert_legacy_option(
+    map: &serde_json::Map<String, serde_json::Value>,
+    aliases: &[&str],
+    canonical_key: &str,
+    options: &mut HashMap<String, String>,
+) {
+    if options.contains_key(canonical_key) {
+        return;
+    }
+    for alias in aliases {
+        if let Some(val) = map.get(*alias) {
+            if let Some(s) = val.as_str() {
+                options.insert(canonical_key.to_string(), s.to_string());
+                break;
+            } else if let Some(n) = val.as_i64() {
+                options.insert(canonical_key.to_string(), n.to_string());
+                break;
+            } else if let Some(b) = val.as_bool() {
+                options.insert(canonical_key.to_string(), b.to_string());
+                break;
+            }
+        }
+    }
 }
 
 /// Migrates an arbitrary JSON string into a current [`SessionConfig`].
@@ -523,25 +1237,55 @@ mod tests {
         let tab = SessionTab::new("tab-1", "My Tab")
             .with_paths("/a", "/b")
             .with_session_type("hex")
-            .with_locked(true);
+            .with_locked(true)
+            .with_read_only(true);
         assert_eq!(tab.id, "tab-1");
         assert_eq!(tab.title, "My Tab");
         assert_eq!(tab.session_type, "hex");
         assert_eq!(tab.left_path.as_deref(), Some("/a"));
         assert_eq!(tab.right_path.as_deref(), Some("/b"));
-        assert!(!tab.read_only);
+        assert!(tab.read_only);
         assert!(tab.locked);
     }
 
     #[test]
     fn test_session_document_roundtrip_unit() {
         let tab = SessionTab::new("t1", "Tab 1").with_paths("/left", "/right");
-        let doc = SessionDocument::with_tabs(vec![tab]).with_locked(true);
+        let doc = SessionDocument::with_tabs(vec![tab])
+            .with_name("My Session")
+            .with_locked(true);
         assert!(doc.is_locked());
+        assert_eq!(doc.tab_count(), 1);
+        assert!(!doc.is_empty());
+        assert_eq!(doc.name.as_deref(), Some("My Session"));
         let json = doc.to_json().expect("to_json");
         let parsed = SessionDocument::from_json(&json).expect("from_json");
         assert_eq!(doc, parsed);
         assert!(parsed.is_locked());
+    }
+
+    #[test]
+    fn test_session_document_tab_management() {
+        let mut doc = SessionDocument::new();
+        assert!(doc.is_empty());
+        let t1 = SessionTab::new_text("t1", "Text Tab", "/a.txt", "/b.txt");
+        let t2 = SessionTab::new_folder("t2", "Folder Tab", "/dirA", "/dirB");
+        assert_eq!(doc.add_tab(t1), 0);
+        assert_eq!(doc.add_tab(t2), 1);
+        assert_eq!(doc.tab_count(), 2);
+        assert_eq!(doc.active_tab().map(|t| t.id.as_str()), Some("t1"));
+
+        assert!(doc.set_active_tab_index(1));
+        assert_eq!(doc.active_tab().map(|t| t.id.as_str()), Some("t2"));
+        assert!(!doc.set_active_tab_index(99));
+
+        assert!(doc.find_tab("t1").is_some());
+        assert!(doc.find_tab("t99").is_none());
+
+        let removed = doc.remove_tab(0).expect("remove t1");
+        assert_eq!(removed.id, "t1");
+        assert_eq!(doc.tab_count(), 1);
+        assert_eq!(doc.active_tab().map(|t| t.id.as_str()), Some("t2"));
     }
 
     #[test]
@@ -551,7 +1295,8 @@ mod tests {
         assert_eq!(doc.schema_version, CURRENT_SESSION_SCHEMA_VERSION);
         assert_eq!(doc.tabs.len(), 1);
         assert!(doc.locked);
-        assert!(doc.tabs[0].locked);
+        let tab0 = doc.tabs.first().expect("tab 0");
+        assert!(tab0.locked);
     }
 
     #[test]
@@ -625,5 +1370,39 @@ mod tests {
         assert_eq!(tab.folder_depth_limit(), None);
         assert!(!tab.folder_content_compare());
         assert!(!tab.folder_case_insensitive());
+    }
+
+    #[test]
+    fn test_text_and_table_compare_options_depth() {
+        let mut tab = SessionTab::new_text("t1", "Diff", "a.rs", "b.rs");
+        tab.set_text_ignore_case(true);
+        tab.set_text_ignore_whitespace(true);
+        tab.set_text_ignore_space_change(true);
+        tab.set_text_ignore_blank_lines(true);
+        tab.set_text_ignore_line_endings(true);
+        tab.set_text_ignore_comments(true);
+        tab.set_grammar_preset("rust");
+
+        assert!(tab.text_ignore_case());
+        assert!(tab.text_ignore_whitespace());
+        assert!(tab.text_ignore_space_change());
+        assert!(tab.text_ignore_blank_lines());
+        assert!(tab.text_ignore_line_endings());
+        assert!(tab.text_ignore_comments());
+        assert_eq!(tab.grammar_preset(), Some("rust"));
+
+        let text_opts = tab.text_options();
+        assert!(text_opts.ignore_case);
+        assert_eq!(text_opts.grammar_preset.as_deref(), Some("rust"));
+
+        let mut tbl_tab = SessionTab::new_table("tbl1", "Table", "a.csv", "b.csv");
+        tbl_tab.set_table_delimiter('\t');
+        tbl_tab.set_table_header(false);
+        assert_eq!(tbl_tab.table_delimiter(), Some('\t'));
+        assert!(!tbl_tab.table_header());
+
+        let tbl_opts = tbl_tab.table_options();
+        assert_eq!(tbl_opts.delimiter, Some('\t'));
+        assert!(!tbl_opts.header);
     }
 }

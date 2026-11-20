@@ -92,6 +92,21 @@ fn test_workspace_corrupt_locked_returns_err() {
 }
 
 #[test]
+fn test_settings_corrupt_locked_returns_err() {
+    let settings_corrupt = [
+        "{\"schema_version\": 1, \"locked\": \"true_string\"}",
+        "{\"schema_version\": 1, \"theme\": \"dark\", \"locked\": [true]}",
+    ];
+    for (i, sample) in settings_corrupt.iter().enumerate() {
+        let res = migrate_settings(sample);
+        assert!(
+            res.is_err(),
+            "Settings corrupt sample #{i} ({sample:?}) must return Err, got: {res:?}"
+        );
+    }
+}
+
+#[test]
 fn test_fuzzed_hostile_inputs_never_panic() {
     let hostile_inputs = [
         "",

@@ -129,6 +129,44 @@ impl WorkspaceDocument {
         self
     }
 
+    /// Returns the number of session paths associated with this workspace.
+    pub fn session_count(&self) -> usize {
+        self.session_paths.len()
+    }
+
+    /// Returns true if this workspace has no session paths.
+    pub fn is_empty(&self) -> bool {
+        self.session_paths.is_empty()
+    }
+
+    /// Returns true if the workspace contains the given session path.
+    pub fn contains_session_path(&self, path: &str) -> bool {
+        self.session_paths.iter().any(|p| p == path)
+    }
+
+    /// Removes a session path from the workspace, returning true if found and removed.
+    pub fn remove_session_path(&mut self, path: &str) -> bool {
+        if let Some(pos) = self.session_paths.iter().position(|p| p == path) {
+            self.session_paths.remove(pos);
+            if self.active_session.as_deref() == Some(path) {
+                self.active_session = self.session_paths.first().cloned();
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clears the recent paths history.
+    pub fn clear_recent_paths(&mut self) {
+        self.recent_paths.clear();
+    }
+
+    /// Sets the active session path or ID.
+    pub fn set_active_session(&mut self, session: impl Into<String>) {
+        self.active_session = Some(session.into());
+    }
+
     /// Returns true if the workspace document is locked.
     pub fn is_locked(&self) -> bool {
         self.locked
@@ -207,15 +245,6 @@ pub fn migrate_workspace_config(old_json: &str) -> Result<WorkspaceConfig, Sessi
 }
 
 /// Migrates an arbitrary JSON string into a current [`WorkspaceDocument`].
-///
-/// Supports:
-/// - Version 0 (unversioned JSON, `schema_version: 0`, legacy field mappings, or bare session arrays)
-/// - Version 1 (current schema version)
-///
-/// Errors on:
-/// - Future schema versions (`schema_version > CURRENT_WORKSPACE_SCHEMA_VERSION`)
-/// - Malformed or corrupted JSON
-/// - Invalid data structures (e.g. non-object and non-array root)
 pub fn migrate_workspace(old_json: &str) -> Result<WorkspaceDocument, SessionError> {
     if old_json.trim().is_empty() {
         return Err(SessionError::CorruptInput("Empty JSON input".to_string()));
@@ -284,6 +313,7 @@ fn migrate_v0_array(items: &[serde_json::Value]) -> Result<WorkspaceDocument, Se
                     .or_else(|| obj.get("file"))
                     .or_else(|| obj.get("uri"))
                     .or_else(|| obj.get("session_path"))
+                    .or_else(|| obj.get("session"))
                     .and_then(|v| v.as_str());
                 if let Some(p) = path_opt {
                     session_paths.push(p.to_string());
@@ -336,6 +366,7 @@ fn migrate_v0_object(
                         .or_else(|| obj.get("file"))
                         .or_else(|| obj.get("uri"))
                         .or_else(|| obj.get("session_path"))
+                        .or_else(|| obj.get("session"))
                         .and_then(|v| v.as_str());
                     if let Some(path_str) = path_opt {
                         session_paths.push(path_str.to_string());
@@ -359,7 +390,8 @@ fn migrate_v0_object(
         let raw_layout = map
             .get("window_layout")
             .or_else(|| map.get("layout"))
-            .or_else(|| map.get("window"));
+            .or_else(|| map.get("window"))
+            .or_else(|| map.get("geometry"));
 
         if let Some(serde_json::Value::Object(win)) = raw_layout {
             let width = win
@@ -436,6 +468,7 @@ fn migrate_v0_object(
         .get("locked")
         .or_else(|| map.get("is_locked"))
         .or_else(|| map.get("read_only_workspace"))
+        .or_else(|| map.get("read_only"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
@@ -477,13 +510,36 @@ mod tests {
         assert_eq!(ws.name, "Test WS");
         assert_eq!(ws.session_paths.len(), 1);
         assert_eq!(ws.active_session.as_deref(), Some("/session1.json"));
-        assert!(ws.window_layout.as_ref().unwrap().is_maximized);
+        assert!(ws.window_layout.as_ref().is_some_and(|l| l.is_maximized));
         assert!(ws.is_locked());
+        assert_eq!(ws.session_count(), 1);
+        assert!(!ws.is_empty());
+        assert!(ws.contains_session_path("/session1.json"));
 
         let json = ws.to_json().expect("to_json");
         let parsed = WorkspaceDocument::from_json(&json).expect("from_json");
         assert_eq!(ws, parsed);
         assert!(parsed.is_locked());
+    }
+
+    #[test]
+    fn test_workspace_path_manipulation() {
+        let mut ws = WorkspaceDocument::new("Manage Paths");
+        assert!(ws.is_empty());
+        ws.add_session_path("/sess1.json");
+        ws.add_session_path("/sess2.json");
+        ws.set_active_session("/sess1.json");
+        assert_eq!(ws.session_count(), 2);
+
+        assert!(ws.remove_session_path("/sess1.json"));
+        assert_eq!(ws.session_count(), 1);
+        assert_eq!(ws.active_session.as_deref(), Some("/sess2.json"));
+        assert!(!ws.remove_session_path("/unknown.json"));
+
+        ws.add_recent_path("/path1");
+        assert_eq!(ws.recent_paths.len(), 1);
+        ws.clear_recent_paths();
+        assert!(ws.recent_paths.is_empty());
     }
 
     #[test]

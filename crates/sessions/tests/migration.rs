@@ -340,3 +340,134 @@ fn test_migrate_settings_v0_custom_grammar_presets() {
         Some("elixir")
     );
 }
+
+#[test]
+fn test_migrate_session_v0_embedded_options() {
+    let v0_json = r#"{
+        "schema_version": 0,
+        "tabs": [
+            {
+                "name": "Embedded Options Tab",
+                "left": "/src/a",
+                "right": "/src/b",
+                "session_type": "folder",
+                "sync_mode": "mirror",
+                "depth_limit": 5,
+                "content_compare": true,
+                "case_insensitive": true,
+                "include": "*.rs",
+                "exclude": "*.tmp",
+                "quick_compare": "crc",
+                "follow_symlinks": true,
+                "archive_traversal": true,
+                "is_locked": true
+            }
+        ]
+    }"#;
+
+    let doc = migrate(v0_json).expect("migrate embedded options tab");
+    assert_eq!(doc.tabs.len(), 1);
+    let tab = doc.tabs.first().expect("one tab");
+    assert_eq!(tab.title, "Embedded Options Tab");
+    assert_eq!(tab.left_path.as_deref(), Some("/src/a"));
+    assert_eq!(tab.right_path.as_deref(), Some("/src/b"));
+    assert_eq!(tab.sync_mode(), Some("mirror"));
+    assert_eq!(tab.folder_depth_limit(), Some(5));
+    assert!(tab.folder_content_compare());
+    assert!(tab.folder_case_insensitive());
+    assert_eq!(tab.folder_include(), Some("*.rs"));
+    assert_eq!(tab.folder_exclude(), Some("*.tmp"));
+    assert_eq!(tab.folder_quick_compare(), Some("crc"));
+    assert!(tab.folder_follow_symlinks());
+    assert!(tab.folder_archive_traversal());
+    assert!(tab.locked);
+}
+
+#[test]
+fn test_migrate_session_v0_path_pairs_array() {
+    let v0_json = r#"[
+        ["/pair/left1.txt", "/pair/right1.txt"],
+        ["/pair/left2.rs", "/pair/right2.rs"]
+    ]"#;
+
+    let doc = migrate(v0_json).expect("migrate array of path pairs");
+    assert_eq!(doc.tabs.len(), 2);
+    let t0 = doc.tabs.first().expect("pair 0");
+    assert_eq!(t0.left_path.as_deref(), Some("/pair/left1.txt"));
+    assert_eq!(t0.right_path.as_deref(), Some("/pair/right1.txt"));
+
+    let t1 = doc.tabs.get(1).expect("pair 1");
+    assert_eq!(t1.left_path.as_deref(), Some("/pair/left2.rs"));
+    assert_eq!(t1.right_path.as_deref(), Some("/pair/right2.rs"));
+}
+
+#[test]
+fn test_migrate_session_v0_single_tab_root() {
+    let v0_json = r#"{
+        "left_path": "/single/left.txt",
+        "right_path": "/single/right.txt",
+        "session_type": "text",
+        "name": "Single Tab Doc",
+        "is_locked": true
+    }"#;
+
+    let doc = migrate(v0_json).expect("migrate single tab root object");
+    assert_eq!(doc.tabs.len(), 1);
+    let tab = doc.tabs.first().expect("single tab");
+    assert_eq!(tab.left_path.as_deref(), Some("/single/left.txt"));
+    assert_eq!(tab.right_path.as_deref(), Some("/single/right.txt"));
+    assert_eq!(tab.title, "Single Tab Doc");
+    assert!(tab.locked);
+}
+
+#[test]
+fn test_migrate_settings_v0_aliases_and_locked() {
+    let v0_json = r#"{
+        "color_theme": "solarized_light",
+        "keybindings": "vim",
+        "syntax": "rust",
+        "tab_width": 2,
+        "autosave": true,
+        "line_numbers": false,
+        "read_only": true,
+        "custom": {
+            "wrap_lines": "true"
+        }
+    }"#;
+
+    let settings = migrate_settings(v0_json).expect("migrate settings aliases");
+    assert_eq!(settings.theme, "solarized_light");
+    assert_eq!(settings.keymap, "vim");
+    assert_eq!(settings.grammar_preset_name, "rust");
+    assert_eq!(settings.tab_size, Some(2));
+    assert!(settings.auto_save);
+    assert!(!settings.show_line_numbers);
+    assert!(settings.is_locked());
+    assert_eq!(
+        settings.extra.get("wrap_lines").map(String::as_str),
+        Some("true")
+    );
+}
+
+#[test]
+fn test_migrate_workspace_v0_geometry_alias() {
+    let v0_json = r#"{
+        "label": "Geometry WS",
+        "paths": ["/sess/1.json"],
+        "geometry": {
+            "width": 2560,
+            "height": 1600,
+            "maximized": true
+        },
+        "read_only": true
+    }"#;
+
+    let ws = migrate_workspace(v0_json).expect("migrate geometry workspace");
+    assert_eq!(ws.name, "Geometry WS");
+    assert_eq!(ws.session_paths, vec!["/sess/1.json"]);
+    let geom = ws.window_layout.as_ref().expect("geometry parsed");
+    assert_eq!(geom.width, 2560);
+    assert_eq!(geom.height, 1600);
+    assert!(geom.is_maximized);
+    assert!(ws.is_locked());
+}

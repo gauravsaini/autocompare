@@ -281,3 +281,141 @@ fn test_app_settings_custom_grammar_presets_round_trip() {
         Some("kotlin")
     );
 }
+
+#[test]
+fn test_locked_settings_round_trip_and_guard() {
+    let mut settings = AppSettings::with_presets("dracula", "emacs", "rust");
+    settings.set_locked(true);
+    assert!(settings.is_locked());
+
+    let json = settings
+        .to_json_pretty()
+        .expect("serialize locked settings");
+    let loaded = AppSettings::from_json(&json).expect("deserialize locked settings");
+    assert_eq!(settings, loaded);
+    assert!(loaded.is_locked());
+
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("test_locked_settings_{}.json", std::process::id()));
+    assert!(settings.save_to_file(&file_path).is_err());
+    assert!(settings.save_to_file_force(&file_path).is_ok());
+
+    let loaded_disk = AppSettings::load_from_file(&file_path).expect("load from file");
+    assert!(loaded_disk.is_locked());
+    let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_session_tab_options_depth_round_trip() {
+    use autocompare_sessions::{
+        AudioCompareOptions, FolderCompareOptions, HexCompareOptions, PictureCompareOptions,
+        SyncCompareOptions, TableCompareOptions, TextCompareOptions,
+    };
+
+    let mut tab_text = SessionTab::new_text("t-text", "Text Compare", "/a.txt", "/b.txt")
+        .with_grammar_preset("rust");
+    tab_text.set_text_options(&TextCompareOptions {
+        ignore_case: true,
+        ignore_whitespace: true,
+        ignore_space_change: true,
+        ignore_blank_lines: true,
+        ignore_line_endings: true,
+        ignore_comments: true,
+        grammar_preset: Some("rust".to_string()),
+        encoding_left: Some("utf-8".to_string()),
+        encoding_right: Some("utf-8".to_string()),
+    });
+
+    let mut tab_folder = SessionTab::new_folder("t-folder", "Folder Compare", "/dir1", "/dir2");
+    tab_folder.set_folder_options(&FolderCompareOptions {
+        content_compare: true,
+        depth_limit: Some(8),
+        case_insensitive: true,
+        include: Some("*.rs".to_string()),
+        exclude: Some("*.bak".to_string()),
+        quick_compare: Some("crc".to_string()),
+        follow_symlinks: true,
+        archive_traversal: true,
+    });
+
+    let mut tab_sync = SessionTab::new_sync("t-sync", "Sync Folders", "/src", "/dst");
+    tab_sync.set_sync_options(&SyncCompareOptions {
+        mode: Some("mirror".to_string()),
+        direction: Some("left_to_right".to_string()),
+        prune: true,
+        delete_empty_folders: true,
+    });
+
+    let mut tab_table = SessionTab::new_table("t-tbl", "Table Compare", "/d1.csv", "/d2.csv");
+    tab_table.set_table_options(&TableCompareOptions {
+        delimiter: Some('\t'),
+        header: false,
+        key_column: Some(0),
+    });
+
+    let mut tab_pic = SessionTab::new_picture("t-pic", "Pic Compare", "/p1.png", "/p2.png");
+    tab_pic.set_picture_options(&PictureCompareOptions {
+        heatmap_path: Some("/tmp/heat.png".to_string()),
+        tolerance: Some(15),
+        ignore_alpha: true,
+    });
+
+    let mut tab_hex = SessionTab::new_hex("t-hex", "Hex Compare", "/b1.bin", "/b2.bin");
+    tab_hex.set_hex_options(&HexCompareOptions {
+        bytes_per_row: Some(32),
+        group_size: Some(4),
+    });
+
+    let mut tab_audio = SessionTab::new_audio("t-aud", "Audio Compare", "/a1.wav", "/a2.wav");
+    tab_audio.set_audio_options(&AudioCompareOptions {
+        sample_rate: Some(44100),
+        tolerance: Some(0.01),
+    });
+
+    let doc = SessionDocument::with_tabs(vec![
+        tab_text, tab_folder, tab_sync, tab_table, tab_pic, tab_hex, tab_audio,
+    ])
+    .with_name("Comprehensive Multi-Format Session");
+
+    let json = doc.to_json_pretty().expect("serialize comprehensive doc");
+    let loaded = SessionDocument::from_json(&json).expect("deserialize comprehensive doc");
+    assert_eq!(doc, loaded);
+    assert_eq!(loaded.tab_count(), 7);
+
+    // Verify roundtripped option depths
+    let t0 = loaded.tabs.first().expect("tab 0");
+    let text_opts = t0.text_options();
+    assert!(text_opts.ignore_case);
+    assert!(text_opts.ignore_comments);
+    assert_eq!(text_opts.grammar_preset.as_deref(), Some("rust"));
+
+    let t1 = loaded.tabs.get(1).expect("tab 1");
+    let folder_opts = t1.folder_options();
+    assert!(folder_opts.content_compare);
+    assert_eq!(folder_opts.depth_limit, Some(8));
+    assert!(folder_opts.follow_symlinks);
+    assert_eq!(folder_opts.include.as_deref(), Some("*.rs"));
+
+    let t2 = loaded.tabs.get(2).expect("tab 2");
+    let sync_opts = t2.sync_options();
+    assert_eq!(sync_opts.mode.as_deref(), Some("mirror"));
+    assert!(sync_opts.prune);
+
+    let t3 = loaded.tabs.get(3).expect("tab 3");
+    let table_opts = t3.table_options();
+    assert_eq!(table_opts.delimiter, Some('\t'));
+    assert!(!table_opts.header);
+
+    let t4 = loaded.tabs.get(4).expect("tab 4");
+    let pic_opts = t4.picture_options();
+    assert_eq!(pic_opts.heatmap_path.as_deref(), Some("/tmp/heat.png"));
+    assert_eq!(pic_opts.tolerance, Some(15));
+
+    let t5 = loaded.tabs.get(5).expect("tab 5");
+    let hex_opts = t5.hex_options();
+    assert_eq!(hex_opts.bytes_per_row, Some(32));
+
+    let t6 = loaded.tabs.get(6).expect("tab 6");
+    let aud_opts = t6.audio_options();
+    assert_eq!(aud_opts.sample_rate, Some(44100));
+}

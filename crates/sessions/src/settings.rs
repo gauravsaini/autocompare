@@ -127,6 +127,40 @@ impl GrammarPreset {
         }
     }
 
+    /// Checks whether this grammar preset handles the given file extension.
+    pub fn matches_extension(&self, ext: &str) -> bool {
+        let needle = ext.trim_start_matches('.').to_ascii_lowercase();
+        self.extensions
+            .iter()
+            .any(|e| e.to_ascii_lowercase() == needle)
+    }
+
+    /// Checks whether this grammar preset handles the file at the given path.
+    pub fn matches_path<P: AsRef<Path>>(&self, path: P) -> bool {
+        path.as_ref()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| self.matches_extension(ext))
+    }
+
+    /// Returns true if the given line (trimmed of leading whitespace) begins with a line comment prefix.
+    pub fn is_comment_line(&self, line: &str) -> bool {
+        if let Some(ref prefix) = self.line_comment_prefix {
+            line.trim_start().starts_with(prefix)
+        } else {
+            false
+        }
+    }
+
+    /// Strips any trailing line comment from a line of text, if this preset defines a line comment prefix.
+    pub fn strip_line_comment<'a>(&self, line: &'a str) -> &'a str {
+        if let Some(ref prefix) = self.line_comment_prefix {
+            line.split(prefix.as_str()).next().unwrap_or(line)
+        } else {
+            line
+        }
+    }
+
     /// Standard suite of built-in grammar presets for common languages.
     pub fn builtin_presets() -> Vec<Self> {
         vec![
@@ -139,6 +173,8 @@ impl GrammarPreset {
                     "cc".to_string(),
                     "h".to_string(),
                     "hpp".to_string(),
+                    "cxx".to_string(),
+                    "hxx".to_string(),
                 ],
             ),
             Self::c_style("rust", vec!["rs".to_string()]),
@@ -149,20 +185,32 @@ impl GrammarPreset {
                     "jsx".to_string(),
                     "ts".to_string(),
                     "tsx".to_string(),
+                    "mjs".to_string(),
+                    "cjs".to_string(),
                 ],
             ),
             Self::c_style("java", vec!["java".to_string()]),
+            Self::c_style("csharp", vec!["cs".to_string()]),
             Self::c_style("go", vec!["go".to_string()]),
+            Self::c_style("swift", vec!["swift".to_string()]),
+            Self::c_style("kotlin", vec!["kt".to_string(), "kts".to_string()]),
+            Self::c_style("php", vec!["php".to_string(), "phtml".to_string()]),
             Self::hash_style(
                 "python",
                 vec!["py".to_string(), "pyw".to_string(), "pyi".to_string()],
             ),
             Self::hash_style(
                 "shell",
-                vec!["sh".to_string(), "bash".to_string(), "zsh".to_string()],
+                vec![
+                    "sh".to_string(),
+                    "bash".to_string(),
+                    "zsh".to_string(),
+                    "fish".to_string(),
+                ],
             ),
             Self::hash_style("ruby", vec!["rb".to_string()]),
             Self::hash_style("yaml", vec!["yaml".to_string(), "yml".to_string()]),
+            Self::hash_style("toml", vec!["toml".to_string()]),
             Self::sql_style("sql", vec!["sql".to_string()]),
             Self::xml_style(
                 "html_xml",
@@ -171,8 +219,16 @@ impl GrammarPreset {
                     "htm".to_string(),
                     "xml".to_string(),
                     "svg".to_string(),
+                    "xhtml".to_string(),
                 ],
             ),
+            Self::c_style(
+                "css",
+                vec!["css".to_string(), "scss".to_string(), "less".to_string()],
+            ),
+            Self::default_preset().with_extensions(vec!["json".to_string()]),
+            Self::hash_style("markdown", vec!["md".to_string(), "markdown".to_string()]),
+            Self::default_preset().with_extensions(vec!["diff".to_string(), "patch".to_string()]),
         ]
     }
 }
@@ -218,6 +274,9 @@ pub struct AppSettings {
     /// Whether line numbers are displayed.
     #[serde(default)]
     pub show_line_numbers: bool,
+    /// Whether this settings document is locked against accidental modification or overwrite.
+    #[serde(default)]
+    pub locked: bool,
     /// Extra user-configured key-value preferences.
     #[serde(default)]
     pub extra: HashMap<String, String>,
@@ -248,6 +307,7 @@ impl Default for AppSettings {
             tab_size: Some(4),
             auto_save: false,
             show_line_numbers: true,
+            locked: false,
             extra: HashMap::new(),
         }
     }
@@ -282,12 +342,14 @@ impl AppSettings {
 
     /// Look up a grammar preset matching a file extension (case-insensitive).
     pub fn find_preset_for_extension(&self, ext: &str) -> Option<&GrammarPreset> {
-        let needle = ext.trim_start_matches('.').to_ascii_lowercase();
-        self.grammar_presets.iter().find(|p| {
-            p.extensions
-                .iter()
-                .any(|e| e.to_ascii_lowercase() == needle)
-        })
+        self.grammar_presets
+            .iter()
+            .find(|p| p.matches_extension(ext))
+    }
+
+    /// Look up a grammar preset matching a file path.
+    pub fn find_preset_for_path<P: AsRef<Path>>(&self, path: P) -> Option<&GrammarPreset> {
+        self.grammar_presets.iter().find(|p| p.matches_path(&path))
     }
 
     /// Adds or updates a grammar preset.
@@ -311,6 +373,22 @@ impl AppSettings {
         self
     }
 
+    /// Returns true if the settings document is locked.
+    pub fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Sets whether the settings document is locked.
+    pub fn set_locked(&mut self, locked: bool) {
+        self.locked = locked;
+    }
+
+    /// Builder method to set whether the settings document is locked.
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
+        self
+    }
+
     /// Serializes the settings to a compact JSON string.
     pub fn to_json(&self) -> Result<String, SessionError> {
         serde_json::to_string(self).map_err(SessionError::Json)
@@ -327,7 +405,21 @@ impl AppSettings {
     }
 
     /// Saves the settings document as pretty-printed JSON to the specified file path.
+    ///
+    /// If the settings document is locked (`self.locked == true`), returns an I/O
+    /// PermissionDenied error. To bypass the lock check, use [`save_to_file_force`].
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
+        if self.locked {
+            return Err(SessionError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Cannot overwrite locked app settings document; unlock or use save_to_file_force",
+            )));
+        }
+        self.save_to_file_force(path)
+    }
+
+    /// Saves the settings document unconditionally, bypassing any lock check.
+    pub fn save_to_file_force<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
         let json = self.to_json_pretty()?;
         std::fs::write(path, json).map_err(SessionError::Io)
     }
@@ -395,6 +487,7 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                 // v0 migration
                 let theme = map
                     .get("theme")
+                    .or_else(|| map.get("color_theme"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("dark")
                     .to_string();
@@ -402,6 +495,7 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                 let keymap = map
                     .get("keymap")
                     .or_else(|| map.get("keys"))
+                    .or_else(|| map.get("keybindings"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("default")
                     .to_string();
@@ -410,12 +504,13 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                     .get("grammar_preset_name")
                     .or_else(|| map.get("grammar_preset"))
                     .or_else(|| map.get("grammar"))
+                    .or_else(|| map.get("syntax"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("default")
                     .to_string();
 
                 let grammar_presets = if let Some(serde_json::Value::Array(arr)) =
-                    map.get("grammar_presets")
+                    map.get("grammar_presets").or_else(|| map.get("presets"))
                 {
                     let mut presets = Vec::new();
                     for item in arr {
@@ -434,34 +529,56 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
 
                 let font_family = map
                     .get("font_family")
+                    .or_else(|| map.get("font"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string);
 
                 let font_size = map
                     .get("font_size")
+                    .or_else(|| map.get("size"))
                     .and_then(|v| v.as_u64())
                     .map(|v| v as u32);
 
                 let tab_size = map
                     .get("tab_size")
+                    .or_else(|| map.get("tab_width"))
+                    .or_else(|| map.get("indent_size"))
                     .and_then(|v| v.as_u64())
                     .map(|v| v as u32);
 
                 let auto_save = map
                     .get("auto_save")
+                    .or_else(|| map.get("autosave"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
                 let show_line_numbers = map
                     .get("show_line_numbers")
+                    .or_else(|| map.get("line_numbers"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true);
 
+                let locked = map
+                    .get("locked")
+                    .or_else(|| map.get("is_locked"))
+                    .or_else(|| map.get("read_only"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
                 let mut extra = HashMap::new();
-                if let Some(serde_json::Value::Object(extra_map)) = map.get("extra") {
+                let raw_extra = map
+                    .get("extra")
+                    .or_else(|| map.get("custom"))
+                    .or_else(|| map.get("preferences"));
+
+                if let Some(serde_json::Value::Object(extra_map)) = raw_extra {
                     for (k, v) in extra_map {
                         if let Some(s) = v.as_str() {
                             extra.insert(k.clone(), s.to_string());
+                        } else if let Some(n) = v.as_i64() {
+                            extra.insert(k.clone(), n.to_string());
+                        } else if let Some(b) = v.as_bool() {
+                            extra.insert(k.clone(), b.to_string());
                         }
                     }
                 }
@@ -477,6 +594,7 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                     tab_size,
                     auto_save,
                     show_line_numbers,
+                    locked,
                     extra,
                 })
             }
@@ -499,15 +617,17 @@ mod tests {
 
     #[test]
     fn test_settings_builder_and_roundtrip_unit() {
-        let s = AppSettings::with_presets("light", "default", "python");
+        let s = AppSettings::with_presets("light", "default", "python").with_locked(true);
         assert_eq!(s.schema_version, CURRENT_SETTINGS_SCHEMA_VERSION);
         assert_eq!(s.theme, "light");
         assert_eq!(s.keymap, "default");
         assert_eq!(s.grammar_preset_name, "python");
+        assert!(s.is_locked());
         assert!(!s.grammar_presets.is_empty());
         let json = s.to_json().expect("to_json");
         let parsed = AppSettings::from_json(&json).expect("from_json");
         assert_eq!(s, parsed);
+        assert!(parsed.is_locked());
     }
 
     #[test]
@@ -516,12 +636,30 @@ mod tests {
         let rs_preset = s.find_preset_for_extension("rs").expect("find rs preset");
         assert_eq!(rs_preset.name, "rust");
         assert_eq!(rs_preset.line_comment_prefix.as_deref(), Some("//"));
+        assert!(rs_preset.matches_path("src/lib.rs"));
 
         let py_preset = s.find_preset_for_extension(".py").expect("find py preset");
         assert_eq!(py_preset.name, "python");
         assert_eq!(py_preset.line_comment_prefix.as_deref(), Some("#"));
+        assert!(py_preset.matches_path(Path::new("scripts/run.py")));
 
         assert!(s.find_preset_for_extension("unknown_xyz").is_none());
+        assert!(s.find_preset_for_path("data.unknown_xyz").is_none());
+    }
+
+    #[test]
+    fn test_grammar_preset_comment_helpers() {
+        let rust_preset = GrammarPreset::c_style("rust", vec!["rs".to_string()]);
+        assert!(rust_preset.is_comment_line("   // this is a rust comment"));
+        assert!(!rust_preset.is_comment_line("let x = 42; // inline comment"));
+        assert_eq!(
+            rust_preset.strip_line_comment("let x = 42; // inline"),
+            "let x = 42; "
+        );
+        assert_eq!(
+            rust_preset.strip_line_comment("no comments here"),
+            "no comments here"
+        );
     }
 
     #[test]
@@ -541,11 +679,12 @@ mod tests {
 
     #[test]
     fn test_settings_v0_migration_unit() {
-        let v0 = r#"{"theme": "dracula", "grammar": "markdown"}"#;
+        let v0 = r#"{"theme": "dracula", "grammar": "markdown", "is_locked": true}"#;
         let s = migrate_settings(v0).expect("migrate");
         assert_eq!(s.schema_version, CURRENT_SETTINGS_SCHEMA_VERSION);
         assert_eq!(s.theme, "dracula");
         assert_eq!(s.grammar_preset_name, "markdown");
+        assert!(s.is_locked());
         assert!(!s.grammar_presets.is_empty());
     }
 
@@ -553,5 +692,20 @@ mod tests {
     fn test_settings_future_version_unit() {
         let v9 = r#"{"schema_version": 9, "theme": "dracula"}"#;
         assert!(migrate_settings(v9).is_err());
+    }
+
+    #[test]
+    fn test_settings_locked_guard() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join(format!("test_settings_locked_{}.json", std::process::id()));
+        let mut settings = AppSettings::new();
+        settings.set_locked(true);
+
+        assert!(settings.save_to_file(&file_path).is_err());
+        assert!(settings.save_to_file_force(&file_path).is_ok());
+
+        let loaded = AppSettings::load_from_file(&file_path).expect("load locked settings");
+        assert!(loaded.is_locked());
+        let _ = std::fs::remove_file(file_path);
     }
 }

@@ -9,16 +9,24 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod options;
 pub mod session;
 pub mod settings;
 pub mod workspace;
 
 pub use error::SessionError;
+pub use options::{
+    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, PictureCompareOptions,
+    SyncCompareOptions, TableCompareOptions, TextCompareOptions,
+};
 pub use session::{
     CURRENT_SESSION_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, migrate,
     migrate_session_config,
 };
-pub use settings::{AppSettings, CURRENT_SETTINGS_SCHEMA_VERSION, migrate_settings};
+pub use settings::{
+    AppSettings, CURRENT_SETTINGS_SCHEMA_VERSION, GrammarPreset, default_grammar_presets,
+    migrate_settings,
+};
 pub use workspace::{
     CURRENT_WORKSPACE_SCHEMA_VERSION, WindowLayout, WorkspaceConfig, WorkspaceDocument,
     migrate_workspace, migrate_workspace_config,
