@@ -1,0 +1,21 @@
+{
+  "name": "text-overunder-960",
+  "intent": "Text-side round 2 at 960px wide: inline span underline reuses TEXT_INLINE_SPAN_UNDERLINE_W (header underline parity, 1px), filler hatch step via SPACE_XS (4px orphan density), over-under (stacked vertical) panes equal full-width (952 each).",
+  "canvas_w": 960.0,
+  "canvas_h": 600.0,
+  "inline_span_underline_px": 1.0,
+  "inline_span_underline_token": "TEXT_INLINE_SPAN_UNDERLINE_W",
+  "header_underline_px": 1.0,
+  "header_underline_token": "TEXT_INLINE_SPAN_UNDERLINE_W",
+  "filler_hatch_step_px": 4.0,
+  "filler_hatch_step_token": "SPACE_XS",
+  "filler_hatch_count_12px": 3,
+  "overunder_panes_px": [952.0, 952.0],
+  "side_by_side_panes_px": [448.0, 448.0],
+  "assertions": {
+    "inline_underline_reuses_theme_token": true,
+    "header_underline_parity": true,
+    "hatch_step_is_space_xs": true,
+    "overunder_panes_equal_at_960": true
+  }
+}

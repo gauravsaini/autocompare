@@ -3990,12 +3990,14 @@ pub struct TextPaneLayout<'a> {
     pub dim: Color32,
 }
 
-/// Intra-line span underline width (px): 1px line jo same mono
+/// Intra-line span underline width (px): [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`]
+/// reuse (1px) — header underline wahi token hai, isliye inline span aur
+/// header underline ek hi weight par rehte hain. 1px line same mono
 /// line-height ke andar rehti hai — row height kabhi nahi badalti.
 /// TypoRole precedent (chrome `strong` = bina size badle emphasis):
 /// span emphasis sirf inversion + is underline se aata hai, naya
 /// size/weight nahi. Pure token; unit-tested.
-pub const INTRA_SPAN_UNDERLINE_W: f32 = 1.0;
+pub const INTRA_SPAN_UNDERLINE_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
 
 /// Changed-word accent underline width (px): double the 1px find line
 /// ([`INTRA_SPAN_UNDERLINE_W`]) so the changed span reads heavier than a
@@ -4656,10 +4658,12 @@ pub fn filler_pad_width(pane: usize, line_len: usize) -> usize {
     pane.saturating_sub(line_len.min(pane))
 }
 
-/// Hatched filler stripe step (px): [`TIGHT_GAP`] reuse, koi naya token
-/// nahi. Pure; unit-tested. Live paint [`paint_filler_hatch`] reuse karta hai.
+/// Hatched filler stripe step (px): [`crate::theme::SPACE_XS`] reuse (4.0,
+/// [`TIGHT_GAP`] parity), koi naya token nahi. Orphan filler hatch isi step
+/// par hai taaki density row rhythm se match kare. Pure; unit-tested.
+/// Live paint [`paint_filler_hatch`] reuse karta hai.
 pub fn filler_hatch_step() -> f32 {
-    TIGHT_GAP
+    crate::theme::SPACE_XS
 }
 
 /// Filler row height (px): locked to the content row rhythm
@@ -4794,6 +4798,24 @@ pub fn text_wide_960_pane_pair() -> (f32, f32) {
 pub fn text_inline_960_total_w() -> f32 {
     let (left, right) = text_pane_pair_widths(960.0);
     left + right + text_center_gutter_width() + 2.0 * SECTION_GAP
+}
+
+/// Over-under (stacked vertical) pane widths (px): narrow layout me dono
+/// panes full-width stack hote hain — ek hi [`text_stacked_pane_width`]
+/// budget dono ko milta hai isliye pair hamesha equal rehta hai. Non-finite
+/// guard callee me hai; ye fn sirf pair banata hai (ponytail reuse, koi
+/// naya magic nahi). Pure; unit-tested.
+pub fn text_overunder_pane_widths(avail: f32) -> (f32, f32) {
+    let w = text_stacked_pane_width(avail);
+    (w, w)
+}
+
+/// Over-under panes at 960px wide: dono full-width stacked panes barabar
+/// (960 − 8 air = 952 each). Fixture
+/// `comparison/text-overunder-960.json` isi ko lock karti hai. Pure;
+/// unit-tested.
+pub fn text_overunder_960_pane_widths() -> (f32, f32) {
+    text_overunder_pane_widths(960.0)
 }
 
 /// Text7 rows-plus-rhythm (exq-text7): generous outer air, even row tops,
@@ -8114,6 +8136,74 @@ mod tests {
         let (lo, hi) = text8_divider_hit_band_960();
         assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
         assert!(((480.0 - lo) - 28.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn text9_spans_plus_overunder_960() {
+        // Mirrors checks/gui-exq-text9/round-1/comparison/text-overunder-960.json:
+        // inline span underline reuses TEXT_INLINE_SPAN_UNDERLINE_W (header
+        // underline parity), filler hatch step via SPACE_XS, over-under
+        // panes equal at 960px wide. Geometry FIRST, typography SECOND,
+        // colors frozen.
+        // Inline underline reuses the theme token (header underline parity).
+        assert_eq!(
+            INTRA_SPAN_UNDERLINE_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(INTRA_SPAN_UNDERLINE_W, 1.0);
+        assert_eq!(
+            span_underline_for_weight(crate::theme::TYPO_WEIGHT_REGULAR),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(
+            span_underline_for_weight(crate::theme::TYPO_WEIGHT_SEMIBOLD),
+            ACCENT_SPAN_UNDERLINE_W
+        );
+        // Filler hatch step via SPACE tokens (TIGHT_GAP parity, orphan density).
+        assert_eq!(filler_hatch_step(), crate::theme::SPACE_XS);
+        assert_eq!(filler_hatch_step(), TIGHT_GAP);
+        assert_eq!(filler_hatch_step(), 4.0);
+        assert_eq!(filler_hatch_count(12.0), 3);
+        // Over-under panes equal at 960px wide (stacked full-width pair).
+        let (over, under) = text_overunder_pane_widths(960.0);
+        assert!((over - under).abs() < 0.001);
+        assert_eq!(text_overunder_960_pane_widths(), (952.0, 952.0));
+        assert_eq!(
+            text_overunder_960_pane_widths(),
+            text_overunder_pane_widths(960.0)
+        );
+        assert_eq!(text_overunder_pane_widths(960.0).0, 952.0);
+    }
+
+    #[test]
+    fn text9_rows_uniform_plus_highlight() {
+        // Mirrors checks/gui-exq-text9/round-1/comparison/edge-rows-uniform.json:
+        // uniform Mono row height across content/filler/selected rows plus
+        // full-width changed-row highlight gate. Geometry FIRST, typography
+        // SECOND (Mono lock), colors frozen.
+        // Mono line-height lock (12 @ 1.30 = 15.6), row rhythm 17.6.
+        assert!((text_row_line_height_px() - TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((text_row_line_height_px() - 15.6).abs() < 0.01);
+        assert!(
+            (text_row_top_rhythm_px() - row_height_for_line(TypoRole::Mono.line_height_px())).abs()
+                < 0.001
+        );
+        assert!((text_row_top_rhythm_px() - 17.6).abs() < 0.01);
+        assert!((filler_row_height() - text_row_top_rhythm_px()).abs() < 0.001);
+        assert!((text8_row_height_px() - text_row_top_rhythm_px()).abs() < 0.001);
+        assert!((filler_row_height() - 17.6).abs() < 0.01);
+        // Wrap reserves stack uniformly on the same beat.
+        let row_h = text_row_top_rhythm_px();
+        assert!((wrap_reserved_height(1, row_h) - row_h).abs() < 0.001);
+        assert!((wrap_reserved_height(2, row_h) - 2.0 * row_h).abs() < 0.001);
+        // Highlight gate: selection band continuous, Changed/Equal plain
+        // base with word-only accent, Deleted/Inserted full-row band.
+        assert!(text_center_gutter_band_fill(true));
+        assert!(!text_center_gutter_band_fill(false));
+        assert!(selective_row_is_plain(TextRowKind::Changed));
+        assert!(selective_row_is_plain(TextRowKind::Equal));
+        assert!(!selective_row_is_plain(TextRowKind::Deleted));
+        assert!(!selective_row_is_plain(TextRowKind::Inserted));
     }
 
     #[test]

@@ -1,0 +1,25 @@
+{
+  "name": "edge-rows-uniform",
+  "intent": "Text-side edge at 960px wide: uniform Mono row height across content/filler/selected rows (15.6 line + ROW_PAD = 17.6) plus full-width changed-row highlight gate (selected band continuous, Changed/Equal plain base with word-only accent, Deleted/Inserted full-row band).",
+  "canvas_w": 960.0,
+  "canvas_h": 600.0,
+  "row_line_height_px": 15.6,
+  "row_line_height_token": "TypoRole::Mono",
+  "row_top_rhythm_px": 17.6,
+  "filler_row_height_px": 17.6,
+  "text8_row_height_px": 17.6,
+  "wrap_reserved_1_px": 17.6,
+  "wrap_reserved_2_px": 35.2,
+  "gutter_band_selected": true,
+  "gutter_band_unselected": false,
+  "selective_plain_changed": true,
+  "selective_plain_equal": true,
+  "selective_plain_deleted": false,
+  "selective_plain_inserted": false,
+  "assertions": {
+    "rows_share_mono_rhythm": true,
+    "filler_matches_content": true,
+    "wrap_stacks_uniformly": true,
+    "highlight_gate_continuous": true
+  }
+}
