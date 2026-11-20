@@ -108,6 +108,8 @@ pub struct WalkOptions {
     pub max_depth: Option<usize>,
     /// Whether to return [`VfsError::SymlinkCycle`] when a cycle is encountered.
     pub refuse_cycles: bool,
+    /// Whether to return [`VfsError::TraversalEscape`] when a symlink escapes root.
+    pub refuse_traversal_escape: bool,
 }
 
 impl Default for WalkOptions {
@@ -116,6 +118,7 @@ impl Default for WalkOptions {
             follow_symlinks: false,
             max_depth: None,
             refuse_cycles: true,
+            refuse_traversal_escape: true,
         }
     }
 }
@@ -128,6 +131,7 @@ impl WalkOptions {
             follow_symlinks: false,
             max_depth: None,
             refuse_cycles: true,
+            refuse_traversal_escape: true,
         }
     }
 
@@ -144,6 +148,7 @@ impl WalkOptions {
             follow_symlinks: false,
             max_depth: Some(1),
             refuse_cycles: true,
+            refuse_traversal_escape: true,
         }
     }
 
@@ -154,6 +159,7 @@ impl WalkOptions {
             follow_symlinks: false,
             max_depth: Some(max_depth),
             refuse_cycles: true,
+            refuse_traversal_escape: true,
         }
     }
 
@@ -175,6 +181,13 @@ impl WalkOptions {
     #[must_use]
     pub const fn with_refuse_cycles(mut self, refuse: bool) -> Self {
         self.refuse_cycles = refuse;
+        self
+    }
+
+    /// Sets whether to refuse symlinks escaping root with [`VfsError::TraversalEscape`].
+    #[must_use]
+    pub const fn with_refuse_traversal_escape(mut self, refuse: bool) -> Self {
+        self.refuse_traversal_escape = refuse;
         self
     }
 }

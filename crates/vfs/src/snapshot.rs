@@ -90,6 +90,54 @@ impl SnapshotDocument {
         self.entries.iter().find(|e| e.path == path)
     }
 
+    /// Finds a mutable reference to an entry by exact relative path string.
+    pub fn find_entry_mut(&mut self, path: &str) -> Option<&mut SnapshotEntry> {
+        self.entries.iter_mut().find(|e| e.path == path)
+    }
+
+    /// Removes an entry by exact relative path string, returning it if found.
+    pub fn remove_entry(&mut self, path: &str) -> Option<SnapshotEntry> {
+        if let Some(idx) = self.entries.iter().position(|e| e.path == path) {
+            Some(self.entries.remove(idx))
+        } else {
+            None
+        }
+    }
+
+    /// Returns entries that have the specified file extension.
+    #[must_use]
+    pub fn entries_with_extension(&self, ext: &str) -> Vec<&SnapshotEntry> {
+        let clean_ext = ext.trim_start_matches('.');
+        self.entries
+            .iter()
+            .filter(|e| {
+                if e.is_dir {
+                    return false;
+                }
+                match e.path.rfind('.') {
+                    Some(idx) if idx > 0 => e
+                        .path
+                        .get(idx.saturating_add(1)..)
+                        .is_some_and(|actual| actual.eq_ignore_ascii_case(clean_ext)),
+                    _ => false,
+                }
+            })
+            .collect()
+    }
+
+    /// Returns entries whose relative path begins with `prefix`.
+    #[must_use]
+    pub fn filter_by_prefix(&self, prefix: &str) -> Vec<&SnapshotEntry> {
+        let norm = prefix.trim_matches('/');
+        if norm.is_empty() {
+            return self.entries.iter().collect();
+        }
+        self.entries
+            .iter()
+            .filter(|e| e.path.starts_with(norm))
+            .collect()
+    }
+
     /// Returns the number of regular file entries in this snapshot.
     #[must_use]
     pub fn file_count(&self) -> usize {
@@ -160,10 +208,57 @@ impl SnapshotDocument {
             unique_right,
         }
     }
+
+    /// Compares two snapshot documents and returns a detailed comparison breakdown.
+    #[must_use]
+    pub fn detailed_diff(&self, other: &Self) -> DetailedSnapshotDiff {
+        let left_map: BTreeMap<&str, &SnapshotEntry> =
+            self.entries.iter().map(|e| (e.path.as_str(), e)).collect();
+        let right_map: BTreeMap<&str, &SnapshotEntry> =
+            other.entries.iter().map(|e| (e.path.as_str(), e)).collect();
+
+        let mut identical = Vec::new();
+        let mut modified = Vec::new();
+        let mut unique_left = Vec::new();
+        let mut unique_right = Vec::new();
+
+        for (path, left_entry) in &left_map {
+            match right_map.get(path) {
+                Some(right_entry) => {
+                    let is_match = left_entry.is_dir == right_entry.is_dir
+                        && left_entry.size == right_entry.size
+                        && (left_entry.crc32.is_none()
+                            || right_entry.crc32.is_none()
+                            || left_entry.crc32 == right_entry.crc32);
+                    if is_match {
+                        identical.push((*path).to_string());
+                    } else {
+                        modified.push((*path).to_string());
+                    }
+                }
+                None => {
+                    unique_left.push((*path).to_string());
+                }
+            }
+        }
+
+        for path in right_map.keys() {
+            if !left_map.contains_key(path) {
+                unique_right.push((*path).to_string());
+            }
+        }
+
+        DetailedSnapshotDiff {
+            identical,
+            modified,
+            unique_left,
+            unique_right,
+        }
+    }
 }
 
 /// Summary metrics comparing two `.bcss` snapshots.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotDiffSummary {
     /// Number of matching entries.
     pub matching: usize,
@@ -173,6 +268,61 @@ pub struct SnapshotDiffSummary {
     pub unique_left: usize,
     /// Number of entries present only in right snapshot.
     pub unique_right: usize,
+}
+
+impl SnapshotDiffSummary {
+    /// Total number of distinct entries compared across both snapshots.
+    #[must_use]
+    pub const fn total_entries(&self) -> usize {
+        self.matching
+            .saturating_add(self.modified)
+            .saturating_add(self.unique_left)
+            .saturating_add(self.unique_right)
+    }
+
+    /// Returns `true` if both snapshots are identical.
+    #[must_use]
+    pub const fn is_identical(&self) -> bool {
+        self.modified == 0 && self.unique_left == 0 && self.unique_right == 0
+    }
+
+    /// Returns `true` if any differences exist between the snapshots.
+    #[must_use]
+    pub const fn has_differences(&self) -> bool {
+        !self.is_identical()
+    }
+}
+
+/// Detailed per-entry difference breakdown comparing two `.bcss` snapshots.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DetailedSnapshotDiff {
+    /// Paths of matching/identical entries.
+    pub identical: Vec<String>,
+    /// Paths of entries modified between snapshots.
+    pub modified: Vec<String>,
+    /// Paths present only in the left snapshot.
+    pub unique_left: Vec<String>,
+    /// Paths present only in the right snapshot.
+    pub unique_right: Vec<String>,
+}
+
+impl DetailedSnapshotDiff {
+    /// Converts this detailed difference into a summary metric.
+    #[must_use]
+    pub fn summary(&self) -> SnapshotDiffSummary {
+        SnapshotDiffSummary {
+            matching: self.identical.len(),
+            modified: self.modified.len(),
+            unique_left: self.unique_left.len(),
+            unique_right: self.unique_right.len(),
+        }
+    }
+
+    /// Returns `true` if both snapshots are identical.
+    #[must_use]
+    pub fn is_identical(&self) -> bool {
+        self.modified.is_empty() && self.unique_left.is_empty() && self.unique_right.is_empty()
+    }
 }
 
 /// A single file or directory record inside a `.bcss` snapshot.
@@ -260,12 +410,42 @@ pub fn create_snapshot(
     root_name: &str,
     description: Option<String>,
 ) -> Result<SnapshotDocument, VfsError> {
-    let options = WalkOptions {
-        follow_symlinks: false,
-        max_depth: None,
-        refuse_cycles: true,
-    };
-    create_snapshot_with_options(vfs, root, root_name, description, &options)
+    create_snapshot_with_options(vfs, root, root_name, description, &WalkOptions::standard())
+}
+
+/// Creates a shallow [`SnapshotDocument`] (max depth 1, immediate children only).
+///
+/// # Errors
+///
+/// Propagates VFS traversal and read errors.
+pub fn create_shallow_snapshot(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    root_name: &str,
+    description: Option<String>,
+) -> Result<SnapshotDocument, VfsError> {
+    create_snapshot_with_options(vfs, root, root_name, description, &WalkOptions::shallow())
+}
+
+/// Creates a deep [`SnapshotDocument`] bounded by `max_depth`.
+///
+/// # Errors
+///
+/// Propagates VFS traversal and read errors.
+pub fn create_deep_snapshot(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    root_name: &str,
+    description: Option<String>,
+    max_depth: usize,
+) -> Result<SnapshotDocument, VfsError> {
+    create_snapshot_with_options(
+        vfs,
+        root,
+        root_name,
+        description,
+        &WalkOptions::bounded(max_depth),
+    )
 }
 
 /// Creates a [`SnapshotDocument`] with custom [`WalkOptions`].

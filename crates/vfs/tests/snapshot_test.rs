@@ -268,6 +268,111 @@ fn test_snapshot_document_diff_summary() {
     assert_eq!(diff.modified, 1);
     assert_eq!(diff.unique_left, 1);
     assert_eq!(diff.unique_right, 1);
+    assert_eq!(diff.total_entries(), 4);
+    assert!(!diff.is_identical());
+    assert!(diff.has_differences());
+
+    let detailed = doc1.detailed_diff(&doc2);
+    assert_eq!(detailed.identical, vec!["same.txt"]);
+    assert_eq!(detailed.modified, vec!["modified.txt"]);
+    assert_eq!(detailed.unique_left, vec!["left_only.txt"]);
+    assert_eq!(detailed.unique_right, vec!["right_only.txt"]);
+    assert_eq!(detailed.summary(), diff);
+    assert!(!detailed.is_identical());
+
+    // Identical snapshots
+    let diff_self = doc1.diff_summary(&doc1);
+    assert!(diff_self.is_identical());
+    assert!(!diff_self.has_differences());
+    assert_eq!(diff_self.matching, 3);
+}
+
+#[test]
+fn test_snapshot_document_entry_helpers() {
+    let mut doc = SnapshotDocument::new("helper_test").with_entries(vec![
+        SnapshotEntry {
+            path: "src/lib.rs".to_string(),
+            is_dir: false,
+            size: 100,
+            modified_epoch_secs: None,
+            crc32: Some(1),
+            readonly: false,
+        },
+        SnapshotEntry {
+            path: "src/main.rs".to_string(),
+            is_dir: false,
+            size: 200,
+            modified_epoch_secs: None,
+            crc32: Some(2),
+            readonly: false,
+        },
+        SnapshotEntry {
+            path: "docs/readme.md".to_string(),
+            is_dir: false,
+            size: 50,
+            modified_epoch_secs: None,
+            crc32: None,
+            readonly: false,
+        },
+    ]);
+
+    // entries_with_extension
+    let rs_entries = doc.entries_with_extension("rs");
+    assert_eq!(rs_entries.len(), 2);
+    let md_entries = doc.entries_with_extension(".MD");
+    assert_eq!(md_entries.len(), 1);
+
+    // filter_by_prefix
+    let src_entries = doc.filter_by_prefix("src");
+    assert_eq!(src_entries.len(), 2);
+
+    // find_entry_mut
+    let entry_mut = doc.find_entry_mut("src/lib.rs").unwrap();
+    entry_mut.size = 150;
+    assert_eq!(doc.find_entry("src/lib.rs").unwrap().size, 150);
+
+    // remove_entry
+    let removed = doc.remove_entry("docs/readme.md").unwrap();
+    assert_eq!(removed.path, "docs/readme.md");
+    assert_eq!(doc.entries.len(), 2);
+    assert!(doc.remove_entry("nonexistent").is_none());
+}
+
+#[test]
+fn test_create_deep_and_shallow_snapshot_functions() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("vfs_snap_deep_shallow_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    let deep = temp_dir.join("a").join("b").join("c");
+    std::fs::create_dir_all(&deep).unwrap();
+    std::fs::write(temp_dir.join("root.txt"), b"root").unwrap();
+    std::fs::write(temp_dir.join("a").join("a.txt"), b"a").unwrap();
+    std::fs::write(temp_dir.join("a").join("b").join("b.txt"), b"b").unwrap();
+    std::fs::write(deep.join("c.txt"), b"c").unwrap();
+
+    let local_vfs = LocalFs::new(&temp_dir).unwrap();
+
+    // 1. Shallow snapshot (depth 1)
+    let shallow = autocompare_vfs::create_shallow_snapshot(
+        &local_vfs,
+        &VfsPath::root(),
+        "shallow_root",
+        None,
+    )
+    .unwrap();
+    assert_eq!(shallow.file_count(), 1); // only root.txt
+    assert!(shallow.find_entry("root.txt").is_some());
+    assert!(shallow.find_entry("a/a.txt").is_none());
+
+    // 2. Deep snapshot bounded by depth 2
+    let deep_snap =
+        autocompare_vfs::create_deep_snapshot(&local_vfs, &VfsPath::root(), "deep_root", None, 2)
+            .unwrap();
+    assert!(deep_snap.find_entry("root.txt").is_some());
+    assert!(deep_snap.find_entry("a/a.txt").is_some());
+    assert!(deep_snap.find_entry("a/b/b.txt").is_none());
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }
 
 #[test]

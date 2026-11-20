@@ -77,11 +77,7 @@ fn test_local_fs_symlink_cycle_refusal() {
     let vfs = LocalFs::new(&temp_dir).unwrap();
 
     // 1. Without following symlinks (default), walk should succeed and NOT loop
-    let options_no_follow = WalkOptions {
-        follow_symlinks: false,
-        max_depth: None,
-        refuse_cycles: true,
-    };
+    let options_no_follow = WalkOptions::standard();
     let entries = vfs.walk(&VfsPath::root(), &options_no_follow).unwrap();
     let sym_entry = entries
         .iter()
@@ -91,11 +87,7 @@ fn test_local_fs_symlink_cycle_refusal() {
     assert!(!sym_entry.meta.is_dir);
 
     // 2. With follow_symlinks = true and refuse_cycles = true, must detect and refuse cycle!
-    let options_follow_refuse = WalkOptions {
-        follow_symlinks: true,
-        max_depth: None,
-        refuse_cycles: true,
-    };
+    let options_follow_refuse = WalkOptions::standard().with_follow_symlinks(true);
     let err = vfs
         .walk(&VfsPath::root(), &options_follow_refuse)
         .unwrap_err();
@@ -105,12 +97,71 @@ fn test_local_fs_symlink_cycle_refusal() {
 }
 
 #[test]
+fn test_local_fs_traversal_escaping_refusal() {
+    let base_temp = std::env::temp_dir();
+    let root_dir = base_temp.join(format!("vfs_test_escape_root_{}", std::process::id()));
+    let outside_dir = base_temp.join(format!("vfs_test_escape_outside_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root_dir);
+    let _ = fs::remove_dir_all(&outside_dir);
+
+    fs::create_dir_all(&root_dir).unwrap();
+    fs::create_dir_all(&outside_dir).unwrap();
+
+    let outside_file = outside_dir.join("secret.txt");
+    fs::write(&outside_file, b"outside secret content").unwrap();
+
+    // 1. Create a symlink to outside file
+    let file_symlink = root_dir.join("link_to_secret");
+    symlink(&outside_file, &file_symlink).unwrap();
+
+    // 2. Create a symlink to outside directory
+    let dir_symlink = root_dir.join("link_to_outside_dir");
+    symlink(&outside_dir, &dir_symlink).unwrap();
+
+    let vfs = LocalFs::new(&root_dir).unwrap();
+    assert!(vfs.canonical_root().is_some());
+
+    // Stat the symlink itself succeeds and reports is_symlink
+    let file_sym_path = VfsPath::new("link_to_secret").unwrap();
+    let meta = vfs.stat(&file_sym_path).unwrap();
+    assert!(meta.is_symlink);
+
+    // Reading stream through the escaping symlink MUST be refused!
+    assert!(matches!(
+        vfs.read_stream(&file_sym_path, 1024),
+        Err(VfsError::TraversalEscape(_))
+    ));
+
+    // Listing directory through the escaping symlink MUST be refused!
+    let dir_sym_path = VfsPath::new("link_to_outside_dir").unwrap();
+    let list_err = vfs.list_dir(&dir_sym_path).unwrap_err();
+    assert!(matches!(list_err, VfsError::TraversalEscape(_)));
+
+    // Writing atomic through the escaping directory symlink MUST be refused!
+    let write_target = VfsPath::new("link_to_outside_dir/injected.txt").unwrap();
+    let write_err = vfs.write_atomic(&write_target, b"evil").unwrap_err();
+    assert!(matches!(write_err, VfsError::TraversalEscape(_)));
+
+    // Stat on a path under the escaping directory symlink MUST be refused!
+    let stat_err = vfs.stat(&write_target).unwrap_err();
+    assert!(matches!(stat_err, VfsError::TraversalEscape(_)));
+
+    // Walking with follow_symlinks: true and refuse_traversal_escape: true MUST refuse!
+    let walk_opt = WalkOptions::standard().with_follow_symlinks(true);
+    let walk_err = vfs.walk(&VfsPath::root(), &walk_opt).unwrap_err();
+    assert!(matches!(walk_err, VfsError::TraversalEscape(_)));
+
+    let _ = fs::remove_dir_all(&root_dir);
+    let _ = fs::remove_dir_all(&outside_dir);
+}
+
+#[test]
 fn test_local_fs_read_only_mode() {
     let temp_dir = std::env::temp_dir().join(format!("vfs_test_ro_{}", std::process::id()));
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).unwrap();
 
-    let vfs = LocalFs::new(&temp_dir).unwrap().with_readonly(true);
+    let mut vfs = LocalFs::new(&temp_dir).unwrap().with_readonly(true);
     assert!(vfs.is_read_only());
 
     let path = VfsPath::new("dummy.txt").unwrap();
@@ -118,6 +169,16 @@ fn test_local_fs_read_only_mode() {
         vfs.write_atomic(&path, b"test"),
         Err(VfsError::ReadOnly)
     ));
+    assert!(matches!(vfs.delete(&path), Err(VfsError::ReadOnly)));
+
+    // Mutate read-only mode in place
+    vfs.set_readonly(false);
+    assert!(!vfs.is_read_only());
+    vfs.write_atomic(&path, b"writable now").unwrap();
+    assert_eq!(vfs.read_all(&path, 1024).unwrap(), b"writable now");
+
+    vfs.set_readonly(true);
+    assert!(vfs.is_read_only());
     assert!(matches!(vfs.delete(&path), Err(VfsError::ReadOnly)));
 
     let _ = fs::remove_dir_all(&temp_dir);

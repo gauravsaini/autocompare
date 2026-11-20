@@ -172,6 +172,70 @@ fn test_tar_corrupted_rejection() {
     let garbage = b"\x1F\x8B\x08\x00corrupted gzip header";
     let res = TarGzFs::from_bytes(garbage);
     assert!(matches!(res, Err(VfsError::CorruptedArchive(_))));
+
+    // Test truncated tar archive
+    let mut truncated = create_sample_tar();
+    truncated.truncate(200); // Truncated mid-header
+    let truncated_res = TarGzFs::from_bytes(&truncated);
+    assert!(matches!(truncated_res, Err(VfsError::CorruptedArchive(_))));
+}
+
+#[test]
+fn test_tar_slip_protection() {
+    let mut builder = Builder::new(Vec::new());
+
+    // 1. Hostile zip-slip entry attempting directory traversal escaping via raw header
+    let mut evil_header = Header::new_gnu();
+    evil_header.set_size(8);
+    evil_header.set_mode(0o644);
+    evil_header.as_mut_bytes()[..13].copy_from_slice(b"../../evil.sh");
+    evil_header.set_cksum();
+    builder
+        .append(&evil_header, std::io::Cursor::new(b"rm -rf /"))
+        .unwrap();
+
+    // 2. Safe entry
+    let mut safe_header = Header::new_gnu();
+    safe_header.set_size(4);
+    safe_header.set_mode(0o644);
+    safe_header.set_cksum();
+    builder
+        .append_data(&mut safe_header, "safe.txt", b"safe".as_slice())
+        .unwrap();
+
+    let tar_bytes = builder.into_inner().unwrap();
+    let vfs = TarGzFs::from_bytes(&tar_bytes).unwrap();
+
+    // evil.sh must be skipped due to path traversal rejection
+    assert_eq!(vfs.file_count(), 1);
+    assert!(vfs.contains(&VfsPath::new("safe.txt").unwrap()));
+    assert!(!vfs.contains(&VfsPath::new("evil.sh").unwrap()));
+}
+
+#[test]
+fn test_tar_extract_to() {
+    let p1 = VfsPath::new("docs/guide.md").unwrap();
+    let p2 = VfsPath::new("version.txt").unwrap();
+    let entries = [
+        (&p1, b"# User Guide".as_slice()),
+        (&p2, b"1.0.0".as_slice()),
+    ];
+
+    let tar_bytes = create_tar_archive(&entries).unwrap();
+    let archive = TarGzFs::from_bytes(&tar_bytes).unwrap();
+
+    let temp_dir = std::env::temp_dir().join(format!("vfs_tar_extract_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let local_dest = LocalFs::new(&temp_dir).unwrap();
+    let count = archive.extract_to(&local_dest, &VfsPath::root()).unwrap();
+    assert_eq!(count, 2);
+
+    assert_eq!(local_dest.read_all(&p1, 1024).unwrap(), b"# User Guide");
+    assert_eq!(local_dest.read_all(&p2, 1024).unwrap(), b"1.0.0");
+
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[test]

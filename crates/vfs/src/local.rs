@@ -19,6 +19,7 @@ static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Clone)]
 pub struct LocalFs {
     root_dir: PathBuf,
+    canonical_root: Option<PathBuf>,
     readonly: bool,
 }
 
@@ -41,17 +42,25 @@ impl LocalFs {
             return Err(VfsError::NotADirectory(VfsPath::root()));
         }
 
+        let canonical_root = fs::canonicalize(&path).ok();
+
         Ok(Self {
             root_dir: path,
+            canonical_root,
             readonly: false,
         })
     }
 
-    /// Sets the read-only mode for this filesystem.
+    /// Sets the read-only mode for this filesystem (builder style).
     #[must_use]
     pub fn with_readonly(mut self, readonly: bool) -> Self {
         self.readonly = readonly;
         self
+    }
+
+    /// Mutates the read-only mode in-place.
+    pub fn set_readonly(&mut self, readonly: bool) {
+        self.readonly = readonly;
     }
 
     /// Returns the root path on the local filesystem.
@@ -60,16 +69,51 @@ impl LocalFs {
         &self.root_dir
     }
 
+    /// Returns the canonicalized root path, if available.
+    #[must_use]
+    pub fn canonical_root(&self) -> Option<&Path> {
+        self.canonical_root.as_deref()
+    }
+
     /// Resolves a [`VfsPath`] to a physical path and verifies it stays inside `root_dir`.
     fn resolve(&self, path: &VfsPath) -> Result<PathBuf, VfsError> {
         let physical = path.to_physical_path(&self.root_dir);
         // Verify prefix containment without following external symlinks
         if !physical.starts_with(&self.root_dir) {
-            return Err(VfsError::InvalidPath(
-                "resolved path escapes root directory".to_string(),
-            ));
+            return Err(VfsError::TraversalEscape(path.clone()));
         }
         Ok(physical)
+    }
+
+    /// Verifies that a target physical path does not escape the canonical root via symlinks.
+    fn check_traversal_escape(&self, physical: &Path, vfs_path: &VfsPath) -> Result<(), VfsError> {
+        if vfs_path.is_root() {
+            return Ok(());
+        }
+        let canon_root = match &self.canonical_root {
+            Some(r) => r,
+            None => return Ok(()),
+        };
+
+        if let Ok(canon) = fs::canonicalize(physical)
+            && !canon.starts_with(canon_root)
+        {
+            return Err(VfsError::TraversalEscape(vfs_path.clone()));
+        } else {
+            let mut curr = physical.parent();
+            while let Some(parent) = curr {
+                if parent.exists() {
+                    if let Ok(canon) = fs::canonicalize(parent)
+                        && !canon.starts_with(canon_root)
+                    {
+                        return Err(VfsError::TraversalEscape(vfs_path.clone()));
+                    }
+                    break;
+                }
+                curr = parent.parent();
+            }
+        }
+        Ok(())
     }
 
     /// Symlink-safe walk that actively detects and refuses symlink cycles.
@@ -92,12 +136,13 @@ impl LocalFs {
         let mut results = Vec::new();
         let mut visited_canonical_dirs = HashSet::new();
 
-        if let Ok(canon_root) = fs::canonicalize(&root_physical) {
-            visited_canonical_dirs.insert(canon_root);
+        let canon_root = fs::canonicalize(&root_physical).ok();
+        if let Some(ref cr) = canon_root {
+            visited_canonical_dirs.insert(cr.clone());
         }
 
         let mut queue = VecDeque::new();
-        queue.push_back((root.clone(), root_physical, 0_usize));
+        queue.push_back((root.clone(), root_physical.clone(), 0_usize));
 
         while let Some((current_vfs, current_phys, current_depth)) = queue.pop_front() {
             if let Some(max) = options.max_depth
@@ -158,9 +203,17 @@ impl LocalFs {
                     }
                     queue.push_back((child_vfs, child_phys, current_depth.saturating_add(1)));
                 } else if is_symlink && options.follow_symlinks {
-                    // Check if symlink target is a directory and whether it forms a cycle
+                    // Check if symlink target is a directory and whether it forms a cycle or escapes root
                     match fs::canonicalize(&child_phys) {
                         Ok(target_canon) => {
+                            if let Some(ref cr) = canon_root
+                                && !target_canon.starts_with(cr)
+                            {
+                                if options.refuse_traversal_escape {
+                                    return Err(VfsError::TraversalEscape(child_vfs));
+                                }
+                                continue;
+                            }
                             if visited_canonical_dirs.contains(&target_canon) {
                                 if options.refuse_cycles {
                                     return Err(VfsError::SymlinkCycle(child_vfs));
@@ -198,6 +251,8 @@ impl LocalFs {
 impl Vfs for LocalFs {
     fn list_dir(&self, path: &VfsPath) -> Result<Vec<VfsEntry>, VfsError> {
         let physical = self.resolve(path)?;
+        self.check_traversal_escape(&physical, path)?;
+
         let meta = fs::metadata(&physical).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => VfsError::NotFound(path.clone()),
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(path.clone()),
@@ -255,6 +310,15 @@ impl Vfs for LocalFs {
 
     fn stat(&self, path: &VfsPath) -> Result<VfsMeta, VfsError> {
         let physical = self.resolve(path)?;
+        if !path.is_root()
+            && let Some(parent) = physical.parent()
+            && let Some(ref canon_root) = self.canonical_root
+            && let Ok(canon_parent) = fs::canonicalize(parent)
+            && !canon_parent.starts_with(canon_root)
+        {
+            return Err(VfsError::TraversalEscape(path.clone()));
+        }
+
         let sym_meta = fs::symlink_metadata(&physical).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => VfsError::NotFound(path.clone()),
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(path.clone()),
@@ -285,6 +349,8 @@ impl Vfs for LocalFs {
         max_bytes: u64,
     ) -> Result<Box<dyn Read + Send>, VfsError> {
         let physical = self.resolve(path)?;
+        self.check_traversal_escape(&physical, path)?;
+
         let meta = fs::metadata(&physical).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => VfsError::NotFound(path.clone()),
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(path.clone()),
@@ -323,6 +389,8 @@ impl Vfs for LocalFs {
         }
 
         let target_phys = self.resolve(path)?;
+        self.check_traversal_escape(&target_phys, path)?;
+
         let parent = target_phys
             .parent()
             .ok_or_else(|| VfsError::InvalidPath("target has no parent directory".to_string()))?;
@@ -375,6 +443,18 @@ impl Vfs for LocalFs {
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(path.clone()),
             _ => VfsError::Io(err),
         })?;
+
+        if sym_meta.file_type().is_symlink() {
+            if let Some(parent) = physical.parent()
+                && let Some(ref canon_root) = self.canonical_root
+                && let Ok(canon_parent) = fs::canonicalize(parent)
+                && !canon_parent.starts_with(canon_root)
+            {
+                return Err(VfsError::TraversalEscape(path.clone()));
+            }
+        } else {
+            self.check_traversal_escape(&physical, path)?;
+        }
 
         if sym_meta.is_dir() {
             fs::remove_dir_all(&physical).map_err(VfsError::Io)?;

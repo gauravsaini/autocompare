@@ -81,13 +81,14 @@ impl TarGzFs {
 
         for entry_res in archive_entries {
             let mut entry = entry_res.map_err(|e| VfsError::CorruptedArchive(e.to_string()))?;
-            let entry_path_raw = entry
-                .path()
-                .map_err(|e| VfsError::CorruptedArchive(e.to_string()))?;
-
-            let path_str = match entry_path_raw.to_str() {
-                Some(s) => s,
-                None => continue, // Skip non-UTF8 paths
+            let path_str = {
+                let entry_path_raw = entry
+                    .path()
+                    .map_err(|e| VfsError::CorruptedArchive(e.to_string()))?;
+                match entry_path_raw.to_str() {
+                    Some(s) => s.to_string(),
+                    None => continue, // Skip non-UTF8 paths
+                }
             };
 
             // Skip pax header records and root
@@ -100,7 +101,7 @@ impl TarGzFs {
                 continue;
             }
 
-            let path = match VfsPath::new(path_str) {
+            let path = match VfsPath::new(&path_str) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
@@ -138,6 +139,12 @@ impl TarGzFs {
                 entry
                     .read_to_end(&mut data)
                     .map_err(|e| VfsError::CorruptedArchive(e.to_string()))?;
+                if (data.len() as u64) != len {
+                    return Err(VfsError::CorruptedArchive(format!(
+                        "truncated tar entry for {path_str}: expected {len} bytes, got {}",
+                        data.len()
+                    )));
+                }
                 Some(Arc::new(data))
             } else {
                 None
@@ -299,6 +306,34 @@ impl TarGzFs {
     /// Returns [`VfsError::CorruptedArchive`] if decompression or tar parsing fails.
     pub fn from_tar_gz_bytes(bytes: &[u8]) -> Result<Self, VfsError> {
         Self::from_bytes(bytes)
+    }
+
+    /// Extracts all files into a destination [`Vfs`].
+    ///
+    /// Preserves directory hierarchies and validates all virtual paths to protect
+    /// against zip-slip traversal escaping.
+    ///
+    /// # Errors
+    ///
+    /// Returns VFS errors on read or write failures.
+    pub fn extract_to(&self, dest: &dyn Vfs, dest_root: &VfsPath) -> Result<usize, VfsError> {
+        let mut extracted = 0_usize;
+        for (path, info) in &self.entries {
+            if info.meta.is_file {
+                let dest_path = if dest_root.is_root() {
+                    path.clone()
+                } else {
+                    dest_root.join(path.as_str())?
+                };
+                let bytes = match &info.content {
+                    Some(arc_bytes) => arc_bytes.as_slice(),
+                    None => continue,
+                };
+                dest.write_atomic(&dest_path, bytes)?;
+                extracted = extracted.saturating_add(1);
+            }
+        }
+        Ok(extracted)
     }
 }
 

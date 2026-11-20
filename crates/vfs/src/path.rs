@@ -73,6 +73,12 @@ impl VfsPath {
         self.0.is_empty()
     }
 
+    /// Returns `true` if this path is empty (refers to root).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.is_root()
+    }
+
     /// Returns the normalized path as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -121,6 +127,39 @@ impl VfsPath {
         }
         let ext_start = dot_idx.saturating_add(1);
         name.get(ext_start..)
+    }
+
+    /// Returns `true` if this path has the given file extension (case-insensitive).
+    #[must_use]
+    pub fn has_extension(&self, ext: &str) -> bool {
+        self.extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext.trim_start_matches('.')))
+    }
+
+    /// Returns a new path with the file name replaced.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::InvalidPath`] if this path is root or the new file name is invalid.
+    pub fn with_file_name(&self, name: &str) -> Result<Self, VfsError> {
+        if self.is_root() {
+            return Err(VfsError::InvalidPath(
+                "cannot set file name on root path".to_string(),
+            ));
+        }
+        if name.is_empty()
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains('\0')
+            || name == ".."
+            || name == "."
+        {
+            return Err(VfsError::InvalidPath(format!("invalid file name: {name}")));
+        }
+        match self.parent() {
+            Some(parent) if !parent.is_root() => parent.join(name),
+            _ => Self::new(name),
+        }
     }
 
     /// Returns the stem of the file (name without extension).
@@ -243,6 +282,32 @@ impl VfsPath {
             result.push(component);
         }
         result
+    }
+
+    /// Returns an iterator yielding this path and each of its ancestors up to root.
+    #[must_use]
+    pub fn ancestors(&self) -> VfsPathAncestors {
+        VfsPathAncestors {
+            current: Some(self.clone()),
+        }
+    }
+}
+
+/// An iterator over [`VfsPath`] and its ancestors up to root.
+#[derive(Debug, Clone)]
+pub struct VfsPathAncestors {
+    current: Option<VfsPath>,
+}
+
+impl Iterator for VfsPathAncestors {
+    type Item = VfsPath;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.current.take()?;
+        if !curr.is_root() {
+            self.current = curr.parent();
+        }
+        Some(curr)
     }
 }
 

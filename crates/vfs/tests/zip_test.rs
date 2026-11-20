@@ -198,3 +198,29 @@ fn test_archive_fs_zip_polymorphic() {
     assert!(archive.as_zip().is_some());
     assert!(archive.as_tar_gz().is_none());
 }
+
+#[test]
+fn test_zip_extract_to() {
+    let p1 = VfsPath::new("src/main.rs").unwrap();
+    let p2 = VfsPath::new("README.md").unwrap();
+    let entries = [
+        (&p1, b"fn main() {}".as_slice()),
+        (&p2, b"# Project".as_slice()),
+    ];
+
+    let zip_bytes = create_zip_archive(&entries).unwrap();
+    let archive = ArchiveFs::from_bytes(&zip_bytes).unwrap();
+
+    let temp_dir = std::env::temp_dir().join(format!("vfs_zip_extract_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let local_dest = LocalFs::new(&temp_dir).unwrap();
+    let count = archive.extract_to(&local_dest, &VfsPath::root()).unwrap();
+    assert_eq!(count, 2);
+
+    assert_eq!(local_dest.read_all(&p1, 1024).unwrap(), b"fn main() {}");
+    assert_eq!(local_dest.read_all(&p2, 1024).unwrap(), b"# Project");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

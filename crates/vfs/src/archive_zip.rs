@@ -329,6 +329,31 @@ impl ZipFs {
     pub fn file_names(&self) -> Vec<VfsPath> {
         self.all_paths()
     }
+
+    /// Extracts all files into a destination [`Vfs`].
+    ///
+    /// Preserves directory hierarchies and validates all virtual paths to protect
+    /// against zip-slip traversal escaping.
+    ///
+    /// # Errors
+    ///
+    /// Returns VFS errors on read or write failures.
+    pub fn extract_to(&self, dest: &dyn Vfs, dest_root: &VfsPath) -> Result<usize, VfsError> {
+        let mut extracted = 0_usize;
+        for (path, item) in &self.entries {
+            if item.meta.is_file {
+                let dest_path = if dest_root.is_root() {
+                    path.clone()
+                } else {
+                    dest_root.join(path.as_str())?
+                };
+                let bytes = self.read_all(path, u64::MAX)?;
+                dest.write_atomic(&dest_path, &bytes)?;
+                extracted = extracted.saturating_add(1);
+            }
+        }
+        Ok(extracted)
+    }
 }
 
 impl Vfs for ZipFs {
@@ -371,7 +396,7 @@ impl Vfs for ZipFs {
             .get(path)
             .ok_or_else(|| VfsError::NotFound(path.clone()))?;
 
-        if item.meta.is_dir {
+        if item.meta.is_dir || item.meta.is_symlink {
             return Err(VfsError::NotAFile(path.clone()));
         }
 
@@ -566,6 +591,21 @@ impl ArchiveFs {
         match self {
             Self::Zip(_) => None,
             Self::TarGz(fs) => Some(fs),
+        }
+    }
+
+    /// Extracts all files from this archive into a destination [`Vfs`].
+    ///
+    /// Preserves directory hierarchies and validates all virtual paths to protect
+    /// against zip-slip traversal escaping.
+    ///
+    /// # Errors
+    ///
+    /// Returns VFS errors on read or write failures.
+    pub fn extract_to(&self, dest: &dyn Vfs, dest_root: &VfsPath) -> Result<usize, VfsError> {
+        match self {
+            Self::Zip(fs) => fs.extract_to(dest, dest_root),
+            Self::TarGz(fs) => fs.extract_to(dest, dest_root),
         }
     }
 }

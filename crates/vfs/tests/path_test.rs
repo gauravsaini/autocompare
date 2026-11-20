@@ -63,3 +63,30 @@ fn hostile_depth_and_prefix_helpers_stay_total() {
     );
     assert!(sibling.strip_prefix(&base).is_none());
 }
+
+#[test]
+fn test_path_extensions_and_ancestors() {
+    let path = VfsPath::new("src/components/button.tsx").expect("valid path");
+    assert!(path.has_extension("tsx"));
+    assert!(path.has_extension(".TSX"));
+    assert!(!path.has_extension("ts"));
+    assert_eq!(path.file_stem(), Some("button"));
+
+    // with_file_name
+    let renamed = path.with_file_name("input.tsx").expect("rename");
+    assert_eq!(renamed.as_str(), "src/components/input.tsx");
+
+    // ancestors
+    let anc: Vec<_> = path.ancestors().map(|p| p.to_string()).collect();
+    assert_eq!(
+        anc,
+        vec!["src/components/button.tsx", "src/components", "src", "/"]
+    );
+
+    // root checks
+    let root = VfsPath::root();
+    assert!(root.is_empty());
+    assert!(root.is_root());
+    let root_anc: Vec<_> = root.ancestors().map(|p| p.to_string()).collect();
+    assert_eq!(root_anc, vec!["/"]);
+}

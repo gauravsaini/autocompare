@@ -26,6 +26,8 @@ pub enum VfsError {
     InvalidPath(String),
     /// Symlink cycle or loop was detected during traversal.
     SymlinkCycle(VfsPath),
+    /// Symlink or path traversal escaped the root directory boundary.
+    TraversalEscape(VfsPath),
     /// File size exceeded the requested maximum byte budget.
     FileTooLarge {
         /// Path to the oversized file.
@@ -61,6 +63,9 @@ impl fmt::Display for VfsError {
             Self::NotAFile(path) => write!(f, "not a file: {path}"),
             Self::InvalidPath(msg) => write!(f, "invalid path: {msg}"),
             Self::SymlinkCycle(path) => write!(f, "symlink cycle detected at: {path}"),
+            Self::TraversalEscape(path) => {
+                write!(f, "traversal escaping root directory detected at: {path}")
+            }
             Self::FileTooLarge {
                 path,
                 max_bytes,
