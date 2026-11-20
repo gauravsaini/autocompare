@@ -7,14 +7,14 @@ Release binaries build, smoke test, packaging, aur checksum verification complet
 
 ## 2. Key Metrics
 - Progress: 100% (6/6 gates met)
-- Build profile: `release` [optimized] via cargo in 2m 40s
+- Build profile: `release` [optimized] via cargo in isolated `/tmp/target-agyx-binmix`
 - Binary sizes:
   - `autocompare` CLI: 1,720,016 bytes (~1.72 MB)
   - `autocompare-gui` GUI: 12,014,752 bytes (~12.01 MB)
 - Package tarballs:
-  - `autocompare-cli-0.5.0-macos-arm64.tar.gz`: 766,834 bytes (~749 KB)
-  - `autocompare-gui-0.5.0-macos-arm64.tar.gz`: 5,124,402 bytes (~4.9 MB)
-  - `autocompare-0.5.0-macos-arm64.tar.gz`: 5,885,027 bytes (~5.6 MB)
+  - `autocompare-cli-0.5.0-macos-arm64.tar.gz`: 766,837 bytes (~749 KB)
+  - `autocompare-gui-0.5.0-macos-arm64.tar.gz`: 5,124,407 bytes (~4.9 MB)
+  - `autocompare-0.5.0-macos-arm64.tar.gz`: 5,887,022 bytes (~5.6 MB)
 - GUI Screenshot: 960 x 600 PNG, 9,765 bytes, magic `89 50 4e 47 0d 0a 1a 0a` verified
 
 ## 3. Highlights
