@@ -19,7 +19,7 @@
     "VFS-D6": "landed 3164bba verified+pushed (strict: 23 green, clippy 0)",
     "CLI-G2": "running (OWNS cli)",
     "EXQ-TYPO3": "landed 5d2e389 verified+pushed (strict: 677 green, clippy 0)",
-    "EXQ-GEO2": "running (OWNS views/tree/home/app)",
+    "EXQ-GEO2": "landed 664c506 verified+pushed (strict: 678 green, fmt+clippy 0)",
     "LOCALRUN-early": "landed a6bb8e8 pushed (docs-only, zero source)",
     "BINARY-early": "landed c8b491e pushed + draft release v0.5.0-early (tarballs attached)"
   }
