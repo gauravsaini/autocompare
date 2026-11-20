@@ -2670,6 +2670,161 @@ pub fn hex_wide_960_visible_rows() -> u64 {
     hex_visible_rows(470.0, hex_wide_row_h())
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex4 round-1: even byte grid plus offset
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC hex half: BC hex compare has an even byte grid (every byte cell
+// the same width), an offset gutter aligned to the ruler, and an ASCII
+// pane in sync; ours had uneven gaps (midline math inline, gutter pads
+// ad-hoc). Geometry FIRST:
+// - Row height locked to `TypoRole::Mono.line_height_px` (15.6px):
+//   `hex_even_row_h` / `hex_offset_row_h` both delegate to
+//   `hex_grid_row_h` so byte rows, ruler rows and offset-gutter rows
+//   share one vertical rhythm at 960px wide.
+// - Byte col widths from char metrics: `hex_byte_col_step_w` (3 chars)
+//   is the even step, `hex_offset_gutter_text_w` (10 ruler chars) and
+//   ASCII cols (1 char) come from the same `char_w`, so columns never
+//   drift per-pane.
+// - Offset gutter from SPACE tokens: `hex_offset_gutter_pad` reuses
+//   `GEO_TIGHT_GAP` (`SPACE_XS`, 4.0px), `hex_offset_gutter_gap` reuses
+//   `GEO_SECTION_GAP` (`SPACE_SM`, 8.0px); the gutter box is text plus
+//   symmetric pads, the gutter-to-grid gap is the ruler Grid gap.
+// Typography SECOND: gutter + grid + ASCII all Mono
+// (`hex_offset_text_role` reuse), labels stay Body — koi naya size/token
+// nahi. Colors FROZEN: koi Color32/Visuals nahi. No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Offset-gutter inner pad per side (px): one tight gap (`SPACE_XS`, 4.0).
+/// Single source so the offset box never drifts from ruler Grid gaps.
+/// Pure; unit-tested.
+pub fn hex_offset_gutter_pad() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Offset-gutter to byte-grid gap (px): one section gap (`SPACE_SM`, 8.0).
+/// Same single source as the ruler/body Grid gap (`hex_ruler_grid_gap_x`).
+/// Pure; unit-tested.
+pub fn hex_offset_gutter_gap() -> f32 {
+    crate::theme::GEO_SECTION_GAP
+}
+
+/// Offset-gutter text width (px): 10 ruler chars x `char_w`.
+/// Bad `char_w` yields 0.0 (paint honest fallback). Pure; unit-tested.
+pub fn hex_offset_gutter_text_w(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    let w = (HEX_RULER_CHARS as f32) * char_w;
+    if !w.is_finite() || w <= 0.0 {
+        return 0.0;
+    }
+    w
+}
+
+/// Offset-gutter outer box width (px): text plus symmetric SPACE pads.
+/// Bad `char_w` keeps the pad floor so the click target never vanishes.
+/// Pure; unit-tested.
+pub fn hex_offset_gutter_w(char_w: f32) -> f32 {
+    hex_offset_gutter_text_w(char_w) + 2.0 * hex_offset_gutter_pad()
+}
+
+/// Even byte-col step (px): 3 chars (`XX `) x `char_w`.
+/// Every byte cell 0..15 starts on a multiple of this step except the
+/// shared one-char midline shift at col 8. Bad `char_w` yields 0.0.
+/// Pure; unit-tested.
+pub fn hex_byte_col_step_w(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    let w = 3.0 * char_w;
+    if !w.is_finite() || w <= 0.0 {
+        return 0.0;
+    }
+    w
+}
+
+/// Even grid row height (px): `hex_grid_row_h` reuse (Mono 15.6).
+/// Byte rows share one rhythm so gaps stay even vertically. Pure.
+pub fn hex_even_row_h() -> f32 {
+    hex_grid_row_h()
+}
+
+/// Offset-gutter row height (px): same single source, so the offset
+/// gutter never desyncs from byte rows. Pure; unit-tested.
+pub fn hex_offset_row_h() -> f32 {
+    hex_grid_row_h()
+}
+
+/// Offset-gutter + grid text role: Mono (ruler/cells precedent reuse).
+/// Koi naya size/token nahi. Pure.
+pub const fn hex_offset_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Even-grid check at `char_w`: col 0 at 0, cols 1..7 step evenly by
+/// `hex_byte_col_step_w`, col 8 shifted by exactly one midline char,
+/// cols 8..15 step evenly again, and ruler cols match byte cols.
+/// Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_even_grid_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let step = hex_byte_col_step_w(char_w);
+    if !step.is_finite() || step <= 0.0 {
+        return false;
+    }
+    let gap = hex_nibble_group_gap_w(char_w);
+    if !gap.is_finite() || gap <= 0.0 {
+        return false;
+    }
+    if (gap - char_w).abs() > 0.001 {
+        return false;
+    }
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        let Some(x) = hex_grid_byte_col_x(col, char_w) else {
+            return false;
+        };
+        let Some(rx) = hex_ruler_col_x(col, char_w) else {
+            return false;
+        };
+        if (x - rx).abs() > 0.001 {
+            return false;
+        }
+        let want = if col < HEX_BYTES_PER_ROW / 2 {
+            (col as f32) * step
+        } else {
+            (col as f32) * step + gap
+        };
+        if (x - want).abs() > 0.001 {
+            return false;
+        }
+        col = col.saturating_add(1);
+    }
+    true
+}
+
+/// ASCII-in-sync check at `char_w`: cols 0..15 sit at `(1 + col) * char_w`
+/// (one pipe char lead) with an even one-char step, matching the body
+/// ASCII cell shape. Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_ascii_sync_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        let Some(x) = hex_grid_ascii_col_x(col, char_w) else {
+            return false;
+        };
+        let want = ((col.saturating_add(1)) as f32) * char_w;
+        if (x - want).abs() > 0.001 {
+            return false;
+        }
+        col = col.saturating_add(1);
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4555,5 +4710,68 @@ mod tests {
             28.0 // 4 chars (3 + 1 midline gap) * 7.0px = 28.0px
         );
         assert_eq!(hex_ruler_col_x(16, char_w), None);
+    }
+
+    #[test]
+    fn hex_exq_hex4_grid_plus_offset_wide_960() {
+        // Headless test proving edge fixture comparison/hex-wide-960.json:
+        // even byte grid (3-char step from char metrics), offset gutter
+        // from SPACE tokens, row height locked to Mono at 960px wide.
+        let fixture_raw = include_str!("../../../checks/gui-exq-hex4/comparison/hex-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex4/round-1/comparison/hex-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"offset_gutter_w\": 78.0"));
+        assert!(fixture_raw.contains("\"byte_col_step_px\": 21.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 30"));
+        // 1. Row height locked to Mono (grid + ruler + offset share one rhythm).
+        assert!((hex_even_row_h() - 15.6).abs() < 0.001);
+        assert!((hex_offset_row_h() - hex_grid_row_h()).abs() < 0.001);
+        assert!((hex_offset_row_h() - hex_ruler_row_h()).abs() < 0.001);
+        assert!((hex_even_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((hex_wide_row_h() - hex_even_row_h()).abs() < 0.001);
+        assert_eq!(hex_layout_mode(HEX_CANVAS_W), HexLayoutMode::SideBySide);
+        assert_eq!(hex_wide_960_visible_rows(), 30);
+        // 2. Byte col widths from char metrics (even 3-char step, 7px char).
+        let char_w = 7.0;
+        assert_eq!(hex_byte_col_step_w(char_w), 21.0);
+        assert_eq!(hex_byte_col_step_w(0.0), 0.0);
+        assert_eq!(hex_byte_col_step_w(f32::NAN), 0.0);
+        assert_eq!(hex_grid_byte_col_x(0, char_w), Some(0.0));
+        assert_eq!(hex_grid_byte_col_x(7, char_w), Some(147.0));
+        assert_eq!(hex_grid_byte_col_x(8, char_w), Some(175.0));
+        assert_eq!(
+            hex_grid_byte_col_x(8, char_w).unwrap_or(0.0)
+                - hex_grid_byte_col_x(7, char_w).unwrap_or(0.0),
+            28.0
+        );
+        assert!(hex_even_grid_ok(char_w));
+        assert!(!hex_even_grid_ok(0.0));
+        assert!(!hex_even_grid_ok(f32::NAN));
+        // 3. Offset gutter from SPACE tokens at 960px wide.
+        assert_eq!(hex_offset_gutter_pad(), crate::theme::SPACE_XS);
+        assert_eq!(hex_offset_gutter_pad(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(hex_offset_gutter_pad(), 4.0);
+        assert_eq!(hex_offset_gutter_gap(), crate::theme::SPACE_SM);
+        assert_eq!(hex_offset_gutter_gap(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(hex_offset_gutter_gap(), 8.0);
+        assert_eq!(hex_offset_gutter_text_w(char_w), 70.0);
+        assert_eq!(hex_offset_gutter_text_w(0.0), 0.0);
+        assert_eq!(hex_offset_gutter_w(char_w), 78.0);
+        assert_eq!(hex_grid_avail_w(960.0, false), 908.0);
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        // 4. ASCII pane in sync (even 1-char step behind the pipe).
+        assert!(hex_ascii_sync_ok(char_w));
+        assert!(!hex_ascii_sync_ok(0.0));
+        assert_eq!(hex_grid_ascii_col_x(0, char_w), Some(7.0));
+        assert_eq!(hex_grid_ascii_col_x(15, char_w), Some(112.0));
+        // Typo second: gutter + grid + ASCII all Mono, no new sizes.
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
     }
 }
