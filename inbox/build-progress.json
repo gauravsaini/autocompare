@@ -8,7 +8,7 @@
     "AGYX-B-sessions": "landed",
     "AGYX-C-diff": "landed",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
-    "VFS-D": "D3 compile-fix done (cargo check green), gates running",
+    "VFS-D": "b940f34 landed-local HELD (9 clippy style warnings), D4 fix-forward launched (sess-vfs-d4)",
     "SYNC-E": "progressing (folder+sync+folder_merge+jobs M)",
     "MEDIA-F": "progressing (diff/image.rs re-added decoders)",
     "CLI-G": "process ended, 5 files M uncommitted preserved, rescue after E/F/D3 land",

@@ -1645,3 +1645,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `32b36a0` docs(localrun): 35 files, OWNS checks/gui-localrun-r7 only, source zero touch.
 - Gates: 674 tests green, PNG 19/19 magic+size PASS, harness RESULT PASS, fixtures byte-stable vs round-6, STATUS untouched. Pushed origin/main.
 - Unblocks: EXQ-GEO + EXQ-TYPO exquisite fix waves (launch gate passed).
+
+## 2026-11-20 — VFS-D3 landed locally HELD + D4 fix-forward launched
+- Commit `b940f34` feat(vfs): 10 files OWNS-clean, tests 18/18 green in isolated worktree, fmt clean, banned zero. HELD from push: 9 clippy `io_other_error` style warnings in new trait_def.rs code (D3 claimed zero, actual 9).
+- Worktree has half-finished follow-ups (tests want `ArchiveFs` enum, lib exports `Archive`) + unknown-author unstaged vfs edits; second writer suspected (BQ actor or post-commit D3). Nothing touched; safety backup step ordered first.
+- D4 (sess-vfs-d4): backup patch, reconcile rename-or-revert (smaller one), Error::other fix, full gates, commit NO PUSH. Push b940f34+D4 together after green.
