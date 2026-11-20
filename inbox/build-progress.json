@@ -71,7 +71,10 @@
     "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)",
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
     "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace",
-    "VFS-DEPTH2": "verified+landed e9dc316 pushed (symlink safety, archive extract_to, snapshot diffs; 34 green, clippy 0, fmt clean)"
+    "VFS-DEPTH2": "verified+landed e9dc316 pushed (symlink safety, archive extract_to, snapshot diffs; 34 green, clippy 0, fmt clean)",
+    "LOCALRUN-5": "running opencode sess-localrun-5 (OWNS checks/early-feedback-5, CLI 10 cmds + 960x600 PNG + TOP-10 geo-typo vs live BC, no source)",
+    "BINARY-4": "running opencode sess-binary-4 (OWNS checks/binary-4, release tarball + sha256 6/6, no source)",
+    "EXQ5-GEO": "running opencode sess-exq5-geo (OWNS crates/gui + round-exq5, geometry first + typography, colors FROZEN, clean-worktree verify if dirty churn)"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
