@@ -9128,6 +9128,64 @@ mod tests {
     }
 
     #[test]
+    fn paint13_center_1200_gap_plus_markers_plus_floor() {
+        // Mirrors checks/gui-exq-paint13/round-1/comparison/paint-center-1200.json:
+        // visible ~20px center gutter gap between panes with yellow '=>'
+        // markers only on changed-row hunk heads, plus canvas floor filled
+        // below last row. Geometry from existing helpers only, no new
+        // widths; colors frozen (band/marker reuse CHANGED pair).
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-paint13/round-1/comparison/paint-center-1200.json"
+        );
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"marker_box\": 16.0"));
+        assert!(fixture_raw.contains("\"marker_inset\": 2.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"marker_label_Changed\": \"=>\""));
+        // Gap width: 20px center column from SPACE scale, gutter helpers.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(
+            text_center_gutter_width(),
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(TEXT_CENTER_GUTTER_W, 20.0);
+        // Marker box/inset/slop reuse gutter helpers, no new widths.
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(
+            text_center_marker_content_w(),
+            crate::gutter::GUTTER_ARROW_BOX
+        );
+        assert_eq!(text_center_marker_inset(), 2.0);
+        assert_eq!(
+            text_center_marker_inset(),
+            crate::gutter::center_row_marker_inset(20.0, 16.0)
+        );
+        assert_eq!(text_center_hit_slop_px(), 2.0);
+        assert_eq!(
+            text_center_hit_slop_px(),
+            crate::gutter::GUTTER_ARROW_HIT_SLOP
+        );
+        // 1200 pane pair: 582/582 + 20 + 2*8 = 1200, column 590, cx 600.
+        assert_eq!(text_pane_pair_widths(1200.0), (582.0, 582.0));
+        assert_eq!(text_center_column_x_for_avail(1200.0), 590.0);
+        assert!((text_center_arrow_cx_for_avail(1200.0) - 600.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_for_avail(1200.0), (588.0, 612.0));
+        // Marker rows: diff kinds show '=>', Equal blanks; hunk heads only.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert!(text_center_hunk_marker(TextRowKind::Changed));
+        assert!(!text_center_hunk_marker(TextRowKind::Equal));
+        // Floor below last row: balanced trailing blanks fill canvas.
+        let row_h = text_row_top_rhythm_px();
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9), 16);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9) % 2, 0);
+    }
+
+    #[test]
     fn text_layout_breakpoint_reuses_viewport_min_and_guards() {
         // Mirrors checks/gui-exq-text2/comparison/*.json canvases.
         assert_eq!(TEXT_STACK_BREAKPOINT_W, 720.0);
