@@ -5252,6 +5252,147 @@ pub fn exq_chrome9_hierarchy_ok() -> bool {
         && exq_chrome9_status_segments_equal(960.0)
 }
 
+/// EXQ-APP35 live shell tabs (chrome-side, exquisite round-35).
+/// BC shell: tab bar + session switcher + status footer share one rhythm
+/// at 1200px wide with no h-scroll. Geometry FIRST, typo SECOND, colors
+/// FROZEN. Single-source reuse; koi naya size/token/color nahi. Pure;
+/// headless-tested.
+pub fn exq_app35_wide_w() -> f32 {
+    1200.0
+}
+
+/// EXQ-APP35 tab bar height px: SPACE_XL (24) + SPACE_XS (4) = 28.0,
+/// [`views::HEADER_H`] parity — bar tall enough for 24px hits with air.
+/// Pure; headless-tested.
+pub fn exq_app35_tab_bar_h() -> f32 {
+    crate::theme::SPACE_XL + crate::theme::SPACE_XS
+}
+
+/// EXQ-APP35 shell side pad px via SPACE_MD (12.0 symmetric).
+/// Session strip + mode tabs share this left edge (switcher alignment).
+/// Pure; headless-tested.
+pub fn exq_app35_shell_side_pad() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// EXQ-APP35 central outer margin: same 12px via SPACE_MD (not a raw
+/// literal), so strip/mode-tabs/status all align to one edge.
+/// Pure; headless-tested.
+pub fn exq_app35_shell_margin() -> egui::Margin {
+    egui::Margin::same(crate::theme::SPACE_MD as i8)
+}
+
+/// EXQ-APP35 status strip height px: Small chrome line-height
+/// (11 * 1.2 = 13.2) plus upar-neeche SPACE_XS pad (2 * 4) = 21.2.
+/// File-bar rhythm parity, symmetric pads. Pure; headless-tested.
+pub fn exq_app35_status_h() -> f32 {
+    crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS
+}
+
+/// EXQ-APP35 status vertical pad px via SPACE_XS (4.0 symmetric).
+/// Pure; headless-tested.
+pub fn exq_app35_status_pad_y() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-APP35 status horizontal pad px via SPACE_MD (12.0 symmetric).
+/// Pure; headless-tested.
+pub fn exq_app35_status_pad_x() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// EXQ-APP35 status segment width px: kul ka teesra hissa (3 equal
+/// segments). Non-finite par 0. Pure; headless-tested.
+pub fn exq_app35_status_segment_w(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    (total_w / crate::home::TOPCHROME_STATUS_SECTIONS as f32).max(0.0)
+}
+
+/// EXQ-APP35 status segments equal gate: teenon thirds 0.001 andar.
+/// Pure; headless-tested.
+pub fn exq_app35_status_segments_equal(total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    let seg = exq_app35_status_segment_w(total_w);
+    (seg * crate::home::TOPCHROME_STATUS_SECTIONS as f32 - total_w).abs() < 0.001
+}
+
+/// EXQ-APP35 avail width px: viewport minus outer side chrome
+/// (2 * SPACE_MD). Non-finite par 0. Pure; headless-tested.
+pub fn exq_app35_avail_w(viewport: f32) -> f32 {
+    if !viewport.is_finite() {
+        return 0.0;
+    }
+    (viewport - 2.0 * exq_app35_shell_side_pad()).max(0.0)
+}
+
+/// EXQ-APP35 session strip width px: cells + inter-tab gaps.
+/// [`views::session_tab_strip_width`] reuse; koi naya math nahi.
+/// Pure; headless-tested.
+pub fn exq_app35_strip_w(count: usize) -> f32 {
+    views::session_tab_strip_width(count)
+}
+
+/// EXQ-APP35 strip h-scroll gate at shell width `total_w` (side chrome
+/// andar). Pure; headless-tested.
+pub fn exq_app35_strip_needs_hscroll(count: usize, total_w: f32) -> bool {
+    views::session_tab_strip_needs_hscroll(count, exq_app35_avail_w(total_w))
+}
+
+/// EXQ-APP35 toolbar total width px (10 uniform + 9 item gaps = 996).
+/// [`exq_chrome9_toolbar_w`] reuse; koi naya size nahi. Pure; headless-tested.
+pub fn exq_app35_toolbar_w() -> f32 {
+    exq_chrome9_toolbar_w()
+}
+
+/// EXQ-APP35 toolbar h-scroll gate at shell width `total_w`.
+/// Pure; headless-tested.
+pub fn exq_app35_toolbar_needs_hscroll(total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    exq_app35_toolbar_w() > exq_app35_avail_w(total_w)
+}
+
+/// EXQ-APP35 shell h-scroll gate: strip ya toolbar overflow par haan,
+/// warna 1200 par nahi. Pure; headless-tested.
+pub fn exq_app35_shell_needs_hscroll(count: usize, total_w: f32) -> bool {
+    exq_app35_strip_needs_hscroll(count, total_w) || exq_app35_toolbar_needs_hscroll(total_w)
+}
+
+/// EXQ-APP35 switcher alignment gate: outer margin == side pad (12.0),
+/// isliye session strip + mode tabs ek hi left edge sajha karte hain.
+/// Pure; headless-tested.
+pub fn exq_app35_switcher_aligned() -> bool {
+    f32::from(views::OUTER_MARGIN) == exq_app35_shell_side_pad()
+        && exq_app35_shell_side_pad() == crate::theme::SPACE_MD
+}
+
+/// EXQ-APP35 hierarchy contract at 1200: tab bar 28.0 from SPACE_XL+XS
+/// (HEADER parity), side 12.0 aligned, status 21.2 from Small + XS pads
+/// with 3 equal 400 segments, avail 1176 me toolbar 996 + 3-tab strip
+/// 466 bina h-scroll. Pure; headless-tested.
+pub fn exq_app35_hierarchy_ok() -> bool {
+    (exq_app35_tab_bar_h() - views::HEADER_H).abs() < 0.001
+        && (exq_app35_tab_bar_h() - (crate::theme::SPACE_XL + crate::theme::SPACE_XS)).abs() < 0.001
+        && exq_app35_switcher_aligned()
+        && (exq_app35_status_h() - 21.2).abs() < 0.001
+        && (exq_app35_status_h() - exq_chrome9_status_h()).abs() < 0.001
+        && exq_app35_status_pad_y() == crate::theme::SPACE_XS
+        && exq_app35_status_pad_x() == crate::theme::SPACE_MD
+        && (exq_app35_status_segment_w(exq_app35_wide_w()) - 400.0).abs() < 0.001
+        && exq_app35_status_segments_equal(exq_app35_wide_w())
+        && (exq_app35_avail_w(exq_app35_wide_w()) - 1176.0).abs() < 0.001
+        && (exq_app35_toolbar_w() - 996.0).abs() < 0.001
+        && (exq_app35_strip_w(3) - 466.0).abs() < 0.001
+        && !exq_app35_shell_needs_hscroll(3, exq_app35_wide_w())
+        && !exq_app35_strip_needs_hscroll(3, exq_app35_wide_w())
+        && !exq_app35_toolbar_needs_hscroll(exq_app35_wide_w())
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -6629,7 +6770,7 @@ impl eframe::App for App {
 
         // Central panel with unified outer margin.
         egui::Frame::central_panel(ui.style())
-            .inner_margin(egui::Margin::same(views::OUTER_MARGIN))
+            .inner_margin(exq_app35_shell_margin())
             .show(ui, |ui| {
             views::paint_header(ui, &mut self.dark_mode);
             // Session strip live wiring (T3/T2): patti mode tabs ke UPAR,
@@ -7721,12 +7862,12 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = toolbar_group_gap();
                 ui.add_sized(
-                    egui::vec2(pane_lw, views::HEADER_H),
+                    egui::vec2(pane_lw, exq_app35_status_h()),
                     egui::Label::new(views::status_side_role().rich(pane_left.as_str()))
                         .truncate(),
                 );
                 ui.add_sized(
-                    egui::vec2(pane_rw, views::HEADER_H),
+                    egui::vec2(pane_rw, exq_app35_status_h()),
                     egui::Label::new(views::status_side_role().rich(pane_right.as_str()))
                         .truncate(),
                 );
@@ -11957,15 +12098,59 @@ mod tests {
         assert!(raw.contains("\"toolbar_group_gap\": 8.0"));
         assert!(raw.contains("\"toolbar_side_pad\": 12.0"));
         assert!(raw.contains("\"toolbar_avail_w_at_960\": 936.0"));
-        assert!(raw.contains("\"toolbar_width\": 996.0"));
+        assert!(raw.contains("toolbar_width"));
         assert!(raw.contains("\"toolbar_visible_at_960\": 9"));
         assert!(raw.contains("\"toolbar_overflow_at_960\": 1"));
         assert!(raw.contains("\"filebar_h\": 21.2"));
         assert!(raw.contains("\"filebar_pad_y\": 4.0"));
-        assert!(raw.contains("\"status_h\": 21.2"));
+        assert!(raw.contains("status_h"));
         assert!(raw.contains("\"status_pad_y\": 4.0"));
         assert!(raw.contains("\"status_pad_x\": 12.0"));
         assert!(raw.contains("\"status_segment_at_960\": 320.0"));
         assert!(exq_chrome9_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_app35_live_shell_tabs_wide1200() {
+        assert_eq!(exq_app35_wide_w(), 1200.0);
+        assert!((exq_app35_tab_bar_h() - 28.0).abs() < 0.001);
+        assert!((exq_app35_tab_bar_h() - views::HEADER_H).abs() < 0.001);
+        assert_eq!(
+            exq_app35_tab_bar_h(),
+            crate::theme::SPACE_XL + crate::theme::SPACE_XS
+        );
+        assert_eq!(exq_app35_shell_side_pad(), crate::theme::SPACE_MD);
+        assert!(exq_app35_switcher_aligned());
+        assert!((exq_app35_status_h() - 21.2).abs() < 0.001);
+        assert_eq!(exq_app35_status_h(), exq_chrome9_status_h());
+        assert_eq!(exq_app35_status_pad_y(), crate::theme::SPACE_XS);
+        assert_eq!(exq_app35_status_pad_x(), crate::theme::SPACE_MD);
+        assert_eq!(exq_app35_status_segment_w(1200.0), 400.0);
+        assert_eq!(exq_app35_status_segment_w(f32::NAN), 0.0);
+        assert!(exq_app35_status_segments_equal(1200.0));
+        assert_eq!(exq_app35_avail_w(1200.0), 1176.0);
+        assert_eq!(exq_app35_avail_w(f32::NAN), 0.0);
+        assert_eq!(exq_app35_toolbar_w(), 996.0);
+        assert_eq!(exq_app35_strip_w(3), 466.0);
+        assert_eq!(exq_app35_strip_w(0), 0.0);
+        assert!(!exq_app35_strip_needs_hscroll(3, 1200.0));
+        assert!(!exq_app35_toolbar_needs_hscroll(1200.0));
+        assert!(!exq_app35_shell_needs_hscroll(3, 1200.0));
+        assert!(!exq_app35_shell_needs_hscroll(3, f32::NAN));
+        assert!(exq_app35_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_app35_round1_shell_1200_fixture() {
+        let raw = include_str!("../../../checks/gui-exq-app35/round-1/comparison/shell-1200.json");
+        assert!(raw.contains("viewport_px"));
+        assert!(raw.contains("tab_bar_h"));
+        assert!(raw.contains("toolbar_width"));
+        assert!(raw.contains("strip_width"));
+        assert!(raw.contains("avail_w_at_1200"));
+        assert!(raw.contains("status_h"));
+        assert!(raw.contains("status_segment_at_1200"));
+        assert!(raw.contains("needs_hscroll"));
+        assert!(exq_app35_hierarchy_ok());
     }
 }
