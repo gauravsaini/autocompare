@@ -1,0 +1,35 @@
+{
+  "name": "text-wide-960",
+  "intent": "Text-side round-8 at 960px wide: row height locked to Mono line-height (15.6 + ROW_PAD = 17.6), inner pad symmetric via SPACE_XS (4), line-num widths via char metrics (digits * 7 + 8), center gap via SPACE_SM (8 per side), divider hit-slop symmetric (452..508 around center 480).",
+  "canvas_w": 960.0,
+  "canvas_h": 600.0,
+  "mono_line_height": 15.6,
+  "row_height": 17.6,
+  "filler_row_height": 17.6,
+  "inner_pad_px": 4.0,
+  "inner_pad_token": "SPACE_XS",
+  "center_gap_px": 8.0,
+  "center_gap_token": "SPACE_SM",
+  "center_gutter_px": 48.0,
+  "pane_pair_px": [448.0, 448.0],
+  "row_alignment_total_w": 960.0,
+  "linenum_width_px": {
+    "char_w": 7.0,
+    "digits_2": 22.0,
+    "digits_3": 29.0,
+    "digits_4": 36.0
+  },
+  "divider_hit_slop_px": 4.0,
+  "divider_hit_band_960": [452.0, 508.0],
+  "divider_center_960": 480.0,
+  "assertions": {
+    "row_height_locked_to_mono": true,
+    "filler_matches_content_rhythm": true,
+    "inner_pad_is_space_xs": true,
+    "center_gap_is_space_sm": true,
+    "linenum_widths_from_char_metrics": true,
+    "panes_equal_width_at_960": true,
+    "alignment_at_960": true,
+    "divider_hit_slop_symmetric_at_960": true
+  }
+}

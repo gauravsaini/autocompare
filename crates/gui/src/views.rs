@@ -4854,6 +4854,65 @@ pub fn text_rows_960_total_w() -> f32 {
     text_inline_960_total_w()
 }
 
+/// Text8 inner pad (px): one XS step ([`crate::theme::SPACE_XS`] = 4)
+/// — comfortable row inner air symmetric on both sides of the number
+/// column and code (`2 * pad` per row width math). [`TIGHT_GAP`] parity.
+/// Pure; unit-tested.
+pub fn text8_inner_pad_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Text8 center gap (px): one SM step ([`crate::theme::SPACE_SM`] = 8)
+/// per side — divider air symmetric left/right of the 48px center
+/// gutter ([`text_center_divider_gap_px`] reuse, [`SECTION_GAP`] parity).
+/// Pure; unit-tested.
+pub fn text8_center_gap_px() -> f32 {
+    text_center_divider_gap_px()
+}
+
+/// Text8 row height (px): locked to [`TypoRole::Mono`] line-height via
+/// [`text_row_top_rhythm_px`] (15.6 + [`ROW_PAD`] = 17.6) — filler rows
+/// ([`filler_row_height`]) same beat, tops share one grid. Pure;
+/// unit-tested.
+pub fn text8_row_height_px() -> f32 {
+    text_row_top_rhythm_px()
+}
+
+/// Text8 line-number column width (px) via char metrics: `digits` mono
+/// advances plus symmetric inner pad both sides (`2 * pad`) so numbers
+/// stay right-aligned without clipping the code. Non-finite or
+/// non-positive `char_w` falls back to pad-only (paint never NaN).
+/// Pure; unit-tested.
+pub fn text8_linenum_width_px(digits: usize, char_w: f32) -> f32 {
+    let pad = text8_inner_pad_px();
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 2.0 * pad;
+    }
+    digits as f32 * char_w + 2.0 * pad
+}
+
+/// Text8 divider hit-slop (px): one XS step symmetric on both edges of
+/// the center gutter so the thin visual grabs like a wide target
+/// ([`TIGHT_GAP`] parity, 48px column + slop each side). Pure;
+/// unit-tested.
+pub fn text8_divider_hit_slop_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Text8 divider hit band at 960px wide: 48px center gutter spans
+/// 456..504 (448 pane + 8 air each side), hit expands by slop each side
+/// → 452..508, symmetric around canvas center 480 by construction.
+/// Pure; unit-tested.
+pub fn text8_divider_hit_band_960() -> (f32, f32) {
+    let slop = text8_divider_hit_slop_px();
+    let (left, _) = text_pane_pair_widths(960.0);
+    let gap = text8_center_gap_px();
+    let gutter = text_center_gutter_width();
+    let gutter_lo = left + gap;
+    let gutter_hi = gutter_lo + gutter;
+    (gutter_lo - slop, gutter_hi + slop)
+}
+
 /// No-truncation gate at 960: line pane me samati hai jab char count
 /// budget (`pane`) ke andar ho — [`pane_segments`] parity (limit ke andar
 /// poori line, koi `<` cut nahi); wrap-off h-scroll isi gate ke bahar
@@ -8016,6 +8075,45 @@ mod tests {
             );
         }
         assert_eq!(text_minimap_marker_band_960(0, 0), None);
+    }
+
+    #[test]
+    fn text8_wide_960_rows_plus_divider() {
+        // Mirrors checks/gui-exq-text8/round-1/comparison/text-wide-960.json:
+        // row height locked to Mono line-height, inner pad via SPACE_XS,
+        // line-num widths via char metrics, center gap via SPACE_SM,
+        // divider hit-slop symmetric at 960px wide. Geometry FIRST,
+        // typography SECOND (Mono lock), colors frozen.
+        // Row height locked to Mono line-height (15.6 + ROW_PAD = 17.6).
+        assert!((text8_row_height_px() - text_row_top_rhythm_px()).abs() < 0.001);
+        assert!((text8_row_height_px() - 17.6).abs() < 0.01);
+        assert!((text_row_line_height_px() - TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((filler_row_height() - text8_row_height_px()).abs() < 0.001);
+        // Inner pad via SPACE_XS symmetric (TIGHT_GAP parity).
+        assert_eq!(text8_inner_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(text8_inner_pad_px(), TIGHT_GAP);
+        assert_eq!(text8_inner_pad_px(), 4.0);
+        // Center gap via SPACE_SM per side (SECTION_GAP parity).
+        assert_eq!(text8_center_gap_px(), crate::theme::SPACE_SM);
+        assert_eq!(text8_center_gap_px(), SECTION_GAP);
+        assert_eq!(text8_center_gap_px(), 8.0);
+        assert_eq!(text_center_gutter_width(), 48.0);
+        // Line-num widths via char metrics (digits * char_w + 2 * pad).
+        assert!((text8_linenum_width_px(2, 7.0) - 22.0).abs() < 0.001);
+        assert!((text8_linenum_width_px(3, 7.0) - 29.0).abs() < 0.001);
+        assert!((text8_linenum_width_px(4, 7.0) - 36.0).abs() < 0.001);
+        assert_eq!(text8_linenum_width_px(2, f32::NAN), 8.0);
+        assert_eq!(text8_linenum_width_px(0, 7.0), 8.0);
+        // Pane pair + total at 960: 448 + 448 + 48 + 2 * 8 = 960.
+        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
+        // Divider hit-slop symmetric at 960: 452..508 around center 480.
+        assert_eq!(text8_divider_hit_slop_px(), crate::theme::SPACE_XS);
+        assert_eq!(text8_divider_hit_slop_px(), 4.0);
+        assert_eq!(text8_divider_hit_band_960(), (452.0, 508.0));
+        let (lo, hi) = text8_divider_hit_band_960();
+        assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
+        assert!(((480.0 - lo) - 28.0).abs() < 0.001);
     }
 
     #[test]
