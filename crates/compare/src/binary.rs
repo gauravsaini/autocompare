@@ -130,9 +130,7 @@ pub(crate) fn files_equal_cancellable(
     let mut lreader = open_buffered(left)?;
     let mut rreader = open_buffered(right)?;
     loop {
-        if let Some(c) = cancel
-            && c.load(Ordering::Relaxed)
-        {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
             return Err(Error::Cancelled);
         }
         let (llen, rlen, equal) = {
@@ -407,4 +405,28 @@ fn slice_at(bytes: &[u8], offset: u64, len: usize) -> Vec<u8> {
     let start = (offset as usize).min(bytes.len());
     let end = start.saturating_add(len).min(bytes.len());
     bytes.get(start..end).unwrap_or(&[]).to_vec()
+}
+
+/// Reads up to `max_len` bytes from a file starting at a 64-bit byte offset (64-bit Go To).
+#[allow(dead_code)]
+pub fn read_bytes_at_offset(path: &Path, offset: u64, max_len: usize) -> Result<Vec<u8>> {
+    let mut reader = open_buffered(path)?;
+    seek_to(&mut reader, offset, path)?;
+    read_up_to(&mut reader, max_len, path)
+}
+
+/// Loads a file into an editable [`autocompare_diff::hex::ByteEditBuffer`].
+#[allow(dead_code)]
+pub fn load_byte_edit_buffer(path: &Path) -> Result<autocompare_diff::hex::ByteEditBuffer> {
+    let bytes = read_capped(path)?;
+    Ok(autocompare_diff::hex::ByteEditBuffer::new(bytes))
+}
+
+/// Writes an edited [`autocompare_diff::hex::ByteEditBuffer`] back to the filesystem.
+#[allow(dead_code)]
+pub fn apply_byte_buffer_to_file(
+    path: &Path,
+    buffer: &autocompare_diff::hex::ByteEditBuffer,
+) -> Result<()> {
+    std::fs::write(path, buffer.as_slice()).map_err(|e| io_error(path, e))
 }
