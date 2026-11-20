@@ -4178,6 +4178,24 @@ pub fn toolbar_group_gap() -> f32 {
     views::SECTION_GAP
 }
 
+/// CHROME9: mode-tabs h-scroll gate (width only). `views::paint_tabs`
+/// ke 10 fixed buttons tang window par sikudte nahi — caller unhe
+/// horizontal `ScrollArea` me rakhta hai taaki session strip (jo andar
+/// se scroll karti hai) jaisa behave ho. Gate existing
+/// [`LAYOUT_NARROW_BREAKPOINT`] reuse; koi naya size/token nahi.
+/// Pure; headless-tested.
+pub fn chrome_mode_tabs_need_hscroll(avail: f32) -> bool {
+    layout_is_narrow(avail)
+}
+
+/// CHROME9: toolbar h-scroll gate (width only).
+/// [`views::action_bar_needs_hscroll`] reuse — row 1 / row 2 dono isi
+/// floor par, caller ka scroll faisla yahi se. Koi naya token nahi.
+/// Pure; headless-tested.
+pub fn chrome_toolbar_needs_hscroll(avail: f32) -> bool {
+    views::action_bar_needs_hscroll(avail)
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -5567,8 +5585,17 @@ impl eframe::App for App {
             // to `set_tab` se adopt (same-kind switch / fresh-kind open,
             // switch se pehle T5/T6 save andar). Direct `&mut self.tab`
             // bypass ab nahi (CALLER 07a8db8 follow-up).
+            // CHROME9 dense tabs (BC session-tabs air): mode patti bhi
+            // session strip jaisi horizontal `ScrollArea` me taaki tang
+            // window par 10 buttons sikuden nahi, scroll karen. Width
+            // gate [`chrome_mode_tabs_need_hscroll`] se; gaps/typo callee
+            // tokens me, koi naya color/size nahi.
             let mut picked_tab = self.tab;
-            views::paint_tabs(ui, &mut picked_tab);
+            egui::ScrollArea::horizontal()
+                .id_salt("chrome_mode_tabs")
+                .show(ui, |ui| {
+                    views::paint_tabs(ui, &mut picked_tab);
+                });
             if picked_tab != self.tab {
                 self.set_tab(picked_tab);
             }
@@ -5578,7 +5605,10 @@ impl eframe::App for App {
 
             // Two-row chrome (BC top-bar air): row 1 session action bar
             // (Swap/Reload + Prev/Next jump cluster + N/M badge + 1:1
-            // readout andar hi), row 2 view toggles. Gaps toolbar tokens
+            // readout andar hi), row 2 view toggles left-docked.
+            // CHROME9 dense: toggles row ka leading indent + separator
+            // hata — checkboxes Swap/Reload ke left edge se shuru hote
+            // hain (alignment fix, 16px hawa khatm). Gaps toolbar tokens
             // reuse; koi naya color/size nahi.
             let toolbar_active = self.tab != Tab::Home;
             let nav = self.chrome_nav_state();
@@ -5616,9 +5646,6 @@ impl eframe::App for App {
             ui.add_space(views::action_bar_row_gap());
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = toolbar_item_gap();
-                ui.add_space(toolbar_group_gap());
-                ui.separator();
-                ui.add_space(toolbar_group_gap());
                 let mut wrap = self.word_wrap;
                 if ui.checkbox(&mut wrap, "Word Wrap").changed() {
                     self.set_word_wrap(wrap);
@@ -9691,6 +9718,28 @@ mod tests {
         assert!(toolbar_item_gap().is_finite() && toolbar_item_gap() > 0.0);
         assert!(toolbar_group_gap().is_finite() && toolbar_group_gap() > 0.0);
         assert!(toolbar_group_gap() > toolbar_item_gap());
+    }
+
+    #[test]
+    fn chrome9_mode_tabs_hscroll_uses_narrow_breakpoint() {
+        assert!(chrome_mode_tabs_need_hscroll(700.0));
+        assert!(chrome_mode_tabs_need_hscroll(899.0));
+        assert!(!chrome_mode_tabs_need_hscroll(900.0));
+        assert!(!chrome_mode_tabs_need_hscroll(1280.0));
+    }
+
+    #[test]
+    fn chrome9_toolbar_hscroll_mirrors_action_bar_floor() {
+        assert_eq!(
+            chrome_toolbar_needs_hscroll(180.0),
+            crate::views::action_bar_needs_hscroll(180.0)
+        );
+        assert_eq!(
+            chrome_toolbar_needs_hscroll(700.0),
+            crate::views::action_bar_needs_hscroll(700.0)
+        );
+        assert!(!chrome_toolbar_needs_hscroll(f32::NAN));
+        assert!(!chrome_toolbar_needs_hscroll(0.0));
     }
 
     #[test]
