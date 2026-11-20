@@ -1,7 +1,7 @@
 //! Report generation and format dispatch for autocompare CLI.
 //!
 //! Converts session diff outcomes into structured reports (HTML, Plain Text,
-//! XML, Unified Patch) and writes them to disk.
+//! XML, Unified Patch, Context Patch) and writes them to disk.
 
 use std::path::{Path, PathBuf};
 
@@ -17,12 +17,20 @@ pub use crate::report_adapter_media::*;
 pub enum ReportFormat {
     /// Full-featured HTML report with color styling.
     Html,
+    /// Full-featured HTML report with color styling (explicit alias).
+    HtmlColor,
+    /// Monochrome / printer-friendly HTML report without color highlights.
+    HtmlMono,
     /// Human-readable plain text report.
     Text,
     /// Machine-readable XML report.
     Xml,
     /// Standard unified diff patch format.
     Patch,
+    /// Standard unified diff patch format (explicit alias).
+    UnifiedPatch,
+    /// Context diff patch format.
+    ContextPatch,
 }
 
 impl ReportFormat {
@@ -30,9 +38,12 @@ impl ReportFormat {
     pub fn parse_str(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
             "html" | "htm" => Some(Self::Html),
+            "html-color" | "color-html" => Some(Self::HtmlColor),
+            "html-mono" | "mono-html" | "mono" => Some(Self::HtmlMono),
             "text" | "txt" => Some(Self::Text),
             "xml" => Some(Self::Xml),
-            "patch" | "diff" => Some(Self::Patch),
+            "patch" | "diff" | "unified" | "unified-patch" => Some(Self::Patch),
+            "context" | "context-patch" => Some(Self::ContextPatch),
             _ => None,
         }
     }
@@ -91,16 +102,27 @@ impl ReportSpec {
     }
 }
 
-/// Formats and writes report document according to specification.
-pub fn write_report(spec: &ReportSpec, input: &ReportInput) -> Result<(), CliError> {
-    let rendered = match spec.format {
-        ReportFormat::Html => {
+/// Renders a diff report into a formatted string according to the specification.
+pub fn render_report(spec: &ReportSpec, input: &ReportInput) -> String {
+    match spec.format {
+        ReportFormat::Html | ReportFormat::HtmlColor => {
             autocompare_reports::render_html(input, autocompare_reports::HtmlTheme::Color)
+        }
+        ReportFormat::HtmlMono => {
+            autocompare_reports::render_html(input, autocompare_reports::HtmlTheme::Mono)
         }
         ReportFormat::Text => autocompare_reports::render_text(input),
         ReportFormat::Xml => autocompare_reports::render_xml(input),
-        ReportFormat::Patch => autocompare_reports::render_unified_patch(input),
-    };
+        ReportFormat::Patch | ReportFormat::UnifiedPatch => {
+            autocompare_reports::render_unified_patch(input)
+        }
+        ReportFormat::ContextPatch => autocompare_reports::render_context_patch(input),
+    }
+}
+
+/// Formats and writes report document according to specification.
+pub fn write_report(spec: &ReportSpec, input: &ReportInput) -> Result<(), CliError> {
+    let rendered = render_report(spec, input);
 
     if let Some(parent) = spec.path.parent()
         && !parent.as_os_str().is_empty()

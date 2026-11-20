@@ -5,6 +5,8 @@
 
 use clap::{Parser, Subcommand};
 
+pub use crate::outcome::ExitCodeMode;
+
 /// When to emit ANSI color sequences in output.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ColorWhen {
@@ -50,6 +52,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub ro: bool,
 
+    /// Read-only mode for left input.
+    #[arg(long, global = true)]
+    pub ro1: bool,
+
+    /// Read-only mode for right input.
+    #[arg(long, global = true)]
+    pub ro2: bool,
+
     /// Automatically merge when there are no conflicts.
     #[arg(long, global = true)]
     pub automerge: bool,
@@ -74,6 +84,22 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub vcs4: Option<String>,
 
+    /// VCS title/label for left / first input.
+    #[arg(long, global = true)]
+    pub title1: Option<String>,
+
+    /// VCS title/label for right / second input.
+    #[arg(long, global = true)]
+    pub title2: Option<String>,
+
+    /// VCS title/label for center / base input.
+    #[arg(long, global = true)]
+    pub title3: Option<String>,
+
+    /// VCS title/label for output input.
+    #[arg(long, global = true)]
+    pub title4: Option<String>,
+
     /// Path to a session document to load and execute.
     #[arg(long, global = true)]
     pub session: Option<String>,
@@ -82,9 +108,49 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub save_session: Option<String>,
 
+    /// Exit code convention mode: diff (0/1/2) or bc (Beyond Compare return codes).
+    #[arg(long, value_enum, default_value_t = ExitCodeMode::Diff, global = true)]
+    pub exit_code_mode: ExitCodeMode,
+
+    /// Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts).
+    #[arg(long, global = true)]
+    pub bc_exit_code: bool,
+
+    /// Title override for comparison reports.
+    #[arg(long, global = true)]
+    pub report_title: Option<String>,
+
+    /// Run in a separate solo process without reusing background instances.
+    #[arg(long, global = true)]
+    pub solo: bool,
+
+    /// Suppress backup file creation during merge/save operations.
+    #[arg(long, global = true)]
+    pub nobackups: bool,
+
+    /// Automatically review conflicts in interactive mode if present.
+    #[arg(long, global = true)]
+    pub reviewconflicts: bool,
+
     /// Comparison subcommand to run.
     #[command(subcommand)]
     pub command: Option<Command>,
+}
+
+impl Cli {
+    /// Determines active exit code convention mode.
+    pub fn effective_exit_code_mode(&self) -> ExitCodeMode {
+        if self.bc_exit_code {
+            ExitCodeMode::BeyondCompare
+        } else {
+            self.exit_code_mode
+        }
+    }
+
+    /// Whether any read-only flag is active.
+    pub fn is_read_only(&self) -> bool {
+        self.ro || self.ro1 || self.ro2
+    }
 }
 
 /// Comparison and merge subcommands.
@@ -97,16 +163,16 @@ pub enum Command {
         /// Right file path.
         right: String,
         /// Ignore differences in letter case.
-        #[arg(long)]
+        #[arg(long, short = 'i')]
         ignore_case: bool,
         /// Ignore whitespace differences inside lines.
-        #[arg(long)]
+        #[arg(long, short = 'b')]
         ignore_space_change: bool,
         /// Print a unified diff instead of side-by-side.
-        #[arg(long)]
+        #[arg(long, short = 'u')]
         unified: bool,
         /// Total width of the side-by-side view.
-        #[arg(long, default_value_t = 80)]
+        #[arg(long, short = 'w', default_value_t = 80)]
         width: usize,
     },
     /// Compare two folder trees recursively by size and modified time.
@@ -119,10 +185,10 @@ pub enum Command {
         #[arg(long)]
         content: bool,
         /// Match file names case-insensitively.
-        #[arg(long)]
+        #[arg(long, short = 'i')]
         ignore_case: bool,
         /// Only walk this many levels deep.
-        #[arg(long, default_value_t = 32)]
+        #[arg(long, short = 'd', default_value_t = 32)]
         depth: usize,
         /// Only compare names matching this simple glob ('*' and '?').
         #[arg(long)]
@@ -130,6 +196,9 @@ pub enum Command {
         /// Skip names matching this simple glob ('*' and '?').
         #[arg(long)]
         exclude: Option<String>,
+        /// Explicit recursive walk flag (folder comparison is recursive by default).
+        #[arg(long, short = 'r')]
+        recursive: bool,
     },
     /// Compare two files byte by byte.
     Hex {
@@ -214,5 +283,10 @@ pub enum Command {
         left: String,
         /// Right file path.
         right: String,
+    },
+    /// Load and run a saved comparison session.
+    Session {
+        /// Path to the session document.
+        path: String,
     },
 }

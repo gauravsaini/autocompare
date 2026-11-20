@@ -22,6 +22,9 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
         ));
     };
 
+    let mode = cli.effective_exit_code_mode();
+    let is_ro = cli.is_read_only();
+
     match command {
         Command::Text {
             left,
@@ -43,10 +46,15 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 render_text::side_by_side(&cmp, *width, color);
             }
             if let Some(spec) = report {
-                write_report(spec, &crate::report::text_report_input(left, right, &cmp))?;
+                let mut input = crate::report::text_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "text", left, right, cli.ro)?;
-            Ok(render_text::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "text", left, right, is_ro)?;
+            let raw_outcome = render_text::outcome(&cmp);
+            Ok(raw_outcome.to_mode(mode))
         }
         Command::Folder {
             left,
@@ -56,6 +64,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             depth,
             include,
             exclude,
+            recursive: _,
         } => {
             let opts = autocompare_compare::FolderOptions {
                 content_compare: *content,
@@ -68,10 +77,15 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 autocompare_compare::compare_folders(Path::new(left), Path::new(right), &opts)?;
             render_folder::print(&cmp, color);
             if let Some(spec) = report {
-                write_report(spec, &crate::report::folder_report_input(left, right, &cmp))?;
+                let mut input = crate::report::folder_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "folder", left, right, cli.ro)?;
-            Ok(render_folder::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "folder", left, right, is_ro)?;
+            let raw_outcome = render_folder::outcome(&cmp);
+            Ok(raw_outcome.to_mode(mode))
         }
         Command::Hex {
             left,
@@ -85,10 +99,15 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             )?;
             render_hex::print(&cmp, color);
             if let Some(spec) = report {
-                write_report(spec, &crate::report::hex_report_input(left, right, &cmp))?;
+                let mut input = crate::report::hex_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "hex", left, right, cli.ro)?;
-            Ok(render_hex::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "hex", left, right, is_ro)?;
+            let is_diff = !cmp.hunks.is_empty();
+            Ok(Outcome::for_binary(is_diff, mode))
         }
         Command::Merge {
             base,
@@ -97,7 +116,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             output,
         } => {
             let out_dest = cli.mergeoutput.as_ref().or(output.as_ref());
-            if cli.ro && out_dest.is_some() {
+            if is_ro && out_dest.is_some() {
                 return Err(CliError::ReadOnly(
                     "cannot write merge in read-only mode".into(),
                 ));
@@ -115,16 +134,14 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 eprintln!("autocompare: the merge has conflicts");
             }
             if let Some(spec) = report {
-                write_report(
-                    spec,
-                    &crate::report::merge_report_input(base, left, right, &merged),
-                )?;
+                let mut input = crate::report::merge_report_input(base, left, right, &merged);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            Ok(if conflicted {
-                Outcome::Different
-            } else {
-                Outcome::Same
-            })
+            save_tab(cli.save_session.as_deref(), "merge", left, right, is_ro)?;
+            Ok(Outcome::for_merge(conflicted, mode))
         }
         Command::Table {
             left,
@@ -140,10 +157,15 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 autocompare_compare::compare_table_files(Path::new(left), Path::new(right), &opts)?;
             render_table::print(&cmp, color);
             if let Some(spec) = report {
-                write_report(spec, &crate::report::table_report_input(left, right, &cmp))?;
+                let mut input = crate::report::table_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "table", left, right, cli.ro)?;
-            Ok(render_table::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "table", left, right, is_ro)?;
+            let raw_outcome = render_table::outcome(&cmp);
+            Ok(raw_outcome.to_mode(mode))
         }
         Command::Sync {
             left,
@@ -152,7 +174,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             prune,
             apply,
         } => {
-            if cli.ro && *apply {
+            if is_ro && *apply {
                 return Err(CliError::ReadOnly(
                     "cannot apply sync in read-only mode".into(),
                 ));
@@ -169,8 +191,13 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             let plan = autocompare_compare::plan_sync(Path::new(left), Path::new(right), &opts)?;
             render_sync::print_plan(&plan, color);
             if let Some(spec) = report {
-                write_report(spec, &crate::report::sync_report_input(left, right, &plan))?;
+                let mut input = crate::report::sync_report_input(left, right, &plan);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
+            save_tab(cli.save_session.as_deref(), "sync", left, right, is_ro)?;
             if !apply {
                 println!(
                     "{}",
@@ -180,20 +207,14 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                         "dry run: nothing changed (pass --apply to run)"
                     )
                 );
-                Ok(if plan.steps.is_empty() {
-                    Outcome::Same
-                } else {
-                    Outcome::Different
-                })
+                let diff = !plan.steps.is_empty();
+                Ok(Outcome::for_diff(diff, mode))
             } else {
                 let rep =
                     autocompare_compare::apply_sync(Path::new(left), Path::new(right), &plan)?;
                 render_sync::print_report(&rep, color);
-                Ok(if rep.failed.is_empty() {
-                    Outcome::Same
-                } else {
-                    Outcome::Different
-                })
+                let diff = !rep.failed.is_empty();
+                Ok(Outcome::for_diff(diff, mode))
             }
         }
         Command::Picture {
@@ -211,13 +232,15 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             )?;
             render_picture::print(&cmp, color, heatmap.as_deref());
             if let Some(spec) = report {
-                write_report(
-                    spec,
-                    &crate::report::picture_report_input(left, right, &cmp),
-                )?;
+                let mut input = crate::report::picture_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "picture", left, right, cli.ro)?;
-            Ok(render_picture::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "picture", left, right, is_ro)?;
+            let raw_outcome = render_picture::outcome(&cmp);
+            Ok(raw_outcome.to_mode(mode))
         }
         Command::FolderMerge {
             base,
@@ -227,7 +250,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             apply,
         } => {
             let out_dest = cli.mergeoutput.as_ref().or(output.as_ref());
-            if cli.ro && *apply {
+            if is_ro && *apply {
                 return Err(CliError::ReadOnly(
                     "cannot apply folder merge in read-only mode".into(),
                 ));
@@ -239,11 +262,19 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             )?;
             render_foldermerge::print_plan(&plan, color);
             if let Some(spec) = report {
-                write_report(
-                    spec,
-                    &crate::report::foldermerge_report_input(base, left, right, &plan),
-                )?;
+                let mut input = crate::report::foldermerge_report_input(base, left, right, &plan);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
+            save_tab(
+                cli.save_session.as_deref(),
+                "folder-merge",
+                left,
+                right,
+                is_ro,
+            )?;
             if !apply {
                 println!(
                     "{}",
@@ -253,11 +284,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                         "dry run: nothing written (pass --apply and --output to run)"
                     )
                 );
-                Ok(if plan.steps.is_empty() && plan.skipped.is_empty() {
-                    Outcome::Same
-                } else {
-                    Outcome::Different
-                })
+                let diff = !plan.steps.is_empty() || !plan.skipped.is_empty();
+                Ok(Outcome::for_merge(!plan.conflicts.is_empty() || diff, mode))
             } else {
                 let Some(out) = out_dest else {
                     return Err(CliError::InvalidArg(
@@ -271,21 +299,28 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                     Path::new(out),
                 )?;
                 render_foldermerge::print_report(&rep, color);
-                Ok(if rep.failed.is_empty() && plan.conflicts.is_empty() {
-                    Outcome::Same
-                } else {
-                    Outcome::Different
-                })
+                let diff = !rep.failed.is_empty() || !plan.conflicts.is_empty();
+                Ok(Outcome::for_merge(diff, mode))
             }
         }
         Command::Audio { left, right } => {
             let cmp = autocompare_compare::compare_audio_files(Path::new(left), Path::new(right))?;
             render_audio::print(&cmp, color);
             if let Some(spec) = report {
-                write_report(spec, &crate::report::audio_report_input(left, right, &cmp))?;
+                let mut input = crate::report::audio_report_input(left, right, &cmp);
+                if let Some(ref title) = cli.report_title {
+                    input.title = title.clone();
+                }
+                write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "audio", left, right, cli.ro)?;
-            Ok(render_audio::outcome(&cmp))
+            save_tab(cli.save_session.as_deref(), "audio", left, right, is_ro)?;
+            let raw_outcome = render_audio::outcome(&cmp);
+            Ok(raw_outcome.to_mode(mode))
+        }
+        Command::Session { path } => {
+            let outcome = session_cmd::load_and_run(path, color, report)?;
+            save_tab(cli.save_session.as_deref(), "session", path, path, is_ro)?;
+            Ok(outcome.to_mode(mode))
         }
     }
 }
