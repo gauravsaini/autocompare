@@ -1441,3 +1441,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BU-PLAN landed (session tabs arch plan, pushed)
 - 0883000 verify ok: OWNS checks/gui-sessionplan-bu only (PLAN.md 228 lines), zero crates, STATUS untouched, Hinglish-Roman, BC own-words, 3 disjoint follow-up waves (model home.rs / app bridge / paint views.rs) with GATES. Pushed (log checked pre-push, no concurrency).
 - Baaki in-flight: BU-PATHMETA. Next: PLAN ke Wave 1 (session model) launch.
+
+## 2026-11-20 - Wave BV plan (session model Wave 1, parallel with pathmeta)
+- BV-MODEL sess-model-bv: OWNS home.rs+checks/gui-sessionmodel-bv (PLAN Wave BU-SES-MODEL: Session/SessionList/T1-T7/title/cap). Disjoint from BU-PATHMETA (views+app). Commit locally NO PUSH, pathspec-only.
