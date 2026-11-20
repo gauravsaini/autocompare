@@ -1,0 +1,4 @@
+STATUS: PASS
+EXIT_CODE_DIFF_MODE: 0 (same), 1 (diff/conflict), 2 (error/readonly)
+EXIT_CODE_BC_MODE: 0 (clean), 11 (binary diff), 13 (rules diff), 14 (conflicts)
+READ_ONLY_GUARD: EXIT 2 ON WRITE

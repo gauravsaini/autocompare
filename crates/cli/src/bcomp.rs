@@ -30,7 +30,8 @@ pub fn normalize_and_resolve_args(raw_args: &[String]) -> Vec<String> {
     resolve_direct_invocation(&normalized)
 }
 
-fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
+/// Normalizes single-dash bcomp and slash flags into canonical clap options.
+pub fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
 
     for arg in args {
@@ -59,7 +60,15 @@ fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
         {
             out.push("--ro2".to_string());
             out.push("--ro".to_string());
-        } else if arg == "-centerreadonly" || arg == "/centerreadonly" {
+        } else if arg == "-centerreadonly"
+            || arg == "/centerreadonly"
+            || arg == "-ro3"
+            || arg == "/ro3"
+            || arg == "-ro4"
+            || arg == "/ro4"
+            || arg == "-outputreadonly"
+            || arg == "/outputreadonly"
+        {
             out.push("--ro".to_string());
         // Merge automation flags
         } else if arg == "-automerge" || arg == "/automerge" {
@@ -276,7 +285,8 @@ fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
     out
 }
 
-fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
+/// Resolves direct invocations, shorthand VCS switches, and positional arguments into subcommands.
+pub fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
     if args.is_empty() {
         return Vec::new();
     }
@@ -292,6 +302,7 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
 
     // Scan for subcommands or non-flag positional arguments.
     let mut non_flag_indices = Vec::new();
+    let mut vcs_consumed_indices = Vec::new();
     let mut iter = rest.iter().enumerate().peekable();
     let mut vcs1 = None;
     let mut vcs2 = None;
@@ -300,28 +311,40 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
 
     while let Some((idx, token)) = iter.next() {
         if token == "--vcs1" {
-            if let Some((_, val)) = iter.next() {
+            vcs_consumed_indices.push(idx);
+            if let Some((v_idx, val)) = iter.next() {
+                vcs_consumed_indices.push(v_idx);
                 vcs1 = Some(val.clone());
             }
         } else if let Some(val) = token.strip_prefix("--vcs1=") {
+            vcs_consumed_indices.push(idx);
             vcs1 = Some(val.to_string());
         } else if token == "--vcs2" {
-            if let Some((_, val)) = iter.next() {
+            vcs_consumed_indices.push(idx);
+            if let Some((v_idx, val)) = iter.next() {
+                vcs_consumed_indices.push(v_idx);
                 vcs2 = Some(val.clone());
             }
         } else if let Some(val) = token.strip_prefix("--vcs2=") {
+            vcs_consumed_indices.push(idx);
             vcs2 = Some(val.to_string());
         } else if token == "--vcs3" {
-            if let Some((_, val)) = iter.next() {
+            vcs_consumed_indices.push(idx);
+            if let Some((v_idx, val)) = iter.next() {
+                vcs_consumed_indices.push(v_idx);
                 vcs3 = Some(val.clone());
             }
         } else if let Some(val) = token.strip_prefix("--vcs3=") {
+            vcs_consumed_indices.push(idx);
             vcs3 = Some(val.to_string());
         } else if token == "--vcs4" {
-            if let Some((_, val)) = iter.next() {
+            vcs_consumed_indices.push(idx);
+            if let Some((v_idx, val)) = iter.next() {
+                vcs_consumed_indices.push(v_idx);
                 vcs4 = Some(val.clone());
             }
         } else if let Some(val) = token.strip_prefix("--vcs4=") {
+            vcs_consumed_indices.push(idx);
             vcs4 = Some(val.to_string());
         } else if token.starts_with('-') {
             // Check if this flag takes an argument that is not attached.
@@ -435,7 +458,7 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
             }
 
             for (idx, token) in rest.iter().enumerate() {
-                if !non_flag_indices.contains(&idx) && !token.starts_with("--vcs3") {
+                if !non_flag_indices.contains(&idx) && !vcs_consumed_indices.contains(&idx) {
                     out.push(token.clone());
                 }
             }
@@ -503,8 +526,10 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
 
     // No positional arguments, but VCS flags might be present.
     if let (Some(l), Some(r)) = (vcs1, vcs2) {
+        let is_dirs = Path::new(&l).is_dir() && Path::new(&r).is_dir();
         if let Some(b) = vcs3 {
-            out.push("merge".to_string());
+            let subcommand = if is_dirs { "folder-merge" } else { "merge" };
+            out.push(subcommand.to_string());
             out.push(b);
             out.push(l);
             out.push(r);
@@ -512,13 +537,14 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
                 out.push(format!("--output={o}"));
             }
         } else {
-            out.push("text".to_string());
+            let subcommand = if is_dirs { "folder" } else { "text" };
+            out.push(subcommand.to_string());
             out.push(l);
             out.push(r);
         }
-        // Append remaining flags that aren't vcs1..4
-        for token in rest {
-            if !token.starts_with("--vcs") {
+        // Append remaining flags that were not consumed by vcs1..4
+        for (idx, token) in rest.iter().enumerate() {
+            if !vcs_consumed_indices.contains(&idx) {
                 out.push(token.clone());
             }
         }
@@ -527,4 +553,295 @@ fn resolve_direct_invocation(args: &[String]) -> Vec<String> {
 
     out.extend(rest.iter().cloned());
     out
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn fixture_path(rel: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tools/parity-harness/fixtures")
+            .join(rel)
+    }
+
+    #[test]
+    fn test_normalize_read_only_flags() {
+        let input = vec![
+            "app".to_string(),
+            "-ro".to_string(),
+            "/ro".to_string(),
+            "-readonly".to_string(),
+            "/readonly".to_string(),
+            "-ro1".to_string(),
+            "/ro1".to_string(),
+            "-leftreadonly".to_string(),
+            "/leftreadonly".to_string(),
+            "-ro2".to_string(),
+            "/ro2".to_string(),
+            "-rightreadonly".to_string(),
+            "/rightreadonly".to_string(),
+            "-ro3".to_string(),
+            "/ro3".to_string(),
+            "-centerreadonly".to_string(),
+            "/centerreadonly".to_string(),
+            "-ro4".to_string(),
+            "/ro4".to_string(),
+            "-outputreadonly".to_string(),
+            "/outputreadonly".to_string(),
+        ];
+        let normalized = normalize_single_dash_flags(&input);
+        assert!(normalized.contains(&"--ro".to_string()));
+        assert!(normalized.contains(&"--ro1".to_string()));
+        assert!(normalized.contains(&"--ro2".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_automerge_and_mergeoutput() {
+        let input = vec![
+            "app".to_string(),
+            "-automerge".to_string(),
+            "/automerge".to_string(),
+            "-reviewconflicts".to_string(),
+            "/reviewconflicts".to_string(),
+            "-mergeoutput=out.txt".to_string(),
+            "/mergeoutput=out2.txt".to_string(),
+            "-savetarget=out3.txt".to_string(),
+            "/savetarget=out4.txt".to_string(),
+            "-mergeoutput".to_string(),
+            "out5.txt".to_string(),
+        ];
+        let normalized = normalize_single_dash_flags(&input);
+        assert!(normalized.contains(&"--automerge".to_string()));
+        assert!(normalized.contains(&"--reviewconflicts".to_string()));
+        assert!(normalized.contains(&"--mergeoutput=out.txt".to_string()));
+        assert!(normalized.contains(&"--mergeoutput=out2.txt".to_string()));
+        assert!(normalized.contains(&"--mergeoutput=out3.txt".to_string()));
+        assert!(normalized.contains(&"--mergeoutput=out4.txt".to_string()));
+        assert!(normalized.contains(&"--mergeoutput".to_string()));
+        assert!(normalized.contains(&"out5.txt".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_vcs_inputs_and_titles() {
+        let input = vec![
+            "app".to_string(),
+            "-vcs1=left.txt".to_string(),
+            "/vcs2=right.txt".to_string(),
+            "-ancestor=base.txt".to_string(),
+            "/base=base2.txt".to_string(),
+            "-center=base3.txt".to_string(),
+            "-vcs4=merged.txt".to_string(),
+            "-title1=LeftPane".to_string(),
+            "/lefttitle=LeftPane2".to_string(),
+            "-title2=RightPane".to_string(),
+            "/righttitle=RightPane2".to_string(),
+            "-title3=CenterPane".to_string(),
+            "-title4=OutputPane".to_string(),
+            "-report=html:rep.html".to_string(),
+            "-reporttitle=CustomTitle".to_string(),
+            "@session.bcss".to_string(),
+            "-bcexitcode".to_string(),
+            "-qc".to_string(),
+            "-diffexitcode".to_string(),
+        ];
+        let normalized = normalize_single_dash_flags(&input);
+        assert!(normalized.contains(&"--vcs1=left.txt".to_string()));
+        assert!(normalized.contains(&"--vcs2=right.txt".to_string()));
+        assert!(normalized.contains(&"--vcs3=base.txt".to_string()));
+        assert!(normalized.contains(&"--vcs3=base2.txt".to_string()));
+        assert!(normalized.contains(&"--vcs3=base3.txt".to_string()));
+        assert!(normalized.contains(&"--vcs4=merged.txt".to_string()));
+        assert!(normalized.contains(&"--title1=LeftPane".to_string()));
+        assert!(normalized.contains(&"--title1=LeftPane2".to_string()));
+        assert!(normalized.contains(&"--title2=RightPane".to_string()));
+        assert!(normalized.contains(&"--title2=RightPane2".to_string()));
+        assert!(normalized.contains(&"--title3=CenterPane".to_string()));
+        assert!(normalized.contains(&"--title4=OutputPane".to_string()));
+        assert!(normalized.contains(&"--report=html:rep.html".to_string()));
+        assert!(normalized.contains(&"--report-title=CustomTitle".to_string()));
+        assert!(normalized.contains(&"--session=session.bcss".to_string()));
+        assert!(normalized.contains(&"--bc-exit-code".to_string()));
+        assert!(normalized.contains(&"--exit-code-mode=diff".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_subcommand_aliases() {
+        let input = vec![
+            "app".to_string(),
+            "-text".to_string(),
+            "-folder".to_string(),
+            "-hex".to_string(),
+            "-merge".to_string(),
+            "-table".to_string(),
+            "-sync".to_string(),
+            "-picture".to_string(),
+            "-folder-merge".to_string(),
+            "-audio".to_string(),
+        ];
+        let normalized = normalize_single_dash_flags(&input);
+        assert_eq!(
+            normalized,
+            vec![
+                "app",
+                "text",
+                "folder",
+                "hex",
+                "merge",
+                "table",
+                "sync",
+                "picture",
+                "folder-merge",
+                "audio"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_resolve_git_mergetool_four_way_files() {
+        let raw = vec![
+            "bcomp".to_string(),
+            "local.txt".to_string(),
+            "remote.txt".to_string(),
+            "base.txt".to_string(),
+            "merged.txt".to_string(),
+            "-automerge".to_string(),
+        ];
+        let resolved = normalize_and_resolve_args(&raw);
+        assert_eq!(resolved.first(), Some(&"bcomp".to_string()));
+        assert_eq!(resolved.get(1), Some(&"merge".to_string()));
+        assert_eq!(resolved.get(2), Some(&"base.txt".to_string()));
+        assert_eq!(resolved.get(3), Some(&"local.txt".to_string()));
+        assert_eq!(resolved.get(4), Some(&"remote.txt".to_string()));
+        assert_eq!(resolved.get(5), Some(&"--output=merged.txt".to_string()));
+        assert!(resolved.contains(&"--automerge".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_git_mergetool_four_way_dirs() {
+        let fx = fixture_path("folder");
+        let left_dir = fx.join("left").to_str().expect("path").to_string();
+        let right_dir = fx.join("right").to_str().expect("path").to_string();
+        let base_dir = fx.join("left").to_str().expect("path").to_string();
+        let out_dir = fx.join("right").to_str().expect("path").to_string();
+
+        let raw = vec![
+            "bcomp".to_string(),
+            left_dir.clone(),
+            right_dir.clone(),
+            base_dir.clone(),
+            out_dir.clone(),
+        ];
+        let resolved = normalize_and_resolve_args(&raw);
+        assert_eq!(resolved.get(1), Some(&"folder-merge".to_string()));
+        assert_eq!(resolved.get(2), Some(&base_dir));
+        assert_eq!(resolved.get(3), Some(&left_dir));
+        assert_eq!(resolved.get(4), Some(&right_dir));
+        assert_eq!(resolved.get(5), Some(&format!("--output={out_dir}")));
+    }
+
+    #[test]
+    fn test_resolve_two_way_with_vcs3_ancestor() {
+        let raw = vec![
+            "bcomp".to_string(),
+            "-ancestor=base.txt".to_string(),
+            "left.txt".to_string(),
+            "right.txt".to_string(),
+            "-mergeoutput=out.txt".to_string(),
+        ];
+        let resolved = normalize_and_resolve_args(&raw);
+        assert_eq!(resolved.get(1), Some(&"merge".to_string()));
+        assert_eq!(resolved.get(2), Some(&"base.txt".to_string()));
+        assert_eq!(resolved.get(3), Some(&"left.txt".to_string()));
+        assert_eq!(resolved.get(4), Some(&"right.txt".to_string()));
+        assert!(resolved.contains(&"--mergeoutput=out.txt".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_two_positionals_files_vs_dirs() {
+        let f_left = fixture_path("t_left.txt").to_str().expect("p").to_string();
+        let f_right = fixture_path("t_right.txt").to_str().expect("p").to_string();
+
+        let raw_files = vec!["bcomp".to_string(), f_left.clone(), f_right.clone()];
+        let res_files = normalize_and_resolve_args(&raw_files);
+        assert_eq!(res_files.get(1), Some(&"text".to_string()));
+
+        let d_left = fixture_path("folder/left").to_str().expect("p").to_string();
+        let d_right = fixture_path("folder/right")
+            .to_str()
+            .expect("p")
+            .to_string();
+        let raw_dirs = vec!["bcomp".to_string(), d_left.clone(), d_right.clone()];
+        let res_dirs = normalize_and_resolve_args(&raw_dirs);
+        assert_eq!(res_dirs.get(1), Some(&"folder".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_three_positionals_files_vs_dirs() {
+        let b = fixture_path("m_base.txt").to_str().expect("p").to_string();
+        let l = fixture_path("m_left.txt").to_str().expect("p").to_string();
+        let r = fixture_path("m_right.txt").to_str().expect("p").to_string();
+
+        let raw_files = vec!["bcomp".to_string(), b.clone(), l.clone(), r.clone()];
+        let res_files = normalize_and_resolve_args(&raw_files);
+        assert_eq!(res_files.get(1), Some(&"merge".to_string()));
+
+        let d_base = fixture_path("folder/left").to_str().expect("p").to_string();
+        let d_left = fixture_path("folder/left").to_str().expect("p").to_string();
+        let d_right = fixture_path("folder/right")
+            .to_str()
+            .expect("p")
+            .to_string();
+        let raw_dirs = vec!["bcomp".to_string(), d_base, d_left, d_right];
+        let res_dirs = normalize_and_resolve_args(&raw_dirs);
+        assert_eq!(res_dirs.get(1), Some(&"folder-merge".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_vcs_flags_space_syntax_and_output() {
+        let raw = vec![
+            "bcomp".to_string(),
+            "-vcs1".to_string(),
+            "left.txt".to_string(),
+            "-vcs2".to_string(),
+            "right.txt".to_string(),
+            "-vcs3".to_string(),
+            "base.txt".to_string(),
+            "-vcs4".to_string(),
+            "merged.txt".to_string(),
+            "-automerge".to_string(),
+        ];
+        let res = normalize_and_resolve_args(&raw);
+        assert_eq!(res.get(1), Some(&"merge".to_string()));
+        assert_eq!(res.get(2), Some(&"base.txt".to_string()));
+        assert_eq!(res.get(3), Some(&"left.txt".to_string()));
+        assert_eq!(res.get(4), Some(&"right.txt".to_string()));
+        assert!(res.contains(&"--output=merged.txt".to_string()));
+        assert!(res.contains(&"--automerge".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_vcs_dirs_two_way() {
+        let d_left = fixture_path("folder/left").to_str().expect("p").to_string();
+        let d_right = fixture_path("folder/right")
+            .to_str()
+            .expect("p")
+            .to_string();
+        let raw = vec![
+            "bcomp".to_string(),
+            format!("-vcs1={d_left}"),
+            format!("-vcs2={d_right}"),
+        ];
+        let res = normalize_and_resolve_args(&raw);
+        assert_eq!(res.get(1), Some(&"folder".to_string()));
+        assert_eq!(res.get(2), Some(&d_left));
+        assert_eq!(res.get(3), Some(&d_right));
+    }
 }

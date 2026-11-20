@@ -1,0 +1,35 @@
+# Edge Fixture: Exit Code Conventions (Diff Mode vs Beyond Compare Mode)
+
+## Scope
+Verification of exit codes across all subcommands and modes:
+
+### 1. Diff(1) Mode (Default)
+- Exit Code 0:
+  - Text: identical files
+  - Folder: all entries same
+  - Hex: identical bytes
+  - Merge: clean merge, zero conflicts
+  - Table: identical rows
+  - Sync: dry-run or applied with 0 pending steps
+  - Picture: identical images (0 differing pixels)
+  - Audio: identical audio samples
+- Exit Code 1:
+  - Text: lines differ
+  - Folder: differences, newer files, or orphan entries
+  - Hex: bytes differ
+  - Merge: conflicts detected
+  - Table: cells/rows differ
+  - Sync: pending steps planned / differences
+  - Picture: differing pixels detected
+  - Audio: differing sample windows
+- Exit Code 2:
+  - Syntax/Argument error
+  - File not found / I/O error
+  - Read-Only violation (e.g. attempting to apply sync or save merge in read-only mode)
+
+### 2. Beyond Compare (bcomp) Mode (`-bcexitcode` / `-qc`)
+- Exit Code 0: Success / clean / identical / conflict-free merge
+- Exit Code 11: Binary differences (hex comparison differences)
+- Exit Code 13: Rules-based differences (text, folder, table, sync differences)
+- Exit Code 14: Merge conflicts detected
+- Exit Code 2: Fatal error / file not found / bad arguments

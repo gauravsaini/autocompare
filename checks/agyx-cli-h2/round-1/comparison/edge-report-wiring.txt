@@ -1,0 +1,34 @@
+# Edge Fixture: Multi-Format Report Generation Wiring
+
+## Scope
+Report generation pipeline via `--report <spec>` and `--report-title <title>`.
+
+## Supported Report Formats
+1. `html` / `html-color` / `color`:
+   - Full HTML comparison table with syntax highlighting, token badges, summary cards, and stats.
+2. `html-mono` / `mono`:
+   - Clean monochrome printer-friendly HTML table without bright background fills.
+3. `text` / `txt`:
+   - Plain text diff rendering with line number padding, diff glyphs, and human-readable stats.
+4. `xml`:
+   - Structured XML tree: `<diff-report>`, `<summary>`, `<hunk>`, `<lines>`.
+5. `patch` / `diff` / `unified` / `unified-patch`:
+   - Standard unified diff format: `--- a/<file>`, `+++ b/<file>`, `@@ -start,len +start,len @@`.
+6. `context` / `context-patch`:
+   - Standard context diff format: `*** <file>`, `--- <file>`, `***************`.
+
+## Adapters Coverage (9/9 Session Types)
+- Text (`text_report_input`)
+- Folder (`folder_report_input`)
+- Hex (`hex_report_input`)
+- Merge (`merge_report_input`)
+- Table (`table_report_input`)
+- Sync (`sync_report_input`)
+- Picture (`picture_report_input`)
+- FolderMerge (`foldermerge_report_input`)
+- Audio (`audio_report_input`)
+
+## Features
+- Safe directory hierarchy creation (nested destination paths auto-create parent folders).
+- Title overrides correctly reflected across all report formats.
+- Safe format inference from extension (`.html`, `.xml`, `.patch`, `.diff`, `.txt`).

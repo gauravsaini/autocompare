@@ -1,0 +1,5 @@
+STATUS: PASS
+ALL_FORMATS_WIRED: 6/6 (html, html-mono, text, xml, patch, context)
+ALL_ADAPTERS_COVERED: 9/9 (text, folder, hex, merge, table, sync, picture, foldermerge, audio)
+SAFE_DIR_CREATION: VERIFIED
+TITLE_OVERRIDE: VERIFIED

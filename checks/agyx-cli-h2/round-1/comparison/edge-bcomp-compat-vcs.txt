@@ -1,0 +1,34 @@
+# Edge Fixture: Beyond Compare (bcomp) VCS Switches and Shorthand Invocation
+
+## Scope
+Clean-room verification of bcomp and diff compatibility flags supported by autocompare CLI:
+1. Read-Only flags:
+   - `-ro`, `/ro`, `-readonly`, `/readonly` -> `--ro`
+   - `-ro1`, `/ro1`, `-leftreadonly`, `/leftreadonly` -> `--ro1 --ro`
+   - `-ro2`, `/ro2`, `-rightreadonly`, `/rightreadonly` -> `--ro2 --ro`
+   - `-ro3`, `/ro3`, `-centerreadonly`, `/centerreadonly` -> `--ro`
+   - `-ro4`, `/ro4`, `-outputreadonly`, `/outputreadonly` -> `--ro`
+2. Merge Automation flags:
+   - `-automerge`, `/automerge` -> `--automerge`
+   - `-reviewconflicts`, `/reviewconflicts` -> `--reviewconflicts`
+   - `-mergeoutput=<path>`, `/mergeoutput=<path>`, `-savetarget=<path>`, `/savetarget=<path>` -> `--mergeoutput=<path>`
+   - Space-separated syntax: `-mergeoutput <path>` -> `--mergeoutput <path>`
+3. VCS inputs and aliases:
+   - `-vcs1=<path>`, `/vcs1=<path>` -> input 1 (local / left)
+   - `-vcs2=<path>`, `/vcs2=<path>` -> input 2 (remote / right)
+   - `-vcs3=<path>`, `/vcs3=<path>`, `-ancestor=<path>`, `-base=<path>`, `-center=<path>` -> input 3 (base / ancestor)
+   - `-vcs4=<path>`, `/vcs4=<path>` -> input 4 (merged / output)
+   - Space-separated syntax: `-vcs1 <path> -vcs2 <path> -vcs3 <path> -vcs4 <path>`
+4. Title and session switches:
+   - `-title1..4=<name>`, `/title1..4=<name>` -> `--title1..4=<name>`
+   - `-report-title=<title>`, `/report-title=<title>`, `-reporttitle=<title>`
+   - `@session.bcss`, `@session.json` -> `--session=<path>`
+5. Direct Invocation Resolution:
+   - 4 positional args: `bcomp $LOCAL $REMOTE $BASE $MERGED` -> `merge $BASE $LOCAL $REMOTE --output=$MERGED`
+   - 4 positional dirs: `bcomp $DIR_L $DIR_R $DIR_BASE $DIR_OUT` -> `folder-merge $DIR_BASE $DIR_L $DIR_R --output=$DIR_OUT`
+   - 2 positional args + `-vcs3=<base>` -> `merge <base> <left> <right>`
+   - 2 positional dirs + `-vcs3=<base>` -> `folder-merge <base> <left> <right>`
+   - 2 positional files -> `text <left> <right>`
+   - 2 positional directories -> `folder <left> <right>`
+   - 3 positional files -> `merge <base> <left> <right>`
+   - 3 positional directories -> `folder-merge <base> <left> <right>`
