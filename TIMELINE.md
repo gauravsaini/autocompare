@@ -237,3 +237,10 @@
 1. **Home Cards & Header Chrome**: Beyond Compare parity for home pane: card grid gaps via SECTION_GAP, header height from TypoRole chrome line-height, card button hit-slop symmetric via SPACE_XS at 960px wide. Colors frozen at 33. Edge fixture comparison/chrome-wide-960.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 928 → 930 passed, 0 failed; clippy clean on owned home.rs; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/home.rs, checks/gui-exq-chrome4/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-chrome5 tabs plus toolbar
+
+1. **Session Tabs & Toolbar at 960px**: Beyond Compare parity for session chrome: tab cell 150px from char metrics (16 mono chars x 7.2 + SPACE_XS slack = 120 label + 6 close gap + 24 close edge), inter-tab gap SPACE_SM (8), side chrome SPACE_MD (12), strip scroll triggers at 6 tabs (940 > 936 avail). Toolbar uniform 96 floored above 79 char need, item gap SPACE_XS (4), group gap SPACE_SM (8). Colors frozen at 33. Edge fixture comparison/chrome-tabs-960.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 930 → 932 passed, 0 failed; clippy clean; rustfmt clean on owned app.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-chrome5/**, TIMELINE.md.
