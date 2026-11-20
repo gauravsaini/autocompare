@@ -183,5 +183,5 @@
   "WAVE-TOOLBAR2": "running opencode sess-opencode-toolbar2 OWNS views.rs + checks/gui-exq-toolbar2 (tab close + icon cluster, launched 23:28)",
   "WAVE-SYNCGUI": "running opencode sess-opencode-syncgui OWNS compare+tree.rs + checks/sync-gui (Update Both/Mirror/conflict nav/log, launched 23:28)",
   "WAVE-MERGETAKE": "running opencode sess-opencode-mergetake OWNS diff+take.rs + checks/merge-take (3-way take + stepper, launched 23:28)",
-  "WAVE-LOCAL7": "running opencode sess-opencode-local7 OWNS checks/early-feedback-7 only read-only (local run vs BC+10363B, launched 23:28)"
+  "WAVE-LOCAL7": "landed+pushed 8395b55 REPORT PASS 5 PNGs magic 778 green 10/10 CLI TOP-10 (table/hex moved, text/folder/home stable)"
 }
