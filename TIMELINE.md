@@ -362,3 +362,9 @@
 1. **Copy Arrows & Hit-Rects at 960px**: copy dialog arrows from space scale, rows from Mono line-height, hit-rect symmetry tests plus wide-960 fixture lock.
 2. **Tests** (before → after): autocompare-gui all green (961 passed); clippy 0 warnings on owned `copy.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy7/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-table5 cols plus separators
+
+1. **Table Cols & Separators at 960px**: column widths from char metrics via space pad, row height locked to TypoRole Mono line-height, header underline plus strong weight.
+2. **Tests** (before → after): autocompare-gui all green (962 passed); clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table5/**`, `TIMELINE.md`.
