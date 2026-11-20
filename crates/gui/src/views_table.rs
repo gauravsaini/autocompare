@@ -3707,6 +3707,247 @@ pub fn table10_key_box_rects(
     table_key_box_rects(view, grid, col_widths_px, total_rows)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table30 round-1: live table geometry with key-cols,
+// sort indicators, numeric tolerance, and xlsx sheet selector at 1200px wide
+// without horizontal scrolling (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: 1200px wide layout with wide columns must fit without
+// horizontal scrolling (`needs_hscroll: false`), key columns maintain stable
+// alignment, sort indicators (▲ / ▼ / blank) remain aligned in dedicated 1-char
+// slots, numeric tolerance threshold formatted and sanitized, and multi-sheet
+// xlsx workbook sheets selectable.
+// Geometry FIRST: wide canvas [`TABLE30_CANVAS_W`] (1200.0 px), available width
+// 1176.0 px (`TABLE30_CANVAS_W - 2 * TABLE30_ORIGIN_X`), column outer widths
+// computed from character metrics plus cell padding `TABLE_CELL_PAD_X` (reusing
+// `crate::theme::SPACE_SM` = 8.0), column spacing reusing `SPACE_SM` (8.0 =
+// `table_col_spacing()`), row gap reusing `SPACE_XS` (4.0 = `TABLE_GRID_ROW_GAP`),
+// row symmetric pad reusing `SPACE_XS` (4.0), row heights from TypoRole line-height
+// locks (Heading 21.6 vs Mono 15.6, delta 6.0, sep 35.6, body 37.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi.
+// Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure; unit-tested.
+// Edge fixture `checks/gui-exq-table30/comparison/wide-cols-1200.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table30 wide canvas width (px): 1200.0 — wide fixture fit lock bina h-scroll. Pure.
+pub const TABLE30_CANVAS_W: f32 = 1200.0;
+
+/// Table30 canvas reference height (px): [`TABLE_CANVAS_H`] reuse (600.0). Pure.
+pub const TABLE30_CANVAS_H: f32 = TABLE_CANVAS_H;
+
+/// Table30 origin margin x (px): [`TABLE_CELL_GRID_ORIGIN_X`] reuse (12.0). Pure.
+pub const TABLE30_ORIGIN_X: f32 = TABLE_CELL_GRID_ORIGIN_X;
+
+/// Table30 origin margin y (px): [`TABLE_CELL_GRID_ORIGIN_Y`] reuse (12.0). Pure.
+pub const TABLE30_ORIGIN_Y: f32 = TABLE_CELL_GRID_ORIGIN_Y;
+
+/// Table30 1200px wide grid avail width (px): canvas minus dono origin margins (1176.0). Pure; unit-tested.
+pub fn table30_avail_w() -> f32 {
+    TABLE30_CANVAS_W - TABLE30_ORIGIN_X * 2.0
+}
+
+/// Table30 grid origin (px): (12.0, 12.0) reuse. Pure; unit-tested.
+pub fn table30_grid_origin() -> (f32, f32) {
+    (TABLE30_ORIGIN_X, TABLE30_ORIGIN_Y)
+}
+
+/// Table30 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table30_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table30 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table30_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table30 row symmetric pad (px): [`table_row_sym_pad`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table30_row_sym_pad() -> f32 {
+    table_row_sym_pad()
+}
+
+/// Table30 cell padding x (px): [`TABLE_CELL_PAD_X`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table30_cell_pad_x() -> f32 {
+    TABLE_CELL_PAD_X
+}
+
+/// Table30 header row height (px): Heading line-height lock (21.6). Pure; unit-tested.
+pub fn table30_header_h() -> f32 {
+    table10_header_h()
+}
+
+/// Table30 body row height (px): Mono line-height lock (15.6). Pure; unit-tested.
+pub fn table30_row_h() -> f32 {
+    table10_row_h()
+}
+
+/// Table30 header/body delta (px): header minus body (> 0). Pure; unit-tested.
+pub fn table30_header_body_delta() -> f32 {
+    table30_header_h() - table30_row_h()
+}
+
+/// Table30 header/body separator y (px): [`table10_header_sep_y`] reuse (35.6). Pure; unit-tested.
+pub fn table30_header_sep_y() -> f32 {
+    table10_header_sep_y()
+}
+
+/// Table30 pehli body row ka y (px): [`table10_body_first_y`] reuse (37.6). Pure; unit-tested.
+pub fn table30_body_first_y() -> f32 {
+    table10_body_first_y()
+}
+
+/// Table30 header underline width (px): [`table10_header_underline_w`] reuse (1.0). Pure; unit-tested.
+pub fn table30_header_underline_w() -> f32 {
+    table10_header_underline_w()
+}
+
+/// Table30 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table30_header_weight_ok() -> bool {
+    table10_header_weight_ok()
+}
+
+/// Table30 char widths se outer px widths: [`table_col_widths_px`] delegation. Pure; unit-tested.
+pub fn table30_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table30 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure; unit-tested.
+pub fn table30_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table30 1200px fit gate: true if total width fits in avail width (bina h-scroll). Pure; unit-tested.
+pub fn table30_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table30 sab columns ki x-positions: [`table10_col_xs`] delegation. Pure; unit-tested.
+pub fn table30_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table10_col_xs(col_widths_px)
+}
+
+/// Table30 vertical separators: [`table10_separator_xs`] delegation. Pure; unit-tested.
+pub fn table30_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table10_separator_xs(col_widths_px)
+}
+
+/// Table30 column alignments: numeric col right (true), baaki left (false). Pure; unit-tested.
+pub fn table30_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table10_col_aligns(header, rows)
+}
+
+/// Table30 cell text ka x outer box me: [`table10_cell_text_x`] delegation. Pure; unit-tested.
+pub fn table30_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table10_cell_text_x(outer, text_w, right)
+}
+
+/// Key columns ki char widths: [`table10_key_widths_chars`] delegation. Pure; unit-tested.
+pub fn table30_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table10_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: [`table10_key_outer_widths`] delegation. Pure; unit-tested.
+pub fn table30_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table10_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table10_key_col_xs`] delegation. Pure; unit-tested.
+pub fn table30_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table10_key_col_xs(keys, col_widths_px)
+}
+
+/// Key-column box height: [`table10_key_box_h`] delegation. Pure; unit-tested.
+pub fn table30_key_box_h(total_rows: usize) -> f32 {
+    table10_key_box_h(total_rows)
+}
+
+/// Key-column box rects: [`table10_key_box_rects`] delegation. Pure; unit-tested.
+pub fn table30_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    table10_key_box_rects(view, grid, col_widths_px, total_rows)
+}
+
+/// Sort marker: [`table10_sort_marker`] delegation. Pure; unit-tested.
+pub fn table30_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table10_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort col hai: [`table10_is_sorted_col`] delegation. Pure; unit-tested.
+pub fn table30_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table10_is_sorted_col(sort_col, col)
+}
+
+/// Header cell label sort-aware: [`table10_header_label`] delegation. Pure; unit-tested.
+pub fn table30_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table10_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table10_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table30_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table10_sort_glyph_rect(cell, char_w)
+}
+
+/// Tolerance sanitize helper: [`TableKeyView::sanitize_tolerance`] delegation. Pure; unit-tested.
+pub fn table30_sanitize_tolerance(tolerance: Option<f64>) -> Option<f64> {
+    TableKeyView::sanitize_tolerance(tolerance)
+}
+
+/// Tolerance badge label for UI status/affordance. Pure; unit-tested.
+pub fn table30_tolerance_badge_label(tolerance: Option<f64>) -> String {
+    match TableKeyView::sanitize_tolerance(tolerance) {
+        Some(t) => format!("tol: {t}"),
+        None => String::from("exact"),
+    }
+}
+
+/// Multi-sheet workbook source kind: [`table_source_kind_for_path`] delegation. Pure; unit-tested.
+pub fn table30_source_kind(path: &str) -> TableSourceKind {
+    table_source_kind_for_path(path)
+}
+
+/// Source badge string: [`table_source_badge_label`] delegation. Pure; unit-tested.
+pub fn table30_source_badge(kind: TableSourceKind) -> &'static str {
+    table_source_badge_label(kind)
+}
+
+/// Sheet count: [`table_sheet_count`] delegation. Pure; unit-tested.
+pub fn table30_sheet_count(names: &[String]) -> usize {
+    table_sheet_count(names)
+}
+
+/// Sheet index clamp: [`table_sheet_clamp`] delegation. Pure; unit-tested.
+pub fn table30_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
+    table_sheet_clamp(names, index)
+}
+
+/// Sheet label: [`table_sheet_label`] delegation. Pure; unit-tested.
+pub fn table30_sheet_label(names: &[String], index: usize) -> Option<String> {
+    table_sheet_label(names, index)
+}
+
+/// Sheet badge (e.g. "1/3" or "0/3"): pure status label. Pure; unit-tested.
+pub fn table30_sheet_badge(names: &[String], selected: Option<usize>) -> String {
+    let total = names.len();
+    match selected {
+        Some(idx) if idx < total => format!("{}/{}", idx.saturating_add(1), total),
+        _ => format!("0/{total}"),
+    }
+}
+
+/// Visible rows at 600px / 1200px: [`table_wide_960_visible_rows`] reuse. Pure; unit-tested.
+pub fn table30_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5810,5 +6051,162 @@ mod tests {
             assert_eq!(box_rect.w, 40.0);
         }
         assert!(table10_key_box_rects(&view, grid, &px, 0).is_empty());
+    }
+
+    #[test]
+    fn table_exq_table30_round1_wide_cols_1200() {
+        // Headless test proving edge fixture comparison/wide-cols-1200.json:
+        // 1200px wide canvas without horizontal scroll (needs_hscroll: false),
+        // key columns (ID key at col 0, outer w 48.0), sort indicators (▲ on ID,
+        // glyph x 48.0 w 8.0), numeric tolerance (tol: 0.01), and xlsx sheet
+        // selector ("Inventory", sheet 1/3, source "xlsx").
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table30/comparison/wide-cols-1200.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table30/round-1/comparison/wide-cols-1200.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"wide-cols-1200\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 1200.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 1176.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\": false"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"sort_col\": 0"));
+        assert!(fixture_raw.contains("\"sort_ascending\": true"));
+        assert!(fixture_raw.contains("\"numeric_tolerance\": 0.01"));
+        assert!(fixture_raw.contains("\"source_kind\": \"xlsx\""));
+        assert!(fixture_raw.contains("\"sheet_badge\": \"1/3\""));
+
+        // 1. 1200px Canvas geometry & avail width
+        assert_eq!(TABLE30_CANVAS_W, 1200.0);
+        assert_eq!(TABLE30_CANVAS_H, 600.0);
+        assert_eq!(table30_avail_w(), 1176.0);
+        assert_eq!(table30_grid_origin(), (12.0, 12.0));
+        assert_eq!(table30_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table30_grid_gap_y(), crate::theme::SPACE_XS);
+        assert_eq!(table30_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table30_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // 2. Row heights and typo rhythm
+        assert!((table30_header_h() - 21.6).abs() < 0.001);
+        assert!((table30_row_h() - 15.6).abs() < 0.001);
+        assert!((table30_header_body_delta() - 6.0).abs() < 0.001);
+        assert!((table30_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table30_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table30_header_underline_w(), 1.0);
+        assert!(table30_header_weight_ok());
+
+        // 3. Wide columns at 1200px: total width 632.0 fits in 1176.0 (no h-scroll)
+        let header = vec![
+            "ID".to_string(),
+            "Product Description".to_string(),
+            "SKU Code".to_string(),
+            "Unit Price".to_string(),
+            "Quantity".to_string(),
+        ];
+        let rows = vec![
+            vec![
+                "1001".to_string(),
+                "Ergonomic Office Chair with Lumbar Support".to_string(),
+                "FURN-CH-001".to_string(),
+                "249.99".to_string(),
+                "15".to_string(),
+            ],
+            vec![
+                "1002".to_string(),
+                "Height-Adjustable Standing Desk Bamboo".to_string(),
+                "FURN-DK-002".to_string(),
+                "489.50".to_string(),
+                "8".to_string(),
+            ],
+        ];
+        let widths_chars = table_column_widths(&header, &rows);
+        assert_eq!(widths_chars, vec![4, 32, 11, 10, 8]);
+        let col_widths_px = table30_col_widths_px(&widths_chars, 8.0);
+        assert_eq!(col_widths_px, vec![48.0, 272.0, 104.0, 96.0, 80.0]);
+        let total_w = table30_grid_total_w(&col_widths_px);
+        assert_eq!(total_w, 632.0);
+        assert!(table30_column_grid_fit(table30_avail_w(), &col_widths_px));
+        assert!(total_w <= table30_avail_w());
+        assert_eq!(
+            table30_col_xs(&col_widths_px),
+            vec![0.0, 56.0, 336.0, 448.0, 552.0]
+        );
+        assert_eq!(
+            table30_separator_xs(&col_widths_px),
+            vec![52.0, 332.0, 444.0, 548.0]
+        );
+        assert_eq!(
+            table30_col_aligns(&header, &rows),
+            vec![true, false, false, true, true]
+        );
+
+        // 4. Key columns
+        let keys = vec![0usize];
+        assert_eq!(
+            table30_key_widths_chars(&header, &rows, &keys),
+            vec![(0, 4)]
+        );
+        assert_eq!(table30_key_outer_widths(&[(0, 4)], 8.0), vec![(0, 48.0)]);
+        assert_eq!(table30_key_col_xs(&keys, &col_widths_px), vec![(0, 0.0)]);
+        let mut key_view = TableKeyView::new();
+        key_view.toggle_key_column(0);
+        let grid = table_cell_grid_default();
+        let key_boxes = table30_key_box_rects(&key_view, grid, &col_widths_px, 2);
+        assert_eq!(key_boxes.len(), 1);
+        if let Some(first_box) = key_boxes.first() {
+            assert_eq!(first_box.x, 12.0);
+            assert_eq!(first_box.w, 48.0);
+        }
+
+        // 5. Sort indicators & glyphs
+        assert_eq!(table30_sort_marker(true, true), "▲");
+        assert_eq!(table30_sort_marker(true, false), "▼");
+        assert_eq!(table30_sort_marker(false, true), " ");
+        assert!(table30_is_sorted_col(Some(0), 0));
+        assert!(!table30_is_sorted_col(Some(0), 1));
+        assert_eq!(table30_header_label("ID", true, true), "ID▲");
+        let outer_header = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 48.0,
+            h: table30_header_h(),
+        };
+        let glyph_rect = table30_sort_glyph_rect(outer_header, 8.0);
+        assert!(glyph_rect.is_some());
+        if let Some(gr) = glyph_rect {
+            assert_eq!(gr.x, 48.0);
+            assert_eq!(gr.w, 8.0);
+        }
+
+        // 6. Tolerance
+        assert_eq!(table30_sanitize_tolerance(Some(0.01)), Some(0.01));
+        assert_eq!(table30_sanitize_tolerance(Some(-1.0)), None);
+        assert_eq!(table30_sanitize_tolerance(Some(f64::NAN)), None);
+        assert_eq!(table30_tolerance_badge_label(Some(0.01)), "tol: 0.01");
+        assert_eq!(table30_tolerance_badge_label(None), "exact");
+
+        // 7. XLSX Sheet selector
+        assert_eq!(
+            table30_source_kind("data/sample.xlsx"),
+            TableSourceKind::Xlsx
+        );
+        assert_eq!(table30_source_badge(TableSourceKind::Xlsx), "xlsx");
+        let sheet_names = vec![
+            "Inventory".to_string(),
+            "Pricing".to_string(),
+            "Archived".to_string(),
+        ];
+        assert_eq!(table30_sheet_count(&sheet_names), 3);
+        assert_eq!(table30_sheet_clamp(&sheet_names, 0), Some(0));
+        assert_eq!(table30_sheet_clamp(&sheet_names, 5), None);
+        assert_eq!(
+            table30_sheet_label(&sheet_names, 0),
+            Some("Inventory".to_string())
+        );
+        assert_eq!(table30_sheet_badge(&sheet_names, Some(0)), "1/3");
+        assert_eq!(table30_sheet_badge(&sheet_names, None), "0/3");
+
+        // 8. Visible rows
+        assert_eq!(table30_visible_rows(600.0), 38);
     }
 }
