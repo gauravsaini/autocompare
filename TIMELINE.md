@@ -608,3 +608,9 @@
 1. **Fixture Gutter Pixels (first visual proof)**: fixture renderer now draws the ~20px center gutter gap with yellow '=>' markers on changed-row hunk heads in the default text fixture. pxdiff vs baseline: 10012 of 576000 pixels differ, bbox (460,148)-(837,559), VERDICT DIFFERENT (was IDENTICAL 0px before; also fixed the harness to screenshot the just-built binary). Edge fixture `comparison/shot-center-1200.json`.
 2. **Tests** (before → after): autocompare-gui 1036 green (including `shot15_*` gutter pixel tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS + pxdiff visual gate pasted in GATES.md.
 3. **Files changed**: `crates/gui/src/screenshot.rs`, `checks/gui-exq-shot15/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-paint16 egui gutter mirror
+
+1. **Egui Gutter Mirror**: paint_text_body mirrors the shot15 fixture look in the live egui path — 20px center gap rects, yellow hunk-head markers (ink reused from frozen CHANGED_FG via text_center_marker_fg), selection bands, floor fill below last row. Geometry from existing helpers only, typography untouched, colors frozen at 33 touches. Edge fixture comparison/paint-egui-mirror-1200.json.
+2. **Tests** (before -> after): autocompare-gui 1037 green (including paint16_egui_mirror_gap_plus_markers_plus_floor); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Live-window runtime verification pending as orchestrator follow-up.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-paint16/**, TIMELINE.md.
