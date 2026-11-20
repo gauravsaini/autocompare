@@ -126,5 +126,6 @@
   "WAVE-SESSIONS-H2-DONE": "s1 COMPLETE DONE:0 (69 passed 0 failed, clippy -D warnings 0, fmt 0, banned 0, REPORT PASS); all landed+verified; session closed",
   "WAVE-REPORTS-H2": "s2 round-1 LANDED 2a0fd24 (473 ins OWNS-clean, REPORT PASS, 3 suites green, fmt/clippy/banned/deadcode clean)",
   "WAVE-REPORTS-H2-DONE": "s2 COMPLETE DONE:0; round-1 landed+verified+pushed; session closed",
-  "WAVE-VFS3": "vfs3 round-1 LANDED 0f5d088 (466 ins OWNS-clean, REPORT PASS, 8 suites green, fmt/clippy/banned clean)"
+  "WAVE-VFS3": "vfs3 round-1 LANDED 0f5d088 (466 ins OWNS-clean, REPORT PASS, 8 suites green, fmt/clippy/banned clean)",
+  "ORCH-MIX-SYNC-CLI": "2026-11-20 21:28 AEDT next leaves live: opencode sync3 (compare sync/jobs + render_sync + round-sync3) + agyx cli (tmux agyxcli, bcomp/report-adapters + agyx-cli-h2); vfs3 session wrapping"
 }
