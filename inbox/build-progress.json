@@ -28,6 +28,7 @@
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
   "ORCH-VERIFY-COMPARE": "2026-11-20 22:26 AEDT compare 154 green isolated, baseline healthy",
   "ORCH-VERIFY-DIFF": "2026-11-20 22:24 AEDT diff 237 green (96+33+44+20+4+40) isolated /tmp/target-orch-verify, baseline healthy",
+  "ORCH-VERIFY-VFS": "2026-11-20 22:28 AEDT vfs 48 green isolated",
   "SWARM-BIN3": "verified+landed a2f7c52 (sha OK, 960x600 PNG, 6/6 PASS, no source edits, isolated /tmp/orch3-src build)",
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
