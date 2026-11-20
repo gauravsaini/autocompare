@@ -27,6 +27,12 @@
     "SWARM-SESS-H": "running pid 40892 (OWNS sessions, checks/agyx-sess-h)",
     "SWARM-REP-H": "running pid 40893 (OWNS reports, checks/agyx-rep-h)",
     "SWARM-GUI-T": "running pid 40894 (OWNS views/copy/take/gutter, checks/gui-text-h)",
-    "SWARM-GUI-F": "running pid 40895 (OWNS tree/home, checks/gui-folder-h)"
+    "SWARM-GUI-F": "running pid 40895 (OWNS tree/home, checks/gui-folder-h)",
+    "SWARM-DIFF-I": "running pid 54344 (OWNS diff text/merge/grammar/word, checks/agyx-diff-i)",
+    "SWARM-VCMP-J": "running pid 54345 (OWNS vfs+compare folder/sync/merge/jobs, checks/agyx-vcmp-j)",
+    "SWARM-CLI-K": "running pid 54346 (OWNS cli, checks/agyx-cli-k)",
+    "SWARM-EXQ-L": "running opencode default-model (OWNS gui views_hex/views_table/viewmodel/app/theme, checks/gui-exq-l)",
+    "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
+    "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)"
   }
 }
