@@ -1,0 +1,104 @@
+{
+  "alignment": {
+    "expander_box_depth1_row100": [
+      8.0,
+      103.8,
+      24.0,
+      119.8
+    ],
+    "expander_centered": true,
+    "expander_w_px": 16.0,
+    "guide_xs_depth4": [
+      8.0,
+      16.0,
+      24.0,
+      32.0
+    ],
+    "guides_strictly_increasing": true,
+    "path_x_depth4_px": 56.0,
+    "path_x_formula": "indent + expander 16 + SM gap 8"
+  },
+  "avail_w_px": 1176.0,
+  "canvas_right_edge_px": 1200.0,
+  "deepest_row": {
+    "depth": 4,
+    "name_len_chars": 11,
+    "rel_path": "a/b/c/d.txt",
+    "text_w_px": 133.0
+  },
+  "indent": {
+    "depths": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "indents_px": [
+      0.0,
+      8.0,
+      16.0,
+      24.0,
+      32.0
+    ],
+    "step_formula": "depth * SPACE_SM",
+    "step_px": 8.0
+  },
+  "intent": "Folder-tree tree31 round-1 at 1200px wide canvas without horizontal scroll: depth-4 nest chain with SM-step indents, mono-locked row rhythm, centered 16px expander, guide/label alignment, and narrow-700 edge, colors frozen.",
+  "margins_px": 12.0,
+  "name": "deep-nest-4",
+  "narrow": {
+    "avail_w_px": 676.0,
+    "guide_step_px": 8.0,
+    "guides_distinct": true,
+    "needs_hscroll": false,
+    "width_px": 700.0
+  },
+  "needs_hscroll": false,
+  "nest_chain": [
+    {
+      "depth": 0,
+      "indent_px": 0.0,
+      "path_x_px": 24.0,
+      "rel_path": "a"
+    },
+    {
+      "depth": 1,
+      "indent_px": 8.0,
+      "path_x_px": 32.0,
+      "rel_path": "a/b"
+    },
+    {
+      "depth": 2,
+      "indent_px": 16.0,
+      "path_x_px": 40.0,
+      "rel_path": "a/b/c"
+    },
+    {
+      "depth": 3,
+      "indent_px": 24.0,
+      "path_x_px": 48.0,
+      "rel_path": "a/b/c/d"
+    },
+    {
+      "depth": 4,
+      "indent_px": 32.0,
+      "path_x_px": 56.0,
+      "rel_path": "a/b/c/d.txt"
+    }
+  ],
+  "row": {
+    "line_height_px": 15.6,
+    "line_role": "Mono",
+    "row_h_formula": "Mono line-height + SPACE_SM",
+    "row_h_px": 23.6
+  },
+  "typography": {
+    "body_role": "Mono",
+    "body_size": 12.0,
+    "dim_role": "Small",
+    "dim_size": 11.0,
+    "new_sizes": 0
+  },
+  "width_px": 1200.0
+}
