@@ -1,0 +1,24 @@
+13:41:45 harness: run-geo-typo.sh exit 0 RESULT PASS (after.png 9765 B)
+13:41:45 fixture: --screenshot fixture-home.png (home scene)
+13:41:45 fixture: --screenshot fixture-text.png (text scene)
+13:41:45 fixture: --screenshot fixture-folder.png (folder scene)
+13:41:45 fixture: --screenshot fixture-table.png (table scene)
+13:42:00 launch: nohup target/debug/autocompare-gui
+71657
+13:42:05 capture: live-desktop full + live-home region R320,91,800,632 (baseline Home)
+13:42:19 bc-list: window ids + titles (observe-only)
+13:43:14 click-1: /tmp/clicker 412 212 (Text mode tab)
+13:43:17 capture: live-text region R320,91,800,632
+13:44:25 incident: live-text.png invalid — browser occluder covered R320,91,800,632 at capture (browser dropdown in shot, 497955 B). click-1 went to browser, not app. Redo with activate-first.
+13:44:33 click-2: /tmp/clicker 412 212 retry (Text tab, app frontmost)
+13:44:44 capture: live-text region R320,91,800,632 (Text tab open, title confirmed)
+13:44:58 click-3: /tmp/clicker 458 212 (Folder mode tab)
+13:45:00 capture: live-folder region R320,91,800,632
+13:45:18 click-4: /tmp/clicker 615 212 (Table mode tab)
+13:45:20 capture: live-table region R320,91,800,632
+13:45:37 capture: strip close-up R320,180,800,80 + toolbar close-up R320,255,800,130 (observe crops, no clicks)
+13:45:37 capture: final desktop full
+13:45:37 capture: BC observe-only -l1394 (zero clicks/focus)
+13:48:03 note: binary mtime above; CP-GEO 13:44:44 + CQ-TYPO 13:42:05 landed after build+binary
+13:50:14 cleanup: kill live instance PID 71657 (own app only)
+13:50:16 gone: PID 71657 confirm, no autocompare-gui process
