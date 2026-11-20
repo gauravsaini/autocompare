@@ -168,6 +168,6 @@
  "WAVE-EXQ-TEXT2B": "dead agyx 0B no-proc twice + probe 0B (consistent fail, abandoned per rule)",
  "WAVE-LOCALRUN5B": "landed+pushed 5daacbc REPORT PASS 10/10 CLI 3 PNGs TOP-10 gaps",
  "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)",
- "WAVE-EXQ-TEXT2C": "running opencode sess-opencode-exqtext2c OWNS views.rs,copy.rs,take.rs (replaces dead agyx, launched 22:50, ps-confirmed)",
+ "WAVE-EXQ-TEXT2C": "landed+pushed 1e5f7ea REPORT PASS 747 green side-by-side+mono typo",
  "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only"
 }
