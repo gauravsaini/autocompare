@@ -164,7 +164,7 @@
  },
  "WAVE-EXQ7B": "landed+pushed 5105090 REPORT PASS 743 green hex+gutter wave7b",
  "HARNESS-EXQUISITE": "landed round-0 PASS tools/exquisite/run.sh + skills/exquisite (743 green, PNG 9765B magic ok, geo-typo signals)",
- "WAVE-EXQ-HOME2B": "running opencode sess-opencode-exqhome2b OWNS home.rs,tree.rs (relaunched 22:48 fresh session, disk 20Gi)",
+ "WAVE-EXQ-HOME2B": "landed+pushed 7b6c1f2 REPORT PASS 747 green home grid+tabs+tree geometry",
  "WAVE-EXQ-TEXT2B": "dead agyx 0B no-proc twice + probe 0B (consistent fail, abandoned per rule)",
  "WAVE-LOCALRUN5B": "landed+pushed 5daacbc REPORT PASS 10/10 CLI 3 PNGs TOP-10 gaps",
  "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)",
