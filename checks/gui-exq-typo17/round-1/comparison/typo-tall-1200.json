@@ -1,0 +1,40 @@
+{
+  "name": "typo-tall-1200",
+  "intent": "Wave typo17 tall 1200: text-compare typography and text geometry at 1200px tall canvas — monospace body (12.0 size, line-height 1.30 = 15.6) with generous row height (17.6px locked to line-height + ROW_PAD 2.0), line-number column derived from char metrics (4 digits x 7.2px + 2x4.0 pad = 36.8px) staying strictly aligned over long 1200-row scroll, calm metadata and header roles, stable readable baselines.",
+  "inputs": {
+    "canvas_h": 1200.0,
+    "total_rows": 1200,
+    "digits": 4,
+    "char_w": 7.2,
+    "mono_size": 12.0,
+    "mono_line_height": 1.30,
+    "mono_line_height_px": 15.6,
+    "row_pad": 2.0,
+    "row_h": 17.6,
+    "inner_pad": 4.0,
+    "outer_margin": 12.0,
+    "center_gap": 8.0
+  },
+  "assertions": {
+    "digits_for_1200": 4,
+    "linenum_col_w_1200": 36.8,
+    "linenum_col_w_1200_tabular": true,
+    "row_h_derived_from_line_height": 17.6,
+    "baseline_offset": 1.0,
+    "body_role": "Mono",
+    "body_family": "monospace",
+    "body_weight": 400,
+    "body_size": 12.0,
+    "body_line_height": 1.30,
+    "body_letter_spacing": 0.0,
+    "meta_role": "Small",
+    "meta_family": "proportional",
+    "meta_size": 11.0,
+    "meta_line_height": 1.20,
+    "header_role": "Heading",
+    "header_size": 18.0,
+    "scroll_visible_rows_1200": 68,
+    "row_tops_strictly_monotonic": true,
+    "linenum_alignment_stable_across_scroll": true
+  }
+}

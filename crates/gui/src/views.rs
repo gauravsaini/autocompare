@@ -37,9 +37,10 @@ use crate::home::{
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
-    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE,
-    TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole, blue_for, dim_for,
-    green_for, red_for, track_for,
+    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_HEADING_SIZE, TYPO_LETTER_SPACING,
+    TYPO_LINE_HEIGHT_CHROME, TYPO_LINE_HEIGHT_MONO, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE,
+    TYPO_SMALL_SIZE, TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole,
+    blue_for, dim_for, green_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -3442,7 +3443,7 @@ fn paint_text_body(
     paint_text_cursor_strip(ui, &model.rows, model.selected);
     paint_text_status_bar(ui, &zones);
 
-    let font_id = TypoRole::Mono.resolved_font_id(ui.style());
+    let font_id = text_body_role().resolved_font_id(ui.style());
     let row_height = row_height_for_line(text_row_height(ui));
     let base_text = ui.style().visuals.text_color();
     let dark = ui.visuals().dark_mode;
@@ -5669,6 +5670,118 @@ pub fn paint_text_legend_bar(ui: &mut Ui) {
             ui.label(text_legend_role().rich(seg));
         }
     });
+}
+
+// ----------------------------------------------------------------------------
+// EXQUISITE TYPO17: text-compare typography + text geometry.
+//
+// BC truth: monospace body with generous row height, a line-number column
+// sized from char metrics, calm header/metadata roles, readable baselines;
+// changed rows carry markers.
+// Typography FIRST (body/mono/small roles, char-metrics line numbers,
+// line-height row height), geometry SECOND (margins, padding, alignment),
+// colors FROZEN at 33 touches.
+// ----------------------------------------------------------------------------
+
+/// Monospace body role for text-compare rows: [`TypoRole::pane_body`]
+/// ([`TypoRole::Mono`] == 12.0 regular monospace, 1.30 line height = 15.6,
+/// 0.0 letter spacing). Pure; unit-tested.
+pub fn text_body_role() -> TypoRole {
+    TypoRole::pane_body()
+}
+
+/// Calm metadata role for text-compare annotations and secondary text:
+/// [`TypoRole::pane_meta`] ([`TypoRole::Small`] == 11.0 proportional,
+/// 1.20 chrome line height = 13.2). Pure; unit-tested.
+pub fn text_meta_role() -> TypoRole {
+    TypoRole::pane_meta()
+}
+
+/// Calm header role for text-compare pane section titles:
+/// [`TypoRole::pane_header`] ([`TypoRole::Heading`] == 18.0 strong proportional).
+/// Pure; unit-tested.
+pub fn text_header_role() -> TypoRole {
+    TypoRole::pane_header()
+}
+
+/// Body text line height multiplier ([`TYPO_LINE_HEIGHT_MONO`] = 1.30). Pure; unit-tested.
+pub fn text_body_line_height() -> f32 {
+    TYPO_LINE_HEIGHT_MONO
+}
+
+/// Metadata text line height multiplier ([`TYPO_LINE_HEIGHT_CHROME`] = 1.20). Pure; unit-tested.
+pub fn text_meta_line_height() -> f32 {
+    TYPO_LINE_HEIGHT_CHROME
+}
+
+/// Metadata point size ([`TYPO_SMALL_SIZE`] = 11.0). Pure; unit-tested.
+pub fn text_meta_size() -> f32 {
+    TYPO_SMALL_SIZE
+}
+
+/// Header point size ([`TYPO_HEADING_SIZE`] = 18.0). Pure; unit-tested.
+pub fn text_header_size() -> f32 {
+    TYPO_HEADING_SIZE
+}
+
+/// Text letter spacing tracking ([`TYPO_LETTER_SPACING`] = 0.0). Pure; unit-tested.
+pub fn text_letter_spacing() -> f32 {
+    TYPO_LETTER_SPACING
+}
+
+/// Standard monospace char advance metric (px): 0.6 of [`TYPO_MONO_SIZE`]
+/// (12.0 * 0.6 = 7.2) for standard monospace code fonts. Pure; unit-tested.
+pub fn text_char_metric_width() -> f32 {
+    TYPO_MONO_SIZE * 0.6
+}
+
+/// Inner horizontal padding (px) inside each row: one XS step
+/// ([`crate::theme::SPACE_XS`] = 4.0) — provides symmetric breathing room
+/// on both sides of the number column and text. Pure; unit-tested.
+pub fn text_row_inner_pad_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Line-number column width derived from char metrics (px): `digits` mono
+/// advances plus symmetric inner pad (`2 * pad`) so numbers stay
+/// right-aligned without clipping code. Non-finite or non-positive `char_w`
+/// falls back to pad-only. Pure; unit-tested.
+pub fn text_linenum_column_width_from_metrics(digits: usize, char_w: f32) -> f32 {
+    let pad = text_row_inner_pad_px();
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 2.0 * pad;
+    }
+    digits as f32 * char_w + 2.0 * pad
+}
+
+/// Line-number column width for `max_line_no` rows derived from char metrics:
+/// when numbers are hidden, collapses to narrow ruler track ([`crate::theme::SPACE_SM`] = 8.0);
+/// when shown, scales with decimal digit count so numbers never clip. Pure; unit-tested.
+pub fn text_linenum_col_width_for_rows(
+    max_line_no: usize,
+    show_line_numbers: bool,
+    char_w: f32,
+) -> f32 {
+    if !show_line_numbers {
+        crate::theme::SPACE_SM
+    } else {
+        let digits = crate::gutter::gutter_linenum_digits(max_line_no);
+        text_linenum_column_width_from_metrics(digits, char_w)
+    }
+}
+
+/// Generous row height (px) derived from line-height tokens:
+/// [`TypoRole::Mono`] line-height (15.6 = 12.0 * 1.30) plus [`ROW_PAD`] (2.0)
+/// gives a stable 17.6 rhythm with vertical breathing room. Pure; unit-tested.
+pub fn text_typo17_row_height() -> f32 {
+    row_height_for_line(TypoRole::Mono.line_height_px())
+}
+
+/// Stable baseline vertical offset (px) inside generous row:
+/// half of [`ROW_PAD`] (1.0) centers the 15.6 text block inside 17.6 row height.
+/// Pure; unit-tested.
+pub fn text_row_baseline_offset_px() -> f32 {
+    ROW_PAD / 2.0
 }
 
 /// Filler hatch paint: khaali (filler) side ke label rect me step-spaced
@@ -9129,6 +9242,91 @@ mod tests {
             "Unimportant differences | Same | Insert | Load"
         );
         assert!(fixture_raw.contains("\"status_bottom_stack_h\": 34.4"));
+    }
+
+    #[test]
+    fn typo17_tall1200_numbers_aligned() {
+        // Mirrors checks/gui-exq-typo17/round-1/comparison/typo-tall-1200.json:
+        // tall 1200px scroll canvas — line numbers stay aligned over long scroll,
+        // baselines stable, generous row height from line-height tokens.
+        // Geometry FIRST, typography SECOND, colors FROZEN.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-typo17/round-1/comparison/typo-tall-1200.json");
+        assert!(fixture_raw.contains("\"name\": \"typo-tall-1200\""));
+        assert!(fixture_raw.contains("\"linenum_col_w_1200\": 36.8"));
+        assert!(fixture_raw.contains("\"row_h_derived_from_line_height\": 17.6"));
+        assert!(fixture_raw.contains("\"scroll_visible_rows_1200\": 68"));
+
+        // 1. Typography roles: body, meta, header
+        assert_eq!(text_body_role(), TypoRole::Mono);
+        assert_eq!(text_body_role().size(), TYPO_MONO_SIZE);
+        assert_eq!(text_body_role().size(), 12.0);
+        assert_eq!(text_body_role().line_height(), TYPO_LINE_HEIGHT_MONO);
+        assert_eq!(text_body_line_height(), TYPO_LINE_HEIGHT_MONO);
+        assert_eq!(text_body_role().family(), "monospace");
+        assert_eq!(text_body_role().weight_value(), TYPO_WEIGHT_REGULAR);
+        assert_eq!(text_body_role().letter_spacing_em(), TYPO_LETTER_SPACING);
+        assert_eq!(text_letter_spacing(), TYPO_LETTER_SPACING);
+
+        assert_eq!(text_meta_role(), TypoRole::Small);
+        assert_eq!(text_meta_role().size(), TYPO_SMALL_SIZE);
+        assert_eq!(text_meta_size(), TYPO_SMALL_SIZE);
+        assert_eq!(text_meta_role().size(), 11.0);
+        assert_eq!(text_meta_role().line_height(), TYPO_LINE_HEIGHT_CHROME);
+        assert_eq!(text_meta_line_height(), TYPO_LINE_HEIGHT_CHROME);
+
+        assert_eq!(text_header_role(), TypoRole::Heading);
+        assert_eq!(text_header_role().size(), TYPO_HEADING_SIZE);
+        assert_eq!(text_header_size(), TYPO_HEADING_SIZE);
+        assert_eq!(text_header_role().size(), 18.0);
+
+        // 2. Line-number column derived from char metrics
+        let char_w = text_char_metric_width();
+        assert!((char_w - 7.2).abs() < 0.001);
+        assert_eq!(text_row_inner_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(text_row_inner_pad_px(), 4.0);
+
+        // For 1200 rows, 4 decimal digits
+        let digits_1200 = crate::gutter::gutter_linenum_digits(1200);
+        assert_eq!(digits_1200, 4);
+        let col_w_1200 = text_linenum_column_width_from_metrics(digits_1200, char_w);
+        assert!((col_w_1200 - 36.8).abs() < 0.001);
+        assert_eq!(
+            text_linenum_col_width_for_rows(1200, true, char_w),
+            col_w_1200
+        );
+        // Hidden line numbers collapse to narrow ruler track
+        assert_eq!(
+            text_linenum_col_width_for_rows(1200, false, char_w),
+            crate::theme::SPACE_SM
+        );
+        assert_eq!(text_linenum_col_width_for_rows(1200, false, char_w), 8.0);
+
+        // 3. Generous row height derived from line-height tokens
+        let mono_lh = TypoRole::Mono.line_height_px();
+        assert!((mono_lh - 15.6).abs() < 0.001);
+        assert_eq!(text_row_line_height_px(), mono_lh);
+        assert!((text_typo17_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(text_typo17_row_height(), text_row_top_rhythm_px());
+        assert_eq!(text_row_baseline_offset_px(), 1.0);
+        assert_eq!(text_row_baseline_offset_px(), ROW_PAD / 2.0);
+
+        // 4. Stable baselines across 1200-row scroll
+        let mut prev_y = 0.0f32;
+        for i in 0..68 {
+            let row_y = i as f32 * text_typo17_row_height();
+            if i > 0 {
+                assert!(row_y > prev_y);
+                assert!((row_y - prev_y - text_typo17_row_height()).abs() < 0.001);
+            }
+            prev_y = row_y;
+        }
+
+        // 5. Geometry margins and gaps in text region
+        assert_eq!(text_rows_outer_margin_px(), crate::theme::SPACE_MD);
+        assert_eq!(text_rows_outer_margin_px(), 12.0);
+        assert_eq!(text_center_divider_gap_px(), crate::theme::SPACE_SM);
+        assert_eq!(text_center_divider_gap_px(), 8.0);
     }
 
     #[test]
