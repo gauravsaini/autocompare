@@ -356,3 +356,9 @@
 1. **Home Search & Indent at 720-960px**: second home pass: search field height from `TypoRole` chrome line-height, tree indent reusing tree indent step, empty-state margins via `OUTER_MARGIN`, hit-slop symmetric. Colors frozen at 33. Edge fixture `comparison/home-narrow-720.json` added; exquisite harness PASS (PNG 10401B).
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `home.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home3/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-copy7 arrows plus hitrects
+
+1. **Copy Arrows & Hit-Rects at 960px**: copy dialog arrows from space scale, rows from Mono line-height, hit-rect symmetry tests plus wide-960 fixture lock.
+2. **Tests** (before → after): autocompare-gui all green (961 passed); clippy 0 warnings on owned `copy.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy7/**`, `TIMELINE.md`.
