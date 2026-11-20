@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::args::{Cli, Command, SyncDir};
 use crate::error::CliError;
 use crate::outcome::Outcome;
-use crate::report::{write_report, ReportSpec};
+use crate::report::{ReportSpec, write_report};
 use crate::{
     render_audio, render_folder, render_foldermerge, render_hex, render_picture, render_sync,
     render_table, render_text, render_text_unified, session_cmd, term,
@@ -47,8 +47,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             }
             if let Some(spec) = report {
                 let mut input = crate::report::text_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -78,8 +78,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_folder::print(&cmp, color);
             if let Some(spec) = report {
                 let mut input = crate::report::folder_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -97,16 +97,16 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 Path::new(right),
                 *max_hunks,
             )?;
+            let is_diff = render_hex::outcome(&cmp).is_diff();
             render_hex::print(&cmp, color);
             if let Some(spec) = report {
                 let mut input = crate::report::hex_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
             save_tab(cli.save_session.as_deref(), "hex", left, right, is_ro)?;
-            let is_diff = !cmp.hunks.is_empty();
             Ok(Outcome::for_binary(is_diff, mode))
         }
         Command::Merge {
@@ -116,7 +116,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             output,
         } => {
             let out_dest = cli.mergeoutput.as_ref().or(output.as_ref());
-            if is_ro && out_dest.is_some() {
+            if (is_ro || cli.ro4) && out_dest.is_some() {
                 return Err(CliError::ReadOnly(
                     "cannot write merge in read-only mode".into(),
                 ));
@@ -135,12 +135,20 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             }
             if let Some(spec) = report {
                 let mut input = crate::report::merge_report_input(base, left, right, &merged);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, Some(base)) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
-            save_tab(cli.save_session.as_deref(), "merge", left, right, is_ro)?;
+            save_tab_with_merge(
+                cli.save_session.as_deref(),
+                "merge",
+                Some(base),
+                left,
+                right,
+                out_dest.map(|s| s.as_str()),
+                is_ro,
+            )?;
             Ok(Outcome::for_merge(conflicted, mode))
         }
         Command::Table {
@@ -158,8 +166,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_table::print(&cmp, color);
             if let Some(spec) = report {
                 let mut input = crate::report::table_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -192,8 +200,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_sync::print_plan(&plan, color);
             if let Some(spec) = report {
                 let mut input = crate::report::sync_report_input(left, right, &plan);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -233,8 +241,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_picture::print(&cmp, color, heatmap.as_deref());
             if let Some(spec) = report {
                 let mut input = crate::report::picture_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -251,7 +259,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
         } => {
             let out_dest = cli.mergeoutput.as_ref().or(output.as_ref());
             let should_apply = *apply || (cli.automerge && out_dest.is_some());
-            if is_ro && should_apply {
+            if (is_ro || cli.ro4) && should_apply {
                 return Err(CliError::ReadOnly(
                     "cannot apply folder merge in read-only mode".into(),
                 ));
@@ -264,16 +272,18 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_foldermerge::print_plan(&plan, color);
             if let Some(spec) = report {
                 let mut input = crate::report::foldermerge_report_input(base, left, right, &plan);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, Some(base)) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
-            save_tab(
+            save_tab_with_merge(
                 cli.save_session.as_deref(),
                 "folder-merge",
+                Some(base),
                 left,
                 right,
+                out_dest.map(|s| s.as_str()),
                 is_ro,
             )?;
             if !should_apply {
@@ -309,8 +319,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             render_audio::print(&cmp, color);
             if let Some(spec) = report {
                 let mut input = crate::report::audio_report_input(left, right, &cmp);
-                if let Some(ref title) = cli.report_title {
-                    input.title = title.clone();
+                if let Some(title) = resolve_report_title(cli, left, right, None) {
+                    input.title = title;
                 }
                 write_report(spec, &input)?;
             }
@@ -326,6 +336,34 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
     }
 }
 
+/// Resolves effective report title from explicit report_title, VCS titles (title1..4), or default.
+fn resolve_report_title(
+    cli: &Cli,
+    default_left: &str,
+    default_right: &str,
+    base: Option<&str>,
+) -> Option<String> {
+    if let Some(ref t) = cli.report_title {
+        return Some(t.clone());
+    }
+    match (base, &cli.title3) {
+        (Some(b_def), _)
+            if cli.title1.is_some() || cli.title2.is_some() || cli.title3.is_some() =>
+        {
+            let b_title = cli.title3.as_deref().unwrap_or(b_def);
+            let l_title = cli.title1.as_deref().unwrap_or(default_left);
+            let r_title = cli.title2.as_deref().unwrap_or(default_right);
+            Some(format!("{b_title} <-> {l_title} <-> {r_title}"))
+        }
+        _ => match (&cli.title1, &cli.title2) {
+            (Some(t1), Some(t2)) => Some(format!("{t1} <-> {t2}")),
+            (Some(t1), None) => Some(format!("{t1} <-> {default_right}")),
+            (None, Some(t2)) => Some(format!("{default_left} <-> {t2}")),
+            (None, None) => None,
+        },
+    }
+}
+
 fn save_tab(
     path: Option<&str>,
     stype: &str,
@@ -333,13 +371,25 @@ fn save_tab(
     right: &str,
     ro: bool,
 ) -> Result<(), CliError> {
+    save_tab_with_merge(path, stype, None, left, right, None, ro)
+}
+
+fn save_tab_with_merge(
+    path: Option<&str>,
+    stype: &str,
+    base: Option<&str>,
+    left: &str,
+    right: &str,
+    output: Option<&str>,
+    ro: bool,
+) -> Result<(), CliError> {
     if let Some(p) = path {
-        session_cmd::save_session(p, stype, left, right, ro)?;
+        session_cmd::save_session_with_merge_paths(p, stype, base, left, right, output, ro)?;
     }
     Ok(())
 }
 
-fn write_merged(merged: &[String], output: Option<&str>) -> Result<(), CliError> {
+pub(crate) fn write_merged(merged: &[String], output: Option<&str>) -> Result<(), CliError> {
     let mut text = merged.join("\n");
     if !text.is_empty() {
         text.push('\n');
@@ -355,5 +405,223 @@ fn write_merged(merged: &[String], output: Option<&str>) -> Result<(), CliError>
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod tests {
+    use super::*;
+    use crate::args::ExitCodeMode;
+    use tempfile::tempdir;
+
+    fn make_test_cli(cmd: Command) -> Cli {
+        Cli {
+            color: crate::args::ColorWhen::Never,
+            report: None,
+            ro: false,
+            ro1: false,
+            ro2: false,
+            ro3: false,
+            ro4: false,
+            automerge: false,
+            mergeoutput: None,
+            vcs1: None,
+            vcs2: None,
+            vcs3: None,
+            vcs4: None,
+            title1: None,
+            title2: None,
+            title3: None,
+            title4: None,
+            session: None,
+            save_session: None,
+            exit_code_mode: ExitCodeMode::Diff,
+            bc_exit_code: false,
+            report_title: None,
+            solo: false,
+            nobackups: false,
+            reviewconflicts: false,
+            command: Some(cmd),
+        }
+    }
+
+    #[test]
+    fn test_runner_text_exit_codes_both_modes() {
+        let tmp = tempdir().expect("tempdir");
+        let same1 = tmp.path().join("same1.txt");
+        let same2 = tmp.path().join("same2.txt");
+        let diff = tmp.path().join("diff.txt");
+
+        std::fs::write(&same1, "line 1\nline 2\n").expect("write");
+        std::fs::write(&same2, "line 1\nline 2\n").expect("write");
+        std::fs::write(&diff, "line 1\nchanged 2\n").expect("write");
+
+        // Identical in Diff mode -> 0
+        let cli_same = make_test_cli(Command::Text {
+            left: same1.to_str().expect("p").to_string(),
+            right: same2.to_str().expect("p").to_string(),
+            ignore_case: false,
+            ignore_space_change: false,
+            unified: false,
+            width: 80,
+        });
+        let res_same = run(&cli_same, false, None).expect("run");
+        assert_eq!(res_same.code(), 0);
+
+        // Differing in Diff mode -> 1
+        let cli_diff = make_test_cli(Command::Text {
+            left: same1.to_str().expect("p").to_string(),
+            right: diff.to_str().expect("p").to_string(),
+            ignore_case: false,
+            ignore_space_change: false,
+            unified: false,
+            width: 80,
+        });
+        let res_diff = run(&cli_diff, false, None).expect("run");
+        assert_eq!(res_diff.code(), 1);
+
+        // Identical in BC mode -> 0
+        let mut cli_same_bc = cli_same;
+        cli_same_bc.bc_exit_code = true;
+        let res_same_bc = run(&cli_same_bc, false, None).expect("run");
+        assert_eq!(res_same_bc.code(), 0);
+
+        // Differing in BC mode -> 13 (Rules diff)
+        let mut cli_diff_bc = cli_diff;
+        cli_diff_bc.bc_exit_code = true;
+        let res_diff_bc = run(&cli_diff_bc, false, None).expect("run");
+        assert_eq!(res_diff_bc.code(), 13);
+    }
+
+    #[test]
+    fn test_runner_hex_exit_codes_both_modes() {
+        let tmp = tempdir().expect("tempdir");
+        let h1 = tmp.path().join("h1.bin");
+        let h2 = tmp.path().join("h2.bin");
+        let h3 = tmp.path().join("h3.bin");
+
+        std::fs::write(&h1, [0xAA, 0xBB, 0xCC]).expect("write");
+        std::fs::write(&h2, [0xAA, 0xBB, 0xCC]).expect("write");
+        std::fs::write(&h3, [0xAA, 0xFF, 0xCC]).expect("write");
+
+        // Identical -> 0
+        let cli_same = make_test_cli(Command::Hex {
+            left: h1.to_str().expect("p").to_string(),
+            right: h2.to_str().expect("p").to_string(),
+            max_hunks: 50,
+        });
+        let res_same = run(&cli_same, false, None).expect("run");
+        assert_eq!(res_same.code(), 0);
+
+        // Differing in Diff mode -> 1
+        let cli_diff = make_test_cli(Command::Hex {
+            left: h1.to_str().expect("p").to_string(),
+            right: h3.to_str().expect("p").to_string(),
+            max_hunks: 50,
+        });
+        let res_diff = run(&cli_diff, false, None).expect("run");
+        assert_eq!(res_diff.code(), 1);
+
+        // Differing in BC mode -> 11 (Binary diff)
+        let mut cli_diff_bc = cli_diff;
+        cli_diff_bc.bc_exit_code = true;
+        let res_diff_bc = run(&cli_diff_bc, false, None).expect("run");
+        assert_eq!(res_diff_bc.code(), 11);
+    }
+
+    #[test]
+    fn test_runner_merge_clean_conflicted_and_readonly_guard() {
+        let tmp = tempdir().expect("tempdir");
+        let base = tmp.path().join("base.txt");
+        let left = tmp.path().join("left.txt");
+        let right_clean = tmp.path().join("right_clean.txt");
+        let right_conflict = tmp.path().join("right_conflict.txt");
+        let out = tmp.path().join("out.txt");
+
+        std::fs::write(&base, "base line\n").expect("write");
+        std::fs::write(&left, "left line\n").expect("write");
+        std::fs::write(&right_clean, "base line\n").expect("write");
+        std::fs::write(&right_conflict, "conflict line\n").expect("write");
+
+        // Clean merge -> 0
+        let cli_clean = make_test_cli(Command::Merge {
+            base: base.to_str().expect("p").to_string(),
+            left: left.to_str().expect("p").to_string(),
+            right: right_clean.to_str().expect("p").to_string(),
+            output: Some(out.to_str().expect("p").to_string()),
+        });
+        let res_clean = run(&cli_clean, false, None).expect("run");
+        assert_eq!(res_clean.code(), 0);
+
+        // Conflicted merge in Diff mode -> 1
+        let cli_conflict = make_test_cli(Command::Merge {
+            base: base.to_str().expect("p").to_string(),
+            left: left.to_str().expect("p").to_string(),
+            right: right_conflict.to_str().expect("p").to_string(),
+            output: Some(out.to_str().expect("p").to_string()),
+        });
+        let res_conflict = run(&cli_conflict, false, None).expect("run");
+        assert_eq!(res_conflict.code(), 1);
+
+        // Conflicted merge in BC mode -> 14
+        let mut cli_conflict_bc = cli_conflict.clone();
+        cli_conflict_bc.bc_exit_code = true;
+        let res_conflict_bc = run(&cli_conflict_bc, false, None).expect("run");
+        assert_eq!(res_conflict_bc.code(), 14);
+
+        // Read-only guard -> error (exit code 2)
+        let mut cli_ro = cli_clean;
+        cli_ro.ro = true;
+        let err = run(&cli_ro, false, None).unwrap_err();
+        assert!(matches!(err, CliError::ReadOnly(_)));
+        assert_eq!(err.exit_code(), std::process::ExitCode::from(2));
+
+        // Read-only ro4 guard -> error (exit code 2)
+        let mut cli_ro4 = cli_conflict;
+        cli_ro4.ro4 = true;
+        let err4 = run(&cli_ro4, false, None).unwrap_err();
+        assert!(matches!(err4, CliError::ReadOnly(_)));
+        assert_eq!(err4.exit_code(), std::process::ExitCode::from(2));
+    }
+
+    #[test]
+    fn test_runner_report_wiring_with_title_override_and_vcs_titles() {
+        let tmp = tempdir().expect("tempdir");
+        let left = tmp.path().join("left.txt");
+        let right = tmp.path().join("right.txt");
+        let rep_html = tmp.path().join("report.html");
+
+        std::fs::write(&left, "alpha\n").expect("write");
+        std::fs::write(&right, "beta\n").expect("write");
+
+        let mut cli = make_test_cli(Command::Text {
+            left: left.to_str().expect("p").to_string(),
+            right: right.to_str().expect("p").to_string(),
+            ignore_case: false,
+            ignore_space_change: false,
+            unified: false,
+            width: 80,
+        });
+
+        // 1. VCS title1 and title2 propagation
+        cli.title1 = Some("Branch-A (v1.0)".to_string());
+        cli.title2 = Some("Branch-B (v2.0)".to_string());
+        let spec = ReportSpec::parse(&format!("html:{}", rep_html.display())).expect("parse");
+        run(&cli, false, Some(&spec)).expect("run");
+        let html_content = std::fs::read_to_string(&rep_html).expect("read");
+        assert!(html_content.contains("Branch-A (v1.0)"));
+        assert!(html_content.contains("Branch-B (v2.0)"));
+
+        // 2. Explicit report_title override takes precedence
+        cli.report_title = Some("Overridden Unified Audit Report".to_string());
+        run(&cli, false, Some(&spec)).expect("run");
+        let html_content_override = std::fs::read_to_string(&rep_html).expect("read");
+        assert!(html_content_override.contains("Overridden Unified Audit Report"));
     }
 }

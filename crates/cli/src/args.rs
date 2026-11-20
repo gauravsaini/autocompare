@@ -60,6 +60,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub ro2: bool,
 
+    /// Read-only mode for base / ancestor / center input.
+    #[arg(long, global = true)]
+    pub ro3: bool,
+
+    /// Read-only mode for output input.
+    #[arg(long, global = true)]
+    pub ro4: bool,
+
     /// Automatically merge when there are no conflicts.
     #[arg(long, global = true)]
     pub automerge: bool,
@@ -149,7 +157,27 @@ impl Cli {
 
     /// Whether any read-only flag is active.
     pub fn is_read_only(&self) -> bool {
-        self.ro || self.ro1 || self.ro2
+        self.ro || self.ro1 || self.ro2 || self.ro3 || self.ro4
+    }
+
+    /// Whether left/first input is marked read-only.
+    pub fn is_left_read_only(&self) -> bool {
+        self.ro || self.ro1
+    }
+
+    /// Whether right/second input is marked read-only.
+    pub fn is_right_read_only(&self) -> bool {
+        self.ro || self.ro2
+    }
+
+    /// Whether center/base input is marked read-only.
+    pub fn is_base_read_only(&self) -> bool {
+        self.ro || self.ro3
+    }
+
+    /// Whether output input is marked read-only.
+    pub fn is_output_read_only(&self) -> bool {
+        self.ro || self.ro4
     }
 }
 
@@ -289,4 +317,109 @@ pub enum Command {
         /// Path to the session document.
         path: String,
     },
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_read_only_flags() {
+        let mut cli = Cli::try_parse_from(["autocompare"]).expect("parse");
+        assert!(!cli.is_read_only());
+        assert!(!cli.is_left_read_only());
+        assert!(!cli.is_right_read_only());
+        assert!(!cli.is_base_read_only());
+        assert!(!cli.is_output_read_only());
+
+        cli.ro = true;
+        assert!(cli.is_read_only());
+        assert!(cli.is_left_read_only());
+        assert!(cli.is_right_read_only());
+        assert!(cli.is_base_read_only());
+        assert!(cli.is_output_read_only());
+
+        cli.ro = false;
+        cli.ro1 = true;
+        assert!(cli.is_read_only());
+        assert!(cli.is_left_read_only());
+        assert!(!cli.is_right_read_only());
+
+        cli.ro1 = false;
+        cli.ro3 = true;
+        assert!(cli.is_read_only());
+        assert!(cli.is_base_read_only());
+
+        cli.ro3 = false;
+        cli.ro4 = true;
+        assert!(cli.is_read_only());
+        assert!(cli.is_output_read_only());
+    }
+
+    #[test]
+    fn test_cli_effective_exit_code_mode() {
+        let mut cli = Cli::try_parse_from(["autocompare"]).expect("parse");
+        assert_eq!(cli.effective_exit_code_mode(), ExitCodeMode::Diff);
+
+        cli.bc_exit_code = true;
+        assert_eq!(cli.effective_exit_code_mode(), ExitCodeMode::BeyondCompare);
+
+        cli.bc_exit_code = false;
+        cli.exit_code_mode = ExitCodeMode::BeyondCompare;
+        assert_eq!(cli.effective_exit_code_mode(), ExitCodeMode::BeyondCompare);
+    }
+
+    #[test]
+    fn test_cli_subcommands_clap_parse() {
+        let cli_text =
+            Cli::try_parse_from(["autocompare", "text", "a.txt", "b.txt"]).expect("text");
+        assert!(matches!(cli_text.command, Some(Command::Text { .. })));
+
+        let cli_hex = Cli::try_parse_from(["autocompare", "hex", "a.bin", "b.bin"]).expect("hex");
+        assert!(matches!(cli_hex.command, Some(Command::Hex { .. })));
+
+        let cli_merge =
+            Cli::try_parse_from(["autocompare", "merge", "base.txt", "left.txt", "right.txt"])
+                .expect("merge");
+        assert!(matches!(cli_merge.command, Some(Command::Merge { .. })));
+
+        let cli_fmerge = Cli::try_parse_from([
+            "autocompare",
+            "folder-merge",
+            "base_dir",
+            "left_dir",
+            "right_dir",
+        ])
+        .expect("fmerge");
+        assert!(matches!(
+            cli_fmerge.command,
+            Some(Command::FolderMerge { .. })
+        ));
+
+        let cli_table =
+            Cli::try_parse_from(["autocompare", "table", "a.csv", "b.csv"]).expect("table");
+        assert!(matches!(cli_table.command, Some(Command::Table { .. })));
+
+        let cli_sync =
+            Cli::try_parse_from(["autocompare", "sync", "dir_a", "dir_b"]).expect("sync");
+        assert!(matches!(cli_sync.command, Some(Command::Sync { .. })));
+
+        let cli_picture =
+            Cli::try_parse_from(["autocompare", "picture", "a.png", "b.png"]).expect("pic");
+        assert!(matches!(cli_picture.command, Some(Command::Picture { .. })));
+
+        let cli_audio =
+            Cli::try_parse_from(["autocompare", "audio", "a.wav", "b.wav"]).expect("audio");
+        assert!(matches!(cli_audio.command, Some(Command::Audio { .. })));
+
+        let cli_session =
+            Cli::try_parse_from(["autocompare", "session", "my_session.json"]).expect("session");
+        assert!(matches!(cli_session.command, Some(Command::Session { .. })));
+    }
 }
