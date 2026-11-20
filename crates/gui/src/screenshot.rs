@@ -300,12 +300,15 @@ fn paint_pathmeta_strip(
     }
 }
 
-/// TopChrome toolbar proof (exq-topchrome + exq-chrome17 mirror): two
-/// stacked 24px action rows + 8px inter-row gap = 56 band (live
+/// TopChrome toolbar proof (exq-topchrome + exq-chrome17 mirror + exq-toolbar21
+/// icons): two stacked 24px action rows + 8px inter-row gap = 56 band (live
 /// `views::action_bar_row_gap` SECTION_GAP rhythm, intra-row TIGHT_GAP stays).
-/// Row 1: `home::topchrome_*` actions; row 2: Prev/Next nav pair with
-/// 8px cluster air (`views::action_nav_arrow_gap`) + right-docked cursor.
-/// Geometry headless contract se aati hai; hues existing fixture tones
+/// Row 1: `home::topchrome_*` actions, each button keeps its rhythm width +
+/// label and gains a 12px original geometric mark (abstract block/bars/wedge
+/// from `fill_rect`, dim hue reuse) left of the label. Row 2: Prev/Next nav
+/// pair with 8px cluster air (`views::action_nav_arrow_gap`) + original `<`
+/// / `>` chevron triples (`fill_rect` bars, dim hue reuse) + right-docked
+/// cursor. Geometry headless contract se aati hai; hues existing fixture tones
 /// reuse, koi naya palette zero. Colors frozen.
 fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
     use crate::home::{
@@ -345,11 +348,54 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
             (x, PATH_TOOLBAR_Y, vw, row_h),
             [45, 45, 45, 255],
         );
-        let label = clip_to_width(action, vw.saturating_sub(8), text_width);
+        // Toolbar icon glyph (exq-toolbar21): 12px original geometric mark
+        // left of the label — abstract variants (solid block / twin bars /
+        // side bars / stepped wedge), `fill_rect` only, dim hue reuse.
+        // Button rects + gaps unchanged, so icons compress with the shared
+        // visible-count rhythm instead of overlapping.
+        if vw >= 16 {
+            let icon_x = x.saturating_add(4);
+            let icon_y = PATH_TOOLBAR_Y.saturating_add(row_h.saturating_sub(12) / 2);
+            let mark = fixture_palette().dim;
+            if shown % 4 == 0 {
+                fill_rect(pixels, dims, (icon_x, icon_y, 12, 12), mark);
+            } else if shown % 4 == 1 {
+                fill_rect(pixels, dims, (icon_x, icon_y, 12, 3), mark);
+                fill_rect(
+                    pixels,
+                    dims,
+                    (icon_x, icon_y.saturating_add(9), 12, 3),
+                    mark,
+                );
+            } else if shown % 4 == 2 {
+                fill_rect(pixels, dims, (icon_x, icon_y, 3, 12), mark);
+                fill_rect(
+                    pixels,
+                    dims,
+                    (icon_x.saturating_add(9), icon_y, 3, 12),
+                    mark,
+                );
+            } else {
+                fill_rect(pixels, dims, (icon_x, icon_y, 12, 4), mark);
+                fill_rect(
+                    pixels,
+                    dims,
+                    (icon_x.saturating_add(2), icon_y.saturating_add(4), 8, 4),
+                    mark,
+                );
+                fill_rect(
+                    pixels,
+                    dims,
+                    (icon_x.saturating_add(4), icon_y.saturating_add(8), 4, 4),
+                    mark,
+                );
+            }
+        }
+        let label = clip_to_width(action, vw.saturating_sub(24), text_width);
         draw_string(
             pixels,
             dims,
-            x.saturating_add(4),
+            x.saturating_add(20),
             PATH_TOOLBAR_Y.saturating_add(8),
             &label,
             fixture_palette().text,
@@ -385,20 +431,71 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
             (side, row2_y, btn_w, row_h),
             [45, 45, 45, 255],
         );
+        // Nav chevrons (exq-toolbar21): original `<` / `>` triples from
+        // `fill_rect` bars, dim hue reuse, inside the existing 96x24 pair.
+        let chev = fixture_palette().dim;
+        let cy = row2_y.saturating_add(row_h.saturating_sub(10) / 2);
+        let pcx = side.saturating_add(4);
+        fill_rect(pixels, dims, (pcx.saturating_add(6), cy, 2, 2), chev);
+        fill_rect(
+            pixels,
+            dims,
+            (pcx.saturating_add(4), cy.saturating_add(2), 2, 2),
+            chev,
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (pcx.saturating_add(2), cy.saturating_add(4), 2, 2),
+            chev,
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (pcx.saturating_add(4), cy.saturating_add(6), 2, 2),
+            chev,
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (pcx.saturating_add(6), cy.saturating_add(8), 2, 2),
+            chev,
+        );
         draw_string(
             pixels,
             dims,
-            side.saturating_add(4),
+            side.saturating_add(16),
             row2_y.saturating_add(8),
             "[Prev]",
             fixture_palette().text,
         );
         let nx = side.saturating_add(btn_w).saturating_add(nav_gap);
         fill_rect(pixels, dims, (nx, row2_y, btn_w, row_h), [45, 45, 45, 255]);
+        let ncx = nx.saturating_add(4);
+        fill_rect(pixels, dims, (ncx, cy, 2, 2), chev);
+        fill_rect(
+            pixels,
+            dims,
+            (ncx.saturating_add(2), cy.saturating_add(2), 2, 2),
+            chev,
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (ncx.saturating_add(4), cy.saturating_add(4), 2, 2),
+            chev,
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (ncx.saturating_add(2), cy.saturating_add(6), 2, 2),
+            chev,
+        );
+        fill_rect(pixels, dims, (ncx, cy.saturating_add(8), 2, 2), chev);
         draw_string(
             pixels,
             dims,
-            nx.saturating_add(4),
+            nx.saturating_add(16),
             row2_y.saturating_add(8),
             "[Next]",
             fixture_palette().text,
@@ -5655,6 +5752,87 @@ mod tests {
         assert_eq!(TEXT_CENTER_MARK, "=>");
         assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
         assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+    }
+
+    #[test]
+    fn toolbar21_narrow720_no_overlap() {
+        // Mirrors checks/gui-exq-toolbar21/round-1/comparison/toolbar-narrow-720.json:
+        // narrow 720px canvas — row-1 icon+label buttons compress via the shared
+        // visible-count/overflow rhythm without overlap, and the thin nav-arrow
+        // row (two small chevron triples) keeps its floor + cluster air.
+        // Gutter/markers/chrome/typo rows/status strips stay intact.
+        let raw = include_str!(
+            "../../../checks/gui-exq-toolbar21/round-1/comparison/toolbar-narrow-720.json"
+        );
+        assert!(raw.contains("\"name\": \"toolbar-narrow-720\""));
+
+        use crate::home::{
+            TOPCHROME_BUTTON_GAP, TOPCHROME_SIDE_PAD, TOPCHROME_TOOLBAR_ACTIONS,
+            topchrome_toolbar_button_width, topchrome_toolbar_visible_count,
+        };
+        use crate::views::{action_bar_row_gap, action_bar_row_height, action_nav_arrow_gap};
+
+        // 1. Toolbar band geometry: 24px rows + 8px gap = 56 at y114, panes at 174.
+        assert_eq!(PATH_TOOLBAR_Y, 114);
+        assert_eq!(action_bar_row_height(), 24.0);
+        assert_eq!(action_bar_row_gap(), 8.0);
+        assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+        assert_eq!(action_nav_arrow_gap(), 8.0);
+
+        // 2. 720px: visible buttons tile left-to-right with the shared gap and
+        // never overlap; the rest collapse behind the ">>" overflow marker.
+        let width = 720u32;
+        let visible = topchrome_toolbar_visible_count(width as f32);
+        assert_eq!(visible, 7);
+        assert!(visible < TOPCHROME_TOOLBAR_ACTIONS.len());
+        let mut x = TOPCHROME_SIDE_PAD as u32;
+        assert_eq!(x, 12);
+        let mut prev_end = x;
+        let mut count = 0usize;
+        for action in TOPCHROME_TOOLBAR_ACTIONS {
+            if count >= visible {
+                break;
+            }
+            let w = topchrome_toolbar_button_width(action) as u32;
+            let vw = w.min(width.saturating_sub(x));
+            // Icon (12 box at +4) + label (at +20, budget vw-24) stay in-bounds.
+            assert!(vw >= 16);
+            assert!(x.saturating_add(16) <= x.saturating_add(vw));
+            let budget = vw.saturating_sub(24);
+            let label = crate::viewmodel::clip_to_width(action, budget, text_width);
+            assert!(text_width(&label) <= budget);
+            // 12px icon box fits the 24px row height.
+            assert!(6u32.saturating_add(12) <= action_bar_row_height() as u32);
+            assert!(x >= prev_end);
+            prev_end = x.saturating_add(vw);
+            x = prev_end.saturating_add(TOPCHROME_BUTTON_GAP as u32);
+            count = count.saturating_add(1);
+        }
+        assert_eq!(count, visible);
+        assert!(prev_end <= width);
+
+        // 3. Nav-arrow row at 720: Prev/Next 96x24 pair + 8px cluster air fits.
+        let btn_w = 96u32;
+        let side = TOPCHROME_SIDE_PAD as u32;
+        let row2_y = PATH_TOOLBAR_Y
+            .saturating_add(action_bar_row_height() as u32)
+            .saturating_add(action_bar_row_gap() as u32);
+        assert_eq!(row2_y, 146);
+        let nx = side
+            .saturating_add(btn_w)
+            .saturating_add(action_nav_arrow_gap() as u32);
+        assert_eq!(nx, 116);
+        assert!(nx.saturating_add(btn_w) <= width);
+        // Chevron triples (8x10 cells) fit inside the 96x24 buttons.
+        assert!(16u32.saturating_add(8) <= btn_w);
+        assert!(7u32.saturating_add(10) <= action_bar_row_height() as u32);
+
+        // 4. Gutter/markers/chrome/typo rows/status strips intact.
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert_eq!(PANE_STATUS_H, 18);
+        assert_eq!(560u32.saturating_sub(PANE_STATUS_H), 542);
+        assert_eq!(STATUS_H, 30);
     }
 
     #[test]
