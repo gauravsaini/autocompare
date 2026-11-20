@@ -630,6 +630,306 @@ pub fn aligned_hex_rows(
     rows
 }
 
+/// Returns the 0-indexed row for a 64-bit byte offset given the row width.
+pub fn row_from_offset(offset: u64, bytes_per_row: usize) -> u64 {
+    let row_len = (bytes_per_row.max(1)) as u64;
+    offset / row_len
+}
+
+/// Returns the 0-indexed column within a row for a 64-bit byte offset.
+pub fn col_from_offset(offset: u64, bytes_per_row: usize) -> usize {
+    let row_len = (bytes_per_row.max(1)) as u64;
+    (offset % row_len) as usize
+}
+
+/// Converts a 64-bit row index and column offset into an absolute 64-bit byte offset.
+pub fn offset_from_row_col(row: u64, col: usize, bytes_per_row: usize) -> u64 {
+    row.saturating_mul(bytes_per_row as u64)
+        .saturating_add(col as u64)
+}
+
+/// Finds the index of the [`HexRow`] containing the requested 64-bit byte offset.
+pub fn find_row_for_offset(rows: &[HexRow], offset: u64, is_left: bool) -> Option<usize> {
+    for (idx, row) in rows.iter().enumerate() {
+        let (row_off_opt, bytes) = if is_left {
+            (row.left_offset, &row.left_bytes)
+        } else {
+            (row.right_offset, &row.right_bytes)
+        };
+        if let Some(row_off) = row_off_opt {
+            let actual_bytes = bytes.iter().filter(|b| b.is_some()).count() as u64;
+            if actual_bytes > 0
+                && offset >= row_off
+                && offset < row_off.saturating_add(actual_bytes)
+            {
+                return Some(idx);
+            }
+        }
+    }
+    None
+}
+
+/// Finds which [`HexOp`] inside a [`HexDiff`] covers the requested 64-bit byte offset.
+pub fn find_op_at_offset(diff: &HexDiff, offset: u64, is_left: bool) -> Option<(usize, &HexOp)> {
+    for (idx, op) in diff.ops.iter().enumerate() {
+        match op {
+            HexOp::Equal {
+                left_offset,
+                right_offset,
+                len,
+            } => {
+                let op_off = if is_left { *left_offset } else { *right_offset };
+                if offset >= op_off && offset < op_off.saturating_add(*len as u64) {
+                    return Some((idx, op));
+                }
+            }
+            HexOp::Different {
+                left_offset,
+                right_offset,
+                len,
+            } => {
+                let op_off = if is_left { *left_offset } else { *right_offset };
+                if offset >= op_off && offset < op_off.saturating_add(*len as u64) {
+                    return Some((idx, op));
+                }
+            }
+            HexOp::LeftOnly { left_offset, len }
+                if is_left
+                    && offset >= *left_offset
+                    && offset < left_offset.saturating_add(*len as u64) =>
+            {
+                return Some((idx, op));
+            }
+            HexOp::RightOnly { right_offset, len }
+                if !is_left
+                    && offset >= *right_offset
+                    && offset < right_offset.saturating_add(*len as u64) =>
+            {
+                return Some((idx, op));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// An atomic byte modification record for the hex byte-edit backend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ByteEdit {
+    /// In-place byte replacement at a 64-bit offset.
+    SetByte {
+        offset: u64,
+        old_val: u8,
+        new_val: u8,
+    },
+    /// Insertion of bytes at a 64-bit offset.
+    InsertBytes { offset: u64, bytes: Vec<u8> },
+    /// Deletion of bytes starting at a 64-bit offset.
+    DeleteBytes { offset: u64, old_bytes: Vec<u8> },
+}
+
+/// In-memory byte editor backend with 64-bit offsets and an undo/redo stack.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ByteEditBuffer {
+    bytes: Vec<u8>,
+    history: Vec<ByteEdit>,
+    undone: Vec<ByteEdit>,
+    dirty: bool,
+}
+
+impl ByteEditBuffer {
+    /// Creates a new byte buffer initialized with `bytes`.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+            history: Vec::new(),
+            undone: Vec::new(),
+            dirty: false,
+        }
+    }
+
+    /// Total length of the buffer in bytes (64-bit).
+    pub fn len(&self) -> u64 {
+        self.bytes.len() as u64
+    }
+
+    /// Returns true when the buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    /// Fetches the byte at a 64-bit offset.
+    pub fn get(&self, offset: u64) -> Option<u8> {
+        let idx = usize::try_from(offset).ok()?;
+        self.bytes.get(idx).copied()
+    }
+
+    /// Sets the byte at a 64-bit offset, recording the change in history.
+    pub fn set_byte(&mut self, offset: u64, new_val: u8) -> bool {
+        let idx = match usize::try_from(offset) {
+            Ok(i) => i,
+            Err(_) => return false,
+        };
+        let slot = match self.bytes.get_mut(idx) {
+            Some(s) => s,
+            None => return false,
+        };
+        let old_val = *slot;
+        *slot = new_val;
+        self.history.push(ByteEdit::SetByte {
+            offset,
+            old_val,
+            new_val,
+        });
+        self.undone.clear();
+        self.dirty = true;
+        true
+    }
+
+    /// Inserts bytes at a 64-bit offset, shifting trailing bytes.
+    pub fn insert(&mut self, offset: u64, data: &[u8]) -> bool {
+        if data.is_empty() {
+            return true;
+        }
+        let idx = match usize::try_from(offset) {
+            Ok(i) if i <= self.bytes.len() => i,
+            _ => return false,
+        };
+        self.bytes.splice(idx..idx, data.iter().copied());
+        self.history.push(ByteEdit::InsertBytes {
+            offset,
+            bytes: data.to_vec(),
+        });
+        self.undone.clear();
+        self.dirty = true;
+        true
+    }
+
+    /// Deletes `count` bytes starting at a 64-bit offset.
+    pub fn delete(&mut self, offset: u64, count: u64) -> bool {
+        if count == 0 {
+            return true;
+        }
+        let start = match usize::try_from(offset) {
+            Ok(i) if i < self.bytes.len() => i,
+            _ => return false,
+        };
+        let end = match usize::try_from(offset.saturating_add(count)) {
+            Ok(e) => e.min(self.bytes.len()),
+            Err(_) => self.bytes.len(),
+        };
+        let old_bytes = self.bytes.get(start..end).unwrap_or(&[]).to_vec();
+        self.bytes.drain(start..end);
+        self.history
+            .push(ByteEdit::DeleteBytes { offset, old_bytes });
+        self.undone.clear();
+        self.dirty = true;
+        true
+    }
+
+    /// Undoes the most recent byte edit.
+    pub fn undo(&mut self) -> bool {
+        let edit = match self.history.pop() {
+            Some(e) => e,
+            None => return false,
+        };
+        match &edit {
+            ByteEdit::SetByte {
+                offset, old_val, ..
+            } => {
+                if let Some(slot) = usize::try_from(*offset)
+                    .ok()
+                    .and_then(|idx| self.bytes.get_mut(idx))
+                {
+                    *slot = *old_val;
+                }
+            }
+            ByteEdit::InsertBytes { offset, bytes } => {
+                if let Ok(start) = usize::try_from(*offset) {
+                    let end = start.saturating_add(bytes.len()).min(self.bytes.len());
+                    self.bytes.drain(start..end);
+                }
+            }
+            ByteEdit::DeleteBytes { offset, old_bytes } => {
+                let valid_idx = usize::try_from(*offset)
+                    .ok()
+                    .filter(|&idx| idx <= self.bytes.len());
+                if let Some(idx) = valid_idx {
+                    self.bytes.splice(idx..idx, old_bytes.iter().copied());
+                }
+            }
+        }
+        self.undone.push(edit);
+        true
+    }
+
+    /// Redoes the most recently undone byte edit.
+    pub fn redo(&mut self) -> bool {
+        let edit = match self.undone.pop() {
+            Some(e) => e,
+            None => return false,
+        };
+        match &edit {
+            ByteEdit::SetByte {
+                offset, new_val, ..
+            } => {
+                if let Some(slot) = usize::try_from(*offset)
+                    .ok()
+                    .and_then(|idx| self.bytes.get_mut(idx))
+                {
+                    *slot = *new_val;
+                }
+            }
+            ByteEdit::InsertBytes { offset, bytes } => {
+                let valid_idx = usize::try_from(*offset)
+                    .ok()
+                    .filter(|&idx| idx <= self.bytes.len());
+                if let Some(idx) = valid_idx {
+                    self.bytes.splice(idx..idx, bytes.iter().copied());
+                }
+            }
+            ByteEdit::DeleteBytes { offset, old_bytes } => {
+                if let Ok(start) = usize::try_from(*offset) {
+                    let end = start.saturating_add(old_bytes.len()).min(self.bytes.len());
+                    self.bytes.drain(start..end);
+                }
+            }
+        }
+        self.history.push(edit);
+        true
+    }
+
+    /// Returns true when undo is available.
+    pub fn can_undo(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    /// Returns true when redo is available.
+    pub fn can_redo(&self) -> bool {
+        !self.undone.is_empty()
+    }
+
+    /// Returns whether any changes have been made to the buffer.
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// Read-only slice view of the current bytes.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Consumes the buffer and returns the underlying byte vector.
+    pub fn into_vec(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Returns the sequence of edits applied so far.
+    pub fn edit_history(&self) -> &[ByteEdit] {
+        &self.history
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,5 +1051,75 @@ mod tests {
         assert_eq!(diff_t.first_diff, Some(500));
         assert_eq!(diff_t.differing_bytes, 500);
         assert_eq!(diff_t.matching_bytes, 500);
+    }
+
+    #[test]
+    fn test_64bit_goto_helpers() {
+        assert_eq!(row_from_offset(0, 16), 0);
+        assert_eq!(row_from_offset(15, 16), 0);
+        assert_eq!(row_from_offset(16, 16), 1);
+        assert_eq!(row_from_offset(1_000_000_000_000, 16), 62_500_000_000);
+
+        assert_eq!(col_from_offset(0, 16), 0);
+        assert_eq!(col_from_offset(15, 16), 15);
+        assert_eq!(col_from_offset(16, 16), 0);
+
+        assert_eq!(offset_from_row_col(10, 5, 16), 165);
+
+        let a = b"0123456789ABCDEFextra";
+        let b = b"0123456789ABCDEFextra";
+        let diff = diff_hex(a, b, HexAlignment::None);
+        let rows = aligned_hex_rows(a, b, &diff, 16);
+        assert_eq!(find_row_for_offset(&rows, 5, true), Some(0));
+        assert_eq!(find_row_for_offset(&rows, 18, true), Some(1));
+        assert_eq!(find_row_for_offset(&rows, 100, true), None);
+
+        let op_match = find_op_at_offset(&diff, 10, true);
+        assert!(op_match.is_some());
+        if let Some((_, op)) = op_match {
+            assert!(matches!(op, HexOp::Equal { .. }));
+        }
+    }
+
+    #[test]
+    fn test_byte_edit_buffer_crud_and_undo_redo() {
+        let mut buf = ByteEditBuffer::new(vec![1, 2, 3, 4, 5]);
+        assert_eq!(buf.len(), 5);
+        assert_eq!(buf.get(2), Some(3));
+        assert!(!buf.is_dirty());
+
+        // SetByte
+        assert!(buf.set_byte(2, 99));
+        assert_eq!(buf.get(2), Some(99));
+        assert!(buf.is_dirty());
+        assert!(buf.can_undo());
+
+        // Insert
+        assert!(buf.insert(1, &[10, 20]));
+        assert_eq!(buf.as_slice(), &[1, 10, 20, 2, 99, 4, 5]);
+        assert_eq!(buf.len(), 7);
+
+        // Delete
+        assert!(buf.delete(3, 2)); // delete 2 bytes at offset 3 ('2', '99')
+        assert_eq!(buf.as_slice(), &[1, 10, 20, 4, 5]);
+        assert_eq!(buf.len(), 5);
+
+        // Undo Delete
+        assert!(buf.undo());
+        assert_eq!(buf.as_slice(), &[1, 10, 20, 2, 99, 4, 5]);
+
+        // Undo Insert
+        assert!(buf.undo());
+        assert_eq!(buf.as_slice(), &[1, 2, 99, 4, 5]);
+
+        // Undo SetByte
+        assert!(buf.undo());
+        assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
+        assert!(!buf.can_undo());
+        assert!(buf.can_redo());
+
+        // Redo SetByte
+        assert!(buf.redo());
+        assert_eq!(buf.as_slice(), &[1, 2, 99, 4, 5]);
     }
 }

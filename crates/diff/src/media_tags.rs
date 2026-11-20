@@ -12,6 +12,7 @@ pub enum MediaFormat {
     Flac,
     Mp3,
     Mp4,
+    Aac,
 }
 
 /// Normalized metadata tags read from an audio file.
@@ -58,7 +59,7 @@ pub struct MediaTagsDiff {
     pub identical: bool,
 }
 
-/// Reads media tags by sniffing container type (FLAC, MP3, or MP4/M4A).
+/// Reads media tags by sniffing container type (FLAC, MP3, MP4/M4A, or AAC).
 #[allow(dead_code)]
 pub fn read_media_tags(bytes: &[u8]) -> Option<MediaTags> {
     if bytes.len() < 4 {
@@ -69,18 +70,108 @@ pub fn read_media_tags(bytes: &[u8]) -> Option<MediaTags> {
         return read_flac_tags(bytes);
     }
 
-    if bytes.get(0..3) == Some(b"ID3") {
-        return read_mp3_tags(bytes);
-    }
-
     if bytes.get(4..8) == Some(b"ftyp") || bytes.get(0..4) == Some(b"ftyp") {
         return read_mp4_tags(bytes);
+    }
+
+    if is_aac_adts(bytes) {
+        return read_aac_tags(bytes);
+    }
+
+    if bytes.get(0..3) == Some(b"ID3") {
+        let aac_tags = read_aac_tags(bytes).filter(|aac| {
+            aac.extra_tags
+                .iter()
+                .any(|(k, _)| k == "Codec" || k == "Sample Rate")
+        });
+        if let Some(aac) = aac_tags {
+            return Some(aac);
+        }
+        return read_mp3_tags(bytes);
     }
 
     // Try each decoder as fallback
     read_flac_tags(bytes)
         .or_else(|| read_mp3_tags(bytes))
         .or_else(|| read_mp4_tags(bytes))
+        .or_else(|| read_aac_tags(bytes))
+}
+
+fn is_aac_adts(bytes: &[u8]) -> bool {
+    bytes.first() == Some(&0xFF) && bytes.get(1).map(|&b| (b & 0xF6) == 0xF0).unwrap_or(false)
+}
+
+/// Reads AAC metadata tags from ADTS streams or AAC files with ID3 tags.
+pub fn read_aac_tags(bytes: &[u8]) -> Option<MediaTags> {
+    if bytes.len() < 4 {
+        return None;
+    }
+    let mut tags = MediaTags {
+        format: MediaFormat::Aac,
+        ..Default::default()
+    };
+    let mut found_any = false;
+
+    let mut pos = 0usize;
+    if bytes.len() >= 10 && bytes.get(0..3) == Some(b"ID3") {
+        let version = bytes.get(3).copied().unwrap_or(3);
+        let b0 = bytes.get(6).copied().unwrap_or(0) as usize & 0x7F;
+        let b1 = bytes.get(7).copied().unwrap_or(0) as usize & 0x7F;
+        let b2 = bytes.get(8).copied().unwrap_or(0) as usize & 0x7F;
+        let b3 = bytes.get(9).copied().unwrap_or(0) as usize & 0x7F;
+        let tag_size = (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
+        let end = 10usize.saturating_add(tag_size).min(bytes.len());
+        if let Some(tag_bytes) = bytes.get(10..end) {
+            parse_id3v2_frames(tag_bytes, version, &mut tags);
+            found_any = true;
+        }
+        pos = end;
+    }
+
+    let adts_b1 = match (bytes.get(pos), bytes.get(pos.saturating_add(1))) {
+        (Some(&b0), Some(&b1)) if b0 == 0xFF && (b1 & 0xF6) == 0xF0 => Some(b1),
+        _ => None,
+    };
+    if let Some(b1) = adts_b1 {
+        let id = (b1 >> 3) & 1;
+        let codec = if id == 0 { "MPEG-4 AAC" } else { "MPEG-2 AAC" };
+        tags.extra_tags
+            .push(("Codec".to_string(), codec.to_string()));
+
+        if let Some(&b2) = bytes.get(pos.saturating_add(2)) {
+            let freq_idx = (b2 >> 2) & 0x0F;
+            let sample_rate = match freq_idx {
+                0 => Some(96000),
+                1 => Some(88200),
+                2 => Some(64000),
+                3 => Some(48000),
+                4 => Some(44100),
+                5 => Some(32000),
+                6 => Some(24000),
+                7 => Some(22050),
+                8 => Some(16000),
+                9 => Some(12000),
+                10 => Some(11025),
+                11 => Some(8000),
+                12 => Some(7350),
+                _ => None,
+            };
+            if let Some(sr) = sample_rate {
+                tags.extra_tags
+                    .push(("Sample Rate".to_string(), format!("{sr} Hz")));
+            }
+            let ch_high = (b2 & 1) << 2;
+            if let Some(&b3) = bytes.get(pos.saturating_add(3)) {
+                let ch_low = (b3 >> 6) & 3;
+                let channels = ch_high | ch_low;
+                tags.extra_tags
+                    .push(("Channels".to_string(), channels.to_string()));
+            }
+        }
+        found_any = true;
+    }
+
+    if found_any { Some(tags) } else { None }
 }
 
 /// Reads FLAC metadata blocks and extracts Vorbis comments.
@@ -262,9 +353,7 @@ fn parse_id3v2_frames(data: &[u8], version: u8, tags: &mut MediaTags) {
             _ => break,
         };
 
-        if let Some(body) = data.get(body_start..body_end)
-            && !body.is_empty()
-        {
+        if let Some(body) = data.get(body_start..body_end).filter(|b| !b.is_empty()) {
             let text = decode_id3_text(body);
             if !text.is_empty() {
                 apply_id3_frame(tags, &frame_id, &text);
@@ -348,10 +437,8 @@ fn parse_id3v1(tail: &[u8], tags: &mut MediaTags) {
         return;
     }
 
-    if tags.title.is_none()
-        && let Some(t) = tail.get(3..33)
-    {
-        let s = String::from_utf8_lossy(t)
+    if tags.title.is_none() {
+        let s = String::from_utf8_lossy(tail.get(3..33).unwrap_or(&[]))
             .trim_matches('\0')
             .trim()
             .to_string();
@@ -359,10 +446,8 @@ fn parse_id3v1(tail: &[u8], tags: &mut MediaTags) {
             tags.title = Some(s);
         }
     }
-    if tags.artist.is_none()
-        && let Some(t) = tail.get(33..63)
-    {
-        let s = String::from_utf8_lossy(t)
+    if tags.artist.is_none() {
+        let s = String::from_utf8_lossy(tail.get(33..63).unwrap_or(&[]))
             .trim_matches('\0')
             .trim()
             .to_string();
@@ -370,10 +455,8 @@ fn parse_id3v1(tail: &[u8], tags: &mut MediaTags) {
             tags.artist = Some(s);
         }
     }
-    if tags.album.is_none()
-        && let Some(t) = tail.get(63..93)
-    {
-        let s = String::from_utf8_lossy(t)
+    if tags.album.is_none() {
+        let s = String::from_utf8_lossy(tail.get(63..93).unwrap_or(&[]))
             .trim_matches('\0')
             .trim()
             .to_string();
@@ -381,10 +464,8 @@ fn parse_id3v1(tail: &[u8], tags: &mut MediaTags) {
             tags.album = Some(s);
         }
     }
-    if tags.year.is_none()
-        && let Some(t) = tail.get(93..97)
-    {
-        let s = String::from_utf8_lossy(t)
+    if tags.year.is_none() {
+        let s = String::from_utf8_lossy(tail.get(93..97).unwrap_or(&[]))
             .trim_matches('\0')
             .trim()
             .to_string();
@@ -392,12 +473,11 @@ fn parse_id3v1(tail: &[u8], tags: &mut MediaTags) {
             tags.year = Some(s);
         }
     }
-    if tags.track.is_none()
-        && tail.get(125) == Some(&0)
-        && let Some(&track_num) = tail.get(126)
-        && track_num > 0
-    {
-        tags.track = Some(u32::from(track_num));
+    if tags.track.is_none() && tail.get(125) == Some(&0) {
+        let track_num = tail.get(126).copied().unwrap_or(0);
+        if track_num > 0 {
+            tags.track = Some(u32::from(track_num));
+        }
     }
 }
 
@@ -472,9 +552,7 @@ fn parse_mp4_ilst(data: &[u8], tags: &mut MediaTags) {
             _ => break,
         };
 
-        if let Some(atom_payload) = data.get(pos + 8..end)
-            && let Some(val_str) = extract_mp4_data_string(atom_payload)
-        {
+        if let Some(val_str) = data.get(pos + 8..end).and_then(extract_mp4_data_string) {
             match atom_type {
                 b"\xa9nam" => tags.title = Some(val_str),
                 b"\xa9ART" => tags.artist = Some(val_str),
@@ -484,6 +562,7 @@ fn parse_mp4_ilst(data: &[u8], tags: &mut MediaTags) {
                 b"\xa9gen" => tags.genre = Some(val_str),
                 b"\xa9cmt" => tags.comment = Some(val_str),
                 b"trkn" => {
+                    let atom_payload = data.get(pos + 8..end).unwrap_or(&[]);
                     if let Some(track_num) = extract_mp4_track_number(atom_payload) {
                         tags.track = Some(track_num);
                     }
@@ -773,5 +852,35 @@ mod tests {
         let truncated = b"fLaC\x84\x00\x10\x00\x01\x02";
         let res = read_flac_tags(truncated);
         assert!(res.is_some()); // Should not panic!
+    }
+
+    #[test]
+    fn test_synthetic_aac_tags() {
+        // Construct an ADTS header:
+        // byte 0: 0xFF
+        // byte 1: 0xF1 (syncword 0xF, ID 0=MPEG-4, layer 0, protection absent 1)
+        // byte 2: 0x50 (profile 1=LC (01), freq_idx 4=44100 (0100), private 0, ch_high 0)
+        // byte 3: 0x80 (ch_low 2 = stereo (10), copy 0, home 0, ...)
+        let adts = vec![0xFF, 0xF1, 0x50, 0x80, 0x00, 0x00, 0x00];
+        let tags_opt = read_aac_tags(&adts);
+        assert!(tags_opt.is_some());
+        if let Some(tags) = tags_opt {
+            assert_eq!(tags.format, MediaFormat::Aac);
+            assert!(
+                tags.extra_tags
+                    .iter()
+                    .any(|(k, v)| k == "Codec" && v == "MPEG-4 AAC")
+            );
+            assert!(
+                tags.extra_tags
+                    .iter()
+                    .any(|(k, v)| k == "Sample Rate" && v == "44100 Hz")
+            );
+            assert!(
+                tags.extra_tags
+                    .iter()
+                    .any(|(k, v)| k == "Channels" && v == "2")
+            );
+        }
     }
 }

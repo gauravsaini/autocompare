@@ -49,6 +49,11 @@ pub struct Workbook {
 }
 
 impl Workbook {
+    /// Decodes an Excel (.xlsx) file from raw bytes into a `Workbook`.
+    pub fn from_xlsx(bytes: &[u8]) -> Option<Self> {
+        decode_xlsx(bytes)
+    }
+
     /// Looks up a sheet by name.
     pub fn sheet(&self, name: &str) -> Option<&Sheet> {
         self.sheets.iter().find(|s| s.name == name)
@@ -156,6 +161,12 @@ pub fn parse_delimited(text: &str, delimiter: char, first_row_is_header: bool) -
         (Vec::new(), rows)
     };
     Table { header, rows: data }
+}
+
+/// Parses tab-separated values (TSV) text into a [`Table`].
+#[allow(dead_code)]
+pub fn parse_tsv(text: &str, first_row_is_header: bool) -> Table {
+    parse_delimited(text, '\t', first_row_is_header)
 }
 
 /// Row-level diff over whole cell rows: the Myers engine over `Vec<String>` rows.
@@ -348,9 +359,10 @@ pub fn diff_table_by_key(a: &Table, b: &Table, key_columns: &[usize]) -> TableKe
             .map(|&c| row_a.get(c).cloned().unwrap_or_default())
             .collect();
 
-        if let Some(r_indices) = right_key_map.get_mut(&key)
-            && let Some(r_idx) = r_indices.iter().copied().find(|i| !used_right.contains(i))
-        {
+        let matching_right = right_key_map
+            .get_mut(&key)
+            .and_then(|r_indices| r_indices.iter().copied().find(|i| !used_right.contains(i)));
+        if let Some(r_idx) = matching_right {
             used_right.insert(r_idx);
             let row_b = b.rows.get(r_idx).cloned().unwrap_or_default();
             let differing_columns = diff_cells(row_a, &row_b);
@@ -368,10 +380,10 @@ pub fn diff_table_by_key(a: &Table, b: &Table, key_columns: &[usize]) -> TableKe
                     differing_columns,
                 });
             }
-        } else {
-            left_only_rows = left_only_rows.saturating_add(1);
-            row_diffs.push(KeyRowDiff::LeftOnly { left_row: l_idx });
+            continue;
         }
+        left_only_rows = left_only_rows.saturating_add(1);
+        row_diffs.push(KeyRowDiff::LeftOnly { left_row: l_idx });
     }
 
     // Remaining unused right rows
@@ -563,6 +575,23 @@ pub fn diff_table_by_key_with_options(
     }
 }
 
+/// Compares two tables aligned by key columns after sorting their data rows
+/// across `sort_columns` (sort-before-align parity).
+#[allow(dead_code)]
+pub fn diff_table_by_key_sorted(
+    a: &Table,
+    b: &Table,
+    opts: &TableCompareOptions,
+    sort_columns: &[usize],
+    ascending: bool,
+) -> TableKeyDiff {
+    let mut sorted_a = a.clone();
+    let mut sorted_b = b.clone();
+    sort_table_rows(&mut sorted_a, sort_columns, ascending);
+    sort_table_rows(&mut sorted_b, sort_columns, ascending);
+    diff_table_by_key_with_options(&sorted_a, &sorted_b, opts)
+}
+
 /// Numeric equality of two cells: both must parse as finite `f64`
 /// after trimming, with `|a - b| <= tolerance`.
 fn numeric_equal(a: &str, b: &str, tolerance: f64) -> bool {
@@ -674,8 +703,12 @@ fn compare_cells_natural(a: &str, b: &str) -> Ordering {
         return ia.cmp(&ib);
     }
     // Try float parsing
-    if let (Ok(fa), Ok(fb)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>())
-        && let Some(ord) = fa.partial_cmp(&fb)
+    if let Some(ord) = a
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .zip(b.trim().parse::<f64>().ok())
+        .and_then(|(fa, fb)| fa.partial_cmp(&fb))
     {
         return ord;
     }
@@ -699,13 +732,20 @@ pub fn decode_xlsx(bytes: &[u8]) -> Option<Workbook> {
     } else {
         Vec::new()
     };
+    let workbook_names = entries
+        .get("xl/workbook.xml")
+        .map(|data| parse_workbook_sheet_names(data))
+        .unwrap_or_default();
 
     let mut sheets = Vec::new();
 
     // Look for worksheets sheet1.xml, sheet2.xml, etc.
     let mut sheet_idx = 1usize;
     while let Some(sheet_data) = entries.get(&format!("xl/worksheets/sheet{sheet_idx}.xml")) {
-        let sheet_name = format!("Sheet{sheet_idx}");
+        let sheet_name = workbook_names
+            .get(sheet_idx.saturating_sub(1))
+            .cloned()
+            .unwrap_or_else(|| format!("Sheet{sheet_idx}"));
         let table = parse_sheet_xml(sheet_data, &shared_strings);
         sheets.push(Sheet {
             name: sheet_name,
@@ -838,8 +878,8 @@ fn parse_sheet_xml(data: &[u8], shared_strings: &[String]) -> Table {
             let col_idx = parse_cell_col_index(cell_chunk);
             let is_shared = cell_chunk.contains("t=\"s\"");
 
-            let val = if let Some(v_start) = cell_chunk.find("<v>")
-                && let Some(v_end) = cell_chunk.find("</v>")
+            let val = if let (Some(v_start), Some(v_end)) =
+                (cell_chunk.find("<v>"), cell_chunk.find("</v>"))
             {
                 let raw_val = cell_chunk.get(v_start + 3..v_end).unwrap_or("");
                 if is_shared {
@@ -851,8 +891,8 @@ fn parse_sheet_xml(data: &[u8], shared_strings: &[String]) -> Table {
                 } else {
                     raw_val.to_string()
                 }
-            } else if let Some(t_start) = cell_chunk.find("<t>")
-                && let Some(t_end) = cell_chunk.find("</t>")
+            } else if let (Some(t_start), Some(t_end)) =
+                (cell_chunk.find("<t>"), cell_chunk.find("</t>"))
             {
                 cell_chunk.get(t_start + 3..t_end).unwrap_or("").to_string()
             } else {
@@ -908,6 +948,32 @@ fn unescape_xml(val: &str) -> String {
         .replace("&gt;", ">")
         .replace("&quot;", "\"")
         .replace("&apos;", "'")
+}
+
+fn parse_workbook_sheet_names(data: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(data);
+    let mut names = Vec::new();
+    let mut rest = text.as_ref();
+    while let Some(start) = rest.find("<sheet ") {
+        let after = match rest.get(start.saturating_add(7)..) {
+            Some(a) => a,
+            None => break,
+        };
+        let tag_end = match after.find('>') {
+            Some(e) => e,
+            None => break,
+        };
+        let tag_content = after.get(..tag_end).unwrap_or("");
+        if let Some(name_pos) = tag_content.find("name=\"") {
+            let after_name = tag_content.get(name_pos.saturating_add(6)..).unwrap_or("");
+            if let Some(q_end) = after_name.find('"') {
+                let name = after_name.get(..q_end).unwrap_or("");
+                names.push(unescape_xml(name));
+            }
+        }
+        rest = after.get(tag_end.saturating_add(1)..).unwrap_or("");
+    }
+    names
 }
 
 /// Where the parser stands inside the current field.
@@ -1210,5 +1276,59 @@ mod tests {
         assert_eq!(diff.modified_rows, 1);
         assert_eq!(diff.left_only_rows, 1);
         assert_eq!(diff.right_only_rows, 0);
+    }
+
+    #[test]
+    fn test_parse_tsv_tab_delimited() {
+        let tsv = "ID\tName\tPrice\n1\tApple\t1.50\n2\tBanana\t0.75";
+        let table = parse_tsv(tsv, true);
+        assert_eq!(table.header, vec!["ID", "Name", "Price"]);
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(
+            table.rows.first().cloned().unwrap_or_default(),
+            vec!["1", "Apple", "1.50"]
+        );
+    }
+
+    #[test]
+    fn test_diff_table_by_key_sorted_order() {
+        let t1 = Table {
+            header: vec!["ID".into(), "Val".into()],
+            rows: vec![
+                vec!["2".into(), "b".into()],
+                vec!["1".into(), "a".into()],
+                vec!["3".into(), "c".into()],
+            ],
+        };
+        let t2 = Table {
+            header: vec!["ID".into(), "Val".into()],
+            rows: vec![
+                vec!["3".into(), "c".into()],
+                vec!["1".into(), "a".into()],
+                vec!["2".into(), "b".into()],
+            ],
+        };
+        let opts = TableCompareOptions {
+            key_columns: vec![0],
+            numeric_tolerance: None,
+            ignore_case: false,
+            trim_space: false,
+        };
+        let diff = diff_table_by_key_sorted(&t1, &t2, &opts, &[0], true);
+        assert_eq!(diff.matching_rows, 3);
+        assert_eq!(diff.modified_rows, 0);
+        assert_eq!(diff.left_only_rows, 0);
+        assert_eq!(diff.right_only_rows, 0);
+    }
+
+    #[test]
+    fn test_parse_workbook_sheet_names() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+        <workbook><sheets>
+            <sheet name="Summary &amp; KPIs" sheetId="1" r:id="rId1"/>
+            <sheet name="Details" sheetId="2" r:id="rId2"/>
+        </sheets></workbook>"#;
+        let names = parse_workbook_sheet_names(xml);
+        assert_eq!(names, vec!["Summary & KPIs", "Details"]);
     }
 }
