@@ -145,6 +145,123 @@ pub const MERGE_PANE_W: u32 = 309;
 pub const MERGE_X0: u32 = 12;
 pub const MERGE_X1: u32 = 325;
 pub const MERGE_X2: u32 = 638;
+/// Pathmeta strip geometry (exq-pathmeta): field row y76 h24 (existing),
+/// second metadata line y100 h12 per-pane, toolbar y114 (pane_top 124 untouched).
+/// Budget: 76+24=100 meta 100..112, toolbar 114, panes 124 — 960x600 me fit.
+pub const PATH_FIELD_Y: u32 = 76;
+pub const PATH_FIELD_H: u32 = 24;
+pub const PATH_META_Y: u32 = 100;
+pub const PATH_META_H: u32 = 12;
+pub const PATH_TOOLBAR_Y: u32 = 114;
+/// Segmented status geometry: 30px strip y570, 4 zones (cursor/format/result/edit).
+pub const SEG_DIV0_X: u32 = 240;
+pub const SEG_DIV1_X: u32 = 480;
+pub const SEG_DIV2_X: u32 = 720;
+
+/// Per-pane path strip: folder icon + clipped path + dropdown caret + Browse,
+/// neeche second metadata line (timestamp | bytes | format | rules, honest-empty).
+/// Geometry: field (12,76,380,24)/(490,76,380,24), meta y100 h12 per-pane;
+/// typo intent viewmodel roles (path Body, meta caption); colors frozen.
+fn paint_pathmeta_strip(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    left_path: &str,
+    right_path: &str,
+    left_meta: &str,
+    right_meta: &str,
+) {
+    use crate::viewmodel::clip_to_width;
+    // Left field + Browse.
+    fill_rect(
+        pixels,
+        dims,
+        (12, PATH_FIELD_Y, 380, PATH_FIELD_H),
+        [45, 45, 45, 255],
+    );
+    let left_shown = clip_to_width(left_path, 300, text_width);
+    draw_string(pixels, dims, 20, 82, "[ ]", fixture_palette().dim);
+    draw_string(pixels, dims, 48, 82, &left_shown, fixture_palette().text);
+    draw_string(pixels, dims, 360, 82, "v", fixture_palette().dim);
+    fill_rect(
+        pixels,
+        dims,
+        (400, PATH_FIELD_Y, 75, PATH_FIELD_H),
+        [60, 60, 60, 255],
+    );
+    draw_string(pixels, dims, 412, 82, "Browse...", fixture_palette().text);
+    // Right field + Browse.
+    fill_rect(
+        pixels,
+        dims,
+        (490, PATH_FIELD_Y, 380, PATH_FIELD_H),
+        [45, 45, 45, 255],
+    );
+    let right_shown = clip_to_width(right_path, 300, text_width);
+    draw_string(pixels, dims, 498, 82, "[ ]", fixture_palette().dim);
+    draw_string(pixels, dims, 526, 82, &right_shown, fixture_palette().text);
+    draw_string(pixels, dims, 838, 82, "v", fixture_palette().dim);
+    fill_rect(
+        pixels,
+        dims,
+        (878, PATH_FIELD_Y, 75, PATH_FIELD_H),
+        [60, 60, 60, 255],
+    );
+    draw_string(pixels, dims, 890, 82, "Browse...", fixture_palette().text);
+    // Second metadata line per-pane (honest-empty: khali ho to kuch nahi).
+    if !left_meta.trim().is_empty() {
+        let shown = clip_to_width(left_meta, 360, text_width);
+        draw_string(pixels, dims, 16, PATH_META_Y, &shown, fixture_palette().dim);
+    }
+    if !right_meta.trim().is_empty() {
+        let shown = clip_to_width(right_meta, 360, text_width);
+        draw_string(
+            pixels,
+            dims,
+            494,
+            PATH_META_Y,
+            &shown,
+            fixture_palette().dim,
+        );
+    }
+}
+
+/// Bottom segmented status: cursor | format | result | edit (4 zones, dividers).
+/// Single-line honest form viewmodel se; clip 936 budget me; colors frozen.
+fn paint_segmented_status(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    status: &crate::viewmodel::PathSegmentedStatus,
+) {
+    use crate::viewmodel::{clip_to_width, path_segmented_status_line};
+    let width = dims.0;
+    fill_rect(pixels, dims, (0, 570, width, STATUS_H), [32, 32, 32, 255]);
+    let line = path_segmented_status_line(status);
+    let shown = clip_to_width(&line, width.saturating_sub(24), text_width);
+    // 4 zones: segments ko dividers par baanto (geometry first, text second).
+    let segs = [
+        status.cursor.as_str(),
+        status.format.as_str(),
+        status.result.as_str(),
+        status.edit.as_str(),
+    ];
+    let xs = [16u32, 250u32, 490u32, 730u32];
+    let mut any = false;
+    for (seg, x) in segs.iter().zip(xs.iter()) {
+        if seg.trim().is_empty() {
+            continue;
+        }
+        any = true;
+        let s = clip_to_width(seg.trim(), 200, text_width);
+        draw_string(pixels, dims, *x, 578, &s, fixture_palette().dim);
+    }
+    if !any {
+        draw_string(pixels, dims, 16, 578, &shown, fixture_palette().dim);
+    }
+    // Dividers (frozen panel tone reuse via dim on dark strip).
+    for dx in [SEG_DIV0_X, SEG_DIV1_X, SEG_DIV2_X] {
+        fill_rect(pixels, dims, (dx, 574, 1, 22), fixture_palette().dim);
+    }
+}
 
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
@@ -324,43 +441,14 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     );
     draw_string(&mut pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
-    // Path row
-    fill_rect(&mut pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(
+    // Per-pane path strip + second metadata line (exq-pathmeta parity).
+    paint_pathmeta_strip(
         &mut pixels,
         dims,
-        20,
-        82,
         "fixtures/left.rs",
-        fixture_palette().text,
-    );
-    fill_rect(&mut pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(
-        &mut pixels,
-        dims,
-        412,
-        82,
-        "Browse...",
-        fixture_palette().text,
-    );
-
-    fill_rect(&mut pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(
-        &mut pixels,
-        dims,
-        498,
-        82,
         "fixtures/right.rs",
-        fixture_palette().text,
-    );
-    fill_rect(&mut pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(
-        &mut pixels,
-        dims,
-        890,
-        82,
-        "Browse...",
-        fixture_palette().text,
+        "2026-01-02 03:04 | 128 B | Text: exact | wrap:off",
+        "2026-01-02 03:05 | 132 B | Text: exact | wrap:off",
     );
 
     // Session toolbar: Swap Sides + Reload, session identity below tabs.
@@ -368,7 +456,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         &mut pixels,
         dims,
         16,
-        104,
+        PATH_TOOLBAR_Y,
         "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
         fixture_palette().text,
     );
@@ -592,15 +680,16 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
-    // Status bar: honest counts plus last-action feedback.
-    fill_rect(&mut pixels, dims, (0, 570, width, 30), [32, 32, 32, 255]);
-    draw_string(
+    // Bottom segmented status: cursor | format | result | edit.
+    paint_segmented_status(
         &mut pixels,
         dims,
-        16,
-        578,
-        "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done: 7 row(s)",
-        fixture_palette().dim,
+        &crate::viewmodel::path_segmented_status_for(
+            "3:1",
+            "Text: exact",
+            "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted",
+            "edit: clean",
+        ),
     );
 
     let image = RgbaImage {
@@ -4140,35 +4229,57 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     draw_string(pixels, dims, 474, 46, "FolderMerge", fixture_palette().dim);
     draw_string(pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
-    // Path row (same geometry for all tabs).
-    fill_rect(pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(
-        pixels,
-        dims,
-        20,
-        82,
-        "fixtures/left",
-        fixture_palette().text,
-    );
-    fill_rect(pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(pixels, dims, 412, 82, "Browse...", fixture_palette().text);
-    fill_rect(pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(
-        pixels,
-        dims,
-        498,
-        82,
-        "fixtures/right",
-        fixture_palette().text,
-    );
-    fill_rect(pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(pixels, dims, 890, 82, "Browse...", fixture_palette().text);
+    // Per-pane path strip + second metadata line (exq-pathmeta parity).
+    if dims.0 >= SNAP_W {
+        paint_pathmeta_strip(
+            pixels,
+            dims,
+            "fixtures/left",
+            "fixtures/right",
+            "2026-01-02 03:04 | 128 B | Text: exact",
+            "2026-01-02 03:05 | 132 B | Text: exact",
+        );
+    } else {
+        use crate::viewmodel::clip_to_width;
+        fill_rect(
+            pixels,
+            dims,
+            (
+                OUTER_PAD,
+                PATH_FIELD_Y,
+                dims.0.saturating_sub(24),
+                PATH_FIELD_H,
+            ),
+            [45, 45, 45, 255],
+        );
+        let shown = clip_to_width(
+            "fixtures/left <--> fixtures/right",
+            dims.0.saturating_sub(80),
+            text_width,
+        );
+        draw_string(
+            pixels,
+            dims,
+            OUTER_PAD.saturating_add(28),
+            82,
+            "[ ]",
+            fixture_palette().dim,
+        );
+        draw_string(
+            pixels,
+            dims,
+            OUTER_PAD.saturating_add(56),
+            82,
+            &shown,
+            fixture_palette().text,
+        );
+    }
 
     draw_string(
         pixels,
         dims,
         16,
-        104,
+        PATH_TOOLBAR_Y,
         "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
         fixture_palette().text,
     );
@@ -5622,6 +5733,45 @@ mod tests {
         assert!(render_fixture_png(&merge_out).is_ok());
         let merge_bytes = std::fs::read(&merge_out).unwrap_or_default();
         assert_ne!(three_bytes, merge_bytes);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn pathmeta_strip_geometry_holds() {
+        // Field row y76 h24, meta y100 h12, toolbar y114, panes y124 untouched.
+        assert_eq!(PATH_FIELD_Y, 76);
+        assert_eq!(PATH_FIELD_H, 24);
+        assert_eq!(PATH_META_Y, 100);
+        assert_eq!(PATH_META_H, 12);
+        assert_eq!(PATH_TOOLBAR_Y, 114);
+        assert!(PATH_FIELD_Y.saturating_add(PATH_FIELD_H) <= PATH_META_Y);
+        assert!(PATH_META_Y.saturating_add(PATH_META_H) <= PATH_TOOLBAR_Y);
+        assert!(PATH_TOOLBAR_Y < 124);
+        // Segmented dividers pane budget me, status strip canvas me.
+        assert!(SEG_DIV0_X < SEG_DIV1_X);
+        assert!(SEG_DIV1_X < SEG_DIV2_X);
+        assert!(SEG_DIV2_X < SNAP_W);
+        assert_eq!(570u32.saturating_add(STATUS_H), SNAP_H);
+        // Strip strings apne budgets me fit honi chahiye.
+        assert!(text_width("fixtures/left.rs") < 300);
+        assert!(text_width("fixtures/right.rs") < 300);
+        // Edge: empty-vs-long — empty meta honest-empty, long clip hota hai.
+        let empty = crate::viewmodel::PathPaneMeta::default();
+        assert_eq!(crate::viewmodel::path_pane_meta_line(&empty), "");
+        let long_path = "fixtures/very/long/nested/dir/structure/that/keeps/going/right.rs";
+        let shown = crate::viewmodel::clip_to_width(long_path, 300, text_width);
+        assert!(shown.ends_with("..."));
+        assert!(text_width(&shown) <= 300);
+        // Segmented line honest + clip budget me.
+        let status = crate::viewmodel::path_segmented_status_for(
+            "3:1",
+            "Text: exact",
+            "7 rows: 4 equal",
+            "edit: clean",
+        );
+        let line = crate::viewmodel::path_segmented_status_line(&status);
+        let clipped = crate::viewmodel::clip_to_width(&line, 936, text_width);
+        assert!(text_width(&clipped) <= 936);
     }
 
     #[test]

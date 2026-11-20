@@ -2472,6 +2472,138 @@ pub const fn zone_is_tabular(role: crate::theme::TypoRole) -> bool {
     role.is_tabular()
 }
 
+// ----------------------------------------------------------------------------
+// Pathmeta strip + segmented status (exq-pathmeta headless; paint wiring
+// stays with the orchestrator / screenshot fixture).
+// Gap: BC per-pane path bar me dropdown + folder icon + second metadata line
+// (timestamp/bytes/format/rules) + bottom 4-segment status
+// (cursor/format/result/edit) hai; ours me single field + Browse + single
+// summary line tha. Ye section sirf headless model hai: path field text,
+// second-line meta, history dropdown label aur 4-segment status — koi egui,
+// koi I/O, koi naya size/color/token nahi (roles existing TypoRole reuse).
+// ----------------------------------------------------------------------------
+
+/// Ek pane ka path + second-line metadata (honest-empty: missing parts
+/// khali rehte hain, koi fake "0 B"/"just now" nahi).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PathPaneMeta {
+    /// Pane ka path text (clip paint `clip_to_width` se karta hai).
+    pub path: String,
+    /// Modified timestamp label ("modified @…"), khali jab unknown.
+    pub timestamp: String,
+    /// Byte-size label ("10 B"), khali jab unknown.
+    pub bytes: String,
+    /// Format label ("Text: exact"), khali jab unknown.
+    pub format: String,
+    /// Rules label ("wrap:off"), khali jab unknown.
+    pub rules: String,
+}
+
+/// Compact second-line meta: timestamp | bytes | format | rules. Khali parts
+/// girte hain (missing file par koi fake nahi). Pure; unit-tested.
+pub fn format_path_pane_meta(
+    timestamp: &str,
+    bytes: &str,
+    format_label: &str,
+    rules: &str,
+) -> String {
+    let mut parts = Vec::new();
+    for part in [timestamp, bytes, format_label, rules] {
+        let trimmed = part.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed);
+        }
+    }
+    parts.join(" | ")
+}
+
+/// Ek pane ki second-line meta string. Pure; unit-tested.
+pub fn path_pane_meta_line(meta: &PathPaneMeta) -> String {
+    format_path_pane_meta(&meta.timestamp, &meta.bytes, &meta.format, &meta.rules)
+}
+
+/// History dropdown ka honest label: current khali ho to "history" (koi fake
+/// path nahi), warna current path. Pure; unit-tested.
+pub fn path_history_label(current: &str) -> String {
+    let trimmed = current.trim();
+    if trimmed.is_empty() {
+        "history".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Bottom 4-segment status: cursor | format | result | edit. Har segment
+/// khali ho sakta hai; line join khali parts girakar banta hai taaki koi fake
+/// segment na dikhe. Paint 4 zones me baant-ta hai, ye headless line deta hai.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PathSegmentedStatus {
+    /// Cursor segment ("3:1" / "L3 R5" / "-").
+    pub cursor: String,
+    /// Format segment ("Text: exact").
+    pub format: String,
+    /// Result segment ("4 equal, 1 changed").
+    pub result: String,
+    /// Edit segment ("edit: clean" / "edit: dirty").
+    pub edit: String,
+}
+
+/// 4 segments se honest status line (khali parts girte hain). Pure; unit-tested.
+pub fn path_segmented_status_for(
+    cursor: &str,
+    format: &str,
+    result: &str,
+    edit: &str,
+) -> PathSegmentedStatus {
+    PathSegmentedStatus {
+        cursor: cursor.trim().to_string(),
+        format: format.trim().to_string(),
+        result: result.trim().to_string(),
+        edit: edit.trim().to_string(),
+    }
+}
+
+/// Segmented status ki single-line form (screenshot clip + tests ke liye).
+/// Khali segments girte hain; sab khali hon to "-". Pure; unit-tested.
+pub fn path_segmented_status_line(status: &PathSegmentedStatus) -> String {
+    let mut parts = Vec::new();
+    for part in [
+        status.cursor.as_str(),
+        status.format.as_str(),
+        status.result.as_str(),
+        status.edit.as_str(),
+    ] {
+        if !part.is_empty() {
+            parts.push(part);
+        }
+    }
+    if parts.is_empty() {
+        "-".to_string()
+    } else {
+        parts.join(" | ")
+    }
+}
+
+/// Path field text role: Body (path chrome precedent reuse).
+pub const fn path_strip_path_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Second-line meta role: caption (Small 11 weak, status-side precedent reuse).
+pub const fn path_strip_meta_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::caption()
+}
+
+/// Segmented cursor role: Body (verdict precedent — cursor sabse upar).
+pub const fn path_segment_cursor_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Segmented side roles (format/result/edit): Small (side precedent reuse).
+pub const fn path_segment_side_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::caption()
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -4144,5 +4276,78 @@ mod tests {
             zone_letter_spacing_em(TypoRole::Heading),
             TypoRole::Heading.letter_spacing_em()
         );
+    }
+
+    #[test]
+    fn pathmeta_second_line_joins_nonempty_parts_only() {
+        assert_eq!(
+            format_path_pane_meta("2026-01-02 03:04", "10 B", "Text: exact", "wrap:off"),
+            "2026-01-02 03:04 | 10 B | Text: exact | wrap:off"
+        );
+        assert_eq!(format_path_pane_meta("", "10 B", "", ""), "10 B");
+        assert_eq!(format_path_pane_meta("  ", " ", "", ""), "");
+        let meta = PathPaneMeta {
+            path: "fixtures/left.rs".to_string(),
+            timestamp: "2026-01-02 03:04".to_string(),
+            bytes: "10 B".to_string(),
+            format: "Text: exact".to_string(),
+            rules: String::new(),
+        };
+        assert_eq!(
+            path_pane_meta_line(&meta),
+            "2026-01-02 03:04 | 10 B | Text: exact"
+        );
+        assert_eq!(path_pane_meta_line(&PathPaneMeta::default()), "");
+    }
+
+    #[test]
+    fn pathmeta_history_label_stays_honest_on_empty() {
+        assert_eq!(path_history_label(""), "history");
+        assert_eq!(path_history_label("   "), "history");
+        assert_eq!(path_history_label("fixtures/left.rs"), "fixtures/left.rs");
+    }
+
+    #[test]
+    fn pathmeta_segmented_line_drops_empty_segments() {
+        let full = path_segmented_status_for("3:1", "Text: exact", "4 equal", "edit: clean");
+        assert_eq!(
+            path_segmented_status_line(&full),
+            "3:1 | Text: exact | 4 equal | edit: clean"
+        );
+        let partial = path_segmented_status_for("3:1", "", "4 equal", "");
+        assert_eq!(path_segmented_status_line(&partial), "3:1 | 4 equal");
+        assert_eq!(
+            path_segmented_status_line(&PathSegmentedStatus::default()),
+            "-"
+        );
+    }
+
+    #[test]
+    fn pathmeta_roles_reuse_existing_tokens() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        assert_eq!(path_strip_path_role(), TypoRole::Body);
+        assert_eq!(path_strip_meta_role(), TypoRole::caption());
+        assert_eq!(path_segment_cursor_role(), TypoRole::Body);
+        assert_eq!(path_segment_side_role(), TypoRole::caption());
+        assert_eq!(path_strip_path_role().size(), TYPO_BODY_SIZE);
+        assert_eq!(path_strip_meta_role().size(), TYPO_SMALL_SIZE);
+        assert!(path_segment_cursor_role().size() > path_segment_side_role().size());
+    }
+
+    #[test]
+    fn pathmeta_edge_empty_vs_long_clips_honestly() {
+        // Edge: empty left (honest-empty meta) vs very long right path
+        // (ellipsis, never raw mid-glyph cut).
+        let empty = PathPaneMeta::default();
+        assert_eq!(path_pane_meta_line(&empty), "");
+        assert_eq!(path_history_label(&empty.path), "history");
+        let long_path = "fixtures/very/long/nested/dir/structure/that/keeps/going/right.rs";
+        let stub = |s: &str| s.chars().count() as u32 * 6;
+        let clipped = clip_to_width(long_path, 300, stub);
+        assert!(clipped.ends_with("..."));
+        assert!(stub(&clipped) <= 300);
+        // Segmented edge: sirf cursor ho to bhi line honest rehti hai.
+        let cursor_only = path_segmented_status_for("L- R5", "", "", "");
+        assert_eq!(path_segmented_status_line(&cursor_only), "L- R5");
     }
 }
