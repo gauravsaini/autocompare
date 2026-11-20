@@ -3274,6 +3274,196 @@ pub fn table8_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table9 round-1: key-column widths plus numeric align
+// at 720px narrow (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare key columns right-aligned with stable widths and
+// numeric alignment; table8 PASS at wide-960 (char metrics, 176 fit in 936).
+// Narrow-720 table-side loose: key widths, numeric align, row heights. Fix
+// table-side only (app.rs views.rs views_hex.rs home.rs tree.rs gutter.rs
+// copy.rs theme.rs viewmodel.rs take.rs dist/** skills/** NO-TOUCH).
+// Geometry FIRST: key widths char metrics se (`table_column_widths` reuse +
+// `table_col_widths_px` outer, grid origin-se 696 avail par fit gate),
+// numeric right-alignment grid origin se (`table7_cell_text_x` pad math
+// delegation), header/body heights TypoRole se (Heading 21.6 vs Mono 15.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Edge fixture
+// `checks/gui-exq-table9/comparison/table-keys-720.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table9 narrow canvas width (px): [`TABLE_NARROW_CANVAS_W`] reuse (720) —
+/// isi par narrow keys fixture fit lock hota hai. Pure.
+pub const TABLE9_CANVAS_W: f32 = TABLE_NARROW_CANVAS_W;
+
+/// Table9 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table8 precedent — marker slot se nahi badhta). Pure; unit-tested.
+pub fn table9_header_h() -> f32 {
+    table8_header_h()
+}
+
+/// Table9 header stable contract: table8 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table9_header_h_stable() -> bool {
+    table8_header_h_stable()
+}
+
+/// Table9 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table9_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table9 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table9_header_body_delta() -> f32 {
+    table9_header_h() - table9_row_h()
+}
+
+/// Table9 narrow-720 avail width (px): [`table3_narrow_avail_w`] reuse (696) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table9_avail_w() -> f32 {
+    table3_narrow_avail_w()
+}
+
+/// Table9 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table9_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table9 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table9_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table9 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table9_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table9 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table9_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table9 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 720 budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table9_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table9 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table9_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table9 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table9_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table9_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table8_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: char widths se [`table_col_widths_px`]
+/// delegation (chars * char_w + pad), kharab `char_w` par khali vec. Pure;
+/// unit-tested.
+pub fn table9_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table8_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative. Range-bahar skip. Pure;
+/// unit-tested.
+pub fn table9_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table8_key_col_xs(keys, col_widths_px)
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table9_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table9_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table9_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table9_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table9_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table9_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table9 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table9_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table9 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table9_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table9 narrow-720 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table9_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table9 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table9_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table9 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table9_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table9 narrow visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table9_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5141,5 +5331,118 @@ mod tests {
         );
         assert_eq!(table8_sort_glyph_rect(cell, 0.0), None);
         assert_eq!(table8_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table9_round1_keys_narrow_720() {
+        // Headless test proving edge fixture comparison/table-keys-720.json:
+        // key-column widths char metrics se at 720 narrow, numeric
+        // right-align grid origin se, header/body heights TypoRole se locked.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table9/comparison/table-keys-720.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table9/round-1/comparison/table-keys-720.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-keys-720\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 720.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 696.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header/body heights TypoRole se locked, narrow canvas 720.
+        assert!((table9_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table9_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table9_header_h(), table8_header_h());
+        assert!(table9_header_h_stable());
+        assert!((table9_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table9_row_h(), table_cell_row_h());
+        assert_eq!(
+            table9_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table9_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table9_header_h() > table9_row_h());
+        assert_eq!(TABLE9_CANVAS_W, 720.0);
+        assert_eq!(TABLE9_CANVAS_W, TABLE_NARROW_CANVAS_W);
+        assert_eq!(table9_avail_w(), 696.0);
+        assert_eq!(table9_avail_w(), table3_narrow_avail_w());
+        assert_eq!(table9_grid_origin(), (12.0, 12.0));
+        assert_eq!(table9_col_spacing(), 8.0);
+        assert_eq!(table9_grid_gap_y(), 4.0);
+        assert!((table9_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table9_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table9_header_underline_w(), 1.0);
+        assert!(table9_header_weight_ok());
+
+        // 2. Key-column widths char metrics se at narrow-720: [3,5,6] @8px
+        // -> outer [40,56,64], key col 0 -> (0,3) -> 40px at x 0.0, total
+        // 176 fit in 696 (nahi overflow).
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(table9_key_widths_chars(&header, &rows, &keys), vec![(0, 3)]);
+        assert_eq!(
+            table9_key_widths_chars(&header, &rows, &[0, 2]),
+            vec![(0, 3), (2, 6)]
+        );
+        assert!(table9_key_widths_chars(&header, &rows, &[9]).is_empty());
+        assert!(table9_key_widths_chars(&header, &rows, &[]).is_empty());
+        let key_px = table9_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table9_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        assert!(table9_key_outer_widths(&[(0, 3)], f32::NAN).is_empty());
+        let px = table9_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table9_grid_total_w(&px), 176.0);
+        assert_eq!(table9_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table9_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table9_key_col_xs(&[2], &px), vec![(2, 112.0)]);
+        assert!(table9_key_col_xs(&[9], &px).is_empty());
+        assert_eq!(table9_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table9_column_grid_fit(table9_avail_w(), &px));
+        assert!(!table9_column_grid_fit(100.0, &px));
+        assert!(table9_col_widths_px(&widths, 0.0).is_empty());
+
+        // 3. Numeric right-alignment via grid origin + sort glyph stable.
+        assert_eq!(table9_col_aligns(&header, &rows), vec![true, false, true]);
+        assert_eq!(
+            table9_col_aligns(&header, &rows),
+            table7_col_aligns(&header, &rows)
+        );
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table9_row_h(),
+        };
+        assert_eq!(table9_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table9_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table9_cell_text_x(outer, 100.0, true), None);
+        assert_eq!(table9_sort_marker(true, false), "▼");
+        assert_eq!(table9_header_label("Price", true, false), "Price▼");
+        assert!(table9_is_sorted_col(Some(0), 0));
+        assert!(!table9_is_sorted_col(Some(0), 1));
+        let cell = TableCellRect {
+            x: 0.0,
+            y: 12.0,
+            w: 40.0,
+            h: table9_header_h(),
+        };
+        assert_eq!(
+            table9_sort_glyph_rect(cell, 8.0).map(|r| (r.x, r.w)),
+            Some((28.0, 8.0))
+        );
+        assert_eq!(table9_sort_glyph_rect(cell, 0.0), None);
+        assert_eq!(table9_visible_rows(600.0), 38);
     }
 }
