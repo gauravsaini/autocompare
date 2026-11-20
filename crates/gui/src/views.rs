@@ -4935,6 +4935,88 @@ pub fn text8_divider_hit_band_960() -> (f32, f32) {
     (gutter_lo - slop, gutter_hi + slop)
 }
 
+/// Text10 tab stop width (chars): fixed 8-column stops (BC mono round-2 —
+/// tab rendering aligned to stops, not a single space). Ponytail: plain 8
+/// (standard code stop), koi naya token nahi. Pure; unit-tested.
+pub const TEXT_TAB_STOP_CHARS: usize = 8;
+
+/// Tab stop step in chars: [`TEXT_TAB_STOP_CHARS`] reuse so paint and
+/// headless math never drift. Pure; unit-tested.
+pub fn text_tab_stop_chars() -> usize {
+    TEXT_TAB_STOP_CHARS
+}
+
+/// Tab stop step in px from char metrics: `stop * char_w` so tabs land on
+/// stops at any mono size. Non-finite or non-positive `char_w` falls back
+/// to 0.0 (paint never NaN). Pure; unit-tested.
+pub fn text_tab_stop_px(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    text_tab_stop_chars() as f32 * char_w
+}
+
+/// Spaces to the next tab stop from 0-based `col`: `stop - (col % stop)`.
+/// Zero `stop` guard returns 1 (paint always advances). Pure; unit-tested.
+pub fn text_tab_next_spaces(col: usize, stop: usize) -> usize {
+    if stop == 0 {
+        return 1;
+    }
+    stop.saturating_sub(col % stop)
+}
+
+/// Next tab stop column (chars) from 0-based `col`. Pure; unit-tested.
+pub fn text_tab_stop_col(col: usize, stop: usize) -> usize {
+    col.saturating_add(text_tab_next_spaces(col, stop))
+}
+
+/// Expand `\t` to spaces aligned to [`TEXT_TAB_STOP_CHARS`] stops: each
+/// tab jumps to the next multiple of 8, other chars pass through (col
+/// counts chars, not bytes). Pure; unit-tested.
+pub fn text_expand_tabs_to_stops(line: &str) -> String {
+    let stop = text_tab_stop_chars();
+    let mut out = String::new();
+    let mut col = 0usize;
+    for ch in line.chars() {
+        if ch == '\t' {
+            let spaces = text_tab_next_spaces(col, stop);
+            let mut i = 0usize;
+            while i < spaces {
+                out.push(' ');
+                i = i.saturating_add(1);
+            }
+            col = col.saturating_add(spaces);
+        } else {
+            out.push(ch);
+            col = col.saturating_add(1);
+        }
+    }
+    out
+}
+
+/// Expanded width (chars) after tab-stop expansion. Pure; unit-tested.
+pub fn text_expanded_width_chars(line: &str) -> usize {
+    text_expand_tabs_to_stops(line).chars().count()
+}
+
+/// Pane status bar height (px): thin chrome bar from [`TypoRole`] chrome
+/// line-height ([`chrome_status_role`] == Small 11 @ 1.2 = 13.2) plus one
+/// [`ROW_PAD`] rhythm (15.2) — BC thin per-pane bar, not the 28px
+/// [`HEADER_H`] toolbar height. Paint [`paint_text_pane_status`] adopts
+/// this. Pure; unit-tested.
+pub fn text_pane_status_height_px() -> f32 {
+    row_height_for_line(chrome_status_role().line_height_px())
+}
+
+/// Line-number gutter width at 960px wide (px): digit-count column
+/// ([`text_gutter_number_width`]) so 1-digit files stay narrow and 4-digit
+/// files widen without touching pane math. Fixture
+/// `comparison/text-tabs-960.json` locks 1/3/4-digit widths. Pure;
+/// unit-tested.
+pub fn text_tabs_960_gutter_width(max_no: usize, show_line_numbers: bool) -> f32 {
+    text_gutter_number_width(max_no, show_line_numbers)
+}
+
 /// No-truncation gate at 960: line pane me samati hai jab char count
 /// budget (`pane`) ke andar ho — [`pane_segments`] parity (limit ke andar
 /// poori line, koi `<` cut nahi); wrap-off h-scroll isi gate ke bahar
@@ -5047,10 +5129,11 @@ pub fn text_pane_needs_hscroll(content_w: f32, avail_w: f32) -> bool {
 /// halves barabar, dono left-aligned (BC per-pane `1:1` precedent — har pane
 /// ka readout apne pane ke start par), har half me cursor label + selected
 /// line ka preview (`L3 | content`; missing side ya no-selection par label
-/// akela, koi fake preview nahi). Geometry toolbar precedent (full-width
-/// `HEADER_H` row, halves beech [`TIGHT_GAP`], truncate clip taaki lambi
-/// line bar ko lamba na kare — single-row lock); typo Mono (code content
-/// reuse, koi naya size nahi); colors untouched.
+/// akela, koi fake preview nahi). Geometry thin chrome bar
+/// ([`text_pane_status_height_px`]: Small 13.2 + [`ROW_PAD`] = 15.2, not
+/// the 28px toolbar [`HEADER_H`]), halves beech [`TIGHT_GAP`], truncate clip
+/// taaki lambi line bar ko lamba na kare — single-row lock); typo Mono
+/// (code content reuse, koi naya size nahi); colors untouched.
 pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
     let (left_label, right_label) = text_pane_cursor_labels(rows, selected);
     let budget = text_pane_detail_budget();
@@ -5066,15 +5149,16 @@ pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<us
     );
     let avail = ui.available_width();
     let half = pane_status_half_width(avail);
+    let bar_h = text_pane_status_height_px();
     ui.horizontal(|ui| {
-        ui.set_min_size(egui::vec2(avail, HEADER_H));
+        ui.set_min_size(egui::vec2(avail, bar_h));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.add_sized(
-            egui::vec2(half, HEADER_H),
+            egui::vec2(half, bar_h),
             egui::Label::new(TypoRole::Mono.rich(left.as_str())).truncate(),
         );
         ui.add_sized(
-            egui::vec2(half, HEADER_H),
+            egui::vec2(half, bar_h),
             egui::Label::new(TypoRole::Mono.rich(right.as_str())).truncate(),
         );
     });
@@ -8136,6 +8220,59 @@ mod tests {
         let (lo, hi) = text8_divider_hit_band_960();
         assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
         assert!(((480.0 - lo) - 28.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn text10_tabs_plus_status_960() {
+        // Mirrors checks/gui-exq-text10/comparison/text-tabs-960.json:
+        // tab stops from char metrics, pane status height from chrome
+        // line-height, gutter width from digit count at 960px wide.
+        // Geometry FIRST, typography SECOND, colors frozen.
+        // Tab stop step: 8 chars, px from mono char metrics.
+        assert_eq!(TEXT_TAB_STOP_CHARS, 8);
+        assert_eq!(text_tab_stop_chars(), 8);
+        assert!((text_tab_stop_px(7.0) - 56.0).abs() < 0.001);
+        assert_eq!(text_tab_stop_px(f32::NAN), 0.0);
+        assert_eq!(text_tab_stop_px(0.0), 0.0);
+        // Next-stop math: col 0 -> 8 spaces, col 7 -> 1, col 8 -> 8.
+        assert_eq!(text_tab_next_spaces(0, 8), 8);
+        assert_eq!(text_tab_next_spaces(7, 8), 1);
+        assert_eq!(text_tab_next_spaces(8, 8), 8);
+        assert_eq!(text_tab_next_spaces(9, 8), 7);
+        assert_eq!(text_tab_next_spaces(0, 0), 1);
+        assert_eq!(text_tab_stop_col(0, 8), 8);
+        assert_eq!(text_tab_stop_col(7, 8), 8);
+        assert_eq!(text_tab_stop_col(8, 8), 16);
+        // Expansion aligns to stops: tab lands both lines on col 8.
+        assert_eq!(text_expand_tabs_to_stops("\ta"), "        a");
+        assert_eq!(text_expand_tabs_to_stops("ab\tc"), "ab      c");
+        assert_eq!(text_expanded_width_chars("\ta"), 9);
+        assert_eq!(text_expanded_width_chars("ab\tc"), 9);
+        assert_eq!(
+            text_expanded_width_chars(&text_expand_tabs_to_stops("a\tb")),
+            text_expanded_width_chars("a       b")
+        );
+        assert_eq!(text_expand_tabs_to_stops("plain"), "plain");
+        // Pane status bar thin: chrome Small 11 @ 1.2 = 13.2 + ROW_PAD.
+        assert_eq!(chrome_status_role(), TypoRole::Small);
+        assert!((chrome_status_role().line_height_px() - 13.2).abs() < 0.01);
+        assert!((text_pane_status_height_px() - 15.2).abs() < 0.01);
+        assert!(
+            (text_pane_status_height_px()
+                - row_height_for_line(chrome_status_role().line_height_px()))
+            .abs()
+                < 0.001
+        );
+        assert!(text_pane_status_height_px() < HEADER_H);
+        // Gutter width from digit count at 960 (narrow 1-digit, wide 4-digit).
+        assert_eq!(text_tabs_960_gutter_width(9, true), 16.0);
+        assert_eq!(text_tabs_960_gutter_width(120, true), 24.0);
+        assert_eq!(text_tabs_960_gutter_width(9999, true), 28.0);
+        assert_eq!(
+            text_tabs_960_gutter_width(9, true),
+            text_gutter_number_width(9, true)
+        );
+        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
     }
 
     #[test]
