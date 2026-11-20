@@ -1,0 +1,62 @@
+warning: function `compare_picture_files_with_offset` is never used
+   --> crates/compare/src/picture.rs:161:8
+    |
+161 | pub fn compare_picture_files_with_offset(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `detect_table_delimiter` is never used
+   --> crates/compare/src/table.rs:116:8
+    |
+116 | pub fn detect_table_delimiter(path: &Path, content: &str) -> char {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_table_tsv` is never used
+   --> crates/compare/src/table.rs:133:8
+    |
+133 | pub fn load_table_tsv(path: &Path, header: bool) -> Result<Table> {
+    |        ^^^^^^^^^^^^^^
+
+warning: function `compare_table_files_tsv` is never used
+   --> crates/compare/src/table.rs:142:8
+    |
+142 | pub fn compare_table_files_tsv(left: &Path, right: &Path, header: bool) -> Result<TableComparison> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `compare_table_files_by_key_sorted` is never used
+   --> crates/compare/src/table.rs:152:8
+    |
+152 | pub fn compare_table_files_by_key_sorted(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `load_workbook` is never used
+   --> crates/compare/src/table.rs:179:8
+    |
+179 | pub fn load_workbook(path: &Path) -> Result<Workbook> {
+    |        ^^^^^^^^^^^^^
+
+warning: struct `WorkbookComparison` is never constructed
+   --> crates/compare/src/table.rs:202:12
+    |
+202 | pub struct WorkbookComparison {
+    |            ^^^^^^^^^^^^^^^^^^
+
+warning: function `compare_workbook_files` is never used
+   --> crates/compare/src/table.rs:208:8
+    |
+208 | pub fn compare_workbook_files(left: &Path, right: &Path) -> Result<WorkbookComparison> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+
+running 677 tests
+....................................................................................... 87/677
+....................................................................................... 174/677
+....................................................................................... 261/677
+....................................................................................... 348/677
+....................................................................................... 435/677
+....................................................................................... 522/677
+....................................................................................... 609/677
+....................................................................
+test result: ok. 677 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.88s
+

@@ -791,6 +791,25 @@ pub fn status_zones_for(
     }
 }
 
+/// Status mid-zone (verdict) text role: Body (13 default proportional).
+/// Verdict side counts/hints (Small 11-weak) se ek step upar taaki
+/// dim-contrast gap weight/size se mite (color frozen). Paint
+/// wiring-pending (views.rs status bar isko adopt karega). Pure;
+/// unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub const fn status_verdict_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Status side zones (left counts, right nav-badge + hints) text role:
+/// Small (11 weak proportional, tabular intent — counts stable).
+/// Verdict (Body) se ek step neeche taaki hierarchy mid > sides
+/// rahe. Koi naya size/token nahi. Pure; unit-tested.
+#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
+pub const fn status_side_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::caption()
+}
+
 // ----------------------------------------------------------------------------
 // Text view prefs (paint-side hook, headless)
 // ----------------------------------------------------------------------------
@@ -3757,6 +3776,20 @@ mod tests {
         assert_eq!(zones.mid, "Changed");
         assert!(zones.right.contains("2/3"));
         assert!(zones.right.contains("F3"));
+    }
+
+    #[test]
+    fn status_zone_roles_keep_verdict_above_sides() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        assert_eq!(status_verdict_text_role(), TypoRole::Body);
+        assert_eq!(status_verdict_text_role().size(), TYPO_BODY_SIZE);
+        assert_eq!(status_side_text_role(), TypoRole::Small);
+        assert_eq!(status_side_text_role(), TypoRole::caption());
+        assert_eq!(status_side_text_role().size(), TYPO_SMALL_SIZE);
+        // Hierarchy: verdict (Body 13) sides (Small 11) se ek step upar;
+        // sides tabular intent rakhte hain (counts stable).
+        assert!(status_verdict_text_role().size() > status_side_text_role().size());
+        assert!(status_side_text_role().is_tabular());
     }
 
     #[test]

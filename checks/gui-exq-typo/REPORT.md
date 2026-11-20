@@ -1,3 +1,66 @@
+# Wave T TYPO — REPORT (round T-2)
+
+Scope: typography only. Koi geometry edit nahi (widths/margins/padding/
+alignment untouched — harness geometry signals T-1 se identical), koi
+color edit nahi (Color32/Visuals touches 29 -> 29, zero new). CR sec-8
+ke 3 typo gaps wired paint me fix: flat hierarchy, label-vs-input
+confusion, dim status contrast — sab weight/size/family se, color frozen.
+
+## Baseline (round-T-1) -> After (round-T-2)
+
+- `cargo test -p autocompare-gui`: 674 passed -> 677 passed (+3: hex
+  find-label role, table section-label role, status zone roles).
+- Harness `tools/gui-polish/run-geo-typo.sh`: PASS -> PASS.
+- PNG bytes: 9765 -> 9765 (byte-identical, `cmp` clean). Expected:
+  default headless scene me find/key rows nahi aate — hierarchy wired
+  paint paths + unit-test proof se cover hai, default scene regression-free.
+- Harness counts: monospace x50 -> x49 (labels/badges role-rich me gaye),
+  strong x26 -> x32 (3 wired paint-side `.strong()` + doc precedent),
+  small x52 -> x41 (`.small()` chains Small-role rich me gaye),
+  `.size` values ['14.0'] same, text_style_height x4 same (koi naya size),
+  Grid x14 same, widths 28 same, add_space [] same.
+- `cargo clippy -p autocompare-gui --all-targets -- -D warnings`: clean
+  (final window; beech me sibling diff/vfs waves ke transient red the —
+  OWNS me zero, unko touch nahi kiya).
+- `cargo fmt -p autocompare-gui -- --check`: clean.
+- MS guidelines: `#![forbid(unsafe_code)]` barkarar; added lines me zero
+  unwrap/expect/panic/todo/unsafe (grep clean); colors frozen.
+
+## 3 gaps — kya badla (file:line)
+
+1. Flat hierarchy — section labels ek step upar:
+   - `views_hex.rs`: `hex_find_label_text_role()` (Body 13) + paint-side
+     `.strong()`; badge `TypoRole::Small.rich` (11-weak, same pixels).
+   - `views_table.rs`: `table_section_label_text_role()` (Body 13) +
+     `.strong()` — `Key:` aur `Find:` dono isi ko chalate hain.
+   - Natija: label(13-strong) > content(12-mono) > hint/badge(11-weak).
+2. Label-vs-input confusion — family se farak:
+   - Dono needle `TextEdit` (hex + table) par `.font(Monospace)`: typed
+     values/hint Mono me, labels proportional-strong me. Color zero.
+3. Dim status contrast — weight se contrast (color frozen):
+   - `(both tables are empty)`: `.weak()` -> `TypoRole::Body.rich`
+     (13 default, weak hata).
+   - Positional note: Small-weak -> `TypoRole::Body.rich`.
+   - `viewmodel.rs`: `status_verdict_text_role()` (Body) +
+     `status_side_text_role()` (caption == Small, tabular) — verdict >
+     sides hierarchy, paint wiring-pending (views.rs FORBIDDEN, untouched).
+   - Counts/badges/page-label Small rahe (tabular intent, bottom step).
+
+## Style table (wired paint)
+
+| Pane | Role | Family | Weight | Size | Refs |
+|---|---|---|---|---|---|
+| Find/Key section label | Body + paint `.strong()` | proportional | strong | 13.0 | views_hex.rs:hex_find_label_text_role, views_table.rs:table_section_label_text_role |
+| Needle input values | TextStyle::Monospace | monospace | default | 12.0 | views_hex.rs:paint_hex_find_bar, views_table.rs:paint_table_find_controls |
+| Badges/hints/suggested | Small | proportional | weak | 11.0 | Small.rich call sites (pixels same) |
+| Empty/positional status | Body | proportional | default | 13.0 | paint_table_cell_grid, paint_table_key_bar |
+| Verdict (wiring-pending) | Body | proportional | default | 13.0 | viewmodel.rs:status_verdict_text_role |
+| Sides (wiring-pending) | Small/caption | proportional | weak | 11.0 | viewmodel.rs:status_side_text_role |
+
+## Rounds used: 2 of 6 (T-1 baseline, T-2 implement+verify). Green.
+
+---
+
 # Wave L TYPO — REPORT (round L-2)
 
 Scope: typography only. No geometry edits (widths/margins/padding/

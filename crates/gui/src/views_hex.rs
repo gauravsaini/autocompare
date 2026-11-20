@@ -795,11 +795,14 @@ pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
 // paint fn + local-state helpers). Gap #12 hex hissa: hex window ke andar
 // find row — table `paint_table_find_bar` precedent ka geometry/typo mirror
 // (wahi bar height, wahi needle chaudai, wahi Prev/Next labels, badge right
-// me ek pad ke saath small weak typo me). Paint caller ke locals
+// me ek pad ke saath Small-role typo me). Typography second: section label
+// Body-strong (helper + paint-side `.strong()`), needle Mono family
+// (`.font(Monospace)`), badge Small-role — label(13-strong) > content(12) >
+// hint(11-weak) hierarchy, koi naya size/token/color nahi. Paint caller ke locals
 // (`&mut String` needle + badge `&str`) par chalti hai, isliye App/viewer
 // struct me koi field edit nahi hota; returns `(prev_clicked, next_clicked)`
 // taaki cursor/badge advance caller ke paas rahe. No I/O; colors frozen
-// (koi Color32/Visuals/.size nahi, sirf small/weak/small_button).
+// (koi color touch nahi, sizes sirf TypoRole tokens se).
 // ----------------------------------------------------------------------------
 
 /// Hex find bar ki height (table precedent reuse, koi naya token nahi).
@@ -814,6 +817,17 @@ pub const HEX_FIND_NEEDLE_W: f32 = 120.0;
 /// Test-only until paint wiring lands (orchestrator owns paint).
 #[allow(dead_code)]
 pub const HEX_FIND_BADGE_PAD: f32 = 4.0;
+
+/// Hex find-bar section-label role: Body (13 default proportional).
+/// Paint-side `.strong()` composition (table header Mono+strong precedent):
+/// section label hint/badge (Small 11-weak) se ek step upar taaki flat
+/// hierarchy tute; input values Mono family me (needle field
+/// `.font(Monospace)`) taaki label-vs-input confuse na ho. Koi naya
+/// size/token/color nahi. Pure; unit-tested.
+#[allow(dead_code)]
+pub const fn hex_find_label_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
 
 /// Needle text se bytes: separators hatakar hex jode decode hota hai,
 /// warna raw utf-8 bytes. Khali par khali vec. App-side
@@ -887,7 +901,8 @@ pub fn hex_find_match_offsets(haystack: &[u8], needle: &[u8]) -> Vec<u64> {
 /// Hex window ke andar find row: needle field + Prev/Next + N/M badge.
 /// Table `paint_table_find_bar` ka geometry/typo mirror (wahi bar height,
 /// wahi needle chaudai, wahi button labels, badge right me ek pad ke
-/// saath small weak typo me). Returns `(prev_clicked, next_clicked)` —
+/// saath Small-role typo me; label Body-strong, needle Mono family).
+/// Returns `(prev_clicked, next_clicked)` —
 /// cursor/badge advance caller ke locals me hota hai (App fields untouched).
 /// Caller signature same rehti hai (hex tab wiring isi ko chalaye, KEVL
 /// caller me koi edit nahi).
@@ -899,10 +914,11 @@ pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -
     let avail = ui.available_width();
     ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), HEX_FIND_BAR_H));
-        ui.label(egui::RichText::new("Find:").small().weak());
+        ui.label(hex_find_label_text_role().rich("Find:").strong());
         ui.add(
             egui::TextEdit::singleline(needle)
                 .desired_width(HEX_FIND_NEEDLE_W)
+                .font(egui::TextStyle::Monospace)
                 .hint_text("needle"),
         );
         if ui.small_button("◀ Prev").clicked() {
@@ -913,7 +929,7 @@ pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(HEX_FIND_BADGE_PAD);
-            ui.label(egui::RichText::new(badge).small().weak());
+            ui.label(crate::theme::TypoRole::Small.rich(badge));
         });
     });
     (prev, next)
@@ -2588,6 +2604,18 @@ mod tests {
         assert_eq!(hex_nibble_text_role(), TypoRole::Mono);
         assert!(hex_nibble_text_role().is_mono());
         assert_eq!(hex_nibble_text_role().size(), TYPO_MONO_SIZE);
+    }
+
+    #[test]
+    fn hex_find_label_role_steps_above_hint() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        assert_eq!(hex_find_label_text_role(), TypoRole::Body);
+        assert_eq!(hex_find_label_text_role().size(), TYPO_BODY_SIZE);
+        // Hierarchy: section label hint se ek step upar, mono content
+        // se alag family (label proportional, input Mono).
+        assert!(hex_find_label_text_role().size() > TYPO_SMALL_SIZE);
+        assert!(!hex_find_label_text_role().is_mono());
+        assert!(hex_find_label_text_role().is_chrome());
     }
 
     #[test]

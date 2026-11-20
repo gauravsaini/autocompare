@@ -232,8 +232,11 @@ pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
 // fixed 1-char marker har toggle ke start me (indicator column align),
 // `TABLE_KEY_BAR_H` uncha bar, `TABLE_KEY_COL_GAP` gap, badge right-end par
 // `TABLE_KEY_BADGE_PAD` ke saath (find-bar badge geometry reuse).
-// Typography second: header `.monospace()`, selected `.strong()`, hint/badge/
-// note `.small().weak()`; koi size-override/color add nahi. No I/O.
+// Typography second: section labels Body-strong (helper +
+// paint-side `.strong()`), header/selected key cells mono-strong,
+// plain cells mono, hint/badge `(suggested)` Small-role, positional
+// note + empty note Body-role (weak hata — weight se contrast, color
+// frozen); koi size-override/color add nahi. No I/O.
 // ----------------------------------------------------------------------------
 
 /// Key-col header bar ki unchai (find-bar precedent reuse).
@@ -282,12 +285,12 @@ pub fn table_key_badge_label(view: &TableKeyView) -> String {
 /// Key-col header affordance row: har header column ek
 /// `selectable_label(marker + name)` toggle hai (selected par
 /// `.strong().monospace()`, deselected par `.monospace()`), click par
-/// `toggle_key_column(col)`; suggested-par-`.small().weak()`
+/// `toggle_key_column(col)`; suggested-par-Small-role
 /// `(suggested)` hint; right-end me `table_key_badge_label` badge
-/// `.small().weak()` me (find-bar badge geometry reuse); positional hone
-/// par `POSITIONAL_NOTE` note line me (honest, `positional_note()` reuse,
-/// koi naya wording nahi). Caller signature stable rehti hai (table tab
-/// wiring isi ko chalati hai).
+/// Small-role me (find-bar badge geometry reuse); positional hone
+/// par `POSITIONAL_NOTE` note line me Body-role (honest,
+/// `positional_note()` reuse, koi naya wording nahi). Caller signature
+/// stable rehti hai (table tab wiring isi ko chalati hai).
 /// Test-only until paint wiring lands (orchestrator owns paint).
 #[allow(dead_code)]
 pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
@@ -296,7 +299,7 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
         ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
-        ui.label(egui::RichText::new("Key:").small().weak());
+        ui.label(table_section_label_text_role().rich("Key:").strong());
         for (col, name) in header.iter().enumerate() {
             let selected = is_key_column(view, col);
             let suggested = is_suggested_key(view, col);
@@ -311,17 +314,13 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
                 clicked = Some(col);
             }
             if suggested && !selected {
-                ui.label(egui::RichText::new("(suggested)").small().weak());
+                ui.label(TypoRole::Small.rich("(suggested)"));
             }
             ui.add_space(TABLE_KEY_COL_GAP);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(TABLE_KEY_BADGE_PAD);
-            ui.label(
-                egui::RichText::new(table_key_badge_label(view))
-                    .small()
-                    .weak(),
-            );
+            ui.label(TypoRole::Small.rich(table_key_badge_label(view)));
         });
     });
     if let Some(col) = clicked {
@@ -330,7 +329,7 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
     // `positional_note()` khud sirf positional par `Some` deta hai,
     // isliye ek `if let` hi honest-note gate hai (outer check redundant).
     if let Some(note) = view.positional_note() {
-        ui.label(egui::RichText::new(note).small().weak());
+        ui.label(TypoRole::Body.rich(note));
     }
 }
 
@@ -615,7 +614,8 @@ pub fn table_find_badge_label(position: Option<usize>, total: usize) -> String {
 /// Table window ke andar Find controls ka single source: needle field +
 /// Prev/Next + N/M badge (text find-bar precedent ka geometry/typo reuse:
 /// wahi bar height, wahi needle chaudai, wahi button labels, badge right me
-/// ek pad ke saath small weak me). `paint_table_find_bar` aur
+/// ek pad ke saath Small-role me; label Body-strong, needle Mono family).
+/// `paint_table_find_bar` aur
 /// `paint_table_toolbar` dono isi ko chalate hain taaki do Find
 /// implementations kabhi drift na karen (G-B2 dedup). Returns
 /// `(prev_clicked, next_clicked)`; cursor/badge advance caller App state
@@ -625,10 +625,11 @@ fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str
     let mut prev = false;
     let mut next = false;
     ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
-    ui.label(egui::RichText::new("Find:").small().weak());
+    ui.label(table_section_label_text_role().rich("Find:").strong());
     ui.add(
         egui::TextEdit::singleline(needle)
             .desired_width(TABLE_FIND_NEEDLE_W)
+            .font(egui::TextStyle::Monospace)
             .hint_text("needle"),
     );
     if ui.small_button("◀ Prev").clicked() {
@@ -639,7 +640,7 @@ fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str
     }
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         ui.add_space(TABLE_FIND_BADGE_PAD);
-        ui.label(egui::RichText::new(badge).small().weak());
+        ui.label(TypoRole::Small.rich(badge));
     });
     (prev, next)
 }
@@ -1090,7 +1091,7 @@ pub fn paint_table_cell_grid(
     paint_table_key_bar(ui, view, header);
     let widths = table_column_widths(header, rows);
     if header.is_empty() && rows.is_empty() {
-        ui.label(egui::RichText::new("(both tables are empty)").weak());
+        ui.label(TypoRole::Body.rich("(both tables are empty)"));
         return;
     }
     if widths.is_empty() {
@@ -1140,6 +1141,16 @@ pub fn paint_table_cell_grid(
 /// unit-tested.
 pub const fn table_header_text_role() -> TypoRole {
     TypoRole::Mono
+}
+
+/// Section-label role: key/find row labels (`Key:`, `Find:`) Body me
+/// (13 default proportional), paint-side `.strong()` composition
+/// (header Mono+strong precedent). Labels hint/badge (Small 11-weak) se
+/// ek step upar taaki flat hierarchy tute; input values Mono family me
+/// (needle field `.font(Monospace)`) taaki label-vs-input confuse na ho.
+/// Koi naya size/token/color nahi. Pure; unit-tested.
+pub const fn table_section_label_text_role() -> TypoRole {
+    TypoRole::Body
 }
 
 /// Real header row Grid me: glyph placeholder + har header cell
@@ -2466,6 +2477,20 @@ mod tests {
         );
         // Grid ids kabhi takrate nahi (header vs data Compose).
         assert_ne!(TABLE_CELL_GRID_ID, TABLE_CELL_HEADER_GRID_ID);
+    }
+
+    #[test]
+    fn table_section_label_role_steps_above_hint() {
+        // Hierarchy: section labels Body (13) hint/badge Small (11) se
+        // ek step upar, mono content se alag family; status notes Body
+        // (weak hata — weight se contrast, color frozen).
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE};
+        assert_eq!(table_section_label_text_role(), TypoRole::Body);
+        assert_eq!(table_section_label_text_role().size(), TYPO_BODY_SIZE);
+        assert!(table_section_label_text_role().size() > TYPO_SMALL_SIZE);
+        assert!(!table_section_label_text_role().is_mono());
+        assert!(table_section_label_text_role().is_chrome());
+        assert_eq!(TypoRole::Body.size(), TypoRole::Small.size() + 2.0);
     }
 
     #[test]
