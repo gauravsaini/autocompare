@@ -4307,6 +4307,201 @@ pub fn chrome3_content_avail_height(viewport_h: f32, chrome_h: f32) -> f32 {
         .max(0.0)
 }
 
+/// CHROME5 exquisite (chrome-side round-5): session tab strip cell width
+/// from char metrics, inter-tab gap via SPACE tokens, overflow scroll
+/// trigger width, toolbar button uniform width plus group gaps via SPACE
+/// tokens at 960px wide. Geometry FIRST, typo SECOND, colors FROZEN.
+/// Single-source reuse; koi naya size/token/color nahi. Pure; headless-tested.
+pub fn chrome5_session_tab_char_w() -> f32 {
+    crate::theme::TypoRole::Mono.size() * 0.6
+}
+
+/// CHROME5 session tab label budget in chars: 16 mono cells cover the
+/// longest tab title ("FolderMerge", 11) plus truncation breathing room.
+/// Pure; headless-tested.
+pub fn chrome5_session_tab_label_chars() -> usize {
+    16
+}
+
+/// CHROME5 session tab label width px: char budget plus one SPACE_XS of
+/// slack, ceiled to whole px (16 * 7.2 + 4 = 119.2 -> 120.0, frozen
+/// [`views::SESSION_TAB_MAX_W`] parity, no drift). Pure; headless-tested.
+pub fn chrome5_session_tab_label_w() -> f32 {
+    (chrome5_session_tab_label_chars() as f32 * chrome5_session_tab_char_w()
+        + crate::theme::SPACE_XS)
+        .ceil()
+}
+
+/// CHROME5 session tab cell width px: label max + close gap
+/// ([`views::TAB_BOTTOM_GAP`] 6) + close edge (24 hit floor) = 150.0.
+/// Pure; headless-tested.
+pub fn chrome5_session_tab_cell_w() -> f32 {
+    chrome5_session_tab_label_w() + views::TAB_BOTTOM_GAP + crate::home::HOME_TOOLBAR_BUTTON_H
+}
+
+/// CHROME5 session tab inter-tab gap px via SPACE_SM (8.0). Pure; headless-tested.
+pub fn chrome5_session_tab_strip_gap() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// CHROME5 session tab strip side chrome px via SPACE_MD (12.0 per side).
+/// Pure; headless-tested.
+pub fn chrome5_session_tab_strip_side() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// CHROME5 session tab strip width px: cells + inter-tab gaps. Pure; headless-tested.
+pub fn chrome5_session_tab_strip_w(count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    count as f32 * chrome5_session_tab_cell_w()
+        + count.saturating_sub(1) as f32 * chrome5_session_tab_strip_gap()
+}
+
+/// CHROME5 session strip needs horizontal scroll at `total_w`. Pure; headless-tested.
+pub fn chrome5_session_strip_needs_scroll(count: usize, total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    let avail = (total_w - chrome5_session_tab_strip_side() * 2.0).max(0.0);
+    chrome5_session_tab_strip_w(count) > avail
+}
+
+/// CHROME5 session tabs visible count at `total_w`. Pure; headless-tested.
+pub fn chrome5_session_tabs_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return usize::MAX;
+    }
+    let avail = (total_w - chrome5_session_tab_strip_side() * 2.0).max(0.0);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    loop {
+        let need = chrome5_session_tab_cell_w()
+            + if count == 0 {
+                0.0
+            } else {
+                chrome5_session_tab_strip_gap()
+            };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// CHROME5 session tabs overflow count given total count and `total_w`.
+/// Pure; headless-tested.
+pub fn chrome5_session_tabs_overflow_count(total_w: f32, count: usize) -> usize {
+    count.saturating_sub(chrome5_session_tabs_visible_count(total_w))
+}
+
+/// CHROME5 toolbar proportional char advance px (Body 13 * 0.6 = 7.8).
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_char_w() -> f32 {
+    crate::theme::TypoRole::Body.size() * 0.6
+}
+
+/// CHROME5 toolbar longest label chars ("Sessions"/"Context" = 8).
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_label_chars() -> usize {
+    8
+}
+
+/// CHROME5 toolbar button content need px: longest label at char advance
+/// plus SPACE_SM side pads (8 * 7.8 + 2 * 8 = 78.4 -> ceil 79.0).
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_content_need_w() -> f32 {
+    (chrome5_toolbar_label_chars() as f32 * chrome5_toolbar_char_w() + 2.0 * crate::theme::SPACE_SM)
+        .ceil()
+}
+
+/// CHROME5 toolbar uniform button width px: content need floored at the
+/// frozen 96 compact floor (79 < 96, so 96; sab barabar, clip nahi).
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_button_w() -> f32 {
+    chrome5_toolbar_content_need_w().max(crate::home::HOME_TOOLBAR_BUTTON_W)
+}
+
+/// CHROME5 toolbar item gap px via SPACE_XS (4.0). Pure; headless-tested.
+pub fn chrome5_toolbar_item_gap() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// CHROME5 toolbar group gap px via SPACE_SM (8.0). Pure; headless-tested.
+pub fn chrome5_toolbar_group_gap() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// CHROME5 toolbar total width px: 10 uniform buttons + 9 item gaps = 996.
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_w() -> f32 {
+    crate::home::TOPCHROME_TOOLBAR_ACTIONS.len() as f32 * chrome5_toolbar_button_w()
+        + crate::home::TOPCHROME_TOOLBAR_ACTIONS
+            .len()
+            .saturating_sub(1) as f32
+            * chrome5_toolbar_item_gap()
+}
+
+/// CHROME5 toolbar available width px at `total_w` (side chrome 2 * 12).
+/// Pure; headless-tested.
+pub fn chrome5_toolbar_avail_w(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - chrome5_session_tab_strip_side() * 2.0).max(0.0)
+}
+
+/// CHROME5 toolbar visible buttons count at `total_w`. Pure; headless-tested.
+pub fn chrome5_toolbar_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return crate::home::TOPCHROME_TOOLBAR_ACTIONS.len();
+    }
+    let avail = chrome5_toolbar_avail_w(total_w);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    for _ in crate::home::TOPCHROME_TOOLBAR_ACTIONS {
+        let need = chrome5_toolbar_button_w()
+            + if count == 0 {
+                0.0
+            } else {
+                chrome5_toolbar_item_gap()
+            };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// CHROME5 toolbar overflow buttons count at `total_w`. Pure; headless-tested.
+pub fn chrome5_toolbar_overflow_count(total_w: f32) -> usize {
+    crate::home::TOPCHROME_TOOLBAR_ACTIONS
+        .len()
+        .saturating_sub(chrome5_toolbar_visible_count(total_w))
+}
+
+/// CHROME5 hierarchy contract: label width matches frozen 120 tab max,
+/// cell matches frozen 150 strip cell, gaps match SPACE tokens, toolbar
+/// floor holds at 96. Pure; headless-tested.
+pub fn chrome5_hierarchy_ok() -> bool {
+    (chrome5_session_tab_char_w() - 7.2).abs() < 0.001
+        && chrome5_session_tab_label_chars() == 16
+        && (chrome5_session_tab_label_w() - views::SESSION_TAB_MAX_W).abs() < 0.001
+        && (chrome5_session_tab_cell_w() - 150.0).abs() < 0.001
+        && chrome5_session_tab_strip_gap() == crate::theme::SPACE_SM
+        && chrome5_session_tab_strip_side() == crate::theme::SPACE_MD
+        && (chrome5_toolbar_char_w() - 7.8).abs() < 0.001
+        && (chrome5_toolbar_button_w() - 96.0).abs() < 0.001
+        && chrome5_toolbar_item_gap() == crate::theme::SPACE_XS
+        && chrome5_toolbar_group_gap() == crate::theme::SPACE_SM
+        && (chrome5_toolbar_w() - 996.0).abs() < 0.001
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -10768,5 +10963,34 @@ mod tests {
     fn tabsapp_typo_reuses_chrome_tab_no_new_size() {
         assert_eq!(App::session_strip_tab_role(), views::chrome_tab_role());
         assert_eq!(App::session_strip_tab_role().size(), 13.0);
+    }
+
+    #[test]
+    fn chrome5_tabs_plus_toolbar_space_tokens_wide960() {
+        assert!((chrome5_session_tab_char_w() - 7.2).abs() < 0.001);
+        assert_eq!(chrome5_session_tab_label_chars(), 16);
+        assert_eq!(chrome5_session_tab_label_w(), 120.0);
+        assert_eq!(chrome5_session_tab_cell_w(), 150.0);
+        assert_eq!(chrome5_session_tab_strip_gap(), crate::theme::SPACE_SM);
+        assert_eq!(chrome5_session_tab_strip_gap(), 8.0);
+        assert_eq!(chrome5_session_tab_strip_side(), crate::theme::SPACE_MD);
+        assert_eq!(chrome5_session_tab_strip_w(0), 0.0);
+        assert_eq!(chrome5_session_tab_strip_w(2), 308.0);
+        assert_eq!(chrome5_session_tab_strip_w(7), 1098.0);
+        assert!(!chrome5_session_strip_needs_scroll(2, 960.0));
+        assert!(chrome5_session_strip_needs_scroll(7, 960.0));
+        assert!(!chrome5_session_strip_needs_scroll(7, f32::NAN));
+        assert_eq!(chrome5_session_tabs_visible_count(960.0), 5);
+        assert_eq!(chrome5_session_tabs_overflow_count(960.0, 7), 2);
+        assert!((chrome5_toolbar_char_w() - 7.8).abs() < 0.001);
+        assert_eq!(chrome5_toolbar_content_need_w(), 79.0);
+        assert_eq!(chrome5_toolbar_button_w(), 96.0);
+        assert_eq!(chrome5_toolbar_item_gap(), crate::theme::SPACE_XS);
+        assert_eq!(chrome5_toolbar_group_gap(), crate::theme::SPACE_SM);
+        assert_eq!(chrome5_toolbar_w(), 996.0);
+        assert_eq!(chrome5_toolbar_avail_w(960.0), 936.0);
+        assert_eq!(chrome5_toolbar_visible_count(960.0), 9);
+        assert_eq!(chrome5_toolbar_overflow_count(960.0), 1);
+        assert!(chrome5_hierarchy_ok());
     }
 }
