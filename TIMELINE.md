@@ -752,3 +752,9 @@
 1. **Early feedback**: CLI 10/10 PASS, 3 PNGs default 11059B / dark 11262B / light 11059B magic ok, dist tarball 5816822B + sha, REPORT RESULT: PASS, LTO release ok.
 2. **Tests**: owned scope no Rust files, fmt clean, banned 0.
 3. **Files changed**: checks/ac-loop/round-lr5/**, dist/VERSION + tarball + sha, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-home32 live home sessions (agyx swarm, orchestrator recovery)
+
+1. **Home sessions geometry**: session cards grid, search field 28px, workspace rows, 1200px no h-scroll + 8tabs edge. SPACE_* reuse, TypoRole reuse.
+2. **Tests**: 1063 green, exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Agyx did work but timeout before commit (0-byte log, no DONE) — orchestrator verified OWNS and committed, same pattern as table30.
+3. **Files changed**: crates/gui/src/home.rs, checks/gui-exq-home32/**, TIMELINE.md.
