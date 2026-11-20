@@ -2359,3 +2359,93 @@ mod exq_text5_tests {
         assert_eq!(gutter_row_center_y_for_line_height(0, 4, f32::NAN), None);
     }
 }
+
+// ----------------------------------------------------------------------------
+// GUTTER6 narrow: 720px canvas symmetric layout + char-metric numbers.
+// BC twin panes 720 par bhi barabar rehte hain (margins bahar barabar,
+// panes andar barabar, divider beech me barabar gaps samet); number column
+// digits (chars) se chauda hota hai, icon reserve fixed LG rehta hai, slop
+// dono taraf barabar. Geometry first: sab SPACE scale reuse, koi naya
+// literal nahi (720 canvas fixture width hai). Typography second: numbers
+// wahi content_grid (Mono 12 tabular) chars, koi naya size nahi.
+// WIRING (paint owner ke paas): narrow canvas `gutter_text_layout_720()`
+// se, number cell char count `gutter_number_cell_width_chars(..)` se.
+// ----------------------------------------------------------------------------
+
+/// 720px narrow canvas par symmetric text layout `(margin, left, center,
+/// right, margin)` px: 12 + 336 + 24 + 336 + 12 = 720. Panes barabar,
+/// divider symmetric gaps samet. Pure; unit-tested.
+pub fn gutter_text_layout_720() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 720.0)
+}
+
+/// Number-cell char width (chars): digit count + trailing pad.
+///
+/// Px column ([`gutter_linenum_column_width`]) digits se chauda hota hai,
+/// text cell ([`gutter_number_cell`]) utne hi chars ki hoti hai (digits +
+/// [`GUTTER_NUMBER_TRAIL_PAD`] spaces) taaki px aur char metrics ek beat
+/// par rahen. Pure; unit-tested.
+pub fn gutter_number_cell_width_chars(digits: usize) -> usize {
+    digits.saturating_add(GUTTER_NUMBER_TRAIL_PAD)
+}
+
+#[cfg(test)]
+mod exq_gutter6_narrow_tests {
+    use super::*;
+
+    #[test]
+    fn gutter6_narrow_720_stays_symmetric_with_char_metrics() {
+        // Mirrors checks/gui-exq-gutter6/round-1/comparison/gutter-narrow-720.json.
+        // Narrow layout symmetric: 12 + 336 + 24 + 336 + 12 = 720.
+        assert_eq!(gutter_text_layout_720(), (12.0, 336.0, 24.0, 336.0, 12.0));
+        let (m0, left, center, right, m1) = gutter_text_layout_720();
+        assert_eq!(m0, m1);
+        assert_eq!(left, right);
+        assert!((m0 + left + center + right + m1 - 720.0).abs() < 0.001);
+        assert_eq!(
+            gutter_text_layout_720(),
+            gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 720.0)
+        );
+        // Number gutter widths char metrics: digits -> px col, chars = digits + trail.
+        assert_eq!(gutter_linenum_digits(9), 1);
+        assert_eq!(gutter_linenum_column_width(9, true), 16.0);
+        assert_eq!(gutter_number_cell_width_chars(1), 3);
+        assert_eq!(gutter_number_cell_width_chars(4), 6);
+        assert_eq!(
+            gutter_number_cell(Some(1), 4).chars().count(),
+            gutter_number_cell_width_chars(4)
+        );
+        assert_eq!(
+            gutter_number_cell(None, 4).chars().count(),
+            gutter_number_cell_width_chars(4)
+        );
+        assert!(gutter_number_cell_is_right_aligned_tabular());
+        // Icon col fixed LG, center gaps fixed XS, arrow box centered.
+        assert_eq!(gutter_icon_column_width(), crate::theme::SPACE_LG);
+        assert_eq!(gutter_icon_column_width(), 16.0);
+        assert_eq!(gutter_center_side_gap(), crate::theme::SPACE_XS);
+        assert_eq!(gutter_center_side_gap(), 4.0);
+        assert!(
+            (gutter_arrow_box() + 2.0 * gutter_center_side_gap() - gutter_center_width()).abs()
+                < 0.001
+        );
+        // Slop symmetric dono taraf: 200..204 + 2 -> 198..206.
+        let seg = GutterSegment {
+            y_start: 200.0,
+            y_end: 204.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(
+            gutter_slop_band(&seg, GUTTER_HIT_SLOP),
+            Some((198.0, 206.0))
+        );
+        let Some((lo, hi)) = gutter_slop_band(&seg, GUTTER_HIT_SLOP) else {
+            return;
+        };
+        assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
+        // 720 par text gutter pane me samae: 1-digit 32 / 3-digit 40 << 336 pane.
+        assert_eq!(gutter_text_gutter_width(9, true), 32.0);
+        assert_eq!(gutter_text_gutter_width(120, true), 40.0);
+        assert!(gutter_text_gutter_width(120, true) < left);
+    }
+}
