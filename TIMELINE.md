@@ -565,3 +565,9 @@
 1. **Views Tall-1200 Dual Panes & Gutter Lock**: dual text-compare panes at 1200px tall canvas with scroll canvas height budget (1200.0 - 43.2 = 1156.8px), side-by-side equal heights (1156.8, 1156.8), over-under stacked equal heights (574.4, 574.4), file-bar rhythm locked to 15.2px over tall canvas, center gutter column over tall canvas (1156.8px height, 20px width, 2px hit slop [348..372] at 720 / [468..492] at 960), middle arrow vertical centering at 600.0px canvas / 578.4px scroll canvas, segment tracking `text_tall_segment_arrow_cy`, and edge fixtures `views-tall-1200.json` and `views-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1019 green (including `viewfill9_tall_1200_dual_panes_plus_gutter_column`); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-viewfill9/**`.
+
+### Feature (2026-11-21) — feat(gui): exq-viewfill9 tall plus panes
+
+1. **Views Tall-1200 Panes & File-Bar Lock**: dual text-compare panes at 1200px tall canvas, file-bar height locked over tall scroll, center gutter column over tall canvas, and edge fixture `comparison/views-tall-1200.json` (narrow-720 fixture reused).
+2. **Tests** (before → after): autocompare-gui 1026 green (including `viewfill9_*` tall panes tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-viewfill9/**`, `TIMELINE.md`.
