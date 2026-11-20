@@ -662,3 +662,9 @@
 1. **Live Gutter+Status Mirror (root-cause fix)**: diagnosis proved width was never the bug (all 6 live call-sites already 20px) — two visual bugs: (a) hunk-head marker used framed small_button pill on changed row only, (b) unselected rows painted transparent (no fill), so the 20px column was invisible. Fix: frameless gap-rect arrows via text_center_marker_fg on changed rows, continuous track fill (track_for when unselected, CHANGED_BG band when selected) on every live center cell incl. floors. Plus live bottom bar mirror of status20 (per-pane labels with honest fallback, 4-segment legend). Colors frozen at 33.
 2. **Tests** (before -> after): autocompare-gui 1045 green (including mirror22_live_gutter_path); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate ABANDONED honestly (fixture path cannot see egui pixels).
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-mirror22/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter23 visible live gutter
+
+1. **Visible Live Gutter (two half-fixes)**: (a) DARK_TRACK 32->48 in theme.rs (delta vs 27 pane bg goes 5->21/255, no new hue; shared track_for also lifts hex-minimap + merge-overview tracks), (b) both live hunk-head marker sites in paint_text_body switch Button::small().frame(false) to allocate_exact_size + painter().text in CHANGED_FG (255,235,160) with same hover + click behavior. First-ever LIVE-PIXEL GATE: PASS (unselected track median brightness 48.0, 100 yellow marker pixels, crop live-crop.png).
+2. **Tests** (before -> after): autocompare-gui 1046 green (including gutter23_live_track_contrast); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; fixture pxdiff ABANDONED honestly (egui-only paint, byte-identical before/after); colors frozen at 33.
+3. **Files changed**: crates/gui/src/views.rs, crates/gui/src/theme.rs, checks/gui-exq-gutter23/**, TIMELINE.md.
