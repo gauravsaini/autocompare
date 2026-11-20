@@ -798,56 +798,32 @@ pub const LIGHT_PALETTE: Palette = Palette {
 
 /// Paint-side palette selector (mirrors `ui.visuals().dark_mode`).
 pub const fn palette(dark: bool) -> Palette {
-    if dark {
-        DARK_PALETTE
-    } else {
-        LIGHT_PALETTE
-    }
+    if dark { DARK_PALETTE } else { LIGHT_PALETTE }
 }
 
 /// Dim paint token for the active mode.
 pub fn dim_for(dark: bool) -> Color32 {
-    if dark {
-        DARK_DIM
-    } else {
-        LIGHT_DIM
-    }
+    if dark { DARK_DIM } else { LIGHT_DIM }
 }
 
 /// Red marker paint token for the active mode.
 pub fn red_for(dark: bool) -> Color32 {
-    if dark {
-        DARK_RED
-    } else {
-        LIGHT_RED
-    }
+    if dark { DARK_RED } else { LIGHT_RED }
 }
 
 /// Green marker paint token for the active mode.
 pub fn green_for(dark: bool) -> Color32 {
-    if dark {
-        DARK_GREEN
-    } else {
-        LIGHT_GREEN
-    }
+    if dark { DARK_GREEN } else { LIGHT_GREEN }
 }
 
 /// Newer-side blue paint token for the active mode.
 pub fn blue_for(dark: bool) -> Color32 {
-    if dark {
-        DARK_BLUE
-    } else {
-        LIGHT_BLUE
-    }
+    if dark { DARK_BLUE } else { LIGHT_BLUE }
 }
 
 /// Gutter track paint token for the active mode.
 pub fn track_for(dark: bool) -> Color32 {
-    if dark {
-        DARK_TRACK
-    } else {
-        LIGHT_TRACK
-    }
+    if dark { DARK_TRACK } else { LIGHT_TRACK }
 }
 
 // ----------------------------------------------------------------------------

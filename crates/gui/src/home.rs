@@ -75,8 +75,7 @@ pub fn home_model() -> HomeModel {
             },
             HomeItem {
                 title: "Text Merge",
-                description:
-                    "Three-way text reconciliation with conflict markers and Take resolution",
+                description: "Three-way text reconciliation with conflict markers and Take resolution",
                 tab: Tab::Merge,
             },
             HomeItem {
@@ -1991,7 +1990,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn home_card_roles_carry_pane_hierarchy() {
-        use crate::theme::{TypoRole, TYPO_LINE_HEIGHT_SOURCE};
+        use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TypoRole};
         assert_eq!(home_card_title_role(), TypoRole::HomeTitle);
         assert_eq!(home_card_desc_role(), TypoRole::HomeDesc);
         assert_eq!(home_card_button_role(), TypoRole::HomeButton);
@@ -2071,8 +2070,8 @@ mod tests {
     #[test]
     fn home_card_typo_second_layer_reuses_roles() {
         use crate::theme::{
-            TypoRole, TYPO_LINE_HEIGHT_BODY, TYPO_LINE_HEIGHT_CHROME, TYPO_TRACKING_HEADING_EM,
-            TYPO_WEIGHT_MEDIUM, TYPO_WEIGHT_REGULAR,
+            TYPO_LINE_HEIGHT_BODY, TYPO_LINE_HEIGHT_CHROME, TYPO_TRACKING_HEADING_EM,
+            TYPO_WEIGHT_MEDIUM, TYPO_WEIGHT_REGULAR, TypoRole,
         };
         assert_eq!(
             super::home_card_title_line_height_px(),
@@ -2096,7 +2095,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn home_card_typo_matches_paint_contract() {
-        use crate::theme::{TypoRole, TYPO_BODY_SIZE, TYPO_SMALL_SIZE};
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
         // Title strong 14 = the single `.size(14.0)` in paint_home.
         assert_eq!(home_card_title_size(), 14.0);
         assert_eq!(HOME_CARD_TITLE_SIZE, 14.0);
@@ -2350,7 +2349,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn homegeo_card_hit_target_beats_cramped_button() {
-        use crate::theme::{TypoRole, CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP, TypoRole};
         // G-C1: card/pad/gap/hit-row consts theme tokens se single-source
         // (values wahi: pad/grid/section 8, inner/path-gap 4, hit-row 28).
         assert_eq!(super::HOME_CARD_PAD, GEO_SECTION_GAP);
@@ -2660,7 +2659,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn session_tree_geometry_and_typography_contract() {
-        use crate::theme::{TypoRole, GEO_TREE_INDENT_STEP};
+        use crate::theme::{GEO_TREE_INDENT_STEP, TypoRole};
         assert_eq!(super::SESSION_TREE_WIDTH, 240.0);
         assert_eq!(super::session_tree_width(), 240.0);
         assert_eq!(super::SESSION_TREE_ROW_H, 24.0);
