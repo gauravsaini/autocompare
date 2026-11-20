@@ -49,7 +49,10 @@ fn main() {
     if let Err(err) = eframe::run_native(
         "autocompare",
         options,
-        Box::new(|_cc| Ok(Box::new(app::App::default()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(eframe::egui::Visuals::dark());
+            Ok(Box::new(app::App::default()))
+        }),
     ) {
         eprintln!("autocompare-gui: {err}");
     }
