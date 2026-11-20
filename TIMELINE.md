@@ -422,3 +422,9 @@
 1. **Copy Narrow & Slop at 720px**: arrow hit-slop expanded symmetric via space scale, copy-line actions aligned to Mono baseline, column width from char metrics.
 2. **Tests** (before → after): autocompare-gui all green (980 passed); clippy 0 warnings on owned `copy.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy8/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-text10 tabs plus status
+
+1. **Text Tabs & Status at 960px**: tab stops from char metrics, pane status bar from TypoRole chrome line-height, line-number gutter from digit count.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text10/**`, `TIMELINE.md`.
