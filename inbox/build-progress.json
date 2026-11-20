@@ -114,5 +114,6 @@
   "ORCH-MIX-DISPATCH": "2026-11-20 21:13 AEDT mix live: opencode gui2-nudge (commit WIP) + opencode text3 sess-opencode-text3 (diff text/merge/grammar) + agyx s1 tmuxagyxs1 (sessions h2) + agyx s2 tmuxagyxs2 (reports rep-h2); probe agyx-ok rotator-200 verified",
   "ORCH-FMT-FIX2": "ab568e2 cargo-fmt edition-2024 (plain rustfmt was wrong edition, import order + collapse fixed, 18 suites green)",
   "WAVE-GUI-EXQ5B": "landed b0520b1 (30 files OWNS-clean, REPORT PASS, PNG magic ok, cargo-fmt clean, banned 0) pushed",
-  "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)"
+  "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)",
+  "WAVE-TEXT3": "landed 6736b59 (181 ins OWNS-clean, REPORT PASS, cargo-fmt clean, clippy 0, banned test-only, 18 suites green) pushed"
 }
