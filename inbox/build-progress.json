@@ -41,6 +41,7 @@
   "WAVE-CLI-AGYX": "agyx-cli landed+pushed 33912bc (REPORT PASS, 55 green cli, clippy 0, OWNS fmt clean, banned allow 0, PNG noise reverted)",
   "WAVE-GUI-EXQ5B": "landed b0520b1 (30 files OWNS-clean, REPORT PASS, PNG magic ok, cargo-fmt clean, banned 0) pushed",
   "WAVE-GUI-EXQ6": "landed+pushed bbe2a1c (REPORT PASS, 728 green gui-lib, clippy 0, fmt clean, banned 0, PNG noise reverted)",
+  "WAVE-HOME1": "landed+pushed faf5464/fa1478e REPORT PASS 742 green home find+narrow+tabs",
   "WAVE-MEDIA-TABLE2": "landed+pushed fc2448f (18 suites green, clippy 0, REPORT PASS x4) + fix-forward 4edb043 (rustfmt 4 files, base was clean)",
   "WAVE-REPORTS-H2": "s2 round-1 LANDED 2a0fd24 (473 ins OWNS-clean, REPORT PASS, 3 suites green, fmt/clippy/banned/deadcode clean)",
   "WAVE-REPORTS-H2-DONE": "s2 COMPLETE DONE:0; round-1 landed+verified+pushed; session closed",
