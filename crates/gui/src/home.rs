@@ -2940,6 +2940,123 @@ pub fn home2_hierarchy_ok() -> bool {
         && HOME2_BUTTON_PADDED_H == 32.0
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME3 round-2 exquisite (first): search height vs header rhythm,
+// tree indent vs folder scale, empty-state margins, symmetric hit-slop
+// at 960px wide. BC pattern, outside observation only: session tree search
+// field header rhythm par, tree rows folder-tree indent step par, khali
+// copy block outer margin me, buttons 960 par symmetric hit-slop samet.
+// Geometry first: search height Heading chrome lh, indent tree step,
+// margins outer/section rhythm, slop SPACE_XS. Typography second:
+// Heading/HomeButton/Small reuse, koi naya size nahi. Paint adoption
+// paint-owner wave ka hai; colors untouched (zero Color32/Visuals).
+// Edge fixture: `checks/gui-exq-home3/comparison/home-narrow-720.json`
+// (720px narrow fallback: search 21.6, indent 12, empty 696 avail).
+// ----------------------------------------------------------------------------
+
+/// Home3 search field height px: TypoRole Heading chrome line-height
+/// (`18.0 * 1.2 = 21.6`) single-source, header rhythm parity.
+pub const HOME3_SEARCH_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+/// Home3 search field side pad px: section rhythm (`GEO_SECTION_GAP` = 8).
+pub const HOME3_SEARCH_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home3 tree indent step px: folder-tree scale single-source
+/// (`GEO_TREE_INDENT_STEP` = 12, `crate::tree::tree_indent_step` parity).
+pub const HOME3_TREE_INDENT_STEP: f32 = crate::theme::GEO_TREE_INDENT_STEP;
+/// Home3 empty-state side margin px: outer margin (`GEO_OUTER_MARGIN` = 12).
+pub const HOME3_EMPTY_MARGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home3 empty-state vertical margin px: section rhythm
+/// (`GEO_SECTION_GAP` = 8).
+pub const HOME3_EMPTY_MARGIN_Y: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home3 button hit-slop px: SPACE_XS (4.0), symmetric on all edges.
+pub const HOME3_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+/// Home3 button width px: compact floor (`HOME_TOOLBAR_BUTTON_W` = 96).
+pub const HOME3_BUTTON_W: f32 = HOME_TOOLBAR_BUTTON_W;
+/// Home3 button height px: compact hit floor (`HOME_TOOLBAR_BUTTON_H` = 24).
+pub const HOME3_BUTTON_H: f32 = HOME_TOOLBAR_BUTTON_H;
+/// Home3 button padded width px: 96 + 2 * 4 = 104.
+pub const HOME3_BUTTON_PADDED_W: f32 = HOME3_BUTTON_W + 2.0 * HOME3_BUTTON_HIT_SLOP;
+/// Home3 button padded height px: 24 + 2 * 4 = 32.
+pub const HOME3_BUTTON_PADDED_H: f32 = HOME3_BUTTON_H + 2.0 * HOME3_BUTTON_HIT_SLOP;
+
+/// Home3 search field height px (single source: [`HOME3_SEARCH_H`]).
+/// Pure; headless-tested.
+pub fn home3_search_height() -> f32 {
+    HOME3_SEARCH_H
+}
+
+/// Home3 tree indent px for one depth level: folder-tree scale reuse.
+/// Pure; headless-tested.
+pub fn home3_tree_indent_for_depth(depth: usize) -> f32 {
+    depth as f32 * HOME3_TREE_INDENT_STEP
+}
+
+/// Home3 empty-state content width px: total minus do taraf outer margin.
+/// Tang par 0, non-finite passthrough taaki paint NaN na khaye.
+/// Pure; headless-tested.
+pub fn home3_empty_content_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME3_EMPTY_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Home3 symmetric button hit rect: `(x0, y0, x1, y1)` ko har taraf
+/// [`HOME3_BUTTON_HIT_SLOP`] se failata hai. Non-finite/inverted par `None`.
+/// Pure; headless-tested.
+pub fn home3_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    Some((
+        x0 - HOME3_BUTTON_HIT_SLOP,
+        y0 - HOME3_BUTTON_HIT_SLOP,
+        x1 + HOME3_BUTTON_HIT_SLOP,
+        y1 + HOME3_BUTTON_HIT_SLOP,
+    ))
+}
+
+/// Home3 card grid columns at `total_w`: empty-margins avail par
+/// (`HOME_CARD_MIN_W` + [`HOME2_CARD_GRID_GAP`] rhythm), canonical 3 max,
+/// tang par wrap, NaN par canonical. Pure; headless-tested.
+pub fn home3_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = home3_empty_content_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME_CARD_MIN_W + cols as f32 * HOME2_CARD_GRID_GAP <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Home3 hierarchy: search Heading lh, indent tree step, margins
+/// outer/section rhythm, slop SPACE_XS, buttons 96x24 -> 104x32.
+/// Pure; headless-tested.
+pub fn home3_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    (TypoRole::Heading.line_height_px() - HOME3_SEARCH_H).abs() < 0.001
+        && HOME3_SEARCH_H == HOME2_HEADER_H
+        && HOME3_TREE_INDENT_STEP == crate::theme::GEO_TREE_INDENT_STEP
+        && HOME3_TREE_INDENT_STEP == crate::tree::tree_indent_step()
+        && HOME3_TREE_INDENT_STEP == SESSION_TREE_INDENT_STEP
+        && HOME3_EMPTY_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME3_EMPTY_MARGIN_Y == crate::theme::GEO_SECTION_GAP
+        && HOME3_BUTTON_HIT_SLOP == crate::theme::SPACE_XS
+        && HOME3_BUTTON_W == 96.0
+        && HOME3_BUTTON_H == crate::theme::SPACE_XL
+        && HOME3_BUTTON_PADDED_W == 104.0
+        && HOME3_BUTTON_PADDED_H == 32.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4480,5 +4597,96 @@ mod tests {
         assert!((super::session_tree_content_height(9) - 224.0).abs() < 0.001);
 
         assert!(super::home2_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home3_search_indent_narrow720_edge() {
+        // Edge fixture: `checks/gui-exq-home3/comparison/home-narrow-720.json`.
+        // Geometry first: search height from chrome lh, indent from tree step,
+        // empty margins from outer rhythm, symmetric hit-slop at 960.
+        // Typography second: Heading/HomeButton/Small reuse, koi naya size nahi.
+        use crate::theme::{GEO_OUTER_MARGIN, GEO_SECTION_GAP, SPACE_XS, TypoRole};
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home3/comparison/home-narrow-720.json");
+        assert!(fixture_raw.contains("\"search_h\":21.6"));
+        assert!(fixture_raw.contains("\"indent_step\":12.0"));
+        assert!(fixture_raw.contains("\"empty_margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"grid_cols_at_960\":3"));
+        assert!(fixture_raw.contains("\"grid_cols_at_720\":2"));
+
+        // Search height from TypoRole chrome line-height (Heading 18 * 1.2),
+        // header rhythm parity (HOME2_HEADER_H 21.6).
+        assert!((TypoRole::Heading.line_height_px() - 21.6).abs() < 0.001);
+        assert_eq!(super::HOME3_SEARCH_H, 21.6);
+        assert_eq!(super::home3_search_height(), 21.6);
+        assert_eq!(super::HOME3_SEARCH_H, TypoRole::Heading.line_height_px());
+        assert_eq!(super::HOME3_SEARCH_H, super::HOME2_HEADER_H);
+        assert_eq!(super::HOME3_SEARCH_PAD_X, 8.0);
+        assert_eq!(super::HOME3_SEARCH_PAD_X, GEO_SECTION_GAP);
+
+        // Tree indent reusing folder-tree step (12 = MD scale).
+        assert_eq!(super::HOME3_TREE_INDENT_STEP, 12.0);
+        assert_eq!(
+            super::HOME3_TREE_INDENT_STEP,
+            crate::theme::GEO_TREE_INDENT_STEP
+        );
+        assert_eq!(
+            super::HOME3_TREE_INDENT_STEP,
+            crate::tree::tree_indent_step()
+        );
+        assert_eq!(
+            super::HOME3_TREE_INDENT_STEP,
+            super::SESSION_TREE_INDENT_STEP
+        );
+        assert_eq!(super::home3_tree_indent_for_depth(0), 0.0);
+        assert_eq!(super::home3_tree_indent_for_depth(1), 12.0);
+        assert_eq!(super::home3_tree_indent_for_depth(2), 24.0);
+        assert_eq!(
+            super::home3_tree_indent_for_depth(2),
+            super::session_tree_indent_for_depth(2)
+        );
+        assert_eq!(
+            super::home3_tree_indent_for_depth(1),
+            crate::tree::tree_indent_for_depth(1)
+        );
+
+        // Empty-state margins via outer rhythm: 720 -> 696, 960 -> 936.
+        assert_eq!(super::HOME3_EMPTY_MARGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(super::HOME3_EMPTY_MARGIN_X, 12.0);
+        assert_eq!(super::HOME3_EMPTY_MARGIN_Y, GEO_SECTION_GAP);
+        assert_eq!(super::HOME3_EMPTY_MARGIN_Y, 8.0);
+        assert_eq!(super::home3_empty_content_width(960.0), 936.0);
+        assert_eq!(super::home3_empty_content_width(720.0), 696.0);
+        assert_eq!(super::home3_empty_content_width(20.0), 0.0);
+        assert!(super::home3_empty_content_width(f32::NAN).is_nan());
+
+        // Symmetric hit-slop at 960px wide: 96x24 -> 104x32.
+        assert_eq!(super::HOME3_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(super::HOME3_BUTTON_HIT_SLOP, 4.0);
+        assert_eq!(super::HOME3_BUTTON_PADDED_W, 104.0);
+        assert_eq!(super::HOME3_BUTTON_PADDED_H, 32.0);
+        assert_eq!(
+            super::home3_button_hit_rect(10.0, 20.0, 106.0, 44.0),
+            Some((6.0, 16.0, 110.0, 48.0))
+        );
+        assert_eq!(
+            super::home3_button_hit_rect(f32::NAN, 0.0, 10.0, 10.0),
+            None
+        );
+        assert_eq!(super::home3_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
+
+        // Narrow 720 grid: 2 cols, 9 cards -> 5 rows (clip nahi).
+        assert_eq!(super::home3_grid_columns(960.0), 3);
+        assert_eq!(super::home3_grid_columns(720.0), 2);
+        assert_eq!(
+            super::home3_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        assert_eq!(super::home2_grid_rows(9, 720.0), 5);
+
+        assert!(super::home3_hierarchy_ok());
     }
 }
