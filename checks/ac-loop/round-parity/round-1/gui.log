@@ -1,0 +1,10 @@
+warning: unused imports: `LineEndingType`, `detect_line_ending`, and `normalize_line_endings`
+  --> crates/diff/src/text_diff.rs:9:37
+   |
+ 9 | ...s, LineEndingRule, LineEndingType, WhitespaceRule, detect_line_ending,
+   |                       ^^^^^^^^^^^^^^                  ^^^^^^^^^^^^^^^^^^
+10 | ...e, normalize_line_endings,
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+

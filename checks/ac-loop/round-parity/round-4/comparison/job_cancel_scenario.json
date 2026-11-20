@@ -1,0 +1,19 @@
+{
+  "scenario": "job_runner_cancellation_and_bounded_progress",
+  "expected_behavior": {
+    "cancellation": {
+      "initial_state": "running",
+      "signal": "cancel_token_seqcst",
+      "flag_observed": true,
+      "terminal_result": "Err(Error::Cancelled)",
+      "thread_joined": true
+    },
+    "bounded_progress_queue": {
+      "capacity": 64,
+      "overflow_policy": "drop_oldest",
+      "polling_method": "drain_progress",
+      "thread_safe": true,
+      "ui_blocking": false
+    }
+  }
+}

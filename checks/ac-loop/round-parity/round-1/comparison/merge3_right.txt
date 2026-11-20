@@ -1,0 +1,5 @@
+line 1: header
+line 2: common setup
+line 3: right conflicting config change
+line 4: shared logic
+line 5: right footer addition

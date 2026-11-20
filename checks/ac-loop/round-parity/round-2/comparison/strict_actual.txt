@@ -1,0 +1,6 @@
+   1 // Calculation module             |    1 // Calculation module            
+   2 fn compute_metrics(x: i32,  y: i3 |    2 fn compute_metrics(x: i32, y: i32
+   3     let base_offset = 10;         |    3     let base_offset = 10;        
+   4     let intermediate = x * 2;     |    4     let intermediate = x * 2;    
+   5     intermediate + y + base_offse |    5     intermediate + y + base_offse
+   6 }                                 |    6 }                                

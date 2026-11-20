@@ -1,0 +1,4 @@
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)

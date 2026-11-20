@@ -1,0 +1,6 @@
+// Calculation module
+fn compute_metrics(x: i32, y: i32) -> i32 {
+    let base_offset = 10;
+    let intermediate = x * 2;
+    intermediate + y + base_offset
+}

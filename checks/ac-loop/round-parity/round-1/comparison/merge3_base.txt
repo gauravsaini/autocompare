@@ -1,0 +1,5 @@
+line 1: header
+line 2: common setup
+line 3: base config
+line 4: shared logic
+line 5: footer

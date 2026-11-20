@@ -2,6 +2,19 @@
 
 ## UPDATED ON : 2026-11-20
 
+### Feature (2026-11-20) — ac-loop round-parity verification: 3-way merge, grammar ignore, sync prune & jobs
+
+1. **ac-loop parity verification**: Completed 4 rounds of ac-loop harness verification for Beyond Compare feature parity:
+   - Round 1: 3-way text merge edge fixtures for clean vs conflicting edits with standard markers (`<<<<<<< left`, `=======`, `>>>>>>> right`).
+   - Round 2: Grammar & whitespace ignore edge fixtures verifying strict diff (exit 1) vs `-b` space-change collapse (exit 0).
+   - Round 3: Folder sync mirror edge fixtures testing dry-run plan generation and live application with `--prune` deleting destination orphans.
+   - Round 4: Background JobRunner cancellation protocol and bounded progress queue (64 max history) validation.
+2. **Tests** (before → after): `autocompare-diff` 192 passed, `autocompare-compare` 106 passed; all 4 ac-loop rounds `RESULT: PASS`; G1-G7 gates all passed with zero clippy warnings, zero `allow(dead_code)`, and zero unsafe/unwrap in non-test OWNS code.
+3. **Files changed**: `checks/ac-loop/round-parity/**`, `GATES.md`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-20
+
 ### Task (2026-11-20) — UI observation sync & study merge
 
 1. **Scope**: Merged live UI observations from `checks/ui-feedback/brief.md` into `docs/study.md` and `checks/ui-feedback/observations.md`. Captured menu facts (Session/View/Edit/Search/Tools labels as short functional facts), layout options, and GUI gaps P0-P3. No prose, strings, or assets copied.
