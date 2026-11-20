@@ -4577,6 +4577,211 @@ pub fn exq_chrome6_hierarchy_ok() -> bool {
             == String::from("Yesterday | 12 B | Text: exact | wrap:off")
 }
 
+/// EXQ-CHROME7 toolbar uniform width (chrome-side, exquisite round-7).
+/// BC has equal-width icon-plus-label buttons; ours cramped without equal
+/// widths. Every button shares one width via SPACE tokens: longest label
+/// (8 chars) at Body advance plus SPACE_SM side pads, floored at the
+/// frozen 96 compact floor so no label clips. Pure; headless-tested.
+pub fn exq_chrome7_viewport_w() -> f32 {
+    crate::theme::VIEWPORT_W as f32
+}
+
+/// EXQ-CHROME7 avail width px: viewport minus outer side chrome
+/// (2 * SPACE_MD). Non-finite par 0. Pure; headless-tested.
+pub fn exq_chrome7_avail_w(viewport: f32) -> f32 {
+    if !viewport.is_finite() {
+        return 0.0;
+    }
+    (viewport - 2.0 * crate::theme::SPACE_MD).max(0.0)
+}
+
+/// EXQ-CHROME7 toolbar proportional char advance px (Body 13 * 0.6 = 7.8).
+/// Pure; headless-tested.
+pub fn exq_chrome7_toolbar_char_w() -> f32 {
+    crate::theme::TypoRole::Body.size() * 0.6
+}
+
+/// EXQ-CHROME7 toolbar longest label chars ("Sessions"/"Context" = 8).
+/// Pure; headless-tested.
+pub fn exq_chrome7_toolbar_label_chars() -> usize {
+    8
+}
+
+/// EXQ-CHROME7 toolbar button content need px: longest label at char
+/// advance plus SPACE_SM side pads (8 * 7.8 + 2 * 8 = 78.4 -> ceil 79.0).
+/// Pure; headless-tested.
+pub fn exq_chrome7_toolbar_content_need_w() -> f32 {
+    (exq_chrome7_toolbar_label_chars() as f32 * exq_chrome7_toolbar_char_w()
+        + 2.0 * crate::theme::SPACE_SM)
+        .ceil()
+}
+
+/// EXQ-CHROME7 toolbar uniform button width px: content need floored at
+/// the frozen 96 compact floor (79 < 96, so 96; sab barabar, clip nahi).
+/// Pure; headless-tested.
+pub fn exq_chrome7_toolbar_button_w() -> f32 {
+    exq_chrome7_toolbar_content_need_w().max(crate::home::HOME_TOOLBAR_BUTTON_W)
+}
+
+/// EXQ-CHROME7 toolbar uniform button height px (frozen 24 hit floor).
+/// Pure; headless-tested.
+pub fn exq_chrome7_toolbar_button_h() -> f32 {
+    crate::home::HOME_TOOLBAR_BUTTON_H
+}
+
+/// EXQ-CHROME7 toolbar item gap px via SPACE_XS (4.0). Pure; headless-tested.
+pub fn exq_chrome7_toolbar_item_gap() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME7 toolbar group gap px via SPACE_SM (8.0). Pure; headless-tested.
+pub fn exq_chrome7_toolbar_group_gap() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// EXQ-CHROME7 toolbar total width px: 10 uniform buttons + 9 item gaps
+/// (10 * 96 + 9 * 4 = 996). Pure; headless-tested.
+pub fn exq_chrome7_toolbar_w() -> f32 {
+    crate::home::TOPCHROME_TOOLBAR_ACTIONS.len() as f32 * exq_chrome7_toolbar_button_w()
+        + crate::home::TOPCHROME_TOOLBAR_ACTIONS
+            .len()
+            .saturating_sub(1) as f32
+            * exq_chrome7_toolbar_item_gap()
+}
+
+/// EXQ-CHROME7 equal-width gate: har toolbar label ka content need
+/// uniform width me fit (koi label bahar nahi, koi crush nahi). Pure;
+/// headless-tested.
+pub fn exq_chrome7_toolbar_buttons_equal() -> bool {
+    let button_w = exq_chrome7_toolbar_button_w();
+    for action in crate::home::TOPCHROME_TOOLBAR_ACTIONS {
+        let need = (action.chars().count() as f32 * exq_chrome7_toolbar_char_w()
+            + 2.0 * crate::theme::SPACE_SM)
+            .ceil();
+        if need > button_w {
+            return false;
+        }
+    }
+    true
+}
+
+/// EXQ-CHROME7 path field widths px: draggable split at default 0.50,
+/// so left == right (equal halves, meta aligned). Pure; headless-tested.
+pub fn exq_chrome7_field_widths(avail: f32) -> (f32, f32) {
+    views::split_field_widths(avail, views::SPLIT_DEFAULT_FRACTION)
+}
+
+/// EXQ-CHROME7 equal-width gate: left vs right 0.001 andar. Pure;
+/// headless-tested.
+pub fn exq_chrome7_fields_equal(left: f32, right: f32) -> bool {
+    (left - right).abs() < 0.001
+}
+
+/// EXQ-CHROME7 tab close edge px: 24 exquisite hit floor (toolbar compact
+/// height parity), square `edge x edge` taaki chhota `x` ungli se lage.
+/// Pure; headless-tested.
+pub fn exq_chrome7_tab_close_edge() -> f32 {
+    crate::home::HOME_TOOLBAR_BUTTON_H
+}
+
+/// EXQ-CHROME7 tab label-to-close gap px via TAB_BOTTOM_GAP (6.0).
+/// Pure; headless-tested.
+pub fn exq_chrome7_tab_close_gap() -> f32 {
+    views::TAB_BOTTOM_GAP
+}
+
+/// EXQ-CHROME7 tab close hit-slop px via SPACE_XS (4.0): chaaron taraf
+/// barabar failta hai (asymmetric slop nahi). Pure; headless-tested.
+pub fn exq_chrome7_tab_close_slop() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME7 symmetric close hit rect: (x0, y0, x1, y1) ko slop se
+/// chaaron edges par barabar expand karta hai. Non-finite ya inverted
+/// rect par `None` (paint kabhi NaN branch na le). Pure; headless-tested.
+pub fn exq_chrome7_tab_close_hit_rect(
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite() || !y0.is_finite() || !x1.is_finite() || !y1.is_finite() {
+        return None;
+    }
+    if x0 > x1 || y0 > y1 {
+        return None;
+    }
+    let slop = exq_chrome7_tab_close_slop();
+    Some((x0 - slop, y0 - slop, x1 + slop, y1 + slop))
+}
+
+/// EXQ-CHROME7 session tab cell width px: label max + close gap + close
+/// edge (120 + 6 + 24 = 150.0, strip parity). Pure; headless-tested.
+pub fn exq_chrome7_tab_cell_w() -> f32 {
+    views::SESSION_TAB_MAX_W + exq_chrome7_tab_close_gap() + exq_chrome7_tab_close_edge()
+}
+
+/// EXQ-CHROME7 status bar height px: Small chrome line-height
+/// (11 * 1.2 = 13.2) + upar-neeche SPACE_XS pad (2 * 4) = 21.2.
+/// Pure; headless-tested.
+pub fn exq_chrome7_status_h() -> f32 {
+    crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME7 status line role: Small chrome (11 weak proportional).
+/// Pure; headless-tested.
+pub fn exq_chrome7_status_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// EXQ-CHROME7 status segment width px: kul ka teesra hissa (3 equal
+/// segments). Non-finite par 0. Pure; headless-tested.
+pub fn exq_chrome7_status_segment_w(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    (total_w / crate::home::TOPCHROME_STATUS_SECTIONS as f32).max(0.0)
+}
+
+/// EXQ-CHROME7 status segments equal gate: teenon thirds 0.001 andar.
+/// Pure; headless-tested.
+pub fn exq_chrome7_status_segments_equal(total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    let seg = exq_chrome7_status_segment_w(total_w);
+    (seg * crate::home::TOPCHROME_STATUS_SECTIONS as f32 - total_w).abs() < 0.001
+}
+
+/// EXQ-CHROME7 hierarchy contract at 960: toolbar uniform 96 (SPACE
+/// pads se, sab barabar, clip nahi), toolbar kul 996, pathbar halves
+/// 274/274 equal, tab cell 150 with symmetric 4.0 slop, status 21.2
+/// from Small chrome line-height with 3 equal 320 segments. Pure;
+/// headless-tested.
+pub fn exq_chrome7_hierarchy_ok() -> bool {
+    (exq_chrome7_toolbar_button_w() - 96.0).abs() < 0.001
+        && (exq_chrome7_toolbar_button_h() - 24.0).abs() < 0.001
+        && exq_chrome7_toolbar_item_gap() == crate::theme::SPACE_XS
+        && exq_chrome7_toolbar_group_gap() == crate::theme::SPACE_SM
+        && (exq_chrome7_toolbar_w() - 996.0).abs() < 0.001
+        && exq_chrome7_toolbar_buttons_equal()
+        && (exq_chrome7_avail_w(exq_chrome7_viewport_w()) - 936.0).abs() < 0.001
+        && {
+            let (left, right) =
+                exq_chrome7_field_widths(exq_chrome7_avail_w(exq_chrome7_viewport_w()));
+            exq_chrome7_fields_equal(left, right) && (left - 274.0).abs() < 0.001
+        }
+        && (exq_chrome7_tab_cell_w() - 150.0).abs() < 0.001
+        && exq_chrome7_tab_close_slop() == crate::theme::SPACE_XS
+        && (exq_chrome7_status_h() - 21.2).abs() < 0.001
+        && (exq_chrome7_status_h()
+            - (crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS))
+            .abs()
+            < 0.001
+        && (exq_chrome7_status_segment_w(960.0) - 320.0).abs() < 0.001
+        && exq_chrome7_status_segments_equal(960.0)
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -11094,5 +11299,51 @@ mod tests {
             "Text: exact"
         );
         assert!(exq_chrome6_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_chrome7_toolbar_plus_pathbar_wide960() {
+        assert_eq!(exq_chrome7_viewport_w(), 960.0);
+        assert_eq!(exq_chrome7_avail_w(960.0), 936.0);
+        assert_eq!(exq_chrome7_avail_w(f32::NAN), 0.0);
+        assert!((exq_chrome7_toolbar_char_w() - 7.8).abs() < 0.001);
+        assert_eq!(exq_chrome7_toolbar_label_chars(), 8);
+        assert_eq!(exq_chrome7_toolbar_content_need_w(), 79.0);
+        assert_eq!(exq_chrome7_toolbar_button_w(), 96.0);
+        assert_eq!(exq_chrome7_toolbar_button_h(), 24.0);
+        assert_eq!(exq_chrome7_toolbar_item_gap(), crate::theme::SPACE_XS);
+        assert_eq!(exq_chrome7_toolbar_group_gap(), crate::theme::SPACE_SM);
+        assert_eq!(exq_chrome7_toolbar_w(), 996.0);
+        assert!(exq_chrome7_toolbar_buttons_equal());
+        let (left, right) = exq_chrome7_field_widths(exq_chrome7_avail_w(960.0));
+        assert_eq!((left, right), (274.0, 274.0));
+        assert!(exq_chrome7_fields_equal(left, right));
+        assert_eq!(exq_chrome7_tab_close_edge(), 24.0);
+        assert_eq!(exq_chrome7_tab_close_gap(), 6.0);
+        assert_eq!(exq_chrome7_tab_close_slop(), crate::theme::SPACE_XS);
+        assert_eq!(exq_chrome7_tab_close_slop(), 4.0);
+        assert_eq!(exq_chrome7_tab_cell_w(), 150.0);
+        assert_eq!(
+            exq_chrome7_tab_close_hit_rect(10.0, 10.0, 34.0, 34.0),
+            Some((6.0, 6.0, 38.0, 38.0))
+        );
+        assert_eq!(exq_chrome7_tab_close_hit_rect(10.0, 10.0, 5.0, 34.0), None);
+        assert_eq!(
+            exq_chrome7_tab_close_hit_rect(f32::NAN, 0.0, 1.0, 1.0),
+            None
+        );
+        assert!((exq_chrome7_status_h() - 21.2).abs() < 0.001);
+        assert_eq!(
+            exq_chrome7_status_h(),
+            crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS
+        );
+        assert_eq!(
+            exq_chrome7_status_role(),
+            crate::theme::TypoRole::chrome_status()
+        );
+        assert_eq!(exq_chrome7_status_segment_w(960.0), 320.0);
+        assert_eq!(exq_chrome7_status_segment_w(f32::NAN), 0.0);
+        assert!(exq_chrome7_status_segments_equal(960.0));
+        assert!(exq_chrome7_hierarchy_ok());
     }
 }
