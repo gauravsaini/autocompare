@@ -680,3 +680,9 @@
 1. **Live Toolbar Glyphs (egui overlay, views.rs only)**: TOOLBAR_GLYPH_W/H + toolbar_glyph_width/lead/variant/rects/slot + paint_toolbar_glyph; paint_toolbar_action_buttons + paint_action_nav_row + paint_text_find_state_bar now paint 12px geometric slots left of labels (Swap solid block, Reload twin bars, Prev/Next + FindPrev/FindNext chevrons) on frozen palette. First live-pixel gate on toolbar: PASS — 6/6 buttons with glyph slots (ink ~150 vs face ~50), 2 chevron triples in nav row ([520,530]/[548,566], [724,734]/[548,566], 12x20). Crop round-1/live-crop.png. Fixture pxdiff ABANDONED honestly (egui-only, before/after byte-identical 11254B).
 2. **Tests** (before -> after): autocompare-gui 1047 -> 1048 green (including toolbar22_live_glyph_slots + 1200px edge fixture toolbar-live-1200.json: band 24+8+24 stable, no h-scroll); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-toolbar22/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-hatch25 calm trailing fill
+
+1. **Calm Trailing Fill (screenshot.rs renderer)**: trailing fill region now ends at pane strips with zero bottom waste (content_end tracking, short content scrolls in full-height viewport). Shot15 gutter/markers, shot18 chrome, shot19 typo, toolbar21 glyphs, filebar24 bar, status20 strips intact. pxdiff vs baseline: 216832 of 576000 DIFFERENT, bbox (12,300)-(935,541) trailing fill band only.
+2. **Tests** (before -> after): autocompare-gui 1048 -> 1049 green (including hatch25_tall_no_banding + hatch-tall-1200.json edge fixture); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-hatch25/**, TIMELINE.md.
