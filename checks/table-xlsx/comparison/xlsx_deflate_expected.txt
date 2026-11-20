@@ -1,0 +1,5 @@
+Edge fixture pair: real-DEFLATE (ZIP method 8) minimal .xlsx workbooks.
+Left rows:  (1,9.99) (2,5.00)
+Right rows: (1,10.04) (2,7.50)
+Sort-before-align on key col 0, numeric tolerance 0.1 -> matching=1 modified=1 left_only=0 right_only=0.
+All ZIP entries verified compress_type=8 (gen-fixtures.py equivalent inline; see REPORT.md).

@@ -5,8 +5,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use autocompare_diff::{
-    DiffScript, Op, Table, TableCompareOptions, cells_equal_with_tolerance, detect_key_columns,
-    diff_cells, diff_cells_with_options, diff_rows, diff_table_by_key,
+    DiffScript, Op, Table, TableCompareOptions, Workbook, cells_equal_with_tolerance,
+    detect_key_columns, diff_cells, diff_cells_with_options, diff_rows, diff_table_by_key,
     diff_table_by_key_with_options, parse_delimited, sort_table_rows,
 };
 
@@ -457,4 +457,115 @@ fn sorted_and_diff_cells_with_options_agree() {
     };
     let d = diff_cells_with_options(&cells(&["5", "x"]), &cells(&["5.2", "x"]), &opts);
     assert!(d.is_empty(), "5 vs 5.2 is within 0.5");
+}
+
+// ---------------------------------------------------------------------
+// .xlsx (ZIP container) deflated + hostile inputs via the public API
+// ---------------------------------------------------------------------
+
+/// Appends one local-file header with the given method (0 = stored,
+/// 8 = raw DEFLATE). Lengths are exact; hostile variants are built by
+/// truncating or corrupting the returned bytes afterwards.
+fn zip_entry(out: &mut Vec<u8>, name: &str, method: u16, data: &[u8], uncomp_len: u32) {
+    out.extend_from_slice(b"PK\x03\x04");
+    out.extend_from_slice(&[20u8, 0u8]);
+    out.extend_from_slice(&[0u8, 0u8]);
+    out.extend_from_slice(&method.to_le_bytes());
+    out.extend_from_slice(&[0u8; 8]);
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(&uncomp_len.to_le_bytes());
+    out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    out.extend_from_slice(&[0u8, 0u8]);
+    out.extend_from_slice(name.as_bytes());
+    out.extend_from_slice(data);
+}
+
+fn deflate_data(data: &[u8]) -> Vec<u8> {
+    use std::io::Write as _;
+    let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+    enc.write_all(data).expect("deflate fixture must compress");
+    enc.finish().expect("deflate fixture must finish")
+}
+
+fn deflated_workbook(sheet_xml: &[u8]) -> Vec<u8> {
+    let workbook_xml = "<workbook><sheets><sheet name=\"Prices\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>";
+    let comp = deflate_data(sheet_xml);
+    let mut out = Vec::new();
+    zip_entry(
+        &mut out,
+        "xl/workbook.xml",
+        0,
+        workbook_xml.as_bytes(),
+        workbook_xml.len() as u32,
+    );
+    zip_entry(
+        &mut out,
+        "xl/worksheets/sheet1.xml",
+        8,
+        &comp,
+        sheet_xml.len() as u32,
+    );
+    out
+}
+
+#[test]
+fn xlsx_deflated_workbook_decodes_and_key_diffs() {
+    let left_xml = "<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>1</v></c><c r=\"B1\"><v>9.99</v></c></row><row r=\"2\"><c r=\"A2\"><v>2</v></c><c r=\"B2\"><v>5.00</v></c></row></sheetData></worksheet>";
+    let right_xml = "<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>1</v></c><c r=\"B1\"><v>10.04</v></c></row><row r=\"2\"><c r=\"A2\"><v>2</v></c><c r=\"B2\"><v>7.50</v></c></row></sheetData></worksheet>";
+    let left = Workbook::from_xlsx(&deflated_workbook(left_xml.as_bytes()))
+        .expect("deflated left workbook must decode");
+    let right = Workbook::from_xlsx(&deflated_workbook(right_xml.as_bytes()))
+        .expect("deflated right workbook must decode");
+    assert_eq!(left.sheets.len(), 1);
+    let first = left.sheets.first().expect("one sheet must decode");
+    assert_eq!(first.name, "Prices");
+    assert_eq!(first.table.rows.len(), 2);
+
+    // Sort-before-align on the key column, then tolerant key diff:
+    // 9.99 vs 10.04 is within 0.1, 5.00 vs 7.50 is not.
+    let mut left_table = first.table.clone();
+    let right_first = right.sheets.first().expect("right sheet must decode");
+    let mut right_table = right_first.table.clone();
+    sort_table_rows(&mut left_table, &[0], true);
+    sort_table_rows(&mut right_table, &[0], true);
+    let opts = TableCompareOptions {
+        key_columns: vec![0],
+        numeric_tolerance: Some(0.1),
+        ..TableCompareOptions::default()
+    };
+    let diff = diff_table_by_key_with_options(&left_table, &right_table, &opts);
+    assert_eq!(diff.matching_rows, 1);
+    assert_eq!(diff.modified_rows, 1);
+}
+
+#[test]
+fn xlsx_truncated_and_garbage_are_none() {
+    assert!(Workbook::from_xlsx(&[]).is_none());
+    assert!(Workbook::from_xlsx(b"not a zip").is_none());
+    assert!(Workbook::from_xlsx(b"PK\x03\x04truncated").is_none());
+
+    let full = deflated_workbook(b"<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>1</v></c></row></sheetData></worksheet>");
+    let cut = full.len() / 2;
+    let prefix = full.get(..cut).expect("half-length cut must be in bounds");
+    assert!(Workbook::from_xlsx(prefix).is_none());
+
+    // Corrupt DEFLATE payload decodes to no workbook, without panicking.
+    let workbook_xml =
+        "<workbook><sheets><sheet name=\"S1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>";
+    let mut bad = Vec::new();
+    zip_entry(
+        &mut bad,
+        "xl/workbook.xml",
+        0,
+        workbook_xml.as_bytes(),
+        workbook_xml.len() as u32,
+    );
+    zip_entry(
+        &mut bad,
+        "xl/worksheets/sheet1.xml",
+        8,
+        b"\x00\x01not-deflate",
+        13,
+    );
+    assert!(Workbook::from_xlsx(&bad).is_none());
 }

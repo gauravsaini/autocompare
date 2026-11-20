@@ -7,6 +7,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::iter::Peekable;
 use std::mem;
 use std::str::Chars;
@@ -795,16 +796,40 @@ pub fn decode_xlsx(bytes: &[u8]) -> Option<Workbook> {
     }
 }
 
-/// Uncompressed or basic ZIP entries map: filename -> slice of uncompressed bytes.
+/// Maximum local-file entries scanned in one `.xlsx` container.
+const MAX_XLSX_ENTRIES: usize = 1024;
+/// Maximum decompressed bytes kept per ZIP entry (zip-bomb cap).
+const MAX_XLSX_ENTRY_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum total decompressed bytes kept across all entries.
+const MAX_XLSX_TOTAL_BYTES: usize = 64 * 1024 * 1024;
+
+/// ZIP local-file entries map: filename -> uncompressed bytes.
+///
+/// Handles method 0 (stored) and method 8 (raw DEFLATE via `flate2`);
+/// other methods are skipped without failing the whole workbook.
+/// Entries with the data-descriptor flag stop the scan (their local
+/// sizes are unreliable); truncation also stops the scan and keeps
+/// whatever complete entries came first. Never panics; total output
+/// is capped so hostile archives cannot force unbounded allocation.
 fn read_zip_entries(bytes: &[u8]) -> Option<HashMap<String, Vec<u8>>> {
     let mut entries = HashMap::new();
+    let mut total_bytes = 0usize;
     let mut pos = 0usize;
 
     while pos.saturating_add(30) <= bytes.len() {
+        if entries.len() >= MAX_XLSX_ENTRIES {
+            break;
+        }
         if bytes.get(pos..pos + 4) != Some(b"PK\x03\x04") {
             break;
         }
 
+        let flags = u16::from_le_bytes(bytes.get(pos + 6..pos + 8)?.try_into().ok()?);
+        if flags & 0x08 != 0 {
+            // Data descriptor: local sizes are placeholders; a clean-room
+            // scanner without central-directory support stops here.
+            break;
+        }
         let compression = u16::from_le_bytes(bytes.get(pos + 8..pos + 10)?.try_into().ok()?);
         let comp_size =
             u32::from_le_bytes(bytes.get(pos + 18..pos + 22)?.try_into().ok()?) as usize;
@@ -823,16 +848,64 @@ fn read_zip_entries(bytes: &[u8]) -> Option<HashMap<String, Vec<u8>>> {
             break;
         }
 
-        if compression == 0 {
-            // Stored (no compression)
-            let file_data = bytes.get(data_start..data_end)?.to_vec();
-            entries.insert(filename, file_data);
+        // Directories and empty names carry no sheet data.
+        if !filename.is_empty() && !filename.ends_with('/') {
+            match compression {
+                0 => {
+                    // Stored (no compression).
+                    if comp_size <= MAX_XLSX_ENTRY_BYTES
+                        && total_bytes.checked_add(comp_size)? <= MAX_XLSX_TOTAL_BYTES
+                        && let Some(file_data) = bytes.get(data_start..data_end)
+                    {
+                        total_bytes = total_bytes.saturating_add(file_data.len());
+                        entries.insert(filename, file_data.to_vec());
+                    }
+                }
+                8 => {
+                    // Raw DEFLATE stream (ZIP method 8 has no zlib header).
+                    if comp_size == 0 {
+                        if total_bytes.checked_add(0)? <= MAX_XLSX_TOTAL_BYTES {
+                            entries.insert(filename, Vec::new());
+                        }
+                    } else if let Some(comp_data) = bytes.get(data_start..data_end)
+                        && let Some(file_data) =
+                            inflate_raw_deflate(comp_data, MAX_XLSX_ENTRY_BYTES)
+                        && total_bytes.checked_add(file_data.len())? <= MAX_XLSX_TOTAL_BYTES
+                    {
+                        total_bytes = total_bytes.saturating_add(file_data.len());
+                        entries.insert(filename, file_data);
+                    }
+                    // Corrupt or over-cap deflate payloads fall through here:
+                    // skipped, while healthy sheets decoded so far are kept.
+                }
+                _ => {
+                    // Unsupported method (e.g. bzip2/lzma): skip the entry.
+                }
+            }
         }
 
         pos = data_end;
     }
 
     Some(entries)
+}
+
+/// Inflates one raw DEFLATE stream, capped at `limit` bytes.
+///
+/// Returns `None` on corrupt input or when the output would exceed
+/// `limit` (zip-bomb guard). Never panics.
+fn inflate_raw_deflate(data: &[u8], limit: usize) -> Option<Vec<u8>> {
+    let cap = u64::try_from(limit.checked_add(1)?).ok()?;
+    let decoder = flate2::read::DeflateDecoder::new(data);
+    let mut limited = decoder.take(cap);
+    let mut out = Vec::new();
+    if limited.read_to_end(&mut out).is_err() {
+        return None;
+    }
+    if out.len() > limit {
+        return None;
+    }
+    Some(out)
 }
 
 fn parse_shared_strings(data: &[u8]) -> Vec<String> {
@@ -1445,5 +1518,190 @@ mod tests {
         let delta = diff_workbooks(&wb, &fewer);
         assert!(!delta.identical);
         assert_eq!(delta.sheet_diffs.len(), 2);
+    }
+
+    #[test]
+    fn test_decode_xlsx_deflated_sheet() {
+        let sheet_xml = b"<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>id</v></c><c r=\"B1\"><v>price</v></c></row><row r=\"2\"><c r=\"A2\"><v>1</v></c><c r=\"B2\"><v>9.99</v></c></row></sheetData></worksheet>";
+        let Some(comp) = deflate_bytes(sheet_xml) else {
+            return;
+        };
+        let mut bytes = Vec::new();
+        entry_method(
+            &mut bytes,
+            "xl/workbook.xml",
+            0,
+            b"<workbook><sheets><sheet name=\"Prices\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+            b"<workbook><sheets><sheet name=\"Prices\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>".len() as u32,
+        );
+        entry_method(
+            &mut bytes,
+            "xl/worksheets/sheet1.xml",
+            8,
+            &comp,
+            sheet_xml.len() as u32,
+        );
+        let wb = decode_xlsx(&bytes);
+        assert!(wb.is_some(), "deflated xlsx must decode");
+        let Some(wb) = wb else {
+            return;
+        };
+        assert_eq!(wb.sheets.len(), 1);
+        let Some(first) = wb.sheets.first() else {
+            return;
+        };
+        assert_eq!(first.name, "Prices");
+        assert_eq!(
+            first.table.rows,
+            vec![
+                vec!["id".to_string(), "price".to_string()],
+                vec!["1".to_string(), "9.99".to_string()],
+            ]
+        );
+    }
+
+    #[test]
+    fn test_decode_xlsx_rejects_garbage_and_truncation() {
+        assert!(decode_xlsx(&[]).is_none(), "empty input must not decode");
+        assert!(
+            decode_xlsx(b"hello world").is_none(),
+            "non-zip input must not decode"
+        );
+        assert!(
+            decode_xlsx(b"PK\x03\x04truncated").is_none(),
+            "short header must not decode"
+        );
+        // Valid stored entry cut mid-data: no complete sheet survives.
+        let mut bytes = Vec::new();
+        entry_method(
+            &mut bytes,
+            "xl/worksheets/sheet1.xml",
+            0,
+            b"<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>hi</v></c></row></sheetData></worksheet>",
+            84,
+        );
+        let half = bytes.len() / 2;
+        if let Some(prefix) = bytes.get(..half) {
+            assert!(
+                decode_xlsx(prefix).is_none(),
+                "truncated zip must not decode a phantom sheet"
+            );
+        }
+        // Truncated filename length claims more than the buffer holds.
+        let mut bad = Vec::new();
+        bad.extend_from_slice(b"PK\x03\x04");
+        bad.extend_from_slice(&[0u8; 26]);
+        assert!(
+            decode_xlsx(&bad).is_none(),
+            "header without filename bytes must not decode"
+        );
+    }
+
+    #[test]
+    fn test_decode_xlsx_skips_bad_entries_without_panic() {
+        // Corrupt deflate payload + unsupported method: no sheets, no panic.
+        let mut bytes = Vec::new();
+        entry_method(
+            &mut bytes,
+            "xl/workbook.xml",
+            0,
+            b"<workbook><sheets><sheet name=\"S1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+            79,
+        );
+        entry_method(
+            &mut bytes,
+            "xl/worksheets/sheet1.xml",
+            8,
+            b"definitely-not-deflate\x00\x01\x02",
+            25,
+        );
+        entry_method(&mut bytes, "xl/worksheets/sheet9.xml", 99, b"zzz", 3);
+        assert!(
+            decode_xlsx(&bytes).is_none(),
+            "only corrupt/unsupported sheets must yield None"
+        );
+
+        // One healthy stored sheet plus one corrupt deflated sheet:
+        // the healthy sheet still decodes.
+        let mut mixed = Vec::new();
+        entry_method(
+            &mut mixed,
+            "xl/workbook.xml",
+            0,
+            b"<workbook><sheets><sheet name=\"S1\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"S2\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>",
+            118,
+        );
+        entry_method(
+            &mut mixed,
+            "xl/worksheets/sheet1.xml",
+            0,
+            b"<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>ok</v></c></row></sheetData></worksheet>",
+            84,
+        );
+        entry_method(
+            &mut mixed,
+            "xl/worksheets/sheet2.xml",
+            8,
+            b"\x00\x01bad-deflate-payload",
+            22,
+        );
+        let wb = decode_xlsx(&mixed);
+        assert!(wb.is_some(), "healthy sheet must survive a corrupt sibling");
+        let Some(wb) = wb else {
+            return;
+        };
+        let Some(first) = wb.sheets.first() else {
+            return;
+        };
+        assert_eq!(
+            first.table.rows,
+            vec![vec!["ok".to_string()]],
+            "healthy sheet content must be intact"
+        );
+    }
+
+    #[test]
+    fn test_decode_xlsx_data_descriptor_stops_scan_safely() {
+        // GP bit 3 set: local sizes are placeholders; scanner stops, no panic.
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"PK\x03\x04");
+        bytes.extend_from_slice(&[20u8, 0u8]); // version
+        bytes.extend_from_slice(&[8u8, 0u8]); // flags: bit 3 (data descriptor)
+        bytes.extend_from_slice(&[0u8, 0u8]); // stored
+        bytes.extend_from_slice(&[0u8; 8]);
+        bytes.extend_from_slice(&[0u8; 8]); // sizes unknown
+        bytes.extend_from_slice(&(3u16).to_le_bytes());
+        bytes.extend_from_slice(&[0u8, 0u8]);
+        bytes.extend_from_slice(b"xl/");
+        bytes.extend_from_slice(b"junk-after-descriptor");
+        assert!(
+            decode_xlsx(&bytes).is_none(),
+            "data-descriptor entry must not decode or panic"
+        );
+    }
+
+    fn entry_method(out: &mut Vec<u8>, name: &str, method: u16, data: &[u8], uncomp_len: u32) {
+        out.extend_from_slice(b"PK\x03\x04");
+        out.extend_from_slice(&[20u8, 0u8]);
+        out.extend_from_slice(&[0u8, 0u8]);
+        out.extend_from_slice(&method.to_le_bytes());
+        out.extend_from_slice(&[0u8; 8]);
+        let comp_len = data.len() as u32;
+        out.extend_from_slice(&comp_len.to_le_bytes());
+        out.extend_from_slice(&uncomp_len.to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&[0u8, 0u8]);
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(data);
+    }
+
+    fn deflate_bytes(data: &[u8]) -> Option<Vec<u8>> {
+        use std::io::Write as _;
+        let mut encoder =
+            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+        if encoder.write_all(data).is_err() {
+            return None;
+        }
+        encoder.finish().ok()
     }
 }
