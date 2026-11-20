@@ -1,0 +1,88 @@
+{
+  "name": "tree-wide-960",
+  "intent": "Size and Modified column alignment at 960px wide, indent depth rhythm, and orphan dimming",
+  "width_px": 960.0,
+  "columns": {
+    "col_gap_px": 8.0,
+    "name": {
+      "col": "Name",
+      "align": "Left",
+      "min_px": 184.0,
+      "x_px": 0.0,
+      "avail_w_px": 730.0
+    },
+    "size": {
+      "col": "Size",
+      "align": "Right",
+      "min_px": 86.0,
+      "x_px": 738.0,
+      "w_px": 86.0
+    },
+    "modified": {
+      "col": "Modified",
+      "align": "Left",
+      "min_px": 128.0,
+      "x_px": 832.0,
+      "w_px": 128.0
+    },
+    "fixed_cols_total_w_px": 222.0,
+    "canvas_right_edge_px": 960.0
+  },
+  "indent_depths": {
+    "indent_step_px": 12.0,
+    "status_mark_w_px": 16.0,
+    "status_gap_px": 8.0,
+    "path_x_separated": {
+      "0": 40.0,
+      "1": 52.0,
+      "2": 64.0,
+      "3": 76.0,
+      "4": 88.0,
+      "5": 100.0
+    },
+    "size_x_across_depths": 738.0,
+    "mod_x_across_depths": 832.0
+  },
+  "orphan_dimming": {
+    "weak_typo_role": "Small",
+    "weak_rank": 4,
+    "is_weak": true,
+    "present_typo_role": "Mono",
+    "present_rank": 3,
+    "orphan_left": {
+      "glyph": "L",
+      "left_side": {
+        "present": true,
+        "dimmed": false,
+        "role": "Mono",
+        "is_weak": false
+      },
+      "right_side": {
+        "missing": true,
+        "dimmed": true,
+        "role": "Small",
+        "is_weak": true,
+        "size_cell": "-",
+        "time_cell": "-"
+      }
+    },
+    "orphan_right": {
+      "glyph": "R",
+      "left_side": {
+        "missing": true,
+        "dimmed": true,
+        "role": "Small",
+        "is_weak": true,
+        "size_cell": "-",
+        "time_cell": "-"
+      },
+      "right_side": {
+        "present": true,
+        "dimmed": false,
+        "role": "Mono",
+        "is_weak": false
+      }
+    }
+  },
+  "notes": "folder_table_column_xs(960.0) -> (0.0, 738.0, 832.0); fixed cols total 222.0px (86.0 + 8.0 + 128.0); modified ends at 832.0 + 128.0 = 960.0; indents scale by 12.0px per depth from base 40.0px; missing orphan sides dim via TypoRole::Small with rank 4 and is_weak == true"
+}

@@ -198,3 +198,12 @@
 1. **Tabs & Toolbar Chrome Round-3**: Beyond Compare parity for session tab strip and toolbar chrome: session tab strip with 150px cells (120 max + 6 close gap + 24 close edge) and 8px inter-tab gap with horizontal overflow scroll (2 tabs fit, 8 tabs scroll at 720px), toolbar spacing via SPACE tokens (SPACE_XS 4.0px item gap, SPACE_SM 8.0px group gap, SPACE_MD 12.0px margin, SPACE_XL 24.0px button height, uniform 96px button width), and header height (21.6px) derived from TypoRole Heading chrome line-height (18.0 * 1.2). Edge fixture `comparison/chrome-narrow-720.json` added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 904 → 906 passed, 0 failed; clippy clean on owned files; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: `crates/gui/src/app.rs`, `crates/gui/src/home.rs`, `checks/gui-exq-chrome3/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-tree2 indent plus columns
+
+1. **Tree Indent Rhythm & Columns Alignment**: Beyond Compare parity for folder tree rows: indent step strictly derived from SPACE tokens (`tree_indent_step_from_space()` == `GEO_TREE_INDENT_STEP` == `SPACE_MD` = 12.0px), depth rhythm scaling across depths 0..=5 (0.0 to 60.0px; path origins 40.0 to 100.0px), orphan rows dimmed on missing sides using `TypoRole::Small` (`is_weak() == true`) with `"-"` dashes without modifying colors (colors frozen at 33), and Size/Modified columns strictly aligned at 960px wide pane (Size 738.0px, Modified 832.0px; fixed trailing cols 222.0px). Edge fixture `comparison/tree-wide-960.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 909 → 913 passed, 0 failed; clippy clean on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree2/**`, `TIMELINE.md`.

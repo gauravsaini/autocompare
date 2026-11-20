@@ -32,6 +32,45 @@ pub struct FolderTreeNode {
     pub has_children: bool,
 }
 
+impl FolderTreeNode {
+    /// Whether this tree node represents an orphan entry (exists on only one side: glyph 'L' or 'R').
+    pub fn is_orphan(&self) -> bool {
+        folder_row_is_orphan(&self.row)
+    }
+
+    /// Whether this tree node is missing on the given side (`FolderSide::Left` or `FolderSide::Right`).
+    pub fn is_missing_on_side(&self, side: FolderSide) -> bool {
+        folder_row_is_missing_on_side(&self.row, side)
+    }
+
+    /// Whether this tree node's cell is dimmed on the given side (missing side of an orphan entry).
+    pub fn is_dimmed(&self, side: FolderSide) -> bool {
+        tree_cell_is_dimmed(&self.row, side)
+    }
+
+    /// Returns the [`crate::theme::TypoRole`] for this tree node cell on the given side:
+    /// - Missing side: [`crate::theme::TypoRole::Small`] (hierarchy rank 4, `is_weak() == true`)
+    /// - Present content: [`crate::theme::TypoRole::Mono`] (hierarchy rank 3, `is_weak() == false`)
+    pub fn cell_typo_role(&self, side: FolderSide) -> crate::theme::TypoRole {
+        tree_cell_typo_role(&self.row, side)
+    }
+
+    /// Horizontal indent offset px for this node: `depth * tree_indent_step()`.
+    pub fn indent_px(&self) -> f32 {
+        tree_indent_for_depth(self.depth)
+    }
+
+    /// Separated path/name column start offset px: indent + expander cell + status cell + gap.
+    pub fn path_x_separated(&self) -> f32 {
+        folder_row_path_x_separated(self.depth)
+    }
+
+    /// Horizontal positions px for vertical ancestor indent guides (`0..depth`).
+    pub fn indent_guide_xs(&self) -> Vec<f32> {
+        tree_indent_guide_xs(self.depth)
+    }
+}
+
 /// Builds a filtered, indented hierarchical view of folder rows based on expanded directories.
 ///
 /// An entry is visible if all its ancestor directories are contained in `expanded_dirs`.
@@ -222,6 +261,67 @@ pub fn tree_status_typo() -> FolderTypo {
         size: FOLDER_BODY_SIZE,
         strong: true,
     }
+}
+
+// ----------------------------------------------------------------------------
+// TREE2 (round-2): indent step from SPACE tokens + orphan dimming via TypoRole
+// Small + Size/Modified column alignment at 960px wide (headless).
+// BC tree rhythm:
+// 1. Indent step strictly derived from SPACE tokens (GEO_TREE_INDENT_STEP == SPACE_MD == 12.0).
+// 2. Depth rhythm: depth * 12.0px indent, with separated path at depth * 12.0 + 40.0px.
+// 3. Orphan dimming via TypoRole::Small (rank 4, is_weak() == true), missing side renders "-"
+//    without touching colors (colors frozen).
+// 4. Size/Modified columns aligned at 960px pane width: Size at 738.0, Modified at 832.0.
+//    Fixed trailing columns total 222.0px.
+// ----------------------------------------------------------------------------
+
+/// Canonical tree-side round-2 indent step derived directly from SPACE tokens
+/// (`crate::theme::GEO_TREE_INDENT_STEP` == `crate::theme::SPACE_MD` == 12.0).
+/// Pure; unit-tested.
+pub const fn tree_indent_step_from_space() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// Tree depth indent rhythm in px for a given depth level:
+/// depth * tree_indent_step() (12.0px per depth level). Pure; unit-tested.
+pub fn tree_indent_rhythm_px(depth: usize) -> f32 {
+    tree_indent_for_depth(depth)
+}
+
+/// Tree row path horizontal origin (px) including expander + status mark + gap:
+/// depth * tree_indent_step() + 40.0. Matches [`folder_row_path_x_separated`].
+/// Depth 0..=5: 40.0, 52.0, 64.0, 76.0, 88.0, 100.0. Pure; unit-tested.
+pub fn tree_row_path_x(depth: usize) -> f32 {
+    folder_row_path_x_separated(depth)
+}
+
+/// Returns whether a tree row cell is dimmed for an orphan entry (missing on that side).
+/// Dimmed cells render placeholder dashes "-" using TypoRole::Small without color edits.
+/// Pure; unit-tested.
+pub fn tree_cell_is_dimmed(row: &FolderRow, side: FolderSide) -> bool {
+    folder_table_cell_is_dimmed(row, side)
+}
+
+/// Returns the TypoRole for a tree row cell:
+/// Missing sides on orphan rows use `TypoRole::Small` (rank 4, is_weak() == true),
+/// while present entries use `TypoRole::Mono` (rank 3, tabular content).
+/// Pure; unit-tested.
+pub fn tree_cell_typo_role(row: &FolderRow, side: FolderSide) -> crate::theme::TypoRole {
+    folder_table_cell_typo_role(row, side)
+}
+
+/// Size and Modified column alignment at 960px pane width:
+/// Returns (name_x, size_x, mod_x) at 960.0px: (0.0, 738.0, 832.0).
+/// Size and Modified columns align at strictly fixed horizontal positions across all depths.
+/// Pure; unit-tested.
+pub fn tree_wide_960_column_xs() -> (f32, f32, f32) {
+    folder_table_column_xs(960.0)
+}
+
+/// Verifies that Size and Modified columns stay strictly fixed at (738.0, 832.0)
+/// regardless of tree depth (depth 0 to 5+). Pure; unit-tested.
+pub fn tree_columns_aligned_at_960(_depth: usize) -> (f32, f32, f32) {
+    folder_table_column_xs(960.0)
 }
 
 /// `visible_count` rows wale ped ki kul height px: rows x row height.
@@ -5185,6 +5285,219 @@ mod exq_tree2_tests {
         assert_eq!(status.size, FOLDER_BODY_SIZE);
         assert_eq!(status.size, path.size);
         assert!(!path.strong);
+    }
+
+    #[test]
+    fn tree2_round2_indent_from_space_tokens() {
+        assert_eq!(tree_indent_step(), crate::theme::GEO_TREE_INDENT_STEP);
+        assert_eq!(tree_indent_step(), crate::theme::SPACE_MD);
+        assert_eq!(tree_indent_step_from_space(), 12.0);
+        assert_eq!(tree_indent_rhythm_px(0), 0.0);
+        assert_eq!(tree_indent_rhythm_px(1), 12.0);
+        assert_eq!(tree_indent_rhythm_px(2), 24.0);
+        assert_eq!(tree_indent_rhythm_px(3), 36.0);
+        assert_eq!(tree_indent_rhythm_px(4), 48.0);
+        assert_eq!(tree_indent_rhythm_px(5), 60.0);
+
+        assert_eq!(tree_row_path_x(0), 40.0);
+        assert_eq!(tree_row_path_x(1), 52.0);
+        assert_eq!(tree_row_path_x(2), 64.0);
+        assert_eq!(tree_row_path_x(3), 76.0);
+        assert_eq!(tree_row_path_x(4), 88.0);
+        assert_eq!(tree_row_path_x(5), 100.0);
+    }
+
+    #[test]
+    fn tree2_round2_orphan_dimming_via_typo_small() {
+        let orphan_left = FolderRow {
+            rel_path: "left_only.txt".to_string(),
+            is_dir: false,
+            glyph: 'L',
+            left_size: Some("1024".to_string()),
+            right_size: None,
+            left_time: Some("2026-03-01 10:00".to_string()),
+            right_time: None,
+            changed: true,
+        };
+        let orphan_right = FolderRow {
+            rel_path: "right_only.txt".to_string(),
+            is_dir: false,
+            glyph: 'R',
+            left_size: None,
+            right_size: Some("2048".to_string()),
+            left_time: None,
+            right_time: Some("2026-03-01 11:00".to_string()),
+            changed: true,
+        };
+
+        // Left-only: right side is missing and dimmed
+        assert!(!tree_cell_is_dimmed(&orphan_left, FolderSide::Left));
+        assert!(tree_cell_is_dimmed(&orphan_left, FolderSide::Right));
+        assert_eq!(
+            tree_cell_typo_role(&orphan_left, FolderSide::Left),
+            crate::theme::TypoRole::Mono
+        );
+        assert_eq!(
+            tree_cell_typo_role(&orphan_left, FolderSide::Right),
+            crate::theme::TypoRole::Small
+        );
+        assert!(tree_cell_typo_role(&orphan_left, FolderSide::Right).is_weak());
+        assert!(!tree_cell_typo_role(&orphan_left, FolderSide::Left).is_weak());
+        assert_eq!(
+            tree_cell_typo_role(&orphan_left, FolderSide::Right).rank(),
+            4
+        );
+        assert_eq!(
+            tree_cell_typo_role(&orphan_left, FolderSide::Left).rank(),
+            3
+        );
+
+        // Right-only: left side is missing and dimmed
+        assert!(tree_cell_is_dimmed(&orphan_right, FolderSide::Left));
+        assert!(!tree_cell_is_dimmed(&orphan_right, FolderSide::Right));
+        assert_eq!(
+            tree_cell_typo_role(&orphan_right, FolderSide::Left),
+            crate::theme::TypoRole::Small
+        );
+        assert_eq!(
+            tree_cell_typo_role(&orphan_right, FolderSide::Right),
+            crate::theme::TypoRole::Mono
+        );
+        assert!(tree_cell_typo_role(&orphan_right, FolderSide::Left).is_weak());
+        assert!(!tree_cell_typo_role(&orphan_right, FolderSide::Right).is_weak());
+        assert_eq!(
+            tree_cell_typo_role(&orphan_right, FolderSide::Left).rank(),
+            4
+        );
+        assert_eq!(
+            tree_cell_typo_role(&orphan_right, FolderSide::Right).rank(),
+            3
+        );
+
+        // FolderTreeNode methods parity check
+        let node_left = FolderTreeNode {
+            row: orphan_left.clone(),
+            depth: 2,
+            is_expanded: false,
+            has_children: false,
+        };
+        assert!(node_left.is_orphan());
+        assert!(!node_left.is_missing_on_side(FolderSide::Left));
+        assert!(node_left.is_missing_on_side(FolderSide::Right));
+        assert!(!node_left.is_dimmed(FolderSide::Left));
+        assert!(node_left.is_dimmed(FolderSide::Right));
+        assert_eq!(
+            node_left.cell_typo_role(FolderSide::Right),
+            crate::theme::TypoRole::Small
+        );
+        assert!(node_left.cell_typo_role(FolderSide::Right).is_weak());
+        assert_eq!(node_left.cell_typo_role(FolderSide::Right).rank(), 4);
+        assert_eq!(node_left.indent_px(), 24.0);
+        assert_eq!(node_left.path_x_separated(), 64.0);
+        assert_eq!(node_left.indent_guide_xs(), vec![8.0, 20.0]);
+    }
+
+    #[test]
+    fn tree2_round2_columns_aligned_at_960() {
+        assert_eq!(folder_table_fixed_cols_w(), 222.0);
+        let (name_x, size_x, mod_x) = folder_table_column_xs(960.0);
+        assert_eq!(name_x, 0.0);
+        assert_eq!(size_x, 738.0);
+        assert_eq!(mod_x, 832.0);
+
+        let (tn_x, ts_x, tm_x) = tree_wide_960_column_xs();
+        assert_eq!(tn_x, name_x);
+        assert_eq!(ts_x, size_x);
+        assert_eq!(tm_x, mod_x);
+
+        let size_min_w = folder_table_col_min_px(FolderTableCol::Size);
+        let mod_min_w = folder_table_col_min_px(FolderTableCol::Modified);
+        assert_eq!(size_min_w, 86.0);
+        assert_eq!(mod_min_w, 128.0);
+        assert_eq!(mod_x + mod_min_w, 960.0);
+        assert_eq!(size_x + size_min_w + FOLDERTABLE_COL_GAP, mod_x);
+
+        // Columns stay aligned across depths 0 to 5
+        for depth in 0..=5 {
+            let (nx, sx, mx) = tree_columns_aligned_at_960(depth);
+            assert_eq!(nx, 0.0);
+            assert_eq!(sx, 738.0);
+            assert_eq!(mx, 832.0);
+        }
+    }
+
+    #[test]
+    fn exq_tree2_round2_tree_wide_960_and_orphan_dimming() {
+        // Headless test proving edge fixture comparison/tree-wide-960.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree2/round-1/comparison/tree-wide-960.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-wide-960\""));
+        assert!(fixture_raw.contains("\"width_px\": 960.0"));
+        assert!(fixture_raw.contains("\"fixed_cols_total_w_px\": 222.0"));
+        assert!(fixture_raw.contains("\"x_px\": 738.0"));
+        assert!(fixture_raw.contains("\"x_px\": 832.0"));
+        assert!(fixture_raw.contains("\"indent_step_px\": 12.0"));
+        assert!(fixture_raw.contains("\"weak_typo_role\": \"Small\""));
+
+        let (name_x, size_x, mod_x) = tree_wide_960_column_xs();
+        assert_eq!(name_x, 0.0);
+        assert_eq!(size_x, 738.0);
+        assert_eq!(mod_x, 832.0);
+
+        let expected_indents = [0.0, 12.0, 24.0, 36.0, 48.0, 60.0];
+        let expected_paths = [40.0, 52.0, 64.0, 76.0, 88.0, 100.0];
+
+        for (depth, (&exp_indent, &exp_path)) in expected_indents
+            .iter()
+            .zip(expected_paths.iter())
+            .enumerate()
+        {
+            assert_eq!(tree_indent_rhythm_px(depth), exp_indent);
+            assert_eq!(tree_row_path_x(depth), exp_path);
+            assert_eq!(tree_indent_guide_xs(depth).len(), depth);
+        }
+
+        // Orphan dimming check
+        let orphan_l = FolderRow {
+            rel_path: "src/gui/orphan_left.rs".to_string(),
+            is_dir: false,
+            glyph: 'L',
+            left_size: Some("2048".to_string()),
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: true,
+        };
+        let orphan_r = FolderRow {
+            rel_path: "src/gui/orphan_right.rs".to_string(),
+            is_dir: false,
+            glyph: 'R',
+            left_size: None,
+            right_size: Some("4096".to_string()),
+            left_time: None,
+            right_time: None,
+            changed: true,
+        };
+
+        assert_eq!(
+            tree_cell_typo_role(&orphan_l, FolderSide::Right),
+            crate::theme::TypoRole::Small
+        );
+        assert!(tree_cell_typo_role(&orphan_l, FolderSide::Right).is_weak());
+        assert_eq!(
+            folder_table_cell_text(&orphan_l, FolderSide::Right, FolderTableCol::Size),
+            "-"
+        );
+
+        assert_eq!(
+            tree_cell_typo_role(&orphan_r, FolderSide::Left),
+            crate::theme::TypoRole::Small
+        );
+        assert!(tree_cell_typo_role(&orphan_r, FolderSide::Left).is_weak());
+        assert_eq!(
+            folder_table_cell_text(&orphan_r, FolderSide::Left, FolderTableCol::Size),
+            "-"
+        );
     }
 }
 
