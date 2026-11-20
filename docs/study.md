@@ -134,6 +134,25 @@ Observed via System Events AX on PID 23316. Menu names paraphrased for clean-roo
 5. **P2:** Layout fixed to side-by-side; toggles (Wrap/Numbers) not yet wired.
 6. **P3:** No session management or Side Swapping.
 
+## Study refresh (HIGH, 2026-11-20, OP-STUDY)
+
+Live app (PID 23316) ka outside-only refresh, 3 rounds. Detail notes:
+`capture/opencode-study/round-1-session-types.md`,
+`round-2-view-tools.md`, `round-3-geometry-search.md`; report:
+`checks/opencode-study/REPORT.md`; gates:
+`checks/opencode-study/GATES.md`.
+
+- 9 session types dobara confirm (folder compare/merge/sync, text
+  compare/merge, hex, media, picture, table) — 2026-11-18 se match.
+- View filters (all/differences/same + context), unimportant-farq
+  ignore switch, side-by-side vs over-under layout, Search menu me
+  farq navigation + bookmarks, Tools me settings packages/snapshot/
+  patch preview — sab HIGH (menu maujoodgi).
+- Window 720x869, toolbar ~30px HIGH; pane/splitter/gutter/statusbar
+  andaze UNVERIFIED (screenshot permission ab bhi blocked).
+- Koi naya gap nahi: display filter, find/bookmark, over-under
+  layout pehle se logged hain.
+
 ## Wave 0: Workspace, Schema & Clean-Room Architecture Decisions (2026-11-19)
 
 1. **Clean-Room Boundary & Provenance (`craft.json`)**:
