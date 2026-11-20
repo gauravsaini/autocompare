@@ -481,3 +481,9 @@
 1. **Home Search & Indent at 720px**: search field height from TypoRole chrome line-height 13.2, tree indent step 12 reuse, empty-state margins OUTER_MARGIN 12 / SECTION_GAP 8.
 2. **Tests** (before → after): autocompare-gui 997 green; clippy 0 home.rs diags; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home5/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-table8 keys plus widths
+
+1. **Table Keys & Widths at 960px**: key-column widths from char metrics, numeric right-alignment via grid origin, header/body heights from TypoRole, 176 fit in avail 936.
+2. **Tests** (before → after): autocompare-gui green incl. new headless keys test; clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table8/**`, `TIMELINE.md`.
