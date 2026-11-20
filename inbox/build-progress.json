@@ -42,7 +42,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 media writing (table+media_tags OWNS-clean), rel inventorying binaries; no commits yet",
+    "ORCH-HEALTH": "2026-11-20 media +68 lines table/tags fixed, on picture/audio; rel hit missing wasm32 target (env gap, E0463 simd-adler32), deciding next step; no commits yet",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
@@ -53,6 +53,7 @@
     "ORCH-WORKSPACE-CLIPPY": "pass 2026-11-20 (cargo clippy --workspace --all-targets DONE_EXIT 0, zero warnings, /tmp/ws-clippy.log)",
     "ORCH-PNG-NOISE": "sessionpaint 2 PNGs rewrite repeatedly (external screenshot hook); left dirty, revert at landing time",
     "ORCH-WAVE-MEDIA": "dispatched opencode default-model (OWNS diff hex/table/image/audio/tags + compare media/picture/table/binary + round-m1, /tmp/sess-wave-media.log)",
-    "ORCH-WAVE-REL": "dispatched opencode default-model (OWNS xtask + release draft v0.6.0 + checks/release-w1, no version bump, /tmp/sess-wave-rel.log)"
+    "ORCH-WAVE-REL": "dispatched opencode default-model (OWNS xtask + release draft v0.6.0 + checks/release-w1, no version bump, /tmp/sess-wave-rel.log)",
+    "ORCH-ENV-GAP": "wasm32-unknown-unknown target not installed (blocks xtask wasm gate; rel wave documenting)"
   }
 }
