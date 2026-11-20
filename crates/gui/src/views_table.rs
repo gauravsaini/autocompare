@@ -2350,6 +2350,130 @@ pub fn table3_narrow_outer_widths(widths_chars: &[usize], char_w: f32) -> Vec<f3
     table_col_widths_px(widths_chars, char_w)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table4 round-1: cols plus rows at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: headers need sort hit-slop (taller than rows),
+// col spacing irregular, delta cells misaligned at wide widths. Fix
+// table-side only (app.rs/views.rs/home.rs/views_hex.rs/gutter.rs/tree.rs/
+// theme.rs/viewmodel.rs/copy.rs/take.rs NO-TOUCH). Geometry FIRST: header
+// height chrome line-height lock (`TABLE4_HEADER_H` = Heading 21.6), col
+// spacing SPACE_SM single-source (`table4_col_spacing` -> `table_col_spacing`
+// -> `GEO_SECTION_GAP`), cell pad SPACE_XS (`TABLE4_CELL_PAD_X` 4.0, outer
+// `chars * char_w + 2 * pad`), row height Mono line-height lock
+// (`table4_row_h` -> `table_cell_row_h` 15.6) at 960px wide avail 936.
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table4/comparison/table-wide-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table4 header height (px): chrome line-height lock
+/// (`TypoRole::Heading.line_height_px()` = 18.0 @ 1.2 = 21.6, section-header
+/// chrome precedent) — rows (Mono 15.6) se taller, isliye sort hit-slop
+/// milta hai. Koi ad-hoc literal nahi. Pure.
+pub const TABLE4_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Table4 cell pad (px): `SPACE_XS` reuse (4.0, symmetric row pad precedent)
+/// — delta cells isi pad se outer boxes banate hain taaki wide widths par
+/// bhi columns align rahen. Pure.
+pub const TABLE4_CELL_PAD_X: f32 = crate::theme::SPACE_XS;
+
+/// Table4 header height single-source (px). Pure; unit-tested.
+pub fn table4_header_h() -> f32 {
+    TABLE4_HEADER_H
+}
+
+/// Table4 header height chrome contract: Heading line-height ke barabar aur
+/// row height se taller (hit-slop). Pure; unit-tested.
+pub fn table4_header_h_ok() -> bool {
+    (table4_header_h() - crate::theme::TypoRole::Heading.line_height_px()).abs() < 0.001
+        && table4_header_h() > table4_row_h()
+}
+
+/// Table4 column spacing (px): `table_col_spacing` reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table4_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table4 cell pad single-source (px). Pure; unit-tested.
+pub fn table4_cell_pad_x() -> f32 {
+    TABLE4_CELL_PAD_X
+}
+
+/// Table4 row height (px): Mono line-height lock (15.6) — wide-960 par
+/// ruler/body desync nahi. Pure; unit-tested.
+pub fn table4_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table4 header underline width (px): `table_header_underline_w` reuse
+/// (1.0) — header underline uneven nahi. Pure; unit-tested.
+pub fn table4_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table4 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table4_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table4 wide-960 avail width (px): `table_wide_avail_w` reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table4_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table4 outer cell box chaudai (px): `text + 2 * TABLE4_CELL_PAD_X`.
+/// Non-finite ya negative text par pad floor. Pure; unit-tested.
+pub fn table4_cell_outer_w(text_w: f32) -> f32 {
+    if !text_w.is_finite() || text_w < 0.0 {
+        return TABLE4_CELL_PAD_X * 2.0;
+    }
+    text_w + TABLE4_CELL_PAD_X * 2.0
+}
+
+/// Table4 outer se text chaudai (px): floor 0 par. Pure; unit-tested.
+pub fn table4_cell_text_w(outer_w: f32) -> f32 {
+    if !outer_w.is_finite() {
+        return 0.0;
+    }
+    (outer_w - TABLE4_CELL_PAD_X * 2.0).max(0.0)
+}
+
+/// Table4 char widths se px outer widths: har char width `char_w` chaudi,
+/// outer `table4_cell_outer_w(chars * char_w)` se. Kharab `char_w` par khali
+/// vec. Pure; unit-tested.
+pub fn table4_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for width in widths_chars.iter() {
+        let text_w = (*width as f32) * char_w;
+        if !text_w.is_finite() || text_w < 0.0 {
+            continue;
+        }
+        out.push(table4_cell_outer_w(text_w));
+    }
+    out
+}
+
+/// Table4 grid kul px chaudai: `table_grid_total_w` reuse taaki col-gap math
+/// kabhi drift na kare. Pure; unit-tested.
+pub fn table4_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table4 wide-960 fit gate: `table_column_grid_fit` reuse. Pure;
+/// unit-tested.
+pub fn table4_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3755,5 +3879,86 @@ mod tests {
         assert!(table_column_grid_fit(720.0, &px));
         assert!(!table_column_grid_fit(100.0, &px));
         assert!(table3_narrow_outer_widths(&widths, 0.0).is_empty());
+    }
+
+    #[test]
+    fn table_exq_table4_round1_cols_plus_rows_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // header height chrome line-height (Heading 21.6, hit-slop over rows),
+        // col spacing SPACE_SM single-source (8), cell pad SPACE_XS (4),
+        // col widths content metrics se, row height Mono lock (15.6) at 960.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table4/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table4/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"col_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"cell_pad\": 4.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header height chrome line-height lock, taller than rows.
+        assert!((table4_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(
+            table4_header_h(),
+            crate::theme::TypoRole::Heading.line_height_px()
+        );
+        assert!(table4_header_h_ok());
+        assert!(table4_header_h() > table4_row_h());
+
+        // 2. Col spacing SPACE_SM single-source, cell pad SPACE_XS.
+        assert_eq!(table4_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table4_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table4_col_spacing(), 8.0);
+        assert_eq!(table4_col_spacing(), table_col_spacing());
+        assert_eq!(TABLE4_CELL_PAD_X, crate::theme::SPACE_XS);
+        assert_eq!(table4_cell_pad_x(), 4.0);
+        assert_eq!(table4_cell_pad_x(), crate::theme::GEO_TIGHT_GAP);
+
+        // 3. Row height Mono line-height lock at 960px wide.
+        assert!((table4_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table4_row_h(), table_cell_row_h());
+        assert_eq!(
+            table4_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(table4_avail_w(), 936.0);
+        assert_eq!(table4_avail_w(), table_wide_avail_w());
+
+        // 4. Header underline/weight reuse.
+        assert_eq!(table4_header_underline_w(), 1.0);
+        assert_eq!(
+            table4_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(table4_header_underline_w(), table_header_underline_w());
+        assert!(table4_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 5. Col widths content metrics se + pad 4: [3,5,6] @8px
+        // -> outer [32,48,56], total 152, avail 936 me fit.
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table4_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![32.0, 48.0, 56.0]);
+        assert_eq!(table4_cell_outer_w(24.0), 32.0);
+        assert_eq!(table4_cell_text_w(32.0), 24.0);
+        assert_eq!(table4_grid_total_w(&px), 152.0);
+        assert_eq!(table4_grid_total_w(&px), table_grid_total_w(&px));
+        assert!(table4_column_grid_fit(table4_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE_CANVAS_W, &px));
+        assert!(!table4_column_grid_fit(100.0, &px));
+        assert!(table4_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table_wide_960_visible_rows(600.0), 38);
     }
 }
