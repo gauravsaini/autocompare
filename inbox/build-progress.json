@@ -93,7 +93,7 @@
     "AGYX-REPORTS-78970": "failed rotator EADDRINUSE race (3 concurrent -p flaky), relaunched opencode rep2",
     "AGYX-MEDIA-37121": "failed rotator race, relaunched opencode med2",
     "AGYX-GUI-51089": "failed rotator race, relaunched opencode gui2",
-    "WAVE-REPORTS-VFS2": "dispatched 2026-11-20 opencode sess-opencode-rep2 sess 64356 OWNS reports/vfs/bcomp",
+    "WAVE-REPORTS-VFS2": "landed+pushed b6a13be (strict: 62 green integ, clippy 0, fmt clean, banned 0, REPORT PASS, OWNS-clean)",
     "WAVE-MEDIA-TABLE2": "dispatched 2026-11-20 opencode sess-opencode-med2 sess 5642 OWNS table/image/media",
     "WAVE-GUI-EXQ5B": "dispatched 2026-11-20 opencode sess-opencode-gui2 sess 75061 OWNS gui exquisite geo+typo",
     "ORCH-AGYX-LESSON2": "agyx -p concurrent x3 triggers rotator EADDRINUSE + 10s timeout; single-stream only, use opencode for parallel (serve multiplexes)",
