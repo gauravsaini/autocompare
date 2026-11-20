@@ -72,7 +72,7 @@
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
     "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace"
   },
-  "SWARM-EXQ4": "agyx silent-dead 0B (rotator concurrency limit), retry via opencode default-model OWNS gui+round-exq4",
+  "SWARM-EXQ4": "retry live via opencode exq4-gui (default-model, OWNS gui+round-exq4, dirty-tree safe, pull ok)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
   "SWARM-BIN3": "WIP checks/binary-orch-3/GATES.md present, sess ses_e0818bb live, no rush",
   "ORCH-BACKOFF": "increased to 120s (parity/sessrep silent since 17:51/17:59, rotator slow-mode), reset on output",
