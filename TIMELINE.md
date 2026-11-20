@@ -265,3 +265,10 @@
 1. **Pathbar & Info Line at 960px**: Beyond Compare parity for path chrome: equal path widths from char metrics, icon slots from SPACE tokens, info line geometry (date|bytes|filter), Browse button uniform width. Colors frozen at 33. Edge fixture comparison/pathbar-960.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 933 → 936 passed, 0 failed; clippy clean; rustfmt clean on owned app.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-chrome6/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-table3 rows plus cols
+
+1. **Table Rows & Cols at 960px**: Beyond Compare parity for table compare: row height locked to TypoRole Mono line-height, col spacing from SPACE tokens, header underline weight reuse, sort indicator alignment. Colors frozen at 33. Edge fixture comparison/table-narrow-720.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 936 → 938 passed, 0 failed; clippy clean; rustfmt clean on owned views_table.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table3/**, TIMELINE.md.
