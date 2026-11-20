@@ -1571,3 +1571,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CQ-TYPO (sess-typo-cq): typography system (family/weight/line-height/letter-spacing). OWNS theme.rs + checks/gui-typo-cq. Geometry+colors FROZEN.
 - CR-LOCALRUN6 (sess-cr-local): READ-ONLY baseline early-feedback (cm->cr DELTA + EXQUISITE GAPS sec-8, CP/CQ ka input). OWNS checks/gui-localrun-cr only, source ZERO touch.
 - Queue (user exquisite priority ke baad): CN-OPENER (CLI --open flag, main+app) -> CO-TBARCALL (app.rs call-site) -> CP-LIGHTFLAG (--screenshot-mode light) -> round-7 verify (CP+CQ land ke baad).
+
+## 2026-11-20 — Wave CQ-TYPO landed + pushed (exquisite typography)
+- Commit `183d00c` feat(gui): TypoRole central system (family/weight/line-height roles) in theme.rs +48/-1, checks/gui-typo-cq evidence (REPORT+GATES+before/after PNGs).
+- Gates: 671 green (+1 TypoRole test), clippy 0 warnings, fmt clean, banned 0, colors 0 new (frozen), PNGs valid 960x600, fixtures before==after byte-identical (paint-neutral), OWNS clean, STATUS untouched.
+- Still running: CP-GEO (views.rs audit, dir created), CR-LOCALRUN6 (live captures).
