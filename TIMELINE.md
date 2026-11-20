@@ -578,3 +578,9 @@
 1. **Tree Tall-1200 Columns & Right-Align Lock**: size/date column widths stable at 1200px tall canvas, right-alignment locked over long scroll, selected-row full-width highlight tall, and edge fixture `comparison/tree-tall-1200.json` (narrow-720 fixture reused).
 2. **Tests** (before → after): autocompare-gui 1032 green (including `tree10_*` tall columns tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree10/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter11 tall plus center
+
+1. **Gutter Tall-1200 Center Column & Marker Lock**: center ~20px gutter column over tall 1200px canvas, marker x locked from char metrics over long scroll, padded click viewport floor tall, changed-rows-only visibility, and edge fixture `comparison/gutter-tall-1200.json` (narrow-720 + padded-viewport fixtures reused).
+2. **Tests** (before → after): autocompare-gui 1032 green (including `gutter11_*` tall center tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter11/**`, `TIMELINE.md`.
