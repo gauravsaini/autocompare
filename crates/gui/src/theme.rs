@@ -1432,6 +1432,69 @@ impl TypoRole {
     }
 }
 
+// ----------------------------------------------------------------------------
+// THEME10 exquisite pane hierarchy (headless, paint-neutral): geometry FIRST
+// (pane header/body/meta gaps plus header height/pad reuse the canonical
+// SPACE scale via GEO_*/CHROME_* aliases for margins/padding rhythm),
+// typography SECOND (header Heading 18 strong > body Mono 12 > meta Small 11
+// — TypoRole reuse only, no new point sizes), colors FROZEN (zero
+// Color32/Visuals). Paint adoption later wave.
+// ----------------------------------------------------------------------------
+
+/// Pane header gap: one MD step (== [`GEO_OUTER_MARGIN`], 12.0).
+pub const THEME10_PANE_HEADER_GAP: f32 = GEO_OUTER_MARGIN;
+/// Pane body gap: one SM step (== [`GEO_SECTION_GAP`], 8.0).
+pub const THEME10_PANE_BODY_GAP: f32 = GEO_SECTION_GAP;
+/// Pane meta gap: one XS step (== [`GEO_TIGHT_GAP`], 4.0).
+pub const THEME10_PANE_META_GAP: f32 = GEO_TIGHT_GAP;
+/// Pane header bar height: same rhythm as [`CHROME_HEADER_BAR_H`] (28.0).
+pub const THEME10_PANE_HEADER_H: f32 = CHROME_HEADER_BAR_H;
+/// Pane horizontal pad: one MD step (== [`GEO_OUTER_MARGIN`], 12.0).
+pub const THEME10_PANE_PAD_X: f32 = GEO_OUTER_MARGIN;
+
+/// Pane hierarchy contract: gaps reuse the geometry scale in strict order
+/// (meta 4 < body 8 < header-gap 12), header bar keeps the 28px chrome
+/// rhythm, sizes step header 18 > body 12 > meta 11 with line-height px in
+/// the same order, weights strong > regular-mono > weak carry the tone.
+/// Pure.
+pub fn theme10_pane_hierarchy_ok() -> bool {
+    THEME10_PANE_META_GAP == GEO_TIGHT_GAP
+        && THEME10_PANE_BODY_GAP == GEO_SECTION_GAP
+        && THEME10_PANE_HEADER_GAP == GEO_OUTER_MARGIN
+        && THEME10_PANE_HEADER_H == CHROME_HEADER_BAR_H
+        && THEME10_PANE_PAD_X == GEO_OUTER_MARGIN
+        && THEME10_PANE_META_GAP < THEME10_PANE_BODY_GAP
+        && THEME10_PANE_BODY_GAP < THEME10_PANE_HEADER_GAP
+        && TypoRole::pane_header().size() > TypoRole::pane_body().size()
+        && TypoRole::pane_body().size() > TypoRole::pane_meta().size()
+        && TypoRole::pane_header().line_height_px() > TypoRole::pane_body().line_height_px()
+        && TypoRole::pane_body().line_height_px() > TypoRole::pane_meta().line_height_px()
+}
+
+impl TypoRole {
+    /// Pane header role: Heading (18 strong proportional, tabular off).
+    /// Same value as [`TypoRole::chrome_section`]: app title plus section
+    /// plus pane headers share the top chrome step so pane headers read
+    /// above card titles. Paint adoption later wave; no size/color move.
+    pub const fn pane_header() -> Self {
+        Self::Heading
+    }
+
+    /// Pane body role: Mono (12 regular monospace, tabular). Same value as
+    /// [`TypoRole::content_textcenter`]: diff rows read as code, never
+    /// chrome. Paint adoption later wave; no size/color move.
+    pub const fn pane_body() -> Self {
+        Self::Mono
+    }
+
+    /// Pane meta role: Small (11 weak proportional, tabular intent). Same
+    /// value as [`TypoRole::caption`]: hints, counts, subtitles hug the
+    /// bottom step. Paint adoption later wave; no size/color move.
+    pub const fn pane_meta() -> Self {
+        Self::Small
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2483,5 +2546,57 @@ mod tests {
         assert_eq!(TypoRole::Body.size(), TYPO_BODY_SIZE);
         assert_eq!(TypoRole::Mono.size(), TYPO_MONO_SIZE);
         assert_eq!(TypoRole::Small.size(), TYPO_SMALL_SIZE);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn theme10_pane_hierarchy_sharp_without_new_sizes() {
+        // THEME10: pane headers vs body vs meta — geometry FIRST (gaps reuse
+        // GEO_*/CHROME_* scale only), typography SECOND (TypoRole reuse,
+        // koi naya point size nahi), colors FROZEN. Paint-neutral.
+        assert!(theme10_pane_hierarchy_ok());
+        // Geometry: meta 4 < body 8 < header-gap 12, header bar 28 rhythm.
+        assert_eq!(THEME10_PANE_META_GAP, GEO_TIGHT_GAP);
+        assert_eq!(THEME10_PANE_META_GAP, SPACE_XS);
+        assert_eq!(THEME10_PANE_BODY_GAP, GEO_SECTION_GAP);
+        assert_eq!(THEME10_PANE_BODY_GAP, SPACE_SM);
+        assert_eq!(THEME10_PANE_HEADER_GAP, GEO_OUTER_MARGIN);
+        assert_eq!(THEME10_PANE_HEADER_GAP, SPACE_MD);
+        assert_eq!(THEME10_PANE_HEADER_H, CHROME_HEADER_BAR_H);
+        assert_eq!(THEME10_PANE_HEADER_H, 28.0);
+        assert_eq!(THEME10_PANE_PAD_X, GEO_OUTER_MARGIN);
+        // Typography: header Heading 18 > body Mono 12 > meta Small 11.
+        assert_eq!(TypoRole::pane_header(), TypoRole::Heading);
+        assert_eq!(TypoRole::pane_header(), TypoRole::chrome_section());
+        assert_eq!(TypoRole::pane_body(), TypoRole::Mono);
+        assert_eq!(TypoRole::pane_body(), TypoRole::content_textcenter());
+        assert_eq!(TypoRole::pane_meta(), TypoRole::Small);
+        assert_eq!(TypoRole::pane_meta(), TypoRole::caption());
+        assert_eq!(TypoRole::pane_header().size(), TYPO_HEADING_SIZE);
+        assert_eq!(TypoRole::pane_body().size(), TYPO_MONO_SIZE);
+        assert_eq!(TypoRole::pane_meta().size(), TYPO_SMALL_SIZE);
+        // Weight + family + tracking carry hierarchy (no new sizes).
+        assert_eq!(TypoRole::pane_header().weight(), "strong");
+        assert_eq!(TypoRole::pane_body().weight(), "regular-mono");
+        assert_eq!(TypoRole::pane_meta().weight(), "weak");
+        assert_eq!(TypoRole::pane_header().family(), "proportional");
+        assert_eq!(TypoRole::pane_body().family(), "monospace");
+        assert_eq!(TypoRole::pane_meta().family(), "proportional");
+        assert!(TypoRole::pane_header().letter_spacing_em() > 0.0);
+        assert_eq!(TypoRole::pane_body().letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::pane_meta().letter_spacing_em(), 0.0);
+        // Tabular: body + meta on, header off; chrome: body content only.
+        assert!(!TypoRole::pane_header().is_tabular());
+        assert!(TypoRole::pane_body().is_tabular());
+        assert!(TypoRole::pane_meta().is_tabular());
+        assert!(TypoRole::pane_header().is_chrome());
+        assert!(!TypoRole::pane_body().is_chrome());
+        assert!(TypoRole::pane_meta().is_chrome());
+        // Narrow edge (720px fallback): hierarchy width-independent rehti
+        // hai — gaps plus size order same, koi flat single-size rhythm nahi.
+        assert!(TypoRole::pane_header().size() > TypoRole::pane_body().size());
+        assert!(TypoRole::pane_body().size() > TypoRole::pane_meta().size());
+        assert!(THEME10_PANE_META_GAP < THEME10_PANE_BODY_GAP);
+        assert!(THEME10_PANE_BODY_GAP < THEME10_PANE_HEADER_GAP);
     }
 }
