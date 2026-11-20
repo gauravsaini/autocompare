@@ -116,12 +116,12 @@ pub const HEX_MINIMAP_H: f32 = 220.0;
 pub const HEX_MINIMAP_W: f32 = 2.0 * GUTTER_W;
 pub const CONTENT_LEAD: &str = "  ";
 /// Text center gutter width (px): do independent panes ke beech patli
-/// fixed-width gutter jisme per-hunk copy arrows rehte hain (BC pattern).
-/// Ponytail reuse: `2 * SPACE_XL` = 48.0 (same beat as before: 28 + 12 +
-/// 4 + 4) — do chhote `→/←` buttons side-by-side fit hote hain, equal
-/// rows par blank click-to-select rehta hai. Center divider gaps SPACE
+/// fixed-width gutter jisme per-hunk changed marker rehta hai (BC pattern).
+/// Ponytail reuse: `SPACE_LG + SPACE_XS` = 20.0 — ek `=>` marker box (16)
+/// plus 2px symmetric inset per side me centered rehta hai, equal rows
+/// par blank click-to-select rehta hai. Center divider gaps SPACE
 /// tokens se (geometry first); koi naya magic nahi; pure token.
-pub const TEXT_CENTER_GUTTER_W: f32 = crate::theme::SPACE_XL + crate::theme::SPACE_XL;
+pub const TEXT_CENTER_GUTTER_W: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
 
 /// Center gutter width accessor (paint fixed column isi se banta hai).
 /// Pure; unit-tested.
@@ -3552,33 +3552,53 @@ fn paint_text_body(
                                                 ui.painter().rect_filled(band, 0.0, CHANGED_BG);
                                             }
                                             if text_center_hunk_head(&model.rows, orig) {
-                                                ui.horizontal(|ui| {
-                                                    ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-                                                    // Centered: leading inset taaki do-arrow row
-                                                    // 48px column me centered rahe (headless
-                                                    // `text_center_marker_inset` = 6px/side).
-                                                    ui.add_space(text_center_marker_inset());
-                                                    if ui
-                                                        .small_button("→")
-                                                        .on_hover_text("Copy Left to Right")
-                                                        .clicked()
-                                                    {
-                                                        copy_action = Some((
-                                                            orig,
-                                                            viewmodel::CopyDirection::LeftToRight,
-                                                        ));
+                                                let kind_opt = model.rows.get(orig).map(|r| r.kind);
+                                                let label_opt =
+                                                    kind_opt.and_then(text_center_marker_label);
+                                                let dir_opt =
+                                                    kind_opt.and_then(text_center_copy_direction);
+                                                match (label_opt, dir_opt) {
+                                                    (Some(label), Some(dir)) => {
+                                                        ui.horizontal(|ui| {
+                                                            ui.spacing_mut().item_spacing.x =
+                                                                TIGHT_GAP;
+                                                            // Centered: leading inset taaki single
+                                                            // `=>` marker 20px column me centered
+                                                            // rahe (headless
+                                                            // `text_center_marker_inset` = 2px/side,
+                                                            // symmetric hit-slop).
+                                                            ui.add_space(
+                                                                text_center_marker_inset(),
+                                                            );
+                                                            if ui
+                                                                .small_button(label)
+                                                                .on_hover_text("Copy changed hunk")
+                                                                .clicked()
+                                                            {
+                                                                copy_action = Some((orig, dir));
+                                                            }
+                                                        });
                                                     }
-                                                    if ui
-                                                        .small_button("←")
-                                                        .on_hover_text("Copy Right to Left")
-                                                        .clicked()
-                                                    {
-                                                        copy_action = Some((
-                                                            orig,
-                                                            viewmodel::CopyDirection::RightToLeft,
-                                                        ));
+                                                    _ => {
+                                                        let (g_rect, resp) = ui
+                                                            .allocate_exact_size(
+                                                                egui::vec2(
+                                                                    text_center_gutter_width(),
+                                                                    row_height,
+                                                                ),
+                                                                egui::Sense::click(),
+                                                            );
+                                                        if text_center_gutter_band_fill(is_selected)
+                                                        {
+                                                            ui.painter().rect_filled(
+                                                                g_rect, 0.0, CHANGED_BG,
+                                                            );
+                                                        }
+                                                        if resp.clicked() {
+                                                            select_action = Some(orig);
+                                                        }
                                                     }
-                                                });
+                                                }
                                             } else {
                                                 let (g_rect, resp) = ui.allocate_exact_size(
                                                     egui::vec2(
@@ -3810,32 +3830,43 @@ fn paint_text_body(
                                         ui.painter().rect_filled(band, 0.0, CHANGED_BG);
                                     }
                                     if text_center_hunk_head(&model.rows, orig) {
-                                        ui.horizontal(|ui| {
-                                            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-                                            // Centered: wrap-off head wahi 6px leading
-                                            // inset (wrap-on parity, ek rhythm).
-                                            ui.add_space(text_center_marker_inset());
-                                            if ui
-                                                .small_button("→")
-                                                .on_hover_text("Copy Left to Right")
-                                                .clicked()
-                                            {
-                                                copy_action = Some((
-                                                    orig,
-                                                    viewmodel::CopyDirection::LeftToRight,
-                                                ));
+                                        let kind_opt = model.rows.get(orig).map(|r| r.kind);
+                                        let label_opt = kind_opt.and_then(text_center_marker_label);
+                                        let dir_opt = kind_opt.and_then(text_center_copy_direction);
+                                        match (label_opt, dir_opt) {
+                                            (Some(label), Some(dir)) => {
+                                                ui.horizontal(|ui| {
+                                                    ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                                                    // Centered: wrap-off head wahi 2px leading
+                                                    // inset (wrap-on parity, ek rhythm,
+                                                    // symmetric hit-slop).
+                                                    ui.add_space(text_center_marker_inset());
+                                                    if ui
+                                                        .small_button(label)
+                                                        .on_hover_text("Copy changed hunk")
+                                                        .clicked()
+                                                    {
+                                                        copy_action = Some((orig, dir));
+                                                    }
+                                                });
                                             }
-                                            if ui
-                                                .small_button("←")
-                                                .on_hover_text("Copy Right to Left")
-                                                .clicked()
-                                            {
-                                                copy_action = Some((
-                                                    orig,
-                                                    viewmodel::CopyDirection::RightToLeft,
-                                                ));
+                                            _ => {
+                                                let (g_rect, resp) = ui.allocate_exact_size(
+                                                    egui::vec2(
+                                                        text_center_gutter_width(),
+                                                        row_height,
+                                                    ),
+                                                    egui::Sense::click(),
+                                                );
+                                                if text_center_gutter_band_fill(is_selected) {
+                                                    ui.painter()
+                                                        .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                }
+                                                if resp.clicked() {
+                                                    select_action = Some(orig);
+                                                }
                                             }
-                                        });
+                                        }
                                     } else {
                                         let (g_rect, resp) = ui.allocate_exact_size(
                                             egui::vec2(text_center_gutter_width(), row_height),
@@ -4734,22 +4765,66 @@ pub fn text_center_gutter_band_fill(selected: bool) -> bool {
     selected
 }
 
-/// Center-gutter marker content width px: do arrow boxes
-/// ([`crate::gutter::GUTTER_ARROW_BOX`] = 16 each) + ek [`TIGHT_GAP`]
-/// (4) beech me = 36. Ponytail reuse: koi naya literal nahi, sirf
-/// existing tokens ka jod. Paint isi par
+/// Center-gutter marker content width px: ek arrow box
+/// ([`crate::gutter::GUTTER_ARROW_BOX`] = 16) — single `=>` marker 20px
+/// column me centered rehta hai. Ponytail reuse: koi naya literal nahi,
+/// sirf existing token. Paint isi par
 /// [`crate::gutter::center_row_marker_inset`] se leading inset nikalta
-/// hai taaki do-arrow row 48px column me centered rahe. Pure; unit-tested.
+/// hai taaki marker column me centered rahe. Pure; unit-tested.
 pub fn text_center_marker_content_w() -> f32 {
-    2.0 * crate::gutter::GUTTER_ARROW_BOX + TIGHT_GAP
+    crate::gutter::GUTTER_ARROW_BOX
 }
 
-/// Center-gutter marker leading inset px: 48px column me 36px content
-/// = 6px per side, dono taraf barabar hawa taaki copy arrows centered
-/// dikhen (BC center-bar rhythm). Guards
+/// Center-gutter marker leading inset px: 20px column me 16px content
+/// = 2px per side, dono taraf barabar hawa taaki marker centered
+/// dikhe (BC center-bar rhythm). Guards
 /// [`crate::gutter::center_row_marker_inset`] me hain. Pure; unit-tested.
 pub fn text_center_marker_inset() -> f32 {
     crate::gutter::center_row_marker_inset(TEXT_CENTER_GUTTER_W, text_center_marker_content_w())
+}
+
+/// Center-gutter changed-only marker label: diff kinds par `=>`,
+/// Equal par `None` (blank click-to-select). BC pattern me center bar
+/// har hunk par ek marker dikhata hai, har row par nahi — gate
+/// [`text_center_hunk_marker`] reuse. Pure; unit-tested.
+pub fn text_center_marker_label(kind: TextRowKind) -> Option<&'static str> {
+    match kind {
+        TextRowKind::Equal => None,
+        TextRowKind::Changed | TextRowKind::Deleted | TextRowKind::Inserted => Some("=>"),
+    }
+}
+
+/// Center-marker copy direction: single `=>` marker se copy kis taraf.
+/// Deleted (left-only) L2R, Inserted (right-only) R2L, Changed default
+/// L2R; Equal par `None` (koi copy nahi). Pure; unit-tested.
+pub fn text_center_copy_direction(kind: TextRowKind) -> Option<viewmodel::CopyDirection> {
+    match kind {
+        TextRowKind::Equal => None,
+        TextRowKind::Deleted => Some(viewmodel::CopyDirection::LeftToRight),
+        TextRowKind::Inserted => Some(viewmodel::CopyDirection::RightToLeft),
+        TextRowKind::Changed => Some(viewmodel::CopyDirection::LeftToRight),
+    }
+}
+
+/// Center-gutter marker hit-slop px per side: arrow hit reuse
+/// ([`crate::gutter::GUTTER_ARROW_HIT_SLOP`] = 2) — 16px marker box
+/// 20px tap-target banta hai bina paint hile, dono taraf symmetric.
+/// Pure; unit-tested.
+pub fn text_center_hit_slop_px() -> f32 {
+    crate::gutter::GUTTER_ARROW_HIT_SLOP
+}
+
+/// Center gutter hit band at 960px wide: panes + gaps se gutter span,
+/// slop symmetric dono taraf — canvas center 480 ke around barabar.
+/// Pure; unit-tested.
+pub fn text_center_hit_band_960() -> (f32, f32) {
+    let slop = text_center_hit_slop_px();
+    let (left, _) = text_pane_pair_widths(960.0);
+    let gap = text_center_divider_gap_px();
+    let gutter = text_center_gutter_width();
+    let gutter_lo = left + gap;
+    let gutter_hi = gutter_lo + gutter;
+    (gutter_lo - slop, gutter_hi + slop)
 }
 
 /// Wrap-continuation marker glyph: number-column ke right edge par lagta
@@ -4782,8 +4857,8 @@ pub fn wrap_marker_column(gutter_chars: usize) -> usize {
     gutter_chars.saturating_sub(1)
 }
 
-/// Wide-960 pane pair px: 960 canvas par center connector (48) + 2 x
-/// [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 448/448
+/// Wide-960 pane pair px: 960 canvas par center connector (20) + 2 x
+/// [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 462/462
 /// ([`text_pane_pair_widths`] reuse). Fixture
 /// `comparison/text-wide-960.json` isi ko lock karti hai. Pure; unit-tested.
 pub fn text_wide_960_pane_pair() -> (f32, f32) {
@@ -4791,7 +4866,7 @@ pub fn text_wide_960_pane_pair() -> (f32, f32) {
 }
 
 /// Inline-960 row alignment total (px): pane pair plus center connector
-/// plus one [`SECTION_GAP`] air per side — 448 + 448 + 48 + 2 * 8 = 960,
+/// plus one [`SECTION_GAP`] air per side — 462 + 462 + 20 + 2 * 8 = 960,
 /// so left/right rows start and end on the same beat at 960px wide.
 /// Fixture `comparison/text-inline-960.json` locks this. Pure;
 /// unit-tested.
@@ -4870,7 +4945,7 @@ pub fn text_minimap_marker_band_960(row: usize, total_rows: usize) -> Option<(f3
 }
 
 /// 960 row-alignment total (px): [`text_inline_960_total_w`] reuse
-///   (panes 448/448, center 48, air 8 per side = 960) — left/right rows
+///   (panes 462/462, center 20, air 8 per side = 960) — left/right rows
 ///   960 par same beat par start/end hote hain. Pure; unit-tested.
 pub fn text_rows_960_total_w() -> f32 {
     text_inline_960_total_w()
@@ -4885,7 +4960,7 @@ pub fn text8_inner_pad_px() -> f32 {
 }
 
 /// Text8 center gap (px): one SM step ([`crate::theme::SPACE_SM`] = 8)
-/// per side — divider air symmetric left/right of the 48px center
+/// per side — divider air symmetric left/right of the 20px center
 /// gutter ([`text_center_divider_gap_px`] reuse, [`SECTION_GAP`] parity).
 /// Pure; unit-tested.
 pub fn text8_center_gap_px() -> f32 {
@@ -4915,15 +4990,15 @@ pub fn text8_linenum_width_px(digits: usize, char_w: f32) -> f32 {
 
 /// Text8 divider hit-slop (px): one XS step symmetric on both edges of
 /// the center gutter so the thin visual grabs like a wide target
-/// ([`TIGHT_GAP`] parity, 48px column + slop each side). Pure;
+/// ([`TIGHT_GAP`] parity, 20px column + slop each side). Pure;
 /// unit-tested.
 pub fn text8_divider_hit_slop_px() -> f32 {
     crate::theme::SPACE_XS
 }
 
-/// Text8 divider hit band at 960px wide: 48px center gutter spans
-/// 456..504 (448 pane + 8 air each side), hit expands by slop each side
-/// → 452..508, symmetric around canvas center 480 by construction.
+/// Text8 divider hit band at 960px wide: 20px center gutter spans
+/// 470..490 (462 pane + 8 air each side), hit expands by slop each side
+/// → 466..494, symmetric around canvas center 480 by construction.
 /// Pure; unit-tested.
 pub fn text8_divider_hit_band_960() -> (f32, f32) {
     let slop = text8_divider_hit_slop_px();
@@ -7914,9 +7989,9 @@ mod tests {
     fn text_center_gutter_reuses_tokens_and_gates_copy() {
         assert_eq!(
             TEXT_CENTER_GUTTER_W,
-            crate::theme::SPACE_XL + crate::theme::SPACE_XL
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
         );
-        assert_eq!(text_center_gutter_width(), 48.0);
+        assert_eq!(text_center_gutter_width(), 20.0);
         assert!(text_gutter_has_copy(TextRowKind::Changed));
         assert!(text_gutter_has_copy(TextRowKind::Deleted));
         assert!(text_gutter_has_copy(TextRowKind::Inserted));
@@ -7930,25 +8005,25 @@ mod tests {
         // even trailing blanks. Geometry FIRST (widths/insets), typography
         // SECOND (mono rhythm untouched), colors frozen (koi hue nahi).
         use viewmodel::TextRow;
-        // Centered markers: 36px content (16+16+4) in 48px column = 6/side.
-        assert_eq!(text_center_marker_content_w(), 36.0);
+        // Centered markers: 16px single `=>` in 20px column = 2/side.
+        assert_eq!(text_center_marker_content_w(), 16.0);
         assert_eq!(
             text_center_marker_content_w(),
-            2.0 * crate::gutter::GUTTER_ARROW_BOX + TIGHT_GAP
+            crate::gutter::GUTTER_ARROW_BOX
         );
-        assert_eq!(text_center_marker_inset(), 6.0);
+        assert_eq!(text_center_marker_inset(), 2.0);
         assert_eq!(
             text_center_marker_inset(),
-            crate::gutter::center_row_marker_inset(48.0, 36.0)
+            crate::gutter::center_row_marker_inset(20.0, 16.0)
         );
         assert!(
-            (text_center_marker_inset() * 2.0 + text_center_marker_content_w() - 48.0).abs() < 0.01
+            (text_center_marker_inset() * 2.0 + text_center_marker_content_w() - 20.0).abs() < 0.01
         );
-        assert_eq!(crate::gutter::center_row_marker_inset(48.0, 36.0), 6.0);
-        assert_eq!(crate::gutter::center_row_marker_inset(f32::NAN, 36.0), 0.0);
-        assert_eq!(crate::gutter::center_row_marker_inset(48.0, 60.0), 0.0);
-        // Wide-960 panes: 448/448 pair fills 960 minus connector + gaps.
-        assert_eq!(text_wide_960_pane_pair(), (448.0, 448.0));
+        assert_eq!(crate::gutter::center_row_marker_inset(20.0, 16.0), 2.0);
+        assert_eq!(crate::gutter::center_row_marker_inset(f32::NAN, 16.0), 0.0);
+        assert_eq!(crate::gutter::center_row_marker_inset(20.0, 60.0), 0.0);
+        // Wide-960 panes: 462/462 pair fills 960 minus connector + gaps.
+        assert_eq!(text_wide_960_pane_pair(), (462.0, 462.0));
         assert_eq!(text_wide_960_pane_pair(), text_pane_pair_widths(960.0));
         // Wrap-marker alignment: same width as blank gutter, marker at
         // number-field right edge, trail pad preserved.
@@ -8100,8 +8175,8 @@ mod tests {
         );
         assert!((filler_row_height() - 17.6).abs() < 0.01);
         assert!((row_height_for_line(TypoRole::Mono.line_height_px()) - 17.6).abs() < 0.01);
-        // Left/right row alignment at 960px wide: 448 + 448 + 48 + 16.
-        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        // Left/right row alignment at 960px wide: 462 + 462 + 20 + 16.
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
         assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
         // Fixture sample: refined span (18, 27) == "std::fs::" survives
         // char-boundary clamp whole, never truncated mid-word.
@@ -8142,8 +8217,11 @@ mod tests {
         // Center divider gaps: one SM step per side (8, SECTION_GAP parity).
         assert_eq!(text_center_divider_gap_px(), crate::theme::SPACE_SM);
         assert_eq!(text_center_divider_gap_px(), SECTION_GAP);
-        assert_eq!(TEXT_CENTER_GUTTER_W, crate::theme::SPACE_XL * 2.0);
-        assert_eq!(text_center_gutter_width(), 48.0);
+        assert_eq!(
+            TEXT_CENTER_GUTTER_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_gutter_width(), 20.0);
         // Line-height locked to TypoRole Mono; row tops share one beat.
         assert!((text_row_line_height_px() - TypoRole::Mono.line_height_px()).abs() < 0.001);
         assert!((text_row_line_height_px() - 15.6).abs() < 0.01);
@@ -8153,8 +8231,8 @@ mod tests {
         );
         assert!((text_row_top_rhythm_px() - 17.6).abs() < 0.01);
         assert!((filler_row_height() - text_row_top_rhythm_px()).abs() < 0.001);
-        // 960 alignment: 448 + 448 + 48 + 2 * 8 = 960, no truncation.
-        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        // 960 alignment: 462 + 462 + 20 + 2 * 8 = 960, no truncation.
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
         assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
         assert!((text_rows_960_total_w() - 960.0).abs() < 0.001);
         let left = "    let content = read_to_string(path)?;";
@@ -8203,23 +8281,23 @@ mod tests {
         assert_eq!(text8_center_gap_px(), crate::theme::SPACE_SM);
         assert_eq!(text8_center_gap_px(), SECTION_GAP);
         assert_eq!(text8_center_gap_px(), 8.0);
-        assert_eq!(text_center_gutter_width(), 48.0);
+        assert_eq!(text_center_gutter_width(), 20.0);
         // Line-num widths via char metrics (digits * char_w + 2 * pad).
         assert!((text8_linenum_width_px(2, 7.0) - 22.0).abs() < 0.001);
         assert!((text8_linenum_width_px(3, 7.0) - 29.0).abs() < 0.001);
         assert!((text8_linenum_width_px(4, 7.0) - 36.0).abs() < 0.001);
         assert_eq!(text8_linenum_width_px(2, f32::NAN), 8.0);
         assert_eq!(text8_linenum_width_px(0, 7.0), 8.0);
-        // Pane pair + total at 960: 448 + 448 + 48 + 2 * 8 = 960.
-        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        // Pane pair + total at 960: 462 + 462 + 20 + 2 * 8 = 960.
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
         assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
-        // Divider hit-slop symmetric at 960: 452..508 around center 480.
+        // Divider hit-slop symmetric at 960: 466..494 around center 480.
         assert_eq!(text8_divider_hit_slop_px(), crate::theme::SPACE_XS);
         assert_eq!(text8_divider_hit_slop_px(), 4.0);
-        assert_eq!(text8_divider_hit_band_960(), (452.0, 508.0));
+        assert_eq!(text8_divider_hit_band_960(), (466.0, 494.0));
         let (lo, hi) = text8_divider_hit_band_960();
         assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
-        assert!(((480.0 - lo) - 28.0).abs() < 0.001);
+        assert!(((480.0 - lo) - 14.0).abs() < 0.001);
     }
 
     #[test]
@@ -8272,7 +8350,103 @@ mod tests {
             text_tabs_960_gutter_width(9, true),
             text_gutter_number_width(9, true)
         );
-        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
+    }
+
+    #[test]
+    fn text11_center_960_gutter_plus_markers() {
+        // Mirrors checks/gui-exq-text11/round-1/comparison/text-center-960.json:
+        // narrow 20px center gutter via SPACE tokens, single `=>` marker
+        // changed-only + symmetric hit-slop, Mono row rhythm, thin chrome
+        // per-pane status at 960px wide. Geometry FIRST, typography
+        // SECOND (Mono/chrome locks), colors frozen.
+        use viewmodel::{CopyDirection, TextRow};
+        // Gutter width via SPACE tokens: LG(16) + XS(4) = 20.
+        assert_eq!(
+            TEXT_CENTER_GUTTER_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_gutter_width(), 20.0);
+        // Single marker content + symmetric inset: 16 in 20 = 2/side.
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(
+            text_center_marker_content_w(),
+            crate::gutter::GUTTER_ARROW_BOX
+        );
+        assert_eq!(text_center_marker_inset(), 2.0);
+        assert!(
+            (text_center_marker_inset() * 2.0 + text_center_marker_content_w() - 20.0).abs() < 0.01
+        );
+        // Changed-only markers: diff kinds `=>`, Equal blank.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert!(text_center_hunk_marker(TextRowKind::Changed));
+        assert!(!text_center_hunk_marker(TextRowKind::Equal));
+        // Copy direction per kind: Deleted L2R, Inserted R2L, Changed L2R.
+        assert_eq!(
+            text_center_copy_direction(TextRowKind::Deleted),
+            Some(CopyDirection::LeftToRight)
+        );
+        assert_eq!(
+            text_center_copy_direction(TextRowKind::Inserted),
+            Some(CopyDirection::RightToLeft)
+        );
+        assert_eq!(
+            text_center_copy_direction(TextRowKind::Changed),
+            Some(CopyDirection::LeftToRight)
+        );
+        assert_eq!(text_center_copy_direction(TextRowKind::Equal), None);
+        // Hunk heads: C,C,E,I -> true,false,false,true (markers head-only).
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                ..Default::default()
+            },
+        ];
+        assert!(text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 1));
+        assert!(!text_center_hunk_head(&rows, 2));
+        assert!(text_center_hunk_head(&rows, 3));
+        assert!(!text_center_hunk_head(&rows, 4));
+        assert!(!text_center_hunk_head(&[], 0));
+        // Symmetric hit-slop: 2px per side, band symmetric around 480.
+        assert_eq!(text_center_hit_slop_px(), 2.0);
+        assert_eq!(
+            text_center_hit_slop_px(),
+            crate::gutter::GUTTER_ARROW_HIT_SLOP
+        );
+        assert_eq!(text_center_hit_band_960(), (468.0, 492.0));
+        let (lo, hi) = text_center_hit_band_960();
+        assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
+        assert!(((480.0 - lo) - 12.0).abs() < 0.001);
+        // Row height uniform from Mono line-height: 15.6 + ROW_PAD = 17.6.
+        assert!((text_row_line_height_px() - TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((text_row_line_height_px() - 15.6).abs() < 0.01);
+        assert!((text_row_top_rhythm_px() - 17.6).abs() < 0.01);
+        assert!((text8_row_height_px() - text_row_top_rhythm_px()).abs() < 0.001);
+        // Per-pane status strip from chrome line-height: 13.2 + ROW_PAD.
+        assert_eq!(chrome_status_role(), TypoRole::Small);
+        assert!((chrome_status_role().line_height_px() - 13.2).abs() < 0.01);
+        assert!((text_pane_status_height_px() - 15.2).abs() < 0.01);
+        assert!(text_pane_status_height_px() < HEADER_H);
+        // 960 alignment: 462 + 462 + 20 + 2 * 8 = 960.
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
+        assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
+        assert!((text_rows_960_total_w() - 960.0).abs() < 0.001);
     }
 
     #[test]
@@ -12487,16 +12661,16 @@ mod tests {
     #[test]
     fn text10_panes_split_even_with_section_gap() {
         // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
-        // center connector (48) + 2 x SECTION_GAP air ghata kar bacha
-        // aadha-aadha (960 -> 448/448); tang par MIN_HALF floor pair;
+        // center connector (20) + 2 x SECTION_GAP air ghata kar bacha
+        // aadha-aadha (960 -> 462/462); tang par MIN_HALF floor pair;
         // kharab avail par floor (koi NaN nahi).
-        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        assert_eq!(text_pane_pair_widths(960.0), (462.0, 462.0));
         let (left, right) = text_pane_pair_widths(960.0);
         assert_eq!(
             left + right,
             960.0 - TEXT_CENTER_GUTTER_W - 2.0 * SECTION_GAP
         );
-        assert_eq!(text_center_gutter_width(), 48.0);
+        assert_eq!(text_center_gutter_width(), 20.0);
         assert_eq!(text_pane_pair_widths(0.0), (MIN_HALF, MIN_HALF));
         assert_eq!(text_pane_pair_widths(f32::NAN), (MIN_HALF, MIN_HALF));
         assert_eq!(text_pane_pair_widths(-50.0), (MIN_HALF, MIN_HALF));
@@ -12509,12 +12683,12 @@ mod tests {
         // Mirrors checks/gui-exq-text10/comparison/tail-insertion.json:
         // content viewport se chauda ho to h-scroll, warna nahi; kharab
         // viewport par kabhi nahi (paint NaN branch na le).
-        assert!(text_pane_needs_hscroll(900.0, 448.0));
-        assert!(!text_pane_needs_hscroll(400.0, 448.0));
-        assert!(!text_pane_needs_hscroll(448.0, 448.0));
+        assert!(text_pane_needs_hscroll(900.0, 462.0));
+        assert!(!text_pane_needs_hscroll(400.0, 462.0));
+        assert!(!text_pane_needs_hscroll(462.0, 462.0));
         assert!(!text_pane_needs_hscroll(900.0, 0.0));
         assert!(!text_pane_needs_hscroll(900.0, f32::NAN));
-        assert!(!text_pane_needs_hscroll(f32::NAN, 448.0));
+        assert!(!text_pane_needs_hscroll(f32::NAN, 462.0));
     }
 
     #[test]
