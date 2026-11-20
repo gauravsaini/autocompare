@@ -1073,3 +1073,137 @@ mod exq_merge3_tests {
         assert!((copy_button_row_vpad() - 4.2).abs() < 0.01);
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQ-COPY8: copy-side narrow-720 hit symmetry + Mono-baseline action (headless).
+// BC center gutter 720px narrow par bhi generous hit-slop rakhta hai (arrow
+// tight nahi lagta), copy-line action row baseline se bhatakti nahi.
+// Geometry first: 24px XL hit floor + 4px XS slop har taraf = symmetric 32px
+// target, narrow center avail/2 par, column 23 char metrics se (1 glyph x 7.0
+// advance + 2 x 8.0 section-gap bearings). Typography second: copy-line
+// action (Small 13.2 line) Mono row (15.6) me centered — dy single source.
+// Colors frozen. WIRING (paint): narrow center `copy_center_x_for(720)`,
+// arrow hit `copy_arrow_hit_rect(cx, cy)`, action y `copy_line_action_y`.
+// ----------------------------------------------------------------------------
+
+/// Narrow-pane center x px for a given avail width: `avail_w / 2`.
+/// `None`: non-finite/non-positive avail. Pure; headless-tested.
+pub fn copy_center_x_for(avail_w: f32) -> Option<f32> {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return None;
+    }
+    let cx = avail_w / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// Copy-line action vertical offset px inside one Mono row: half the leftover
+/// of the Small action line over the Mono row ((15.6 - 13.2) / 2 = 1.2).
+/// Action text Mono baseline rhythm par tikti hai. Pure; headless-tested.
+pub fn copy_line_action_dy() -> f32 {
+    (copy_line_row_height() - copy_action_text_line_height_px()) / 2.0
+}
+
+/// Copy-line action text top y px for a row starting at `row_top`:
+/// `row_top + copy_line_action_dy`. Non-finite par `None`. Pure; headless-tested.
+pub fn copy_line_action_y(row_top: f32) -> Option<f32> {
+    if !row_top.is_finite() {
+        return None;
+    }
+    let y = row_top + copy_line_action_dy();
+    if y.is_finite() { Some(y) } else { None }
+}
+
+/// True when the arrow column + slop hit both fit in `avail_w` without
+/// h-scroll (column 23 + hit 32 lazily 720 me). Non-finite/non-positive
+/// avail par false. Pure; headless-tested.
+pub fn copy_narrow_column_fits(avail_w: f32) -> bool {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    copy_arrow_column_width() <= avail_w && copy_hit_size_with_slop() <= avail_w
+}
+
+#[cfg(test)]
+mod exq_copy8_tests {
+    use super::*;
+    use crate::theme::{GEO_SECTION_GAP, SPACE_XL, SPACE_XS, TypoRole};
+
+    #[test]
+    fn copy8_hit_slop_symmetric_at_narrow_720() {
+        // SPACE tokens se: 24 XL floor + 4 XS slop har taraf = 32 square.
+        assert_eq!(copy_hit_size(), SPACE_XL);
+        assert_eq!(copy_button_sym_pad(), SPACE_XS);
+        assert_eq!(copy_hit_size_with_slop(), 32.0);
+        // Narrow center avail/2: 720 -> 360.
+        assert_eq!(copy_center_x_for(720.0), Some(360.0));
+        assert_eq!(copy_center_x_for(0.0), None);
+        assert_eq!(copy_center_x_for(f32::NAN), None);
+        assert_eq!(copy_center_x_for(f32::INFINITY), None);
+        // Symmetric hit rect at narrow center (360,300): 344..376 x 284..316.
+        let rect = copy_arrow_hit_rect(360.0, 300.0);
+        assert_eq!(rect, Some((344.0, 284.0, 376.0, 316.0)));
+        assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 32.0);
+            assert_eq!(y1 - y0, 32.0);
+            assert!(((360.0 - x0) - 16.0).abs() < 0.0001);
+            assert!(((x1 - 360.0) - 16.0).abs() < 0.0001);
+            assert!(((300.0 - y0) - 16.0).abs() < 0.0001);
+            assert!(((y1 - 300.0) - 16.0).abs() < 0.0001);
+        }
+        // Edges inclusive, just outside false — tight panes me bhi generous.
+        assert!(copy_arrow_hit_contains(360.0, 300.0, 344.0, 284.0));
+        assert!(copy_arrow_hit_contains(360.0, 300.0, 376.0, 316.0));
+        assert!(!copy_arrow_hit_contains(360.0, 300.0, 343.9, 300.0));
+        assert!(!copy_arrow_hit_contains(360.0, 300.0, 376.1, 300.0));
+        assert!(!copy_narrow_column_fits(f32::NAN));
+        assert!(copy_narrow_column_fits(720.0));
+    }
+
+    #[test]
+    fn copy8_line_action_aligned_to_mono_baseline() {
+        // Typo second: Small action line 13.2 Mono row 15.6 me centered.
+        assert_eq!(copy_line_row_height(), TypoRole::Mono.line_height_px());
+        assert!((copy_line_row_height() - 15.6).abs() < 0.01);
+        assert!((copy_action_text_line_height_px() - 13.2).abs() < 0.01);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert_eq!(
+            copy_line_action_dy(),
+            (copy_line_row_height() - copy_action_text_line_height_px()) / 2.0
+        );
+        assert_eq!(copy_line_action_y(f32::NAN), None);
+        assert_eq!(copy_line_action_y(f32::INFINITY), None);
+        assert!(copy_line_action_y(100.0).is_some_and(|y| (y - 101.2).abs() < 0.01));
+    }
+
+    #[test]
+    fn copy8_column_width_from_char_metrics_at_narrow() {
+        // 1 glyph x 7.0 advance + 2 x 8.0 section-gap bearings = 23.0.
+        assert_eq!(copy_arrow_advance_px(), 7.0);
+        assert_eq!(
+            copy_arrow_column_width(),
+            COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * GEO_SECTION_GAP
+        );
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!(copy_hit_size_with_slop() > copy_arrow_column_width());
+        assert!(copy_narrow_column_fits(720.0));
+    }
+
+    #[test]
+    fn copy8_narrow_fixture() {
+        // Mirrors checks/gui-exq-copy8/round-1/comparison/copy-narrow-720.json.
+        let raw =
+            include_str!("../../../checks/gui-exq-copy8/round-1/comparison/copy-narrow-720.json");
+        assert!(raw.contains("\"name\":\"copy-narrow-720\""));
+        assert!(raw.contains("\"avail_w\":720.0"));
+        assert!(raw.contains("\"arrow_column_width\":23.0"));
+        assert!(raw.contains("\"arrow_hit_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"action_dy\":1.2"));
+        assert_eq!(copy_center_x_for(720.0), Some(360.0));
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!((copy_hit_size_with_slop() - 32.0).abs() < 0.0001);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
+    }
+}
