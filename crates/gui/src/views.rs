@@ -835,6 +835,7 @@ pub fn format_path_meta(timestamp: &str, byte_size: &str, rules: &str, flags: &s
 /// hai; ye fn koi state mutate nahi karta.
 pub fn paint_path_meta_row(ui: &mut Ui, metas: &[String], history: &[String], current: &str) {
     ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(ui.available_width(), text_meta_line_height_px()));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         let (last, rest) = match metas.split_last() {
             Some(pair) => pair,
@@ -4050,6 +4051,11 @@ fn paint_text_body(
     // apne pane ke neeche padhe. Geometry/typo top status bar reuse
     // (full-width `HEADER_H` + Small weak); koi naya token/color nahi.
     paint_text_pane_status(ui, &model.rows, model.selected);
+    // Bottom legend key (BC bottom-bar key precedent): pane strips ke
+    // neeche static key, thin-strip rhythm par ([`text_legend_gap_px`]
+    // air + [`paint_text_legend_bar`] 15.2 bar). Koi state nahi.
+    ui.add_space(text_legend_gap_px());
+    paint_text_legend_bar(ui);
 
     if let Some((idx, dir)) = copy_action
         && viewmodel::copy_line(model, idx, dir).is_ok()
@@ -5509,6 +5515,114 @@ pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<us
             egui::vec2(half, bar_h),
             egui::Label::new(TypoRole::Mono.rich(right.as_str())).truncate(),
         );
+    });
+}
+
+// ----------------------------------------------------------------------------
+// EXQUISITE STATUS12: metadata rhythm, pane-status baseline, legend strip.
+//
+// BC file bars show a path field plus a second metadata line (timestamp,
+// byte size, rules) and each pane carries its own thin status strip; the
+// bottom strip is a static legend key. Ours had the file-bar height (15.2)
+// and pane halves locked but the metadata row floated without a height,
+// the pane strip had no baseline contract, and no legend strip existed.
+// Geometry FIRST (thin-bar parity, TIGHT_GAP rhythm), typography SECOND
+// (Small/chrome locks), colors FROZEN (koi naya hue/token nahi).
+// ----------------------------------------------------------------------------
+
+/// Metadata line height (px): the thin chrome bar
+/// ([`text_pane_status_height_px`] = 15.2) — the second line under each
+/// file path field sits on the same beat as the per-pane strip, not the
+/// 28px [`HEADER_H`] toolbar. [`paint_path_meta_row`] adopts this.
+/// Pure; unit-tested.
+pub fn text_meta_line_height_px() -> f32 {
+    text_pane_status_height_px()
+}
+
+/// File-to-metadata gap (px): one [`TIGHT_GAP`] step (4.0) — path field
+/// row aur metadata line ke beech wahi air jo har chrome row ke andar hai.
+/// [`paint_path_meta_row`] trailing gap isi par tha; ye naam us rhythm ko
+/// lock karta hai. Pure; unit-tested.
+pub fn text_file_meta_gap_px() -> f32 {
+    TIGHT_GAP
+}
+
+/// Pane-status text baseline (px): the chrome line-height
+/// ([`chrome_status_role`] == Small 11 @ 1.2 = 13.2) — har thin strip
+/// (file bar, metadata, pane status, legend) ka text isi baseline par
+/// baithta hai, bar height ([`text_pane_status_height_px`] = 15.2) me
+/// [`text_pane_status_top_inset_px`] ka symmetric air chhod kar. Pure;
+/// unit-tested.
+pub fn text_pane_status_baseline_px() -> f32 {
+    chrome_status_role().line_height_px()
+}
+
+/// Pane-status top inset (px): half of one [`ROW_PAD`] (1.0) — 13.2
+/// baseline 15.2 bar me upar/neeche barabar 1.0 air ke saath centered
+/// rehti hai (BC thin-strip rhythm). Pure; unit-tested.
+pub fn text_pane_status_top_inset_px() -> f32 {
+    ROW_PAD / 2.0
+}
+
+/// Bottom legend strip height (px): the thin chrome bar
+/// ([`text_pane_status_height_px`] = 15.2) — bottom key row toolbar
+/// ([`HEADER_H`]) se patli, per-pane strip ke barabar. Pure; unit-tested.
+pub fn text_legend_strip_height_px() -> f32 {
+    text_pane_status_height_px()
+}
+
+/// Pane-status-to-legend gap (px): one [`TIGHT_GAP`] step (4.0) — strips
+/// ke beech wahi air jo rows ke andar hai. Pure; unit-tested.
+pub fn text_legend_gap_px() -> f32 {
+    TIGHT_GAP
+}
+
+/// Bottom legend key segments: static key, not state — har entry ek
+/// fixed label hai (BC bottom-bar key precedent), isliye khali model par
+/// bhi honest rehta hai (koi fake count/preview nahi). Pure; unit-tested.
+pub fn text_legend_segments() -> [&'static str; 4] {
+    ["Unimportant differences", "Same", "Insert", "Load"]
+}
+
+/// Legend single-line form: segments ` | ` se jude (status/segmented
+/// line precedent) — screenshot clip aur tests ke liye. Pure;
+/// unit-tested.
+pub fn format_text_legend_line() -> String {
+    let mut out = String::new();
+    for seg in text_legend_segments() {
+        if !out.is_empty() {
+            out.push_str(" | ");
+        }
+        out.push_str(seg);
+    }
+    out
+}
+
+/// Legend strip role: [`status_side_role`] (Small 11 weak) — key chrome
+/// me rahe, mono me nahi. Pure; unit-tested.
+pub fn text_legend_role() -> TypoRole {
+    status_side_role()
+}
+
+/// Bottom legend strip: static key row (Unimportant differences | Same |
+/// Insert | Load). Geometry thin bar ([`text_legend_strip_height_px`],
+/// [`TIGHT_GAP`] spacing, separators); typo [`text_legend_role`].
+/// Fixed short labels never stretch the bar — no clip math needed.
+/// Koi state mutate nahi, koi naya size/color nahi.
+pub fn paint_text_legend_bar(ui: &mut Ui) {
+    let avail = ui.available_width();
+    let bar_h = text_legend_strip_height_px();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail, bar_h));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        let mut first = true;
+        for seg in text_legend_segments() {
+            if !first {
+                ui.separator();
+            }
+            first = false;
+            ui.label(text_legend_role().rich(seg));
+        }
     });
 }
 
@@ -8917,6 +9031,59 @@ mod tests {
             viewmodel::TEXT_PANES_MIN_H
         );
         assert_eq!(text_tall_canvas_center_y(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn status12_tall_1200_strips_plus_legend() {
+        // Mirrors checks/gui-exq-status12/round-1/comparison/status-tall-1200.json:
+        // metadata line under file bar on the thin 15.2 beat, per-pane
+        // status halves with chrome baseline + symmetric inset, bottom
+        // legend key strip. Geometry FIRST, typography SECOND (Small/chrome
+        // locks), colors FROZEN (koi naya hue/token nahi).
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-status12/round-1/comparison/status-tall-1200.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"status-tall-1200\""));
+        assert!(fixture_raw.contains("\"file_bar_h\": 15.2"));
+        assert!(fixture_raw.contains("\"meta_line_h\": 15.2"));
+        assert!(fixture_raw.contains("\"pane_status_h\": 15.2"));
+        assert!(fixture_raw.contains("\"legend_h\": 15.2"));
+        assert!(fixture_raw.contains("\"baseline_px\": 13.2"));
+        // 1. Metadata rhythm: thin-bar parity + TIGHT_GAP air under file bar.
+        assert!((text_meta_line_height_px() - 15.2).abs() < 0.01);
+        assert_eq!(text_meta_line_height_px(), text_file_bar_height_px());
+        assert_eq!(text_meta_line_height_px(), text_pane_status_height_px());
+        assert_eq!(text_file_meta_gap_px(), TIGHT_GAP);
+        assert_eq!(text_file_meta_gap_px(), 4.0);
+        assert!(text_meta_line_height_px() < HEADER_H);
+        // 2. Pane-status baseline: chrome 13.2 in 15.2 bar, 1.0 inset/side.
+        assert_eq!(chrome_status_role(), TypoRole::Small);
+        assert!((text_pane_status_baseline_px() - 13.2).abs() < 0.01);
+        assert!((text_pane_status_top_inset_px() - 1.0).abs() < 0.001);
+        assert!((text_pane_status_top_inset_px() - ROW_PAD / 2.0).abs() < 0.001);
+        assert!(
+            (text_pane_status_baseline_px() + 2.0 * text_pane_status_top_inset_px()
+                - text_pane_status_height_px())
+            .abs()
+                < 0.001
+        );
+        // Halves share avail evenly at 960: (960 - 4) / 2 = 478 each.
+        assert_eq!(pane_status_half_width(960.0), 478.0);
+        let (left_label, right_label) = text_pane_cursor_labels(&[], None);
+        assert_eq!(left_label, "L-");
+        assert_eq!(right_label, "R-");
+        // 3. Legend strip: thin-bar parity, gap rhythm, static key line.
+        assert!((text_legend_strip_height_px() - 15.2).abs() < 0.01);
+        assert_eq!(text_legend_strip_height_px(), text_pane_status_height_px());
+        assert!(text_legend_strip_height_px() < HEADER_H);
+        assert_eq!(text_legend_gap_px(), TIGHT_GAP);
+        assert_eq!(text_legend_segments().len(), 4);
+        assert_eq!(text_legend_role(), status_side_role());
+        assert_eq!(
+            format_text_legend_line(),
+            "Unimportant differences | Same | Insert | Load"
+        );
+        assert!(fixture_raw.contains("\"status_bottom_stack_h\": 34.4"));
     }
 
     #[test]
