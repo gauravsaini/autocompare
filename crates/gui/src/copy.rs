@@ -1244,6 +1244,135 @@ pub fn copy_wide_action_y(row_top: f32) -> Option<f32> {
     copy_line_action_y(row_top)
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-COPY10: narrow-720 arrow rhythm lock + Mono-baseline line actions (headless).
+// BC copy-side 720 narrow par bhi per-hunk arrows ek hi rhythm par rehte hain
+// (hit symmetric, column char metrics se, stacked pitch Mono + gap lock),
+// copy-line actions Mono baseline se bhatakti nahi, copy button 32px hit
+// centered rehta hai. Geometry first: 24px XL hit floor + 4px XS slop har
+// taraf = symmetric 32px target, narrow center avail/2 (720 -> 360) par,
+// column 23 char metrics se (1 glyph x 7.0 advance + 2 x 8.0 section-gap
+// bearings), pitch 19.6 lock (15.6 Mono row + 4.0 tight gap). Typography
+// second: copy-line action (Small 13.2 line) Mono row (15.6) me centered —
+// dy 1.2 single source. Colors frozen.
+// WIRING (paint): narrow center `copy_center_x_for(720)`, arrow hit
+// `copy_arrow_hit_rect(cx, cy)`, stacked pitch `copy_narrow_arrow_pitch`,
+// action y `copy_narrow_action_y`, fit `copy_narrow_column_fits`.
+// ----------------------------------------------------------------------------
+
+/// Narrow stacked-arrow pitch px: one Mono row + tight gap lock
+/// (15.6 + 4.0 = 19.6). Narrow single source ka pitch alias taaki 720
+/// narrow rhythm wahi rule pakde. Pure; headless-tested.
+pub fn copy_narrow_arrow_pitch() -> Option<f32> {
+    copy_arrow_default_pitch()
+}
+
+/// Narrow copy-line action top y px for a row starting at `row_top`:
+/// `row_top + dy` (dy 1.2 Mono-baseline centering). Non-finite par `None`.
+/// Pure; headless-tested.
+pub fn copy_narrow_action_y(row_top: f32) -> Option<f32> {
+    copy_line_action_y(row_top)
+}
+
+#[cfg(test)]
+mod exq_copy10_tests {
+    use super::*;
+    use crate::theme::{GEO_SECTION_GAP, SPACE_XL, SPACE_XS, TypoRole};
+
+    #[test]
+    fn copy10_hit_rects_symmetric_from_space_scale_at_narrow_720() {
+        // Geometry first: 24 XL floor + 4 XS slop har taraf = 32 square.
+        assert_eq!(copy_hit_size(), SPACE_XL);
+        assert_eq!(copy_hit_size(), COPY_HIT_MIN);
+        assert_eq!(copy_button_hit_slop(), SPACE_XS);
+        assert_eq!(copy_button_sym_pad(), SPACE_XS);
+        assert_eq!(copy_hit_size_with_slop(), 32.0);
+        assert_eq!(
+            copy_hit_size_with_slop(),
+            copy_hit_size() + 2.0 * COPY_BUTTON_HIT_SLOP
+        );
+        // Copy button 32px hit centered: sym pad single source.
+        assert_eq!(copy_button_padded_size(), 32.0);
+        assert_eq!(copy_button_padded_size(), copy_hit_size_with_slop());
+        // Narrow center avail/2: 720 -> 360.
+        assert_eq!(copy_center_x_for(720.0), Some(360.0));
+        assert_eq!(copy_center_x_for(0.0), None);
+        assert_eq!(copy_center_x_for(f32::NAN), None);
+        // Symmetric hit rect at narrow center (360,300): 344..376 x 284..316.
+        let rect = copy_arrow_hit_rect(360.0, 300.0);
+        assert_eq!(rect, Some((344.0, 284.0, 376.0, 316.0)));
+        assert_eq!(rect, copy_button_hit_rect(360.0, 300.0));
+        assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 32.0);
+            assert_eq!(y1 - y0, 32.0);
+            assert!(((360.0 - x0) - 16.0).abs() < 0.0001);
+            assert!(((x1 - 360.0) - 16.0).abs() < 0.0001);
+            assert!(((300.0 - y0) - 16.0).abs() < 0.0001);
+            assert!(((y1 - 300.0) - 16.0).abs() < 0.0001);
+        }
+        // Edges inclusive, just outside false — tight panes me bhi generous.
+        assert!(copy_arrow_hit_contains(360.0, 300.0, 344.0, 284.0));
+        assert!(copy_arrow_hit_contains(360.0, 300.0, 376.0, 316.0));
+        assert!(!copy_arrow_hit_contains(360.0, 300.0, 343.9, 300.0));
+        assert!(!copy_arrow_hit_contains(360.0, 300.0, 376.1, 300.0));
+        assert!(!copy_narrow_column_fits(f32::NAN));
+        assert!(copy_narrow_column_fits(720.0));
+    }
+
+    #[test]
+    fn copy10_column_width_char_metrics_and_pitch_lock_at_narrow() {
+        // Arrow column x char metrics se: 1 glyph x 7.0 + 2 x 8.0 = 23.0.
+        assert_eq!(copy_arrow_advance_px(), 7.0);
+        assert_eq!(
+            copy_arrow_column_width(),
+            COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * GEO_SECTION_GAP
+        );
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!(copy_hit_size_with_slop() > copy_arrow_column_width());
+        // Stacked pitch lock: 15.6 Mono row + 4.0 tight gap = 19.6.
+        let pitch = copy_narrow_arrow_pitch();
+        assert!(pitch.is_some_and(|p| (p - 19.6).abs() < 0.01));
+        assert_eq!(pitch, copy_arrow_default_pitch());
+        assert_eq!(pitch, copy_wide_arrow_pitch());
+        assert!(copy_narrow_column_fits(720.0));
+    }
+
+    #[test]
+    fn copy10_line_action_dy_inside_mono_row_at_narrow() {
+        // Typo second: Small action line 13.2 Mono row 15.6 me centered.
+        assert_eq!(copy_line_row_height(), TypoRole::Mono.line_height_px());
+        assert!((copy_line_row_height() - 15.6).abs() < 0.01);
+        assert!((copy_action_text_line_height_px() - 13.2).abs() < 0.01);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert_eq!(copy_narrow_action_y(f32::NAN), None);
+        assert_eq!(copy_narrow_action_y(f32::INFINITY), None);
+        assert!(copy_narrow_action_y(100.0).is_some_and(|y| (y - 101.2).abs() < 0.01));
+        assert_eq!(copy_narrow_action_y(100.0), copy_line_action_y(100.0));
+        assert_eq!(copy_narrow_action_y(100.0), copy_wide_action_y(100.0));
+    }
+
+    #[test]
+    fn copy10_narrow_fixture() {
+        // Mirrors checks/gui-exq-copy10/round-1/comparison/copy-narrow-720.json.
+        let raw =
+            include_str!("../../../checks/gui-exq-copy10/round-1/comparison/copy-narrow-720.json");
+        assert!(raw.contains("\"name\":\"copy-narrow-720\""));
+        assert!(raw.contains("\"avail_w\":720.0"));
+        assert!(raw.contains("\"arrow_column_width\":23.0"));
+        assert!(raw.contains("\"arrow_hit_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"action_dy\":1.2"));
+        assert!(raw.contains("\"arrow_pitch\":19.6"));
+        assert_eq!(copy_center_x_for(720.0), Some(360.0));
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!((copy_hit_size_with_slop() - 32.0).abs() < 0.0001);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
+        assert!(copy_narrow_column_fits(720.0));
+    }
+}
+
 #[cfg(test)]
 mod exq_copy9_tests {
     use super::*;
