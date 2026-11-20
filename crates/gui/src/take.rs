@@ -911,6 +911,90 @@ pub fn take_tall_hit_locked_y(row: usize, scroll_y: f32, viewport_h: f32) -> Opt
     }
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-TAKE33: live merge take — buttons row, center alignment, badge spot (headless).
+// BC parity: take bar teeno uniform buttons ek row me tight gap par; center
+// (ancestor) pane divider-gap ke baad shuru hokar canvas me centered; har
+// unresolved conflict par badge pane ki trailing edge se XS inset par marker
+// row se aligned. Geometry first (SPACE_XS/GEO_TIGHT_GAP/GEO_SECTION_GAP +
+// take_bar/merge_three reuse, no new literals), typography second (badge text
+// Small status precedent single source), colors frozen.
+// WIRING (paint): button x `take_buttons_row_x(i)` se; center pane
+// `merge_center_pane_x(avail_w)` se; badge `take_conflict_badge_pos` se;
+// `merge_center_pane_aligned(avail_w)` 1200 par true hona chahiye.
+// ----------------------------------------------------------------------------
+
+/// Take buttons row me `index` wale button ka leading-x px:
+/// `index * (uniform_w + gap)`. 0/1/2 ke bahar `None`.
+/// Pure; headless-tested.
+pub fn take_buttons_row_x(index: usize) -> Option<f32> {
+    if index > 2 {
+        return None;
+    }
+    let pitch = take_bar_button_width() + take_bar_gap();
+    if !pitch.is_finite() {
+        return None;
+    }
+    Some(index as f32 * pitch)
+}
+
+/// 3-way center (ancestor) pane ka leading-x px: `left_w + divider_gap`
+/// ([`merge_three_pane_widths`] + [`merge_divider_gap`] se, no new literal).
+/// Pure; headless-tested.
+pub fn merge_center_pane_x(avail_w: f32) -> f32 {
+    let (left, _, _) = merge_three_pane_widths(avail_w);
+    left + merge_divider_gap()
+}
+
+/// True jab center pane canvas me centered hai:
+/// `center_mid == avail_w / 2` ±0.01. Non-finite/non-positive par false.
+/// Pure; headless-tested.
+pub fn merge_center_pane_aligned(avail_w: f32) -> bool {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    let (_, base, _) = merge_three_pane_widths(avail_w);
+    let mid = merge_center_pane_x(avail_w) + base / 2.0;
+    (mid - avail_w / 2.0).abs() < 0.01
+}
+
+/// Conflict badge trailing inset px: one XS step (pane edge rhythm parity).
+/// Pure; headless-tested.
+pub fn take_conflict_badge_inset() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Conflict badge anchor `(x, y)` px: trailing edge se XS inset
+/// (`pane_x + pane_w - inset`), marker row top se aligned
+/// ([`take_marker_row_y`]). `None`: OOB row (1200 canvas ke bahar),
+/// non-finite/negative pane input. Pure; headless-tested.
+pub fn take_conflict_badge_pos(row: usize, pane_x: f32, pane_w: f32) -> Option<(f32, f32)> {
+    if !pane_x.is_finite() || !pane_w.is_finite() || pane_w <= 0.0 {
+        return None;
+    }
+    let y = take_marker_row_y(row);
+    if !y.is_finite() || y < 0.0 || y >= TAKE_TALL_CANVAS_H {
+        return None;
+    }
+    let x = pane_x + pane_w - take_conflict_badge_inset();
+    if x.is_finite() && x >= pane_x {
+        Some((x, y))
+    } else {
+        None
+    }
+}
+
+/// Conflict badge text role: Small weak proportional (status precedent —
+/// [`take_counter_text_role`] wahi single source).
+pub const fn take_conflict_badge_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// Conflict badge text size px (single source: Small, 11.0).
+pub fn take_conflict_badge_text_size() -> f32 {
+    take_conflict_badge_text_role().size()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1502,5 +1586,99 @@ mod exq_take7_tests {
         assert!((take_marker_row_y(76) - 1185.6).abs() < 0.5);
         let lock76 = take_tall_hit_locked_y(76, 600.0, 600.0).unwrap_or(-1.0);
         assert!((lock76 - 568.0).abs() < 0.5);
+    }
+}
+
+#[cfg(test)]
+mod exq_take33_tests {
+    use super::*;
+
+    #[test]
+    fn take33_buttons_row_reuses_space_tokens() {
+        assert_eq!(take_bar_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(take_bar_gap(), crate::theme::SPACE_XS);
+        assert_eq!(take_buttons_row_x(0), Some(0.0));
+        assert!((take_buttons_row_x(1).unwrap_or(-1.0) - 97.0).abs() < 0.01);
+        assert!((take_buttons_row_x(2).unwrap_or(-1.0) - 194.0).abs() < 0.01);
+        assert_eq!(take_buttons_row_x(3), None);
+        // Row pitch single source: uniform 93 + tight 4.
+        let x1 = take_buttons_row_x(1).unwrap_or(-1.0);
+        assert!((x1 - (take_bar_button_width() + take_bar_gap())).abs() < 0.01);
+        assert!((take_buttons_row_x(2).unwrap_or(-1.0) - 2.0 * x1).abs() < 0.01);
+    }
+
+    #[test]
+    fn take33_center_pane_alignment() {
+        // 700 edge: equal thirds, center starts after left + gap.
+        let (l700, b700, r700) = merge_three_pane_widths(700.0);
+        assert!((l700 - 228.0).abs() < 0.01);
+        assert!((b700 - 228.0).abs() < 0.01);
+        assert!((r700 - 228.0).abs() < 0.01);
+        assert!((merge_center_pane_x(700.0) - 236.0).abs() < 0.01);
+        assert!(merge_center_pane_aligned(700.0));
+        // 1200 wide: equal thirds, centered, exact fill, no scroll.
+        let (l1200, b1200, _) = merge_three_pane_widths(1200.0);
+        assert!((l1200 - 394.666656).abs() < 0.01);
+        assert!((b1200 - 394.666656).abs() < 0.01);
+        assert!((merge_center_pane_x(1200.0) - 402.666656).abs() < 0.05);
+        assert!(merge_center_pane_aligned(1200.0));
+        assert!(merge_three_panes_fill_exact(1200.0));
+        assert!(!merge_three_pane_needs_hscroll(1200.0));
+        assert!(!take_bar_needs_hscroll(1200.0));
+        assert!(!merge_center_pane_aligned(0.0));
+        assert!(!merge_center_pane_aligned(f32::NAN));
+    }
+
+    #[test]
+    fn take33_conflict_badge_placement() {
+        assert_eq!(take_conflict_badge_inset(), crate::theme::SPACE_XS);
+        assert_eq!(take_conflict_badge_inset(), 4.0);
+        // Badge row 10 par pane trailing se XS inset, marker row se aligned.
+        let pos = take_conflict_badge_pos(10, 236.0, 228.0).unwrap_or((-1.0, -1.0));
+        assert!((pos.0 - 460.0).abs() < 0.01);
+        assert!((pos.1 - take_marker_row_y(10)).abs() < 0.01);
+        // Badge pane ke andar hai.
+        assert!(pos.0 >= 236.0 && pos.0 <= 236.0 + 228.0);
+        // Bad input par None.
+        assert_eq!(take_conflict_badge_pos(77, 236.0, 228.0), None);
+        assert_eq!(take_conflict_badge_pos(10, f32::NAN, 228.0), None);
+        assert_eq!(take_conflict_badge_pos(10, 236.0, 0.0), None);
+    }
+
+    #[test]
+    fn take33_badge_role_reuses_typo_only() {
+        assert_eq!(
+            take_conflict_badge_text_role(),
+            crate::theme::TypoRole::chrome_status()
+        );
+        assert_eq!(
+            take_conflict_badge_text_role(),
+            crate::theme::TypoRole::Small
+        );
+        assert_eq!(take_conflict_badge_text_size(), 11.0);
+        assert_eq!(take_conflict_badge_text_size(), take_counter_text_size());
+    }
+
+    #[test]
+    fn take33_narrow700_fixture() {
+        let raw =
+            include_str!("../../../checks/gui-exq-take33/round-1/comparison/take-narrow-700.json");
+        assert!(raw.contains("\"name\":\"take-narrow-700\""));
+        assert!(raw.contains("\"avail_w\":700.0"));
+        assert!(raw.contains("\"needs_hscroll_700\":false"));
+        assert!(raw.contains("\"take_bar_hscroll_700\":false"));
+        assert!(raw.contains("\"take_bar_total\":287.0"));
+        assert!(raw.contains("\"pane_w_700\":228.0"));
+        assert!(raw.contains("\"center_x_700\":236.0"));
+        assert!(raw.contains("\"wide_avail_w\":1200.0"));
+        assert!(raw.contains("\"needs_hscroll_1200\":false"));
+        // Fixture numbers headless recompute se match.
+        assert!(!merge_three_pane_needs_hscroll(700.0));
+        assert!(!take_bar_needs_hscroll(700.0));
+        let (l, _, _) = merge_three_pane_widths(700.0);
+        assert!((l - 228.0).abs() < 0.01);
+        assert!((merge_center_pane_x(700.0) - 236.0).abs() < 0.01);
+        assert_eq!(take_bar_total_width(), 287.0);
+        assert!((take_buttons_row_x(1).unwrap_or(-1.0) - 97.0).abs() < 0.01);
     }
 }
