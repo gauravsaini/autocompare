@@ -3243,7 +3243,7 @@ pub fn home6_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32,
     ))
 }
 
-/// Home6 hierarchy and contract verification helper:
+/// Home7 hierarchy and contract verification helper:
 /// proves geometry from SPACE tokens, CTA width from card inner width,
 /// toolbar button symmetric hit targets, and typography reuse.
 /// Pure; headless-tested.
@@ -3261,6 +3261,159 @@ pub fn home6_contract_ok() -> bool {
         && HOME6_BUTTON_PADDED_H == 32.0
         && HOME6_CARD_CTA_MIN_W == 224.0
         && HOME6_CARD_CTA_MIN_W == HOME_CARD_CTA_W
+        && home_card_hierarchy_ok()
+}
+
+// ----------------------------------------------------------------------------
+// Wave HOME7 round-1 exquisite (leaf): tall card rows + CTA lock + toolbar
+// rhythm at 1200px tall canvas. BC pattern, outside observation only:
+// 1200px tall window par card grid 3 cols me stable rehta hai (1176 avail,
+// EXQ 24 gap, 376px flexed cards), CTA card inner width se lock hota hai
+// (min 224, 1200 par 360 — lambe scroll par bhi single-line), toolbar 24px
+// hit rhythm symmetric slop samet (96x24 + 4px -> 104x32, 3328 px²).
+// Geometry first: sab SPACE/GEO tokens se derive, koi magic number nahi.
+// Typography second: Heading/HomeTitle/HomeButton/HomeDesc reuse, koi naya
+// size nahi. Paint adoption paint-owner wave ka hai; colors untouched.
+// Edge fixture: `checks/gui-exq-home7/comparison/home-tall-1200.json`.
+// ----------------------------------------------------------------------------
+
+/// Home7 card min width px: SPACE scale (10 * [`crate::theme::SPACE_XL`] = 240.0).
+pub const HOME7_CARD_MIN_W: f32 = crate::theme::SPACE_XL * 10.0;
+/// Home7 card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME7_CARD_PAD: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home7 content side margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME7_CONTENT_MARGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home7 card grid generous gap px: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24.0).
+pub const HOME7_CARD_GRID_GAP_EXQ: f32 = crate::theme::GEO_CARD_GAP;
+/// Home7 toolbar button width px: compact floor (96.0).
+pub const HOME7_TOOLBAR_BUTTON_W: f32 = HOME_TOOLBAR_BUTTON_W;
+/// Home7 toolbar button height px: 24.0 exquisite hit floor ([`crate::theme::SPACE_XL`]).
+pub const HOME7_TOOLBAR_BUTTON_H: f32 = crate::theme::SPACE_XL;
+/// Home7 toolbar button hit-slop px: [`crate::theme::SPACE_XS`] (4.0), symmetric.
+pub const HOME7_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+/// Home7 button padded hit width px: 96 + 2 * 4 = 104.
+pub const HOME7_BUTTON_PADDED_W: f32 = HOME7_TOOLBAR_BUTTON_W + 2.0 * HOME7_BUTTON_HIT_SLOP;
+/// Home7 button padded hit height px: 24 + 2 * 4 = 32.
+pub const HOME7_BUTTON_PADDED_H: f32 = HOME7_TOOLBAR_BUTTON_H + 2.0 * HOME7_BUTTON_HIT_SLOP;
+/// Home7 CTA min width px: card inner width at min card width (240 − 2*8 = 224.0).
+pub const HOME7_CARD_CTA_MIN_W: f32 = HOME7_CARD_MIN_W - HOME7_CARD_PAD * 2.0;
+
+/// Home7 content available width px: total minus do taraf margin.
+/// Tang par 0.0, non-finite passthrough. Pure; headless-tested.
+pub fn home7_content_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME7_CONTENT_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Home7 card grid columns at total width: EXQ gap rhythm par.
+/// 1200 par 3 cols (768 <= 1176), 720 par 2 cols, tang par 1 col.
+/// Non-finite par canonical. Pure; headless-tested.
+pub fn home7_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = home7_content_avail_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME7_CARD_MIN_W + cols as f32 * HOME7_CARD_GRID_GAP_EXQ <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Home7 card grid rows for item count at total width. Pure; headless-tested.
+pub fn home7_grid_rows(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home7_grid_columns(total_w).max(1))
+}
+
+/// Home7 flexed card width px for available width at EXQ gap:
+/// (avail − (cols − 1) * gap) / cols, floor at [`HOME7_CARD_MIN_W`].
+/// Cols avail se derive hote hain (3-col floor 768, 2-col floor 504 —
+/// dono MIN_W + EXQ gap se, koi magic number nahi).
+/// 1200 par (1176 avail): (1176 − 48) / 3 = 376.0.
+/// Pure; headless-tested.
+pub fn home7_grid_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME7_CARD_MIN_W;
+    }
+    let three_floor = 3.0 * HOME7_CARD_MIN_W + 2.0 * HOME7_CARD_GRID_GAP_EXQ;
+    let two_floor = 2.0 * HOME7_CARD_MIN_W + HOME7_CARD_GRID_GAP_EXQ;
+    let cols = if avail >= three_floor {
+        3.0
+    } else if avail >= two_floor {
+        2.0
+    } else {
+        1.0
+    };
+    let gaps = (cols - 1.0) * HOME7_CARD_GRID_GAP_EXQ;
+    ((avail - gaps) / cols).max(HOME7_CARD_MIN_W)
+}
+
+/// Home7 card inner width px: card width minus do taraf pad.
+/// Non-finite par [`HOME7_CARD_CTA_MIN_W`]. Pure; headless-tested.
+pub fn home7_card_inner_width(card_w: f32) -> f32 {
+    if !card_w.is_finite() {
+        return HOME7_CARD_CTA_MIN_W;
+    }
+    (card_w - HOME7_CARD_PAD * 2.0).max(0.0)
+}
+
+/// Home7 CTA width px: card inner width se lock (single-line budget lambe
+/// scroll par bhi stable). Pure; headless-tested.
+pub fn home7_card_cta_width(card_w: f32) -> f32 {
+    home7_card_inner_width(card_w)
+}
+
+/// Home7 grid content height px: rows * card min + beech EXQ gaps.
+/// 1200 par 9 cards (3 rows): 3 * 99.6 + 2 * 24 = 346.8.
+/// Khali par 0. Pure; headless-tested.
+pub fn home7_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    let rows = home7_grid_rows(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME7_CARD_GRID_GAP_EXQ
+}
+
+/// Home7 symmetric button hit rect: har taraf hit-slop se failao.
+/// Non-finite/inverted par `None`. Pure; headless-tested.
+pub fn home7_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    Some((
+        x0 - HOME7_BUTTON_HIT_SLOP,
+        y0 - HOME7_BUTTON_HIT_SLOP,
+        x1 + HOME7_BUTTON_HIT_SLOP,
+        y1 + HOME7_BUTTON_HIT_SLOP,
+    ))
+}
+
+/// Home7 hierarchy and contract verification helper: SPACE-token geometry,
+/// CTA inner-width lock, symmetric toolbar hits, typo reuse.
+/// Pure; headless-tested.
+pub fn home7_contract_ok() -> bool {
+    HOME7_CARD_MIN_W == crate::theme::SPACE_XL * 10.0
+        && HOME7_CARD_MIN_W == HOME_CARD_MIN_W
+        && HOME7_CARD_PAD == crate::theme::GEO_SECTION_GAP
+        && HOME7_CONTENT_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME7_CARD_GRID_GAP_EXQ == crate::theme::GEO_CARD_GAP
+        && HOME7_TOOLBAR_BUTTON_W == 96.0
+        && HOME7_TOOLBAR_BUTTON_H == 24.0
+        && HOME7_BUTTON_HIT_SLOP == crate::theme::SPACE_XS
+        && HOME7_BUTTON_PADDED_W == 104.0
+        && HOME7_BUTTON_PADDED_H == 32.0
+        && HOME7_CARD_CTA_MIN_W == 224.0
+        && HOME7_CARD_CTA_MIN_W == HOME_CARD_CTA_W
         && home_card_hierarchy_ok()
 }
 
@@ -5145,5 +5298,102 @@ mod tests {
 
         // Overall contract
         assert!(super::home6_contract_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home7_tall1200_card_rows_cta_toolbar_edge() {
+        // Edge fixture: `checks/gui-exq-home7/comparison/home-tall-1200.json`.
+        // Geometry first: tall 1200 canvas par 3 cols / 3 rows, CTA inner
+        // lock (224 min, 360 at 1200), toolbar 24px symmetric (104x32).
+        // Typography second: HomeTitle/HomeButton/HomeDesc reuse.
+        use crate::theme::{
+            GEO_CARD_GAP, GEO_OUTER_MARGIN, GEO_SECTION_GAP, SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS,
+        };
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home7/comparison/home-tall-1200.json");
+        assert!(fixture_raw.contains("\"card_min_w\":240.0"));
+        assert!(fixture_raw.contains("\"card_pad\":8.0"));
+        assert!(fixture_raw.contains("\"card_inner_w_min\":224.0"));
+        assert!(fixture_raw.contains("\"card_inner_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"cta_w_min\":224.0"));
+        assert!(fixture_raw.contains("\"cta_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"content_avail_w_at_1200\":1176.0"));
+        assert!(fixture_raw.contains("\"content_margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"grid_cols_at_1200\":3"));
+        assert!(fixture_raw.contains("\"grid_rows_9_at_1200\":3"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_1200\":376.0"));
+        assert!(fixture_raw.contains("\"grid_content_h_9_at_1200\":346.8"));
+        assert!(fixture_raw.contains("\"toolbar_button_w\":96.0"));
+        assert!(fixture_raw.contains("\"toolbar_button_h\":24.0"));
+        assert!(fixture_raw.contains("\"button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"button_padded_w\":104.0"));
+        assert!(fixture_raw.contains("\"button_padded_h\":32.0"));
+        assert!(fixture_raw.contains("\"button_hit_area\":3328.0"));
+
+        // 1. Card min-w from SPACE scale, tall rows at 1200.
+        assert_eq!(super::HOME7_CARD_MIN_W, SPACE_XL * 10.0);
+        assert_eq!(super::HOME7_CARD_MIN_W, 240.0);
+        assert_eq!(super::HOME7_CARD_MIN_W, super::HOME_CARD_MIN_W);
+        assert_eq!(super::HOME7_CARD_PAD, SPACE_SM);
+        assert_eq!(super::HOME7_CARD_PAD, GEO_SECTION_GAP);
+        assert_eq!(super::HOME7_CARD_GRID_GAP_EXQ, GEO_CARD_GAP);
+        assert_eq!(super::HOME7_CARD_GRID_GAP_EXQ, SPACE_XL);
+        assert_eq!(super::HOME7_CARD_GRID_GAP_EXQ, 24.0);
+        assert_eq!(super::HOME7_CONTENT_MARGIN_X, SPACE_MD);
+        assert_eq!(super::HOME7_CONTENT_MARGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(super::home7_content_avail_width(1200.0), 1176.0);
+        assert_eq!(super::home7_content_avail_width(720.0), 696.0);
+        assert_eq!(super::home7_content_avail_width(20.0), 0.0);
+        assert!(super::home7_content_avail_width(f32::NAN).is_nan());
+        assert_eq!(super::home7_grid_columns(1200.0), 3);
+        assert_eq!(super::home7_grid_columns(720.0), 2);
+        assert_eq!(super::home7_grid_columns(500.0), 1);
+        assert_eq!(
+            super::home7_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        assert_eq!(super::home7_grid_rows(9, 1200.0), 3);
+        assert_eq!(super::home7_grid_rows(9, 720.0), 5);
+        assert_eq!(super::home7_grid_rows(0, 1200.0), 0);
+        assert_eq!(super::home7_grid_card_width(1176.0), 376.0);
+        assert_eq!(super::home7_grid_card_width(696.0), 336.0);
+        assert_eq!(super::home7_grid_card_width(f32::NAN), 240.0);
+        assert_eq!(super::home7_grid_card_width(0.0), 240.0);
+        let tall_h = super::home7_grid_content_height(9, 1200.0);
+        assert!((tall_h - 346.8).abs() < 0.05);
+        assert_eq!(super::home7_grid_content_height(0, 1200.0), 0.0);
+
+        // 2. CTA tall lock from card inner width.
+        assert_eq!(super::HOME7_CARD_CTA_MIN_W, 224.0);
+        assert_eq!(super::HOME7_CARD_CTA_MIN_W, super::HOME_CARD_CTA_W);
+        assert_eq!(super::home7_card_inner_width(240.0), 224.0);
+        assert_eq!(super::home7_card_cta_width(240.0), 224.0);
+        assert_eq!(super::home7_card_inner_width(376.0), 360.0);
+        assert_eq!(super::home7_card_cta_width(376.0), 360.0);
+        assert_eq!(super::home7_card_inner_width(f32::NAN), 224.0);
+        assert_eq!(super::home7_card_inner_width(10.0), 0.0);
+
+        // 3. Toolbar tall rhythm symmetric.
+        assert_eq!(super::HOME7_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(super::HOME7_TOOLBAR_BUTTON_H, 24.0);
+        assert_eq!(super::HOME7_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::HOME7_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(super::HOME7_BUTTON_PADDED_W, 104.0);
+        assert_eq!(super::HOME7_BUTTON_PADDED_H, 32.0);
+        assert_eq!(
+            super::HOME7_BUTTON_PADDED_W * super::HOME7_BUTTON_PADDED_H,
+            3328.0
+        );
+        let hit_rect = super::home7_button_hit_rect(10.0, 20.0, 106.0, 44.0);
+        assert_eq!(hit_rect, Some((6.0, 16.0, 110.0, 48.0)));
+        assert_eq!(
+            super::home7_button_hit_rect(f32::NAN, 0.0, 10.0, 10.0),
+            None
+        );
+        assert_eq!(super::home7_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
+
+        assert!(super::home7_contract_ok());
     }
 }
