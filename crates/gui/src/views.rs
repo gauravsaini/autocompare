@@ -3674,23 +3674,30 @@ fn paint_text_body(
                                                             // `=>` marker 20px column me centered
                                                             // rahe (headless
                                                             // `text_center_marker_inset` = 2px/side,
-                                                            // symmetric hit-slop).
+                                                            // symmetric hit-slop). Ink seedha
+                                                            // painter se CHANGED_FG me (Button
+                                                            // apna gray override lagata tha).
                                                             ui.add_space(
                                                                 text_center_marker_inset(),
                                                             );
-                                                            if ui
-                                                                .add(
-                                                                    egui::Button::new(
-                                                                        RichText::new(label).color(
-                                                                            text_center_marker_fg(),
-                                                                        ),
-                                                                    )
-                                                                    .small()
-                                                                    .frame(false),
-                                                                )
-                                                                .on_hover_text("Copy changed hunk")
-                                                                .clicked()
-                                                            {
+                                                            let (m_rect, m_resp) = ui
+                                                                .allocate_exact_size(
+                                                                egui::vec2(
+                                                                    text_center_marker_content_w(),
+                                                                    row_height,
+                                                                ),
+                                                                egui::Sense::click(),
+                                                            );
+                                                            let m_resp = m_resp
+                                                                .on_hover_text("Copy changed hunk");
+                                                            ui.painter().text(
+                                                                m_rect.center(),
+                                                                egui::Align2::CENTER_CENTER,
+                                                                label,
+                                                                font_id.clone(),
+                                                                text_center_marker_fg(),
+                                                            );
+                                                            if m_resp.clicked() {
                                                                 copy_action = Some((orig, dir));
                                                             }
                                                         });
@@ -3984,20 +3991,27 @@ fn paint_text_body(
                                                     ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                                                     // Centered: wrap-off head wahi 2px leading
                                                     // inset (wrap-on parity, ek rhythm,
-                                                    // symmetric hit-slop).
+                                                    // symmetric hit-slop). Ink seedha
+                                                    // painter se CHANGED_FG me (Button
+                                                    // apna gray override lagata tha).
                                                     ui.add_space(text_center_marker_inset());
-                                                    if ui
-                                                        .add(
-                                                            egui::Button::new(
-                                                                RichText::new(label)
-                                                                    .color(text_center_marker_fg()),
-                                                            )
-                                                            .small()
-                                                            .frame(false),
-                                                        )
-                                                        .on_hover_text("Copy changed hunk")
-                                                        .clicked()
-                                                    {
+                                                    let (m_rect, m_resp) = ui.allocate_exact_size(
+                                                        egui::vec2(
+                                                            text_center_marker_content_w(),
+                                                            row_height,
+                                                        ),
+                                                        egui::Sense::click(),
+                                                    );
+                                                    let m_resp =
+                                                        m_resp.on_hover_text("Copy changed hunk");
+                                                    ui.painter().text(
+                                                        m_rect.center(),
+                                                        egui::Align2::CENTER_CENTER,
+                                                        label,
+                                                        font_id.clone(),
+                                                        text_center_marker_fg(),
+                                                    );
+                                                    if m_resp.clicked() {
                                                         copy_action = Some((orig, dir));
                                                     }
                                                 });
@@ -9782,6 +9796,131 @@ mod tests {
         assert_eq!(right_label, "R-");
         assert_eq!(text_legend_segments().len(), 4);
         assert!(format_text_legend_line().contains(" | "));
+    }
+
+    #[test]
+    fn gutter23_live_track_contrast() {
+        // Mirrors checks/gui-exq-gutter23/round-1/comparison/gutter-live-1200.json:
+        // live center gutter ACTUALLY visible — (a) track (48,48,48) vs
+        // pane bg (27,27,27) delta 21 (har channel >= 40 brightness floor),
+        // (b) marker ink frozen CHANGED_FG (255,235,160) via painter.text
+        // (koi Button gray override nahi). Tall 1200-row math har scroll
+        // window me stable. Sab existing helpers/tokens reuse.
+        use viewmodel::TextRow;
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-gutter23/round-1/comparison/gutter-live-1200.json"
+        );
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"marker_frame\": false"));
+        assert!(fixture_raw.contains("\"track_rgb\": ["));
+        assert!(fixture_raw.contains("\"track_vs_bg_delta\": 21"));
+        assert!(fixture_raw.contains("\"tall_heads_1200rows\": ["));
+        // Track contrast: (48,48,48) vs bg (27,27,27) — har channel par
+        // delta 21, median floor 40 se upar (bg 27 se clearly visible).
+        assert_eq!(crate::theme::DARK_TRACK_RGB, [48, 48, 48]);
+        assert_eq!(crate::theme::DARK_BG_RGB, [27, 27, 27]);
+        let track = crate::theme::DARK_TRACK_RGB;
+        let bg = crate::theme::DARK_BG_RGB;
+        let mut ch = 0usize;
+        while ch < 3 {
+            let t = match track.get(ch) {
+                Some(v) => *v,
+                None => 0,
+            };
+            let b = match bg.get(ch) {
+                Some(v) => *v,
+                None => 0,
+            };
+            assert!(t >= 40);
+            assert_eq!(t.saturating_sub(b), 21);
+            ch = ch.saturating_add(1);
+        }
+        assert_eq!(track_for(true), crate::theme::DARK_TRACK);
+        assert_eq!(track_for(false), crate::theme::LIGHT_TRACK);
+        // Tall model: Equal sea me 3 hunks (Changed pair @2, Deleted
+        // @500, Inserted pair @1000) — heads scroll offset se independent.
+        let mut rows = Vec::new();
+        let mut idx = 0usize;
+        while idx < 1200 {
+            let kind = if idx == 2 || idx == 3 {
+                TextRowKind::Changed
+            } else if idx == 500 {
+                TextRowKind::Deleted
+            } else if idx == 1000 || idx == 1001 {
+                TextRowKind::Inserted
+            } else {
+                TextRowKind::Equal
+            };
+            rows.push(TextRow {
+                kind,
+                ..TextRow::default()
+            });
+            idx = idx.saturating_add(1);
+        }
+        assert_eq!(rows.len(), 1200);
+        let mut heads = Vec::new();
+        let mut i = 0usize;
+        while i < rows.len() {
+            let is_head = match rows.get(i) {
+                Some(_) => text_center_hunk_head(&rows, i),
+                None => false,
+            };
+            if is_head {
+                heads.push(i);
+            }
+            i = i.saturating_add(1);
+        }
+        assert_eq!(heads, vec![2, 500, 1000]);
+        let window_heads = |lo: usize, hi: usize| {
+            let mut found = Vec::new();
+            let mut j = lo;
+            while j < hi && j < rows.len() {
+                let is_head = match rows.get(j) {
+                    Some(_) => text_center_hunk_head(&rows, j),
+                    None => false,
+                };
+                if is_head {
+                    found.push(j);
+                }
+                j = j.saturating_add(1);
+            }
+            found
+        };
+        assert_eq!(window_heads(0, 60), vec![2]);
+        assert_eq!(window_heads(470, 530), vec![500]);
+        assert_eq!(window_heads(980, 1040), vec![1000]);
+        assert_eq!(window_heads(60, 470), Vec::<usize>::new());
+        // Gutter geometry tall canvas par bhi wahi: 20px, column 590.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(
+            text_center_gutter_width(),
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_column_x_for_avail(1200.0), 590.0);
+        assert!((text_center_arrow_cx_for_avail(1200.0) - 600.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_for_avail(1200.0), (588.0, 612.0));
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(text_center_marker_inset(), 2.0);
+        // Marker ink: frozen CHANGED_FG reuse, painter.text se (Button
+        // override hata) — diff kinds par `=>`, Equal par blank.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert_eq!(text_center_marker_fg(), CHANGED_FG);
+        assert_eq!(text_center_marker_fg(), crate::theme::CHANGED_FG);
+        // Continuous strip: band selected par, track unselected par.
+        assert!(text_center_gutter_band_fill(true));
+        assert!(!text_center_gutter_band_fill(false));
+        assert!(!text_center_gutter_track_fill(true));
+        assert!(text_center_gutter_track_fill(false));
+        // Tall floor balanced.
+        let row_h = text_row_top_rhythm_px();
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9), 60);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9) % 2, 0);
     }
 
     #[test]

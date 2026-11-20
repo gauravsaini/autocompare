@@ -1,0 +1,77 @@
+{
+  "assertions": {
+    "arrow_cx_1200": 600.0,
+    "band_fill_selected": true,
+    "band_fill_unselected": false,
+    "center_gutter_w": 20.0,
+    "column_x_1200": 590.0,
+    "hit_band_1200": [
+      588.0,
+      612.0
+    ],
+    "hit_slop": 2.0,
+    "marker_box": 16.0,
+    "marker_fg": "CHANGED_FG (255,235,160) via painter.text, no Button override",
+    "marker_frame": false,
+    "marker_inset": 2.0,
+    "marker_label_Changed": "=>",
+    "marker_label_Deleted": "=>",
+    "marker_label_Equal": null,
+    "marker_label_Inserted": "=>",
+    "marker_paint": "allocate_exact_size + painter.text (wrap-on + wrap-off hunk-head sites)",
+    "scroll_window_0_60_heads": [
+      2
+    ],
+    "scroll_window_470_530_heads": [
+      500
+    ],
+    "scroll_window_980_1040_heads": [
+      1000
+    ],
+    "tall_heads_1200rows": [
+      2,
+      500,
+      1000
+    ],
+    "track_fill_selected": false,
+    "track_fill_unselected": true,
+    "track_rgb": [
+      48,
+      48,
+      48
+    ],
+    "track_vs_bg_delta": 21,
+    "trailing_floor_balanced_tall_1200_9": 60
+  },
+  "description": "gutter23 live tall scroll: 1200-row model keeps 20px center gutter (column 590, cx 600, hit 588..612) with painter-text yellow '=>' hunk-head markers only at [2,500,1000]; unselected rows paint (48,48,48) track fill (delta 21 vs 27 bg, continuous strip), selected rows band fill; trailing floor balanced.",
+  "inputs": {
+    "avail_w": 1200.0,
+    "live_paint_sites": [
+      "wrap-off head (paint_text_body wrap-off branch, painter.text marker)",
+      "wrap-off continuation (track fill)",
+      "wrap-off trailing-blank (track fill)",
+      "wrap-on head/continuation/trailing (same 20px helpers, parity)"
+    ],
+    "panes_h": 1200.0,
+    "row_h": 17.6,
+    "rows": "1200 rows, Equal except Changed@2..3, Deleted@500, Inserted@1000..1001",
+    "scroll_windows": [
+      [
+        0,
+        60
+      ],
+      [
+        470,
+        530
+      ],
+      [
+        980,
+        1040
+      ]
+    ],
+    "visible_rows": 9
+  },
+  "intent": "live visibility: track contrast (48 vs 27 bg) + marker ink (CHANGED_FG via painter.text) stable at every scroll offset; tall track math identical across windows",
+  "mode": "None",
+  "name": "gutter-live-1200"
+}

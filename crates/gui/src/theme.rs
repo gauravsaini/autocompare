@@ -737,7 +737,7 @@ pub const DARK_BLUE_RGB: [u8; 3] = [130, 170, 255];
 /// Light newer-side blue (darkened so it passes AA on light).
 pub const LIGHT_BLUE_RGB: [u8; 3] = [30, 80, 180];
 /// Dark gutter track fill (decorative, not text).
-pub const DARK_TRACK_RGB: [u8; 3] = [32, 32, 32];
+pub const DARK_TRACK_RGB: [u8; 3] = [48, 48, 48];
 /// Light gutter track fill (decorative, not text).
 pub const LIGHT_TRACK_RGB: [u8; 3] = [225, 225, 225];
 
@@ -774,7 +774,7 @@ pub const DARK_BLUE: Color32 = Color32::from_rgb(130, 170, 255);
 /// Light newer-side blue paint token.
 pub const LIGHT_BLUE: Color32 = Color32::from_rgb(30, 80, 180);
 /// Dark gutter track paint token.
-pub const DARK_TRACK: Color32 = Color32::from_rgb(32, 32, 32);
+pub const DARK_TRACK: Color32 = Color32::from_rgb(48, 48, 48);
 /// Light gutter track paint token.
 pub const LIGHT_TRACK: Color32 = Color32::from_rgb(225, 225, 225);
 
@@ -1695,7 +1695,7 @@ mod tests {
         assert_eq!(DARK_RED_RGB, [255, 100, 100]);
         assert_eq!(DARK_GREEN_RGB, [120, 220, 130]);
         assert_eq!(DARK_BLUE_RGB, [130, 170, 255]);
-        assert_eq!(DARK_TRACK_RGB, [32, 32, 32]);
+        assert_eq!(DARK_TRACK_RGB, [48, 48, 48]);
     }
 
     #[test]
