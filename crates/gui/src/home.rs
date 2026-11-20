@@ -1945,6 +1945,200 @@ pub fn home_tab_bar_selected_scroll_offset(
     )
 }
 
+// ----------------------------------------------------------------------------
+// Wave TOPCHROME exquisite (first): toolbar + path bar + file info + status.
+// BC pattern, outside observation only: tab strip ke neeche action toolbar
+// (generic labels, icons paint-owner wave me), phir folder affordance wali
+// path bar, phir date/size/rule file-info line, neeche 3-section status.
+// Geometry first: toolbar 28, button floor 96x24, path dual flex, info
+// Small line, status 3 x total/3. Typography second: Body/Mono/Small reuse,
+// koi naya size nahi. Paint adoption screenshot fixture se proof;
+// colors untouched (zero Color32/Visuals).
+// ----------------------------------------------------------------------------
+
+/// Toolbar actions (generic functional labels, apne shabdon me).
+pub const TOPCHROME_TOOLBAR_ACTIONS: [&str; 10] = [
+    "Home", "Sessions", "All", "Diffs", "Same", "Context", "Minor", "Rules", "Format", "Copy",
+];
+/// Toolbar row height px: standard hit row ([`crate::theme::CHROME_HEADER_BAR_H`] = 28).
+pub const TOPCHROME_TOOLBAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Toolbar button min width px: compact floor ([`HOME_TOOLBAR_BUTTON_W`] = 96 parity).
+pub const TOPCHROME_BUTTON_MIN_W: f32 = HOME_TOOLBAR_BUTTON_W;
+/// Toolbar button min height px: 24 hit floor ([`HOME_TOOLBAR_BUTTON_H`] parity).
+pub const TOPCHROME_BUTTON_MIN_H: f32 = HOME_TOOLBAR_BUTTON_H;
+/// Toolbar button gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4).
+pub const TOPCHROME_BUTTON_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Toolbar side pad px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12).
+pub const TOPCHROME_SIDE_PAD: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Path bar row height px: standard path row ([`HOME_PATH_ROW_H`] = 28 parity).
+pub const TOPCHROME_PATH_H: f32 = HOME_PATH_ROW_H;
+/// Path bar gap px: tight rhythm (dual fields beech).
+pub const TOPCHROME_PATH_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Path folder affordance width px: 16 icon cell ([`SESSION_TREE_ICON_W`] parity).
+pub const TOPCHROME_FOLDER_ICON_W: f32 = SESSION_TREE_ICON_W;
+/// Path Browse button width px: fixture Browse parity (75).
+pub const TOPCHROME_BROWSE_W: f32 = 75.0;
+/// Status sections: left summary | middle Same/counts | right Insert/edit.
+pub const TOPCHROME_STATUS_SECTIONS: usize = 3;
+/// Status bar height px: standard hit row ([`HOME_STATUS_BAR_H`] = 28 parity).
+pub const TOPCHROME_STATUS_H: f32 = HOME_STATUS_BAR_H;
+
+/// Ek toolbar button ki width px: label + tab pad, floor 96 (clip nahi).
+/// Pure; headless-tested.
+pub fn topchrome_toolbar_button_width(label: &str) -> f32 {
+    (label.chars().count() as f32 * HOME_TAB_ADVANCE_PX + HOME_TAB_PAD_X * 2.0)
+        .max(TOPCHROME_BUTTON_MIN_W)
+}
+
+/// Toolbar kul width px: sab buttons + beech gaps. Pure; headless-tested.
+pub fn topchrome_toolbar_width() -> f32 {
+    let mut total = 0.0f32;
+    let mut first = true;
+    for action in TOPCHROME_TOOLBAR_ACTIONS {
+        if !first {
+            total += TOPCHROME_BUTTON_GAP;
+        }
+        first = false;
+        total += topchrome_toolbar_button_width(action);
+    }
+    total
+}
+
+/// Toolbar avail width px: window minus do taraf pad. Non-finite passthrough,
+/// tang par 0 floor. Pure; headless-tested.
+pub fn topchrome_toolbar_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - TOPCHROME_SIDE_PAD * 2.0).max(0.0)
+}
+
+/// Toolbar overflow: content avail se bahar (scroll, clip nahi).
+/// Non-finite par jhootha scroll nahi. Pure; headless-tested.
+pub fn topchrome_toolbar_needs_scroll(total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    topchrome_toolbar_width() > topchrome_toolbar_avail_width(total_w)
+}
+
+/// Toolbar me kitne buttons `total_w` par fit hote hain (order me, gap samet).
+/// Non-finite par sab (koi phantom clip nahi). Pure; headless-tested.
+pub fn topchrome_toolbar_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return TOPCHROME_TOOLBAR_ACTIONS.len();
+    }
+    let avail = topchrome_toolbar_avail_width(total_w);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    for action in TOPCHROME_TOOLBAR_ACTIONS {
+        let need = topchrome_toolbar_button_width(action)
+            + if count == 0 {
+                0.0
+            } else {
+                TOPCHROME_BUTTON_GAP
+            };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// Toolbar overflow count: kul minus visible. Pure; headless-tested.
+pub fn topchrome_toolbar_overflow_count(total_w: f32) -> usize {
+    TOPCHROME_TOOLBAR_ACTIONS
+        .len()
+        .saturating_sub(topchrome_toolbar_visible_count(total_w))
+}
+
+/// Dual path field width px: avail minus beech gap ka aadha. Tang par 0,
+/// non-finite passthrough. Pure; headless-tested.
+pub fn topchrome_path_field_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    ((total_w - TOPCHROME_SIDE_PAD * 2.0 - TOPCHROME_PATH_GAP) * 0.5).max(0.0)
+}
+
+/// Empty-vs-nonempty header hint: dono khali par guidance, ek khali par
+/// kaun sa missing, dono bhare par "" (paint hint chhupata hai).
+/// Pure; headless-tested.
+pub const fn topchrome_path_empty_hint(has_left: bool, has_right: bool) -> &'static str {
+    match (has_left, has_right) {
+        (true, true) => "",
+        (true, false) => "right path missing",
+        (false, true) => "left path missing",
+        (false, false) => "pick both paths above, then Compare",
+    }
+}
+
+/// Status section width px: kul ka teesra hissa. Tang/NaN par 0.
+/// Pure; headless-tested.
+pub fn topchrome_status_section_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    (total_w / TOPCHROME_STATUS_SECTIONS as f32).max(0.0)
+}
+
+/// Status section `index` ka left edge px. OOB par kul width (clip nahi).
+/// Pure; headless-tested.
+pub fn topchrome_status_section_x(index: usize, total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    if index >= TOPCHROME_STATUS_SECTIONS {
+        return total_w.max(0.0);
+    }
+    index as f32 * topchrome_status_section_width(total_w)
+}
+
+/// Toolbar role: Body 13 proportional (tab precedent). Koi naya size nahi.
+pub const fn topchrome_toolbar_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Path role: Mono 12 fixed (grid precedent, paths code bankar). Koi naya size nahi.
+pub const fn topchrome_path_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// File-info role: Small 11 weak proportional (caption precedent). Koi naya size nahi.
+pub const fn topchrome_info_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Small
+}
+
+/// Status role: Small 11 weak proportional (status precedent). Koi naya size nahi.
+pub const fn topchrome_status_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Small
+}
+
+/// Topchrome hierarchy: toolbar Body > info/status Small, path Mono content,
+/// sab chrome proportional (path Mono content hai). Koi naya size nahi.
+/// Pure; headless-tested.
+pub fn topchrome_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    let bar = TypoRole::Body;
+    let path = TypoRole::Mono;
+    let info = TypoRole::Small;
+    let status = TypoRole::Small;
+    bar.size() == crate::theme::TYPO_BODY_SIZE
+        && path.size() == crate::theme::TYPO_MONO_SIZE
+        && info.size() == crate::theme::TYPO_SMALL_SIZE
+        && status.size() == crate::theme::TYPO_SMALL_SIZE
+        && bar.size() > info.size()
+        && path.size() > info.size()
+        && bar.is_chrome()
+        && info.is_chrome()
+        && status.is_chrome()
+        && !path.is_chrome()
+        && info.is_small()
+        && info.is_weak()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3029,5 +3223,63 @@ mod tests {
         // Typography second: theme steps reuse, koi naya size nahi.
         assert!(crate::theme::typo_home4_steps_ok());
         assert!(super::home_card_type_scale_exq_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn topchrome_toolbar_path_status_narrow_empty_edge() {
+        // Edge fixture: `checks/gui-exq-topchrome/comparison/topchrome-narrow-empty.json`.
+        // Geometry first: 10-button toolbar 996px, 960 avail 936 scroll, 700
+        // avail 676 par 6 visible + 4 overflow; empty header honest hint.
+        use crate::theme::{GEO_OUTER_MARGIN, GEO_TIGHT_GAP};
+        assert_eq!(super::TOPCHROME_TOOLBAR_ACTIONS.len(), 10);
+        assert_eq!(super::TOPCHROME_TOOLBAR_H, 28.0);
+        assert_eq!(super::TOPCHROME_BUTTON_MIN_H, 24.0);
+        assert_eq!(super::TOPCHROME_BUTTON_MIN_W, 96.0);
+        assert_eq!(super::TOPCHROME_BUTTON_GAP, GEO_TIGHT_GAP);
+        assert_eq!(super::TOPCHROME_SIDE_PAD, GEO_OUTER_MARGIN);
+        assert!(super::TOPCHROME_TOOLBAR_H >= super::TOPCHROME_BUTTON_MIN_H);
+        // Har button floor par: sabse chhota "All" bhi 96.
+        assert!((super::topchrome_toolbar_button_width("All") - 96.0).abs() < 0.001);
+        assert!((super::topchrome_toolbar_button_width("Sessions") - 96.0).abs() < 0.001);
+        assert!((super::topchrome_toolbar_width() - 996.0).abs() < 0.001);
+        // 960 par avail 936: 9 fit + 1 overflow (scroll, clip nahi).
+        assert!((super::topchrome_toolbar_avail_width(960.0) - 936.0).abs() < 0.001);
+        assert!(super::topchrome_toolbar_needs_scroll(960.0));
+        assert_eq!(super::topchrome_toolbar_visible_count(960.0), 9);
+        assert_eq!(super::topchrome_toolbar_overflow_count(960.0), 1);
+        // Narrow <720: 700 par avail 676: 6 fit + 4 overflow.
+        assert!(super::topchrome_toolbar_needs_scroll(700.0));
+        assert_eq!(super::topchrome_toolbar_visible_count(700.0), 6);
+        assert_eq!(super::topchrome_toolbar_overflow_count(700.0), 4);
+        assert!(!super::topchrome_toolbar_needs_scroll(f32::NAN));
+        assert_eq!(super::topchrome_toolbar_visible_count(f32::NAN), 10);
+        // Path bar: dual field 960 -> 466, 700 -> 336; empty hint imaandaar.
+        assert!((super::topchrome_path_field_width(960.0) - 466.0).abs() < 0.001);
+        assert!((super::topchrome_path_field_width(700.0) - 336.0).abs() < 0.001);
+        assert_eq!(super::topchrome_path_field_width(20.0), 0.0);
+        assert!(super::topchrome_path_field_width(f32::NAN).is_nan());
+        assert_eq!(
+            super::topchrome_path_empty_hint(false, false),
+            "pick both paths above, then Compare"
+        );
+        assert_eq!(super::topchrome_path_empty_hint(true, true), "");
+        assert_eq!(
+            super::topchrome_path_empty_hint(true, false),
+            "right path missing"
+        );
+        assert_eq!(
+            super::topchrome_path_empty_hint(false, true),
+            "left path missing"
+        );
+        // Status 3 sections: 960 -> 320 each, 0/320/640 origins, jod 960.
+        assert_eq!(super::TOPCHROME_STATUS_SECTIONS, 3);
+        assert!((super::topchrome_status_section_width(960.0) - 320.0).abs() < 0.001);
+        assert_eq!(super::topchrome_status_section_x(0, 960.0), 0.0);
+        assert!((super::topchrome_status_section_x(1, 960.0) - 320.0).abs() < 0.001);
+        assert!((super::topchrome_status_section_x(2, 960.0) - 640.0).abs() < 0.001);
+        assert_eq!(super::topchrome_status_section_x(9, 960.0), 960.0);
+        // Typography second: toolbar Body 13, path Mono 12, info/status Small 11.
+        assert!(super::topchrome_hierarchy_ok());
     }
 }

@@ -225,6 +225,65 @@ fn paint_pathmeta_strip(
     }
 }
 
+/// TopChrome toolbar proof (exq-topchrome): action buttons 96x24 floor par,
+/// 28px row budget me, overflow par ">>" marker (clip ka jhooth nahi).
+/// Geometry headless contract (`home::topchrome_*`) se aati hai; hues
+/// existing fixture tones reuse, koi naya palette zero. Colors frozen.
+fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
+    use crate::home::{
+        TOPCHROME_BUTTON_GAP, TOPCHROME_SIDE_PAD, TOPCHROME_TOOLBAR_ACTIONS,
+        topchrome_toolbar_button_width, topchrome_toolbar_visible_count,
+    };
+    use crate::viewmodel::clip_to_width;
+    let width = dims.0;
+    fill_rect(
+        pixels,
+        dims,
+        (0, PATH_TOOLBAR_Y, width, 24),
+        [32, 32, 32, 255],
+    );
+    let visible = topchrome_toolbar_visible_count(width as f32);
+    let mut x = TOPCHROME_SIDE_PAD as u32;
+    let mut shown = 0usize;
+    for action in TOPCHROME_TOOLBAR_ACTIONS {
+        if shown >= visible {
+            break;
+        }
+        let w = topchrome_toolbar_button_width(action) as u32;
+        if x >= width {
+            break;
+        }
+        let vw = w.min(width.saturating_sub(x));
+        if vw < 8 {
+            break;
+        }
+        fill_rect(pixels, dims, (x, PATH_TOOLBAR_Y, vw, 24), [45, 45, 45, 255]);
+        let label = clip_to_width(action, vw.saturating_sub(8), text_width);
+        draw_string(
+            pixels,
+            dims,
+            x.saturating_add(4),
+            PATH_TOOLBAR_Y.saturating_add(8),
+            &label,
+            fixture_palette().text,
+        );
+        x = x
+            .saturating_add(vw)
+            .saturating_add(TOPCHROME_BUTTON_GAP as u32);
+        shown = shown.saturating_add(1);
+    }
+    if shown < TOPCHROME_TOOLBAR_ACTIONS.len() && width > 28 {
+        draw_string(
+            pixels,
+            dims,
+            width.saturating_sub(24),
+            PATH_TOOLBAR_Y.saturating_add(8),
+            ">>",
+            fixture_palette().dim,
+        );
+    }
+}
+
 /// Bottom segmented status: cursor | format | result | edit (4 zones, dividers).
 /// Single-line honest form viewmodel se; clip 936 budget me; colors frozen.
 fn paint_segmented_status(
@@ -451,18 +510,12 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         "2026-01-02 03:05 | 132 B | Text: exact | wrap:off",
     );
 
-    // Session toolbar: Swap Sides + Reload, session identity below tabs.
-    draw_string(
-        &mut pixels,
-        dims,
-        16,
-        PATH_TOOLBAR_Y,
-        "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
-        fixture_palette().text,
-    );
+    // TopChrome toolbar: action buttons 96x24 floor (headless contract proof),
+    // overflow par ">>" marker. Row 114..138, panes 142 se (4px rhythm gap).
+    paint_topchrome_toolbar(&mut pixels, dims);
 
     // Main diff pane borders
-    let pane_top = 124u32;
+    let pane_top = 142u32;
     let pane_bottom = 560u32;
     let pane_height = pane_bottom.saturating_sub(pane_top);
     let gutter_x = GUTTER_X;

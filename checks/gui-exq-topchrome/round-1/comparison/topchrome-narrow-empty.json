@@ -1,0 +1,35 @@
+{
+  "wave": "topchrome",
+  "geometry_first": true,
+  "toolbar": {
+    "actions": 10,
+    "total_width_px": 996,
+    "avail_960_px": 936,
+    "visible_960": 9,
+    "overflow_960": 1,
+    "avail_700_px": 676,
+    "visible_700": 6,
+    "overflow_700": 4,
+    "button_min_w": 96,
+    "button_min_h": 24,
+    "row_h": 28
+  },
+  "path_header": {
+    "field_960_px": 466,
+    "field_700_px": 336,
+    "empty_hint": "pick both paths above, then Compare",
+    "nonempty_hint": ""
+  },
+  "status": {
+    "sections": 3,
+    "section_960_px": 320,
+    "origins_960": [0, 320, 640]
+  },
+  "typography": {
+    "toolbar": "Body 13",
+    "path": "Mono 12",
+    "info": "Small 11",
+    "status": "Small 11"
+  },
+  "colors_frozen": true
+}
