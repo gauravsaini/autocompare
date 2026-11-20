@@ -2007,15 +2007,92 @@ pub fn gutter_viewport_rect_padded(
     if bottom <= top {
         return None;
     }
-    let y0 = pad + (top / total_f) * inner;
+    let mut y0 = pad + (top / total_f) * inner;
     let mut y1 = pad + (bottom / total_f) * inner;
     if y1 < y0 + GUTTER_VIEWPORT_MIN_H {
         y1 = (y0 + GUTTER_VIEWPORT_MIN_H).min(pad + inner);
+    }
+    if y1 - y0 < GUTTER_VIEWPORT_MIN_H {
+        y0 = (y1 - GUTTER_VIEWPORT_MIN_H).max(pad);
     }
     if !y0.is_finite() || !y1.is_finite() || y0 < pad || y1 > pad + inner || y0 >= y1 {
         return None;
     }
     Some((y0, y1))
+}
+
+/// 720px narrow canvas symmetric side layout `(margin, left, center, right, margin)`
+/// px: 12 + 338 + 20 + 338 + 12 = 720. Panes barabar, 20px side column beech
+/// me symmetric insets samet. Single source over [`gutter_text_layout`].
+/// Pure; unit-tested.
+pub fn gutter_side_layout_720() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_SIDE_MARKER_COL_W,
+        720.0,
+    )
+}
+
+/// 720px narrow canvas side-column x px: `margin + pane` from the symmetric
+/// side layout (12 + 338 = 350). Column is [`GUTTER_SIDE_MARKER_COL_W`] wide (20).
+/// Pure; unit-tested.
+pub fn gutter_side_column_x_720() -> f32 {
+    let (margin, pane, _, _, _) = gutter_side_layout_720();
+    margin + pane
+}
+
+/// 720px narrow canvas side-marker cx px: column center (350 + 20/2 = 360 =
+/// canvas middle), so the marker sits centered in the gutter. `None` only
+/// when the column math goes non-finite. Pure; unit-tested.
+pub fn gutter_side_arrow_cx_720() -> Option<f32> {
+    let x = gutter_side_column_x_720();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    if !x.is_finite() || !w.is_finite() {
+        return None;
+    }
+    let cx = x + w / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// 720px narrow canvas side glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (360) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_side_glyph_720(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_side_arrow_cx_720()?;
+    gutter_arrow_glyph_rect(cx, center_y)
+}
+
+/// 720px narrow canvas side hit band `(lo, hi)` px: side column + symmetric slop on
+/// both sides (350 - 2 .. 370 + 2 = 348..372), canvas center 360 ke around
+/// barabar. Pure; unit-tested.
+pub fn gutter_side_hit_band_720() -> (f32, f32) {
+    let x = gutter_side_column_x_720();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    let s = GUTTER_SIDE_HIT_SLOP;
+    (x - s, x + w + s)
+}
+
+/// 720px narrow canvas center-column x px: `margin + pane` from the symmetric
+/// text layout (12 + 336 = 348). Column is [`GUTTER_CENTER_W`] wide (24).
+/// Pure; unit-tested.
+pub fn gutter_center_column_x_720() -> f32 {
+    let (margin, pane, _, _, _) = gutter_text_layout_720();
+    margin + pane
+}
+
+/// 720px narrow canvas center-arrow cx px: column center (348 + 24/2 = 360 =
+/// canvas middle), so the glyph sits centered in the gutter. `None` only
+/// when the column math goes non-finite. Pure; unit-tested.
+pub fn gutter_center_arrow_cx_720() -> Option<f32> {
+    gutter_arrow_center_x(gutter_center_column_x_720())
+}
+
+/// 720px narrow canvas center glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (360) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_center_glyph_720(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_center_arrow_cx_720()?;
+    gutter_arrow_glyph_rect(cx, center_y)
 }
 
 #[cfg(test)]
@@ -2097,11 +2174,159 @@ mod exq_gutter10_tests {
                 a >= GUTTER_MINIMAP_TRACK_PAD && b <= 600.0 - GUTTER_MINIMAP_TRACK_PAD
             })
         );
+        // Viewport bottom edge floor: row 999 keeps min height without escaping pad.
+        assert_eq!(
+            gutter_viewport_rect_padded(1000, 400.0, 999, 1),
+            Some((392.0, 396.0))
+        );
         // Khali/kharab input: None.
         assert_eq!(gutter_viewport_rect_padded(0, 600.0, 0, 2), None);
         assert_eq!(gutter_viewport_rect_padded(6, 600.0, 0, 0), None);
         assert_eq!(gutter_viewport_rect_padded(6, 8.0, 0, 2), None);
         assert_eq!(gutter_viewport_rect_padded(6, 600.0, 99, 2), None);
+    }
+
+    #[test]
+    fn gutter10_narrow_720_marker_alignment_from_char_metrics() {
+        // Mirrors checks/gui-exq-gutter10/round-1/comparison/gutter-narrow-720.json.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-gutter10/round-1/comparison/gutter-narrow-720.json"
+        );
+        assert!(fixture_raw.contains("\"arrow_cx_720\": 360.0"));
+        assert!(fixture_raw.contains("\"center_column_x_720\": 348.0"));
+        assert!(fixture_raw.contains("\"column_x_720\": 350.0"));
+        assert!(fixture_raw.contains("\"linenum_col_1digit\": 16.0"));
+        assert!(fixture_raw.contains("\"linenum_text_x_1digit\": 26.0"));
+
+        // Narrow layout 720 symmetric: 12 + 338 + 20 + 338 + 12 = 720.
+        assert_eq!(gutter_side_layout_720(), (12.0, 338.0, 20.0, 338.0, 12.0));
+        let (m0, left, center, right, m1) = gutter_side_layout_720();
+        assert_eq!(m0, m1);
+        assert_eq!(left, right);
+        assert!((m0 + left + center + right + m1 - 720.0).abs() < 0.001);
+        assert_eq!(center, GUTTER_SIDE_MARKER_COL_W);
+
+        // Column x 350, cx 360 canvas middle; glyph + hit symmetric about 360.
+        assert_eq!(gutter_side_column_x_720(), 350.0);
+        assert_eq!(gutter_side_arrow_cx_720(), Some(360.0));
+        assert_eq!(
+            gutter_side_marker_rect(360.0, 200.0),
+            Some((352.0, 192.0, 368.0, 208.0))
+        );
+        assert_eq!(
+            gutter_side_hit_rect(360.0, 200.0),
+            Some((350.0, 190.0, 370.0, 210.0))
+        );
+        assert_eq!(
+            gutter_side_glyph_720(200.0),
+            Some((354.0, 194.0, 366.0, 206.0))
+        );
+        assert_eq!(gutter_side_glyph_720(f32::NAN), None);
+        assert_eq!(gutter_side_hit_band_720(), (348.0, 372.0));
+        let (lo, hi) = gutter_side_hit_band_720();
+        assert!(((360.0 - lo) - (hi - 360.0)).abs() < 0.001);
+
+        // Center gutter 24px layout: 12 + 336 + 24 + 336 + 12 = 720; cx also 360.
+        assert_eq!(gutter_center_column_x_720(), 348.0);
+        assert_eq!(gutter_center_arrow_cx_720(), Some(360.0));
+        assert_eq!(
+            gutter_center_glyph_720(200.0),
+            Some((354.0, 194.0, 366.0, 206.0))
+        );
+        assert_eq!(gutter_center_glyph_720(f32::NAN), None);
+
+        // Char metrics at 720:
+        // Left pane (12..350): 1-digit line numbers col 16px -> text_x 26px (col 12 + col 16 - inset 2).
+        assert_eq!(gutter_linenum_column_width(9, true), 16.0);
+        assert_eq!(gutter_linenum_text_x(12.0, 16.0), Some(26.0));
+        assert_eq!(gutter_text_gutter_width(9, true), 32.0);
+        assert!(gutter_text_gutter_width(9, true) < left);
+        // Right pane (370..708): 1-digit line numbers col 16px -> text_x 384px (col 370 + col 16 - inset 2).
+        assert_eq!(gutter_linenum_text_x(370.0, 16.0), Some(384.0));
+
+        // Marker visibility only on changed rows (diff kind != Equal).
+        assert!(!gutter_side_marker_visible(TextRowKind::Equal));
+        assert!(gutter_side_marker_visible(TextRowKind::Deleted));
+        assert!(gutter_side_marker_visible(TextRowKind::Inserted));
+        assert!(gutter_side_marker_visible(TextRowKind::Changed));
+
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Deleted,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+        ];
+        assert_eq!(gutter_side_changed_rows(&rows), vec![1, 3, 5]);
+        let geom = gutter_geometry(rows.len(), 800.0, &rows);
+        assert_eq!(geom.segments.len(), 3);
     }
 }
 

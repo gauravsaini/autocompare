@@ -35,3 +35,30 @@ content_grid Mono 12 tabular reuse, koi naya size nahi). Colors FROZEN
   CHECK: `cargo clippy -p autocompare-gui -- -D warnings` + `rustfmt --edition 2024 --check crates/gui/src/gutter.rs` + banned grep + `grep -c Color32 gutter.rs` == 0
   EXPECT: clippy 0 warnings, fmt clean, non-test unwrap/expect/panic/todo/unimplemented 0, colors 0
   EVIDENCE: round-1 green; clippy lib+tests clean, fmt clean, banned 0, gutter.rs colors 0 (repo 33, gutter6 se unchanged)
+
+## Round-2 Observable gates (markers plus narrow-720 viewport lock)
+
+- [x] G6: narrow 720px side marker layout + alignment at canvas middle (cx=360) from char metrics
+  CHECK: `cargo test -p autocompare-gui gutter10_narrow_720` green + fixture comparison/gutter-narrow-720.json
+  EXPECT: layout (12, 338, 20, 338, 12), col_x 350, cx 360 (canvas mid), glyph (354, 194, 366, 206), hit band (348, 372) symmetric about 360; char metrics linenum col 16 -> text_x 26.0 (col 12 + 16 - 2)
+  EVIDENCE: round-2 green (1004 tests ok, harness RESULT:PASS)
+
+- [x] G7: center column 24px at 720 also centers at cx=360 (col_x 348, cx 360)
+  CHECK: `cargo test -p autocompare-gui gutter10_narrow_720` green
+  EXPECT: center col_x 348, cx 360, glyph centered at cx=360
+  EVIDENCE: round-2 green; center column 348 + 12 = 360, glyph matches side marker center
+
+- [x] G8: marker visibility only on changed rows
+  CHECK: `cargo test -p autocompare-gui gutter10_narrow_720` green
+  EXPECT: Equal -> false, Deleted/Inserted/Changed -> true; changed_rows -> [1, 3, 5] on 8-row mixed
+  EVIDENCE: round-2 green; Equal rows blank, diff kinds get markers, exactly 3 segments
+
+- [x] G9: padded click viewport bottom edge floor lock
+  CHECK: `cargo test -p autocompare-gui gutter10_padded` green
+  EXPECT: 1000 rows @400px bottom row 999 keeps floor >= 4.0 within [pad, pad + inner] -> (392, 396)
+  EVIDENCE: round-2 green; bottom row viewport band never collapses below GUTTER_VIEWPORT_MIN_H
+
+- [x] G10: MS Rust + frozen gates round-2
+  CHECK: `cargo clippy -p autocompare-gui -- -D warnings` + `rustfmt --edition 2024 --check crates/gui/src/gutter.rs` + banned grep + `grep -c Color32 gutter.rs` == 0
+  EXPECT: clippy 0 warnings, fmt clean, non-test unwrap/expect/panic/todo/unreachable/indexing 0, colors 0
+  EVIDENCE: round-2 green; clippy clean, fmt clean, banned 0, gutter.rs colors 0 (repo 33, frozen)
