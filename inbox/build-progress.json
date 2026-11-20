@@ -80,7 +80,8 @@
     "EXQ5-GUI": "landed+pushed d1ac988 (725 green clean-tree, clippy 0, fmt clean, banned 0, allow 0; geometry+typo headless contracts)",
     "PARITY-VERIFY": "landed+pushed d62349a (parity r1-3 PASS + exq5 REPORT PASS 960x600+720x600 PNGs valid, 131 files checks-only)",
     "PARITY-SOURCE": "landed+pushed 215888b (3631 ins, 8 files) + fix 553611a test-only clippy allows (clippy 0, fmt clean, tests 18 suites ok, banned-non-test 0)",
-    "ORCH-PARITY-FIX": "2026-11-20 parity agent exited after 215888b, orchestrator added test-mod allows (7 files, 42 ins), verified isolated target, pushed e2af276..553611a"
+    "ORCH-PARITY-FIX": "2026-11-20 parity agent exited after 215888b, orchestrator added test-mod allows (7 files, 42 ins), verified isolated target, pushed e2af276..553611a",
+    "EXQ4-SOURCE": "landed+pushed 05e667e (6 files, TypoRole single-source + 720px proof PNG 12992B, 726 green clean-tree, clippy 0, fmt clean, banned-non-test 0)"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
