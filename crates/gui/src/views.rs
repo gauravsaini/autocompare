@@ -3237,7 +3237,7 @@ fn paint_text_body(
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
-                                            if text_gutter_has_copy(row.kind) {
+                                            if text_center_hunk_marker(row.kind) {
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                                                     if ui
@@ -3308,13 +3308,99 @@ fn paint_text_body(
                             }
                             vis_pos = vis_pos.saturating_add(1);
                         }
+                        // Wrap-on trailing blanks: flat visuals fill `panes_h`
+                        // (BC hatched blank precedent, wrap-off parity).
+                        let total_visual = wrap_total_visual(&wrap_counts);
+                        let trailing_visual =
+                            text_trailing_blank_rows(panes_h, row_height, total_visual);
+                        let mut t = 0usize;
+                        while t < trailing_visual {
+                            ui.set_row_height(wrap_reserved_height(1, row_height));
+                            ui.horizontal(|ui| {
+                                let blank_left = wrap_blank_sub_job(
+                                    font_id.clone(),
+                                    base_text,
+                                    Color32::TRANSPARENT,
+                                    gutter_dim,
+                                    gutter_chars,
+                                    wrap_width,
+                                );
+                                let left_resp = ui.label(blank_left);
+                                paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
+                                ui.vertical(|ui| {
+                                    ui.set_width(text_center_gutter_width());
+                                    ui.allocate_exact_size(
+                                        egui::vec2(text_center_gutter_width(), row_height),
+                                        egui::Sense::hover(),
+                                    );
+                                });
+                                let blank_right = wrap_blank_sub_job(
+                                    font_id.clone(),
+                                    base_text,
+                                    Color32::TRANSPARENT,
+                                    gutter_dim,
+                                    gutter_chars,
+                                    wrap_width,
+                                );
+                                let right_resp = ui.label(blank_right);
+                                paint_filler_hatch(ui.painter(), right_resp.rect, gutter_dim);
+                            });
+                            t = t.saturating_add(1);
+                        }
                     });
             } else {
+                // Wrap-off: virtualized rows plus trailing hatched blanks so
+                // short content fills `panes_h` (BC blank-fill precedent).
+                // `total` = content + trailing; trailing rows paint both
+                // sides blank + hatch + blank center gutter, scroll target
+                // sirf real rows par. Typo Mono rhythm unchanged.
+                let trailing = text_trailing_blank_rows(panes_h, row_height, visible.len());
+                let total = visible.len().saturating_add(trailing);
+                let blank_row = TextRow::default();
                 egui::ScrollArea::both()
                     .id_salt("text_diff_rows")
                     .auto_shrink([false, false])
-                    .show_rows(ui, row_height, visible.len(), |ui, range| {
+                    .show_rows(ui, row_height, total, |ui, range| {
                         for vis_pos in range {
+                            if vis_pos >= visible.len() {
+                                ui.set_row_height(row_height);
+                                ui.horizontal(|ui| {
+                                    let layout = TextPaneLayout {
+                                        pane_chars,
+                                        gutter_chars,
+                                        prefs,
+                                        dim: gutter_dim,
+                                    };
+                                    let left_job = side_job_with_prefs(
+                                        Side::Left,
+                                        &blank_row,
+                                        &layout,
+                                        font_id.clone(),
+                                        base_text,
+                                        Color32::TRANSPARENT,
+                                    );
+                                    let left_resp = ui.label(left_job);
+                                    paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
+                                    ui.vertical(|ui| {
+                                        ui.set_width(text_center_gutter_width());
+                                        ui.allocate_exact_size(
+                                            egui::vec2(text_center_gutter_width(), row_height),
+                                            egui::Sense::hover(),
+                                        );
+                                    });
+                                    let right_job = side_job_with_prefs(
+                                        Side::Right,
+                                        &blank_row,
+                                        &layout,
+                                        font_id.clone(),
+                                        base_text,
+                                        Color32::TRANSPARENT,
+                                    );
+                                    let right_resp = ui.label(right_job);
+                                    paint_filler_hatch(ui.painter(), right_resp.rect, gutter_dim);
+                                });
+                                continue;
+                            }
                             let Some(orig) = visible.get(vis_pos).copied() else {
                                 continue;
                             };
@@ -3375,7 +3461,7 @@ fn paint_text_body(
 
                                 ui.vertical(|ui| {
                                     ui.set_width(text_center_gutter_width());
-                                    if text_gutter_has_copy(row.kind) {
+                                    if text_center_hunk_marker(row.kind) {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                                             if ui
@@ -3511,6 +3597,12 @@ fn paint_text_body(
             }
         }
     });
+
+    // Segmented pane status (BC per-pane `1:1` precedent): panes row ke
+    // neeche left/right cursor side-by-side, taaki har pane ka cursor
+    // apne pane ke neeche padhe. Geometry/typo top status bar reuse
+    // (full-width `HEADER_H` + Small weak); koi naya token/color nahi.
+    paint_text_pane_status(ui, &model.rows, model.selected);
 
     if let Some((idx, dir)) = copy_action
         && viewmodel::copy_line(model, idx, dir).is_ok()
@@ -4137,6 +4229,69 @@ pub fn filler_hatch_count(width: f32) -> usize {
         return 0;
     }
     (width / step).floor() as usize
+}
+
+/// Viewport fill: remaining-height budget me kitne blank rows lagenge
+/// taaki short content ke neeche kala waste na rahe (BC hatched blank
+/// precedent). Slots `ceil(panes_h / row_h)` hain, trailing usme se
+/// `visible_len` ghata kar — short file par positive, full/overflow par
+/// zero. Guards finite/positive hain; koi unwrap/panic nahi. Geometry
+/// only ([`TIGHT_GAP`] step reuse nahi, sirf row rhythm); typo/colors
+/// untouched. Pure; unit-tested.
+pub fn text_trailing_blank_rows(panes_h: f32, row_h: f32, visible_len: usize) -> usize {
+    if !panes_h.is_finite() || !row_h.is_finite() || panes_h <= 0.0 || row_h <= 0.0 {
+        return 0;
+    }
+    let slots = (panes_h / row_h).ceil().clamp(0.0, 100_000.0) as usize;
+    slots.saturating_sub(visible_len)
+}
+
+/// Center-gutter per-hunk marker: diff kinds par marker, Equal par nahi.
+/// Copy arrows isi gate par hain ([`text_gutter_has_copy`] reuse) — BC
+/// center bar me har hunk par arrow/marker rehta hai, equal rows par
+/// blank click-to-select. Ponytail alias taaki paint intent naam se
+/// padhe, logic ek jagah rahe. Pure; unit-tested.
+pub fn text_center_hunk_marker(kind: TextRowKind) -> bool {
+    text_gutter_has_copy(kind)
+}
+
+/// Segmented pane status: selected row ke per-side line numbers —
+/// left `L<n>` / `R<n>`, missing side ya no-selection/OOB par `L-` /
+/// `R-` (koi fake number nahi). BC bottom bar har pane ke neeche apna
+/// cursor dikhata hai (`1:1` per pane); ye uska headless model hai.
+/// Paint [`paint_text_pane_status`] dono ko side-by-side rakhta hai.
+/// Pure; unit-tested.
+pub fn text_pane_cursor_labels(rows: &[TextRow], selected: Option<usize>) -> (String, String) {
+    let row = selected.and_then(|idx| rows.get(idx));
+    let left = match row.and_then(|r| r.left_no) {
+        Some(n) => format!("L{n}"),
+        None => "L-".to_string(),
+    };
+    let right = match row.and_then(|r| r.right_no) {
+        Some(n) => format!("R{n}"),
+        None => "R-".to_string(),
+    };
+    (left, right)
+}
+
+/// Segmented pane status bar: bottom row me left-pane cursor + right-pane
+/// cursor side-by-side (BC per-pane `1:1` precedent). Geometry toolbar
+/// precedent (full-width `HEADER_H` row, [`TIGHT_GAP`] spacing, right-end
+/// dock); typo [`chrome_status_role`] (Small weak proportional reuse —
+/// Mono 12 hierarchy rows me rehti hai, status chrome me). Koi naya
+/// size/color/Grid nahi.
+pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
+    let (left, right) = text_pane_cursor_labels(rows, selected);
+    let avail = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail, HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.label(chrome_status_role().rich(left.as_str()));
+        ui.separator();
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(chrome_status_role().rich(right.as_str()));
+        });
+    });
 }
 
 /// Filler hatch paint: khaali (filler) side ke label rect me step-spaced
@@ -7706,6 +7861,62 @@ mod tests {
         assert_eq!(right_bg, base);
         assert!(filler_hatch_count(460.0) > 0);
         assert_eq!(filler_hatch_count(0.0), 0);
+    }
+
+    #[test]
+    fn paint1_fill_viewport_blank_alignment_and_pane_status() {
+        // Short-vs-long edge: 7-row content at 24px rows in a 436px pane
+        // budget leaves trailing hatched blanks (BC precedent) — no bottom
+        // waste, alignment preserved via same row rhythm.
+        assert_eq!(text_trailing_blank_rows(436.0, 24.0, 7), 12);
+        assert_eq!(text_trailing_blank_rows(436.0, 24.0, 19), 0);
+        assert_eq!(text_trailing_blank_rows(f32::NAN, 24.0, 7), 0);
+        assert_eq!(text_trailing_blank_rows(436.0, 0.0, 7), 0);
+        // Center-gutter per-hunk markers: diffs mark, equal blanks.
+        assert!(text_center_hunk_marker(TextRowKind::Changed));
+        assert!(text_center_hunk_marker(TextRowKind::Deleted));
+        assert!(text_center_hunk_marker(TextRowKind::Inserted));
+        assert!(!text_center_hunk_marker(TextRowKind::Equal));
+        // Segmented pane status: per-side honest labels, no fakes.
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                left_no: Some(3),
+                right_no: Some(3),
+                left: "a".to_string(),
+                right: "b".to_string(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+            TextRow {
+                kind: TextRowKind::Deleted,
+                left_no: Some(4),
+                right_no: None,
+                left: "x".to_string(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            },
+        ];
+        assert_eq!(
+            text_pane_cursor_labels(&rows, Some(0)),
+            ("L3".to_string(), "R3".to_string())
+        );
+        assert_eq!(
+            text_pane_cursor_labels(&rows, Some(1)),
+            ("L4".to_string(), "R-".to_string())
+        );
+        assert_eq!(
+            text_pane_cursor_labels(&rows, None),
+            ("L-".to_string(), "R-".to_string())
+        );
+        assert_eq!(
+            text_pane_cursor_labels(&rows, Some(99)),
+            ("L-".to_string(), "R-".to_string())
+        );
+        // Typo reuse: status roles stay Small/Body (Mono 12 rows untouched).
+        assert_eq!(status_side_role(), TypoRole::Small);
+        assert_eq!(status_verdict_role(), TypoRole::Body);
     }
 
     #[test]
