@@ -3482,10 +3482,7 @@ mod tests {
         // Origin-aligned first cell box default grid par.
         let first = table_cell_rect(grid, 0, 0, &px);
         let expected_h = table_cell_row_h();
-        assert_eq!(
-            first.map(|r| (r.x, r.y, r.w)),
-            Some((12.0, 12.0, 40.0))
-        );
+        assert_eq!(first.map(|r| (r.x, r.y, r.w)), Some((12.0, 12.0, 40.0)));
         assert!((first.map(|r| r.h).unwrap_or(0.0) - expected_h).abs() < 0.001);
     }
 
@@ -3554,10 +3551,16 @@ mod tests {
         assert!(table_wide_outer_widths(&widths, 0.0).is_empty());
 
         // 4. Header underline weight via TYPO tokens, row height Mono lock.
-        assert_eq!(TABLE_HEADER_UNDERLINE_W, crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W);
+        assert_eq!(
+            TABLE_HEADER_UNDERLINE_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
         assert_eq!(table_header_underline_w(), 1.0);
         assert_eq!(table_header_underline_w(), TABLE_FIND_UNDERLINE_W);
-        assert_eq!(TABLE_FIND_UNDERLINE_W, crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W);
+        assert_eq!(
+            TABLE_FIND_UNDERLINE_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
         assert!(table_header_weight_ok());
         assert!((table_wide_row_h() - 15.6).abs() < 0.001);
         assert_eq!(table_wide_row_h(), table_cell_row_h());
