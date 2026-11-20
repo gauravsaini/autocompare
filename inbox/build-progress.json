@@ -83,7 +83,7 @@
  "WAVE-GUI-EXQ6": "landed+pushed bbe2a1c (REPORT PASS, 728 green gui-lib, clippy 0, fmt clean, banned 0, PNG noise reverted)",
  "WAVE-GUTTER6": "landed+pushed 38da325 840 green REPORT PASS OWNS-clean fmt0 banned0 (clippy fail views_table useless_vec pre-existing, follow-up needed)",
  "WAVE-GUTTERCOPY8": "WIP gutter+copy+take, session live msgs17",
- "WAVE-HEXDENSE8": "fix-nudged 2026-11-21 hexdense8_narrow test fails views_hex.rs:3832, agent fixing, WIP views_hex+views_table",
+ "WAVE-HEXDENSE8": "fixed+green 2026-11-21 orch-verify 858 passed 0 failed (views_hex single+full), nudged to REPORT+GATES+commit",
  "WAVE-HEXTABLE": "landed+pushed e7c3333 REPORT PASS 755 green pane-heights gutter-markers cell-padding",
  "WAVE-HEXTABLE2": "landed+pushed 7005bca REPORT PASS 793 green clippy0 fmt clean banned0 2 edge fixtures",
  "WAVE-HEXTABLE2-SWARM": "dead agyx /swarm needs TTY bubbletea no-dev-tty in headless, fallback opencode sess-opencode-hextable2 OWNS views_hex+views_table running 23:52",
