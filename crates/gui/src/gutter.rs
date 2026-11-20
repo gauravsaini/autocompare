@@ -2875,3 +2875,291 @@ mod exq_gutter7_tests {
         assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
     }
 }
+
+// ----------------------------------------------------------------------------
+// GUTTER9 round-1: gutter-side changed-only markers + SPACE-width column at 960.
+// BC text compare center gutter ~20px with yellow '=>' markers ONLY at changed
+// rows; views-side already narrows to 20px (SPACE_LG + SPACE_XS). Gutter-side
+// locks the same rhythm: marker box 16px (SPACE_LG) centered in a 20px column
+// with 2px symmetric inset/slop (GUTTER_MERGE_GAP), markers gated on the
+// changed-row flag so Equal rows stay blank. Geometry first: all widths from
+// SPACE/GUTTER scale, no new literals. Typography second: nothing (no text
+// here). Colors frozen: shape only.
+// WIRING (paint owner ke paas): per-row marker `gutter_side_marker_visible(..)`
+// se gate karo (false -> blank); changed rows `gutter_side_changed_rows(..)`
+// se; 960 column x `gutter_side_column_x_960()` se, arrow cx
+// `gutter_side_arrow_cx_960()` se, marker box `gutter_side_marker_rect(..)`
+// se, hit `gutter_side_hit_rect(..)` / `gutter_side_hit_contains(..)` se,
+// band `gutter_side_hit_band_960()` se, glyph `gutter_side_glyph_960(..)` se.
+// ----------------------------------------------------------------------------
+
+/// Gutter-side marker column width px: SPACE_LG + SPACE_XS (20.0).
+///
+/// Views-side [`crate::views::TEXT_CENTER_GUTTER_W`] parity so gutter-side and
+/// views-side stay symmetric at 960px wide. No new literal, only SPACE scale.
+pub const GUTTER_SIDE_MARKER_COL_W: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
+
+/// Gutter-side marker box px: one LG step (16.0, arrow-box parity).
+///
+/// [`GUTTER_ARROW_BOX`] twin so side markers read the same size as center
+/// arrows without drifting off scale.
+pub const GUTTER_SIDE_MARKER_BOX: f32 = crate::theme::SPACE_LG;
+
+/// Gutter-side marker inset px per side: merge-gap reuse (2.0).
+///
+/// `(COL - BOX) / 2 == 2`, symmetric so the 16px marker centers in the 20px
+/// column ( BC center-bar rhythm ).
+pub const GUTTER_SIDE_MARKER_INSET: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Gutter-side hit slop px per side: merge-gap reuse (2.0), symmetric.
+///
+/// 16px box -> 20px tap-target bina paint hile, dono taraf barabar.
+pub const GUTTER_SIDE_HIT_SLOP: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Gutter-side marker column width px (single source). Pure.
+pub fn gutter_side_marker_width() -> f32 {
+    GUTTER_SIDE_MARKER_COL_W
+}
+
+/// Gutter-side marker box px (single source). Pure.
+pub fn gutter_side_marker_box() -> f32 {
+    GUTTER_SIDE_MARKER_BOX
+}
+
+/// Gutter-side marker inset px per side (single source). Pure.
+pub fn gutter_side_marker_inset() -> f32 {
+    GUTTER_SIDE_MARKER_INSET
+}
+
+/// Gutter-side hit slop px per side (single source). Pure.
+pub fn gutter_side_hit_slop() -> f32 {
+    GUTTER_SIDE_HIT_SLOP
+}
+
+/// Gutter-side marker visibility for one row: changed rows only.
+///
+/// Single source over [`gutter_marker_visible`] so side and center gates never
+/// disagree: `Equal` rows stay blank, every diff kind gets a marker.
+/// Pure; unit-tested.
+pub fn gutter_side_marker_visible(kind: TextRowKind) -> bool {
+    gutter_marker_visible(kind)
+}
+
+/// Gutter-side changed-row indices in row order.
+///
+/// Single source over [`gutter_changed_rows`] so markers land ONLY on changed
+/// rows at 960px wide. Pure; unit-tested.
+pub fn gutter_side_changed_rows(rows: &[TextRow]) -> Vec<usize> {
+    gutter_changed_rows(rows)
+}
+
+/// 960px canvas symmetric side layout `(margin, left, center, right, margin)`
+/// px: 12 + 458 + 20 + 458 + 12 = 960. Panes barabar, 20px side column beech
+/// me symmetric insets samet. Single source over [`gutter_text_layout`].
+/// Pure; unit-tested.
+pub fn gutter_side_layout_960() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_SIDE_MARKER_COL_W,
+        960.0,
+    )
+}
+
+/// 960px canvas side-column x px: `margin + pane` from the symmetric side
+/// layout (12 + 458 = 470). Column is [`GUTTER_SIDE_MARKER_COL_W`] wide (20).
+/// Pure; unit-tested.
+pub fn gutter_side_column_x_960() -> f32 {
+    let (margin, pane, _, _, _) = gutter_side_layout_960();
+    margin + pane
+}
+
+/// 960px canvas side-marker cx px: column center (470 + 20/2 = 480 = canvas
+/// middle), so the marker sits centered in the gutter. `None` only when the
+/// column math goes non-finite. Pure; unit-tested.
+pub fn gutter_side_arrow_cx_960() -> Option<f32> {
+    let x = gutter_side_column_x_960();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    if !x.is_finite() || !w.is_finite() {
+        return None;
+    }
+    let cx = x + w / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// Gutter-side marker box rect `(x0, y0, x1, y1)` px: [`GUTTER_SIDE_MARKER_BOX`]
+/// centered at `(center_x, center_y)`. Non-finite input par `None` taaki paint
+/// NaN kabhi layout me na daale. Pure; unit-tested.
+pub fn gutter_side_marker_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    if !center_x.is_finite() || !center_y.is_finite() {
+        return None;
+    }
+    let half = GUTTER_SIDE_MARKER_BOX / 2.0;
+    Some((
+        center_x - half,
+        center_y - half,
+        center_x + half,
+        center_y + half,
+    ))
+}
+
+/// Gutter-side slop-expanded hit rect `(x0, y0, x1, y1)` px: marker box har
+/// taraf [`GUTTER_SIDE_HIT_SLOP`] badha hua (16px box -> 20px target), dono
+/// taraf symmetric. Non-finite par `None`. Pure; unit-tested.
+pub fn gutter_side_hit_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let (x0, y0, x1, y1) = gutter_side_marker_rect(center_x, center_y)?;
+    let s = GUTTER_SIDE_HIT_SLOP;
+    let (lx0, ly0, lx1, ly1) = (x0 - s, y0 - s, x1 + s, y1 + s);
+    if lx0.is_finite() && ly0.is_finite() && lx1.is_finite() && ly1.is_finite() {
+        Some((lx0, ly0, lx1, ly1))
+    } else {
+        None
+    }
+}
+
+/// Gutter-side hit-test: point `(x, y)` slop-expanded hit rect ke andar hai
+/// ya nahi (edges inclusive). Non-finite par false. Pure; unit-tested.
+pub fn gutter_side_hit_contains(center_x: f32, center_y: f32, x: f32, y: f32) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    match gutter_side_hit_rect(center_x, center_y) {
+        Some((x0, y0, x1, y1)) => x >= x0 && x <= x1 && y >= y0 && y <= y1,
+        None => false,
+    }
+}
+
+/// 960px canvas side glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (480) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_side_glyph_960(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_side_arrow_cx_960()?;
+    gutter_arrow_glyph_rect(cx, center_y)
+}
+
+/// 960px canvas side hit band `(lo, hi)` px: side column + symmetric slop on
+/// both sides (470 - 2 .. 490 + 2 = 468..492), canvas center 480 ke around
+/// barabar. Pure; unit-tested.
+pub fn gutter_side_hit_band_960() -> (f32, f32) {
+    let x = gutter_side_column_x_960();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    let s = GUTTER_SIDE_HIT_SLOP;
+    (x - s, x + w + s)
+}
+
+#[cfg(test)]
+mod exq_gutter9_tests {
+    use super::*;
+
+    fn srow(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        }
+    }
+
+    fn mixed_960_rows() -> Vec<TextRow> {
+        vec![
+            srow(TextRowKind::Equal),
+            srow(TextRowKind::Deleted),
+            srow(TextRowKind::Equal),
+            srow(TextRowKind::Changed),
+            srow(TextRowKind::Equal),
+            srow(TextRowKind::Inserted),
+            srow(TextRowKind::Equal),
+            srow(TextRowKind::Equal),
+        ]
+    }
+
+    #[test]
+    fn gutter9_side_markers_only_on_changed_rows() {
+        // Mirrors checks/gui-exq-gutter9/round-1/comparison/gutter-markers-960.json.
+        let rows = mixed_960_rows();
+        assert!(!gutter_side_marker_visible(TextRowKind::Equal));
+        assert!(gutter_side_marker_visible(TextRowKind::Deleted));
+        assert!(gutter_side_marker_visible(TextRowKind::Inserted));
+        assert!(gutter_side_marker_visible(TextRowKind::Changed));
+        assert_eq!(gutter_side_changed_rows(&rows), vec![1, 3, 5]);
+        assert_eq!(gutter_side_changed_rows(&rows), gutter_changed_rows(&rows));
+        // Segments agree: diff-only geometry yields exactly the changed bands.
+        let geom = gutter_geometry(rows.len(), 800.0, &rows);
+        assert_eq!(geom.segments.len(), 3);
+        // Every Equal row maps to no segment: side markers never land there.
+        let mut idx = 0usize;
+        while idx < rows.len() {
+            if let Some(row) = rows.get(idx) {
+                if row.kind == TextRowKind::Equal {
+                    if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+                        assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+                    }
+                }
+            }
+            idx = idx.saturating_add(1);
+        }
+        assert!(gutter_side_changed_rows(&[]).is_empty());
+    }
+
+    #[test]
+    fn gutter9_side_box_from_space_tokens_hit_symmetric_at_960() {
+        // Mirrors checks/gui-exq-gutter9/round-1/comparison/gutter-markers-960.json:
+        // col 20 (LG+XS), box 16 (LG), inset 2 + slop 2 (merge-gap), symmetric.
+        assert_eq!(
+            GUTTER_SIDE_MARKER_COL_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(gutter_side_marker_width(), 20.0);
+        assert_eq!(GUTTER_SIDE_MARKER_BOX, crate::theme::SPACE_LG);
+        assert_eq!(gutter_side_marker_box(), 16.0);
+        assert_eq!(GUTTER_SIDE_MARKER_INSET, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(gutter_side_marker_inset(), 2.0);
+        assert_eq!(GUTTER_SIDE_HIT_SLOP, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(gutter_side_hit_slop(), 2.0);
+        // Inset centers the box: (col - box) / 2 == inset, both sides equal.
+        assert!(
+            (center_row_marker_inset(gutter_side_marker_width(), gutter_side_marker_box())
+                - gutter_side_marker_inset())
+            .abs()
+                < 0.001
+        );
+        assert_eq!(
+            center_row_marker_inset(gutter_side_marker_width(), gutter_side_marker_box()),
+            2.0
+        );
+        // Symmetric layout at 960: 12 + 458 + 20 + 458 + 12 = 960.
+        assert_eq!(gutter_side_layout_960(), (12.0, 458.0, 20.0, 458.0, 12.0));
+        let (m0, left, center, right, m1) = gutter_side_layout_960();
+        assert_eq!(m0, m1);
+        assert_eq!(left, right);
+        assert!((m0 + left + center + right + m1 - 960.0).abs() < 0.001);
+        // Column x 470, cx 480 canvas middle; glyph + hit symmetric about 480.
+        assert_eq!(gutter_side_column_x_960(), 470.0);
+        assert_eq!(gutter_side_arrow_cx_960(), Some(480.0));
+        assert_eq!(
+            gutter_side_marker_rect(480.0, 200.0),
+            Some((472.0, 192.0, 488.0, 208.0))
+        );
+        assert_eq!(
+            gutter_side_hit_rect(480.0, 200.0),
+            Some((470.0, 190.0, 490.0, 210.0))
+        );
+        assert_eq!(
+            gutter_side_glyph_960(200.0),
+            Some((474.0, 194.0, 486.0, 206.0))
+        );
+        assert_eq!(gutter_side_glyph_960(f32::NAN), None);
+        assert_eq!(gutter_side_hit_band_960(), (468.0, 492.0));
+        let (lo, hi) = gutter_side_hit_band_960();
+        assert!(((480.0 - lo) - (hi - 480.0)).abs() < 0.001);
+        // Hit box misses, slop hits: symmetric both sides.
+        assert!(gutter_side_hit_contains(480.0, 200.0, 471.0, 200.0));
+        assert!(gutter_side_hit_contains(480.0, 200.0, 480.0, 200.0));
+        assert!(!gutter_side_hit_contains(480.0, 200.0, 467.0, 200.0));
+        assert!(!gutter_side_hit_contains(480.0, 200.0, 480.0, 211.0));
+        assert_eq!(gutter_side_marker_rect(f32::NAN, 200.0), None);
+        assert_eq!(gutter_side_hit_rect(480.0, f32::INFINITY), None);
+    }
+}
