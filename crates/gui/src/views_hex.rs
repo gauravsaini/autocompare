@@ -2825,6 +2825,107 @@ pub fn hex_ascii_sync_ok(char_w: f32) -> bool {
     true
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex5 round-1: grid plus ascii at 960px.
+// Gap BC hex half: nibble gap uneven, ASCII pane offset drift, ruler tick
+// spacing asymmetric. Geometry FIRST:
+// - Nibble group gap stays single-sourced from the midline helper
+//   (`hex_nibble_group_gap_w` -> `hex_midline_gap_w`), so grid cols and
+//   ruler cols match pixel-for-pixel.
+// - ASCII pane x comes from the grid origin (`hex_ascii_pane_x` =
+//   grid origin + offset gutter box + gutter gap + hex outer +
+//   ascii gutter), so the ASCII pane never drifts from the byte grid.
+// - Ruler tick spacing reuses SPACE tokens (`hex_ruler_tick_spacing` =
+//   `GEO_SECTION_GAP` = `SPACE_SM` 8.0, sym pad = `GEO_TIGHT_GAP` 4.0);
+//   absolute tick x (`hex_ruler_tick_abs_x`) shares the byte-pane origin
+//   so ticks sit above byte cells.
+// - Row height locked to `TypoRole::Mono.line_height_px` (15.6) at the
+//   960px canvas (`hex_wide_row_h` reuse), 30 visible rows in 470px.
+// Typography SECOND: grid + ruler + offset + ASCII all Mono, labels Body
+// — koi naya size/token nahi. Colors FROZEN: koi Color32/Visuals nahi.
+// No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Byte pane absolute x (px) from window origin: grid origin plus the
+/// offset gutter box plus the gutter-to-grid gap. Single source so byte
+/// cells and ruler ticks share one origin. Bad `char_w` yields `None`.
+/// Pure; unit-tested.
+pub fn hex_byte_pane_x(show_line_numbers: bool, char_w: f32) -> Option<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let x = hex_grid_origin_x(show_line_numbers)
+        + hex_offset_gutter_w(char_w)
+        + hex_offset_gutter_gap();
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// ASCII pane absolute x (px) from window origin: byte pane plus hex pane
+/// outer plus the ascii gutter (`SPACE_SM`). Single source from the grid
+/// origin so the ASCII pane never drifts from the byte grid. Bad `char_w`
+/// yields `None`. Pure; unit-tested.
+pub fn hex_ascii_pane_x(show_line_numbers: bool, char_w: f32) -> Option<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let Some((hex_outer, _)) = hex_pane_outer_widths(char_w) else {
+        return None;
+    };
+    let Some(byte_x) = hex_byte_pane_x(show_line_numbers, char_w) else {
+        return None;
+    };
+    let x = byte_x + hex_outer + hex_ascii_gutter_w();
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Ruler tick absolute x (px) for byte col: byte pane origin plus the
+/// pane-relative tick (`hex_ruler_col_x`, itself midline single-sourced).
+/// Shares the byte-pane origin with [`hex_grid_byte_col_x`], so ruler
+/// ticks sit exactly above byte cells. Out-of-range or bad `char_w`
+/// yields `None`. Pure; unit-tested.
+pub fn hex_ruler_tick_abs_x(show_line_numbers: bool, col: usize, char_w: f32) -> Option<f32> {
+    let Some(base) = hex_byte_pane_x(show_line_numbers, char_w) else {
+        return None;
+    };
+    let Some(rel) = hex_ruler_col_x(col, char_w) else {
+        return None;
+    };
+    let x = base + rel;
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Grid-plus-offset sync check at `char_w`: even byte grid, ASCII sync,
+/// nibble gap exactly one char, and ruler cols matching byte cols. Bad
+/// `char_w` returns false. Pure; unit-tested.
+pub fn hex_grid_plus_offset_sync_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    if !hex_even_grid_ok(char_w) {
+        return false;
+    }
+    if !hex_ascii_sync_ok(char_w) {
+        return false;
+    }
+    let gap = hex_nibble_group_gap_w(char_w);
+    if !gap.is_finite() || (gap - char_w).abs() > 0.001 {
+        return false;
+    }
+    if hex_ruler_tick_spacing() != crate::theme::SPACE_SM {
+        return false;
+    }
+    hex_byte_pane_x(false, char_w).is_some() && hex_ascii_pane_x(false, char_w).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4773,5 +4874,65 @@ mod tests {
         assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex5_grid_plus_ascii_wide_960() {
+        // Headless test proving edge fixture comparison/hex-wide-960.json:
+        // nibble gap single-sourced from midline, ASCII pane x from grid
+        // origin, ruler tick spacing via SPACE_SM, row height locked to
+        // Mono line-height at 960px wide.
+        let fixture_raw = include_str!("../../../checks/gui-exq-hex5/comparison/hex-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex5/round-1/comparison/hex-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"nibble_group_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"midline_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"ruler_tick_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_x\": 505.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 30"));
+        // 1. Nibble group gap from single-source midline helper.
+        let char_w = 7.0;
+        assert_eq!(HEX_MIDLINE_GAP_CHARS, 1);
+        assert_eq!(hex_midline_gap_w(char_w), 7.0);
+        assert_eq!(hex_nibble_group_gap_w(char_w), hex_midline_gap_w(char_w));
+        assert_eq!(hex_nibble_group_gap_w(char_w), 7.0);
+        // 2. ASCII pane x from grid origin (no drift).
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        assert_eq!(hex_offset_gutter_w(char_w), 78.0);
+        assert_eq!(hex_offset_gutter_gap(), 8.0);
+        assert_eq!(hex_byte_pane_x(false, char_w), Some(138.0));
+        assert_eq!(hex_ascii_pane_x(false, char_w), Some(505.0));
+        assert_eq!(hex_byte_pane_x(false, 0.0), None);
+        assert_eq!(hex_ascii_pane_x(false, f32::NAN), None);
+        // Byte + ruler absolute ticks share the pane origin.
+        assert_eq!(hex_ruler_tick_abs_x(false, 0, char_w), Some(138.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 7, char_w), Some(285.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 8, char_w), Some(313.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 16, char_w), None);
+        // 3. Ruler tick spacing symmetric via SPACE_SM.
+        assert_eq!(hex_ruler_tick_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(hex_ruler_tick_spacing(), 8.0);
+        assert_eq!(hex_ruler_tick_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(hex_ruler_tick_sym_pad(), 4.0);
+        // 4. Row height locked to Mono line-height at 960px wide.
+        assert_eq!(hex_layout_mode(HEX_CANVAS_W), HexLayoutMode::SideBySide);
+        assert!((hex_wide_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((hex_wide_row_h() - 15.6).abs() < 0.001);
+        assert!((hex_grid_row_h() - hex_ruler_row_h()).abs() < 0.001);
+        assert!((hex_even_row_h() - hex_offset_row_h()).abs() < 0.001);
+        assert_eq!(hex_wide_960_visible_rows(), 30);
+        // 5. Grid plus offset sync as one check.
+        assert!(hex_grid_plus_offset_sync_ok(char_w));
+        assert!(!hex_grid_plus_offset_sync_ok(0.0));
+        assert!(!hex_grid_plus_offset_sync_ok(f32::NAN));
+        // Typo second: grid + ruler + offset all Mono.
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
     }
 }
