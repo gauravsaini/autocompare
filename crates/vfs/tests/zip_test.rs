@@ -10,7 +10,7 @@ use zip::write::SimpleFileOptions;
 
 use autocompare_vfs::{
     LocalFs, Vfs, VfsError, VfsPath, WalkOptions, ZipFs,
-    archive_zip::{create_zip_archive, create_zip_from_vfs},
+    archive_zip::{ArchiveFs, create_zip_archive, create_zip_from_vfs},
 };
 
 fn create_sample_zip() -> Vec<u8> {
@@ -166,4 +166,35 @@ fn test_zip_corrupted_archive() {
     let garbage = b"this is not a zip file at all";
     let res = ZipFs::from_bytes(garbage.to_vec());
     assert!(matches!(res, Err(VfsError::CorruptedArchive(_))));
+}
+
+#[test]
+fn test_archive_fs_zip_polymorphic() {
+    let zip_bytes = create_sample_zip();
+    let archive = ArchiveFs::from_bytes(&zip_bytes).unwrap();
+
+    assert!(archive.is_zip());
+    assert!(!archive.is_tar());
+    assert!(archive.is_read_only());
+    assert_eq!(archive.file_count(), 2);
+    assert_eq!(archive.dir_count(), 1);
+    assert!(!archive.is_empty());
+
+    let file_path = VfsPath::new("docs/readme.txt").unwrap();
+    assert!(archive.contains(&file_path));
+
+    let content = archive.read_all(&file_path, 1024).unwrap();
+    assert_eq!(content, b"Beyond Compare Zip Replica");
+
+    let stat = archive.stat(&file_path).unwrap();
+    assert_eq!(stat.len, 26);
+
+    let entries = archive.list_dir(&VfsPath::new("docs").unwrap()).unwrap();
+    assert_eq!(entries.len(), 1);
+
+    let found = archive.find_case_insensitive("DOCS/README.TXT");
+    assert_eq!(found, Some(file_path));
+
+    assert!(archive.as_zip().is_some());
+    assert!(archive.as_tar_gz().is_none());
 }

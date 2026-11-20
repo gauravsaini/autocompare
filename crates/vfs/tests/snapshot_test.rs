@@ -5,7 +5,9 @@
 use autocompare_vfs::{
     BCSS_SCHEMA_VERSION, LocalFs, SnapshotDocument, SnapshotEntry, SnapshotFs, Vfs, VfsError,
     VfsPath, WalkOptions, create_snapshot, deserialize_bcss, serialize_bcss_compressed,
-    serialize_bcss_json, snapshot::create_snapshot_with_options,
+    serialize_bcss_json,
+    snapshot::create_snapshot_with_options,
+    trait_def::{FakeRemoteFs, RemoteConnectionState, RemoteEndpoint, RemoteKind, RemoteVfs},
 };
 
 #[test]
@@ -266,4 +268,120 @@ fn test_snapshot_document_diff_summary() {
     assert_eq!(diff.modified, 1);
     assert_eq!(diff.unique_left, 1);
     assert_eq!(diff.unique_right, 1);
+}
+
+#[test]
+fn test_remote_vfs_fake_sftp_webdav() {
+    // 1. SFTP endpoint and FakeRemoteFs
+    let sftp_endpoint =
+        RemoteEndpoint::new(RemoteKind::Sftp, "sftp.internal.local", VfsPath::root())
+            .with_user("operator")
+            .with_port(2222);
+
+    let remote = FakeRemoteFs::new(sftp_endpoint);
+    assert_eq!(remote.protocol(), RemoteKind::Sftp);
+    assert_eq!(remote.endpoint().user.as_deref(), Some("operator"));
+    assert_eq!(remote.endpoint().port, 2222);
+    assert!(!remote.endpoint().tls);
+    assert_eq!(remote.connection_state(), RemoteConnectionState::Connected);
+
+    // Ping check
+    let ping_latency = remote.ping().unwrap();
+    assert!(ping_latency >= std::time::Duration::ZERO);
+
+    // Virtual filesystem operations
+    let file_path = VfsPath::new("remote_data.txt").unwrap();
+    remote.write_atomic(&file_path, b"sftp payload").unwrap();
+
+    let meta = remote.stat(&file_path).unwrap();
+    assert_eq!(meta.len, 12);
+    assert!(meta.is_file);
+
+    let content = remote.read_all(&file_path, 1024).unwrap();
+    assert_eq!(content, b"sftp payload");
+
+    let list = remote.list_dir(&VfsPath::root()).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list.first().unwrap().name, "remote_data.txt");
+
+    // 2. WebDAV endpoint
+    let webdav_endpoint =
+        RemoteEndpoint::new(RemoteKind::WebDav, "dav.internal.local", VfsPath::root());
+    assert_eq!(webdav_endpoint.kind, RemoteKind::WebDav);
+    assert_eq!(webdav_endpoint.port, 443);
+    assert!(webdav_endpoint.tls);
+}
+
+#[test]
+fn test_remote_vfs_disconnect_reconnect_and_ping() {
+    let endpoint = RemoteEndpoint::new(RemoteKind::WebDav, "dav.cloud.local", VfsPath::root());
+    let mut remote = FakeRemoteFs::new(endpoint);
+
+    let file_path = VfsPath::new("test.dat").unwrap();
+    remote.write_atomic(&file_path, b"data bytes").unwrap();
+
+    // Disconnect simulation
+    remote.disconnect().unwrap();
+    assert_eq!(
+        remote.connection_state(),
+        RemoteConnectionState::Disconnected
+    );
+
+    // Ping should fail when disconnected
+    assert!(remote.ping().is_err());
+
+    // IO should fail when disconnected
+    assert!(matches!(remote.stat(&file_path), Err(VfsError::Io(_))));
+    assert!(matches!(
+        remote.write_atomic(&file_path, b"fail"),
+        Err(VfsError::Io(_))
+    ));
+    assert!(matches!(
+        remote.list_dir(&VfsPath::root()),
+        Err(VfsError::Io(_))
+    ));
+
+    // Reconnect
+    remote.reconnect().unwrap();
+    assert_eq!(remote.connection_state(), RemoteConnectionState::Connected);
+    assert!(remote.ping().is_ok());
+
+    // Verify data retained across reconnect
+    let read_back = remote.read_all(&file_path, 1024).unwrap();
+    assert_eq!(read_back, b"data bytes");
+}
+
+#[test]
+fn test_vfs_walk_options_and_cycle_refusal() {
+    let temp_dir = std::env::temp_dir().join(format!("vfs_walk_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    let deep = temp_dir.join("a").join("b").join("c");
+    std::fs::create_dir_all(&deep).unwrap();
+    std::fs::write(deep.join("leaf.txt"), b"leaf").unwrap();
+
+    let local_vfs = LocalFs::new(&temp_dir).unwrap();
+
+    // Test WalkOptions presets
+    let std_opts = WalkOptions::standard();
+    assert_eq!(std_opts.max_depth, None);
+    assert!(std_opts.refuse_cycles);
+    assert!(!std_opts.follow_symlinks);
+
+    let unbounded = WalkOptions::unbounded();
+    assert_eq!(unbounded.max_depth, None);
+
+    let bounded = WalkOptions::bounded(2);
+    assert_eq!(bounded.max_depth, Some(2));
+
+    let shallow = WalkOptions::shallow();
+    assert_eq!(shallow.max_depth, Some(1));
+
+    // Walk with depth limit = 2
+    let entries = local_vfs.walk(&VfsPath::root(), &bounded).unwrap();
+    // At root: "a" is depth 1; "a/b" is depth 2; "a/b/c" is depth 3 (excluded)
+    assert!(entries.iter().any(|e| e.name == "a"));
+    assert!(entries.iter().any(|e| e.name == "b"));
+    assert!(!entries.iter().any(|e| e.name == "leaf.txt"));
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

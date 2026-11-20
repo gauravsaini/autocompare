@@ -259,6 +259,12 @@ impl ZipFs {
         self.entries.len()
     }
 
+    /// Returns `true` if the archive contains no items.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Returns the number of regular files in the archive.
     #[must_use]
     pub fn file_count(&self) -> usize {
@@ -406,5 +412,208 @@ impl Vfs for ZipFs {
 
     fn is_read_only(&self) -> bool {
         true
+    }
+}
+
+/// Unified archive virtual filesystem supporting `.zip`, `.tar`, and `.tar.gz` formats.
+#[derive(Debug, Clone)]
+pub enum ArchiveFs {
+    /// A `.zip` archive virtual filesystem.
+    Zip(ZipFs),
+    /// A `.tar` or `.tar.gz` archive virtual filesystem.
+    TarGz(crate::archive_tar::TarGzFs),
+}
+
+impl ArchiveFs {
+    /// Opens an archive from a local file path, automatically detecting the format.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::NotFound`] if missing, or [`VfsError::CorruptedArchive`]
+    /// if archive parsing fails.
+    pub fn open_file(path: impl AsRef<Path>) -> Result<Self, VfsError> {
+        let path_ref = path.as_ref();
+        let ext = path_ref
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+
+        if ext == "zip" {
+            ZipFs::open_file(path_ref).map(Self::Zip)
+        } else if ext == "tar" || ext == "gz" || ext == "tgz" {
+            crate::archive_tar::TarGzFs::open_file(path_ref).map(Self::TarGz)
+        } else {
+            match ZipFs::open_file(path_ref) {
+                Ok(zip_fs) => Ok(Self::Zip(zip_fs)),
+                Err(_) => crate::archive_tar::TarGzFs::open_file(path_ref).map(Self::TarGz),
+            }
+        }
+    }
+
+    /// Creates an [`ArchiveFs`] from an in-memory byte slice, auto-detecting the format.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::CorruptedArchive`] if decompression or archive parsing fails.
+    pub fn from_bytes(raw: &[u8]) -> Result<Self, VfsError> {
+        if raw.starts_with(b"PK") {
+            ZipFs::from_bytes(raw.to_vec()).map(Self::Zip)
+        } else {
+            crate::archive_tar::TarGzFs::from_bytes(raw).map(Self::TarGz)
+        }
+    }
+
+    /// Wraps a [`ZipFs`] into an [`ArchiveFs`].
+    #[must_use]
+    pub const fn from_zip(zip_fs: ZipFs) -> Self {
+        Self::Zip(zip_fs)
+    }
+
+    /// Wraps a [`TarGzFs`](crate::archive_tar::TarGzFs) into an [`ArchiveFs`].
+    #[must_use]
+    pub const fn from_tar(tar_fs: crate::archive_tar::TarGzFs) -> Self {
+        Self::TarGz(tar_fs)
+    }
+
+    /// Returns `true` if this archive is a Zip archive.
+    #[must_use]
+    pub const fn is_zip(&self) -> bool {
+        matches!(self, Self::Zip(_))
+    }
+
+    /// Returns `true` if this archive is a Tar or Tar.gz archive.
+    #[must_use]
+    pub const fn is_tar(&self) -> bool {
+        matches!(self, Self::TarGz(_))
+    }
+
+    /// Returns the number of regular files in the archive.
+    #[must_use]
+    pub fn file_count(&self) -> usize {
+        match self {
+            Self::Zip(fs) => fs.file_count(),
+            Self::TarGz(fs) => fs.file_count(),
+        }
+    }
+
+    /// Returns the number of directories in the archive.
+    #[must_use]
+    pub fn dir_count(&self) -> usize {
+        match self {
+            Self::Zip(fs) => fs.dir_count(),
+            Self::TarGz(fs) => fs.dir_count(),
+        }
+    }
+
+    /// Returns `true` if the archive contains no items.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Zip(fs) => fs.is_empty(),
+            Self::TarGz(fs) => fs.is_empty(),
+        }
+    }
+
+    /// Returns the total uncompressed bytes of regular files in the archive.
+    #[must_use]
+    pub fn total_uncompressed_bytes(&self) -> u64 {
+        match self {
+            Self::Zip(fs) => fs.total_uncompressed_bytes(),
+            Self::TarGz(fs) => fs.total_uncompressed_bytes(),
+        }
+    }
+
+    /// Returns `true` if the archive contains the given virtual path.
+    #[must_use]
+    pub fn contains(&self, path: &VfsPath) -> bool {
+        match self {
+            Self::Zip(fs) => fs.contains(path),
+            Self::TarGz(fs) => fs.contains(path),
+        }
+    }
+
+    /// Searches for a virtual path matching `query` case-insensitively.
+    #[must_use]
+    pub fn find_case_insensitive(&self, query: &str) -> Option<VfsPath> {
+        match self {
+            Self::Zip(fs) => fs.find_case_insensitive(query),
+            Self::TarGz(fs) => fs.find_case_insensitive(query),
+        }
+    }
+
+    /// Returns all normalized virtual paths present in the archive.
+    #[must_use]
+    pub fn all_paths(&self) -> Vec<VfsPath> {
+        match self {
+            Self::Zip(fs) => fs.all_paths(),
+            Self::TarGz(fs) => fs.all_paths(),
+        }
+    }
+
+    /// Returns a reference to the inner [`ZipFs`] if this is a Zip archive.
+    #[must_use]
+    pub const fn as_zip(&self) -> Option<&ZipFs> {
+        match self {
+            Self::Zip(fs) => Some(fs),
+            Self::TarGz(_) => None,
+        }
+    }
+
+    /// Returns a reference to the inner [`TarGzFs`](crate::archive_tar::TarGzFs) if this is a Tar archive.
+    #[must_use]
+    pub const fn as_tar_gz(&self) -> Option<&crate::archive_tar::TarGzFs> {
+        match self {
+            Self::Zip(_) => None,
+            Self::TarGz(fs) => Some(fs),
+        }
+    }
+}
+
+impl Vfs for ArchiveFs {
+    fn list_dir(&self, path: &VfsPath) -> Result<Vec<VfsEntry>, VfsError> {
+        match self {
+            Self::Zip(fs) => fs.list_dir(path),
+            Self::TarGz(fs) => fs.list_dir(path),
+        }
+    }
+
+    fn stat(&self, path: &VfsPath) -> Result<VfsMeta, VfsError> {
+        match self {
+            Self::Zip(fs) => fs.stat(path),
+            Self::TarGz(fs) => fs.stat(path),
+        }
+    }
+
+    fn read_stream(
+        &self,
+        path: &VfsPath,
+        max_bytes: u64,
+    ) -> Result<Box<dyn Read + Send>, VfsError> {
+        match self {
+            Self::Zip(fs) => fs.read_stream(path, max_bytes),
+            Self::TarGz(fs) => fs.read_stream(path, max_bytes),
+        }
+    }
+
+    fn write_atomic(&self, path: &VfsPath, bytes: &[u8]) -> Result<(), VfsError> {
+        match self {
+            Self::Zip(fs) => fs.write_atomic(path, bytes),
+            Self::TarGz(fs) => fs.write_atomic(path, bytes),
+        }
+    }
+
+    fn delete(&self, path: &VfsPath) -> Result<(), VfsError> {
+        match self {
+            Self::Zip(fs) => fs.delete(path),
+            Self::TarGz(fs) => fs.delete(path),
+        }
+    }
+
+    fn is_read_only(&self) -> bool {
+        match self {
+            Self::Zip(fs) => fs.is_read_only(),
+            Self::TarGz(fs) => fs.is_read_only(),
+        }
     }
 }

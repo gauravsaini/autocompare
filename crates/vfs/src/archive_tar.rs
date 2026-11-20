@@ -16,6 +16,8 @@ use crate::error::VfsError;
 use crate::path::VfsPath;
 use crate::trait_def::{Vfs, VfsEntry, VfsMeta, WalkOptions};
 
+pub use crate::archive_zip::ArchiveFs;
+
 #[derive(Debug, Clone)]
 struct TarItemInfo {
     meta: VfsMeta,
@@ -267,6 +269,36 @@ impl TarGzFs {
     #[must_use]
     pub fn file_names(&self) -> Vec<VfsPath> {
         self.entries.keys().cloned().collect()
+    }
+
+    /// Returns a list of all normalized virtual paths present in the archive.
+    #[must_use]
+    pub fn all_paths(&self) -> Vec<VfsPath> {
+        self.file_names()
+    }
+
+    /// Returns `true` if the archive contains no items.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Creates a [`TarGzFs`] from an uncompressed tar byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::CorruptedArchive`] if tar parsing fails.
+    pub fn from_tar_bytes(bytes: &[u8]) -> Result<Self, VfsError> {
+        Self::from_bytes(bytes)
+    }
+
+    /// Creates a [`TarGzFs`] from a gzip-compressed tar byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::CorruptedArchive`] if decompression or tar parsing fails.
+    pub fn from_tar_gz_bytes(bytes: &[u8]) -> Result<Self, VfsError> {
+        Self::from_bytes(bytes)
     }
 }
 

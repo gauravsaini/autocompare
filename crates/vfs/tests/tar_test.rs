@@ -12,7 +12,8 @@ use tar::{Builder, Header};
 use autocompare_vfs::{
     LocalFs, TarGzFs, Vfs, VfsError, VfsPath, WalkOptions,
     archive_tar::{
-        create_tar_archive, create_tar_from_vfs, create_tar_gz_archive, create_tar_gz_from_vfs,
+        ArchiveFs, create_tar_archive, create_tar_from_vfs, create_tar_gz_archive,
+        create_tar_gz_from_vfs,
     },
 };
 
@@ -171,4 +172,37 @@ fn test_tar_corrupted_rejection() {
     let garbage = b"\x1F\x8B\x08\x00corrupted gzip header";
     let res = TarGzFs::from_bytes(garbage);
     assert!(matches!(res, Err(VfsError::CorruptedArchive(_))));
+}
+
+#[test]
+fn test_archive_fs_tar_polymorphic() {
+    let tar_bytes = create_sample_tar();
+    let archive = ArchiveFs::from_bytes(&tar_bytes).unwrap();
+
+    assert!(!archive.is_zip());
+    assert!(archive.is_tar());
+    assert!(archive.is_read_only());
+    assert_eq!(archive.file_count(), 1);
+    assert_eq!(archive.dir_count(), 1);
+    assert!(!archive.is_empty());
+
+    let file_path = VfsPath::new("archive/hello.txt").unwrap();
+    assert!(archive.contains(&file_path));
+
+    let content = archive.read_all(&file_path, 1024).unwrap();
+    assert_eq!(content, b"Hello from Tar");
+
+    let entries = archive.list_dir(&VfsPath::new("archive").unwrap()).unwrap();
+    assert_eq!(entries.len(), 1);
+
+    // from_tar_bytes & from_tar_gz_bytes
+    let from_tar = TarGzFs::from_tar_bytes(&tar_bytes).unwrap();
+    assert_eq!(from_tar.file_count(), 1);
+
+    let gz_bytes = create_sample_tar_gz();
+    let from_gz = TarGzFs::from_tar_gz_bytes(&gz_bytes).unwrap();
+    assert_eq!(from_gz.file_count(), 1);
+
+    assert!(archive.as_tar_gz().is_some());
+    assert!(archive.as_zip().is_none());
 }
