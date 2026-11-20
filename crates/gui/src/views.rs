@@ -673,6 +673,35 @@ pub fn action_bar_readout_gap() -> f32 {
     SECTION_GAP
 }
 
+/// Toolbar button pair width (px): two uniform buttons + one cluster
+/// gap (`2 * tool_w + cluster_gap` = 200) — row 1 actions aur row 2
+/// arrows dono isi floor par (BC toolbar row symmetric hits). Pure;
+/// unit-tested.
+pub fn toolbar_button_pair_width() -> f32 {
+    let (tool_w, _) = session_toolbar_button_size();
+    2.0 * tool_w + toolbar_cluster_gap()
+}
+
+/// Toolbar row side air (px): `avail` me se pair width ghata kar bachi
+/// hawa ka aadha — dono taraf barabar taaki 720 par hits symmetric
+/// rahen (left/right inset equal). Floor par ya tang par 0 (clip nahi,
+/// h-scroll gate lagta hai); non-finite ya non-positive par 0. Pure;
+/// unit-tested.
+pub fn toolbar_button_row_side_air(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return 0.0;
+    }
+    ((avail - toolbar_button_pair_width()) / 2.0).max(0.0)
+}
+
+/// Arrow-row gap (px): Prev/Next arrows ke beech [`toolbar_cluster_gap`]
+/// (8) — row 2 arrows row 1 actions se ek beat par (BC second small
+/// nav-arrow row rhythm). Alag naam, wahi token; koi naya size nahi.
+/// Pure; unit-tested.
+pub fn action_nav_arrow_gap() -> f32 {
+    toolbar_cluster_gap()
+}
+
 /// Session action buttons (row 1): Swap + Reload ek hi `horizontal` me.
 /// [`paint_session_toolbar`] live call-site aur [`paint_session_action_bar`]
 /// row 1 dono isi par hain (ek shape, do caller — dup nahi). Geometry/typo
@@ -1137,6 +1166,40 @@ pub fn session_tab_strip_needs_hscroll(tabs: usize, avail: f32) -> bool {
         return false;
     }
     avail < session_tab_strip_width(tabs)
+}
+
+/// Session tab cell width from label metrics (px): measured label width
+/// capped at [`SESSION_TAB_MAX_W`] + close gap + close edge — chhote
+/// labels sikudte hain (fixed 120 har tab par nahi), lambe truncate cap
+/// par rukte hain. Non-finite ya non-positive label par close chrome
+/// floor. Pure; unit-tested.
+pub fn session_tab_cell_width(label_w: f32) -> f32 {
+    let capped = if !label_w.is_finite() || label_w <= 0.0 {
+        0.0
+    } else {
+        label_w.min(SESSION_TAB_MAX_W)
+    };
+    capped + session_tab_close_gap() + session_tab_close_edge()
+}
+
+/// Strip width from label metrics (px): per-tab measured cells + inter
+/// gaps; 0 tabs par 0. Fixed-max [`session_tab_strip_width`] ka metric
+/// variant — BC 3-tab row isi se tight hota hai. Pure; unit-tested.
+pub fn session_tab_strip_width_for_labels(label_widths: &[f32]) -> f32 {
+    if label_widths.is_empty() {
+        return 0.0;
+    }
+    let mut total = 0.0;
+    let mut idx = 0usize;
+    while idx < label_widths.len() {
+        let w = match label_widths.get(idx) {
+            Some(v) => session_tab_cell_width(*v),
+            None => 0.0,
+        };
+        total += w;
+        idx = idx.saturating_add(1);
+    }
+    total + session_tab_strip_gap() * label_widths.len().saturating_sub(1) as f32
 }
 
 /// Single session tab: label (fixed max width + truncate clip, single line)
@@ -12984,6 +13047,34 @@ mod tests {
         assert!(!session_tab_strip_needs_hscroll(8, 1256.0));
         assert!(!session_tab_strip_needs_hscroll(8, f32::NAN));
         assert!(!session_tab_strip_needs_hscroll(8, 0.0));
+    }
+
+    #[test]
+    fn toolbar_narrow_720_buttons_tabs_arrows() {
+        // Edge fixture toolbar-narrow-720: 720 par button pair 200 (2*96+8)
+        // side air 260 symmetric, koi h-scroll nahi; 3 fixed tabs 466
+        // (720 par fit); label metrics [60,90,200] -> cells [90,120,150]
+        // strip 376; arrow row wahi 8 rhythm. Koi naya token/color nahi.
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(toolbar_button_pair_width(), action_bar_min_width());
+        assert_eq!(toolbar_button_row_side_air(720.0), 260.0);
+        assert_eq!(toolbar_button_row_side_air(200.0), 0.0);
+        assert_eq!(toolbar_button_row_side_air(f32::NAN), 0.0);
+        assert_eq!(toolbar_button_row_side_air(0.0), 0.0);
+        assert!(!action_bar_needs_hscroll(720.0));
+        assert_eq!(action_nav_arrow_gap(), toolbar_cluster_gap());
+        assert_eq!(action_nav_arrow_gap(), 8.0);
+        assert_eq!(session_tab_strip_width(3), 466.0);
+        assert!(!session_tab_strip_needs_hscroll(3, 720.0));
+        assert_eq!(session_tab_cell_width(60.0), 90.0);
+        assert_eq!(session_tab_cell_width(90.0), 120.0);
+        assert_eq!(session_tab_cell_width(200.0), 150.0);
+        assert_eq!(session_tab_cell_width(f32::NAN), 30.0);
+        assert_eq!(
+            session_tab_strip_width_for_labels(&[60.0, 90.0, 200.0]),
+            376.0
+        );
+        assert_eq!(session_tab_strip_width_for_labels(&[]), 0.0);
     }
 
     #[test]
