@@ -679,6 +679,58 @@ pub fn copy_arrow_default_pitch() -> Option<f32> {
     copy_hunk_arrow_pitch(copy_row_height())
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-MERGE3: copy button symmetric hit-slop padding (headless).
+// BC parity: the 24px copy arrow hit floor expands by the same XS slop
+// (4px) on every side -> symmetric 32px target, so clicks near any
+// edge register identically. Geometry first (SPACE_XS reuse, no new
+// literal), typography second (row height already Mono-sourced above),
+// colors frozen.
+// WIRING (paint): hit rects use `copy_button_hit_rect` (already
+// symmetric); `copy_button_sym_pad` documents the per-side pad,
+// `copy_button_padded_size` the symmetric target,
+// `copy_button_row_vpad` the Mono-rhythm centering.
+// ----------------------------------------------------------------------------
+
+/// Copy button symmetric pad px per side: one XS step single source.
+/// Equal on left/right/top/bottom — no lopsided tap target.
+pub fn copy_button_sym_pad() -> f32 {
+    COPY_BUTTON_HIT_SLOP
+}
+
+/// Copy button symmetric target size px: hit floor + pad on both sides
+/// (24 + 2 * 4 = 32). Must equal [`copy_hit_size_with_slop`].
+pub fn copy_button_padded_size() -> f32 {
+    copy_hit_size() + 2.0 * copy_button_sym_pad()
+}
+
+/// Copy button vertical centering pad px over one Mono row:
+/// half the leftover of the hit floor over [`copy_row_height`]
+/// ((24 - 15.6) / 2 = 4.2). Proves the button centers on the same
+/// Mono rhythm take uses. Pure; headless-tested.
+pub fn copy_button_row_vpad() -> f32 {
+    (copy_hit_size() - copy_row_height()) / 2.0
+}
+
+/// True when a slop-expanded copy rect is symmetric: each edge moved
+/// exactly `COPY_BUTTON_HIT_SLOP` from the visual rect.
+/// Pure; headless-tested.
+pub fn copy_hit_rect_is_symmetric(x0: f32, y0: f32, x1: f32, y1: f32) -> bool {
+    if x0 > x1 || y0 > y1 {
+        return false;
+    }
+    match copy_hit_rect_with_slop(x0, y0, x1, y1) {
+        Some((hx0, hy0, hx1, hy1)) => {
+            let s = copy_button_sym_pad();
+            ((x0 - hx0) - s).abs() < 0.0001
+                && ((y0 - hy0) - s).abs() < 0.0001
+                && ((hx1 - x1) - s).abs() < 0.0001
+                && ((hy1 - y1) - s).abs() < 0.0001
+        }
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod exq_tree2_tests {
     use super::*;
@@ -835,5 +887,48 @@ mod exq_merge2_tests {
         assert_eq!(copy_hit_size_with_slop(), 32.0);
         assert!((copy_row_height() - 15.6).abs() < 0.01);
         assert_eq!(copy_row_height(), TypoRole::Mono.line_height_px());
+    }
+}
+
+#[cfg(test)]
+mod exq_merge3_tests {
+    use super::*;
+    use crate::theme::{SPACE_XS, TypoRole};
+
+    #[test]
+    fn merge3_copy_sym_pad() {
+        assert_eq!(copy_button_sym_pad(), COPY_BUTTON_HIT_SLOP);
+        assert_eq!(copy_button_sym_pad(), SPACE_XS);
+        assert_eq!(copy_button_sym_pad(), 4.0);
+        assert_eq!(copy_button_padded_size(), 32.0);
+        assert_eq!(copy_button_padded_size(), copy_hit_size_with_slop());
+        assert!(copy_hit_rect_is_symmetric(10.0, 20.0, 34.0, 44.0));
+        assert!(!copy_hit_rect_is_symmetric(f32::NAN, 20.0, 34.0, 44.0));
+        assert!(!copy_hit_rect_is_symmetric(34.0, 20.0, 10.0, 44.0));
+    }
+
+    #[test]
+    fn merge3_copy_row_vpad_matches_take_rhythm() {
+        assert!((copy_row_height() - 15.6).abs() < 0.01);
+        assert_eq!(copy_row_height(), TypoRole::Mono.line_height_px());
+        assert!((copy_button_row_vpad() - 4.2).abs() < 0.01);
+        assert_eq!(
+            copy_button_row_vpad(),
+            (copy_hit_size() - TypoRole::Mono.line_height_px()) / 2.0
+        );
+        assert_eq!(copy_button_row_vpad(), crate::take::take_button_vpad());
+    }
+
+    #[test]
+    fn merge3_wide_fixture() {
+        let raw =
+            include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
+        assert!(raw.contains("\"name\":\"merge-wide-960\""));
+        assert!(raw.contains("\"copy_button_sym_pad\":4.0"));
+        assert!(raw.contains("\"copy_button_padded_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!((copy_button_sym_pad() - 4.0).abs() < 0.0001);
+        assert!((copy_button_padded_size() - 32.0).abs() < 0.0001);
+        assert!((copy_button_row_vpad() - 4.2).abs() < 0.01);
     }
 }

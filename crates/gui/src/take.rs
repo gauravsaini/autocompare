@@ -721,6 +721,65 @@ pub fn take_side_button_hit_rect(x: f32, y: f32, side: TakeSide) -> Option<(f32,
     take_button_hit_rect(x, y, x + w, y + h)
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-MERGE3: take vertical rhythm from Mono line-height + 3-way divider
+// gaps via SECTION_GAP at 960px (headless). BC parity: take buttons sit
+// on the Mono row rhythm (15.6px line-height) with symmetric vertical
+// padding so stacked buttons never look cramped; 3-way dividers are two
+// SECTION_GAP (8px) gutters, exact at 960px wide. Geometry first
+// (Mono line-height + SECTION_GAP reuse, no new literals), typography
+// second (Mono role single source), colors frozen.
+// WIRING (paint): take button y-centering uses `take_button_vpad`;
+// row pitch uses `take_button_row_pitch`; divider x-origins use
+// `merge_three_divider_x(avail_w)`.
+// ----------------------------------------------------------------------------
+
+/// Take button vertical rhythm role: Mono (12 regular monospace).
+/// Single source for button-to-row centering. Pure.
+pub const fn take_button_rhythm_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Take button symmetric vertical pad px: half the leftover of the
+/// 24px hit floor over one Mono line-height ((24 - 15.6) / 2 = 4.2).
+/// Centers the label on the Mono row rhythm. Pure; headless-tested.
+pub fn take_button_vpad() -> f32 {
+    (TAKE_BUTTON_H - take_button_rhythm_role().line_height_px()) / 2.0
+}
+
+/// Take button stacked row pitch px: button height + one tight gap
+/// (24 + 4 = 28). Guarantees stacked take buttons never collide.
+/// Pure; headless-tested.
+pub fn take_button_row_pitch() -> f32 {
+    TAKE_BUTTON_H + crate::theme::GEO_TIGHT_GAP
+}
+
+/// 3-way divider gap px: section rhythm single source (8.0).
+pub fn merge_divider_gap() -> f32 {
+    MERGE_SECTION_GAP
+}
+
+/// 3-way divider leading-x origins `(x0, x1)` px at `avail_w`:
+/// `x0 = left_w`, `x1 = left_w + gap + base_w` from
+/// [`merge_three_pane_widths`]. Non-finite/non-positive input par the
+/// min-floor layout origins. Pure; headless-tested.
+pub fn merge_three_divider_x(avail_w: f32) -> (f32, f32) {
+    let (left, base, _) = merge_three_pane_widths(avail_w);
+    let gap = merge_divider_gap();
+    (left, left + gap + base)
+}
+
+/// True when the wide 3-way row exactly fills `avail_w`:
+/// `left + base + right + 2 * gap == avail_w` within 0.01.
+/// Non-finite input par false. Pure; headless-tested.
+pub fn merge_three_panes_fill_exact(avail_w: f32) -> bool {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    let (left, base, right) = merge_three_pane_widths(avail_w);
+    ((left + base + right + 2.0 * merge_divider_gap()) - avail_w).abs() < 0.01
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1161,5 +1220,59 @@ pub mod exq_merge2_tests {
         assert!(!merge_three_pane_needs_hscroll(960.0));
         let (lw, _, _) = merge_three_pane_widths(960.0);
         assert!((lw - 314.666656).abs() < 0.001);
+    }
+}
+
+#[cfg(test)]
+mod exq_merge3_tests {
+    use super::*;
+    use crate::theme::{GEO_SECTION_GAP, GEO_TIGHT_GAP, TypoRole};
+
+    #[test]
+    fn merge3_take_vertical_rhythm_from_mono() {
+        assert_eq!(take_button_rhythm_role(), TypoRole::Mono);
+        assert!((take_button_rhythm_role().line_height_px() - 15.6).abs() < 0.01);
+        assert!((take_button_vpad() - 4.2).abs() < 0.01);
+        assert_eq!(
+            take_button_vpad(),
+            (TAKE_BUTTON_H - TypoRole::Mono.line_height_px()) / 2.0
+        );
+        assert!((take_button_row_pitch() - 28.0).abs() < 0.01);
+        assert_eq!(take_button_row_pitch(), TAKE_BUTTON_H + GEO_TIGHT_GAP);
+        assert!(take_button_row_pitch() > merge_row_height());
+    }
+
+    #[test]
+    fn merge3_divider_gaps_via_section_gap_at_960() {
+        assert_eq!(merge_divider_gap(), GEO_SECTION_GAP);
+        assert_eq!(merge_divider_gap(), 8.0);
+        assert_eq!(merge_divider_gap(), MERGE_SECTION_GAP);
+        let (x0, x1) = merge_three_divider_x(960.0);
+        assert!((x0 - 314.666656).abs() < 0.01);
+        assert!((x1 - 637.333313).abs() < 0.05);
+        assert!(((x1 - x0) - (314.666656 + 8.0)).abs() < 0.05);
+        assert!(merge_three_panes_fill_exact(960.0));
+        assert!(!merge_three_pane_needs_hscroll(960.0));
+    }
+
+    #[test]
+    fn merge3_wide_fixture() {
+        let raw =
+            include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
+        assert!(raw.contains("\"name\":\"merge-wide-960\""));
+        assert!(raw.contains("\"avail_w\":960.0"));
+        assert!(raw.contains("\"section_gap\":8.0"));
+        assert!(raw.contains("\"total_min_w\":406.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"take_button_vpad\":4.2"));
+        assert!(raw.contains("\"take_button_pitch\":28.0"));
+        assert!(raw.contains("\"copy_button_sym_pad\":4.0"));
+        assert!((take_button_vpad() - 4.2).abs() < 0.01);
+        assert!((merge_row_height() - 15.6).abs() < 0.01);
+        let (l, b, r) = merge_three_pane_widths(960.0);
+        assert!((l - 314.666656).abs() < 0.01);
+        assert!((b - 314.666656).abs() < 0.01);
+        assert!((r - 314.666656).abs() < 0.01);
+        assert!(merge_three_panes_fill_exact(960.0));
     }
 }
