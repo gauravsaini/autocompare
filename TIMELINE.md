@@ -511,3 +511,9 @@
 1. **Gutter Markers & Viewport at Narrow 720px**: marker x from char metrics at narrow widths (`gutter_side_layout_720`, `gutter_side_column_x_720` 350.0, `gutter_side_arrow_cx_720` 360.0 canvas middle, glyph 354..366, hit band 348..372; center column 348.0, cx 360.0), padded click viewport bottom floor lock (`gutter_viewport_rect_padded` floor >= 4px for row 999 @400px), marker visibility only on changed rows (`gutter_marker_visible` and `gutter_side_marker_visible`), and edge fixture `comparison/gutter-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1009 green (including `gutter10_narrow_720_marker_alignment_from_char_metrics`); clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter10/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-table9 narrow plus keys
+
+1. **Table Narrow-720 Keys & Widths**: key-column widths from char metrics at 720px (avail 690-ish budget), numeric right-alignment via grid origin, header/body heights from TypoRole rhythm, and edge fixture `comparison/table-keys-720.json`.
+2. **Tests** (before → after): autocompare-gui 1011 green (including `exq_table9` narrow keys tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table9/**`, `TIMELINE.md`.
