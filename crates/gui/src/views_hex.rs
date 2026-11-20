@@ -2871,12 +2871,8 @@ pub fn hex_ascii_pane_x(show_line_numbers: bool, char_w: f32) -> Option<f32> {
     if !char_w.is_finite() || char_w <= 0.0 {
         return None;
     }
-    let Some((hex_outer, _)) = hex_pane_outer_widths(char_w) else {
-        return None;
-    };
-    let Some(byte_x) = hex_byte_pane_x(show_line_numbers, char_w) else {
-        return None;
-    };
+    let (hex_outer, _) = hex_pane_outer_widths(char_w)?;
+    let byte_x = hex_byte_pane_x(show_line_numbers, char_w)?;
     let x = byte_x + hex_outer + hex_ascii_gutter_w();
     if !x.is_finite() {
         return None;
@@ -2890,12 +2886,8 @@ pub fn hex_ascii_pane_x(show_line_numbers: bool, char_w: f32) -> Option<f32> {
 /// ticks sit exactly above byte cells. Out-of-range or bad `char_w`
 /// yields `None`. Pure; unit-tested.
 pub fn hex_ruler_tick_abs_x(show_line_numbers: bool, col: usize, char_w: f32) -> Option<f32> {
-    let Some(base) = hex_byte_pane_x(show_line_numbers, char_w) else {
-        return None;
-    };
-    let Some(rel) = hex_ruler_col_x(col, char_w) else {
-        return None;
-    };
+    let base = hex_byte_pane_x(show_line_numbers, char_w)?;
+    let rel = hex_ruler_col_x(col, char_w)?;
     let x = base + rel;
     if !x.is_finite() {
         return None;

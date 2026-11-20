@@ -330,3 +330,20 @@
 1. **Tree Indent & Guides at 960px**: BC parity for folder compare tree: indent step via SPACE tokens, guide x from char metrics, expander hit-slop symmetric, row height locked to `TypoRole::Mono` line-height. Pre-existing clippy errors in non-OWNS files left untouched (none in `tree.rs`). Colors frozen at 33. Edge fixture `comparison/tree-wide-960.json` added; exquisite harness PASS (PNG 10401B).
 2. **Tests** (before → after): autocompare-gui all green; rustfmt clean on owned `tree.rs`; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree6/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-table4 cols plus rows
+
+1. **Table Cols & Rows at 960px**: BC parity for table compare: header height from `TypoRole` chrome line-height, col spacing via `SPACE_SM` single-source, cell pad via `SPACE_XS`, row height locked to `TypoRole::Mono` line-height. Colors frozen at 33. Edge fixture `comparison/table-wide-960.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui all green; clippy clean on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table4/**`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-hex5 grid plus ascii
+
+1. **Hex Grid & ASCII Sync at 960px**: BC parity for hex compare: nibble group gap from single-source midline helper, ASCII pane x from grid origin, ruler tick spacing via `SPACE_SM`, row height locked to `TypoRole::Mono` line-height. Follow-up `fix(gui)`: 4 new `let...else` clippy lints rewritten with `?` operator, zero behavior change (70 hex tests green). Colors frozen at 33. Edge fixture `comparison/hex-wide-960.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui all green (70 hex tests); clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0 (1 unwrap is test-only); exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex5/**`, `TIMELINE.md`.
