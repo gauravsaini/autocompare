@@ -211,9 +211,9 @@
   "WAVE-TABLE-XLSX": "landed+pushed 861dd28 (REPORT PASS, 96 lib + 40 table integ green, clippy 0, fmt clean, banned 0 non-test, OWNS-clean, PNG noise reverted)",
   "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)"
  },
- "WAVE-TEXT6": "REPORT PASS 825 green, awaiting agent commit OWNS views.rs",
- "WAVE-CHROME6": "REPORT PASS 2026-11-21 840 green (825+15), after.png 10401, awaiting agent commit OWNS app.rs",
- "WAVE-GUTTER6": "advancing gutter.rs 326 WIP",
+ "WAVE-TEXT6": "REPORT PASS 825 awaiting commit",
+ "WAVE-CHROME6": "landed+pushed c54d3c9 840 green REPORT PASS OWNS-clean (clippy WIP fail is gutter.rs unrelated)",
+ "WAVE-GUTTER6": "WIP gutter.rs clippy indexing panic must-fix before land",
  "WAVE-COPYTAKE6": "advancing copy.rs 163 take.rs 178 WIP",
  "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest",
  "AGYX-FIX": "root cause: raw agy -p bypassed rotator, gemini-4-neon 404; agyx wrapper forces gemini-3.8-flash-high via localhost:51200, verified 200",
