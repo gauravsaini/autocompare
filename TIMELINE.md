@@ -523,3 +523,9 @@
 1. **Home Narrow-720 Cards & CTA**: card min widths from space scale at 720px, CTA width from card inner width, toolbar button 24px symmetric hits, card grid wrap at narrow width, and edge fixture `comparison/home-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1011 green (including `exq_home6` narrow cards tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home6/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-copy11 tall plus pitch
+
+1. **Copy Tall-1200 Arrows & Pitch**: stacked per-hunk arrow pitch locked over tall 1200px canvas (Mono row + tight gap), copy button hit band centered tall, action text baseline steady over long scroll, and edge fixture `comparison/copy-tall-1200.json`.
+2. **Tests** (before → after): autocompare-gui 1015 green (including `exq_copy11` tall pitch tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy11/**`, `TIMELINE.md`.
