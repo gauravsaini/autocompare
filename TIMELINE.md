@@ -620,3 +620,9 @@
 1. **App-Chrome Geometry**: toolbar height/padding/button rhythm, tabstrip tab widths + padding, file-bar height + Browse alignment, per-pane metadata line rhythm. Existing SPACE_*/margin consts reused, TypoRole sizes only, colors frozen at 33 touches. Edge fixture comparison/chrome-narrow-720.json + headless test chrome17_narrow720_no_overlap.
 2. **Tests** (before -> after): autocompare-gui 1038 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate ABANDONED with reason (fixture renderer paints chrome rects hardcoded in screenshot.rs; no chrome helper feeds those pixels — same structural block as paint14; egui delta visible only in live app, live-window verification pending).
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-chrome17/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-shot18 fixture chrome pixels
+
+1. **Fixture Chrome Pixels (visual-spec-first)**: screenshot.rs fixture renderer now paints the chrome17 geometry — taller toolbar band with button rhythm, padded tabstrip tabs, file-bar rows with per-pane metadata line, segmented bottom status. Shot15 center gutter + yellow markers intact. pxdiff vs baseline: 138850 of 576000 DIFFERENT, bbox (0,40)-(959,448), VERDICT DIFFERENT (independently re-verified).
+2. **Tests** (before -> after): autocompare-gui 1039 green (including shot18_chrome720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-shot18/**, TIMELINE.md.
