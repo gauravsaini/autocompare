@@ -3635,7 +3635,11 @@ fn paint_text_body(
                                                                 text_center_marker_inset(),
                                                             );
                                                             if ui
-                                                                .small_button(label)
+                                                                .small_button(
+                                                                    RichText::new(label).color(
+                                                                        text_center_marker_fg(),
+                                                                    ),
+                                                                )
                                                                 .on_hover_text("Copy changed hunk")
                                                                 .clicked()
                                                             {
@@ -3906,7 +3910,10 @@ fn paint_text_body(
                                                     // symmetric hit-slop).
                                                     ui.add_space(text_center_marker_inset());
                                                     if ui
-                                                        .small_button(label)
+                                                        .small_button(
+                                                            RichText::new(label)
+                                                                .color(text_center_marker_fg()),
+                                                        )
                                                         .on_hover_text("Copy changed hunk")
                                                         .clicked()
                                                     {
@@ -4861,6 +4868,14 @@ pub fn text_center_marker_label(kind: TextRowKind) -> Option<&'static str> {
         TextRowKind::Equal => None,
         TextRowKind::Changed | TextRowKind::Deleted | TextRowKind::Inserted => Some("=>"),
     }
+}
+
+/// Center-gutter marker ink: frozen [`CHANGED_FG`] reuse (fixture
+/// `TEXT_CENTER_MARK` bhi isi hue me hai) — koi naya hue nahi.
+/// Paint marker text isi par rangta hai taaki `=>` changed-row
+/// band ([`CHANGED_BG`]) par yellow padhe. Pure; unit-tested.
+pub fn text_center_marker_fg() -> Color32 {
+    CHANGED_FG
 }
 
 /// Center-marker copy direction: single `=>` marker se copy kis taraf.
@@ -9178,6 +9193,99 @@ mod tests {
         assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
         assert!(text_center_hunk_marker(TextRowKind::Changed));
         assert!(!text_center_hunk_marker(TextRowKind::Equal));
+        // Floor below last row: balanced trailing blanks fill canvas.
+        let row_h = text_row_top_rhythm_px();
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9), 16);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9) % 2, 0);
+    }
+
+    #[test]
+    fn paint16_egui_mirror_gap_plus_markers_plus_floor() {
+        // Mirrors checks/gui-exq-paint16/round-1/comparison/paint-egui-mirror-1200.json:
+        // runtime `paint_text_body` draws the shot15 look — 20px center gap
+        // rect, yellow `=>` markers on changed-row hunk heads only, floor
+        // fill below last row. Geometry from existing helpers only, no new
+        // widths; colors frozen (marker ink reuses CHANGED_FG via
+        // `text_center_marker_fg`, band reuses CHANGED_BG).
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-paint16/round-1/comparison/paint-egui-mirror-1200.json"
+        );
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"marker_box\": 16.0"));
+        assert!(fixture_raw.contains("\"marker_inset\": 2.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"marker_label_Changed\": \"=>\""));
+        assert!(fixture_raw.contains("\"marker_fg\": \"CHANGED_FG"));
+        // Gap width: 20px center column from SPACE scale, gutter helpers.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(
+            text_center_gutter_width(),
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(TEXT_CENTER_GUTTER_W, 20.0);
+        // Marker box/inset/slop reuse gutter helpers, no new widths.
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(
+            text_center_marker_content_w(),
+            crate::gutter::GUTTER_ARROW_BOX
+        );
+        assert_eq!(text_center_marker_inset(), 2.0);
+        assert_eq!(
+            text_center_marker_inset(),
+            crate::gutter::center_row_marker_inset(20.0, 16.0)
+        );
+        assert_eq!(text_center_hit_slop_px(), 2.0);
+        assert_eq!(
+            text_center_hit_slop_px(),
+            crate::gutter::GUTTER_ARROW_HIT_SLOP
+        );
+        // 1200 pane pair: 582/582 + 20 + 2*8 = 1200, column 590, cx 600.
+        assert_eq!(text_pane_pair_widths(1200.0), (582.0, 582.0));
+        assert_eq!(text_center_column_x_for_avail(1200.0), 590.0);
+        assert!((text_center_arrow_cx_for_avail(1200.0) - 600.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_for_avail(1200.0), (588.0, 612.0));
+        let (left, right) = text_pane_pair_widths(1200.0);
+        assert!(
+            (left + right + text_center_gutter_width() + 2.0 * SECTION_GAP - 1200.0).abs() < 0.001
+        );
+        // Marker mapping: diff kinds show '=>', Equal blanks.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert!(text_center_hunk_marker(TextRowKind::Changed));
+        assert!(text_center_hunk_marker(TextRowKind::Deleted));
+        assert!(text_center_hunk_marker(TextRowKind::Inserted));
+        assert!(!text_center_hunk_marker(TextRowKind::Equal));
+        // Hunk heads on the default 7-row fixture (E E C D I E E): one
+        // contiguous diff hunk headed at row 2 only.
+        let row = |kind: TextRowKind| TextRow {
+            kind,
+            ..TextRow::default()
+        };
+        let rows = vec![
+            row(TextRowKind::Equal),
+            row(TextRowKind::Equal),
+            row(TextRowKind::Changed),
+            row(TextRowKind::Deleted),
+            row(TextRowKind::Inserted),
+            row(TextRowKind::Equal),
+            row(TextRowKind::Equal),
+        ];
+        let mut heads = Vec::new();
+        let mut idx = 0usize;
+        while idx < rows.len() {
+            if text_center_hunk_head(&rows, idx) {
+                heads.push(idx);
+            }
+            idx = idx.saturating_add(1);
+        }
+        assert_eq!(heads, vec![2]);
+        // Marker ink: frozen CHANGED_FG reuse, no new color.
+        assert_eq!(text_center_marker_fg(), CHANGED_FG);
+        assert_eq!(text_center_marker_fg(), crate::theme::CHANGED_FG);
         // Floor below last row: balanced trailing blanks fill canvas.
         let row_h = text_row_top_rhythm_px();
         assert!((row_h - 17.6).abs() < 0.01);
