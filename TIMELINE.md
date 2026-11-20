@@ -728,3 +728,9 @@
 1. **Folder parity**: engine already correct, minimal 78-line sync prune test + nested-orphan 4-deep fixture, parity harness RESULT: PASS 10/10.
 2. **Tests**: autocompare-compare sync green; clippy -D warnings clean; fmt clean; banned 0.
 3. **Files changed**: crates/compare/tests/sync.rs, checks/ac-loop/round-folder30/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-text30 live text typo
+
+1. **Typography second**: TEXT_ROW_HEIGHT_COMPACT 18.0 -> 20.0 SPACE_LG+SPACE_XS reuse, mono 15.6 line-height 4.4px pad, MAX 16.9 3.1px pad zero clip, narrow700 wrap fixture.
+2. **Tests**: 1061 green (text30_wrap700_zero_clip new); exquisite harness RESULT: PASS 11059B; fmt clean; banned 0; colors 38 frozen.
+3. **Files changed**: crates/gui/src/viewmodel.rs, checks/gui-exq-text30/**, TIMELINE.md.
