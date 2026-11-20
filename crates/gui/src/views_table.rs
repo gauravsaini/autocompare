@@ -3058,6 +3058,222 @@ pub fn table7_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table8 round-1: key-column widths plus align
+// at 960px wide (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: numeric columns right-align with stable header height
+// and sort-indicator arrows; ours table7 fixed sort glyph + right-alignment at
+// 960px, key-column widths + multi-sheet rhythm still loose. Fix table-side
+// only (app.rs views.rs views_hex.rs home.rs tree.rs gutter.rs copy.rs
+// theme.rs viewmodel.rs take.rs dist/** skills/** NO-TOUCH). Geometry FIRST:
+// key-column widths char metrics se (`table_column_widths` reuse +
+// `table_col_widths_px` outer, grid origin-se 936 avail par fit gate),
+// numeric right-alignment grid origin se (`table7_cell_text_x` pad math
+// delegation), header/body row heights TypoRole se (Heading 21.6 vs Mono
+// 15.6). Typography SECOND: header underline
+// `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0), header weight
+// `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi. Colors
+// FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure;
+// unit-tested. Edge fixture
+// `checks/gui-exq-table8/comparison/table-keys-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table8 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par keys
+/// fixture fit lock hota hai. Pure.
+pub const TABLE8_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table8 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table7 precedent — marker slot se nahi badhta). Pure; unit-tested.
+pub fn table8_header_h() -> f32 {
+    table7_header_h()
+}
+
+/// Table8 header stable contract: table6 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table8_header_h_stable() -> bool {
+    table7_header_h_stable()
+}
+
+/// Table8 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table8_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table8 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table8_header_body_delta() -> f32 {
+    table8_header_h() - table8_row_h()
+}
+
+/// Table8 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936).
+/// Pure; unit-tested.
+pub fn table8_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table8 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table8_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table8 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table8_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table8 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table8_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table8 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table8_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table8 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 960px budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table8_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table8 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table8_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table8 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table8_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table8_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    let widths = table_column_widths(header, rows);
+    let mut out = Vec::new();
+    for key in keys.iter() {
+        if let Some(chars) = widths.get(*key) {
+            out.push((*key, *chars));
+        }
+    }
+    out
+}
+
+/// Key columns ki px outer widths: char widths se
+/// [`table_col_widths_px`] delegation (chars * char_w + pad), kharab
+/// `char_w` par khali vec. Order `table8_key_widths_chars` wali. Pure;
+/// unit-tested.
+pub fn table8_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (col, chars) in key_widths.iter() {
+        let mut single = Vec::new();
+        single.push(*chars);
+        if let Some(px) = table_col_widths_px(&single, char_w).first().copied() {
+            out.push((*col, px));
+        }
+    }
+    out
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative (paint origin add karta
+/// hai). Range-bahar col skip. Pure; unit-tested.
+pub fn table8_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    for key in keys.iter() {
+        if let Some(x) = table_column_grid_col_x(*key, col_widths_px, table_col_spacing()) {
+            out.push((*key, x));
+        }
+    }
+    out
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table8_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table8_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table8_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table8_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table8_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table8_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table8 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table8_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table8 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table8_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table8 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table8_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table8 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table8_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table8 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table8_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table8 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse.
+/// Pure; unit-tested.
+pub fn table8_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4815,5 +5031,115 @@ mod tests {
         assert!(!table7_column_grid_fit(100.0, &px));
         assert!(table7_col_widths_px(&widths, 0.0).is_empty());
         assert_eq!(table7_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table8_round1_keys_plus_widths_wide_960() {
+        // Headless test proving edge fixture comparison/table-keys-960.json:
+        // key-column widths char metrics se, numeric right-align grid origin
+        // se, header/body heights TypoRole se at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table8/comparison/table-keys-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table8/round-1/comparison/table-keys-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-keys-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header/body heights TypoRole se, stable rhythm.
+        assert!((table8_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table8_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table8_header_h(), table7_header_h());
+        assert!(table8_header_h_stable());
+        assert!((table8_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table8_row_h(), table_cell_row_h());
+        assert_eq!(
+            table8_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table8_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table8_header_h() > table8_row_h());
+        assert_eq!(TABLE8_CANVAS_W, 960.0);
+        assert_eq!(TABLE8_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table8_avail_w(), 936.0);
+        assert_eq!(table8_grid_origin(), (12.0, 12.0));
+        assert_eq!(table8_col_spacing(), 8.0);
+        assert_eq!(table8_grid_gap_y(), 4.0);
+        assert!((table8_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table8_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table8_header_underline_w(), 1.0);
+        assert!(table8_header_weight_ok());
+
+        // 2. Key-column widths char metrics se at 960px wide.
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(table8_key_widths_chars(&header, &rows, &keys), vec![(0, 3)]);
+        assert_eq!(
+            table8_key_widths_chars(&header, &rows, &[0, 2]),
+            vec![(0, 3), (2, 6)]
+        );
+        assert!(table8_key_widths_chars(&header, &rows, &[9]).is_empty());
+        assert!(table8_key_widths_chars(&header, &rows, &[]).is_empty());
+        let key_px = table8_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table8_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        assert!(table8_key_outer_widths(&[(0, 3)], f32::NAN).is_empty());
+        let px = table8_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table8_grid_total_w(&px), 176.0);
+        assert_eq!(table8_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table8_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table8_key_col_xs(&[2], &px), vec![(2, 112.0)]);
+        assert!(table8_key_col_xs(&[9], &px).is_empty());
+        assert_eq!(table8_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table8_column_grid_fit(table8_avail_w(), &px));
+        assert!(!table8_column_grid_fit(100.0, &px));
+        assert!(table8_col_widths_px(&widths, 0.0).is_empty());
+
+        // 3. Numeric right-alignment grid origin se + sort glyph stable.
+        assert_eq!(table8_col_aligns(&header, &rows), vec![true, false, true]);
+        assert_eq!(
+            table8_col_aligns(&header, &rows),
+            table7_col_aligns(&header, &rows)
+        );
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table8_row_h(),
+        };
+        assert_eq!(table8_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table8_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table8_cell_text_x(outer, 100.0, true), None);
+        assert_eq!(table8_sort_marker(true, false), "▼");
+        assert_eq!(table8_header_label("Price", true, false), "Price▼");
+        assert!(table8_is_sorted_col(Some(0), 0));
+        assert!(!table8_is_sorted_col(Some(0), 1));
+        let cell = TableCellRect {
+            x: 0.0,
+            y: 12.0,
+            w: 40.0,
+            h: table8_header_h(),
+        };
+        assert_eq!(
+            table8_sort_glyph_rect(cell, 8.0).map(|r| (r.x, r.w)),
+            Some((28.0, 8.0))
+        );
+        assert_eq!(table8_sort_glyph_rect(cell, 0.0), None);
+        assert_eq!(table8_visible_rows(600.0), 38);
     }
 }
