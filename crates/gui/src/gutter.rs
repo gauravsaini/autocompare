@@ -1220,7 +1220,10 @@ mod tests {
     #[test]
     fn selection_marker_band_covers_one_min_band() {
         // 4 rows over 400px: row 1 center 150, band 148..152.
-        assert_eq!(gutter_selection_marker_band(1, 4, 400.0), Some((148.0, 152.0)));
+        assert_eq!(
+            gutter_selection_marker_band(1, 4, 400.0),
+            Some((148.0, 152.0))
+        );
         // Band height is exactly one min segment, never two rows.
         if let Some((y0, y1)) = gutter_selection_marker_band(2, 4, 400.0) {
             assert!((y1 - y0 - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
@@ -1229,7 +1232,10 @@ mod tests {
             panic!("band must exist");
         }
         // Edge rows clamp inside the track instead of spilling out.
-        assert_eq!(gutter_selection_marker_band(0, 1000, 400.0), Some((0.0, 4.0)));
+        assert_eq!(
+            gutter_selection_marker_band(0, 1000, 400.0),
+            Some((0.0, 4.0))
+        );
         assert_eq!(
             gutter_selection_marker_band(999, 1000, 400.0),
             Some((396.0, 400.0))
@@ -2164,7 +2170,11 @@ pub fn gutter_mono_line_height_px() -> f32 {
 /// paint text rows isi pitch par bichhata hai, isliye markers yahi se
 /// align hote hain. `None`: out-of-range row ya non-finite/non-positive
 /// pitch. Pure; unit-tested.
-pub fn gutter_row_center_y_for_line_height(row: usize, total_rows: usize, line_h: f32) -> Option<f32> {
+pub fn gutter_row_center_y_for_line_height(
+    row: usize,
+    total_rows: usize,
+    line_h: f32,
+) -> Option<f32> {
     if total_rows == 0 || row >= total_rows {
         return None;
     }
@@ -2262,7 +2272,10 @@ mod exq_text5_tests {
         assert_eq!(gutter_center_side_gap(), 4.0);
         // Arrow box + 2 * side gap == center width (16 + 8 == 24).
         assert_eq!(gutter_arrow_box(), crate::theme::SPACE_LG);
-        assert!((gutter_arrow_box() + 2.0 * gutter_center_side_gap() - gutter_center_width()).abs() < 0.001);
+        assert!(
+            (gutter_arrow_box() + 2.0 * gutter_center_side_gap() - gutter_center_width()).abs()
+                < 0.001
+        );
         assert_eq!(gutter_center_width(), crate::theme::SPACE_XL);
         assert_eq!(gutter_center_width(), 24.0);
     }
@@ -2271,18 +2284,24 @@ mod exq_text5_tests {
     fn text5_layout_960_is_symmetric_with_equal_panes() {
         // Mirrors checks/gui-exq-text5/comparison/text-gutter-960.json:
         // 12 + 456 + 24 + 456 + 12 = 960.
-        assert_eq!(
-            gutter_text5_layout_960(),
-            (12.0, 456.0, 24.0, 456.0, 12.0)
-        );
+        assert_eq!(gutter_text5_layout_960(), (12.0, 456.0, 24.0, 456.0, 12.0));
         let (m0, left, center, right, m1) = gutter_text5_layout_960();
         assert_eq!(m0, m1);
         assert_eq!(left, right);
         assert!((m0 + left + center + right + m1 - 960.0).abs() < 0.001);
         // Generic twin bhi symmetric rehta hai; na-mumkin par zero panes.
-        assert_eq!(gutter_text_layout(12.0, 24.0, 960.0), gutter_text5_layout_960());
-        assert_eq!(gutter_text_layout(12.0, 24.0, 40.0), (12.0, 0.0, 24.0, 0.0, 12.0));
-        assert_eq!(gutter_text_layout(12.0, 24.0, f32::NAN), (0.0, 0.0, 0.0, 0.0, 0.0));
+        assert_eq!(
+            gutter_text_layout(12.0, 24.0, 960.0),
+            gutter_text5_layout_960()
+        );
+        assert_eq!(
+            gutter_text_layout(12.0, 24.0, 40.0),
+            (12.0, 0.0, 24.0, 0.0, 12.0)
+        );
+        assert_eq!(
+            gutter_text_layout(12.0, 24.0, f32::NAN),
+            (0.0, 0.0, 0.0, 0.0, 0.0)
+        );
     }
 
     #[test]
@@ -2294,7 +2313,10 @@ mod exq_text5_tests {
             y_end: 204.0,
             kind: TextRowKind::Deleted,
         };
-        assert_eq!(gutter_slop_band(&seg, crate::theme::GUTTER_MERGE_GAP), Some((198.0, 206.0)));
+        assert_eq!(
+            gutter_slop_band(&seg, crate::theme::GUTTER_MERGE_GAP),
+            Some((198.0, 206.0))
+        );
         let Some((lo, hi)) = gutter_slop_band(&seg, GUTTER_HIT_SLOP) else {
             panic!("band must exist");
         };
@@ -2320,10 +2342,17 @@ mod exq_text5_tests {
             gutter_mono_line_height_px(),
             crate::theme::TypoRole::content_grid().line_height_px()
         );
-        assert!(gutter_row_center_y_for_line_height(1, 4, 15.6).is_some_and(|v| (v - 23.4).abs() < 0.01));
-        assert!(gutter_row_center_y_for_line_height(0, 4, 15.6).is_some_and(|v| (v - 7.8).abs() < 0.01));
+        assert!(
+            gutter_row_center_y_for_line_height(1, 4, 15.6)
+                .is_some_and(|v| (v - 23.4).abs() < 0.01)
+        );
+        assert!(
+            gutter_row_center_y_for_line_height(0, 4, 15.6).is_some_and(|v| (v - 7.8).abs() < 0.01)
+        );
         // Pitch badle to center usi pitch par (19.6 text-row pitch par row 0 = 9.8).
-        assert!(gutter_row_center_y_for_line_height(0, 4, 19.6).is_some_and(|v| (v - 9.8).abs() < 0.01));
+        assert!(
+            gutter_row_center_y_for_line_height(0, 4, 19.6).is_some_and(|v| (v - 9.8).abs() < 0.01)
+        );
         assert_eq!(gutter_row_center_y_for_line_height(4, 4, 15.6), None);
         assert_eq!(gutter_row_center_y_for_line_height(0, 0, 15.6), None);
         assert_eq!(gutter_row_center_y_for_line_height(0, 4, 0.0), None);

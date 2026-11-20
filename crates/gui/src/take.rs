@@ -1257,8 +1257,7 @@ mod exq_merge3_tests {
 
     #[test]
     fn merge3_wide_fixture() {
-        let raw =
-            include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
+        let raw = include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
         assert!(raw.contains("\"name\":\"merge-wide-960\""));
         assert!(raw.contains("\"avail_w\":960.0"));
         assert!(raw.contains("\"section_gap\":8.0"));
