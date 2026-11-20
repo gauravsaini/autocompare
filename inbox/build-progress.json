@@ -94,7 +94,7 @@
   "WAVE-TEXTCENTER": "holding 21 msgs, no WIP",
   "WAVE-TOOLBAR": "landed+pushed f48710e REPORT PASS 778 green session-tabs action-bar jump-controls (views.rs)",
   "WAVE-TOOLBAR2": "landed+pushed 32f68ed REPORT PASS tab-close icon-cluster (views.rs 174)",
-  "WAVE-TOPCHROME": "REPORT PASS sess-opencode-topchrome 31 msgs 804 green PNG 10363 edge topchrome-narrow-empty, commit pending",
+  "WAVE-TOPCHROME": "gates pre-verified on WIP 35 msgs: 804 green clippy0 fmt clean banned0 REPORT PASS, agent commit pending",
   "WAVE-TREE2": "landed+pushed abcf36c REPORT PASS 773 green indent-guides status-marks gutter-arrows (tree+gutter+copy)",
   "WAVE-TREE4": "landed+pushed 4654e5c REPORT PASS 798 green clippy0 fmt clean banned0 edge fixture",
   "WAVE-UXKEY2": "landed+pushed 9f8625e REPORT PASS 743+31 green keymap+AA",
