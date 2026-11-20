@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "updated": "2026-11-20",
+  "waves": {
+    "CO-TBARCALL": "landed",
+    "CP-LIGHTFLAG": "landed",
+    "AGYX-A-reports": "landed",
+    "AGYX-B-sessions": "landed",
+    "AGYX-C-diff": "landed",
+    "round-7-verify": "queued"
+  }
+}
