@@ -9,10 +9,18 @@
     "AGYX-C-diff": "landed",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
-    "SYNC-E": "progressing (folder+sync+folder_merge+jobs M)",
-    "MEDIA-F": "progressing (diff/image.rs re-added decoders)",
+    "SYNC-E": "running (alive, OWNS compare folder/sync)",
+    "MEDIA-F": "running (alive, OWNS compare table/diff)",
     "CLI-G": "process ended, 5 files M uncommitted preserved, rescue after E/F/D3 land",
     "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
-    "EXQ-TYPO": "viewmodel zone-role helpers (views_hex+views_table+viewmodel M)"
+    "EXQ-TYPO": "viewmodel zone-role helpers (views_hex+views_table+viewmodel M)",
+    "HARNESS-ac-loop": "landed 2f13554 (tools/ac-loop/run.sh + skills/ac-loop/SKILL.md, pushed)",
+    "VFS-D5": "landed caffc39 pushed (Error::other, 9 warnings fixed)",
+    "VFS-D6": "launched (reconcile RemoteEndpoint breakage, OWNS vfs)",
+    "CLI-G2": "launched (rescue, OWNS cli)",
+    "EXQ-TYPO3": "running (harness PASS 677 green, OWNS clippy clean, full clippy blocked on diff sibling)",
+    "EXQ-GEO2": "launched (geometry-first 7 gaps, OWNS views/tree/home/app)",
+    "LOCALRUN-early": "launched (zero-source local run + screenshots)",
+    "BINARY-early": "launched (release binaries install)"
   }
 }
