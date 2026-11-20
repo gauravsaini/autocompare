@@ -10,8 +10,8 @@
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "VFS-D": "progressing (8 files M OWNS-clean, GATES.md drafted unchecked)",
     "SYNC-E": "progressing (folder.rs M, GATES.md drafted with G1-Gx)",
-    "MEDIA-F": "running (agyx-f-media)",
-    "CLI-G": "running (agyx-g-cli)",
+    "MEDIA-F": "progressing (checks/agyx-media-f/GATES.md drafted)",
+    "CLI-G": "progressing (crates/cli/src/outcome.rs M)",
     "EXQ-GEO": "running (sess-exq-geo)",
     "EXQ-TYPO": "running gate-passed (sess-exq-typo2, R7 path fixed)"
   }
