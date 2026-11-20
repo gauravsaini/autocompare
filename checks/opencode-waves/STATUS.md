@@ -1481,3 +1481,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `ff6895e` feat(gui): paint session tab strip with label fallback and overflow scroll (OWNS views.rs + checks/gui-sessionpaint-by).
 - Gates: 654 green (648 -> +6), clippy zero, fmt clean, banned zero, colors zero new, 4 PNGs magic+size+distinct ok, STATUS untouched.
 - P0-1 session tabs PLAN complete (MODEL 334dee5 -> APP c950d03 -> PAINT ff6895e). Follow-up: App caller wiring (strip call + action match + T5/T6 bridge) agle wave ka hai.
+
+## 2026-11-20 — Wave BZ-SEL2 launched (P0-2 selective highlight paint wiring, retry)
+- Sess sess-sel-bz, OWNS views.rs + checks/gui-selwire-bz. Scope: dead-code helpers ko live paint me wire + fixture visibility proof. Shared-workdir savdhani prompt me (sibling-dirt check before trusting test results).
