@@ -29,11 +29,11 @@ use crate::gutter::{
 };
 use crate::home::{
     HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
-    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, RECENT_COL_GAP, RECENT_ROW_GAP, Session,
-    SessionHistory, SessionList, SessionSnapshot, home_card_button_size, home_card_cta_width,
-    home_card_desc_is_small_weak, home_card_min_height, home_card_title_size,
-    recent_list_empty_hint, recent_row_columns, recent_row_meta_role, recent_row_meta_text,
-    recent_row_title_role, recent_row_two_line_height,
+    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, HOME_TOOLBAR_BUTTON_H, HOME_TOOLBAR_BUTTON_W,
+    RECENT_COL_GAP, RECENT_ROW_GAP, Session, SessionHistory, SessionList, SessionSnapshot,
+    home_card_button_size, home_card_cta_width, home_card_desc_is_small_weak, home_card_min_height,
+    home_card_title_size, recent_list_empty_hint, recent_row_columns, recent_row_meta_role,
+    recent_row_meta_text, recent_row_title_role, recent_row_two_line_height,
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
@@ -146,19 +146,41 @@ pub fn half_field_width(avail: f32) -> f32 {
     split_field_widths(avail, SPLIT_DEFAULT_FRACTION).0
 }
 
+/// Path-row chrome width (px): two Browse buttons + Compare button +
+/// split handle + five [`TIGHT_GAP`] item gaps. `paint_paths` row ka
+/// fixed kharcha; fields ko `avail` me se yahi ghata kar milta hai taaki
+/// right edge overflow na ho (Gap 3). Pure; unit-tested.
+pub fn path_row_chrome_width() -> f32 {
+    let (btn_w, _) = path_browse_button_size();
+    3.0 * btn_w + SPLIT_HIT_W + 5.0 * TIGHT_GAP
+}
+
+/// Triple path-row chrome width (px): three Browse buttons + Compare
+/// button + six [`TIGHT_GAP`] item gaps. `paint_triple_paths` row ka
+/// fixed kharcha. Pure; unit-tested.
+pub fn triple_path_row_chrome_width() -> f32 {
+    let (btn_w, _) = path_browse_button_size();
+    4.0 * btn_w + 6.0 * TIGHT_GAP
+}
+
 /// Equal third width for three path fields sharing one row.
+/// Row chrome ([`triple_path_row_chrome_width`]) ghata kar banta hai,
+/// each third keeps the [`MIN_THIRD`] floor so narrow windows scroll
+/// instead of crushing the fields.
 pub fn third_field_width(avail: f32) -> f32 {
-    (avail / 3.0).max(MIN_THIRD) - BROWSE_RESERVE
+    ((avail - triple_path_row_chrome_width()) / 3.0).max(MIN_THIRD)
 }
 
 /// Split widths for the two path fields at `fraction` of `avail`.
-/// Each side keeps the [`MIN_HALF`] floor minus the browse reserve,
-/// so narrow windows scroll instead of crushing the fields.
+/// Row chrome ([`path_row_chrome_width`]) ghata kar banta hai, each side
+/// keeps the [`MIN_HALF`] floor and the pair always fills the row
+/// ([`split_picture_widths`] precedent), so narrow windows scroll
+/// instead of crushing the fields or clipping the right edge.
 pub fn split_field_widths(avail: f32, fraction: f32) -> (f32, f32) {
     let f = clamp_split_fraction(fraction);
-    let left = (avail * f).max(MIN_HALF) - BROWSE_RESERVE;
-    let right = (avail * (1.0 - f)).max(MIN_HALF) - BROWSE_RESERVE;
-    (left, right)
+    let total = (avail - path_row_chrome_width()).max(2.0 * MIN_HALF);
+    let left = (total * f).clamp(MIN_HALF, total - MIN_HALF);
+    (left, total - left)
 }
 
 /// Split widths for the picture side-by-side columns at `fraction`
@@ -351,13 +373,14 @@ pub fn home_paint_cta_size() -> (f32, f32) {
     (home_card_cta_width(), HOME_CARD_BUTTON_MIN_H)
 }
 
-/// Session toolbar button size: 120x28 floor ([`HOME_CARD_BUTTON_MIN_W`] x
-/// [`HOME_CARD_BUTTON_MIN_H`]) taaki Swap/Reload poori ungli se lagen.
-/// Home CTA (224) se alag floor hai — toolbar labels chhote hain, isliye
-/// wahi purana floor reuse hota hai (spacing `toolbar_item_gap`/`toolbar_group_gap` se).
-/// Koi naya size nahi; pure; unit-tested.
+/// Session toolbar button size: 96x24 floor. Width path Browse floor
+/// (120) se tang taaki wide text pills compact rahen (content se chhota
+/// floor kabhi crush nahi karta, floor sirf chhote labels ko pakadta hai);
+/// height 24 exquisite hit floor (find-nav precedent) taaki toolbar row
+/// 28 se 24 par aaye. Home CTA (224x28) se alag floor hai. Pure;
+/// unit-tested.
 pub fn session_toolbar_button_size() -> (f32, f32) {
-    (HOME_CARD_BUTTON_MIN_W, HOME_CARD_BUTTON_MIN_H)
+    (HOME_TOOLBAR_BUTTON_W, HOME_TOOLBAR_BUTTON_H)
 }
 
 /// Toolbar swap glyph: `↔` reuse ([`home_recent_row_title`] precedent) —
@@ -705,10 +728,10 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
 // ----------------------------------------------------------------------------
 
 /// Session tab max width (px): fixed cell + truncate clip, do-line kabhi
-/// nahi. `CARD_W` precedent jaisa named token (card se tang taaki 8-tab
-/// overflow 960 canvas par scroll me jaye); magic number paint me nahi.
-/// Pure; unit-tested.
-pub const SESSION_TAB_MAX_W: f32 = 160.0;
+/// nahi. `CARD_W` precedent jaisa named token (card se tang taaki pill
+/// patti tairti na lage; 3 pills ab 444px me, strip scroll 8-tab par bhi
+/// barkarar); magic number paint me nahi. Pure; unit-tested.
+pub const SESSION_TAB_MAX_W: f32 = 120.0;
 
 /// Session tab hit: strip caller (`App`, agle wave) is par switch/close
 /// chalata hai. Paint sirf emit karta hai, mutate nahi (`paint_paths`
@@ -749,12 +772,12 @@ pub fn session_strip_is_empty(list: &SessionList) -> bool {
     list.is_empty()
 }
 
-/// Close-x hit box edge (px): browse-button size token ka reuse
-/// ([`path_browse_button_size`], 120x28 floor) — square `h x h`, taaki
-/// chhota `x` ungli se lage bina tab cell khaye. Koi naya size nahi.
+/// Close-x hit box edge (px): 24 exquisite hit floor (toolbar compact
+/// height precedent) — square `h x h`, taaki chhota `x` ungli se lage
+/// bina tab cell khaye; 28 se 24 taaki pill footprint tang ho.
 /// Pure; unit-tested.
 pub fn session_tab_close_edge() -> f32 {
-    path_browse_button_size().1
+    HOME_TOOLBAR_BUTTON_H
 }
 
 /// Single session tab: label (fixed max width + truncate clip, single line)
@@ -6986,21 +7009,24 @@ mod tests {
     }
 
     #[test]
-    fn session_toolbar_and_path_buttons_reuse_home_cta_floor() {
-        // Toolbar/path-row floor: 120x28 (area 3360) — Home CTA (224x28)
-        // se alag, chhote labels ke liye purana floor intact.
-        assert_eq!(session_toolbar_button_size(), path_browse_button_size());
-        assert_eq!(session_toolbar_button_size(), (120.0, 28.0));
+    fn session_toolbar_uses_compact_floor() {
+        // Toolbar compact floor: 96x24 (area 2304) — path Browse floor
+        // (120x28) se tang taaki wide text pills compact rahen; height 24
+        // exquisite hit floor (find-nav precedent). Home CTA (224x28)
+        // se alag floor barkarar.
+        assert_eq!(session_toolbar_button_size(), (96.0, 24.0));
         assert_eq!(
             session_toolbar_button_size(),
             (
-                crate::home::HOME_CARD_BUTTON_MIN_W,
-                crate::home::HOME_CARD_BUTTON_MIN_H
+                crate::home::HOME_TOOLBAR_BUTTON_W,
+                crate::home::HOME_TOOLBAR_BUTTON_H
             )
         );
         let (w, h) = session_toolbar_button_size();
         assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
-        assert_eq!(w * h, 3360.0);
+        assert_eq!(w * h, 2304.0);
+        assert!(w < path_browse_button_size().0);
+        assert!(h <= path_browse_button_size().1);
     }
 
     #[test]
@@ -7541,14 +7567,29 @@ mod tests {
 
     #[test]
     fn half_fields_share_equal_width() {
-        assert_eq!(half_field_width(800.0), 325.0);
-        assert_eq!(half_field_width(0.0), 105.0);
+        // Row chrome 388 ghata kar: (800-388)/2 = 206; zero par floors.
+        assert_eq!(half_field_width(800.0), 206.0);
+        assert_eq!(half_field_width(0.0), 180.0);
     }
 
     #[test]
     fn third_fields_share_equal_width() {
-        assert_eq!(third_field_width(900.0), 225.0);
-        assert_eq!(third_field_width(0.0), 55.0);
+        // Triple chrome 504 ghata kar: (900-504)/3 = 132; zero par floor.
+        assert_eq!(third_field_width(900.0), 132.0);
+        assert_eq!(third_field_width(0.0), 130.0);
+    }
+
+    #[test]
+    fn path_row_chrome_matches_paint_widgets() {
+        // Gap 3: fields + chrome == avail (koi overflow nahi).
+        assert_eq!(path_row_chrome_width(), 388.0);
+        assert_eq!(triple_path_row_chrome_width(), 504.0);
+        let (left, right) = split_field_widths(800.0, 0.50);
+        assert_eq!(left + right + path_row_chrome_width(), 800.0);
+        assert_eq!(
+            3.0 * third_field_width(900.0) + triple_path_row_chrome_width(),
+            900.0
+        );
     }
 
     #[test]
@@ -7585,16 +7626,17 @@ mod tests {
     #[test]
     fn split_field_widths_follow_fraction() {
         let (left, right) = split_field_widths(800.0, 0.50);
-        assert_eq!((left, right), (325.0, 325.0));
+        assert_eq!((left, right), (206.0, 206.0));
         assert_eq!(
             (left, right),
             (half_field_width(800.0), half_field_width(800.0))
         );
         let (wide_left, wide_right) = split_field_widths(800.0, 0.80);
         assert!(wide_left > wide_right);
-        assert_eq!(wide_left, 800.0 * 0.80 - 75.0);
+        assert_eq!((wide_left, wide_right), (232.0, 180.0));
         let (narrow_left, narrow_right) = split_field_widths(800.0, 0.0);
         assert_eq!((narrow_left, narrow_right), split_field_widths(800.0, 0.20));
+        assert_eq!((narrow_left, narrow_right), (180.0, 232.0));
     }
 
     #[test]
@@ -10443,13 +10485,13 @@ mod tests {
 
     #[test]
     fn session_tab_geometry_reuses_tokens() {
-        assert_eq!(SESSION_TAB_MAX_W, 160.0);
+        assert_eq!(SESSION_TAB_MAX_W, 120.0);
         assert!(SESSION_TAB_MAX_W.is_finite() && SESSION_TAB_MAX_W > 0.0);
         let max_w = SESSION_TAB_MAX_W;
         let card_w = CARD_W;
         assert!(max_w <= card_w);
-        assert_eq!(session_tab_close_edge(), path_browse_button_size().1);
-        assert_eq!(session_tab_close_edge(), 28.0);
+        assert_eq!(session_tab_close_edge(), HOME_TOOLBAR_BUTTON_H);
+        assert_eq!(session_tab_close_edge(), 24.0);
     }
 
     #[test]

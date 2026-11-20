@@ -5266,8 +5266,9 @@ impl eframe::App for App {
             if picked_tab != self.tab {
                 self.set_tab(picked_tab);
             }
-            ui.label(RichText::new(self.session_identity()).small().weak());
-            ui.add_space(views::TAB_BOTTOM_GAP);
+            // Gap 1: session-identity label row hata di (window title +
+            // strip pills wahi identity rakhte hain) taaki content se pehle
+            // 4 nav rows 3 rahen: strip / mode tabs / toolbar.
 
             // Single aligned toolbar row: actions (views call-site) + view toggles.
             let toolbar_active = self.tab != Tab::Home;
@@ -5577,10 +5578,8 @@ impl eframe::App for App {
                         show_split_content(ui, text_fraction, |ui| {
                             views::paint_text(ui, &mut empty);
                         });
-                        ui.label(
-                            RichText::new("no text results yet: type both file paths and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status
+                        // ("text: no results yet") wahi state rakhta hai.
                     }
                     self.mirror_legacy_from_text_find();
                     if let (Some(before), Some(real)) =
@@ -5933,10 +5932,7 @@ impl eframe::App for App {
                     } else if self.hex_view.over_cap {
                         views::paint_hex_over_cap(ui, &self.hex_view);
                     } else {
-                        ui.label(
-                            RichText::new("no hex results yet: type both file paths and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                 }
                 Tab::Merge => {
@@ -5994,16 +5990,15 @@ impl eframe::App for App {
                             self.run_merge_apply();
                         }
                     } else {
-                        ui.label(
-                            RichText::new("no merge results yet: type base + both sides and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                 }
                 Tab::Table => {
                     let had_results = self.table_model.is_some();
                     let mut rerun = false;
                     ui.horizontal_wrapped(|ui| {
+                        // Gap 5: uniform row floor (HEADER_H, path-row precedent).
+                        ui.set_min_size(egui::vec2(ui.available_width(), views::HEADER_H));
                         ui.label(RichText::new("Keys:").small().weak());
                         let mut toggled: Option<usize> = None;
                         for col in 0..8usize {
@@ -6028,6 +6023,8 @@ impl eframe::App for App {
                         }
                     });
                     ui.horizontal_wrapped(|ui| {
+                        // Gap 5: uniform row floor (HEADER_H, path-row precedent).
+                        ui.set_min_size(egui::vec2(ui.available_width(), views::HEADER_H));
                         ui.label(RichText::new("Tolerance:").small().weak());
                         let mut tol = self.table_view.numeric_tolerance;
                         ui.radio_value(&mut tol, None, "exact");
@@ -6128,20 +6125,14 @@ impl eframe::App for App {
                             });
                         }
                     } else {
-                        ui.label(
-                            RichText::new("no table results yet: type both table paths and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                 }
                 Tab::Sync => {
                     if let Some(list) = self.sync_model.as_mut() {
                         views::paint_sync_checklist(ui, list);
                     } else {
-                        ui.label(
-                            RichText::new("no sync plan yet: type both folder paths and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                     // Gap #8: one-direction Apply (checked left->right
                     // copies only, never deletes). Dry-run default on;
@@ -6233,12 +6224,7 @@ impl eframe::App for App {
                             );
                         }
                     } else {
-                        ui.label(
-                            RichText::new(
-                                "no picture results yet: type both image paths and Compare.",
-                            )
-                            .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                 }
                 Tab::FolderMerge => {
@@ -6263,22 +6249,14 @@ impl eframe::App for App {
                             );
                         }
                     } else {
-                        ui.label(
-                            RichText::new(
-                                "no folder-merge plan yet: type base + both sides and Compare.",
-                            )
-                            .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                 }
                 Tab::Audio => {
                     if let Some(list) = self.audio_model.as_mut() {
                         views::paint_audio_checklist(ui, list);
                     } else {
-                        ui.label(
-                            RichText::new("no audio results yet: type both audio paths and Compare.")
-                                .weak(),
-                        );
+                        // Gap 4: inline hint hata di — bottom status wahi state rakhta hai.
                     }
                     // Gap #8 audio action UI: stub play affordance plus
                     // summary/waveform display from App state. Play is a

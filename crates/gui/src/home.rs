@@ -176,6 +176,15 @@ pub const HOME_CARD_DESC_LINES: usize = 2;
 /// Session-card grid gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8
 /// parity) — cards aur rows dono isi beat par, koi naya gap nahi.
 pub const HOME_GRID_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Toolbar compact button width px: path button floor se 0.8× (96)
+/// taaki wide text pills compact rahen; sabse lamba toolbar label
+/// content-driven ab bhi poora dikhta hai (floor sirf chhote labels ko
+/// pakadta hai, content ko crush nahi karta). Pure; headless-tested.
+pub const HOME_TOOLBAR_BUTTON_W: f32 = HOME_CARD_BUTTON_MIN_W * 0.8;
+/// Toolbar compact button height px: 24 exquisite hit floor (find-nav
+/// precedent, `app::LAYOUT_FIND_HIT_MIN` mirror) taaki toolbar row 28 se
+/// 24 par aaye. Pure; headless-tested.
+pub const HOME_TOOLBAR_BUTTON_H: f32 = 24.0;
 /// Card button min hit width px: card aadha (report ka 120-wide "Open …"
 /// label budget; `HOME_CARD_MIN_W` se derive, koi magic number nahi).
 pub const HOME_CARD_BUTTON_MIN_W: f32 = HOME_CARD_MIN_W * 0.5;
@@ -1585,6 +1594,14 @@ mod tests {
         assert_eq!(super::HOME_CARD_BUTTON_MIN_H, 28.0);
         assert_eq!(super::HOME_GRID_GAP, 8.0);
         assert_eq!(super::HOME_CARD_BUTTON_MIN_W, 120.0);
+        // Toolbar compact floor: 96x24 (area 2304), path floor se tang.
+        assert_eq!(super::HOME_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(
+            super::HOME_TOOLBAR_BUTTON_W,
+            super::HOME_CARD_BUTTON_MIN_W * 0.8
+        );
+        assert_eq!(super::HOME_TOOLBAR_BUTTON_H, 24.0);
+        assert!(super::HOME_TOOLBAR_BUTTON_W < super::HOME_CARD_BUTTON_MIN_W);
         // Report ka dabaa 120x22 = 2640; naya floor 120x28 = 3360.
         assert!((super::home_card_button_hit_area() - 3_360.0).abs() < 0.001);
         assert!(super::home_card_button_hit_area() > 2_640.0);

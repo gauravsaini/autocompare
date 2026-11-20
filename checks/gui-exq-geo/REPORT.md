@@ -70,3 +70,67 @@ Headless-first kept: `--screenshot` path untouched.
   concurrent TYPO wave edit to `theme.rs`, not GEO files.
 
 ## 5. Rounds used: 2/6. Next: re-run full green once TYPO/PARITY land.
+
+---
+
+# Wave GEO1 — cr section-8 ke 7 geometry gaps (round-geo1)
+
+Scope: `crates/gui/src/views.rs` + `app.rs` + `home.rs` geometry only
+(width/height/margin/padding/align/position). Zero Color32/Visuals,
+zero typo (family/weight/size/line-height untouched). Clean-room:
+BC outside-observe only, apne words me, kuch copy nahi.
+
+## 1. Baseline (round-geo1 start)
+
+- `git pull --ff-only`: Already up to date. Start-time dirty tree me
+  OWNS (`views.rs`/`home.rs`/`tree.rs`/`app.rs`, `checks/gui-exq-geo`)
+  clean the — baaki M files (compare/diff/cli/vfs/viewmodel/views_hex/
+  views_table) doosri waves ke, ignore kiye (DIRTY RULE v3).
+- `cargo test -p autocompare-gui`: 678 passed, 0 failed.
+- Harness `tools/gui-polish/run-geo-typo.sh checks/gui-exq-geo/round-geo1`:
+  PASS (PNG 9765 B, magic ok, distinct 256).
+- Harness signals tree-wide hain (sibling waves land hue: Grid 14, mono
+  x49, strong x32, small x40, widths 28) — GEO1 diff inme zero add karta
+  hai (diff me koi Grid/mono/strong/small nahi).
+- `tools/ac-loop/run.sh checks/ac-loop/round-geo1`: CLI PASS + GUI PASS
+  => `RESULT: PASS`. BC observe read-only (`BCompare` process mila).
+
+## 2. Gap table — section-8 ke 7 gaps vs fix
+
+| # | Gap | Fix (file:line) | Px delta |
+|---|---|---|---|
+| 1 | 4-row chrome stack (pills+tabs+identity+toolbar) | identity label row + uska TAB_BOTTOM_GAP hataya (`app.rs` central panel); window title + pills wahi identity rakhte hain | -1 row (~14px) - 6px gap |
+| 2 | Toolbar oversized (120x28 pills + 3 checkboxes) | `session_toolbar_button_size` 120x28 -> 96x24 (`views.rs`, `home.rs` `HOME_TOOLBAR_BUTTON_W/H`); height 24 find-hit floor precedent | row 28 -> 24 (-4px); Swap ~120 -> ~96 (-24px, content-driven floor) |
+| 3 | Right-edge overflow (path row avail se 238px wide) | `split_field_widths`/`third_field_width` ab real chrome ghatate hain (`path_row_chrome_width` 388, `triple_path_row_chrome_width` 504; `split_picture_widths` precedent) | 800 avail par fields 650 -> 412, fields + chrome = avail exact (overflow 238 -> 0); triple 279 -> 0 |
+| 4 | Double status (inline hint + bottom bar ek hi baat) | 8 inline "no X results yet..." labels hataye (Text/Hex/Merge/Table/Sync/Picture/FolderMerge/Audio); bottom `status_line` + Home guide + in-pane note rehte hain; Folder ka state-aware hint retained | -8 rows |
+| 5 | Table uneven density (Keys tight, Tolerance bheed) | Keys + Tolerance rows par `HEADER_H` (28) min-height floor (`app.rs`, path-row precedent) | dono rows >= 28px uniform floor |
+| 6 | Khali-pan void (~55% khali) | Mitigated: in-pane notes in-zone rahe (Text "(nothing to display...)"), Folder guided hint retained; placeholder structure (gutter/ruler) paint wave ka kaam, deferred | 0 px is wave me (structure deferred) |
+| 7 | Strip alignment (bade gaps, chhota x, tairte pills) | `SESSION_TAB_MAX_W` 160 -> 120, `session_tab_close_edge` 28 -> 24 (hit floor barkarar); pill 192 -> 148px (-23%); 3 pills 576 -> 444, 8-pill scroll threshold test hold | -44px/pill |
+
+## 3. Proof
+
+- `cargo test -p autocompare-gui`: 678 passed, 0 failed (pehle jaisa).
+- Clippy: `crates/gui` me zero diagnostics (fail sirf `autocompare-diff`
+  lib me 11 pre-existing errors — doosri wave ki dirty `hex.rs`, OWNS
+  bahar, untouched).
+- `cargo fmt --check`: `views.rs`/`app.rs`/`home.rs` clean (4 diffs sirf
+  `crates/diff` me — pre-existing, untouched).
+- Banned: diff me zero `Color32`/`Visuals::`, zero unwrap/expect/panic/
+  todo non-test me.
+- Harness round-geo1 `RESULT: PASS`; ac-loop round-geo1 `RESULT: PASS`
+  (CLI PASS + GUI PASS, BC read-only observed).
+- Edge fixture: `round-geo1/edge-narrow800.md` (+ copy ac-loop
+  `comparison/` me) — 800px live window par exact-fit math lock.
+- Tests updated to new targets only (wave-L precedent): toolbar floor,
+  half/third/split widths (+ row-fit asserts), strip geometry, home
+  toolbar consts.
+
+## 4. Files changed (OWNS only)
+
+- `crates/gui/src/views.rs` (chrome-width fns + width math + toolbar/strip tokens + tests)
+- `crates/gui/src/app.rs` (identity row + 8 inline hints hataye, table row floors)
+- `crates/gui/src/home.rs` (`HOME_TOOLBAR_BUTTON_W/H` + locks)
+- `checks/gui-exq-geo/round-geo1/` (harness out + edge fixture)
+- `checks/gui-exq-geo/REPORT.md` (ye section)
+
+## 5. Rounds used: 1/6. Next: live-capture wave me pixel verify (G6 structure samet).
