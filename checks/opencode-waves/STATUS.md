@@ -1496,3 +1496,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CB-CALLER (sess-caller-cb): App session caller wiring, OWNS app.rs + checks/gui-sescaller-cb.
 - CC-DARKRC (sess-dark-cc): Light-vs-dark root-cause, STRICT READ-ONLY (zero source change, no tests), OWNS checks/gui-darkroot-cc only. Evidence via `git show HEAD:` taaki sibling dirt se immune rahe.
 - Uske baad: localrun round-3 (poora gap re-verify).
+
+## 2026-11-20 — Waves CB-CALLER + CC-DARKRC landed + pushed
+- `07a8db8` feat(gui): session tab strip caller wiring + T5/T6 bridge (OWNS app.rs + checks/gui-sescaller-cb). Gates: 659 green (655 -> +4), clippy/fmt/banned/colors/PNG clean, STATUS untouched. Fixture byte-identical justified (renderer frozen, wiring headless-tested). Follow-up: mode-tab click session adopt + T7 rename.
+- `fac1bd5` docs(gui): light-vs-dark root-cause locked (checks/gui-darkroot-cc only, source ZERO touch). Fix options A/B/C REPORT me; C (persist+fixture param) alag wave.
