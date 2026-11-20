@@ -410,3 +410,9 @@
 1. **Table Header & Rhythm at 960px**: header row height from TypoRole strong line-height, body rows Mono line-height lock, separator insets symmetric.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table6/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter8 changed-only plus width
+
+1. **Gutter Changed-Only & Width at 960px**: markers gated on changed rows, gutter width from space scale, arrow glyph centered.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter8/**`, `TIMELINE.md`.
