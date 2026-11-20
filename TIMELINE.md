@@ -189,3 +189,12 @@
 1. **Merge 3-Way Panes & Take/Copy Actions**: Beyond Compare parity for 3-way merge panes with 2x `SECTION_GAP` (8.0px = `SPACE_SM`) dividers, `MERGE_PANE_MIN_W` (130.0px) floor with horizontal scroll trigger at <406px (`MERGE_TOTAL_MIN_W`), single-source row height from `TypoRole::Mono.line_height_px()` (15.6px), and `SPACE_XS` (4.0px) hit-slop expansion for take and copy button hit targets (24px to 32px effective hit box). Edge fixture `comparison/merge-3way-narrow.json` added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 896 → 903 passed, 0 failed; clippy clean; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: `crates/gui/src/{copy,take}.rs`, `checks/gui-exq-merge2/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-chrome3 tabs plus toolbar
+
+1. **Tabs & Toolbar Chrome Round-3**: Beyond Compare parity for session tab strip and toolbar chrome: session tab strip with 150px cells (120 max + 6 close gap + 24 close edge) and 8px inter-tab gap with horizontal overflow scroll (2 tabs fit, 8 tabs scroll at 720px), toolbar spacing via SPACE tokens (SPACE_XS 4.0px item gap, SPACE_SM 8.0px group gap, SPACE_MD 12.0px margin, SPACE_XL 24.0px button height, uniform 96px button width), and header height (21.6px) derived from TypoRole Heading chrome line-height (18.0 * 1.2). Edge fixture `comparison/chrome-narrow-720.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 904 → 906 passed, 0 failed; clippy clean on owned files; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: `crates/gui/src/app.rs`, `crates/gui/src/home.rs`, `checks/gui-exq-chrome3/**`, `TIMELINE.md`.

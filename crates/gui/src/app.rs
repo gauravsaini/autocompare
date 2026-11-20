@@ -4234,6 +4234,79 @@ pub fn chrome2_content_avail_height(viewport_h: f32, chrome_h: f32) -> f32 {
         .max(0.0)
 }
 
+/// CHROME3 caller half (exquisite, round-3): tabs plus toolbar.
+/// Header from TypoRole Heading line-height (21.6), toolbar spacing via
+/// SPACE tokens, session tab strip overflow scroll. Single-source reuse;
+/// koi naya size/token/color nahi. Pure; headless-tested.
+pub fn chrome3_header_h() -> f32 {
+    home::chrome3_header_height()
+}
+
+/// CHROME3 status bar height (Small line-height + 2 * SPACE_XS = 21.2).
+/// Pure; headless-tested.
+pub fn chrome3_status_h() -> f32 {
+    home::chrome3_status_height()
+}
+
+/// CHROME3 toolbar uniform button width (96). Pure; headless-tested.
+pub fn chrome3_toolbar_button_w() -> f32 {
+    home::chrome3_toolbar_button_width()
+}
+
+/// CHROME3 toolbar total width (996). Pure; headless-tested.
+pub fn chrome3_toolbar_w() -> f32 {
+    home::chrome3_toolbar_width()
+}
+
+/// CHROME3 toolbar item gap via SPACE_XS (4.0). Pure; headless-tested.
+pub fn chrome3_toolbar_item_gap() -> f32 {
+    home::chrome3_toolbar_item_gap()
+}
+
+/// CHROME3 toolbar group gap via SPACE_SM (8.0). Pure; headless-tested.
+pub fn chrome3_toolbar_group_gap() -> f32 {
+    home::chrome3_toolbar_group_gap()
+}
+
+/// CHROME3 session tab cell width (150.0). Pure; headless-tested.
+pub fn chrome3_session_tab_cell_w() -> f32 {
+    home::chrome3_session_tab_cell_w()
+}
+
+/// CHROME3 session tab strip width (px). Pure; headless-tested.
+pub fn chrome3_session_strip_w(count: usize) -> f32 {
+    home::chrome3_session_tab_width(count)
+}
+
+/// CHROME3 session strip needs horizontal scroll. Pure; headless-tested.
+pub fn chrome3_session_strip_needs_scroll(count: usize, total_w: f32) -> bool {
+    home::chrome3_session_tab_strip_needs_scroll(count, total_w)
+}
+
+/// CHROME3 session tabs visible count at total_w. Pure; headless-tested.
+pub fn chrome3_session_tabs_visible_count(total_w: f32) -> usize {
+    home::chrome3_session_tabs_visible_count(total_w)
+}
+
+/// CHROME3 session tabs overflow count at total_w. Pure; headless-tested.
+pub fn chrome3_session_tabs_overflow_count(total_w: f32, count: usize) -> usize {
+    home::chrome3_session_tabs_overflow_count(total_w, count)
+}
+
+/// CHROME3 content avail height px: viewport minus compact header (21.6),
+/// tab gap, caller chrome and Small-derived status line. Pure; headless-tested.
+pub fn chrome3_content_avail_height(viewport_h: f32, chrome_h: f32) -> f32 {
+    if !viewport_h.is_finite() || !chrome_h.is_finite() {
+        return 0.0;
+    }
+    (viewport_h
+        - home::CHROME3_HEADER_H
+        - home::CHROME3_TAB_GAP
+        - chrome_h
+        - home::CHROME3_STATUS_H)
+        .max(0.0)
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -9781,6 +9854,31 @@ mod tests {
         assert!((chrome2_content_avail_height(450.0, 120.0) - 276.8).abs() < 0.01);
         assert_eq!(chrome2_content_avail_height(100.0, 120.0), 0.0);
         assert_eq!(chrome2_content_avail_height(f32::NAN, 120.0), 0.0);
+    }
+
+    #[test]
+    fn chrome3_header_tabs_toolbar_space_tokens_narrow720() {
+        // Edge fixture: `checks/gui-exq-chrome3/round-1/comparison/chrome-narrow-720.json`.
+        // Caller half: sab `home::CHROME3_*` single-source reuse.
+        assert_eq!(chrome3_header_h(), crate::home::CHROME3_HEADER_H);
+        assert_eq!(chrome3_header_h(), 21.6);
+        assert_eq!(chrome3_status_h(), crate::home::CHROME3_STATUS_H);
+        assert_eq!(chrome3_toolbar_button_w(), 96.0);
+        assert_eq!(chrome3_toolbar_w(), 996.0);
+        assert_eq!(chrome3_toolbar_item_gap(), 4.0);
+        assert_eq!(chrome3_toolbar_group_gap(), 8.0);
+        assert_eq!(chrome3_session_tab_cell_w(), 150.0);
+        assert_eq!(chrome3_session_strip_w(2), 308.0);
+        assert_eq!(chrome3_session_strip_w(8), 1256.0);
+        assert!(!chrome3_session_strip_needs_scroll(2, 720.0));
+        assert!(chrome3_session_strip_needs_scroll(8, 720.0));
+        assert_eq!(chrome3_session_tabs_visible_count(720.0), 4);
+        assert_eq!(chrome3_session_tabs_overflow_count(720.0, 8), 4);
+
+        // 450 viewport, 120 folder chrome: 450 - 21.6 - 4 - 120 - 21.2 = 283.2.
+        assert!((chrome3_content_avail_height(450.0, 120.0) - 283.2).abs() < 0.01);
+        assert_eq!(chrome3_content_avail_height(100.0, 120.0), 0.0);
+        assert_eq!(chrome3_content_avail_height(f32::NAN, 120.0), 0.0);
     }
 
     #[test]

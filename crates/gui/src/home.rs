@@ -2284,6 +2284,218 @@ pub fn chrome2_hierarchy_ok() -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Wave CHROME3 exquisite: tabs plus toolbar chrome-side round-3.
+// BC pattern, outside observation only: session tab strip overflows vs BC
+// single ribbon — tab widths with overflow scroll, toolbar spacing via
+// SPACE tokens, header height from TypoRole chrome line-height. Geometry
+// first: SPACE tokens (`SPACE_XS`, `SPACE_SM`, `SPACE_MD`, `SPACE_XL`)
+// reuse; header height from TypoRole Heading line-height px
+// (18.0 * 1.2 = 21.6) single-source; toolbar buttons uniform 96 with
+// SPACE_XS item gap and SPACE_SM group gap; session tab strip 150px cells
+// (120 max + 6 close gap + 24 close edge) with overflow scroll.
+// Typography second: Body/Heading/Small reuse, koi naya size nahi.
+// Colors frozen: zero Color32/Visuals.
+// Edge fixture: `checks/gui-exq-chrome3/round-1/comparison/chrome-narrow-720.json`
+// ----------------------------------------------------------------------------
+
+/// Chrome3 header bar height px: TypoRole Heading chrome line-height
+/// (`18.0 * 1.2 = 21.6`) single-source. Purane 28 hit-row se compact.
+pub const CHROME3_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Chrome3 tab label side pad px: SPACE_SM (8 parity).
+pub const CHROME3_TAB_PAD_X: f32 = crate::theme::SPACE_SM;
+/// Chrome3 tab beech gap px: SPACE_XS (4 parity).
+pub const CHROME3_TAB_GAP: f32 = crate::theme::SPACE_XS;
+/// Chrome3 tab strip side chrome px: SPACE_MD (12 parity).
+pub const CHROME3_TAB_STRIP_SIDE: f32 = crate::theme::SPACE_MD;
+
+/// Chrome3 toolbar outer margin px: SPACE_MD (12 parity).
+pub const CHROME3_TOOLBAR_MARGIN: f32 = crate::theme::SPACE_MD;
+/// Chrome3 toolbar button uniform width px: 96.
+pub const CHROME3_TOOLBAR_BUTTON_W: f32 = 96.0;
+/// Chrome3 toolbar button height px: SPACE_XL (24.0).
+pub const CHROME3_TOOLBAR_BUTTON_H: f32 = crate::theme::SPACE_XL;
+/// Chrome3 toolbar item gap px: SPACE_XS (4.0).
+pub const CHROME3_TOOLBAR_ITEM_GAP: f32 = crate::theme::SPACE_XS;
+/// Chrome3 toolbar group gap px: SPACE_SM (8.0).
+pub const CHROME3_TOOLBAR_GROUP_GAP: f32 = crate::theme::SPACE_SM;
+/// Chrome3 toolbar inter-button gap px: SPACE_XS (4.0).
+pub const CHROME3_TOOLBAR_GAP: f32 = crate::theme::SPACE_XS;
+
+/// Chrome3 status bar height px: Small line-height (13.2) + 2 * SPACE_XS (8.0) = 21.2.
+pub const CHROME3_STATUS_H: f32 = 21.2;
+
+/// Chrome3 session tab cell width px: max width (120) + close gap (6) + close edge (24) = 150.
+pub const CHROME3_SESSION_TAB_CELL_W: f32 = 150.0;
+/// Chrome3 session tab strip inter-tab gap px: SPACE_SM (8.0).
+pub const CHROME3_SESSION_TAB_STRIP_GAP: f32 = crate::theme::SPACE_SM;
+
+/// Chrome3 header height px (single source: [`CHROME3_HEADER_H`]).
+/// Pure; headless-tested.
+pub fn chrome3_header_height() -> f32 {
+    CHROME3_HEADER_H
+}
+
+/// Chrome3 status height px (single source: [`CHROME3_STATUS_H`]).
+/// Pure; headless-tested.
+pub fn chrome3_status_height() -> f32 {
+    CHROME3_STATUS_H
+}
+
+/// Chrome3 toolbar button width px (single source: [`CHROME3_TOOLBAR_BUTTON_W`]).
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_button_width() -> f32 {
+    CHROME3_TOOLBAR_BUTTON_W
+}
+
+/// Chrome3 toolbar button height px (single source: [`CHROME3_TOOLBAR_BUTTON_H`]).
+/// SPACE_XL (24.0 parity). Pure; headless-tested.
+pub fn chrome3_toolbar_button_height() -> f32 {
+    CHROME3_TOOLBAR_BUTTON_H
+}
+
+/// Chrome3 toolbar outer margin px (single source: [`CHROME3_TOOLBAR_MARGIN`]).
+/// SPACE_MD (12.0 parity). Pure; headless-tested.
+pub fn chrome3_toolbar_margin() -> f32 {
+    CHROME3_TOOLBAR_MARGIN
+}
+
+/// Chrome3 toolbar item gap px: SPACE_XS (4.0).
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_item_gap() -> f32 {
+    CHROME3_TOOLBAR_ITEM_GAP
+}
+
+/// Chrome3 toolbar group gap px: SPACE_SM (8.0).
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_group_gap() -> f32 {
+    CHROME3_TOOLBAR_GROUP_GAP
+}
+
+/// Chrome3 toolbar total width px: 10 uniform buttons + 9 gaps = 996.
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_width() -> f32 {
+    TOPCHROME_TOOLBAR_ACTIONS.len() as f32 * CHROME3_TOOLBAR_BUTTON_W
+        + TOPCHROME_TOOLBAR_ACTIONS.len().saturating_sub(1) as f32 * CHROME3_TOOLBAR_GAP
+}
+
+/// Chrome3 toolbar available width px: total minus side margins.
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - CHROME3_TOOLBAR_MARGIN * 2.0).max(0.0)
+}
+
+/// Chrome3 toolbar visible buttons count at total_w.
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return TOPCHROME_TOOLBAR_ACTIONS.len();
+    }
+    let avail = chrome3_toolbar_avail_width(total_w);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    for _ in TOPCHROME_TOOLBAR_ACTIONS {
+        let need = CHROME3_TOOLBAR_BUTTON_W + if count == 0 { 0.0 } else { CHROME3_TOOLBAR_GAP };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// Chrome3 toolbar overflow buttons count at total_w.
+/// Pure; headless-tested.
+pub fn chrome3_toolbar_overflow_count(total_w: f32) -> usize {
+    TOPCHROME_TOOLBAR_ACTIONS
+        .len()
+        .saturating_sub(chrome3_toolbar_visible_count(total_w))
+}
+
+/// Chrome3 session tab cell width px (150.0).
+/// Pure; headless-tested.
+pub fn chrome3_session_tab_cell_w() -> f32 {
+    CHROME3_SESSION_TAB_CELL_W
+}
+
+/// Chrome3 session tab strip width px: count * 150 + (count - 1) * 8.
+/// Pure; headless-tested.
+pub fn chrome3_session_tab_width(count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    count as f32 * CHROME3_SESSION_TAB_CELL_W
+        + count.saturating_sub(1) as f32 * CHROME3_SESSION_TAB_STRIP_GAP
+}
+
+/// Chrome3 session tab strip needs horizontal scroll.
+/// Pure; headless-tested.
+pub fn chrome3_session_tab_strip_needs_scroll(count: usize, total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    let avail = (total_w - CHROME3_TAB_STRIP_SIDE * 2.0).max(0.0);
+    chrome3_session_tab_width(count) > avail
+}
+
+/// Chrome3 session tabs visible count at total_w (with 150px cells + 8px gaps).
+/// Pure; headless-tested.
+pub fn chrome3_session_tabs_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return usize::MAX;
+    }
+    let avail = (total_w - CHROME3_TAB_STRIP_SIDE * 2.0).max(0.0);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    loop {
+        let need = CHROME3_SESSION_TAB_CELL_W
+            + if count == 0 {
+                0.0
+            } else {
+                CHROME3_SESSION_TAB_STRIP_GAP
+            };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// Chrome3 session tabs overflow count given total count and total_w.
+/// Pure; headless-tested.
+pub fn chrome3_session_tabs_overflow_count(total_w: f32, count: usize) -> usize {
+    count.saturating_sub(chrome3_session_tabs_visible_count(total_w))
+}
+
+/// Chrome3 hierarchy check: header height matches TypoRole Heading line-height px,
+/// status height matches Small line-height + 2 * tight pad, toolbar buttons match
+/// SPACE tokens, session cells match 150px.
+/// Pure; headless-tested.
+pub fn chrome3_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    let heading_lh = TypoRole::Heading.line_height_px();
+    (heading_lh - CHROME3_HEADER_H).abs() < 0.001
+        && CHROME3_TAB_PAD_X == crate::theme::SPACE_SM
+        && CHROME3_TAB_STRIP_SIDE == crate::theme::SPACE_MD
+        && CHROME3_TAB_GAP == crate::theme::SPACE_XS
+        && CHROME3_TOOLBAR_MARGIN == crate::theme::SPACE_MD
+        && CHROME3_TOOLBAR_ITEM_GAP == crate::theme::SPACE_XS
+        && CHROME3_TOOLBAR_GROUP_GAP == crate::theme::SPACE_SM
+        && CHROME3_TOOLBAR_BUTTON_H == crate::theme::SPACE_XL
+        && (TypoRole::Small.line_height_px() + crate::theme::SPACE_XS * 2.0 - CHROME3_STATUS_H)
+            .abs()
+            < 0.001
+        && CHROME3_TOOLBAR_BUTTON_W == 96.0
+        && CHROME3_SESSION_TAB_CELL_W == 150.0
+}
+
+// ----------------------------------------------------------------------------
 // Wave HOME5 exquisite (first): session tree vs cards — new-session CTA,
 // session row height, grid margins. BC pattern, outside observation only:
 // left session tree (groups + rows) beside the 3-col card grid; tree top par
@@ -3645,5 +3857,124 @@ mod tests {
         assert_eq!(super::home_grid_rows_for_width(9, 720.0), 5);
         // Typography second: Body > Small, Small small + weak + chrome.
         assert!(super::chrome2_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn chrome3_header_tabs_toolbar_space_tokens_narrow720_edge() {
+        // Edge fixture: `checks/gui-exq-chrome3/round-1/comparison/chrome-narrow-720.json`.
+        // Geometry first: header 21.6 from TypoRole Heading line-height (18.0 * 1.2),
+        // toolbar spacing via SPACE tokens (XS 4, SM 8, MD 12, XL 24),
+        // session tab strip 150px cells with overflow scroll.
+        use crate::theme::{SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS, TypoRole};
+
+        // Header height from TypoRole chrome section line-height:
+        // Heading size 18.0 * 1.2 = 21.6.
+        assert_eq!(super::CHROME3_HEADER_H, 21.6);
+        assert!((TypoRole::Heading.line_height_px() - 21.6).abs() < 0.001);
+        assert!((super::chrome3_header_height() - 21.6).abs() < 0.001);
+        assert!(super::CHROME3_HEADER_H < crate::theme::CHROME_HEADER_BAR_H);
+
+        // Toolbar spacing via SPACE tokens:
+        assert_eq!(super::CHROME3_TOOLBAR_ITEM_GAP, SPACE_XS);
+        assert_eq!(super::CHROME3_TOOLBAR_ITEM_GAP, 4.0);
+        assert_eq!(super::chrome3_toolbar_item_gap(), 4.0);
+        assert_eq!(super::CHROME3_TOOLBAR_GROUP_GAP, SPACE_SM);
+        assert_eq!(super::CHROME3_TOOLBAR_GROUP_GAP, 8.0);
+        assert_eq!(super::chrome3_toolbar_group_gap(), 8.0);
+        assert_eq!(super::CHROME3_TOOLBAR_MARGIN, SPACE_MD);
+        assert_eq!(super::CHROME3_TOOLBAR_MARGIN, 12.0);
+        assert_eq!(super::chrome3_toolbar_margin(), 12.0);
+        assert_eq!(super::CHROME3_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::CHROME3_TOOLBAR_BUTTON_H, 24.0);
+        assert_eq!(super::chrome3_toolbar_button_height(), 24.0);
+        assert_eq!(super::CHROME3_TAB_STRIP_SIDE, SPACE_MD);
+        assert_eq!(super::CHROME3_TAB_STRIP_SIDE, 12.0);
+
+        // Toolbar 10 uniform buttons @ 96px: total 996px.
+        assert_eq!(super::CHROME3_TOOLBAR_BUTTON_W, 96.0);
+        assert_eq!(super::chrome3_toolbar_button_width(), 96.0);
+        assert!((super::chrome3_toolbar_width() - 996.0).abs() < 0.001);
+
+        // Narrow 720: avail 696 par 7 toolbar buttons fit + 3 overflow.
+        assert!((super::chrome3_toolbar_avail_width(720.0) - 696.0).abs() < 0.001);
+        assert_eq!(super::chrome3_toolbar_visible_count(720.0), 7);
+        assert_eq!(super::chrome3_toolbar_overflow_count(720.0), 3);
+        assert_eq!(super::chrome3_toolbar_visible_count(f32::NAN), 10);
+        assert_eq!(super::chrome3_toolbar_avail_width(20.0), 0.0);
+
+        // Session tab strip: cell 150px (120 max + 6 close gap + 24 close edge),
+        // strip gap 8px (SPACE_SM).
+        assert_eq!(super::CHROME3_TAB_PAD_X, SPACE_SM);
+        assert_eq!(super::CHROME3_TAB_PAD_X, 8.0);
+        assert_eq!(super::CHROME3_TAB_GAP, SPACE_XS);
+        assert_eq!(super::CHROME3_TAB_GAP, 4.0);
+        assert_eq!(super::CHROME3_SESSION_TAB_STRIP_GAP, SPACE_SM);
+        assert_eq!(super::CHROME3_SESSION_TAB_STRIP_GAP, 8.0);
+        assert_eq!(super::CHROME3_SESSION_TAB_CELL_W, 150.0);
+        assert_eq!(super::chrome3_session_tab_cell_w(), 150.0);
+        assert_eq!(super::chrome3_session_tab_width(0), 0.0);
+        assert_eq!(super::chrome3_session_tab_width(2), 308.0);
+        assert_eq!(super::chrome3_session_tab_width(8), 1256.0);
+
+        // At 720px (avail 696px): 2 tabs fit (no scroll), 8 tabs overflow (need scroll).
+        assert!(!super::chrome3_session_tab_strip_needs_scroll(2, 720.0));
+        assert!(super::chrome3_session_tab_strip_needs_scroll(8, 720.0));
+        assert!(!super::chrome3_session_tab_strip_needs_scroll(8, f32::NAN));
+        assert_eq!(super::chrome3_session_tabs_visible_count(720.0), 4);
+        assert_eq!(super::chrome3_session_tabs_overflow_count(720.0, 8), 4);
+
+        // Status bar Small line-height + 2 * SPACE_XS = 21.2.
+        assert!((super::CHROME3_STATUS_H - 21.2).abs() < 0.001);
+        assert!((super::chrome3_status_height() - 21.2).abs() < 0.001);
+
+        // Hierarchy contract passes.
+        assert!(super::chrome3_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn chrome3_toolbar_spacing_space_tokens_and_header_line_height() {
+        use crate::theme::{SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS, TypoRole};
+
+        // TypoRole Heading chrome line height: size 18 * 1.2 = 21.6.
+        assert_eq!(TypoRole::Heading.size(), 18.0);
+        assert_eq!(
+            TypoRole::Heading.line_height(),
+            crate::theme::TYPO_LINE_HEIGHT_CHROME
+        );
+        assert_eq!(TypoRole::Heading.line_height(), 1.2);
+        assert_eq!(TypoRole::Heading.line_height_px(), 21.6);
+        assert_eq!(super::CHROME3_HEADER_H, TypoRole::Heading.line_height_px());
+        assert_eq!(super::chrome3_header_height(), 21.6);
+
+        // Toolbar spacing tokens via SPACE tokens:
+        assert_eq!(super::CHROME3_TOOLBAR_ITEM_GAP, SPACE_XS);
+        assert_eq!(super::CHROME3_TOOLBAR_GROUP_GAP, SPACE_SM);
+        assert_eq!(super::CHROME3_TOOLBAR_MARGIN, SPACE_MD);
+        assert_eq!(super::CHROME3_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::chrome3_toolbar_item_gap(), 4.0);
+        assert_eq!(super::chrome3_toolbar_group_gap(), 8.0);
+        assert_eq!(super::chrome3_toolbar_margin(), 12.0);
+        assert_eq!(super::chrome3_toolbar_button_height(), 24.0);
+
+        // Relative hierarchy between gaps:
+        assert!(super::chrome3_toolbar_item_gap() < super::chrome3_toolbar_group_gap());
+        assert!(super::chrome3_toolbar_group_gap() < super::chrome3_toolbar_margin());
+        assert!(super::chrome3_toolbar_margin() < super::chrome3_toolbar_button_height());
+
+        // Width & visibility across breakpoints:
+        // Canonical 960px: 960 - 24 = 936 avail.
+        // 9 buttons need: 9 * 96 + 8 * 4 = 864 + 32 = 896 <= 936 -> 9 fit.
+        // 10 buttons need 996 > 936 -> 1 overflow.
+        assert_eq!(super::chrome3_toolbar_avail_width(960.0), 936.0);
+        assert_eq!(super::chrome3_toolbar_visible_count(960.0), 9);
+        assert_eq!(super::chrome3_toolbar_overflow_count(960.0), 1);
+
+        // Wide 1024px: 1024 - 24 = 1000 avail.
+        // 10 buttons need 996 <= 1000 -> all 10 fit, 0 overflow.
+        assert_eq!(super::chrome3_toolbar_avail_width(1024.0), 1000.0);
+        assert_eq!(super::chrome3_toolbar_visible_count(1024.0), 10);
+        assert_eq!(super::chrome3_toolbar_overflow_count(1024.0), 0);
     }
 }
