@@ -223,3 +223,10 @@
 1. **Table Row Rhythm & Column Widths at 960px**: Beyond Compare parity for table compare: row gap symmetric via SPACE tokens (`table_row_sym_pad()` = `GEO_TIGHT_GAP` = `SPACE_XS` = 4.0px, `table_grid_gap_y()` single-sourced), column spacing `table_col_spacing()` = `GEO_SECTION_GAP` = `SPACE_SM` = 8.0px, outer widths from char metrics (`table_wide_outer_widths()` delegates `table_col_widths_px`), 960px avail `table_wide_avail_w()` = 936 with row height locked to `TypoRole::Mono` line-height (15.6px). Header underline weight reuses `TEXT_INLINE_SPAN_UNDERLINE_W` (1.0), header weight 600 via `TYPO_WEIGHT_SEMIBOLD`. Colors frozen at 33. Edge fixture `comparison/table-wide-960.json` added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 922 → 923 passed, 0 failed; clippy clean on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table2/**`, `TIMELINE.md`.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-text5 gutter plus divider
+
+1. **Text Gutter & Center Divider at 960px**: Beyond Compare parity for text compare chrome: separate number gutter + icon column (`gutter_text_gutter_width` = number column + `GUTTER_ICON_COL_W` = SPACE_LG 16; 1-digit 32, 3-digit 40), symmetric center divider (`GUTTER_CENTER_SIDE_GAP` = SPACE_XS 4; 16 box + 2x4 = 24 center; 960 layout 12+456+24+456+12 equal panes), hit-slop symmetric (`gutter_slop_band` +/-2 both sides), row centers locked to Mono pitch 15.6. Colors frozen at 33. Edge fixture `comparison/text-gutter-960.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 923 → 928 passed, 0 failed; clippy clean; rustfmt clean on owned `gutter.rs`; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-text5/**`, `TIMELINE.md`.
