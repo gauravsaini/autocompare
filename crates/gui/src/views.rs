@@ -841,6 +841,41 @@ pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
     gutter_ruler_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
 }
 
+/// Text number-column width px: the tabular gutter column for `max_no`
+/// ([`crate::gutter::gutter_linenum_column_width`]: 16 + 4 per extra
+/// digit, hidden numbers narrow to the ruler track). Paint reserves this
+/// so right-aligned numbers never clip the code. Pure; unit-tested.
+pub fn text_gutter_number_width(max_no: usize, show_line_numbers: bool) -> f32 {
+    crate::gutter::gutter_linenum_column_width(max_no, show_line_numbers)
+}
+
+/// Text number-column tabular contract: Mono tabular role
+/// ([`crate::gutter::gutter_linenum_is_tabular`]) so digits stay aligned
+/// row to row. Pure; unit-tested.
+pub fn text_gutter_numbers_tabular() -> bool {
+    crate::gutter::gutter_linenum_is_tabular()
+}
+
+/// Stacked single-pane width (px): narrow windows (< 720) stack the two
+/// panes full-width — one [`SECTION_GAP`] air off `avail`, [`MIN_HALF`]
+/// floor so tang windows scroll instead of crushing content. Non-finite
+/// ya non-positive `avail` par floor (paint kabhi NaN na khaye).
+/// Pure; unit-tested.
+pub fn text_stacked_pane_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return MIN_HALF;
+    }
+    (avail - SECTION_GAP).max(MIN_HALF)
+}
+
+/// Narrow-720b stacked width: [`text_stacked_pane_width`] at the 720
+/// breakpoint (712.0 = 720 − 8 air). Fixture
+/// `comparison/text-narrow-720b.json` isi ko lock karti hai. Pure;
+/// unit-tested.
+pub fn text_narrow_720b_stacked_width() -> f32 {
+    text_stacked_pane_width(TEXT_STACK_BREAKPOINT_W)
+}
+
 /// Header: title, subtitle, and dark/light mode toggle with WCAG contrast verification.
 /// Bar reserves [`header_bar_height`] (the paging-bar rhythm) so it sits
 /// on the pane-split grid; the note shares the [`header_content_lead`]
@@ -3970,6 +4005,45 @@ pub const INTRA_SPAN_UNDERLINE_W: f32 = 1.0;
 /// size change. Pure token; unit-tested.
 pub const ACCENT_SPAN_UNDERLINE_W: f32 = 2.0 * INTRA_SPAN_UNDERLINE_W;
 
+/// Intra-line span breathing pad (px): one XS step
+/// ([`crate::theme::SPACE_XS`] reuse, 4.0). Changed-word blocks keep this
+/// total air split equally on both sides (2 + 2) so the heavier 2px
+/// accent underline never crowds its neighbours — even gaps vs BC, same
+/// mono advance, no size/weight/color move. Pure token; unit-tested.
+pub const INTRA_SPAN_PAD_PX: f32 = crate::theme::SPACE_XS;
+
+/// Total intra-span pad px (single source). Pure; unit-tested.
+pub fn intra_span_pad_px() -> f32 {
+    INTRA_SPAN_PAD_PX
+}
+
+/// One-side intra-span pad px: total pad split equally so the left gap
+/// always equals the right gap (symmetric by construction). Pure;
+/// unit-tested.
+pub fn intra_span_side_pad_px() -> f32 {
+    INTRA_SPAN_PAD_PX / 2.0
+}
+
+/// Symmetric-gap contract: `2 * side == total` (left and right air are
+/// one [`SPACE_XS`][`crate::theme::SPACE_XS`] half each). Pure;
+/// unit-tested.
+pub fn intra_span_gaps_symmetric() -> bool {
+    (intra_span_side_pad_px() * 2.0 - intra_span_pad_px()).abs() < 0.001
+}
+
+/// Leading gap (px) for one intra-line segment in a [`LayoutJob`]: the
+/// head segment starts flush (0.0) and every following segment takes one
+/// side pad, so all internal gaps read one uniform step — symmetric on
+/// both sides of every span boundary. Gutter prefixes keep 0.0. Pure;
+/// unit-tested.
+pub fn intra_segment_leading_gap(is_first: bool) -> f32 {
+    if is_first {
+        0.0
+    } else {
+        intra_span_side_pad_px()
+    }
+}
+
 /// (text, background) for one pane segment: plain passes the row
 /// strip pair through, accented inverts it so the span paints as a
 /// distinct block over the full-row strip. Row ke apne frozen pair
@@ -4355,13 +4429,15 @@ fn side_job_with_prefs(
     let mut gutter = TextFormat::simple(font_id.clone(), layout.dim);
     gutter.background = bg;
     job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+    let mut first_seg = true;
     for (segment, accented) in prefs_pane_segments(line, raw_spans, layout.pane_chars, layout.prefs)
     {
         job.append(
             &segment,
-            0.0,
+            intra_segment_leading_gap(first_seg),
             selective_span_format(font_id.clone(), fg, bg, accented),
         );
+        first_seg = false;
     }
     job
 }
@@ -4407,6 +4483,7 @@ fn side_job_with_prefs_and_find_current(
         None
     };
     job.append(&gutter_text(no, layout.gutter_chars), 0.0, gutter);
+    let mut first_seg = true;
     for (segment, kind) in find_pane_segments(
         line,
         accents,
@@ -4417,9 +4494,10 @@ fn side_job_with_prefs_and_find_current(
     ) {
         job.append(
             &segment,
-            0.0,
+            intra_segment_leading_gap(first_seg),
             selective_find_format(font_id.clone(), fg, bg, kind),
         );
+        first_seg = false;
     }
     job
 }
@@ -4838,15 +4916,12 @@ fn paint_filler_hatch(painter: &egui::Painter, rect: egui::Rect, color: egui::Co
 }
 
 /// The line-number gutter: right-aligned number plus separating pad,
-/// or blanks when the row has no such side. Trail pad
-/// ([`GUTTER_NUMBER_TRAIL_PAD`], two-space lead beat parity) keeps the
-/// number column off the code; tabular Mono keeps digits aligned.
+/// or blanks when the row has no such side. Single source is
+/// [`crate::gutter::gutter_number_cell`] (right-aligned tabular Mono);
+/// trail pad ([`GUTTER_NUMBER_TRAIL_PAD`], two-space lead beat parity)
+/// keeps the number column off the code. Pure; unit-tested.
 fn gutter_text(no: Option<usize>, width: usize) -> String {
-    let trail = " ".repeat(GUTTER_NUMBER_TRAIL_PAD);
-    match no {
-        Some(n) => format!("{n:>width$}{trail}"),
-        None => format!("{}{trail}", " ".repeat(width)),
-    }
+    crate::gutter::gutter_number_cell(no, width)
 }
 
 /// Splits `line` into (text, accented) segments at the half-open
@@ -5272,12 +5347,14 @@ fn side_jobs_wrapped_with_prefs(
         } else {
             job.append(&wrap_continuation_gutter(layout.gutter_chars), 0.0, gutter);
         }
+        let mut first_seg = true;
         for (segment, accented) in pane_segments(&chunk.text, &spans, width) {
             job.append(
                 &segment,
-                0.0,
+                intra_segment_leading_gap(first_seg),
                 selective_span_format(font_id.clone(), fg, bg, accented),
             );
+            first_seg = false;
         }
         jobs.push(job);
     }
@@ -5337,14 +5414,16 @@ fn side_jobs_wrapped_with_find_current(
         } else {
             job.append(&wrap_continuation_gutter(layout.gutter_chars), 0.0, gutter);
         }
+        let mut first_seg = true;
         for (segment, kind) in
             find_chunk_segments(chunk, accents, &find_raw, find.is_current, width)
         {
             job.append(
                 &segment,
-                0.0,
+                intra_segment_leading_gap(first_seg),
                 selective_find_format(font_id.clone(), fg, bg, kind),
             );
+            first_seg = false;
         }
         jobs.push(job);
     }
@@ -7604,6 +7683,74 @@ mod tests {
         assert_eq!(text_trailing_blank_rows(436.0, row_h, 9), 16);
         assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9), 16);
         assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9) % 2, 0);
+        // Hunk heads per fixture: C,C,E,I -> true,false,false,true.
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                ..Default::default()
+            },
+        ];
+        assert!(text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 1));
+        assert!(!text_center_hunk_head(&rows, 2));
+        assert!(text_center_hunk_head(&rows, 3));
+    }
+
+    #[test]
+    fn text4_narrow720b_spans_plus_numbers() {
+        // Mirrors checks/gui-exq-text4/comparison/text-narrow-720b.json:
+        // even intra-line span gaps (SPACE_XS symmetric), right-aligned
+        // tabular number column, even trailing blanks at the 720 narrow
+        // breakpoint. Geometry FIRST, typography SECOND, colors frozen.
+        use viewmodel::TextRow;
+        // Intra-line span pad: one XS step total, half per side, symmetric.
+        assert_eq!(INTRA_SPAN_PAD_PX, crate::theme::SPACE_XS);
+        assert_eq!(INTRA_SPAN_PAD_PX, 4.0);
+        assert_eq!(intra_span_pad_px(), 4.0);
+        assert_eq!(intra_span_side_pad_px(), 2.0);
+        assert!(intra_span_gaps_symmetric());
+        assert_eq!(intra_segment_leading_gap(true), 0.0);
+        assert_eq!(intra_segment_leading_gap(false), 2.0);
+        // Number column: right-aligned tabular, blank sides same width.
+        assert_eq!(gutter_text(Some(1), 4), "   1  ".to_string());
+        assert_eq!(gutter_text(Some(12), 4), "  12  ".to_string());
+        assert_eq!(gutter_text(None, 4), "      ".to_string());
+        assert_eq!(
+            gutter_text(None, 4).chars().count(),
+            gutter_text(Some(1), 4).chars().count()
+        );
+        assert!(text_gutter_numbers_tabular());
+        assert_eq!(text_gutter_number_width(9, true), 16.0);
+        assert_eq!(text_gutter_number_width(99, true), 20.0);
+        assert_eq!(text_gutter_number_width(9, false), 8.0);
+        assert!(text_gutter_number_width(999, true) > text_gutter_number_width(99, true));
+        // Narrow 720: 720 stays side-by-side, 719 stacks; stacked single
+        // pane fills 720 - 8 air = 712.
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        assert_eq!(text_narrow_720b_stacked_width(), 712.0);
+        assert_eq!(text_narrow_720b_stacked_width(), text_stacked_pane_width(720.0));
+        assert_eq!(text_stacked_pane_width(f32::NAN), MIN_HALF);
+        // Trailing balance at narrow: 300px budget @17.6 row, 7 visible
+        // rows leave 11 raw blanks, balanced up to 12 (paired, no orphan).
+        let row_h = row_height_for_line(TypoRole::Mono.line_height_px());
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows(300.0, row_h, 7), 11);
+        assert_eq!(text_trailing_blank_rows_balanced(300.0, row_h, 7), 12);
+        assert_eq!(text_trailing_blank_rows_balanced(300.0, row_h, 7) % 2, 0);
+        assert_eq!(text_trailing_blank_rows_balanced(300.0, row_h, 18), 0);
         // Hunk heads per fixture: C,C,E,I -> true,false,false,true.
         let rows = vec![
             TextRow {

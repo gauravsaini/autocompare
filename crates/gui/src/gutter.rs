@@ -682,6 +682,26 @@ pub const GUTTER_LINENUM_MAX_EXTRA: usize = 5;
 /// rakhte hain taaki column rhythm na toote. Pure; unit-tested.
 pub const GUTTER_NUMBER_TRAIL_PAD: usize = 2;
 
+/// Number-cell text: right-aligned number in `width` plus the trailing
+/// pad, or blanks when the row has no such side. Single source for
+/// `views::gutter_text` plus the wrap continuation/marker gutters so the
+/// number column keeps one tabular width (digits seedh me rahen, code se
+/// chipke nahi). Pure; unit-tested.
+pub fn gutter_number_cell(no: Option<usize>, width: usize) -> String {
+    let trail = " ".repeat(GUTTER_NUMBER_TRAIL_PAD);
+    match no {
+        Some(n) => format!("{n:>width$}{trail}"),
+        None => format!("{}{trail}", " ".repeat(width)),
+    }
+}
+
+/// Number-cell right-aligned tabular contract: numbers right-align in a
+/// fixed Mono tabular column ([`gutter_linenum_is_tabular`]). Paint never
+/// left-pads or proportionally drifts. Pure; unit-tested.
+pub fn gutter_number_cell_is_right_aligned_tabular() -> bool {
+    gutter_linenum_is_tabular()
+}
+
 /// Line-number column ka decimal digit count: `max_line_no` me kitne
 /// digits hain (`0` par bhi 1, khali file me bhi ek column). Pure.
 pub fn gutter_linenum_digits(max_line_no: usize) -> usize {
@@ -1757,6 +1777,24 @@ mod exq_gutter6_tests {
         // beat parity) taaki numbers code se chipke na lagen; blank
         // sides utna hi blank rakhen.
         assert_eq!(GUTTER_NUMBER_TRAIL_PAD, 2);
+    }
+
+    #[test]
+    fn gutter_number_cell_right_aligns_tabular() {
+        // Mirrors checks/gui-exq-text4/comparison/text-narrow-720b.json:
+        // right-aligned number + 2-space trail, blanks same width, tabular.
+        assert_eq!(gutter_number_cell(Some(1), 4), "   1  ".to_string());
+        assert_eq!(gutter_number_cell(Some(12), 4), "  12  ".to_string());
+        assert_eq!(gutter_number_cell(None, 4), "      ".to_string());
+        assert_eq!(
+            gutter_number_cell(None, 4).chars().count(),
+            gutter_number_cell(Some(1), 4).chars().count()
+        );
+        assert!(gutter_number_cell_is_right_aligned_tabular());
+        assert_eq!(
+            gutter_number_cell_is_right_aligned_tabular(),
+            gutter_linenum_is_tabular()
+        );
     }
 
     #[test]
