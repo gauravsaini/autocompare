@@ -1329,6 +1329,291 @@ mod exq_tree2_tests {
     }
 }
 
+// ----------------------------------------------------------------------------
+// GUTTERCOPY8: arrow glyph breathing + padded minimap track (headless).
+// BC center arrows ka chevron box se chhota hota hai (glyph saans leta
+// hai, 20px hit untouched), aur minimap bands ruler edges se chipakte
+// nahi — top/bottom track pad me baithte hain taaki pehli/aakhri band
+// kabhi clip na ho. Geometry first: sab SPACE scale reuse, koi naya
+// literal nahi. Typography second: kuch nahi (koi text yahan nahi).
+// Colors frozen: sirf shape.
+// WIRING (paint owner ke paas): chevron `gutter_arrow_glyph_rect(cx, cy)`
+// me, overview `gutter_overview_geometry_padded(..)` se, arrow x
+// `gutter_arrow_center_x(col_x)` se.
+// ----------------------------------------------------------------------------
+
+/// Arrow glyph inset per side: merge-gap reuse (2px).
+///
+/// 16px box me 12px chevron; 20px slop hit-target untouched rehta hai.
+pub const GUTTER_ARROW_GLYPH_INSET: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Minimap track pad top/bottom: one XS step (ruler-edge rhythm).
+///
+/// Pehli/aakhri overview band ruler kinare se 4px andar shuru/khatm hoti
+/// hai; bahut chhoti height par inner track ke bajay khali geometry.
+pub const GUTTER_MINIMAP_TRACK_PAD: f32 = crate::theme::SPACE_XS;
+
+/// Center arrow ka glyph rect `(x0, y0, x1, y1)` px: [`gutter_arrow_rect`]
+/// box har taraf [`GUTTER_ARROW_GLYPH_INSET`] sikuda hua (16px box ->
+/// 12px chevron). Non-finite ya ulta rect par `None`. Pure; unit-tested.
+pub fn gutter_arrow_glyph_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let (x0, y0, x1, y1) = gutter_arrow_rect(center_x, center_y)?;
+    let s = GUTTER_ARROW_GLYPH_INSET;
+    let (lx0, ly0, lx1, ly1) = (x0 + s, y0 + s, x1 - s, y1 - s);
+    if lx0.is_finite()
+        && ly0.is_finite()
+        && lx1.is_finite()
+        && ly1.is_finite()
+        && lx0 < lx1
+        && ly0 < ly1
+    {
+        Some((lx0, ly0, lx1, ly1))
+    } else {
+        None
+    }
+}
+
+/// 24px center column me arrow ka center x px: `col_x + CENTER_W / 2`.
+/// Non-finite par `None` taaki paint NaN kabhi layout me na daale.
+/// Pure; unit-tested.
+pub fn gutter_arrow_center_x(col_x: f32) -> Option<f32> {
+    if !col_x.is_finite() {
+        return None;
+    }
+    let cx = col_x + GUTTER_CENTER_W / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// Minimap inner track height px: `height - 2 * pad`. `None`:
+/// non-finite/non-positive height, ya track pad se dhaka (inner <= 0).
+/// Pure; unit-tested.
+pub fn gutter_minimap_inner_height(height: f32) -> Option<f32> {
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let inner = height - 2.0 * GUTTER_MINIMAP_TRACK_PAD;
+    if inner.is_finite() && inner > 0.0 {
+        Some(inner)
+    } else {
+        None
+    }
+}
+
+/// Padded thumbnail overview: [`gutter_overview_geometry`] wahi band-math
+/// (fraction mapping, [`GUTTER_SEGMENT_MIN_H`] floor, merge-gap fusion,
+/// same+diff bands) par `[pad, height - pad]` inner track me. Pehli band
+/// pad par shuru, aakhri `height - pad` par khatm — ruler edges kabhi
+/// clip nahi hote. Na-mumkin track par khali geometry. Pure; unit-tested.
+pub fn gutter_overview_geometry_padded(
+    total_rows: usize,
+    height: f32,
+    rows: &[TextRow],
+) -> GutterGeometry {
+    if total_rows == 0 {
+        return GutterGeometry {
+            total_height: if height.is_finite() {
+                height.max(0.0)
+            } else {
+                0.0
+            },
+            segments: Vec::new(),
+        };
+    }
+    let Some(inner) = gutter_minimap_inner_height(height) else {
+        return GutterGeometry {
+            total_height: if height.is_finite() {
+                height.max(0.0)
+            } else {
+                0.0
+            },
+            segments: Vec::new(),
+        };
+    };
+    let pad = GUTTER_MINIMAP_TRACK_PAD;
+    let mut segments: Vec<GutterSegment> = Vec::new();
+    let total_f = total_rows as f32;
+    let mut idx = 0usize;
+    while idx < rows.len() && idx < total_rows {
+        let kind = match rows.get(idx) {
+            Some(row) => row.kind,
+            None => break,
+        };
+        let mut end = idx.saturating_add(1);
+        while end < rows.len() && end < total_rows {
+            match rows.get(end) {
+                Some(next) if next.kind == kind => {
+                    end = end.saturating_add(1);
+                }
+                _ => break,
+            }
+        }
+        let y_start = pad + (idx as f32 / total_f) * inner;
+        let mut y_end = pad + (end as f32 / total_f) * inner;
+        if y_end < y_start + GUTTER_SEGMENT_MIN_H {
+            y_end = (y_start + GUTTER_SEGMENT_MIN_H).min(pad + inner);
+        }
+        if let Some(last) = segments.last_mut() {
+            let last_seg: &mut GutterSegment = last;
+            if last_seg.kind == kind && y_start <= last_seg.y_end + crate::theme::GUTTER_MERGE_GAP {
+                last_seg.y_end = last_seg.y_end.max(y_end);
+                idx = end;
+                continue;
+            }
+        }
+        segments.push(GutterSegment {
+            y_start,
+            y_end,
+            kind,
+        });
+        idx = end;
+    }
+    GutterGeometry {
+        total_height: height,
+        segments,
+    }
+}
+
+#[cfg(test)]
+mod exq_guttercopy8_tests {
+    use super::*;
+
+    fn prow(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn guttercopy8_glyph_box_breathes_inside_hit_box() {
+        // Mirrors checks/gui-exq-guttercopy8/round-1/comparison/edge-padded-minimap-tall.json.
+        assert_eq!(GUTTER_ARROW_GLYPH_INSET, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_ARROW_GLYPH_INSET, 2.0);
+        // 16px box (4..20, 192..208) me 12px chevron (6..18, 194..206).
+        assert_eq!(
+            gutter_arrow_glyph_rect(12.0, 200.0),
+            Some((6.0, 194.0, 18.0, 206.0))
+        );
+        // Glyph chevron hit box ke andar: hit lage jahan glyph na ho.
+        assert!(gutter_arrow_hit_contains(12.0, 200.0, 3.0, 200.0));
+        assert_eq!(gutter_arrow_glyph_rect(f32::NAN, 200.0), None);
+        assert_eq!(gutter_arrow_glyph_rect(12.0, f32::INFINITY), None);
+    }
+
+    #[test]
+    fn guttercopy8_arrow_centers_in_column() {
+        assert_eq!(gutter_arrow_center_x(0.0), Some(12.0));
+        assert_eq!(gutter_arrow_center_x(100.0), Some(112.0));
+        assert_eq!(gutter_arrow_center_x(f32::NAN), None);
+        assert_eq!(gutter_arrow_center_x(f32::INFINITY), None);
+    }
+
+    #[test]
+    fn guttercopy8_minimap_track_pads_tiny_heights_out() {
+        assert_eq!(GUTTER_MINIMAP_TRACK_PAD, crate::theme::SPACE_XS);
+        assert_eq!(GUTTER_MINIMAP_TRACK_PAD, 4.0);
+        assert_eq!(gutter_minimap_inner_height(400.0), Some(392.0));
+        // 8px height pad se dhaka: inner 0, None.
+        assert_eq!(gutter_minimap_inner_height(8.0), None);
+        assert_eq!(gutter_minimap_inner_height(0.0), None);
+        assert_eq!(gutter_minimap_inner_height(-50.0), None);
+        assert_eq!(gutter_minimap_inner_height(f32::NAN), None);
+    }
+
+    #[test]
+    fn guttercopy8_padded_overview_sits_inside_track() {
+        // 6 rows E D D E E I @600px, pad 4: bands [4, 596] me, 4 segments.
+        let rows = vec![
+            prow(TextRowKind::Equal),
+            prow(TextRowKind::Deleted),
+            prow(TextRowKind::Deleted),
+            prow(TextRowKind::Equal),
+            prow(TextRowKind::Equal),
+            prow(TextRowKind::Inserted),
+        ];
+        let over = gutter_overview_geometry_padded(6, 600.0, &rows);
+        assert_eq!(over.segments.len(), 4);
+        assert_eq!(over.total_height, 600.0);
+        assert!(
+            over.segments
+                .first()
+                .is_some_and(|s| s.y_start == GUTTER_MINIMAP_TRACK_PAD)
+        );
+        assert!(
+            over.segments
+                .get(3)
+                .is_some_and(|s| s.y_end == 600.0 - GUTTER_MINIMAP_TRACK_PAD)
+        );
+        // Bands contiguous: har agli band pichhli ke end par shuru.
+        let mut i = 1usize;
+        while i < over.segments.len() {
+            let (prev_end, next_start) = match (over.segments.get(i - 1), over.segments.get(i)) {
+                (Some(p), Some(n)) => (p.y_end, n.y_start),
+                _ => break,
+            };
+            assert!((next_start - prev_end).abs() < 0.01);
+            i = i.saturating_add(1);
+        }
+        // Diff bands wahi (Equal runs background, Deleted/Inserted same math).
+        let kinds: Vec<TextRowKind> = over.segments.iter().map(|s| s.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                TextRowKind::Equal,
+                TextRowKind::Deleted,
+                TextRowKind::Equal,
+                TextRowKind::Inserted
+            ]
+        );
+        // Na-mumkin track / khali input par khali.
+        assert!(
+            gutter_overview_geometry_padded(6, 8.0, &rows)
+                .segments
+                .is_empty()
+        );
+        assert!(
+            gutter_overview_geometry_padded(0, 600.0, &rows)
+                .segments
+                .is_empty()
+        );
+        assert!(
+            gutter_overview_geometry_padded(6, f32::NAN, &rows)
+                .segments
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn guttercopy8_tall_file_bands_stay_inside_track() {
+        // 1000 rows @400px, ek diff row 500 par: band [4,396] ke andar, 4px floor.
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1000 {
+            rows.push(prow(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = rows.get_mut(500) {
+            row.kind = TextRowKind::Deleted;
+        }
+        let over = gutter_overview_geometry_padded(1000, 400.0, &rows);
+        let mut found = false;
+        for seg in &over.segments {
+            assert!(seg.y_start >= GUTTER_MINIMAP_TRACK_PAD);
+            assert!(seg.y_end <= 400.0 - GUTTER_MINIMAP_TRACK_PAD);
+            if seg.kind == TextRowKind::Deleted {
+                assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.01);
+                found = true;
+            }
+        }
+        assert!(found);
+    }
+}
+
 #[cfg(test)]
 mod exq_gutter6_tests {
     use super::*;

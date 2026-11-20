@@ -555,6 +555,52 @@ pub fn take_counter_text_size() -> f32 {
     take_counter_text_role().size()
 }
 
+// ----------------------------------------------------------------------------
+// GUTTERCOPY8: conflict marks on minimap (headless; paint owner ke paas).
+// BC minimap me har unresolved conflict ek band hai — overview ruler par
+// wahi fraction-math + 4px floor taaki chhote conflicts bhi dikhen aur
+// click lagein. Geometry first (XS floor reuse), typo nahi, colors frozen.
+// WIRING (paint): conflict rows `take_minimap_marks(rows, total, height)` se bands.
+// ----------------------------------------------------------------------------
+
+/// Conflict minimap band min height px: one XS step (overview floor parity).
+pub const TAKE_MINIMAP_MARK_MIN_H: f32 = crate::theme::SPACE_XS;
+
+/// Ek conflict row ka minimap band `(y0, y1)` px: fraction mapping +
+/// min-height floor (neeche se katkar, height ke andar). `None`: khali
+/// totals, OOB row, non-positive/non-finite height. Pure; headless-tested.
+pub fn take_minimap_band(row: usize, total_rows: usize, height: f32) -> Option<(f32, f32)> {
+    if total_rows == 0 || row >= total_rows {
+        return None;
+    }
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let total_f = total_rows as f32;
+    let y0 = (row as f32 / total_f) * height;
+    let mut y1 = ((row.saturating_add(1)) as f32 / total_f) * height;
+    if y1 < y0 + TAKE_MINIMAP_MARK_MIN_H {
+        y1 = (y0 + TAKE_MINIMAP_MARK_MIN_H).min(height);
+    }
+    if y0.is_finite() && y1.is_finite() && y0 >= 0.0 && y1 <= height && y0 < y1 {
+        Some((y0, y1))
+    } else {
+        None
+    }
+}
+
+/// Conflict rows ke minimap bands, input order me; kharab rows skip.
+/// Khali input par khali vec. Pure; headless-tested.
+pub fn take_minimap_marks(rows: &[usize], total_rows: usize, height: f32) -> Vec<(f32, f32)> {
+    let mut out = Vec::new();
+    for row in rows {
+        if let Some(band) = take_minimap_band(*row, total_rows, height) {
+            out.push(band);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,5 +840,39 @@ mod tests {
             take_stepper_counter_text(sess.current(), sess.conflict_count()),
             "Conflict 1 of 1"
         );
+    }
+}
+
+#[cfg(test)]
+mod exq_guttercopy8_tests {
+    use super::*;
+
+    #[test]
+    fn guttercopy8_conflict_band_maps_row_fraction_with_floor() {
+        // Mirrors checks/gui-exq-guttercopy8/round-1/comparison/edge-padded-minimap-tall.json.
+        assert_eq!(TAKE_MINIMAP_MARK_MIN_H, crate::theme::SPACE_XS);
+        assert_eq!(TAKE_MINIMAP_MARK_MIN_H, 4.0);
+        assert_eq!(TAKE_MINIMAP_MARK_MIN_H, crate::gutter::GUTTER_SEGMENT_MIN_H);
+        // 4 rows @400px: row 1 ka band 100..200.
+        assert_eq!(take_minimap_band(1, 4, 400.0), Some((100.0, 200.0)));
+        // Tall file: row 500 @1000 rows/400px floor se 200..204.
+        assert_eq!(take_minimap_band(500, 1000, 400.0), Some((200.0, 204.0)));
+        // Bad input par None.
+        assert_eq!(take_minimap_band(4, 4, 400.0), None);
+        assert_eq!(take_minimap_band(0, 0, 400.0), None);
+        assert_eq!(take_minimap_band(1, 4, 0.0), None);
+        assert_eq!(take_minimap_band(1, 4, f32::NAN), None);
+    }
+
+    #[test]
+    fn guttercopy8_conflict_marks_keep_order_and_skip_bad_rows() {
+        assert_eq!(
+            take_minimap_marks(&[1, 3], 4, 400.0),
+            vec![(100.0, 200.0), (300.0, 400.0)]
+        );
+        // OOB row skip, achhi wali rahe.
+        assert_eq!(take_minimap_marks(&[1, 99], 4, 400.0), vec![(100.0, 200.0)]);
+        assert!(take_minimap_marks(&[], 4, 400.0).is_empty());
+        assert!(take_minimap_marks(&[0], 0, 400.0).is_empty());
     }
 }

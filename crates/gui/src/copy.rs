@@ -536,6 +536,34 @@ mod exq_copytake6_tests {
     }
 }
 
+// ----------------------------------------------------------------------------
+// GUTTERCOPY8: copy arrow visual-vs-hit + hunk pitch (headless).
+// BC center arrows 24px tap-target me 16px chevron rakhte hain (visual
+// chhota, hit bada); paas-paas hunks ke arrows ek rhythm (pitch) par
+// taaki stacked arrows collide na karen. Geometry first: hit floor +
+// tight gap reuse, koi naya literal nahi. Colors frozen.
+// WIRING (paint): center arrow button visual `copy_arrow_visual_size`,
+// hit `copy_hit_size`; stacked arrows `copy_hunk_arrow_pitch(row_h)` pitch.
+// ----------------------------------------------------------------------------
+
+/// Stacked hunk arrows ke beech gap px: tight rhythm (4).
+pub const COPY_HUNK_ARROW_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+
+/// Copy arrow visual size px: 24 hit me 16 chevron (gutter arrow-box parity).
+pub fn copy_arrow_visual_size() -> f32 {
+    COPY_HIT_MIN - 2.0 * COPY_HUNK_ARROW_GAP
+}
+
+/// Paas-paas hunks ke arrows ka vertical pitch px: `row_h + gap`.
+/// `None`: non-finite/non-positive row height. Pure; headless-tested.
+pub fn copy_hunk_arrow_pitch(row_h: f32) -> Option<f32> {
+    if !row_h.is_finite() || row_h <= 0.0 {
+        return None;
+    }
+    let pitch = row_h + COPY_HUNK_ARROW_GAP;
+    if pitch.is_finite() { Some(pitch) } else { None }
+}
+
 #[cfg(test)]
 mod exq_tree2_tests {
     use super::*;
@@ -573,5 +601,27 @@ mod exq_tree2_tests {
         assert!(copy_center_arrow_visible(&model, 3));
         let empty = TextRows::default();
         assert!(!copy_hunk_head(&empty, 0));
+    }
+}
+
+#[cfg(test)]
+mod exq_guttercopy8_tests {
+    use super::*;
+
+    #[test]
+    fn guttercopy8_arrow_visual_matches_gutter_box_and_pitch_rhythm() {
+        // Mirrors checks/gui-exq-guttercopy8/round-1/comparison/edge-padded-minimap-tall.json.
+        assert_eq!(COPY_HUNK_ARROW_GAP, crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(COPY_HUNK_ARROW_GAP, 4.0);
+        // 24 hit me 12 nahi, 16 chevron: gutter arrow-box parity.
+        assert_eq!(copy_arrow_visual_size(), 16.0);
+        assert_eq!(copy_arrow_visual_size(), crate::gutter::GUTTER_ARROW_BOX);
+        assert!(copy_arrow_visual_size() < copy_hit_size());
+        // Pitch: 19.6 row par 23.6; kharab input par None.
+        assert!(copy_hunk_arrow_pitch(19.6).is_some_and(|p| (p - 23.6).abs() < 0.01));
+        assert_eq!(copy_hunk_arrow_pitch(0.0), None);
+        assert_eq!(copy_hunk_arrow_pitch(-4.0), None);
+        assert_eq!(copy_hunk_arrow_pitch(f32::NAN), None);
+        assert_eq!(copy_hunk_arrow_pitch(f32::INFINITY), None);
     }
 }
