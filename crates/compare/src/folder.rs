@@ -1,4 +1,6 @@
 //! Folder-tree comparison: an iterative, symlink-safe walk.
+
+#![forbid(unsafe_code)]
 //!
 //! Documented choices for rare situations:
 //!
@@ -101,6 +103,34 @@ impl FolderCompare {
             &self.options,
             Some(cancel),
         )
+    }
+
+    /// Compares two modification times with a duration tolerance (such as FAT 2-second timestamp tolerance).
+    pub fn compare_mtimes_with_tolerance(
+        left: Option<SystemTime>,
+        right: Option<SystemTime>,
+        tolerance: std::time::Duration,
+    ) -> FolderStatus {
+        match (left, right) {
+            (Some(lt), Some(rt)) => {
+                if let Ok(duration) = lt.duration_since(rt) {
+                    if duration > tolerance {
+                        FolderStatus::NewerLeft
+                    } else {
+                        FolderStatus::Same
+                    }
+                } else if let Ok(duration) = rt.duration_since(lt) {
+                    if duration > tolerance {
+                        FolderStatus::NewerRight
+                    } else {
+                        FolderStatus::Same
+                    }
+                } else {
+                    FolderStatus::Same
+                }
+            }
+            _ => FolderStatus::Same,
+        }
     }
 }
 
@@ -803,5 +833,93 @@ impl FolderComparison {
             }
         }
         counts
+    }
+
+    /// Returns all entries that differ between left and right (status != `FolderStatus::Same`).
+    pub fn differences(&self) -> Vec<&FolderEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.status != FolderStatus::Same)
+            .collect()
+    }
+
+    /// Returns all entries matching a specific `FolderStatus`.
+    pub fn entries_by_status(&self, status: FolderStatus) -> Vec<&FolderEntry> {
+        self.entries.iter().filter(|e| e.status == status).collect()
+    }
+
+    /// Finds an entry by its relative path.
+    pub fn entry_by_path(&self, rel_path: &str) -> Option<&FolderEntry> {
+        self.entries.iter().find(|e| e.rel_path == rel_path)
+    }
+
+    /// Whether the two folder trees are completely identical (no differences and not truncated).
+    pub fn is_identical(&self) -> bool {
+        !self.truncated && self.entries.iter().all(|e| e.status == FolderStatus::Same)
+    }
+
+    /// Total number of entries in the comparison.
+    pub fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_mtime_tolerance_comparison() {
+        let now = SystemTime::now();
+        let one_sec_later = now + Duration::from_secs(1);
+        let five_secs_later = now + Duration::from_secs(5);
+
+        // Within 2 second tolerance -> considered Same
+        let res_tol = FolderCompare::compare_mtimes_with_tolerance(
+            Some(one_sec_later),
+            Some(now),
+            Duration::from_secs(2),
+        );
+        assert_eq!(res_tol, FolderStatus::Same);
+
+        // Beyond 2 second tolerance -> NewerLeft
+        let res_diff = FolderCompare::compare_mtimes_with_tolerance(
+            Some(five_secs_later),
+            Some(now),
+            Duration::from_secs(2),
+        );
+        assert_eq!(res_diff, FolderStatus::NewerLeft);
+    }
+
+    #[test]
+    fn test_folder_comparison_helpers() {
+        let entry_same = FolderEntry {
+            rel_path: "same.txt".to_string(),
+            is_dir: false,
+            left: None,
+            right: None,
+            status: FolderStatus::Same,
+        };
+        let entry_diff = FolderEntry {
+            rel_path: "diff.txt".to_string(),
+            is_dir: false,
+            left: None,
+            right: None,
+            status: FolderStatus::Different,
+        };
+
+        let comparison = FolderComparison {
+            entries: vec![entry_same, entry_diff],
+            truncated: false,
+        };
+
+        assert_eq!(comparison.entry_count(), 2);
+        assert_eq!(comparison.differences().len(), 1);
+        assert_eq!(comparison.differences()[0].rel_path, "diff.txt");
+        assert_eq!(comparison.entries_by_status(FolderStatus::Same).len(), 1);
+        assert!(!comparison.is_identical());
+        assert!(comparison.entry_by_path("same.txt").is_some());
+        assert!(comparison.entry_by_path("missing.txt").is_none());
     }
 }

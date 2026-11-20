@@ -1,4 +1,6 @@
 //! Three-way folder merge: plan building and applying.
+
+#![forbid(unsafe_code)]
 //!
 //! Documented choices for rare situations:
 //!
@@ -58,6 +60,50 @@ enum Side {
     Right,
 }
 
+/// The specific category of a three-way merge conflict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MergeConflictKind {
+    /// Both Left and Right modified the file differently from Base.
+    BothModified,
+    /// One side modified the file from Base while the other side deleted it.
+    DeleteVsModify,
+    /// Both sides created/added the file with differing content.
+    BothAdded,
+}
+
+/// Structured details about a detected conflict in a three-way merge.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MergeConflictDetail {
+    /// Relative path of the conflicting file.
+    pub rel_path: String,
+    /// The classification of conflict.
+    pub kind: MergeConflictKind,
+    /// Whether the file was present in Base.
+    pub base_exists: bool,
+    /// Whether the file is present in Left.
+    pub left_exists: bool,
+    /// Whether the file is present in Right.
+    pub right_exists: bool,
+    /// Human-readable explanation.
+    pub description: String,
+}
+
+/// Policy governing how conflicts are automatically resolved during three-way merge planning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum MergeResolutionPolicy {
+    /// Non-conflicting changes are applied automatically; conflicts produce conflict steps
+    /// (with markers for text or Left copy for binary) and are recorded in `conflicts`.
+    #[default]
+    TakeNonConflicting,
+    /// Resolve conflicts by favoring the Left side's version.
+    FavorLeft,
+    /// Resolve conflicts by favoring the Right side's version.
+    FavorRight,
+    /// Resolve conflicts by favoring whichever side was modified most recently.
+    /// Falls back to Left if modification timestamps are unavailable or equal.
+    Newest,
+}
+
 /// One node of one tree, as the walk saw it. A symlink is a plain
 /// node with `is_symlink` set: its target is never opened.
 struct SideNode {
@@ -103,6 +149,23 @@ pub fn plan_tree_merge_cancellable(
     right: &Path,
     cancel: Option<&AtomicBool>,
 ) -> Result<TreeMergePlan> {
+    plan_tree_merge_with_policy_cancellable(
+        base,
+        left,
+        right,
+        MergeResolutionPolicy::TakeNonConflicting,
+        cancel,
+    )
+}
+
+/// Plans a three-way merge with explicit conflict resolution policy and cancellation support.
+pub fn plan_tree_merge_with_policy_cancellable(
+    base: &Path,
+    left: &Path,
+    right: &Path,
+    policy: MergeResolutionPolicy,
+    cancel: Option<&AtomicBool>,
+) -> Result<TreeMergePlan> {
     require_dir(base)?;
     require_dir(left)?;
     require_dir(right)?;
@@ -143,7 +206,7 @@ pub fn plan_tree_merge_cancellable(
             });
             continue;
         }
-        match resolve_file(rel, b, l, r) {
+        match resolve_file(rel, b, l, r, policy) {
             Ok(Resolved::Step(step)) => plan.steps.push(step),
             Ok(Resolved::StepConflict(step)) => {
                 plan.steps.push(step);
@@ -309,15 +372,16 @@ fn is_dir_node(node: Option<&SideNode>) -> bool {
     node.is_some_and(|n| n.is_dir)
 }
 
-/// Resolves one file entry of the union by the crate's rule table.
-/// `b`/`l`/`r` are the base, left and right nodes where present; at
-/// least one is, by construction. Read failures surface as errors
-/// and become skips in the caller; nothing here panics.
+/// Resolves one file entry of the union by the crate's rule table and
+/// resolution policy. `b`/`l`/`r` are the base, left and right nodes
+/// where present; at least one is, by construction. Read failures surface
+/// as errors and become skips in the caller; nothing here panics.
 fn resolve_file(
     rel: &str,
     b: Option<&SideNode>,
     l: Option<&SideNode>,
     r: Option<&SideNode>,
+    policy: MergeResolutionPolicy,
 ) -> Result<Resolved> {
     match (b, l, r) {
         (Some(bn), Some(ln), Some(rn)) => {
@@ -332,11 +396,28 @@ fn resolve_file(
             if equal(rn, bn)? {
                 return Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false));
             }
-            // Both sides changed differently.
-            Ok(match merge_all3(bn, ln, rn)? {
-                Some(merged) => merged_outcome(rel, merged),
-                None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
-            })
+            // Both sides changed differently (BothModified).
+            match policy {
+                MergeResolutionPolicy::FavorLeft => {
+                    Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                }
+                MergeResolutionPolicy::FavorRight => {
+                    Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                }
+                MergeResolutionPolicy::Newest => {
+                    let left_mtime = get_mtime(&ln.path);
+                    let right_mtime = get_mtime(&rn.path);
+                    if right_mtime > left_mtime {
+                        Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                    } else {
+                        Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                    }
+                }
+                MergeResolutionPolicy::TakeNonConflicting => Ok(match merge_all3(bn, ln, rn)? {
+                    Some(merged) => merged_outcome(rel, merged),
+                    None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
+                }),
+            }
         }
         (Some(bn), Some(ln), None) => {
             // The right side deleted the file.
@@ -345,9 +426,21 @@ fn resolve_file(
                     "deleted on the right; left unchanged from base".to_owned(),
                 ))
             } else {
-                // Left changed while right deleted: keep the change,
-                // record the delete-vs-change conflict.
-                Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, true))
+                // Left changed while right deleted (DeleteVsModify).
+                match policy {
+                    MergeResolutionPolicy::FavorRight => Ok(Resolved::Skip(
+                        "right deletion favored over left modification".to_owned(),
+                    )),
+                    MergeResolutionPolicy::FavorLeft => {
+                        Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                    }
+                    MergeResolutionPolicy::Newest => {
+                        Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                    }
+                    MergeResolutionPolicy::TakeNonConflicting => {
+                        Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, true))
+                    }
+                }
             }
         }
         (Some(bn), None, Some(rn)) => {
@@ -357,19 +450,52 @@ fn resolve_file(
                     "deleted on the left; right unchanged from base".to_owned(),
                 ))
             } else {
-                Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, true))
+                // Right changed while left deleted (DeleteVsModify).
+                match policy {
+                    MergeResolutionPolicy::FavorLeft => Ok(Resolved::Skip(
+                        "left deletion favored over right modification".to_owned(),
+                    )),
+                    MergeResolutionPolicy::FavorRight => {
+                        Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                    }
+                    MergeResolutionPolicy::Newest => {
+                        Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                    }
+                    MergeResolutionPolicy::TakeNonConflicting => {
+                        Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, true))
+                    }
+                }
             }
         }
         (Some(_), None, None) => Ok(Resolved::Skip("deleted on both sides".to_owned())),
         (None, Some(ln), Some(rn)) => {
-            // Both sides added the file.
+            // Both sides added the file (BothAdded).
             if equal(ln, rn)? {
                 return Ok(Resolved::Step(step(rel, TreeMergeAction::TakeLeft, None)));
             }
-            Ok(match merge_over_empty_base(ln, rn)? {
-                Some(merged) => merged_outcome(rel, merged),
-                None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
-            })
+            match policy {
+                MergeResolutionPolicy::FavorLeft => {
+                    Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                }
+                MergeResolutionPolicy::FavorRight => {
+                    Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                }
+                MergeResolutionPolicy::Newest => {
+                    let left_mtime = get_mtime(&ln.path);
+                    let right_mtime = get_mtime(&rn.path);
+                    if right_mtime > left_mtime {
+                        Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false))
+                    } else {
+                        Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false))
+                    }
+                }
+                MergeResolutionPolicy::TakeNonConflicting => {
+                    Ok(match merge_over_empty_base(ln, rn)? {
+                        Some(merged) => merged_outcome(rel, merged),
+                        None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
+                    })
+                }
+            }
         }
         (None, Some(ln), None) => Ok(copy_step(rel, ln, TreeMergeAction::TakeLeft, false)),
         (None, None, Some(rn)) => Ok(copy_step(rel, rn, TreeMergeAction::TakeRight, false)),
@@ -378,6 +504,13 @@ fn resolve_file(
         // rather than an unreachable panic.
         (None, None, None) => Ok(Resolved::Skip("not present in any tree".to_owned())),
     }
+}
+
+/// Fetches the file modification time safely via metadata, if available.
+fn get_mtime(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::symlink_metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
 }
 
 /// Builds a step that writes one side's copy (`TakeLeft`/`TakeRight`,
@@ -717,6 +850,7 @@ pub struct FolderMerge {
     base: PathBuf,
     left: PathBuf,
     right: PathBuf,
+    policy: MergeResolutionPolicy,
 }
 
 impl FolderMerge {
@@ -726,12 +860,35 @@ impl FolderMerge {
             base: base.as_ref().to_path_buf(),
             left: left.as_ref().to_path_buf(),
             right: right.as_ref().to_path_buf(),
+            policy: MergeResolutionPolicy::default(),
         }
+    }
+
+    /// Sets the conflict resolution policy.
+    pub fn with_resolution_policy(mut self, policy: MergeResolutionPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// Updates the conflict resolution policy.
+    pub fn set_resolution_policy(&mut self, policy: MergeResolutionPolicy) {
+        self.policy = policy;
+    }
+
+    /// Returns the active resolution policy.
+    pub fn resolution_policy(&self) -> MergeResolutionPolicy {
+        self.policy
     }
 
     /// Plans a three-way merge without modifying the filesystem (read-only).
     pub fn plan(&self) -> Result<TreeMergePlan> {
-        plan_tree_merge(&self.base, &self.left, &self.right)
+        plan_tree_merge_with_policy_cancellable(
+            &self.base,
+            &self.left,
+            &self.right,
+            self.policy,
+            None,
+        )
     }
 
     /// Applies the merge plan into `output`.
@@ -771,7 +928,13 @@ impl FolderMerge {
         output: impl AsRef<Path>,
         cancel: &AtomicBool,
     ) -> Result<TreeMergeReport> {
-        let plan = plan_tree_merge_cancellable(&self.base, &self.left, &self.right, Some(cancel))?;
+        let plan = plan_tree_merge_with_policy_cancellable(
+            &self.base,
+            &self.left,
+            &self.right,
+            self.policy,
+            Some(cancel),
+        )?;
         apply_tree_merge_cancellable(
             &self.left,
             &self.right,
@@ -780,6 +943,89 @@ impl FolderMerge {
             Some(cancel),
             None,
         )
+    }
+
+    /// Analyzes the three trees and detects all conflicts with their specific classification.
+    pub fn detect_conflicts(&self) -> Result<Vec<MergeConflictDetail>> {
+        require_dir(&self.base)?;
+        require_dir(&self.left)?;
+        require_dir(&self.right)?;
+
+        let (trees, _) = collect_trees(&self.base, &self.left, &self.right)?;
+        let rels: BTreeSet<&str> = trees
+            .base
+            .keys()
+            .chain(trees.left.keys())
+            .chain(trees.right.keys())
+            .map(|k| k.as_str())
+            .collect();
+
+        let mut conflicts = Vec::new();
+
+        for rel in rels {
+            let b = trees.base.get(rel);
+            let l = trees.left.get(rel);
+            let r = trees.right.get(rel);
+
+            if is_dir_node(l) || is_dir_node(r) {
+                continue;
+            }
+
+            match (b, l, r) {
+                (Some(bn), Some(ln), Some(rn)) => {
+                    if equal(ln, rn)? || equal(ln, bn)? || equal(rn, bn)? {
+                        continue;
+                    }
+                    conflicts.push(MergeConflictDetail {
+                        rel_path: rel.to_owned(),
+                        kind: MergeConflictKind::BothModified,
+                        base_exists: true,
+                        left_exists: true,
+                        right_exists: true,
+                        description: "both left and right modified file with differing changes"
+                            .to_owned(),
+                    });
+                }
+                (Some(bn), Some(ln), None) => {
+                    if !equal(ln, bn)? {
+                        conflicts.push(MergeConflictDetail {
+                            rel_path: rel.to_owned(),
+                            kind: MergeConflictKind::DeleteVsModify,
+                            base_exists: true,
+                            left_exists: true,
+                            right_exists: false,
+                            description: "left modified file while right deleted it".to_owned(),
+                        });
+                    }
+                }
+                (Some(bn), None, Some(rn)) => {
+                    if !equal(rn, bn)? {
+                        conflicts.push(MergeConflictDetail {
+                            rel_path: rel.to_owned(),
+                            kind: MergeConflictKind::DeleteVsModify,
+                            base_exists: true,
+                            left_exists: false,
+                            right_exists: true,
+                            description: "right modified file while left deleted it".to_owned(),
+                        });
+                    }
+                }
+                (None, Some(ln), Some(rn)) if !equal(ln, rn)? => {
+                    conflicts.push(MergeConflictDetail {
+                        rel_path: rel.to_owned(),
+                        kind: MergeConflictKind::BothAdded,
+                        base_exists: false,
+                        left_exists: true,
+                        right_exists: true,
+                        description: "both left and right created file with differing content"
+                            .to_owned(),
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        Ok(conflicts)
     }
 
     /// Navigates to the next conflict in the plan.
@@ -911,6 +1157,44 @@ impl TreeMergePlan {
             .count()
     }
 
+    /// Sorts steps ensuring directory creations (`MakeDir`) precede any files inside them.
+    pub fn sort_steps(&mut self) {
+        self.steps.sort_by(|a, b| {
+            let is_dir_a = matches!(a.action, TreeMergeAction::MakeDir);
+            let is_dir_b = matches!(b.action, TreeMergeAction::MakeDir);
+            match (is_dir_a, is_dir_b) {
+                (true, true) => a.rel_path.cmp(&b.rel_path),
+                (true, false) => {
+                    let prefix = format!("{}/", a.rel_path);
+                    if b.rel_path.starts_with(&prefix) {
+                        std::cmp::Ordering::Less
+                    } else {
+                        a.rel_path.cmp(&b.rel_path)
+                    }
+                }
+                (false, true) => {
+                    let prefix = format!("{}/", b.rel_path);
+                    if a.rel_path.starts_with(&prefix) {
+                        std::cmp::Ordering::Greater
+                    } else {
+                        a.rel_path.cmp(&b.rel_path)
+                    }
+                }
+                (false, false) => a.rel_path.cmp(&b.rel_path),
+            }
+        });
+    }
+
+    /// Whether this merge plan has no steps.
+    pub fn is_empty(&self) -> bool {
+        self.steps.is_empty()
+    }
+
+    /// Number of steps matching a given action.
+    pub fn step_action_count(&self, action: TreeMergeAction) -> usize {
+        self.steps.iter().filter(|s| s.action == action).count()
+    }
+
     /// Human-readable summary of the merge plan.
     pub fn summary(&self) -> String {
         format!(
@@ -951,5 +1235,114 @@ impl TreeMergeReport {
             self.dirs_created,
             self.failed.len()
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "autocompare_merge_test_{name}_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).expect("create temp dir");
+        path
+    }
+
+    #[test]
+    fn test_conflict_detection_and_policies() {
+        let base = temp_dir("cd_base");
+        let left = temp_dir("cd_left");
+        let right = temp_dir("cd_right");
+
+        // 1. BothModified: base="v1", left="v2_left", right="v3_right"
+        fs::write(base.join("both_mod.txt"), "v1").unwrap();
+        fs::write(left.join("both_mod.txt"), "v2_left").unwrap();
+        fs::write(right.join("both_mod.txt"), "v3_right").unwrap();
+
+        // 2. DeleteVsModify: base="v1", left="v2_mod", right is deleted
+        fs::write(base.join("del_vs_mod.txt"), "v1").unwrap();
+        fs::write(left.join("del_vs_mod.txt"), "v2_mod").unwrap();
+
+        // 3. BothAdded: left="add_l", right="add_r"
+        fs::write(left.join("both_add.txt"), "add_l").unwrap();
+        fs::write(right.join("both_add.txt"), "add_r").unwrap();
+
+        let merge = FolderMerge::new(&base, &left, &right);
+        let conflicts = merge.detect_conflicts().expect("detect conflicts");
+        assert_eq!(conflicts.len(), 3);
+
+        let both_mod = conflicts
+            .iter()
+            .find(|c| c.rel_path == "both_mod.txt")
+            .unwrap();
+        assert_eq!(both_mod.kind, MergeConflictKind::BothModified);
+
+        let del_vs_mod = conflicts
+            .iter()
+            .find(|c| c.rel_path == "del_vs_mod.txt")
+            .unwrap();
+        assert_eq!(del_vs_mod.kind, MergeConflictKind::DeleteVsModify);
+
+        let both_add = conflicts
+            .iter()
+            .find(|c| c.rel_path == "both_add.txt")
+            .unwrap();
+        assert_eq!(both_add.kind, MergeConflictKind::BothAdded);
+
+        // Policy FavorLeft: resolves conflicts without leaving them as conflicts
+        let merge_left = merge
+            .clone()
+            .with_resolution_policy(MergeResolutionPolicy::FavorLeft);
+        let plan_left = merge_left.plan().unwrap();
+        assert!(!plan_left.has_conflicts());
+        assert_eq!(plan_left.conflicts.len(), 0);
+        let step_both = plan_left.step_for("both_mod.txt").unwrap();
+        assert_eq!(step_both.action, TreeMergeAction::TakeLeft);
+
+        // Policy FavorRight
+        let merge_right = merge.with_resolution_policy(MergeResolutionPolicy::FavorRight);
+        let plan_right = merge_right.plan().unwrap();
+        assert!(!plan_right.has_conflicts());
+        let step_both_r = plan_right.step_for("both_mod.txt").unwrap();
+        assert_eq!(step_both_r.action, TreeMergeAction::TakeRight);
+
+        let _ = fs::remove_dir_all(base);
+        let _ = fs::remove_dir_all(left);
+        let _ = fs::remove_dir_all(right);
+    }
+
+    #[test]
+    fn test_tree_merge_plan_sort_steps() {
+        let mut plan = TreeMergePlan {
+            steps: vec![
+                TreeMergeStep {
+                    rel_path: "dir/sub/file.txt".to_string(),
+                    action: TreeMergeAction::TakeLeft,
+                    merged: None,
+                },
+                TreeMergeStep {
+                    rel_path: "dir".to_string(),
+                    action: TreeMergeAction::MakeDir,
+                    merged: None,
+                },
+                TreeMergeStep {
+                    rel_path: "dir/sub".to_string(),
+                    action: TreeMergeAction::MakeDir,
+                    merged: None,
+                },
+            ],
+            conflicts: Vec::new(),
+            skipped: Vec::new(),
+        };
+
+        plan.sort_steps();
+        assert_eq!(plan.steps[0].rel_path, "dir");
+        assert_eq!(plan.steps[1].rel_path, "dir/sub");
+        assert_eq!(plan.steps[2].rel_path, "dir/sub/file.txt");
     }
 }

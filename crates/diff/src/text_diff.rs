@@ -1,12 +1,15 @@
-//! Line diffing with Myers and Patience algorithms, plus unified hunk generation.
+//! Line diffing with Myers and Patience algorithms, unified hunk generation,
+//! and character/word inline diff refinement.
 //!
 //! Layer 0: no panics, no unwrap/expect in non-test code, no unsafe.
 
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
-use crate::{DiffScript, Op, engine};
+pub use crate::grammar::{
+    GrammarOptions, LineEndingRule, LineEndingType, WhitespaceRule, detect_line_ending,
+    normalize_line, normalize_line_endings,
+};
+use crate::{DiffScript, InlineSpan, Op, engine};
 
 /// Choice of line difference algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -17,6 +20,36 @@ pub enum DiffAlgorithm {
     /// Patience diff: aligns on unique matching lines, producing more
     /// human-readable diffs for shifted or reordered blocks.
     Patience,
+}
+
+/// Options configuring line difference computation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextDiffOptions {
+    /// Diff algorithm to employ.
+    pub algorithm: DiffAlgorithm,
+    /// Whitespace handling rule.
+    pub whitespace: WhitespaceRule,
+    /// Line ending handling rule.
+    pub line_ending: LineEndingRule,
+    /// Whether to ignore case differences.
+    pub ignore_case: bool,
+    /// Whether to ignore completely blank lines.
+    pub ignore_blank_lines: bool,
+    /// Number of context lines for hunk generation.
+    pub context_lines: usize,
+}
+
+impl Default for TextDiffOptions {
+    fn default() -> Self {
+        Self {
+            algorithm: DiffAlgorithm::Myers,
+            whitespace: WhitespaceRule::CompareAll,
+            line_ending: LineEndingRule::Ignore,
+            ignore_case: false,
+            ignore_blank_lines: false,
+            context_lines: 3,
+        }
+    }
 }
 
 /// Computes a diff script between two line sequences using the chosen algorithm.
@@ -31,6 +64,27 @@ pub fn diff(a: &[&str], b: &[&str], algorithm: DiffAlgorithm) -> DiffScript {
 pub fn diff_myers(a: &[&str], b: &[&str]) -> DiffScript {
     let (ops, exact) = engine::diff_slices(a, b, Some(crate::EDIT_BUDGET));
     DiffScript { ops, exact }
+}
+
+/// Compares two line sequences taking full text diff ignore options into account.
+pub fn diff_with_options(a: &[&str], b: &[&str], options: &TextDiffOptions) -> DiffScript {
+    let grammar_opts = GrammarOptions {
+        ignore_case: options.ignore_case,
+        whitespace: options.whitespace,
+        line_ending: options.line_ending,
+        ignore_comments: false,
+        comment_rules: Vec::new(),
+        string_rules: Vec::new(),
+        ignore_string_contents: false,
+        ignore_blank_lines: options.ignore_blank_lines,
+    };
+
+    let norm_a: Vec<String> = a.iter().map(|s| normalize_line(s, &grammar_opts)).collect();
+    let norm_b: Vec<String> = b.iter().map(|s| normalize_line(s, &grammar_opts)).collect();
+    let slice_a: Vec<&str> = norm_a.iter().map(|s| s.as_str()).collect();
+    let slice_b: Vec<&str> = norm_b.iter().map(|s| s.as_str()).collect();
+
+    diff(&slice_a, &slice_b, options.algorithm)
 }
 
 /// Compares two line sequences using the Patience diff algorithm.
@@ -251,7 +305,7 @@ fn common_suffix(a: &[&str], b: &[&str]) -> usize {
 /// Matches that appear exactly once in `a` and exactly once in `b`.
 /// Returns pairs of `(index_in_a, index_in_b)` sorted by `index_in_a`.
 fn find_unique_matches(a: &[&str], b: &[&str]) -> Vec<(usize, usize)> {
-    let mut a_counts: HashMap<&str, (usize, usize)> = HashMap::new(); // text -> (count, first_index)
+    let mut a_counts: HashMap<&str, (usize, usize)> = HashMap::new();
     for (i, &line) in a.iter().enumerate() {
         let entry = a_counts.entry(line).or_insert((0, i));
         entry.0 = entry.0.saturating_add(1);
@@ -283,14 +337,10 @@ fn longest_increasing_subsequence(pairs: &[(usize, usize)]) -> Vec<(usize, usize
         return Vec::new();
     }
 
-    // Piles for patience sorting.
-    // piles[k] = index into `pairs` of the top of pile k
     let mut piles: Vec<usize> = Vec::new();
-    // back_pointers[i] = index into `pairs` of the previous element in LIS
     let mut back_pointers: Vec<Option<usize>> = vec![None; pairs.len()];
 
     for (i, &(_, b_val)) in pairs.iter().enumerate() {
-        // Binary search for smallest pile with top b_val >= current b_val
         let mut lo = 0usize;
         let mut hi = piles.len();
         while lo < hi {
@@ -393,6 +443,277 @@ impl PatienceBuilder {
 }
 
 // ----------------------------------------------------------------------------
+// Inline Diff Modes & Hierarchical Word/Char Refinement
+// ----------------------------------------------------------------------------
+
+/// Mode of inline diff refinement between two strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InlineDiffMode {
+    /// Pure word-level diffing.
+    Word,
+    /// Pure character-level diffing.
+    Char,
+    /// Hierarchical word diffing refined to character-level for partially modified words (Beyond Compare parity).
+    #[default]
+    WordRefined,
+}
+
+/// Character-level changed spans between two lines.
+pub fn char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    if a == b {
+        return Vec::new();
+    }
+    let ca: Vec<char> = a.chars().collect();
+    let cb: Vec<char> = b.chars().collect();
+    let (ops, _) = engine::diff_slices(&ca, &cb, Some(crate::EDIT_BUDGET));
+
+    let mut spans = Vec::new();
+    let mut ai = 0usize;
+    let mut bi = 0usize;
+    let mut idx = 0usize;
+
+    while let Some(op) = ops.get(idx) {
+        match op {
+            Op::Equal { len } => {
+                ai = ai.saturating_add(*len);
+                bi = bi.saturating_add(*len);
+            }
+            Op::Delete { len } => {
+                let a_start = ai;
+                let a_end = ai.saturating_add(*len);
+                match ops.get(idx.saturating_add(1)) {
+                    Some(Op::Insert { len: ins }) => {
+                        let b_start = bi;
+                        let b_end = bi.saturating_add(*ins);
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start,
+                            b_end,
+                        });
+                        ai = a_end;
+                        bi = b_end;
+                        idx += 1;
+                    }
+                    _ => {
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start: bi,
+                            b_end: bi,
+                        });
+                        ai = a_end;
+                    }
+                }
+            }
+            Op::Insert { len } => {
+                let b_start = bi;
+                let b_end = bi.saturating_add(*len);
+                spans.push(InlineSpan {
+                    a_start: ai,
+                    a_end: ai,
+                    b_start,
+                    b_end,
+                });
+                bi = b_end;
+            }
+        }
+        idx += 1;
+    }
+
+    spans
+}
+
+/// Token with character offsets.
+struct WordToken<'a> {
+    text: &'a str,
+    start: usize,
+    end: usize,
+}
+
+fn tokenize_words(line: &str) -> Vec<WordToken<'_>> {
+    let mut out = Vec::new();
+    let mut cpos = 0usize;
+    let mut in_token = false;
+    let mut bstart = 0usize;
+    let mut cstart = 0usize;
+
+    for (boff, ch) in line.char_indices() {
+        if ch.is_whitespace() {
+            if in_token {
+                out.push(WordToken {
+                    text: line.get(bstart..boff).unwrap_or(""),
+                    start: cstart,
+                    end: cpos,
+                });
+                in_token = false;
+            }
+        } else if !in_token {
+            in_token = true;
+            bstart = boff;
+            cstart = cpos;
+        }
+        cpos += 1;
+    }
+    if in_token {
+        out.push(WordToken {
+            text: line.get(bstart..line.len()).unwrap_or(""),
+            start: cstart,
+            end: cpos,
+        });
+    }
+    out
+}
+
+/// Word-level inline diffing.
+pub fn word_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    if a == b {
+        return Vec::new();
+    }
+    let ta = tokenize_words(a);
+    let tb = tokenize_words(b);
+    let sa: Vec<&str> = ta.iter().map(|t| t.text).collect();
+    let sb: Vec<&str> = tb.iter().map(|t| t.text).collect();
+    let (ops, _) = engine::diff_slices(&sa, &sb, Some(crate::EDIT_BUDGET));
+
+    let mut spans: Vec<InlineSpan> = Vec::new();
+    let (mut ai, mut bi) = (0usize, 0usize);
+    let mut idx = 0usize;
+
+    while let Some(op) = ops.get(idx) {
+        match op {
+            Op::Equal { len } => {
+                ai = ai.saturating_add(*len);
+                bi = bi.saturating_add(*len);
+            }
+            Op::Delete { len } => {
+                let last_a = ai.saturating_add(*len).saturating_sub(1);
+                match ops.get(idx.saturating_add(1)) {
+                    Some(Op::Insert { len: ins }) => {
+                        let last_b = bi.saturating_add(*ins).saturating_sub(1);
+                        let a_start = ta.get(ai).map(|t| t.start).unwrap_or(0);
+                        let a_end = ta.get(last_a).map(|t| t.end).unwrap_or(a_start);
+                        let b_start = tb.get(bi).map(|t| t.start).unwrap_or(0);
+                        let b_end = tb.get(last_b).map(|t| t.end).unwrap_or(b_start);
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start,
+                            b_end,
+                        });
+                        ai = ai.saturating_add(*len);
+                        bi = bi.saturating_add(*ins);
+                        idx += 1;
+                    }
+                    _ => {
+                        let a_start = ta.get(ai).map(|t| t.start).unwrap_or(0);
+                        let a_end = ta.get(last_a).map(|t| t.end).unwrap_or(a_start);
+                        let b_pos = tb
+                            .get(bi)
+                            .map(|t| t.start)
+                            .unwrap_or(tb.last().map(|t| t.end).unwrap_or(0));
+                        spans.push(InlineSpan {
+                            a_start,
+                            a_end,
+                            b_start: b_pos,
+                            b_end: b_pos,
+                        });
+                        ai = ai.saturating_add(*len);
+                    }
+                }
+            }
+            Op::Insert { len } => {
+                let last_b = bi.saturating_add(*len).saturating_sub(1);
+                let a_pos = ta
+                    .get(ai)
+                    .map(|t| t.start)
+                    .unwrap_or(ta.last().map(|t| t.end).unwrap_or(0));
+                let b_start = tb.get(bi).map(|t| t.start).unwrap_or(0);
+                let b_end = tb.get(last_b).map(|t| t.end).unwrap_or(b_start);
+                spans.push(InlineSpan {
+                    a_start: a_pos,
+                    a_end: a_pos,
+                    b_start,
+                    b_end,
+                });
+                bi = bi.saturating_add(*len);
+            }
+        }
+        idx += 1;
+    }
+    spans
+}
+
+/// Hierarchical word-and-character inline diff refinement (Beyond Compare parity).
+pub fn inline_diff_refined(a: &str, b: &str) -> Vec<InlineSpan> {
+    if a == b {
+        return Vec::new();
+    }
+    let word_spans = word_diff(a, b);
+    let mut refined = Vec::new();
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+
+    for span in word_spans {
+        let a_len = span.a_end.saturating_sub(span.a_start);
+        let b_len = span.b_end.saturating_sub(span.b_start);
+
+        if a_len == 0 || b_len == 0 || (a_len < 3 && b_len < 3) {
+            refined.push(span);
+            continue;
+        }
+
+        let sub_a: String = a_chars
+            .get(span.a_start..span.a_end)
+            .unwrap_or(&[])
+            .iter()
+            .collect();
+        let sub_b: String = b_chars
+            .get(span.b_start..span.b_end)
+            .unwrap_or(&[])
+            .iter()
+            .collect();
+
+        let sub_spans = char_diff(&sub_a, &sub_b);
+        let total_sub_a_diff: usize = sub_spans
+            .iter()
+            .map(|s| s.a_end.saturating_sub(s.a_start))
+            .sum();
+        let total_sub_b_diff: usize = sub_spans
+            .iter()
+            .map(|s| s.b_end.saturating_sub(s.b_start))
+            .sum();
+
+        if !sub_spans.is_empty()
+            && total_sub_a_diff.saturating_mul(2) < a_len
+            && total_sub_b_diff.saturating_mul(2) < b_len
+        {
+            for sub in sub_spans {
+                refined.push(InlineSpan {
+                    a_start: span.a_start.saturating_add(sub.a_start),
+                    a_end: span.a_start.saturating_add(sub.a_end),
+                    b_start: span.b_start.saturating_add(sub.b_start),
+                    b_end: span.b_start.saturating_add(sub.b_end),
+                });
+            }
+        } else {
+            refined.push(span);
+        }
+    }
+
+    refined
+}
+
+/// Computes inline changed character spans using the chosen [`InlineDiffMode`].
+pub fn inline_diff_mode(a: &str, b: &str, mode: InlineDiffMode) -> Vec<InlineSpan> {
+    match mode {
+        InlineDiffMode::Word => word_diff(a, b),
+        InlineDiffMode::Char => char_diff(a, b),
+        InlineDiffMode::WordRefined => inline_diff_refined(a, b),
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Hunk generation & offsets
 // ----------------------------------------------------------------------------
 
@@ -451,6 +772,43 @@ impl Hunk {
     }
 }
 
+/// A single line within a refined hunk, equipped with word/character inline diff spans.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefinedHunkLine {
+    pub change: LineChange,
+    pub content: String,
+    /// Refined character spans within this line that highlight exact changes.
+    pub inline_spans: Vec<InlineSpan>,
+    /// 1-based line number in the old file, if present.
+    pub old_line_no: Option<usize>,
+    /// 1-based line number in the new file, if present.
+    pub new_line_no: Option<usize>,
+}
+
+/// A hunk with refined inline highlights computed for changed lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefinedHunk {
+    pub old_start: usize,
+    pub old_lines: usize,
+    pub new_start: usize,
+    pub new_lines: usize,
+    pub old_byte_offset: usize,
+    pub old_byte_len: usize,
+    pub new_byte_offset: usize,
+    pub new_byte_len: usize,
+    pub lines: Vec<RefinedHunkLine>,
+}
+
+impl RefinedHunk {
+    /// Formats the unified diff header for this hunk.
+    pub fn header(&self) -> String {
+        format!(
+            "@@ -{},{} +{},{} @@",
+            self.old_start, self.old_lines, self.new_start, self.new_lines
+        )
+    }
+}
+
 /// Precomputed line byte offsets and lengths for calculating hunk byte spans.
 struct LineIndex {
     line_offsets: Vec<usize>,
@@ -464,7 +822,6 @@ impl LineIndex {
         let mut offset = 0usize;
         for line in lines {
             line_offsets.push(offset);
-            // Include 1 byte for '\n'
             let len = line.len().saturating_add(1);
             line_lengths.push(len);
             offset = offset.saturating_add(len);
@@ -507,12 +864,11 @@ pub fn create_hunks(a: &[&str], b: &[&str], ops: &[Op], context: usize) -> Vec<H
     let a_index = LineIndex::from_lines(a);
     let b_index = LineIndex::from_lines(b);
 
-    // Expand ops into per-line tokens
     #[derive(Clone, Copy)]
     enum RawItem {
-        Equal(usize, usize), // a_idx, b_idx
-        Delete(usize),       // a_idx
-        Insert(usize),       // b_idx
+        Equal(usize, usize),
+        Delete(usize),
+        Insert(usize),
     }
 
     let mut items: Vec<RawItem> = Vec::new();
@@ -543,8 +899,7 @@ pub fn create_hunks(a: &[&str], b: &[&str], ops: &[Op], context: usize) -> Vec<H
         }
     }
 
-    // Identify edit regions (non-Equal items)
-    let mut edit_ranges: Vec<(usize, usize)> = Vec::new(); // [start, end) indices into `items`
+    let mut edit_ranges: Vec<(usize, usize)> = Vec::new();
     let mut in_edit = false;
     let mut edit_start = 0usize;
 
@@ -568,7 +923,6 @@ pub fn create_hunks(a: &[&str], b: &[&str], ops: &[Op], context: usize) -> Vec<H
         return Vec::new();
     }
 
-    // Merge edit ranges separated by <= 2 * context
     let mut merged_ranges: Vec<(usize, usize)> = Vec::new();
     for (start, end) in edit_ranges {
         if let Some(last) = merged_ranges.last_mut() {
@@ -671,6 +1025,129 @@ pub fn create_hunks(a: &[&str], b: &[&str], ops: &[Op], context: usize) -> Vec<H
     hunks
 }
 
+/// Creates hunks augmented with character/word inline diff spans for changed lines.
+pub fn create_refined_hunks(
+    a: &[&str],
+    b: &[&str],
+    ops: &[Op],
+    context: usize,
+) -> Vec<RefinedHunk> {
+    let raw_hunks = create_hunks(a, b, ops, context);
+    let mut refined_hunks = Vec::with_capacity(raw_hunks.len());
+
+    for hunk in raw_hunks {
+        let mut refined_lines = Vec::with_capacity(hunk.lines.len());
+        let mut i = 0usize;
+
+        while i < hunk.lines.len() {
+            let cur = match hunk.lines.get(i) {
+                Some(l) => l,
+                None => break,
+            };
+
+            match cur.change {
+                LineChange::Context => {
+                    refined_lines.push(RefinedHunkLine {
+                        change: LineChange::Context,
+                        content: cur.content.clone(),
+                        inline_spans: Vec::new(),
+                        old_line_no: cur.old_line_no,
+                        new_line_no: cur.new_line_no,
+                    });
+                    i += 1;
+                }
+                LineChange::Delete => {
+                    // Check if directly followed by an Insert (a replacement)
+                    if let Some(next) = hunk.lines.get(i.saturating_add(1))
+                        && next.change == LineChange::Insert
+                    {
+                        let spans = inline_diff_refined(&cur.content, &next.content);
+                        let a_spans: Vec<InlineSpan> = spans
+                            .iter()
+                            .map(|s| InlineSpan {
+                                a_start: s.a_start,
+                                a_end: s.a_end,
+                                b_start: 0,
+                                b_end: 0,
+                            })
+                            .collect();
+                        let b_spans: Vec<InlineSpan> = spans
+                            .iter()
+                            .map(|s| InlineSpan {
+                                a_start: 0,
+                                a_end: 0,
+                                b_start: s.b_start,
+                                b_end: s.b_end,
+                            })
+                            .collect();
+
+                        refined_lines.push(RefinedHunkLine {
+                            change: LineChange::Delete,
+                            content: cur.content.clone(),
+                            inline_spans: a_spans,
+                            old_line_no: cur.old_line_no,
+                            new_line_no: None,
+                        });
+                        refined_lines.push(RefinedHunkLine {
+                            change: LineChange::Insert,
+                            content: next.content.clone(),
+                            inline_spans: b_spans,
+                            old_line_no: None,
+                            new_line_no: next.new_line_no,
+                        });
+                        i += 2;
+                    } else {
+                        let full_span = vec![InlineSpan {
+                            a_start: 0,
+                            a_end: cur.content.chars().count(),
+                            b_start: 0,
+                            b_end: 0,
+                        }];
+                        refined_lines.push(RefinedHunkLine {
+                            change: LineChange::Delete,
+                            content: cur.content.clone(),
+                            inline_spans: full_span,
+                            old_line_no: cur.old_line_no,
+                            new_line_no: None,
+                        });
+                        i += 1;
+                    }
+                }
+                LineChange::Insert => {
+                    let full_span = vec![InlineSpan {
+                        a_start: 0,
+                        a_end: 0,
+                        b_start: 0,
+                        b_end: cur.content.chars().count(),
+                    }];
+                    refined_lines.push(RefinedHunkLine {
+                        change: LineChange::Insert,
+                        content: cur.content.clone(),
+                        inline_spans: full_span,
+                        old_line_no: None,
+                        new_line_no: cur.new_line_no,
+                    });
+                    i += 1;
+                }
+            }
+        }
+
+        refined_hunks.push(RefinedHunk {
+            old_start: hunk.old_start,
+            old_lines: hunk.old_lines,
+            new_start: hunk.new_start,
+            new_lines: hunk.new_lines,
+            old_byte_offset: hunk.old_byte_offset,
+            old_byte_len: hunk.old_byte_len,
+            new_byte_offset: hunk.new_byte_offset,
+            new_byte_len: hunk.new_byte_len,
+            lines: refined_lines,
+        });
+    }
+
+    refined_hunks
+}
+
 /// Applies a diff script to `old_lines`. Returns `None` if the script does not match.
 pub fn apply_diff(old_lines: &[&str], ops: &[Op]) -> Option<Vec<String>> {
     let mut out = Vec::new();
@@ -695,10 +1172,7 @@ pub fn apply_diff(old_lines: &[&str], ops: &[Op]) -> Option<Vec<String>> {
                 }
                 pos = end;
             }
-            Op::Insert { .. } => {
-                // An insert does not consume old_lines. In replay against old_lines only,
-                // we can only verify position unless new lines are supplied.
-            }
+            Op::Insert { .. } => {}
         }
     }
 
@@ -709,9 +1183,6 @@ pub fn apply_diff(old_lines: &[&str], ops: &[Op]) -> Option<Vec<String>> {
 }
 
 /// Replays a diff script across both old and new lines, reconstructing `new_lines`.
-///
-/// Returns `Some(reconstructed)` when the script matches both inputs exactly,
-/// or `None` if an operation overflows or encounters a mismatch.
 pub fn apply_diff_slices(
     old_lines: &[&str],
     new_lines: &[&str],
@@ -852,7 +1323,6 @@ mod tests {
         let b = ["A", "C", "D", "B"];
         let script = diff_patience(&a, &b);
         assert!(script.exact);
-        // Verify replay preserves input
         assert_eq!(
             script
                 .ops
@@ -867,6 +1337,70 @@ mod tests {
     }
 
     #[test]
+    fn test_diff_with_options_whitespace_and_case() {
+        let a = ["  HELLO  ", "World"];
+        let b = ["hello", "WORLD"];
+
+        let opt = TextDiffOptions {
+            algorithm: DiffAlgorithm::Myers,
+            whitespace: WhitespaceRule::IgnoreLeadingAndTrailing,
+            line_ending: LineEndingRule::Ignore,
+            ignore_case: true,
+            ignore_blank_lines: false,
+            context_lines: 3,
+        };
+
+        let script = diff_with_options(&a, &b, &opt);
+        assert!(script.exact);
+        assert_eq!(script.ops, vec![Op::Equal { len: 2 }]);
+    }
+
+    #[test]
+    fn test_inline_diff_refined_modes() {
+        let a = "let my_counter_old = 10;";
+        let b = "let my_counter_new = 10;";
+
+        let spans_refined = inline_diff_mode(a, b, InlineDiffMode::WordRefined);
+        assert!(!spans_refined.is_empty());
+        // Verify refinement isolated "old" vs "new" inside token
+        assert_eq!(
+            spans_refined,
+            vec![InlineSpan {
+                a_start: 15,
+                a_end: 18,
+                b_start: 15,
+                b_end: 18,
+            }]
+        );
+
+        let spans_word = inline_diff_mode(a, b, InlineDiffMode::Word);
+        assert_eq!(
+            spans_word,
+            vec![InlineSpan {
+                a_start: 4,
+                a_end: 18,
+                b_start: 4,
+                b_end: 18,
+            }]
+        );
+    }
+
+    #[test]
+    fn test_create_refined_hunks() {
+        let a = ["prefix", "value_old", "suffix"];
+        let b = ["prefix", "value_new", "suffix"];
+        let script = diff_myers(&a, &b);
+        let refined_hunks = create_refined_hunks(&a, &b, &script.ops, 1);
+        assert_eq!(refined_hunks.len(), 1);
+        let rh = refined_hunks.first().unwrap();
+        assert_eq!(rh.lines.len(), 4); // prefix, -value_old, +value_new, suffix
+        // Second line (-value_old) has inline spans
+        assert!(!rh.lines.get(1).unwrap().inline_spans.is_empty());
+        // Third line (+value_new) has inline spans
+        assert!(!rh.lines.get(2).unwrap().inline_spans.is_empty());
+    }
+
+    #[test]
     fn test_hunks_with_context() {
         let a = ["line1", "line2", "line3", "line4", "line5"];
         let b = ["line1", "line2_changed", "line3", "line4", "line5"];
@@ -875,7 +1409,7 @@ mod tests {
         assert_eq!(hunks.len(), 1);
         if let Some(h) = hunks.first() {
             assert_eq!(h.old_start, 1);
-            assert_eq!(h.old_lines, 3); // line1, line2, line3
+            assert_eq!(h.old_lines, 3);
             assert_eq!(h.new_start, 1);
             assert_eq!(h.new_lines, 3);
             assert_eq!(h.header(), "@@ -1,3 +1,3 @@");
@@ -890,7 +1424,6 @@ mod tests {
         let hunks = create_hunks(&a, &b, &script.ops, 0);
         assert_eq!(hunks.len(), 1);
         if let Some(h) = hunks.first() {
-            // "abc\n" is 4 bytes
             assert_eq!(h.old_byte_offset, 4);
             assert_eq!(h.new_byte_offset, 4);
         }
@@ -929,7 +1462,6 @@ mod tests {
 
     #[test]
     fn test_patience_diff_no_unique_lines() {
-        // Fallback to Myers when lines are repeated
         let a = ["x", "x", "x"];
         let b = ["x", "y", "x"];
         let script = diff_patience(&a, &b);
@@ -946,14 +1478,12 @@ mod tests {
 
     #[test]
     fn test_hunks_multibyte_utf8() {
-        // UTF-8 characters: "🦀" is 4 bytes, "こんにちは" is 15 bytes
         let a = ["🦀 crab", "line2", "end"];
         let b = ["🦀 crab", "line2_mod", "end"];
         let script = diff_myers(&a, &b);
         let hunks = create_hunks(&a, &b, &script.ops, 0);
         assert_eq!(hunks.len(), 1);
         if let Some(h) = hunks.first() {
-            // "🦀 crab" is 4 + 1 + 4 = 9 bytes + 1 newline = 10 bytes
             assert_eq!(h.old_byte_offset, 10);
         }
     }

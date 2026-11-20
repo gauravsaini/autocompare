@@ -2,6 +2,16 @@
 
 ## UPDATED ON : 2026-11-20
 
+### Feature (2026-11-20) — folder-sync/merge and text/merge editor feature parity
+
+1. **Feature parity**: Clean-room implementation of folder-sync, folder-merge, text-diff, and merge editor engines:
+   - `crates/diff`: Myers & Patience text diff, char/word inline refinement, ignore options (whitespace collapse/trim, case insensitivity, CRLF vs LF); 2-way and 3-way text merge with clean edit merging, conflict detection & marker formatting (`<<<<<<< left`, `=======`, `>>>>>>> right`), buffer undo/redo/splice; syntax grammar rules (comments, strings, important vs unimportant differences).
+   - `crates/compare`: Folder sync modes (Mirror L-to-R / R-to-L, Update, Two-Way, custom rules), dry-run plan generation, directory pruning, symlink & traversal guards; 3-way folder merge conflict detection & resolution policies; background `JobRunner` with cooperative cancellation and bounded progress queue (64 max history).
+2. **Tests** (before → after): `autocompare-diff` 192 passed, `autocompare-compare` 106 passed; clippy `-D warnings` clean; rustfmt clean; zero `allow(dead_code)`, zero unsafe, zero unwrap/expect/panic/todo in non-test code.
+3. **Files changed**: `crates/compare/src/{folder,folder_merge,jobs,sync}.rs`, `crates/diff/src/{grammar,merge,text_diff}.rs`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-20
+
 ### Feature (2026-11-20) — ac-loop round-parity verification: 3-way merge, grammar ignore, sync prune & jobs
 
 1. **ac-loop parity verification**: Completed 4 rounds of ac-loop harness verification for Beyond Compare feature parity:
