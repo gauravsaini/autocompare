@@ -159,6 +159,11 @@ fn read_hex_inputs_capped(left: &Path, right: &Path) -> Option<HexByteSnap> {
 /// The GUI's whole state.
 pub struct App {
     pub tab: Tab,
+    /// Live multi-session store (BW-SES-APP bridge): har khula compare ek
+    /// session hai. `current_tab` active session ka kind deta hai, khaali
+    /// par legacy `tab` (Home). Model API (`home::SessionList` T1-T7)
+    /// read-only use hota hai, yahan sirf bridge + slots sync rehta hai.
+    pub sessions: home::SessionList,
     /// Session-start recent list (Home): `open_home_session` yahan record
     /// karta hai, naya sabse upar, cap [`home::HOME_RECENT_MAX`] tak.
     pub home_recent: home::RecentSessions,
@@ -318,6 +323,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             tab: Tab::Home,
+            sessions: home::SessionList::new(),
             home_recent: home::RecentSessions::new(),
             session_history: home::SessionHistory::new(),
             recent_cleared: false,
@@ -489,6 +495,7 @@ impl App {
     pub fn set_text_paths(&mut self, left: impl Into<String>, right: impl Into<String>) {
         self.text.left = left.into();
         self.text.right = right.into();
+        self.save_slots_into_active();
     }
 
     /// Returns current text paths.
@@ -500,6 +507,7 @@ impl App {
     pub fn set_folder_paths(&mut self, left: impl Into<String>, right: impl Into<String>) {
         self.folder.left = left.into();
         self.folder.right = right.into();
+        self.save_slots_into_active();
     }
 
     /// Returns current folder paths.
@@ -639,6 +647,7 @@ impl App {
         self.merge.base = base.into();
         self.merge.left = left.into();
         self.merge.right = right.into();
+        self.save_slots_into_active();
     }
 
     /// Returns current merge triple paths.
@@ -650,24 +659,263 @@ impl App {
         )
     }
 
-    /// Sets the active tab.
+    /// Sets the active tab (legacy compat): same-kind session ho to switch,
+    /// na ho to us kind ke slot paths se open (fresh kinds par khaali).
+    /// Switch se pehle purane active ke slots save hote hain (T5/T6).
     pub fn set_tab(&mut self, tab: Tab) {
+        if tab == Tab::Home {
+            self.save_slots_into_active();
+            self.tab = Tab::Home;
+            return;
+        }
+        if self.sessions.active().map(|item| item.kind) == Some(tab) {
+            self.tab = tab;
+            return;
+        }
+        if let Some(id) = self
+            .sessions
+            .list()
+            .iter()
+            .find(|item| item.kind == tab)
+            .map(|item| item.id)
+        {
+            self.switch_session(id);
+            return;
+        }
+        self.save_slots_into_active();
+        let (left, right, base) = self.slot_paths_for(tab);
+        self.sessions.open(tab, left, right, base);
         self.tab = tab;
+        self.load_active_into_slots();
     }
 
-    /// Returns the active tab.
+    /// Returns the active tab: active session ka kind, khaali par legacy
+    /// `tab` (Default par Home). Pure; headless-tested.
     pub fn current_tab(&self) -> Tab {
-        self.tab
+        match self.sessions.active() {
+            Some(item) => item.kind,
+            None => self.tab,
+        }
     }
 
-    /// Opens one Home session card: tab switch + recent me record (Home
-    /// khud record nahi hota). Returns true jab koi session khula ho.
+    /// Us kind ke slots ke trimmed paths (session open/sync ke liye).
+    /// Order `(left, right, base)` — `SessionList::open` jaisa. Pure.
+    fn slot_paths_for(&self, kind: Tab) -> (String, String, String) {
+        match kind {
+            Tab::Text => (
+                self.text.left.trim().to_string(),
+                self.text.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Folder => (
+                self.folder.left.trim().to_string(),
+                self.folder.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Hex => (
+                self.hex.left.trim().to_string(),
+                self.hex.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Merge => (
+                self.merge.left.trim().to_string(),
+                self.merge.right.trim().to_string(),
+                self.merge.base.trim().to_string(),
+            ),
+            Tab::Table => (
+                self.table.left.trim().to_string(),
+                self.table.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Sync => (
+                self.sync.left.trim().to_string(),
+                self.sync.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Picture => (
+                self.picture.left.trim().to_string(),
+                self.picture.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::FolderMerge => (
+                self.folder_merge.left.trim().to_string(),
+                self.folder_merge.right.trim().to_string(),
+                self.folder_merge.base.trim().to_string(),
+            ),
+            Tab::Audio => (
+                self.audio.left.trim().to_string(),
+                self.audio.right.trim().to_string(),
+                String::new(),
+            ),
+            Tab::Home => (String::new(), String::new(), String::new()),
+        }
+    }
+
+    /// Active session ke paths + cursor slots me load karta hai (switch ke
+    /// baad; paint ke `paint_paths` signature bina tode). Khaali par no-op.
+    fn load_active_into_slots(&mut self) {
+        let snapshot = match self.sessions.active() {
+            Some(item) => (
+                item.kind,
+                item.left.clone(),
+                item.right.clone(),
+                item.base.clone(),
+                item.cursor,
+            ),
+            None => return,
+        };
+        let (kind, left, right, base, cursor) = snapshot;
+        match kind {
+            Tab::Text => {
+                self.text.left = left;
+                self.text.right = right;
+            }
+            Tab::Folder => {
+                self.folder.left = left;
+                self.folder.right = right;
+            }
+            Tab::Hex => {
+                self.hex.left = left;
+                self.hex.right = right;
+            }
+            Tab::Merge => {
+                self.merge.left = left;
+                self.merge.right = right;
+                self.merge.base = base;
+            }
+            Tab::Table => {
+                self.table.left = left;
+                self.table.right = right;
+            }
+            Tab::Sync => {
+                self.sync.left = left;
+                self.sync.right = right;
+            }
+            Tab::Picture => {
+                self.picture.left = left;
+                self.picture.right = right;
+            }
+            Tab::FolderMerge => {
+                self.folder_merge.left = left;
+                self.folder_merge.right = right;
+                self.folder_merge.base = base;
+            }
+            Tab::Audio => {
+                self.audio.left = left;
+                self.audio.right = right;
+            }
+            Tab::Home => return,
+        }
+        self.tab = kind;
+        self.set_current_cursor(cursor);
+    }
+
+    /// Active session me current slots sync karta hai (T5 paths + T6
+    /// cursor; type/compare/switch ke baad caller chalaye). Khaali ya
+    /// unknown active par no-op. Trimmed likhta hai (model precedent).
+    fn save_slots_into_active(&mut self) {
+        let (id, kind) = match self.sessions.active() {
+            Some(item) => (item.id, item.kind),
+            None => return,
+        };
+        let (left, right, base) = self.slot_paths_for(kind);
+        self.sessions.update_paths(id, left, right, base);
+        self.sessions.update_cursor(id, self.cursor_for(kind));
+    }
+
+    /// Us kind ka find/scroll cursor. Hex `u64` saturate hokar aata hai
+    /// (`as` cast, koi `unwrap` nahi). Pure; headless-tested.
+    fn cursor_for(&self, kind: Tab) -> usize {
+        match kind {
+            Tab::Text => self.text_find_cursor,
+            Tab::Folder => self.folder_cursor,
+            Tab::Table => self.table_find_cursor,
+            Tab::Hex => {
+                let cursor = self.hex_find_cursor;
+                let max = usize::MAX as u64;
+                if cursor > max {
+                    usize::MAX
+                } else {
+                    cursor as usize
+                }
+            }
+            Tab::Home | Tab::Merge | Tab::Sync | Tab::Picture | Tab::FolderMerge | Tab::Audio => 0,
+        }
+    }
+
+    /// Slots ko live session banata hai: active same-kind ho to update
+    /// (T5/T6), na ho to open (cap/drop model rule se). Home par no-op.
+    fn adopt_slots_as_session(&mut self) {
+        let kind = self.tab;
+        if kind == Tab::Home {
+            return;
+        }
+        let (left, right, base) = self.slot_paths_for(kind);
+        let cursor = self.cursor_for(kind);
+        if let Some(id) = self.sessions.active_id() {
+            let same = self.sessions.get(id).map(|item| item.kind) == Some(kind);
+            if same {
+                self.sessions.update_paths(id, left, right, base);
+                self.sessions.update_cursor(id, cursor);
+                return;
+            }
+        }
+        self.sessions.open(kind, left, right, base);
+    }
+
+    /// Session switch (T3 bridge): pehle purane slots save, phir switch,
+    /// phir naye slots load. Unknown id par false, `tab`/slots untouched.
+    pub fn switch_session(&mut self, id: u64) -> bool {
+        if self.sessions.active_id() == Some(id) {
+            self.load_active_into_slots();
+            return true;
+        }
+        self.save_slots_into_active();
+        if !self.sessions.switch(id) {
+            return false;
+        }
+        self.load_active_into_slots();
+        self.error = None;
+        self.status = format!("switched session: {}", self.tab.title());
+        true
+    }
+
+    /// Session close (T2 bridge): band wahi hota hai; active band hua to
+    /// naya active left-neighbour (na ho to right-neighbour); khaali par
+    /// `tab` Home. Unknown id par false. Cap/drop model rule se.
+    pub fn close_session(&mut self, id: u64) -> bool {
+        if self.sessions.active_id() == Some(id) {
+            self.save_slots_into_active();
+        }
+        if !self.sessions.close(id) {
+            return false;
+        }
+        self.tab = match self.sessions.active() {
+            Some(item) => item.kind,
+            None => Tab::Home,
+        };
+        self.load_active_into_slots();
+        self.error = None;
+        if self.sessions.is_empty() {
+            self.status = String::from("session closed: launcher ready");
+        } else {
+            self.status = format!("session closed: {}", self.tab.title());
+        }
+        true
+    }
+
+    /// Opens one Home session card: live session open + recent me record
+    /// (Home khud record nahi hota). Returns true jab koi session khula ho.
     /// Pure state; paint card click isi ko chalata hai. Headless-tested.
     pub fn open_home_session(&mut self, tab: Tab) -> bool {
         if tab == Tab::Home {
             return false;
         }
+        self.save_slots_into_active();
+        let (left, right, base) = self.slot_paths_for(tab);
+        self.sessions.open(tab, left, right, base);
         self.tab = tab;
+        self.load_active_into_slots();
         self.home_recent.push(tab.title());
         let snapshot = self.current_snapshot();
         self.session_history.push(snapshot);
@@ -682,7 +930,11 @@ impl App {
         if tab == Tab::Home {
             return false;
         }
+        self.save_slots_into_active();
+        let (left, right, base) = self.slot_paths_for(tab);
+        self.sessions.open(tab, left, right, base);
         self.tab = tab;
+        self.load_active_into_slots();
         self.home_recent.push(tab.title());
         let snapshot = self.current_snapshot();
         self.session_history.push_stamped(snapshot, now_secs);
@@ -742,21 +994,7 @@ impl App {
     /// Active tab ka find/scroll cursor `usize` me. Hex `u64` yahan
     /// saturate hokar aata hai (`as` cast, koi `unwrap` nahi).
     fn current_cursor(&self) -> usize {
-        match self.tab {
-            Tab::Text => self.text_find_cursor,
-            Tab::Folder => self.folder_cursor,
-            Tab::Table => self.table_find_cursor,
-            Tab::Hex => {
-                let cursor = self.hex_find_cursor;
-                let max = usize::MAX as u64;
-                if cursor > max {
-                    usize::MAX
-                } else {
-                    cursor as usize
-                }
-            }
-            Tab::Home | Tab::Merge | Tab::Sync | Tab::Picture | Tab::FolderMerge | Tab::Audio => 0,
-        }
+        self.cursor_for(self.tab)
     }
 
     /// Restore par cursor wapas lagata hai; doosre tabs untouched.
@@ -913,6 +1151,7 @@ impl App {
         self.clear_restored_tab_model();
         self.set_current_cursor(snapshot.cursor);
         self.error = None;
+        self.adopt_slots_as_session();
         if snapshot.has_empty_paths() {
             self.status = format!(
                 "reopened {}: saved paths empty, type both paths then Compare",
@@ -1085,6 +1324,7 @@ impl App {
             Tab::Home => false,
         };
         if swapped {
+            self.save_slots_into_active();
             self.error = None;
             self.status = format!("swapped sides: {}", self.session_identity());
         } else {
@@ -2757,7 +2997,7 @@ impl App {
         let staged_file = self.folder_session.stage_double_click(node);
         let target = home::resolve_compare_tab(&self.folder_session.staged);
         if staged_file {
-            self.tab = target;
+            self.set_tab(target);
             if let Some(rel) = self.folder_session.staged.clone() {
                 self.status = format!("staged {rel} for text compare");
             }
@@ -3254,11 +3494,13 @@ impl App {
             }
             Tab::Home => {
                 if let Some(first) = paths.first() {
+                    self.save_slots_into_active();
                     self.tab = Tab::Text;
                     self.text.left = first.clone();
                     if let Some(second) = paths.get(1) {
                         self.text.right = second.clone();
                     }
+                    self.adopt_slots_as_session();
                 }
             }
             _ => {
@@ -3286,6 +3528,7 @@ impl App {
                 }
             }
         }
+        self.save_slots_into_active();
     }
 
     /// Rejects an empty side with a friendly message before the
@@ -5936,6 +6179,121 @@ mod tests {
         assert_eq!(recent.get(1).map(String::as_str), Some("Text"));
         app.clear_recent_sessions();
         assert!(app.recent_sessions().is_empty());
+    }
+
+    #[test]
+    fn bridge_derived_tab_empty_is_home() {
+        let app = App::default();
+        assert!(app.sessions.is_empty());
+        assert_eq!(app.current_tab(), Tab::Home);
+    }
+
+    #[test]
+    fn bridge_set_tab_switch_vs_open() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        assert_eq!(app.sessions.len(), 1);
+        assert_eq!(app.current_tab(), Tab::Text);
+        app.set_text_paths("left.txt", "right.txt");
+        app.set_tab(Tab::Folder);
+        assert_eq!(app.sessions.len(), 2);
+        assert_eq!(app.current_tab(), Tab::Folder);
+        app.set_tab(Tab::Text);
+        assert_eq!(app.sessions.len(), 2);
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert_eq!(
+            app.text_paths(),
+            ("left.txt".to_string(), "right.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn bridge_type_then_switch_preserves_paths_and_cursor() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_text_paths("a.txt", "b.txt");
+        app.text_find_cursor = 4;
+        app.set_tab(Tab::Folder);
+        app.set_folder_paths("dir_a", "dir_b");
+        app.set_tab(Tab::Text);
+        assert_eq!(app.text_paths(), ("a.txt".to_string(), "b.txt".to_string()));
+        assert_eq!(app.text_find_cursor, 4);
+        let active = app.sessions.active().map(|item| item.kind);
+        assert_eq!(active, Some(Tab::Text));
+        let stored = app
+            .sessions
+            .list()
+            .iter()
+            .find(|item| item.kind == Tab::Folder)
+            .map(|item| (item.left.clone(), item.right.clone()));
+        assert_eq!(stored, Some(("dir_a".to_string(), "dir_b".to_string())));
+    }
+
+    #[test]
+    fn bridge_close_neighbour_and_empty() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_tab(Tab::Folder);
+        app.set_tab(Tab::Audio);
+        assert_eq!(app.sessions.len(), 3);
+        let active = match app.sessions.active_id() {
+            Some(id) => id,
+            None => return,
+        };
+        assert!(!app.close_session(999_999));
+        assert!(app.close_session(active));
+        assert_eq!(app.current_tab(), Tab::Folder);
+        assert_eq!(app.sessions.len(), 2);
+        let ids: Vec<u64> = app.sessions.list().iter().map(|item| item.id).collect();
+        for id in ids {
+            assert!(app.close_session(id));
+        }
+        assert!(app.sessions.is_empty());
+        assert_eq!(app.current_tab(), Tab::Home);
+    }
+
+    #[test]
+    fn bridge_open_home_session_creates_live_session() {
+        let mut app = App::default();
+        assert!(app.open_home_session(Tab::Text));
+        assert_eq!(app.sessions.len(), 1);
+        assert_eq!(app.current_tab(), Tab::Text);
+        app.set_text_paths("a.txt", "b.txt");
+        assert!(app.open_home_session(Tab::Text));
+        assert_eq!(app.sessions.len(), 2);
+        assert_eq!(
+            app.recent_sessions().first().map(String::as_str),
+            Some("Text")
+        );
+        assert_eq!(app.session_count(), 2);
+        assert!(app.status.contains("opened Text"));
+    }
+
+    #[test]
+    fn bridge_cap_keeps_active_and_drops_oldest_inactive() {
+        let mut app = App::default();
+        let kinds = [
+            Tab::Text,
+            Tab::Folder,
+            Tab::Hex,
+            Tab::Merge,
+            Tab::Table,
+            Tab::Sync,
+            Tab::Picture,
+            Tab::FolderMerge,
+            Tab::Audio,
+        ];
+        for kind in kinds {
+            app.set_tab(kind);
+        }
+        assert_eq!(app.sessions.len(), home::HOME_RECENT_MAX);
+        assert_eq!(app.current_tab(), Tab::Audio);
+        let has_text = app
+            .sessions
+            .list()
+            .iter()
+            .any(|item| item.kind == Tab::Text);
+        assert!(!has_text);
     }
 
     #[test]
