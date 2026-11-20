@@ -8,10 +8,10 @@
     "AGYX-B-sessions": "landed",
     "AGYX-C-diff": "landed",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
-    "VFS-D": "D2 STOPPED no-commit (compile-fail snapshot.rs + dirty-rule), D3 rescue launched (sess-vfs-d3)",
-    "SYNC-E": "progressing (folder.rs+sync.rs M)",
-    "MEDIA-F": "progressing (checks/agyx-media-f/GATES.md drafted)",
-    "CLI-G": "progressing (args+outcome+bcomp M)",
+    "VFS-D": "D3 compile-fix done (cargo check green), gates running",
+    "SYNC-E": "progressing (folder+sync M)",
+    "MEDIA-F": "progressing (diff/table.rs M, GATES drafted)",
+    "CLI-G": "progressing (args+bcomp+outcome+report+runner M)",
     "EXQ-GEO": "running (sess-exq-geo)",
     "EXQ-TYPO": "running gate-passed (sess-exq-typo2, R7 path fixed)"
   }
