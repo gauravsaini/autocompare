@@ -12,7 +12,7 @@
     "SYNC-E": "progressing (folder+sync+folder_merge M)",
     "MEDIA-F": "progressing (diff/table.rs M, GATES drafted)",
     "CLI-G": "progressing (args+bcomp+outcome+report+runner M)",
-    "EXQ-GEO": "running (sess-exq-geo)",
-    "EXQ-TYPO": "round-T-1 evidence written (sess-exq-typo3)"
+    "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
+    "EXQ-TYPO": "running (sess-exq-typo3, views_hex reads)"
   }
 }
