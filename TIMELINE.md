@@ -584,3 +584,9 @@
 1. **Gutter Tall-1200 Center Column & Marker Lock**: center ~20px gutter column over tall 1200px canvas, marker x locked from char metrics over long scroll, padded click viewport floor tall, changed-rows-only visibility, and edge fixture `comparison/gutter-tall-1200.json` (narrow-720 + padded-viewport fixtures reused).
 2. **Tests** (before → after): autocompare-gui 1032 green (including `gutter11_*` tall center tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter11/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-toolbar11 narrow plus buttons
+
+1. **Toolbar Narrow-720 Buttons & Tabstrip**: icon+label button symmetric hit rects at 720px narrow canvas, tab widths from label metrics (tabstrip-8tabs reused), second-row nav-arrow rhythm, per-pane status halves even split, and edge fixture `comparison/toolbar-narrow-720.json`.
+2. **Tests** (before → after): autocompare-gui 1033 green (including `toolbar11_*` narrow buttons tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-toolbar11/**`, `TIMELINE.md`.
