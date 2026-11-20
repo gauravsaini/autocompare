@@ -225,6 +225,28 @@ pub const PATH_FIELD_H: u32 = 24;
 pub const PATH_META_Y: u32 = 100;
 pub const PATH_META_H: u32 = 12;
 pub const PATH_TOOLBAR_Y: u32 = 114;
+/// File-bar geometry (exq-filebar24): one bar row above each pane = path
+/// field row (24) + metadata segment line (12) = 36px band at y76..112,
+/// 2px air above the toolbar (114). Bar columns track the true pane
+/// columns (status20 per-pane strips precedent, extended upward to the
+/// file-bar instead of a new layout language).
+pub const FILE_BAR_Y: u32 = PATH_FIELD_Y;
+pub const FILE_BAR_H: u32 = PATH_FIELD_H + PATH_META_H;
+/// File-bar Browse button width (existing width, refit inside each bar).
+pub const FILE_BAR_BROWSE_W: u32 = 75;
+
+/// Formats one file-bar metadata segment: timestamp | byte size | format
+/// word. Empty parts drop; all-empty yields "-" (honest fallback when stat
+/// fails — mirrors status20 `format_pane_status_line`, never a fake "0 B").
+/// Pure.
+pub fn format_file_bar_meta(timestamp: &str, bytes: &str, format_word: &str) -> String {
+    let line = crate::viewmodel::format_path_pane_meta(timestamp, bytes, format_word, "");
+    if line.trim().is_empty() {
+        "-".to_string()
+    } else {
+        line
+    }
+}
 /// Segmented status geometry: 30px strip y570, 4 zones (cursor/format/result/edit).
 pub const SEG_DIV0_X: u32 = 240;
 pub const SEG_DIV1_X: u32 = 480;
@@ -233,10 +255,13 @@ pub const SEG_DIV2_X: u32 = 720;
 /// sits above the bottom of each pane.
 pub const PANE_STATUS_H: u32 = 18;
 
-/// Per-pane path strip: folder icon + clipped path + dropdown caret + Browse,
-/// neeche second metadata line (timestamp | bytes | format | rules, honest-empty).
-/// Geometry: field (12,76,380,24)/(490,76,380,24), meta y100 h12 per-pane;
-/// typo intent viewmodel roles (path Body, meta caption); colors frozen.
+/// Per-pane file-bar: bar band + path field + dropdown caret + Browse,
+/// neeche metadata segment line (timestamp | bytes | format word, "-" jab
+/// stat fail ho).
+/// Geometry: bar columns track the true pane columns (wide: center layout;
+/// narrow: dual-pane split) taaki bar apne pane ke upar tikhe — center
+/// gap/gutter me bleed nahi; bar bottom (76+36=112) toolbar (114) se upar.
+/// Typo intent viewmodel roles (path Body, meta caption); colors frozen.
 fn paint_pathmeta_strip(
     pixels: &mut [u8],
     dims: (u32, u32),
@@ -246,55 +271,91 @@ fn paint_pathmeta_strip(
     right_meta: &str,
 ) {
     use crate::viewmodel::clip_to_width;
-    // Left field + Browse.
-    fill_rect(
-        pixels,
-        dims,
-        (12, PATH_FIELD_Y, 380, PATH_FIELD_H),
-        [45, 45, 45, 255],
-    );
-    let left_shown = clip_to_width(left_path, 300, text_width);
-    draw_string(pixels, dims, 20, 82, "[ ]", fixture_palette().dim);
-    draw_string(pixels, dims, 48, 82, &left_shown, fixture_palette().text);
-    draw_string(pixels, dims, 360, 82, "v", fixture_palette().dim);
-    fill_rect(
-        pixels,
-        dims,
-        (400, PATH_FIELD_Y, 75, PATH_FIELD_H),
-        [60, 60, 60, 255],
-    );
-    draw_string(pixels, dims, 412, 82, "Browse...", fixture_palette().text);
-    // Right field + Browse.
-    fill_rect(
-        pixels,
-        dims,
-        (490, PATH_FIELD_Y, 380, PATH_FIELD_H),
-        [45, 45, 45, 255],
-    );
-    let right_shown = clip_to_width(right_path, 300, text_width);
-    draw_string(pixels, dims, 498, 82, "[ ]", fixture_palette().dim);
-    draw_string(pixels, dims, 526, 82, &right_shown, fixture_palette().text);
-    draw_string(pixels, dims, 838, 82, "v", fixture_palette().dim);
-    fill_rect(
-        pixels,
-        dims,
-        (878, PATH_FIELD_Y, 75, PATH_FIELD_H),
-        [60, 60, 60, 255],
-    );
-    draw_string(pixels, dims, 890, 82, "Browse...", fixture_palette().text);
-    // Second metadata line per-pane (honest-empty: khali ho to kuch nahi).
-    if !left_meta.trim().is_empty() {
-        let shown = clip_to_width(left_meta, 360, text_width);
-        draw_string(pixels, dims, 16, PATH_META_Y, &shown, fixture_palette().dim);
-    }
-    if !right_meta.trim().is_empty() {
-        let shown = clip_to_width(right_meta, 360, text_width);
+    let (bar_lx, bar_lw, bar_rx, bar_rw) = if dims.0 >= SNAP_W {
+        let (lx, lw, _, _, rx, rw) = text_fixture_center_layout();
+        (lx, lw, rx, rw)
+    } else {
+        let (lw, rw) = crate::viewmodel::dual_pane_widths(dims.0, 0.50);
+        let (lx, rx, _) = crate::viewmodel::dual_pane_x_positions(dims.0, 0.50);
+        (lx, lw, rx, rw)
+    };
+    let bars = [
+        (bar_lx, bar_lw, left_path, left_meta),
+        (bar_rx, bar_rw, right_path, right_meta),
+    ];
+    for (bar_x, bar_w, path, meta) in bars.into_iter() {
+        if bar_w == 0 {
+            continue;
+        }
+        // Bar band: field row + metadata line on one panel tone.
+        fill_rect(
+            pixels,
+            dims,
+            (bar_x, FILE_BAR_Y, bar_w, FILE_BAR_H),
+            fixture_palette().panel,
+        );
+        // Path field refit inside the bar: Browse keeps its width, docked
+        // right with 4px air on both sides of the pair.
+        let field_w = bar_w.saturating_sub(FILE_BAR_BROWSE_W).saturating_sub(8);
+        let browse_x = bar_x.saturating_add(field_w).saturating_add(4);
+        fill_rect(
+            pixels,
+            dims,
+            (bar_x, PATH_FIELD_Y, field_w, PATH_FIELD_H),
+            [45, 45, 45, 255],
+        );
+        fill_rect(
+            pixels,
+            dims,
+            (browse_x, PATH_FIELD_Y, FILE_BAR_BROWSE_W, PATH_FIELD_H),
+            [60, 60, 60, 255],
+        );
+        let path_shown = clip_to_width(path, field_w.saturating_sub(80), text_width);
         draw_string(
             pixels,
             dims,
-            494,
+            bar_x.saturating_add(8),
+            82,
+            "[ ]",
+            fixture_palette().dim,
+        );
+        draw_string(
+            pixels,
+            dims,
+            bar_x.saturating_add(36),
+            82,
+            &path_shown,
+            fixture_palette().text,
+        );
+        draw_string(
+            pixels,
+            dims,
+            bar_x.saturating_add(field_w.saturating_sub(32)),
+            82,
+            "v",
+            fixture_palette().dim,
+        );
+        draw_string(
+            pixels,
+            dims,
+            browse_x.saturating_add(12),
+            82,
+            "Browse...",
+            fixture_palette().text,
+        );
+        // Metadata segment: clipped to the bar, "-" jab stat fail ho.
+        let trimmed = meta.trim();
+        let meta_shown = if trimmed.is_empty() {
+            "-".to_string()
+        } else {
+            clip_to_width(trimmed, bar_w.saturating_sub(16), text_width)
+        };
+        draw_string(
+            pixels,
+            dims,
+            bar_x.saturating_add(4),
             PATH_META_Y,
-            &shown,
+            &meta_shown,
             fixture_palette().dim,
         );
     }
@@ -814,14 +875,15 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     );
     draw_string(&mut pixels, dims, 644, 46, "Audio", fixture_palette().dim);
 
-    // Per-pane path strip + second metadata line (exq-pathmeta parity).
+    // Per-pane file-bar + metadata segment line (exq-filebar24): path
+    // field left (ellipsis-clipped) + timestamp | bytes | format word.
     paint_pathmeta_strip(
         &mut pixels,
         dims,
         "fixtures/left.rs",
         "fixtures/right.rs",
-        "2026-01-02 03:04 | 128 B | Text: exact | wrap:off",
-        "2026-01-02 03:05 | 132 B | Text: exact | wrap:off",
+        &format_file_bar_meta("2026-01-02 03:04", "128 B", "Text: exact"),
+        &format_file_bar_meta("2026-01-02 03:05", "132 B", "Text: exact"),
     );
 
     // TopChrome toolbar: two stacked 24px rows + 8px gap = 56 band (chrome17
@@ -5751,6 +5813,80 @@ mod tests {
         assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
         assert_eq!(TEXT_CENTER_MARK, "=>");
         assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
+        assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+    }
+
+    #[test]
+    fn filebar24_narrow720_no_overlap() {
+        // Mirrors checks/gui-exq-filebar24/round-1/comparison/filebar-narrow-720.json:
+        // narrow 720px canvas — per-pane file-bar rows (path field + metadata
+        // segment) fit within 340px panes without overlap across the 4px
+        // central gap; long paths truncate with ellipsis inside the field;
+        // the metadata segment clips to the bar and never overlaps pane
+        // content; bar bottom (112) stays above the toolbar (114). Shot15
+        // center gutter, shot18 chrome, shot19 typo, and status20 strips
+        // stay intact.
+        let raw = include_str!(
+            "../../../checks/gui-exq-filebar24/round-1/comparison/filebar-narrow-720.json"
+        );
+        assert!(raw.contains("\"name\": \"filebar-narrow-720\""));
+
+        // 1. File-bar band geometry: field row 24 + meta line 12 = 36 at y76.
+        assert_eq!(FILE_BAR_Y, PATH_FIELD_Y);
+        assert_eq!(FILE_BAR_Y, 76);
+        assert_eq!(FILE_BAR_H, PATH_FIELD_H.saturating_add(PATH_META_H));
+        assert_eq!(FILE_BAR_H, 36);
+        assert_eq!(FILE_BAR_BROWSE_W, 75);
+        assert_eq!(FILE_BAR_Y.saturating_add(FILE_BAR_H), 112);
+        assert!(FILE_BAR_Y.saturating_add(FILE_BAR_H) <= PATH_TOOLBAR_Y);
+        assert_eq!(PATH_TOOLBAR_Y, 114);
+
+        // 2. Narrow 720px bar columns track the dual-pane split: 340/340,
+        // 4px gap, no overlap, metadata never reaches pane content.
+        let (left_w, right_w) = crate::viewmodel::dual_pane_widths(720, 0.50);
+        assert_eq!((left_w, right_w), (340, 340));
+        let (lx, rx, gx) = crate::viewmodel::dual_pane_x_positions(720, 0.50);
+        assert_eq!((lx, rx, gx), (12, 356, 696));
+        assert_eq!(lx.saturating_add(left_w), 352);
+        assert!(lx.saturating_add(left_w) <= rx);
+        assert_eq!(rx.saturating_sub(lx.saturating_add(left_w)), PANE_GAP);
+        assert_eq!(rx.saturating_add(right_w), gx);
+
+        // 3. Path field refit inside each bar: Browse keeps its width.
+        let field_w = left_w.saturating_sub(FILE_BAR_BROWSE_W).saturating_sub(8);
+        assert_eq!(field_w, 257);
+        let browse_x = lx.saturating_add(field_w).saturating_add(4);
+        assert_eq!(browse_x, 273);
+        assert!(browse_x.saturating_add(FILE_BAR_BROWSE_W) <= lx.saturating_add(left_w));
+
+        // 4. Long path truncates with ellipsis inside the field budget.
+        let long_path = "fixtures/very/long/nested/dir/structure/that/keeps/going/right.rs";
+        let path_budget = field_w.saturating_sub(80);
+        let path_shown = crate::viewmodel::clip_to_width(long_path, path_budget, text_width);
+        assert!(path_shown.ends_with("..."));
+        assert!(text_width(&path_shown) <= path_budget);
+
+        // 5. Metadata segment: timestamp | bytes | format word; honest "-"
+        // fallback when stat fails; clipped to the bar, never pane overlap.
+        assert_eq!(
+            format_file_bar_meta("2026-01-02 03:04", "128 B", "Text: exact"),
+            "2026-01-02 03:04 | 128 B | Text: exact"
+        );
+        assert_eq!(format_file_bar_meta("", "", ""), "-");
+        assert_eq!(format_file_bar_meta("  ", " ", ""), "-");
+        assert_eq!(format_file_bar_meta("", "128 B", ""), "128 B");
+        let meta = format_file_bar_meta("2026-01-02 03:04", "128 B", "Text: exact");
+        let meta_budget = left_w.saturating_sub(16);
+        assert_eq!(meta_budget, 324);
+        let meta_shown = crate::viewmodel::clip_to_width(&meta, meta_budget, text_width);
+        assert!(text_width(&meta_shown) <= meta_budget);
+
+        // 6. Wide canvas intact: bars track the center layout columns;
+        // shot15 gutter/markers, shot18 chrome, status20 strips untouched.
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert_eq!(PANE_STATUS_H, 18);
+        assert_eq!(fixture_legend_segments().len(), 4);
         assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
     }
 
