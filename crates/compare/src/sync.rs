@@ -981,6 +981,67 @@ impl SyncPlanner {
     ) -> Option<&'a (String, String)> {
         plan.prev_conflict(current)
     }
+
+    /// GUI preview line: dry-run summary for the consent checkbox row.
+    pub fn preview_summary(&self, plan: &SyncPlan) -> String {
+        self.dry_run_summary(plan)
+    }
+
+    /// Whether this plan needs explicit consent before Apply.
+    /// Destructive (mirror prune deletes) plans always need consent;
+    /// an empty plan never does.
+    pub fn requires_consent(&self, plan: &SyncPlan) -> bool {
+        if plan.is_empty() {
+            return false;
+        }
+        if self.mode.requires_consent() {
+            return true;
+        }
+        plan.delete_count() > 0
+    }
+
+    /// Applies only with explicit GUI consent. Without consent the
+    /// filesystem is untouched and an `Unsupported` "preview only"
+    /// error is returned.
+    pub fn apply_with_consent(&self, plan: &SyncPlan, consented: bool) -> Result<SyncReport> {
+        if !consented {
+            return Err(Error::Unsupported {
+                path: "sync-apply".to_owned(),
+                what: "preview only: tick consent to enable Apply",
+            });
+        }
+        self.apply(plan)
+    }
+}
+
+impl SyncMode {
+    /// Display name for GUI mode pickers.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            SyncMode::UpdateRight => "Update Right",
+            SyncMode::UpdateLeft => "Update Left",
+            SyncMode::Both => "Update Both",
+            SyncMode::Mirror => "Mirror Left to Right",
+            SyncMode::MirrorLeft => "Mirror Right to Left",
+            SyncMode::TwoWay => "Two-Way Sync",
+            SyncMode::Custom => "Custom Sync",
+        }
+    }
+
+    /// Whether this mode deletes on the losing side (needs consent).
+    pub fn is_destructive(self) -> bool {
+        matches!(self, SyncMode::Mirror | SyncMode::MirrorLeft)
+    }
+
+    /// Whether Apply behind this mode needs explicit GUI consent.
+    pub fn requires_consent(self) -> bool {
+        self.is_destructive()
+    }
+
+    /// Whether this mode prunes one-sided entries on the losing side.
+    pub fn prunes(self) -> bool {
+        self.is_destructive()
+    }
 }
 
 fn is_conflict_reason(reason: &str) -> bool {
@@ -1072,6 +1133,23 @@ impl SyncPlan {
     /// Finds the planned step for a relative path, if any.
     pub fn step_for(&self, rel_path: &str) -> Option<&SyncStep> {
         self.steps.iter().find(|s| s.rel_path == rel_path)
+    }
+
+    /// GUI checklist subset: keeps steps whose parallel `checked`
+    /// entry is true; short or missing entries count as unchecked.
+    /// Skips and truncation pass through so the summary stays honest.
+    pub fn select_subset(&self, checked: &[bool]) -> Self {
+        let mut steps = Vec::new();
+        for (idx, step) in self.steps.iter().enumerate() {
+            if checked.get(idx).is_some_and(|on| *on) {
+                steps.push(step.clone());
+            }
+        }
+        Self {
+            steps,
+            skipped: self.skipped.clone(),
+            truncated: self.truncated,
+        }
     }
 
     /// Number of CopyToRight steps.

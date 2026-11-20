@@ -1,0 +1,4 @@
+update-right: 1 step(s) planned, 1 skipped
+mirror: 2 step(s) planned, 0 skipped
+mirror requires consent: true
+update-right requires consent: false
