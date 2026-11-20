@@ -1,5 +1,5 @@
 //! Grammar and unimportant-text rules: whitespace, casing, and comments filtering,
-//! plus grammar-aware word-level intra-line diffing.
+//! plus grammar-aware word-level intra-line diffing and Beyond Compare parity line diffing.
 //!
 //! Layer 0: no panics, no unwrap/expect in non-test code, no unsafe.
 
@@ -74,6 +74,23 @@ impl CommentRule {
     }
 }
 
+/// Tracks block comment state across lines.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CommentState {
+    /// If currently inside an open block comment, stores the expected closing delimiter.
+    pub active_block_end: Option<String>,
+}
+
+impl CommentState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn is_inside_comment(&self) -> bool {
+        self.active_block_end.is_some()
+    }
+}
+
 /// Grammar comparison options governing unimportant differences.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GrammarOptions {
@@ -107,18 +124,147 @@ impl GrammarOptions {
 pub enum Importance {
     /// The texts are identical.
     Identical,
-    /// The texts differ only in unimportant aspects (whitespace, case, comments).
+    /// The texts differ only in unimportant aspects (whitespace, case, comments, blank lines).
     UnimportantDifference,
     /// The texts contain meaningful/important semantic differences.
     ImportantDifference,
 }
 
+/// Checks whether a line consists purely of whitespace or is empty.
+pub fn is_blank_line(line: &str) -> bool {
+    line.chars().all(|c| c.is_whitespace())
+}
+
+/// Strips comments (both line comments and block comments) from a single line.
+pub fn strip_comments(line: &str, rules: &[CommentRule]) -> String {
+    let mut state = CommentState::default();
+    strip_comments_with_state(line, rules, &mut state)
+}
+
+/// Strips comments from a line while persisting multi-line comment state.
+pub fn strip_comments_with_state(
+    line: &str,
+    rules: &[CommentRule],
+    state: &mut CommentState,
+) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut curr_boff = 0usize;
+
+    while curr_boff < line.len() {
+        if let Some(ref end_delim) = state.active_block_end {
+            let rest = line.get(curr_boff..).unwrap_or("");
+            if let Some(pos) = rest.find(end_delim) {
+                curr_boff = curr_boff
+                    .saturating_add(pos)
+                    .saturating_add(end_delim.len());
+                state.active_block_end = None;
+                if !out.ends_with(' ') && !out.is_empty() {
+                    out.push(' ');
+                }
+            } else {
+                return out;
+            }
+        } else {
+            let rest = line.get(curr_boff..).unwrap_or("");
+            let mut earliest_line_prefix: Option<usize> = None;
+            let mut earliest_block_start: Option<(usize, &str, &str)> = None;
+
+            for rule in rules {
+                if let Some(ref prefix) = rule.line_prefix
+                    && let Some(pos) = rest.find(prefix)
+                {
+                    earliest_line_prefix = Some(earliest_line_prefix.map_or(pos, |p| p.min(pos)));
+                }
+                if let (Some(bstart), Some(bend)) = (&rule.block_start, &rule.block_end)
+                    && let Some(pos) = rest.find(bstart)
+                {
+                    match earliest_block_start {
+                        Some((best_pos, _, _)) if pos < best_pos => {
+                            earliest_block_start = Some((pos, bstart.as_str(), bend.as_str()));
+                        }
+                        None => {
+                            earliest_block_start = Some((pos, bstart.as_str(), bend.as_str()));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            match (earliest_line_prefix, earliest_block_start) {
+                (None, None) => {
+                    out.push_str(rest);
+                    break;
+                }
+                (Some(lp_pos), None) => {
+                    out.push_str(rest.get(..lp_pos).unwrap_or(""));
+                    break;
+                }
+                (None, Some((bs_pos, bstart, bend))) => {
+                    out.push_str(rest.get(..bs_pos).unwrap_or(""));
+                    let after_bstart = bs_pos.saturating_add(bstart.len());
+                    let inside_rest = rest.get(after_bstart..).unwrap_or("");
+                    if let Some(end_pos) = inside_rest.find(bend) {
+                        curr_boff = curr_boff
+                            .saturating_add(after_bstart)
+                            .saturating_add(end_pos)
+                            .saturating_add(bend.len());
+                        if !out.ends_with(' ') && !out.is_empty() {
+                            out.push(' ');
+                        }
+                    } else {
+                        state.active_block_end = Some(bend.to_string());
+                        return out;
+                    }
+                }
+                (Some(lp_pos), Some((bs_pos, bstart, bend))) => {
+                    if lp_pos < bs_pos {
+                        out.push_str(rest.get(..lp_pos).unwrap_or(""));
+                        break;
+                    } else {
+                        out.push_str(rest.get(..bs_pos).unwrap_or(""));
+                        let after_bstart = bs_pos.saturating_add(bstart.len());
+                        let inside_rest = rest.get(after_bstart..).unwrap_or("");
+                        if let Some(end_pos) = inside_rest.find(bend) {
+                            curr_boff = curr_boff
+                                .saturating_add(after_bstart)
+                                .saturating_add(end_pos)
+                                .saturating_add(bend.len());
+                            if !out.ends_with(' ') && !out.is_empty() {
+                                out.push(' ');
+                            }
+                        } else {
+                            state.active_block_end = Some(bend.to_string());
+                            return out;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out
+}
+
 /// Normalizes a single line according to grammar whitespace and casing rules.
 pub fn normalize_line(line: &str, options: &GrammarOptions) -> String {
-    let mut s = line.to_string();
+    let mut state = CommentState::default();
+    normalize_line_with_state(line, options, &mut state)
+}
 
-    if options.ignore_comments {
-        s = strip_line_comments(&s, &options.comment_rules);
+/// Normalizes a single line while tracking persistent comment state across lines.
+pub fn normalize_line_with_state(
+    line: &str,
+    options: &GrammarOptions,
+    state: &mut CommentState,
+) -> String {
+    let mut s = if options.ignore_comments {
+        strip_comments_with_state(line, &options.comment_rules, state)
+    } else {
+        line.to_string()
+    };
+
+    if options.ignore_blank_lines && is_blank_line(&s) {
+        return String::new();
     }
 
     match options.whitespace {
@@ -160,24 +306,24 @@ pub fn normalize_line(line: &str, options: &GrammarOptions) -> String {
     s
 }
 
-/// Removes line comment suffixes from a line.
-fn strip_line_comments(line: &str, rules: &[CommentRule]) -> String {
-    let mut cut_idx = line.len();
-    for rule in rules {
-        if let Some(prefix) = &rule.line_prefix
-            && let Some(pos) = line.find(prefix)
-            && pos < cut_idx
-        {
-            cut_idx = pos;
-        }
+/// Normalizes a sequence of lines using grammar rules and persistent comment state.
+pub fn normalize_lines(lines: &[&str], options: &GrammarOptions) -> Vec<String> {
+    let mut state = CommentState::default();
+    let mut out = Vec::with_capacity(lines.len());
+    for &line in lines {
+        out.push(normalize_line_with_state(line, options, &mut state));
     }
-    line.get(..cut_idx).unwrap_or(line).to_string()
+    out
 }
 
 /// Assesses the difference importance between two lines.
 pub fn compare_lines_importance(a: &str, b: &str, options: &GrammarOptions) -> Importance {
     if a == b {
         return Importance::Identical;
+    }
+
+    if options.ignore_blank_lines && is_blank_line(a) && is_blank_line(b) {
+        return Importance::UnimportantDifference;
     }
 
     let norm_a = normalize_line(a, options);
@@ -214,33 +360,85 @@ pub struct GrammarToken<'a> {
 
 /// Tokenizes a line into words, punctuation, whitespace, and comments.
 pub fn tokenize_line<'a>(line: &'a str, rules: &[CommentRule]) -> Vec<GrammarToken<'a>> {
+    let mut state = CommentState::default();
+    tokenize_line_with_state(line, rules, &mut state)
+}
+
+/// Tokenizes a line while preserving multi-line comment state across lines.
+pub fn tokenize_line_with_state<'a>(
+    line: &'a str,
+    rules: &[CommentRule],
+    state: &mut CommentState,
+) -> Vec<GrammarToken<'a>> {
     let mut tokens = Vec::new();
+    let chars: Vec<(usize, char)> = line.char_indices().collect();
+    let mut i = 0usize;
     let mut cpos = 0usize;
 
-    // Check if line contains a line comment
-    let mut comment_byte_idx = None;
-    for rule in rules {
-        if let Some(prefix) = &rule.line_prefix
-            && let Some(pos) = line.find(prefix)
-        {
-            comment_byte_idx = Some(comment_byte_idx.map_or(pos, |curr: usize| curr.min(pos)));
+    // Check if continuing inside a block comment
+    if let Some(ref end_delim) = state.active_block_end {
+        if let Some(pos) = line.find(end_delim) {
+            let end_byte = pos.saturating_add(end_delim.len());
+            let mut close_chars = 0usize;
+            while i < chars.len() {
+                if let Some(&(boff, _)) = chars.get(i) {
+                    if boff < end_byte {
+                        close_chars = close_chars.saturating_add(1);
+                        i = i.saturating_add(1);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            tokens.push(GrammarToken {
+                text: line.get(..end_byte).unwrap_or(""),
+                start: cpos,
+                end: cpos.saturating_add(close_chars),
+                kind: TokenKind::Comment,
+            });
+            cpos = cpos.saturating_add(close_chars);
+            state.active_block_end = None;
+        } else {
+            let rest_chars = chars.len().saturating_sub(i);
+            tokens.push(GrammarToken {
+                text: line,
+                start: cpos,
+                end: cpos.saturating_add(rest_chars),
+                kind: TokenKind::Comment,
+            });
+            return tokens;
         }
     }
 
-    let chars: Vec<(usize, char)> = line.char_indices().collect();
-    let mut i = 0usize;
-
     while i < chars.len() {
         let (boff, ch) = chars.get(i).copied().unwrap_or((0, ' '));
+        let rest = line.get(boff..).unwrap_or("");
 
-        // If at or past comment prefix, rest of line is a comment token
-        if let Some(c_byte) = comment_byte_idx
-            && boff >= c_byte
-        {
-            let rest_text = line.get(boff..).unwrap_or("");
+        // Check comment triggers at this byte position
+        let mut line_comment_match = false;
+        let mut block_match: Option<(&str, &str)> = None;
+
+        for rule in rules {
+            if let Some(ref prefix) = rule.line_prefix
+                && rest.starts_with(prefix)
+            {
+                line_comment_match = true;
+                break;
+            }
+            if let (Some(bstart), Some(bend)) = (&rule.block_start, &rule.block_end)
+                && rest.starts_with(bstart)
+            {
+                block_match = Some((bstart.as_str(), bend.as_str()));
+                break;
+            }
+        }
+
+        if line_comment_match {
             let rest_chars = chars.len().saturating_sub(i);
             tokens.push(GrammarToken {
-                text: rest_text,
+                text: rest,
                 start: cpos,
                 end: cpos.saturating_add(rest_chars),
                 kind: TokenKind::Comment,
@@ -248,19 +446,57 @@ pub fn tokenize_line<'a>(line: &'a str, rules: &[CommentRule]) -> Vec<GrammarTok
             break;
         }
 
+        if let Some((bstart, bend)) = block_match {
+            let after_start = bstart.len();
+            let inside = rest.get(after_start..).unwrap_or("");
+            if let Some(end_rel) = inside.find(bend) {
+                let total_bytes = after_start
+                    .saturating_add(end_rel)
+                    .saturating_add(bend.len());
+                let target_byte = boff.saturating_add(total_bytes);
+                let start_cpos = cpos;
+                let mut comm_chars = 0usize;
+                while i < chars.len() {
+                    if let Some(&(cur_b, _)) = chars.get(i) {
+                        if cur_b < target_byte {
+                            comm_chars = comm_chars.saturating_add(1);
+                            cpos = cpos.saturating_add(1);
+                            i = i.saturating_add(1);
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                tokens.push(GrammarToken {
+                    text: line.get(boff..target_byte).unwrap_or(""),
+                    start: start_cpos,
+                    end: cpos,
+                    kind: TokenKind::Comment,
+                });
+                continue;
+            } else {
+                state.active_block_end = Some(bend.to_string());
+                let rest_chars = chars.len().saturating_sub(i);
+                tokens.push(GrammarToken {
+                    text: rest,
+                    start: cpos,
+                    end: cpos.saturating_add(rest_chars),
+                    kind: TokenKind::Comment,
+                });
+                break;
+            }
+        }
+
         if ch.is_whitespace() {
             let start_cpos = cpos;
             let start_boff = boff;
             while i < chars.len() {
-                let (next_boff, next_ch) = chars.get(i).copied().unwrap_or((0, ' '));
-                if let Some(c_byte) = comment_byte_idx
-                    && next_boff >= c_byte
-                {
-                    break;
-                }
+                let (_, next_ch) = chars.get(i).copied().unwrap_or((0, ' '));
                 if next_ch.is_whitespace() {
-                    cpos += 1;
-                    i += 1;
+                    cpos = cpos.saturating_add(1);
+                    i = i.saturating_add(1);
                 } else {
                     break;
                 }
@@ -276,15 +512,10 @@ pub fn tokenize_line<'a>(line: &'a str, rules: &[CommentRule]) -> Vec<GrammarTok
             let start_cpos = cpos;
             let start_boff = boff;
             while i < chars.len() {
-                let (next_boff, next_ch) = chars.get(i).copied().unwrap_or((0, ' '));
-                if let Some(c_byte) = comment_byte_idx
-                    && next_boff >= c_byte
-                {
-                    break;
-                }
+                let (_, next_ch) = chars.get(i).copied().unwrap_or((0, ' '));
                 if next_ch.is_alphanumeric() || next_ch == '_' {
-                    cpos += 1;
-                    i += 1;
+                    cpos = cpos.saturating_add(1);
+                    i = i.saturating_add(1);
                 } else {
                     break;
                 }
@@ -297,7 +528,6 @@ pub fn tokenize_line<'a>(line: &'a str, rules: &[CommentRule]) -> Vec<GrammarTok
                 kind: TokenKind::Word,
             });
         } else {
-            // Punctuation / symbol (single char or cluster)
             tokens.push(GrammarToken {
                 text: line
                     .get(boff..boff.saturating_add(ch.len_utf8()))
@@ -306,12 +536,22 @@ pub fn tokenize_line<'a>(line: &'a str, rules: &[CommentRule]) -> Vec<GrammarTok
                 end: cpos.saturating_add(1),
                 kind: TokenKind::Punctuation,
             });
-            cpos += 1;
-            i += 1;
+            cpos = cpos.saturating_add(1);
+            i = i.saturating_add(1);
         }
     }
 
     tokens
+}
+
+/// Tokenizes a multi-line document while preserving comment state across lines.
+pub fn tokenize_lines<'a>(lines: &[&'a str], rules: &[CommentRule]) -> Vec<Vec<GrammarToken<'a>>> {
+    let mut state = CommentState::default();
+    let mut result = Vec::with_capacity(lines.len());
+    for &line in lines {
+        result.push(tokenize_line_with_state(line, rules, &mut state));
+    }
+    result
 }
 
 /// Character span of intra-line differences with an importance classification.
@@ -372,8 +612,6 @@ pub fn grammar_inline_diff(a: &str, b: &str, options: &GrammarOptions) -> Vec<Gr
     while let Some(op) = ops.get(idx) {
         match op {
             Op::Equal { len } => {
-                // Tokens are equal under normalization.
-                // Check if they differed in raw text (unimportant difference).
                 for offset in 0..*len {
                     let curr_a = ai.saturating_add(offset);
                     let curr_b = bi.saturating_add(offset);
@@ -417,7 +655,7 @@ pub fn grammar_inline_diff(a: &str, b: &str, options: &GrammarOptions) -> Vec<Gr
                         });
                         ai = ai.saturating_add(*len);
                         bi = bi.saturating_add(*ins);
-                        idx += 1;
+                        idx = idx.saturating_add(1);
                     }
                     _ => {
                         let a_start = tokens_a.get(ai).map(|t| t.start).unwrap_or(0);
@@ -466,7 +704,7 @@ pub fn grammar_inline_diff(a: &str, b: &str, options: &GrammarOptions) -> Vec<Gr
                 bi = bi.saturating_add(*len);
             }
         }
-        idx += 1;
+        idx = idx.saturating_add(1);
     }
 
     spans
@@ -496,7 +734,6 @@ fn is_span_unimportant(
     tokens_b: &[GrammarToken<'_>],
     options: &GrammarOptions,
 ) -> bool {
-    // If all tokens on both sides are whitespace and whitespace differences are ignored:
     let all_a_whitespace =
         tokens_a.is_empty() || tokens_a.iter().all(|t| t.kind == TokenKind::Whitespace);
     let all_b_whitespace =
@@ -505,7 +742,6 @@ fn is_span_unimportant(
         return true;
     }
 
-    // If all tokens are comments and comments are ignored:
     let all_a_comment = tokens_a
         .iter()
         .all(|t| t.kind == TokenKind::Comment || t.kind == TokenKind::Whitespace);
@@ -513,6 +749,294 @@ fn is_span_unimportant(
         .iter()
         .all(|t| t.kind == TokenKind::Comment || t.kind == TokenKind::Whitespace);
     all_a_comment && all_b_comment && options.ignore_comments
+}
+
+// ----------------------------------------------------------------------------
+// Line-level diff with grammar awareness and Beyond Compare display filters
+// ----------------------------------------------------------------------------
+
+/// Display filter for line differences (Beyond Compare parity).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DisplayFilter {
+    /// Show all lines (identical, unimportant diffs, important diffs).
+    #[default]
+    All,
+    /// Show all differences (both important and unimportant).
+    Diffs,
+    /// Show only important differences (ignoring unimportant differences).
+    DiffsImportantOnly,
+    /// Show same/matching lines (identical and unimportant differences).
+    Same,
+}
+
+/// A line-level diff entry tagged with its grammar importance classification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrammarLineDiff {
+    /// The edit operation (Equal, Delete, or Insert).
+    pub op: Op,
+    /// Importance classification of this line change.
+    pub importance: Importance,
+    /// Line content from the left input, if present.
+    pub left_line: Option<String>,
+    /// Line content from the right input, if present.
+    pub right_line: Option<String>,
+}
+
+impl GrammarLineDiff {
+    pub fn is_identical(&self) -> bool {
+        self.importance == Importance::Identical
+    }
+
+    pub fn is_unimportant(&self) -> bool {
+        self.importance == Importance::UnimportantDifference
+    }
+
+    pub fn is_important(&self) -> bool {
+        self.importance == Importance::ImportantDifference
+    }
+}
+
+/// Diff script produced by grammar-aware line comparison.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrammarDiffScript {
+    /// Detailed line-level differences.
+    pub lines: Vec<GrammarLineDiff>,
+    /// Whether the script is exact (did not hit edit budget fallback).
+    pub exact: bool,
+    /// Count of lines that are completely identical.
+    pub identical_count: usize,
+    /// Count of lines that differ only in unimportant grammar aspects.
+    pub unimportant_count: usize,
+    /// Count of lines that contain important differences.
+    pub important_count: usize,
+}
+
+impl GrammarDiffScript {
+    /// Filters diff lines according to the specified Beyond Compare display filter.
+    pub fn filter(&self, filter: DisplayFilter) -> Vec<&GrammarLineDiff> {
+        self.lines
+            .iter()
+            .filter(|line| match filter {
+                DisplayFilter::All => true,
+                DisplayFilter::Diffs => line.importance != Importance::Identical,
+                DisplayFilter::DiffsImportantOnly => {
+                    line.importance == Importance::ImportantDifference
+                }
+                DisplayFilter::Same => line.importance != Importance::ImportantDifference,
+            })
+            .collect()
+    }
+
+    /// Returns true if any important differences exist between the inputs.
+    pub fn has_important_differences(&self) -> bool {
+        self.important_count > 0
+    }
+
+    /// Returns true if any differences (important or unimportant) exist between the inputs.
+    pub fn has_differences(&self) -> bool {
+        self.unimportant_count > 0 || self.important_count > 0
+    }
+}
+
+/// Compares two sequences of lines using grammar rules and unimportant text filtering.
+///
+/// Lines are aligned using their normalized forms (accounting for whitespace, comments,
+/// case, and blank lines), and each aligned line or inserted/deleted line is tagged with
+/// its [`Importance`].
+pub fn diff_lines_with_grammar(
+    a: &[&str],
+    b: &[&str],
+    options: &GrammarOptions,
+) -> GrammarDiffScript {
+    let norm_a = normalize_lines(a, options);
+    let norm_b = normalize_lines(b, options);
+
+    let norm_a_refs: Vec<&str> = norm_a.iter().map(|s| s.as_str()).collect();
+    let norm_b_refs: Vec<&str> = norm_b.iter().map(|s| s.as_str()).collect();
+
+    let (ops, exact) = engine::diff_slices(&norm_a_refs, &norm_b_refs, Some(crate::EDIT_BUDGET));
+
+    let mut lines = Vec::new();
+    let mut ai = 0usize;
+    let mut bi = 0usize;
+    let mut identical_count = 0usize;
+    let mut unimportant_count = 0usize;
+    let mut important_count = 0usize;
+    let mut idx = 0usize;
+
+    while let Some(op) = ops.get(idx) {
+        match op {
+            Op::Equal { len } => {
+                for offset in 0..*len {
+                    let a_curr = ai.saturating_add(offset);
+                    let b_curr = bi.saturating_add(offset);
+                    let left = a.get(a_curr).copied();
+                    let right = b.get(b_curr).copied();
+
+                    let importance = match (left, right) {
+                        (Some(l), Some(r)) if l == r => {
+                            identical_count = identical_count.saturating_add(1);
+                            Importance::Identical
+                        }
+                        (Some(_), Some(_)) => {
+                            unimportant_count = unimportant_count.saturating_add(1);
+                            Importance::UnimportantDifference
+                        }
+                        _ => {
+                            important_count = important_count.saturating_add(1);
+                            Importance::ImportantDifference
+                        }
+                    };
+
+                    lines.push(GrammarLineDiff {
+                        op: Op::Equal { len: 1 },
+                        importance,
+                        left_line: left.map(|s| s.to_string()),
+                        right_line: right.map(|s| s.to_string()),
+                    });
+                }
+                ai = ai.saturating_add(*len);
+                bi = bi.saturating_add(*len);
+            }
+            Op::Delete { len } => match ops.get(idx.saturating_add(1)) {
+                Some(Op::Insert { len: ins }) => {
+                    let min_len = (*len).min(*ins);
+                    for offset in 0..min_len {
+                        let a_curr = ai.saturating_add(offset);
+                        let b_curr = bi.saturating_add(offset);
+                        let left = a.get(a_curr).copied();
+                        let right = b.get(b_curr).copied();
+
+                        let importance = match (left, right) {
+                            (Some(l), Some(r)) => compare_lines_importance(l, r, options),
+                            _ => Importance::ImportantDifference,
+                        };
+
+                        match importance {
+                            Importance::Identical => {
+                                identical_count = identical_count.saturating_add(1);
+                            }
+                            Importance::UnimportantDifference => {
+                                unimportant_count = unimportant_count.saturating_add(1);
+                            }
+                            Importance::ImportantDifference => {
+                                important_count = important_count.saturating_add(1);
+                            }
+                        }
+
+                        lines.push(GrammarLineDiff {
+                            op: Op::Equal { len: 1 },
+                            importance,
+                            left_line: left.map(|s| s.to_string()),
+                            right_line: right.map(|s| s.to_string()),
+                        });
+                    }
+
+                    if *len > min_len {
+                        for offset in min_len..*len {
+                            let a_curr = ai.saturating_add(offset);
+                            let left = a.get(a_curr).copied();
+                            let is_unimp =
+                                options.ignore_blank_lines && left.is_some_and(is_blank_line);
+                            let importance = if is_unimp {
+                                unimportant_count = unimportant_count.saturating_add(1);
+                                Importance::UnimportantDifference
+                            } else {
+                                important_count = important_count.saturating_add(1);
+                                Importance::ImportantDifference
+                            };
+
+                            lines.push(GrammarLineDiff {
+                                op: Op::Delete { len: 1 },
+                                importance,
+                                left_line: left.map(|s| s.to_string()),
+                                right_line: None,
+                            });
+                        }
+                    } else if *ins > min_len {
+                        for offset in min_len..*ins {
+                            let b_curr = bi.saturating_add(offset);
+                            let right = b.get(b_curr).copied();
+                            let is_unimp =
+                                options.ignore_blank_lines && right.is_some_and(is_blank_line);
+                            let importance = if is_unimp {
+                                unimportant_count = unimportant_count.saturating_add(1);
+                                Importance::UnimportantDifference
+                            } else {
+                                important_count = important_count.saturating_add(1);
+                                Importance::ImportantDifference
+                            };
+
+                            lines.push(GrammarLineDiff {
+                                op: Op::Insert { len: 1 },
+                                importance,
+                                left_line: None,
+                                right_line: right.map(|s| s.to_string()),
+                            });
+                        }
+                    }
+
+                    ai = ai.saturating_add(*len);
+                    bi = bi.saturating_add(*ins);
+                    idx = idx.saturating_add(1);
+                }
+                _ => {
+                    for offset in 0..*len {
+                        let a_curr = ai.saturating_add(offset);
+                        let left = a.get(a_curr).copied();
+                        let is_unimp =
+                            options.ignore_blank_lines && left.is_some_and(is_blank_line);
+                        let importance = if is_unimp {
+                            unimportant_count = unimportant_count.saturating_add(1);
+                            Importance::UnimportantDifference
+                        } else {
+                            important_count = important_count.saturating_add(1);
+                            Importance::ImportantDifference
+                        };
+
+                        lines.push(GrammarLineDiff {
+                            op: Op::Delete { len: 1 },
+                            importance,
+                            left_line: left.map(|s| s.to_string()),
+                            right_line: None,
+                        });
+                    }
+                    ai = ai.saturating_add(*len);
+                }
+            },
+            Op::Insert { len } => {
+                for offset in 0..*len {
+                    let b_curr = bi.saturating_add(offset);
+                    let right = b.get(b_curr).copied();
+                    let is_unimp = options.ignore_blank_lines && right.is_some_and(is_blank_line);
+                    let importance = if is_unimp {
+                        unimportant_count = unimportant_count.saturating_add(1);
+                        Importance::UnimportantDifference
+                    } else {
+                        important_count = important_count.saturating_add(1);
+                        Importance::ImportantDifference
+                    };
+
+                    lines.push(GrammarLineDiff {
+                        op: Op::Insert { len: 1 },
+                        importance,
+                        left_line: None,
+                        right_line: right.map(|s| s.to_string()),
+                    });
+                }
+                bi = bi.saturating_add(*len);
+            }
+        }
+        idx = idx.saturating_add(1);
+    }
+
+    GrammarDiffScript {
+        lines,
+        exact,
+        identical_count,
+        unimportant_count,
+        important_count,
+    }
 }
 
 #[cfg(test)]
@@ -569,6 +1093,156 @@ mod tests {
     }
 
     #[test]
+    fn test_block_comment_intra_line() {
+        let opt = GrammarOptions {
+            ignore_comments: true,
+            comment_rules: vec![CommentRule::c_style()],
+            ..Default::default()
+        };
+        assert_eq!(
+            compare_lines_importance(
+                "let x = /* old comment */ 42;",
+                "let x = /* new comment */ 42;",
+                &opt
+            ),
+            Importance::UnimportantDifference
+        );
+        assert_eq!(
+            compare_lines_importance("/* full comment */", "/* different comment */", &opt),
+            Importance::UnimportantDifference
+        );
+    }
+
+    #[test]
+    fn test_xml_block_comment() {
+        let opt = GrammarOptions {
+            ignore_comments: true,
+            comment_rules: vec![CommentRule::xml_style()],
+            ..Default::default()
+        };
+        assert_eq!(
+            compare_lines_importance(
+                "<config><!-- comment a --></config>",
+                "<config><!-- comment b --></config>",
+                &opt
+            ),
+            Importance::UnimportantDifference
+        );
+    }
+
+    #[test]
+    fn test_multi_line_comment_normalization() {
+        let opt = GrammarOptions {
+            ignore_comments: true,
+            comment_rules: vec![CommentRule::c_style()],
+            ..Default::default()
+        };
+        let lines_a = [
+            "/* start of comment",
+            " middle text",
+            " end of comment */",
+            "let x = 10;",
+        ];
+        let lines_b = [
+            "/* entirely different",
+            " commentary lines",
+            " */",
+            "let x = 10;",
+        ];
+
+        let norm_a = normalize_lines(&lines_a, &opt);
+        let norm_b = normalize_lines(&lines_b, &opt);
+
+        assert_eq!(norm_a.get(3), norm_b.get(3));
+        assert_eq!(norm_a.get(1).map(|s| s.trim()), Some(""));
+        assert_eq!(norm_b.get(1).map(|s| s.trim()), Some(""));
+    }
+
+    #[test]
+    fn test_ignore_blank_lines() {
+        let opt = GrammarOptions {
+            ignore_blank_lines: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            compare_lines_importance("   ", "", &opt),
+            Importance::UnimportantDifference
+        );
+        assert_eq!(
+            compare_lines_importance("", "", &opt),
+            Importance::Identical
+        );
+    }
+
+    #[test]
+    fn test_diff_lines_with_grammar_identical() {
+        let opt = GrammarOptions::default();
+        let a = ["alpha", "beta", "gamma"];
+        let b = ["alpha", "beta", "gamma"];
+
+        let script = diff_lines_with_grammar(&a, &b, &opt);
+        assert!(script.exact);
+        assert_eq!(script.identical_count, 3);
+        assert_eq!(script.unimportant_count, 0);
+        assert_eq!(script.important_count, 0);
+        assert!(!script.has_differences());
+        assert!(!script.has_important_differences());
+    }
+
+    #[test]
+    fn test_diff_lines_with_grammar_unimportant_and_filters() {
+        let opt = GrammarOptions {
+            ignore_case: true,
+            whitespace: WhitespaceRule::IgnoreChanges,
+            ignore_comments: true,
+            comment_rules: vec![CommentRule::c_style()],
+            ignore_blank_lines: true,
+        };
+
+        let a = ["FOO = 1;", "   ", "// comment A", "bar = 2;"];
+        let b = ["foo = 1;", "", "// comment B", "bar = 999;"];
+
+        let script = diff_lines_with_grammar(&a, &b, &opt);
+        assert!(script.has_differences());
+        assert!(script.has_important_differences());
+        assert_eq!(script.important_count, 1); // bar = 2 vs bar = 999
+        assert_eq!(script.unimportant_count, 3); // case, blank, comment
+
+        // Beyond Compare display filters
+        let all = script.filter(DisplayFilter::All);
+        assert_eq!(all.len(), 4);
+
+        let diffs = script.filter(DisplayFilter::Diffs);
+        assert_eq!(diffs.len(), 4); // all 4 differ (3 unimportant, 1 important)
+
+        let important_only = script.filter(DisplayFilter::DiffsImportantOnly);
+        assert_eq!(important_only.len(), 1);
+        assert_eq!(
+            important_only.first().and_then(|l| l.left_line.as_deref()),
+            Some("bar = 2;")
+        );
+
+        let same = script.filter(DisplayFilter::Same);
+        assert_eq!(same.len(), 3); // 3 match under grammar rules
+    }
+
+    #[test]
+    fn test_diff_lines_with_grammar_blank_line_insertion() {
+        let opt = GrammarOptions {
+            ignore_blank_lines: true,
+            ..Default::default()
+        };
+
+        let a = ["line 1", "line 2"];
+        let b = ["line 1", "", "   ", "line 2"];
+
+        let script = diff_lines_with_grammar(&a, &b, &opt);
+        assert!(!script.has_important_differences());
+        assert_eq!(script.unimportant_count, 2); // 2 blank lines inserted
+        assert_eq!(script.identical_count, 2);
+    }
+
+    #[test]
     fn test_grammar_inline_diff_tags_unimportant() {
         let opt = GrammarOptions {
             ignore_case: true,
@@ -577,7 +1251,6 @@ mod tests {
         };
         let spans = grammar_inline_diff("FooBar = 123", "foobar = 456", &opt);
         assert_eq!(spans.len(), 2);
-        // "FooBar" vs "foobar" is unimportant because ignore_case is on
         assert!(spans.first().is_some_and(|s| s.is_unimportant));
         assert!(spans.get(1).is_some_and(|s| !s.is_unimportant));
     }
