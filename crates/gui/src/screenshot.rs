@@ -229,6 +229,9 @@ pub const PATH_TOOLBAR_Y: u32 = 114;
 pub const SEG_DIV0_X: u32 = 240;
 pub const SEG_DIV1_X: u32 = 480;
 pub const SEG_DIV2_X: u32 = 720;
+/// Per-pane status strip height (px): 18px thin bar matching fixture row rhythm,
+/// sits above the bottom of each pane.
+pub const PANE_STATUS_H: u32 = 18;
 
 /// Per-pane path strip: folder icon + clipped path + dropdown caret + Browse,
 /// neeche second metadata line (timestamp | bytes | format | rules, honest-empty).
@@ -413,6 +416,7 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
 
 /// Bottom segmented status: cursor | format | result | edit (4 zones, dividers).
 /// Single-line honest form viewmodel se; clip 936 budget me; colors frozen.
+#[allow(dead_code)]
 fn paint_segmented_status(
     pixels: &mut [u8],
     dims: (u32, u32),
@@ -446,6 +450,89 @@ fn paint_segmented_status(
     // Dividers (frozen panel tone reuse via dim on dark strip).
     for dx in [SEG_DIV0_X, SEG_DIV1_X, SEG_DIV2_X] {
         fill_rect(pixels, dims, (dx, 574, 1, 22), fixture_palette().dim);
+    }
+}
+
+/// Formats a per-pane status line from cursor, format word, and result word.
+/// Empty parts are omitted; if all empty, returns "-". Pure; unit-tested.
+pub fn format_pane_status_line(cursor: &str, format: &str, result: &str) -> String {
+    let mut parts = Vec::new();
+    let c = cursor.trim();
+    if !c.is_empty() {
+        parts.push(c);
+    }
+    let f = format.trim();
+    if !f.is_empty() {
+        parts.push(f);
+    }
+    let r = result.trim();
+    if !r.is_empty() {
+        parts.push(r);
+    }
+    if parts.is_empty() {
+        "-".to_string()
+    } else {
+        parts.join(" | ")
+    }
+}
+
+/// Paints one per-pane status strip above a pane bottom: dark panel tone, subtle top border,
+/// single-line honest text clipped to pane width.
+pub fn paint_pane_status_strip(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    rect: (u32, u32, u32, u32),
+    line: &str,
+) {
+    let (x, y, w, h) = rect;
+    fill_rect(pixels, dims, rect, [32, 32, 32, 255]);
+    fill_rect(pixels, dims, (x, y, w, 1), [45, 45, 45, 255]);
+    let shown = crate::viewmodel::clip_to_width(line, w.saturating_sub(16), text_width);
+    let base_dy = h.saturating_sub(FIXTURE_GLYPH_H) / 2;
+    draw_string(
+        pixels,
+        dims,
+        x.saturating_add(8),
+        y.saturating_add(base_dy),
+        &shown,
+        fixture_palette().dim,
+    );
+}
+
+/// Bottom legend key segments (exq-status20): static legend key in clean-room phrasing
+/// (differences, same, insert, overview).
+pub fn fixture_legend_segments() -> [&'static str; 4] {
+    ["Differences", "Same", "Insert", "Overview"]
+}
+
+/// Bottom legend strip (exq-status20): 30px strip at canvas bottom (y570..600)
+/// showing 3-4 segment words with subtle dividers, clipped per zone.
+pub fn paint_bottom_legend_strip(pixels: &mut [u8], dims: (u32, u32), segments: &[&str]) {
+    let width = dims.0;
+    fill_rect(pixels, dims, (0, 570, width, STATUS_H), [32, 32, 32, 255]);
+    fill_rect(pixels, dims, (0, 570, width, 1), [45, 45, 45, 255]);
+
+    let count = segments.len() as u32;
+    if count == 0 {
+        return;
+    }
+    let zone_w = width / count;
+    for (i, seg) in segments.iter().enumerate() {
+        let idx = i as u32;
+        let zone_x = idx.saturating_mul(zone_w);
+        if idx > 0 {
+            fill_rect(pixels, dims, (zone_x, 574, 1, 22), fixture_palette().dim);
+        }
+        let text_budget = zone_w.saturating_sub(16);
+        let s = crate::viewmodel::clip_to_width(seg.trim(), text_budget, text_width);
+        draw_string(
+            pixels,
+            dims,
+            zone_x.saturating_add(12),
+            578,
+            &s,
+            fixture_palette().dim,
+        );
     }
 }
 
@@ -911,17 +998,28 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
-    // Bottom segmented status: cursor | format | result | edit.
-    paint_segmented_status(
+    // Per-pane status strips above pane bottoms (BC parity: cursor, format word, result word).
+    let strip_y = pane_bottom.saturating_sub(PANE_STATUS_H);
+    let left_status =
+        format_pane_status_line("3:1", "Text: exact", "4 equal, 1 changed, 1 deleted");
+    paint_pane_status_strip(
         &mut pixels,
         dims,
-        &crate::viewmodel::path_segmented_status_for(
-            "3:1",
-            "Text: exact",
-            "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted",
-            "edit: clean",
-        ),
+        (left_x, strip_y, left_w, PANE_STATUS_H),
+        &left_status,
     );
+
+    let right_status =
+        format_pane_status_line("3:1", "Text: exact", "4 equal, 1 changed, 1 inserted");
+    paint_pane_status_strip(
+        &mut pixels,
+        dims,
+        (right_x, strip_y, right_w, PANE_STATUS_H),
+        &right_status,
+    );
+
+    // Bottom legend strip: static key words (differences, same, insert, overview).
+    paint_bottom_legend_strip(&mut pixels, dims, &fixture_legend_segments());
 
     let image = RgbaImage {
         width,
@@ -5491,6 +5589,68 @@ mod tests {
         assert!(text_width("1200") <= fixture_text_linenum_col_w(1200));
 
         // 4. Shot15 + shot18 intact: center layout, markers, pane top.
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
+        assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+    }
+
+    #[test]
+    fn status20_narrow720_no_overlap() {
+        // Mirrors checks/gui-exq-status20/round-1/comparison/status-narrow-720.json:
+        // narrow 720px canvas — per-pane status strips fit within 340px panes without
+        // overlap across the 4px central gap; bottom legend 4 zones scale/clip cleanly
+        // across 720px width without text collision. Shot15 center gutter and shot18
+        // chrome stay intact.
+        let raw = include_str!(
+            "../../../checks/gui-exq-status20/round-1/comparison/status-narrow-720.json"
+        );
+        assert!(raw.contains("\"name\": \"status-narrow-720\""));
+
+        // 1. Dual-pane layout at 720px: panes 340/340, 4px gap, 16px gutter.
+        let (left_w, right_w) = crate::viewmodel::dual_pane_widths(720, 0.50);
+        assert_eq!((left_w, right_w), (340, 340));
+        let (lx, rx, gx) = crate::viewmodel::dual_pane_x_positions(720, 0.50);
+        assert_eq!((lx, rx, gx), (12, 356, 696));
+
+        // 2. Strip geometry: strips sit at bottom of panes above 560, height 18.
+        let pane_bottom = 560u32;
+        let strip_h = PANE_STATUS_H;
+        assert_eq!(strip_h, 18);
+        let strip_y = pane_bottom.saturating_sub(strip_h);
+        assert_eq!(strip_y, 542);
+
+        // 3. No overlap between left and right strips across the gap:
+        assert_eq!(lx.saturating_add(left_w), 352);
+        assert_eq!(rx, 356);
+        assert!(lx.saturating_add(left_w) <= rx);
+        assert_eq!(rx.saturating_sub(lx.saturating_add(left_w)), PANE_GAP);
+        assert_eq!(rx.saturating_add(right_w), gx);
+
+        // 4. Per-pane strip content fits within 340px pane budget:
+        let left_line =
+            format_pane_status_line("3:1", "Text: exact", "4 equal, 1 changed, 1 deleted");
+        let right_line =
+            format_pane_status_line("3:1", "Text: exact", "4 equal, 1 changed, 1 inserted");
+        let left_clipped =
+            crate::viewmodel::clip_to_width(&left_line, left_w.saturating_sub(16), text_width);
+        let right_clipped =
+            crate::viewmodel::clip_to_width(&right_line, right_w.saturating_sub(16), text_width);
+        assert!(text_width(&left_clipped) <= left_w.saturating_sub(16));
+        assert!(text_width(&right_clipped) <= right_w.saturating_sub(16));
+
+        // 5. Bottom legend strip at 720px: 4 zones of 180px each, dividers at 180, 360, 540.
+        let segs = fixture_legend_segments();
+        assert_eq!(segs.len(), 4);
+        let zone_w = 720u32 / 4;
+        assert_eq!(zone_w, 180);
+        for seg in segs.iter() {
+            let clipped =
+                crate::viewmodel::clip_to_width(seg, zone_w.saturating_sub(16), text_width);
+            assert!(text_width(&clipped) <= zone_w.saturating_sub(16));
+        }
+
+        // 6. Shot15 center gutter and shot18 chrome stay intact.
         assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
         assert_eq!(TEXT_CENTER_MARK, "=>");
         assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
