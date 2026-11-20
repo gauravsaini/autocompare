@@ -2228,8 +2228,13 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
     let gutter_dim = dim_for(dark);
     let gutter_w = format!("{}", model.lines.len()).len().max(3);
 
+    // Geometry: panes fill remaining height (no bottom waste) — budget
+    // captured before the row consumes it; the list column keeps it as
+    // its floor and the overview ruler pins to the same height.
+    let panes_h = viewmodel::text_panes_height(ui.available_height());
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
+            ui.set_min_height(panes_h);
             egui::ScrollArea::vertical()
                 .id_salt("merge_output_rows")
                 .auto_shrink([false, false])
@@ -2257,8 +2262,9 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
                 });
         });
 
-        // Overview ruler for merge conflicts
-        let avail_h = ui.available_height().max(100.0);
+        // Overview ruler for merge conflicts (same remaining-height
+        // budget as the list column, so ruler and rows stay in sync).
+        let avail_h = panes_h;
         let geom = crate::gutter::merge_gutter_geometry(&model.lines, avail_h);
         let bar_w = crate::gutter::gutter_ruler_width(true);
         let (rect, resp) =
@@ -3040,9 +3046,17 @@ fn paint_text_body(
         debug_assert!(wrap_total_visual(&wrap_counts) >= visible.len());
     }
 
+    // Geometry FIRST (bottom-waste fix): the panes row fills the
+    // remaining viewport height instead of shrinking to content.
+    // Budget captured before the row consumes it (nav toolbar, cursor
+    // strip and status bar already spent above); the list column keeps
+    // it as its floor and the minimap pins to the same height, so short
+    // content scrolls in a full-height viewport with zero bottom waste.
+    let panes_h = viewmodel::text_panes_height(ui.available_height());
     ui.horizontal(|ui| {
         // Main diff scroll area
         ui.vertical(|ui| {
+            ui.set_min_height(panes_h);
             if wrap_on {
                 // Wrap-on: variable-height manual list (G4). Har model row
                 // apne visual count tak failta hai (left/right me jo bada,
@@ -3400,13 +3414,15 @@ fn paint_text_body(
             }
         });
 
-        // Thumbnail overview gutter on the right; narrows when line
-        // numbers hide so chrome stays in sync while counts stay honest.
+        // Thumbnail overview gutter on the right (same remaining-height
+        // budget as the list column, so gutter and rows stay in sync);
+        // narrows when line numbers hide so chrome stays in sync while
+        // counts stay honest.
         // Click/drag jumps: fraction se nearest-diff row select hoti hai
         // (wahi snap jo hex minimap `hex_minimap_jump_to_row` me hai),
         // selection marker synced rehta hai, list agli frame scroll karti
         // hai (pending key, struct change bina).
-        let avail_h = ui.available_height().max(100.0);
+        let avail_h = panes_h;
         let geom = viewmodel::gutter_geometry(model.rows.len(), avail_h, &model.rows);
         let bar_w = text_minimap_ruler_width(prefs.show_line_numbers);
         let (rect, resp) =

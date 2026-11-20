@@ -1306,6 +1306,25 @@ pub fn split_accessibility_label(fraction: f32) -> String {
     format!("Splitter: left pane {pct} percent. Drag to resize between 20 and 80 percent.")
 }
 
+/// Minimum panes-list height (px): names the legacy `.max(100.0)` floor
+/// the text/merge painters used inline, so headless tests lock it.
+/// Below this the minimap/gutter math degrades; at or above it panes
+/// fill the remaining viewport instead of shrinking to content.
+pub const TEXT_PANES_MIN_H: f32 = 100.0;
+
+/// Remaining-height budget for the text/merge panes row: paint captures
+/// `ui.available_height()` *before* the panes `horizontal` (toolbar +
+/// file-info bar already spent above) and the row keeps at least
+/// [`TEXT_PANES_MIN_H`]. Non-finite/non-positive input pins to the
+/// floor so paint never feeds NaN into layout. Pure; unit-tested.
+pub fn text_panes_height(avail_h: f32) -> f32 {
+    if avail_h.is_finite() && avail_h > 0.0 {
+        avail_h.max(TEXT_PANES_MIN_H)
+    } else {
+        TEXT_PANES_MIN_H
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Hex
 // ----------------------------------------------------------------------------
@@ -3707,6 +3726,21 @@ mod tests {
         assert!(max_label.contains("80"));
         // NaN label default 50% par girta hai, crash nahi.
         assert!(split_accessibility_label(f32::NAN).contains("50"));
+    }
+
+    #[test]
+    fn text_panes_height_edge_guards() {
+        // Edge fixture (exq8b bottom-waste fix): panes row fills remaining
+        // height; degenerate input pins to the named floor, kabhi NaN nahi.
+        assert_eq!(TEXT_PANES_MIN_H, 100.0);
+        assert_eq!(text_panes_height(600.0), 600.0);
+        assert_eq!(text_panes_height(99.9), TEXT_PANES_MIN_H);
+        assert_eq!(text_panes_height(0.0), TEXT_PANES_MIN_H);
+        assert_eq!(text_panes_height(-50.0), TEXT_PANES_MIN_H);
+        assert_eq!(text_panes_height(f32::NAN), TEXT_PANES_MIN_H);
+        assert_eq!(text_panes_height(f32::INFINITY), TEXT_PANES_MIN_H);
+        let guarded = text_panes_height(f32::NAN);
+        assert!(guarded.is_finite() && guarded > 0.0);
     }
 
     #[test]
