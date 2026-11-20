@@ -135,7 +135,8 @@ impl TarGzFs {
             let readonly = entry.header().mode().ok().is_some_and(|m| (m & 0o222) == 0);
 
             let content = if is_file {
-                let mut data = Vec::with_capacity(len as usize);
+                // No pre-allocation from the untrusted tar header size.
+                let mut data = Vec::new();
                 entry
                     .read_to_end(&mut data)
                     .map_err(|e| VfsError::CorruptedArchive(e.to_string()))?;

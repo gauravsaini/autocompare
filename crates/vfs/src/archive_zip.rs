@@ -412,7 +412,8 @@ impl Vfs for ZipFs {
         let mut archive = ZipArchive::new(cursor).map_err(VfsError::from)?;
 
         let mut zip_file = archive.by_index(item.zip_index).map_err(VfsError::from)?;
-        let mut buffer = Vec::with_capacity(item.meta.len as usize);
+        // No pre-allocation from the untrusted central-directory size.
+        let mut buffer = Vec::new();
         zip_file.read_to_end(&mut buffer).map_err(VfsError::Io)?;
 
         let bytes_read = buffer.len() as u64;

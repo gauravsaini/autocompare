@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "created_at_epoch_secs": 1700000000,
+  "generator": "autocompare-vfs v0.5.0",
+  "root_name": "vfs3-edge",
+  "description": "Minimal clean-room edge fixture for round-vfs3 snapshot round-trip",
+  "entries": [
+    {
+      "path": "docs",
+      "is_dir": true,
+      "size": 0,
+      "modified_epoch_secs": 1700000000,
+      "crc32": null,
+      "readonly": false
+    },
+    {
+      "path": "docs/note.txt",
+      "is_dir": false,
+      "size": 11,
+      "modified_epoch_secs": 1700000000,
+      "crc32": 222957957,
+      "readonly": false
+    },
+    {
+      "path": "empty.bin",
+      "is_dir": false,
+      "size": 0,
+      "modified_epoch_secs": null,
+      "crc32": 0,
+      "readonly": true
+    }
+  ]
+}
