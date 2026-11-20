@@ -1,0 +1,15 @@
+{
+  "schema_version": 0,
+  "appearance": "solarized_light",
+  "key_map": "vi",
+  "syntax": "rust",
+  "tab_width": 2,
+  "autosave": true,
+  "line_numbers": false,
+  "read_only": true,
+  "custom": {
+    "vim_esc_delay_ms": "25",
+    "unicode_label": "⚡️ macOS Beyond Compare UX",
+    "high_contrast_gutter": "true"
+  }
+}

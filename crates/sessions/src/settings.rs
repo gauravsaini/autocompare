@@ -238,6 +238,63 @@ pub fn default_grammar_presets() -> Vec<GrammarPreset> {
     GrammarPreset::builtin_presets()
 }
 
+/// Supported keymap preset names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeymapPreset {
+    /// Default standard keyboard shortcuts.
+    Default,
+    /// Modal Vim-style navigation and editing shortcuts.
+    Vim,
+    /// Visual Studio Code compatible shortcuts.
+    Vscode,
+    /// GNU Emacs compatible keybindings.
+    Emacs,
+}
+
+impl KeymapPreset {
+    /// Canonical identifier string for this preset.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Vim => "vim",
+            Self::Vscode => "vscode",
+            Self::Emacs => "emacs",
+        }
+    }
+
+    /// Parses a string slice into a known [`KeymapPreset`], handling common aliases.
+    ///
+    /// Case-insensitive. Recognized aliases include:
+    /// - `"default"`, `"standard"`, `"mac"`, `"macos"` -> `Default`
+    /// - `"vim"`, `"vi"` -> `Vim`
+    /// - `"vscode"`, `"code"` -> `Vscode`
+    /// - `"emacs"` -> `Emacs`
+    pub fn from_preset_name(s: &str) -> Option<Self> {
+        let trimmed = s.trim();
+        if trimmed.eq_ignore_ascii_case("default")
+            || trimmed.eq_ignore_ascii_case("standard")
+            || trimmed.eq_ignore_ascii_case("mac")
+            || trimmed.eq_ignore_ascii_case("macos")
+        {
+            Some(Self::Default)
+        } else if trimmed.eq_ignore_ascii_case("vim") || trimmed.eq_ignore_ascii_case("vi") {
+            Some(Self::Vim)
+        } else if trimmed.eq_ignore_ascii_case("vscode") || trimmed.eq_ignore_ascii_case("code") {
+            Some(Self::Vscode)
+        } else if trimmed.eq_ignore_ascii_case("emacs") {
+            Some(Self::Emacs)
+        } else {
+            None
+        }
+    }
+
+    /// All available keymap presets in canonical order.
+    pub const fn all() -> &'static [Self] {
+        &[Self::Default, Self::Vim, Self::Vscode, Self::Emacs]
+    }
+}
+
 /// Application configuration including theme, keybindings, and grammar presets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppSettings {
@@ -389,6 +446,38 @@ impl AppSettings {
         self
     }
 
+    /// Returns the resolved [`KeymapPreset`] enum, defaulting to [`KeymapPreset::Default`]
+    /// if the configured keymap string is unrecognized.
+    pub fn keymap_preset(&self) -> KeymapPreset {
+        match KeymapPreset::from_preset_name(&self.keymap) {
+            Some(preset) => preset,
+            None => KeymapPreset::Default,
+        }
+    }
+
+    /// Sets the keymap from a typed [`KeymapPreset`].
+    pub fn set_keymap_preset(&mut self, preset: KeymapPreset) {
+        self.keymap = preset.as_str().to_string();
+    }
+
+    /// Builder method to set the keymap from a typed [`KeymapPreset`].
+    pub fn with_keymap_preset(mut self, preset: KeymapPreset) -> Self {
+        self.set_keymap_preset(preset);
+        self
+    }
+
+    /// Returns true if the configured theme indicates dark mode.
+    pub fn is_dark_theme(&self) -> bool {
+        let t = self.theme.trim().to_ascii_lowercase();
+        t != "light" && !t.contains("light")
+    }
+
+    /// Returns true if the configured theme indicates light mode.
+    pub fn is_light_theme(&self) -> bool {
+        let t = self.theme.trim().to_ascii_lowercase();
+        t == "light" || t.contains("light")
+    }
+
     /// Serializes the settings to a compact JSON string.
     pub fn to_json(&self) -> Result<String, SessionError> {
         serde_json::to_string(self).map_err(SessionError::Json)
@@ -488,6 +577,8 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                 let theme = map
                     .get("theme")
                     .or_else(|| map.get("color_theme"))
+                    .or_else(|| map.get("appearance"))
+                    .or_else(|| map.get("palette"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("dark")
                     .to_string();
@@ -496,6 +587,9 @@ pub fn migrate_settings(old_json: &str) -> Result<AppSettings, SessionError> {
                     .get("keymap")
                     .or_else(|| map.get("keys"))
                     .or_else(|| map.get("keybindings"))
+                    .or_else(|| map.get("key_map"))
+                    .or_else(|| map.get("shortcut_preset"))
+                    .or_else(|| map.get("shortcuts"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("default")
                     .to_string();
@@ -707,5 +801,133 @@ mod tests {
         let loaded = AppSettings::load_from_file(&file_path).expect("load locked settings");
         assert!(loaded.is_locked());
         let _ = std::fs::remove_file(file_path);
+    }
+
+    #[test]
+    fn test_keymap_preset_parsing_and_resolution() {
+        assert_eq!(
+            KeymapPreset::from_preset_name("default"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("standard"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("mac"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("macos"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("vim"),
+            Some(KeymapPreset::Vim)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("vi"),
+            Some(KeymapPreset::Vim)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("VI"),
+            Some(KeymapPreset::Vim)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("vscode"),
+            Some(KeymapPreset::Vscode)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("code"),
+            Some(KeymapPreset::Vscode)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("emacs"),
+            Some(KeymapPreset::Emacs)
+        );
+        assert_eq!(
+            KeymapPreset::from_preset_name("EMACS"),
+            Some(KeymapPreset::Emacs)
+        );
+        assert_eq!(KeymapPreset::from_preset_name("unknown_keymap"), None);
+
+        let mut s = AppSettings::new();
+        assert_eq!(s.keymap_preset(), KeymapPreset::Default);
+        s.set_keymap_preset(KeymapPreset::Vim);
+        assert_eq!(s.keymap, "vim");
+        assert_eq!(s.keymap_preset(), KeymapPreset::Vim);
+
+        let s2 = AppSettings::new().with_keymap_preset(KeymapPreset::Vscode);
+        assert_eq!(s2.keymap, "vscode");
+        assert_eq!(s2.keymap_preset(), KeymapPreset::Vscode);
+    }
+
+    #[test]
+    fn test_keymap_preset_all_canonical_strings() {
+        let all = KeymapPreset::all();
+        assert_eq!(all.len(), 4);
+        assert_eq!(KeymapPreset::Default.as_str(), "default");
+        assert_eq!(KeymapPreset::Vim.as_str(), "vim");
+        assert_eq!(KeymapPreset::Vscode.as_str(), "vscode");
+        assert_eq!(KeymapPreset::Emacs.as_str(), "emacs");
+        for preset in all {
+            assert_eq!(
+                KeymapPreset::from_preset_name(preset.as_str()),
+                Some(*preset)
+            );
+        }
+    }
+
+    #[test]
+    fn test_settings_theme_mode_helpers() {
+        let dark_s = AppSettings::new();
+        assert!(dark_s.is_dark_theme());
+        assert!(!dark_s.is_light_theme());
+
+        let light_s = AppSettings::with_presets("light", "default", "default");
+        assert!(!light_s.is_dark_theme());
+        assert!(light_s.is_light_theme());
+
+        let sol_light = AppSettings::with_presets("solarized_light", "default", "default");
+        assert!(!sol_light.is_dark_theme());
+        assert!(sol_light.is_light_theme());
+    }
+
+    #[test]
+    fn test_settings_schema_migration_keymap_aliases() {
+        let json = r#"{
+            "appearance": "light",
+            "key_map": "vi",
+            "shortcut_preset": "ignore_me_if_earlier",
+            "syntax": "rust"
+        }"#;
+        let s = migrate_settings(json).expect("migrate keymap aliases");
+        assert_eq!(s.schema_version, CURRENT_SETTINGS_SCHEMA_VERSION);
+        assert_eq!(s.theme, "light");
+        assert!(s.is_light_theme());
+        assert_eq!(s.keymap, "vi");
+        assert_eq!(s.keymap_preset(), KeymapPreset::Vim);
+    }
+
+    #[test]
+    fn test_edge_keymap_settings_fixture_migration() {
+        let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("crates dir")
+            .parent()
+            .expect("repo root")
+            .join("checks/ux-keymap/round-1/fixtures/edge_keymap_settings.json");
+        if fixture_path.exists() {
+            let loaded = AppSettings::load_from_file(&fixture_path).expect("load edge fixture");
+            assert_eq!(loaded.schema_version, CURRENT_SETTINGS_SCHEMA_VERSION);
+            assert!(loaded.is_light_theme());
+            assert_eq!(loaded.keymap_preset(), KeymapPreset::Vim);
+            assert!(loaded.is_locked());
+            assert_eq!(loaded.tab_size, Some(2));
+            assert_eq!(
+                loaded.extra.get("vim_esc_delay_ms").map(String::as_str),
+                Some("25")
+            );
+        }
     }
 }

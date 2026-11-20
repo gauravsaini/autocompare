@@ -856,6 +856,417 @@ pub fn contrast_dim_text_ok() -> bool {
         && theme_mode_contrast_ok(false)
 }
 
+// ----------------------------------------------------------------------------
+// WCAG AA Design-Token Contrast Verification Tokens & Helpers
+// ----------------------------------------------------------------------------
+
+/// Standard WCAG 2.1 AA contrast ratio threshold for normal text (4.5:1).
+pub const WCAG_AA_NORMAL_TEXT_RATIO: f64 = 4.5;
+
+/// Standard WCAG 2.1 AA contrast ratio threshold for large text / UI components (3.0:1).
+pub const WCAG_AA_LARGE_TEXT_RATIO: f64 = 3.0;
+
+/// Standard WCAG 2.1 AAA contrast ratio threshold for normal text (7.0:1).
+pub const WCAG_AAA_NORMAL_TEXT_RATIO: f64 = 7.0;
+
+/// Contrast ratio calculation using [`Color32`] instances.
+pub fn theme_contrast_ratio_color32(fg: Color32, bg: Color32) -> f64 {
+    theme_contrast_ratio([fg.r(), fg.g(), fg.b()], [bg.r(), bg.g(), bg.b()])
+}
+
+/// Checks whether [`Color32`] foreground and background meet WCAG AA (4.5:1).
+pub fn theme_contrast_ok_color32(fg: Color32, bg: Color32) -> bool {
+    theme_contrast_ratio_color32(fg, bg) >= WCAG_AA_NORMAL_TEXT_RATIO
+}
+
+/// Verifies that all text tokens in the given palette satisfy the WCAG AA contrast threshold (>= 4.5:1).
+pub fn palette_all_text_tokens_aa(palette: &Palette) -> bool {
+    theme_contrast_ok(palette.base_fg, palette.base_bg)
+        && theme_contrast_ok(palette.dim, palette.base_bg)
+        && theme_contrast_ok(palette.red, palette.base_bg)
+        && theme_contrast_ok(palette.green, palette.base_bg)
+        && theme_contrast_ok(palette.blue, palette.base_bg)
+}
+
+/// Verifies that all Dark and Light design-token palettes satisfy WCAG AA contrast.
+pub fn theme_all_palettes_satisfy_aa() -> bool {
+    palette_all_text_tokens_aa(&DARK_PALETTE) && palette_all_text_tokens_aa(&LIGHT_PALETTE)
+}
+
+// ----------------------------------------------------------------------------
+// Typed Keymap Table (Headless macOS UX tokens & bindings)
+// ----------------------------------------------------------------------------
+
+/// Supported keymap preset names in GUI layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum KeymapPreset {
+    /// Default macOS / Beyond Compare keyboard shortcuts.
+    Default,
+    /// Modal Vim-style navigation and editing shortcuts.
+    Vim,
+    /// Visual Studio Code compatible shortcuts.
+    Vscode,
+    /// GNU Emacs compatible keybindings.
+    Emacs,
+}
+
+impl KeymapPreset {
+    /// Canonical identifier for the preset.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Vim => "vim",
+            Self::Vscode => "vscode",
+            Self::Emacs => "emacs",
+        }
+    }
+
+    /// Parses a string into a [`KeymapPreset`], case-insensitively with alias support.
+    pub fn from_name(name: &str) -> Option<Self> {
+        let trimmed = name.trim();
+        if trimmed.eq_ignore_ascii_case("default")
+            || trimmed.eq_ignore_ascii_case("standard")
+            || trimmed.eq_ignore_ascii_case("mac")
+            || trimmed.eq_ignore_ascii_case("macos")
+        {
+            Some(Self::Default)
+        } else if trimmed.eq_ignore_ascii_case("vim") || trimmed.eq_ignore_ascii_case("vi") {
+            Some(Self::Vim)
+        } else if trimmed.eq_ignore_ascii_case("vscode") || trimmed.eq_ignore_ascii_case("code") {
+            Some(Self::Vscode)
+        } else if trimmed.eq_ignore_ascii_case("emacs") {
+            Some(Self::Emacs)
+        } else {
+            None
+        }
+    }
+
+    /// All supported presets.
+    pub const fn all() -> &'static [Self] {
+        &[Self::Default, Self::Vim, Self::Vscode, Self::Emacs]
+    }
+}
+
+/// Typed application actions triggerable via keyboard shortcuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum KeyAction {
+    /// Search / find in active pane (Cmd-F / Ctrl-F / / in vim / C-s in emacs).
+    Find,
+    /// Toggle file / metadata info or inspector panel (Cmd-I / Ctrl-I).
+    ToggleInfo,
+    /// Reset zoom level to default (Cmd-0 / Ctrl-0).
+    ResetZoom,
+    /// Zoom in font size (Cmd-+ / Cmd-=).
+    ZoomIn,
+    /// Zoom out font size (Cmd--).
+    ZoomOut,
+    /// Jump to next difference hunk (F3 / Ctrl-N / ]c in vim).
+    NextDiff,
+    /// Jump to previous difference hunk (Shift-F3 / Ctrl-P / [c in vim).
+    PrevDiff,
+    /// Toggle line numbers / gutter visibility.
+    ToggleLineNumbers,
+    /// Toggle word wrap in text panes.
+    ToggleWrap,
+}
+
+/// Typed keyboard shortcut representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyBinding {
+    /// Target primary key.
+    pub key: egui::Key,
+    /// Requires Command (macOS) or Control (other platforms).
+    pub command: bool,
+    /// Requires Shift modifier.
+    pub shift: bool,
+    /// Requires Alt / Option modifier.
+    pub alt: bool,
+    /// Requires Control modifier specifically (e.g. for Emacs C-x chords).
+    pub ctrl: bool,
+}
+
+impl KeyBinding {
+    /// Creates a Command (or Ctrl on non-Mac) shortcut with the given key.
+    pub const fn cmd(key: egui::Key) -> Self {
+        Self {
+            key,
+            command: true,
+            shift: false,
+            alt: false,
+            ctrl: false,
+        }
+    }
+
+    /// Creates a Command+Shift shortcut with the given key.
+    pub const fn cmd_shift(key: egui::Key) -> Self {
+        Self {
+            key,
+            command: true,
+            shift: true,
+            alt: false,
+            ctrl: false,
+        }
+    }
+
+    /// Creates a Control modifier shortcut with the given key.
+    pub const fn ctrl(key: egui::Key) -> Self {
+        Self {
+            key,
+            command: false,
+            shift: false,
+            alt: false,
+            ctrl: true,
+        }
+    }
+
+    /// Creates a plain, un-modified shortcut with the given key.
+    pub const fn plain(key: egui::Key) -> Self {
+        Self {
+            key,
+            command: false,
+            shift: false,
+            alt: false,
+            ctrl: false,
+        }
+    }
+
+    /// Builder to add Shift modifier.
+    pub const fn with_shift(mut self) -> Self {
+        self.shift = true;
+        self
+    }
+
+    /// Builder to add Alt / Option modifier.
+    pub const fn with_alt(mut self) -> Self {
+        self.alt = true;
+        self
+    }
+
+    /// Tests if this binding matches an input key and modifier state.
+    pub fn matches(&self, key: egui::Key, modifiers: &egui::Modifiers) -> bool {
+        if self.key != key {
+            return false;
+        }
+        let has_cmd = modifiers.command || modifiers.ctrl;
+        if self.command && !has_cmd {
+            return false;
+        }
+        if !self.command && has_cmd && !self.ctrl {
+            return false;
+        }
+        if self.ctrl && !modifiers.ctrl {
+            return false;
+        }
+        if self.shift != modifiers.shift {
+            return false;
+        }
+        if self.alt != modifiers.alt {
+            return false;
+        }
+        true
+    }
+}
+
+const DEFAULT_FIND: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::F)];
+const DEFAULT_INFO: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::I)];
+const DEFAULT_RESET_ZOOM: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::Num0)];
+const DEFAULT_ZOOM_IN: [KeyBinding; 2] = [
+    KeyBinding::cmd(egui::Key::Equals),
+    KeyBinding::cmd(egui::Key::Plus),
+];
+const DEFAULT_ZOOM_OUT: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::Minus)];
+const DEFAULT_NEXT_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3),
+    KeyBinding::ctrl(egui::Key::N),
+];
+const DEFAULT_PREV_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3).with_shift(),
+    KeyBinding::ctrl(egui::Key::P),
+];
+const DEFAULT_TOGGLE_LINE_NUMBERS: [KeyBinding; 1] = [KeyBinding::cmd_shift(egui::Key::L)];
+const DEFAULT_TOGGLE_WRAP: [KeyBinding; 1] = [KeyBinding::cmd_shift(egui::Key::W)];
+
+const VIM_FIND: [KeyBinding; 2] = [
+    KeyBinding::cmd(egui::Key::F),
+    KeyBinding::plain(egui::Key::Slash),
+];
+const VIM_INFO: [KeyBinding; 2] = [
+    KeyBinding::cmd(egui::Key::I),
+    KeyBinding::plain(egui::Key::K),
+];
+const VIM_RESET_ZOOM: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::Num0)];
+const VIM_NEXT_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3),
+    KeyBinding::plain(egui::Key::J),
+];
+const VIM_PREV_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3).with_shift(),
+    KeyBinding::plain(egui::Key::K).with_shift(),
+];
+
+const VSCODE_FIND: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::F)];
+const VSCODE_INFO: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::I)];
+const VSCODE_RESET_ZOOM: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::Num0)];
+const VSCODE_NEXT_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3),
+    KeyBinding::plain(egui::Key::F7),
+];
+const VSCODE_PREV_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3).with_shift(),
+    KeyBinding::plain(egui::Key::F7).with_shift(),
+];
+
+const EMACS_FIND: [KeyBinding; 2] = [
+    KeyBinding::cmd(egui::Key::F),
+    KeyBinding::ctrl(egui::Key::S),
+];
+const EMACS_INFO: [KeyBinding; 2] = [
+    KeyBinding::cmd(egui::Key::I),
+    KeyBinding::ctrl(egui::Key::H),
+];
+const EMACS_RESET_ZOOM: [KeyBinding; 1] = [KeyBinding::cmd(egui::Key::Num0)];
+const EMACS_NEXT_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3),
+    KeyBinding::ctrl(egui::Key::N),
+];
+const EMACS_PREV_DIFF: [KeyBinding; 2] = [
+    KeyBinding::plain(egui::Key::F3).with_shift(),
+    KeyBinding::ctrl(egui::Key::P),
+];
+
+/// Returns the slice of [`KeyBinding`]s registered for an action in the given preset.
+pub fn keymap_bindings(preset: KeymapPreset, action: KeyAction) -> &'static [KeyBinding] {
+    match (preset, action) {
+        (KeymapPreset::Default, KeyAction::Find) => &DEFAULT_FIND,
+        (KeymapPreset::Default, KeyAction::ToggleInfo) => &DEFAULT_INFO,
+        (KeymapPreset::Default, KeyAction::ResetZoom) => &DEFAULT_RESET_ZOOM,
+        (KeymapPreset::Default, KeyAction::ZoomIn) => &DEFAULT_ZOOM_IN,
+        (KeymapPreset::Default, KeyAction::ZoomOut) => &DEFAULT_ZOOM_OUT,
+        (KeymapPreset::Default, KeyAction::NextDiff) => &DEFAULT_NEXT_DIFF,
+        (KeymapPreset::Default, KeyAction::PrevDiff) => &DEFAULT_PREV_DIFF,
+        (KeymapPreset::Default, KeyAction::ToggleLineNumbers) => &DEFAULT_TOGGLE_LINE_NUMBERS,
+        (KeymapPreset::Default, KeyAction::ToggleWrap) => &DEFAULT_TOGGLE_WRAP,
+
+        (KeymapPreset::Vim, KeyAction::Find) => &VIM_FIND,
+        (KeymapPreset::Vim, KeyAction::ToggleInfo) => &VIM_INFO,
+        (KeymapPreset::Vim, KeyAction::ResetZoom) => &VIM_RESET_ZOOM,
+        (KeymapPreset::Vim, KeyAction::ZoomIn) => &DEFAULT_ZOOM_IN,
+        (KeymapPreset::Vim, KeyAction::ZoomOut) => &DEFAULT_ZOOM_OUT,
+        (KeymapPreset::Vim, KeyAction::NextDiff) => &VIM_NEXT_DIFF,
+        (KeymapPreset::Vim, KeyAction::PrevDiff) => &VIM_PREV_DIFF,
+        (KeymapPreset::Vim, KeyAction::ToggleLineNumbers) => &DEFAULT_TOGGLE_LINE_NUMBERS,
+        (KeymapPreset::Vim, KeyAction::ToggleWrap) => &DEFAULT_TOGGLE_WRAP,
+
+        (KeymapPreset::Vscode, KeyAction::Find) => &VSCODE_FIND,
+        (KeymapPreset::Vscode, KeyAction::ToggleInfo) => &VSCODE_INFO,
+        (KeymapPreset::Vscode, KeyAction::ResetZoom) => &VSCODE_RESET_ZOOM,
+        (KeymapPreset::Vscode, KeyAction::ZoomIn) => &DEFAULT_ZOOM_IN,
+        (KeymapPreset::Vscode, KeyAction::ZoomOut) => &DEFAULT_ZOOM_OUT,
+        (KeymapPreset::Vscode, KeyAction::NextDiff) => &VSCODE_NEXT_DIFF,
+        (KeymapPreset::Vscode, KeyAction::PrevDiff) => &VSCODE_PREV_DIFF,
+        (KeymapPreset::Vscode, KeyAction::ToggleLineNumbers) => &DEFAULT_TOGGLE_LINE_NUMBERS,
+        (KeymapPreset::Vscode, KeyAction::ToggleWrap) => &DEFAULT_TOGGLE_WRAP,
+
+        (KeymapPreset::Emacs, KeyAction::Find) => &EMACS_FIND,
+        (KeymapPreset::Emacs, KeyAction::ToggleInfo) => &EMACS_INFO,
+        (KeymapPreset::Emacs, KeyAction::ResetZoom) => &EMACS_RESET_ZOOM,
+        (KeymapPreset::Emacs, KeyAction::ZoomIn) => &DEFAULT_ZOOM_IN,
+        (KeymapPreset::Emacs, KeyAction::ZoomOut) => &DEFAULT_ZOOM_OUT,
+        (KeymapPreset::Emacs, KeyAction::NextDiff) => &EMACS_NEXT_DIFF,
+        (KeymapPreset::Emacs, KeyAction::PrevDiff) => &EMACS_PREV_DIFF,
+        (KeymapPreset::Emacs, KeyAction::ToggleLineNumbers) => &DEFAULT_TOGGLE_LINE_NUMBERS,
+        (KeymapPreset::Emacs, KeyAction::ToggleWrap) => &DEFAULT_TOGGLE_WRAP,
+    }
+}
+
+/// Resolves a key press and modifier state into a [`KeyAction`] under the active preset.
+pub fn keymap_resolve(
+    preset: KeymapPreset,
+    key: egui::Key,
+    modifiers: &egui::Modifiers,
+) -> Option<KeyAction> {
+    const ACTIONS: [KeyAction; 9] = [
+        KeyAction::Find,
+        KeyAction::ToggleInfo,
+        KeyAction::ResetZoom,
+        KeyAction::ZoomIn,
+        KeyAction::ZoomOut,
+        KeyAction::NextDiff,
+        KeyAction::PrevDiff,
+        KeyAction::ToggleLineNumbers,
+        KeyAction::ToggleWrap,
+    ];
+
+    for action in ACTIONS {
+        let bindings = keymap_bindings(preset, action);
+        for binding in bindings {
+            if binding.matches(key, modifiers) {
+                return Some(action);
+            }
+        }
+    }
+    None
+}
+
+/// Returns human-readable shortcut hint text for display in menus or status bars (e.g. "⌘F").
+pub fn keymap_shortcut_hint(preset: KeymapPreset, action: KeyAction) -> &'static str {
+    match (preset, action) {
+        (KeymapPreset::Default, KeyAction::Find) => "⌘F",
+        (KeymapPreset::Default, KeyAction::ToggleInfo) => "⌘I",
+        (KeymapPreset::Default, KeyAction::ResetZoom) => "⌘0",
+        (KeymapPreset::Default, KeyAction::ZoomIn) => "⌘+",
+        (KeymapPreset::Default, KeyAction::ZoomOut) => "⌘-",
+        (KeymapPreset::Default, KeyAction::NextDiff) => "F3",
+        (KeymapPreset::Default, KeyAction::PrevDiff) => "⇧F3",
+        (KeymapPreset::Default, KeyAction::ToggleLineNumbers) => "⇧⌘L",
+        (KeymapPreset::Default, KeyAction::ToggleWrap) => "⇧⌘W",
+
+        (KeymapPreset::Vim, KeyAction::Find) => "⌘F / /",
+        (KeymapPreset::Vim, KeyAction::ToggleInfo) => "⌘I / K",
+        (KeymapPreset::Vim, KeyAction::ResetZoom) => "⌘0",
+        (KeymapPreset::Vim, KeyAction::ZoomIn) => "⌘+",
+        (KeymapPreset::Vim, KeyAction::ZoomOut) => "⌘-",
+        (KeymapPreset::Vim, KeyAction::NextDiff) => "j / F3",
+        (KeymapPreset::Vim, KeyAction::PrevDiff) => "k / ⇧F3",
+        (KeymapPreset::Vim, KeyAction::ToggleLineNumbers) => "⇧⌘L",
+        (KeymapPreset::Vim, KeyAction::ToggleWrap) => "⇧⌘W",
+
+        (KeymapPreset::Vscode, KeyAction::Find) => "⌘F",
+        (KeymapPreset::Vscode, KeyAction::ToggleInfo) => "⌘I",
+        (KeymapPreset::Vscode, KeyAction::ResetZoom) => "⌘0",
+        (KeymapPreset::Vscode, KeyAction::ZoomIn) => "⌘+",
+        (KeymapPreset::Vscode, KeyAction::ZoomOut) => "⌘-",
+        (KeymapPreset::Vscode, KeyAction::NextDiff) => "F7",
+        (KeymapPreset::Vscode, KeyAction::PrevDiff) => "⇧F7",
+        (KeymapPreset::Vscode, KeyAction::ToggleLineNumbers) => "⇧⌘L",
+        (KeymapPreset::Vscode, KeyAction::ToggleWrap) => "⇧⌘W",
+
+        (KeymapPreset::Emacs, KeyAction::Find) => "⌘F / C-s",
+        (KeymapPreset::Emacs, KeyAction::ToggleInfo) => "⌘I / C-h",
+        (KeymapPreset::Emacs, KeyAction::ResetZoom) => "⌘0",
+        (KeymapPreset::Emacs, KeyAction::ZoomIn) => "⌘+",
+        (KeymapPreset::Emacs, KeyAction::ZoomOut) => "⌘-",
+        (KeymapPreset::Emacs, KeyAction::NextDiff) => "C-n",
+        (KeymapPreset::Emacs, KeyAction::PrevDiff) => "C-p",
+        (KeymapPreset::Emacs, KeyAction::ToggleLineNumbers) => "⇧⌘L",
+        (KeymapPreset::Emacs, KeyAction::ToggleWrap) => "⇧⌘W",
+    }
+}
+
+/// Verifies that all required core macOS bindings (Cmd-F, Cmd-I, Cmd-0) are active in `preset`.
+pub fn keymap_has_core_mac_bindings(preset: KeymapPreset) -> bool {
+    let cmd_modifiers = egui::Modifiers {
+        command: true,
+        ..Default::default()
+    };
+    let has_find = keymap_resolve(preset, egui::Key::F, &cmd_modifiers) == Some(KeyAction::Find);
+    let has_info =
+        keymap_resolve(preset, egui::Key::I, &cmd_modifiers) == Some(KeyAction::ToggleInfo);
+    let has_reset =
+        keymap_resolve(preset, egui::Key::Num0, &cmd_modifiers) == Some(KeyAction::ResetZoom);
+    has_find && has_info && has_reset
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1663,5 +2074,118 @@ mod tests {
         assert_eq!(contrast_dim_min_weight(), TYPO_WEIGHT_SEMIBOLD);
         assert_eq!(contrast_gutter_text_role(), TypoRole::Mono);
         assert!(contrast_dim_text_ok());
+    }
+
+    #[test]
+    fn test_wcag_aa_design_token_contrast_all_palettes() {
+        assert!(theme_all_palettes_satisfy_aa());
+        assert!(palette_all_text_tokens_aa(&DARK_PALETTE));
+        assert!(palette_all_text_tokens_aa(&LIGHT_PALETTE));
+        assert!(theme_contrast_ok_color32(
+            Color32::from_rgb(
+                DARK_FG_RGB.first().copied().unwrap_or(0),
+                DARK_FG_RGB.get(1).copied().unwrap_or(0),
+                DARK_FG_RGB.get(2).copied().unwrap_or(0),
+            ),
+            Color32::from_rgb(
+                DARK_BG_RGB.first().copied().unwrap_or(0),
+                DARK_BG_RGB.get(1).copied().unwrap_or(0),
+                DARK_BG_RGB.get(2).copied().unwrap_or(0),
+            ),
+        ));
+        assert!(theme_contrast_ok_color32(
+            Color32::from_rgb(
+                LIGHT_FG_RGB.first().copied().unwrap_or(0),
+                LIGHT_FG_RGB.get(1).copied().unwrap_or(0),
+                LIGHT_FG_RGB.get(2).copied().unwrap_or(0),
+            ),
+            Color32::from_rgb(
+                LIGHT_BG_RGB.first().copied().unwrap_or(0),
+                LIGHT_BG_RGB.get(1).copied().unwrap_or(0),
+                LIGHT_BG_RGB.get(2).copied().unwrap_or(0),
+            ),
+        ));
+    }
+
+    #[test]
+    fn test_keymap_preset_parsing_and_names() {
+        for preset in KeymapPreset::all() {
+            assert_eq!(KeymapPreset::from_name(preset.as_str()), Some(*preset));
+        }
+        assert_eq!(KeymapPreset::from_name("vi"), Some(KeymapPreset::Vim));
+        assert_eq!(KeymapPreset::from_name("code"), Some(KeymapPreset::Vscode));
+        assert_eq!(
+            KeymapPreset::from_name("standard"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(
+            KeymapPreset::from_name("macos"),
+            Some(KeymapPreset::Default)
+        );
+        assert_eq!(KeymapPreset::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn test_keymap_core_mac_bindings_cmd_f_i_0() {
+        for preset in KeymapPreset::all() {
+            assert!(
+                keymap_has_core_mac_bindings(*preset),
+                "Preset {preset:?} must bind Cmd-F, Cmd-I, Cmd-0"
+            );
+        }
+    }
+
+    #[test]
+    fn test_keymap_resolve_shortcuts_across_presets() {
+        let cmd = egui::Modifiers {
+            command: true,
+            ..Default::default()
+        };
+        let plain = egui::Modifiers::default();
+        let shift = egui::Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+
+        // Cmd-F, Cmd-I, Cmd-0 resolve on all presets
+        for preset in KeymapPreset::all() {
+            assert_eq!(
+                keymap_resolve(*preset, egui::Key::F, &cmd),
+                Some(KeyAction::Find)
+            );
+            assert_eq!(
+                keymap_resolve(*preset, egui::Key::I, &cmd),
+                Some(KeyAction::ToggleInfo)
+            );
+            assert_eq!(
+                keymap_resolve(*preset, egui::Key::Num0, &cmd),
+                Some(KeyAction::ResetZoom)
+            );
+        }
+
+        // Vim specific '/' resolves to Find
+        assert_eq!(
+            keymap_resolve(KeymapPreset::Vim, egui::Key::Slash, &plain),
+            Some(KeyAction::Find)
+        );
+
+        // F3 resolves to NextDiff, Shift-F3 to PrevDiff
+        assert_eq!(
+            keymap_resolve(KeymapPreset::Default, egui::Key::F3, &plain),
+            Some(KeyAction::NextDiff)
+        );
+        assert_eq!(
+            keymap_resolve(KeymapPreset::Default, egui::Key::F3, &shift),
+            Some(KeyAction::PrevDiff)
+        );
+    }
+
+    #[test]
+    fn test_keymap_shortcut_hints() {
+        for preset in KeymapPreset::all() {
+            assert!(keymap_shortcut_hint(*preset, KeyAction::Find).contains("⌘F"));
+            assert!(keymap_shortcut_hint(*preset, KeyAction::ToggleInfo).contains("⌘I"));
+            assert_eq!(keymap_shortcut_hint(*preset, KeyAction::ResetZoom), "⌘0");
+        }
     }
 }
