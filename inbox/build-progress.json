@@ -59,7 +59,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-RUN3": "landed 6d5fe4a pushed (CLI 10 cmds exit0, 960x600 gui.png 9765B valid, workspace tests ok, TOP-10 geo-typo gaps, PNG noise reverted)",
     "SWARM-SESS-H": "landed fbbd347 verified+pushed (47 green, clippy 0, fmt clean, banned 0 non-test)",
-    "SWARM-SESSREP": "live, awaiting commit",
+    "SWARM-SESSREP": "WIP breaks reports check (E0432 render_patch_bundle* missing), awaiting swarm fix",
     "SWARM-VCMP-J": "dead no-source-change (only checks/agyx-vcmp-j evidence, unlanded); VFS/compare DWARF healthy via dependent tests",
     "SYNC-E": "landed 225750e verified+pushed (strict: 110 green, clippy 0)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
@@ -68,6 +68,7 @@
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "EXQ3A-round": "landed ab774fc pushed (report + narrow-720-proof.png 720x600 evidence-only)",
     "EXQ3B-fix": "landed 5870ea7 pushed (strict: 712 green any-CWD, fmt clean, clippy -D warnings clean, banned 0, dead_code 0, clippy-allow 0 non-test; FindState::next->advance, HOME_SHOWS_PATH_PICKER const-assert removed)",
-    "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)"
+    "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)",
+    "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2"
   }
 }
