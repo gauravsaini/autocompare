@@ -59,7 +59,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-RUN3": "landed 6d5fe4a pushed (CLI 10 cmds exit0, 960x600 gui.png 9765B valid, workspace tests ok, TOP-10 geo-typo gaps, PNG noise reverted)",
     "SWARM-SESS-H": "landed fbbd347 verified+pushed (47 green, clippy 0, fmt clean, banned 0 non-test)",
-    "SWARM-SESSREP": "round-sessrep live with edge fixtures (symlink-cycle, snapshot, presets, unicode), gui PASS cli FAIL on E0432; lib fix pending",
+    "SWARM-SESSREP": "reports E0432 fixed by swarm; vfs E0063 WalkOptions.refuse_traversal_escape missing in snapshot.rs init (their churn); awaiting fix+commits",
     "SWARM-VCMP-J": "dead no-source-change (only checks/agyx-vcmp-j evidence, unlanded); VFS/compare DWARF healthy via dependent tests",
     "SYNC-E": "landed 225750e verified+pushed (strict: 110 green, clippy 0)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
