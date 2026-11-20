@@ -1,0 +1,14 @@
+warning: unused import: `FolderMerge`
+  --> crates/compare/src/jobs.rs:15:5
+   |
+15 |     FolderMerge, apply_tree_merge_cancellable, plan_tree_merge_cancellable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `SyncPlanner`
+  --> crates/compare/src/jobs.rs:17:19
+   |
+17 | use crate::sync::{SyncPlanner, apply_sync_cancellable, plan_sync_with_compare_cancellable};
+   |                   ^^^^^^^^^^^
+
