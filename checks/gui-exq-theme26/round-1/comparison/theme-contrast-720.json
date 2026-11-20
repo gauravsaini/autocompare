@@ -1,0 +1,89 @@
+{
+  "name": "theme-contrast-720",
+  "intent": "Wave theme26 light-theme narrow-720 contract: the 720px fallback (VIEWPORT_MIN_W x VIEWPORT_MIN_H) reuses the identical light palette — hues are width-independent, so the same AA ratios hold as at 960px. Every light text ink recorded below meets WCAG AA (>= 4.5) on its pane surface. Paint adoption of the *_for() selectors is a later wave (views.rs frozen); this file records the headless contract that the theme26_light_contrast test proves.",
+  "viewport_px": 720,
+  "viewport_min": [720, 450],
+  "light_base": {
+    "fg": [20, 20, 20],
+    "bg": [248, 248, 248],
+    "ratio": 17.35
+  },
+  "panes": {
+    "left": {
+      "fg": [20, 20, 20],
+      "bg": [248, 248, 248],
+      "ratio": 17.35
+    },
+    "right": {
+      "fg": [20, 20, 20],
+      "bg": [248, 248, 248],
+      "ratio": 17.35
+    },
+    "center_gutter": {
+      "ink": "LIGHT_CHANGED_FG",
+      "ink_rgb": [105, 85, 15],
+      "surface": "LIGHT_BG pane",
+      "ratio": 6.8
+    }
+  },
+  "dim": {
+    "rgb": [90, 90, 90],
+    "on_light_bg_ratio": 6.49
+  },
+  "markers": {
+    "red": {
+      "rgb": [180, 20, 20],
+      "on_light_bg_ratio": 6.48
+    },
+    "green": {
+      "rgb": [20, 110, 50],
+      "on_light_bg_ratio": 5.98
+    },
+    "blue": {
+      "rgb": [30, 80, 180],
+      "on_light_bg_ratio": 6.91
+    }
+  },
+  "rows": {
+    "deleted": {
+      "ink": "LIGHT_RED",
+      "ink_rgb": [180, 20, 20],
+      "wash": "LIGHT_DELETED_BG",
+      "wash_rgb": [255, 222, 222],
+      "ratio": 5.49
+    },
+    "inserted": {
+      "ink": "LIGHT_GREEN",
+      "ink_rgb": [20, 110, 50],
+      "wash": "LIGHT_INSERTED_BG",
+      "wash_rgb": [214, 242, 220],
+      "ratio": 5.32
+    },
+    "changed": {
+      "ink": "LIGHT_CHANGED_FG",
+      "ink_rgb": [105, 85, 15],
+      "wash": "LIGHT_CHANGED_BG",
+      "wash_rgb": [255, 242, 204],
+      "ratio": 6.48
+    }
+  },
+  "accent_span": {
+    "ink": "LIGHT_CHANGED_FG",
+    "on_wash_ratio": 6.48,
+    "on_pane_ratio": 6.8
+  },
+  "error_panel": {
+    "ink": "LIGHT_RED",
+    "wash": "LIGHT_ERROR_BG",
+    "wash_rgb": [252, 230, 230],
+    "ratio": 5.77
+  },
+  "min_ratio": 5.32,
+  "assertions": {
+    "all_light_text_aa": true,
+    "min_ratio_at_least_4_5": true,
+    "washes_pale_tints_of_pane": true,
+    "hues_recognizable_on_light": true,
+    "geometry_typography_unchanged": true
+  }
+}

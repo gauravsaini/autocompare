@@ -4,7 +4,7 @@
 //! palette (Dark/Light) that `views.rs` paints with.
 //!
 //! Geometry and typography live here as headless tokens (this wave);
-//! colors below are FROZEN from the COLOR wave — no hue changes.
+//! colors below carry the theme26 light mirrors (single color wave).
 //!
 //! Geometry scale (px): canonical spacing 4/8/12/16/24. Panel
 //! gutters, tree indent and gutter bars all snap to this scale;
@@ -38,13 +38,13 @@
 //! -> Mono; hints, subtitles, counts -> Small; plain labels, buttons
 //! -> Body.
 //!
-//! Color model: the diff accents are fixed (a deleted row reads the
-//! same in light and dark mode, so those colors carry their own
-//! contrast), while the chrome (base text, dim/glyph, red/green/blue
+//! Color model: the diff accents are per-mode washes sharing one hue
+//! family (dark keeps the saturated rows, light remaps to pale washes +
+//! dark inks), while the chrome (base text, dim/glyph, red/green/blue
 //! markers, gutter track) is per-mode so both [`DARK_PALETTE`] and
 //! [`LIGHT_PALETTE`] satisfy WCAG AA via [`theme_contrast_ok`].
 //! Paint picks a side with [`palette`] / `*_for(dark)` using
-//! `ui.visuals().dark_mode`; no color values move in this wave.
+//! `ui.visuals().dark_mode`; this wave adds the light mirrors.
 
 #![forbid(unsafe_code)]
 
@@ -740,6 +740,22 @@ pub const LIGHT_BLUE_RGB: [u8; 3] = [30, 80, 180];
 pub const DARK_TRACK_RGB: [u8; 3] = [48, 48, 48];
 /// Light gutter track fill (decorative, not text).
 pub const LIGHT_TRACK_RGB: [u8; 3] = [225, 225, 225];
+/// Light deleted-row wash (dark-red ink [`LIGHT_RED_RGB`] on top).
+/// Light-mirror of [`DELETED_BG_RGB`]: same red hue, lightness remapped
+/// so the pair passes AA on the near-white pane.
+pub const LIGHT_DELETED_BG_RGB: [u8; 3] = [255, 222, 222];
+/// Light inserted-row wash (dark-green ink [`LIGHT_GREEN_RGB`] on top).
+/// Light-mirror of [`INSERTED_BG_RGB`].
+pub const LIGHT_INSERTED_BG_RGB: [u8; 3] = [214, 242, 220];
+/// Light changed-row wash (dark-amber ink [`LIGHT_CHANGED_FG_RGB`] on top).
+/// Light-mirror of [`CHANGED_BG_RGB`].
+pub const LIGHT_CHANGED_BG_RGB: [u8; 3] = [255, 242, 204];
+/// Light changed-row/span ink on the wash above. Light-mirror of
+/// [`CHANGED_FG_RGB`]: same amber hue, darkened so AA holds on light.
+pub const LIGHT_CHANGED_FG_RGB: [u8; 3] = [105, 85, 15];
+/// Light error-panel wash (text reuses [`LIGHT_RED_RGB`]).
+/// Light-mirror of [`ERROR_BG_RGB`].
+pub const LIGHT_ERROR_BG_RGB: [u8; 3] = [252, 230, 230];
 
 /// Fixed diff deleted foreground paint token.
 pub const DELETED_FG: Color32 = Color32::from_rgb(255, 170, 170);
@@ -777,6 +793,16 @@ pub const LIGHT_BLUE: Color32 = Color32::from_rgb(30, 80, 180);
 pub const DARK_TRACK: Color32 = Color32::from_rgb(48, 48, 48);
 /// Light gutter track paint token.
 pub const LIGHT_TRACK: Color32 = Color32::from_rgb(225, 225, 225);
+/// Light deleted-row wash paint token.
+pub const LIGHT_DELETED_BG: Color32 = Color32::from_rgb(255, 222, 222);
+/// Light inserted-row wash paint token.
+pub const LIGHT_INSERTED_BG: Color32 = Color32::from_rgb(214, 242, 220);
+/// Light changed-row wash paint token.
+pub const LIGHT_CHANGED_BG: Color32 = Color32::from_rgb(255, 242, 204);
+/// Light changed-row/span ink paint token.
+pub const LIGHT_CHANGED_FG: Color32 = Color32::from_rgb(105, 85, 15);
+/// Light error-panel wash paint token.
+pub const LIGHT_ERROR_BG: Color32 = Color32::from_rgb(252, 230, 230);
 
 /// Per-mode chrome: base pair plus the markers that paint on it.
 /// The diff accents stay fixed outside this struct so one deleted row
@@ -849,6 +875,61 @@ pub fn blue_for(dark: bool) -> Color32 {
 /// Gutter track paint token for the active mode.
 pub fn track_for(dark: bool) -> Color32 {
     if dark { DARK_TRACK } else { LIGHT_TRACK }
+}
+
+/// Deleted-row background for the active mode (saturated dark vs pale wash).
+pub fn deleted_bg_for(dark: bool) -> Color32 {
+    if dark { DELETED_BG } else { LIGHT_DELETED_BG }
+}
+
+/// Deleted-row ink for the active mode (pale pink vs reused dark red).
+pub fn deleted_fg_for(dark: bool) -> Color32 {
+    if dark { DELETED_FG } else { LIGHT_RED }
+}
+
+/// Inserted-row background for the active mode (saturated dark vs pale wash).
+pub fn inserted_bg_for(dark: bool) -> Color32 {
+    if dark { INSERTED_BG } else { LIGHT_INSERTED_BG }
+}
+
+/// Inserted-row ink for the active mode (pale mint vs reused dark green).
+pub fn inserted_fg_for(dark: bool) -> Color32 {
+    if dark { INSERTED_FG } else { LIGHT_GREEN }
+}
+
+/// Changed-row background for the active mode (olive dark vs amber wash).
+pub fn changed_bg_for(dark: bool) -> Color32 {
+    if dark { CHANGED_BG } else { LIGHT_CHANGED_BG }
+}
+
+/// Changed-row ink for the active mode (pale gold vs dark amber).
+pub fn changed_fg_for(dark: bool) -> Color32 {
+    if dark { CHANGED_FG } else { LIGHT_CHANGED_FG }
+}
+
+/// Accent span ink for the active mode (pale gold vs reused dark amber).
+pub fn accent_fg_for(dark: bool) -> Color32 {
+    if dark { ACCENT_FG } else { LIGHT_CHANGED_FG }
+}
+
+/// Error-panel wash for the active mode (dark maroon vs pale wash).
+pub fn error_bg_for(dark: bool) -> Color32 {
+    if dark { ERROR_BG } else { LIGHT_ERROR_BG }
+}
+
+/// Error-panel ink for the active mode (pale pink vs reused dark red).
+pub fn error_fg_for(dark: bool) -> Color32 {
+    if dark { DELETED_FG } else { LIGHT_RED }
+}
+
+/// Light diff-accent contract: every light wash/ink pair (plus the span
+/// ink on the pane) meets WCAG AA. Pure; `theme26_light_contrast` proves it.
+pub fn light_diff_accents_aa() -> bool {
+    theme_contrast_ok(LIGHT_RED_RGB, LIGHT_DELETED_BG_RGB)
+        && theme_contrast_ok(LIGHT_GREEN_RGB, LIGHT_INSERTED_BG_RGB)
+        && theme_contrast_ok(LIGHT_CHANGED_FG_RGB, LIGHT_CHANGED_BG_RGB)
+        && theme_contrast_ok(LIGHT_CHANGED_FG_RGB, LIGHT_BG_RGB)
+        && theme_contrast_ok(LIGHT_RED_RGB, LIGHT_ERROR_BG_RGB)
 }
 
 // ----------------------------------------------------------------------------
@@ -1658,6 +1739,41 @@ mod tests {
         assert!(theme_contrast_ok(ACCENT_FG_RGB, DELETED_BG_RGB));
         assert!(theme_contrast_ok(ACCENT_FG_RGB, INSERTED_BG_RGB));
         assert!(theme_contrast_ok(DELETED_FG_RGB, ERROR_BG_RGB));
+    }
+
+    #[test]
+    fn theme26_light_contrast() {
+        // Edge fixture: `checks/gui-exq-theme26/round-1/comparison/theme-contrast-720.json`.
+        // 720px narrow fallback reuses the identical light palette
+        // (width-independent hues); every light text ink below must meet
+        // WCAG AA (>= 4.5) on its pane surface.
+        assert!(theme_contrast_ok(LIGHT_FG_RGB, LIGHT_BG_RGB));
+        assert!(theme_contrast_ok(LIGHT_DIM_RGB, LIGHT_BG_RGB));
+        assert!(theme_contrast_ok(LIGHT_RED_RGB, LIGHT_BG_RGB));
+        assert!(theme_contrast_ok(LIGHT_GREEN_RGB, LIGHT_BG_RGB));
+        assert!(theme_contrast_ok(LIGHT_BLUE_RGB, LIGHT_BG_RGB));
+        assert!(light_diff_accents_aa());
+        assert!(palette_all_text_tokens_aa(&LIGHT_PALETTE));
+        // Washes stay pale tints of the near-white pane (hue, not depth,
+        // carries the signal) while inks stay dark enough for AA.
+        for wash in [
+            LIGHT_DELETED_BG_RGB,
+            LIGHT_INSERTED_BG_RGB,
+            LIGHT_CHANGED_BG_RGB,
+            LIGHT_ERROR_BG_RGB,
+        ] {
+            assert!(wash != LIGHT_BG_RGB);
+            assert!(theme_contrast_ratio(wash, LIGHT_BG_RGB) < 1.5);
+        }
+        // Selectors agree with the consts on both arms.
+        assert_eq!(deleted_bg_for(true), DELETED_BG);
+        assert_eq!(deleted_bg_for(false), LIGHT_DELETED_BG);
+        assert_eq!(inserted_fg_for(true), INSERTED_FG);
+        assert_eq!(inserted_fg_for(false), LIGHT_GREEN);
+        assert_eq!(changed_fg_for(false), LIGHT_CHANGED_FG);
+        assert_eq!(accent_fg_for(false), LIGHT_CHANGED_FG);
+        assert_eq!(error_bg_for(false), LIGHT_ERROR_BG);
+        assert_eq!(error_fg_for(false), LIGHT_RED);
     }
 
     #[test]

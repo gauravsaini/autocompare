@@ -30,7 +30,7 @@ fn main() {
     }
 
     if let Some(path_str) = screenshot_target {
-        let mode = match screenshot::screenshot_mode_from_args(&args) {
+        let mode = match app::App::resolve_screenshot_mode(&args) {
             Ok(mode) => mode,
             Err(err) => {
                 eprintln!("autocompare-gui: {err}");

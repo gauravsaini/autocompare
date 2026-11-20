@@ -1732,6 +1732,44 @@ impl App {
         }
     }
 
+    /// Theme26 screenshot theme: `--screenshot` renders the light fixture
+    /// by default so `after.png` proves the light theme at identical
+    /// geometry. An explicit `--screenshot-mode <dark|light>` wins;
+    /// otherwise `AUTOCOMPARE_DARK_REF` keeps the dark reference.
+    /// Pure over `dark_ref` except the thin env read; headless-tested.
+    pub fn resolve_screenshot_mode(
+        args: &[String],
+    ) -> Result<crate::screenshot::FixtureMode, String> {
+        Self::resolve_screenshot_mode_with_env(args, Self::dark_ref_from_env())
+    }
+
+    /// Env half of [`App::resolve_screenshot_mode`]: true on `1`/`true`/`dark`
+    /// (case-insensitive, trimmed), false when missing/blank/unknown.
+    fn dark_ref_from_env() -> bool {
+        match std::env::var("AUTOCOMPARE_DARK_REF") {
+            Ok(raw) => {
+                let lowered = raw.trim().to_ascii_lowercase();
+                lowered == "1" || lowered == "true" || lowered == "dark"
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Pure core of [`App::resolve_screenshot_mode`] (test seam: no env read).
+    fn resolve_screenshot_mode_with_env(
+        args: &[String],
+        dark_ref: bool,
+    ) -> Result<crate::screenshot::FixtureMode, String> {
+        let mode = crate::screenshot::screenshot_mode_from_args(args)?;
+        if args.iter().any(|arg| arg == "--screenshot-mode") {
+            return Ok(mode);
+        }
+        if dark_ref {
+            return Ok(crate::screenshot::FixtureMode::Dark);
+        }
+        Ok(crate::screenshot::FixtureMode::Light)
+    }
+
     /// Current font zoom step (clamped to `crate::theme::ZOOM_LEVELS`).
     pub fn zoom_level(&self) -> i8 {
         crate::theme::clamp_zoom_level(self.zoom_level)
@@ -8800,6 +8838,54 @@ mod tests {
         assert!(!App::dark_mode_from_storage(Some("0")));
         assert!(!App::dark_mode_from_storage(Some(" false ")));
         assert!(!App::dark_mode_from_storage(Some("light")));
+    }
+
+    #[test]
+    fn theme26_screenshot_mode_defaults_light() {
+        let args = vec![
+            String::from("autocompare-gui"),
+            String::from("--screenshot"),
+            String::from("x.png"),
+        ];
+        assert_eq!(
+            App::resolve_screenshot_mode_with_env(&args, false),
+            Ok(crate::screenshot::FixtureMode::Light)
+        );
+    }
+
+    #[test]
+    fn theme26_screenshot_mode_explicit_flag_wins() {
+        let dark_args = vec![
+            String::from("autocompare-gui"),
+            String::from("--screenshot"),
+            String::from("x.png"),
+            String::from("--screenshot-mode"),
+            String::from("dark"),
+        ];
+        assert_eq!(
+            App::resolve_screenshot_mode_with_env(&dark_args, false),
+            Ok(crate::screenshot::FixtureMode::Dark)
+        );
+        // Explicit light wins even when the dark-ref env is set.
+        let light_args = vec![
+            String::from("autocompare-gui"),
+            String::from("--screenshot-mode"),
+            String::from("light"),
+        ];
+        assert_eq!(
+            App::resolve_screenshot_mode_with_env(&light_args, true),
+            Ok(crate::screenshot::FixtureMode::Light)
+        );
+    }
+
+    #[test]
+    fn theme26_screenshot_mode_env_dark_ref() {
+        let args = vec![String::from("autocompare-gui")];
+        assert_eq!(
+            App::resolve_screenshot_mode_with_env(&args, true),
+            Ok(crate::screenshot::FixtureMode::Dark)
+        );
+        assert!(!App::dark_ref_from_env());
     }
 
     #[test]
