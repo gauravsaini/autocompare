@@ -10,7 +10,7 @@
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
     "SYNC-E": "landed 225750e verified+pushed (strict: 110 green, clippy 0)",
-    "MEDIA-F": "running (diff OWNS, task-389 tests)",
+    "MEDIA-F": "done (diff+compare both landed)",
     "CLI-G": "process ended, 5 files M uncommitted preserved, rescue after E/F/D3 land",
     "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
     "EXQ-TYPO": "viewmodel zone-role helpers (views_hex+views_table+viewmodel M)",
@@ -22,6 +22,7 @@
     "EXQ-GEO2": "landed 664c506 verified+pushed (strict: 678 green, fmt+clippy 0)",
     "LOCALRUN-early": "landed a6bb8e8 pushed (docs-only, zero source)",
     "BINARY-early": "landed c8b491e pushed + draft release v0.5.0-early (tarballs attached)",
-    "MEDIA-F-diff": "landed 3e3352b verified+pushed (strict: 203 green, fmt+clippy 0)"
+    "MEDIA-F-diff": "landed 3e3352b verified+pushed (strict: 203 green, fmt+clippy 0)",
+    "MEDIA-F-compare": "landed fbcbc88 verified+pushed (strict: 110 green, clippy 0)"
   }
 }
