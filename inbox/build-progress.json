@@ -53,13 +53,13 @@
     "SWARM-MEDIA": "landed+pushed 8f8bb84 (strict: 333 green, fmt/clippy per gates clean; 48 unwired helpers under 60 allows disclosed as wiring debt, tests cover them)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
-    "SWARM-PARITY": "internal swarm live (text-merge + folder-sync + verifier + monitor, gates G1-G7, WIP)",
+    "SWARM-PARITY": "round-1 evidence live, merge.rs syntax fixed, check clean, awaiting commit",
     "SWARM-REP-H": "rescued+landed 701f0a4 pushed (dead swarm round-6 WIP: sbs row classes, bundle parity; 22 green, clippy 0, fmt clean; 4 over-pinned asserts corrected to renderer contract)",
     "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-RUN3": "landed 6d5fe4a pushed (CLI 10 cmds exit0, 960x600 gui.png 9765B valid, workspace tests ok, TOP-10 geo-typo gaps, PNG noise reverted)",
     "SWARM-SESS-H": "landed fbbd347 verified+pushed (47 green, clippy 0, fmt clean, banned 0 non-test)",
-    "SWARM-SESSREP": "internal swarm live (sessions-dev + reports-dev + vfs-dev + verifier + monitor)",
+    "SWARM-SESSREP": "live, awaiting commit",
     "SWARM-VCMP-J": "dead no-source-change (only checks/agyx-vcmp-j evidence, unlanded); VFS/compare DWARF healthy via dependent tests",
     "SYNC-E": "landed 225750e verified+pushed (strict: 110 green, clippy 0)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
@@ -67,6 +67,7 @@
     "VFS-D6": "landed 3164bba verified+pushed (strict: 23 green, clippy 0)",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "EXQ3A-round": "landed ab774fc pushed (report + narrow-720-proof.png 720x600 evidence-only)",
-    "EXQ3B-fix": "landed 5870ea7 pushed (strict: 712 green any-CWD, fmt clean, clippy -D warnings clean, banned 0, dead_code 0, clippy-allow 0 non-test; FindState::next->advance, HOME_SHOWS_PATH_PICKER const-assert removed)"
+    "EXQ3B-fix": "landed 5870ea7 pushed (strict: 712 green any-CWD, fmt clean, clippy -D warnings clean, banned 0, dead_code 0, clippy-allow 0 non-test; FindState::next->advance, HOME_SHOWS_PATH_PICKER const-assert removed)",
+    "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)"
   }
 }
