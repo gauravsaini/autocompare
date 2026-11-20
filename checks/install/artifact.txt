@@ -1,0 +1,1 @@
+-rw-r--r--@ 1 ektasaini  staff   4.9M Nov 21 01:55 dist/autocompare-gui-0.5.0-macos-arm64.tar.gz
