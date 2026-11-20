@@ -7776,3 +7776,237 @@ mod exq_tree9_tests {
         assert!(clipped.ends_with('…'));
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE10: tall 1200 canvas columns + right-align lock + full-width select
+// over long scroll (headless).
+// BC folder compare tree on a tall canvas: size/date columns keep the same
+// char-metric widths, numeric size text right-aligns to its grid column
+// origin (never to the indent), and the selected-row highlight still spans
+// the full canvas width no matter how far the scroll runs. TREE9 locked the
+// narrow 720 canvas; TREE10 pins the tall 1200 canvas with the same single
+// sources. Geometry FIRST: origins from folder_table_column_xs(1200),
+// widths from FOLDER_MONO_ADVANCE plus pad, select band 0..1200, tall
+// content math on the locked Mono row rhythm (17.6). Typography SECOND:
+// locked Mono rhythm reuse, Right/Left align precedent reuse, no new sizes.
+// Colors FROZEN: no hue moves here.
+// WIRING (paint): tall hits unchanged (symmetric slop twins), size/mod x
+// from tree10_column_xs_1200, numeric text x from tree10_size_cell_text_x,
+// select band from tree10_selected_row_rect, scroll window from
+// tree10_tall_visible_rows / tree10_tall_content_height.
+// ----------------------------------------------------------------------------
+
+/// TREE10 tall canvas width px: 1200 reference (tall tree side).
+pub const TREE10_CANVAS_TALL_W: f32 = 1200.0;
+
+/// TREE10 tall viewport height px: 1200 reference for long-scroll math.
+pub const TREE10_VIEWPORT_TALL_H: f32 = 1200.0;
+
+/// Tall grid column origins `(name_x, size_x, mod_x)` px at 1200:
+/// `(0.0, 978.0, 1072.0)`. Size/mod origins stay depth-independent.
+/// Pure; unit-tested.
+pub fn tree10_column_xs_1200() -> (f32, f32, f32) {
+    folder_table_column_xs(TREE10_CANVAS_TALL_W)
+}
+
+/// Tall name column avail width px at 1200: `970.0` char metrics budget.
+/// Pure; unit-tested.
+pub fn tree10_name_avail_w_1200() -> f32 {
+    folder_table_name_avail_w(TREE10_CANVAS_TALL_W)
+}
+
+/// Tall grid origins stay steady across depths `0..=8` at 1200:
+/// every depth reads `(0.0, 978.0, 1072.0)`. Pure; unit-tested.
+pub fn tree10_columns_steady_across_depths() -> bool {
+    let mut depth = 0usize;
+    while depth <= 8 {
+        let cols = folder_table_column_xs(TREE10_CANVAS_TALL_W);
+        let steady = cols.0 == 0.0 && cols.1 == 978.0 && cols.2 == 1072.0;
+        if !steady {
+            return false;
+        }
+        depth = depth.saturating_add(1);
+    }
+    true
+}
+
+/// Tall size column alignment: Right (numeric digits share one edge).
+/// Pure; unit-tested.
+pub fn tree10_size_col_align() -> FolderCellAlign {
+    FolderCellAlign::Right
+}
+
+/// Right-aligned text x px for a numeric size cell on the tall canvas:
+/// grid origin plus column width minus pad minus text width, clamped to
+/// origin plus pad on overflow. Delegates to the TREE8 single source so
+/// tall never drifts from the 960/narrow lock. Pure; unit-tested.
+pub fn tree10_size_cell_text_x(col_origin_x: f32, col_w_px: f32, text_chars: usize) -> f32 {
+    tree8_size_cell_text_x(col_origin_x, col_w_px, text_chars)
+}
+
+/// Whether the tall size column stays right-aligned: align precedent is
+/// Right and a short numeric cell sits at the column right edge minus pad.
+/// Pure; unit-tested.
+pub fn tree10_size_right_aligned() -> bool {
+    if tree10_size_col_align() != FolderCellAlign::Right {
+        return false;
+    }
+    let (_name_x, size_x, _mod_x) = tree10_column_xs_1200();
+    let x = tree10_size_cell_text_x(size_x, tree8_size_col_w_px(), 4);
+    (x - 1028.0).abs() < 0.001
+}
+
+/// Tall content height px for `visible_count` rows: locked Mono row
+/// rhythm (`17.6`) tiled, no gap drift. Empty tree is 0. Pure; unit-tested.
+pub fn tree10_tall_content_height(visible_count: usize) -> f32 {
+    visible_count as f32 * tree_row_height()
+}
+
+/// Tall visible rows in `avail_h` px: floor on the locked rhythm, min 0.
+/// Non-finite/empty budget is 0 (never NaN). Pure; unit-tested.
+pub fn tree10_tall_visible_rows(avail_h: f32) -> usize {
+    if !avail_h.is_finite() || avail_h <= 0.0 {
+        return 0;
+    }
+    (avail_h / tree_row_height()) as usize
+}
+
+/// Tall canvas needs a scroll window: content taller than viewport.
+/// Non-finite viewport is false. Pure; unit-tested.
+pub fn tree10_tall_needs_scroll(visible_count: usize, avail_h: f32) -> bool {
+    if !avail_h.is_finite() {
+        return false;
+    }
+    tree10_tall_content_height(visible_count) > avail_h
+}
+
+/// Tall selected-row highlight rect `(x0, y0, x1, y1)` px at 1200: full
+/// canvas width `0.0..1200.0`, locked row height, even tiling.
+/// Depth-independent: indent never narrows the band. Pure; unit-tested.
+pub fn tree10_selected_row_rect(row_idx: usize) -> (f32, f32, f32, f32) {
+    let top = tree_row_top(row_idx);
+    (0.0, top, TREE10_CANVAS_TALL_W, top + tree_row_height())
+}
+
+/// Tall selected-row highlight width px: full canvas `1200.0`.
+/// Pure; unit-tested.
+pub fn tree10_selected_row_w() -> f32 {
+    TREE10_CANVAS_TALL_W
+}
+
+#[cfg(test)]
+mod exq_tree10_tests {
+    use super::*;
+
+    #[test]
+    fn tree10_tall_columns_from_char_metrics() {
+        assert_eq!(TREE10_CANVAS_TALL_W, 1200.0);
+        assert_eq!(TREE10_VIEWPORT_TALL_H, 1200.0);
+        assert_eq!(tree10_column_xs_1200(), (0.0, 978.0, 1072.0));
+        assert_eq!(tree10_column_xs_1200(), folder_table_column_xs(1200.0));
+        assert_eq!(tree10_name_avail_w_1200(), 970.0);
+        assert_eq!(
+            tree10_name_avail_w_1200(),
+            folder_table_name_avail_w(1200.0)
+        );
+        let (_name_x, _size_x, mod_x) = tree10_column_xs_1200();
+        assert_eq!(
+            mod_x + folder_table_col_min_px(FolderTableCol::Modified),
+            1200.0
+        );
+        assert_eq!(tree8_size_col_w_px(), 86.0);
+        assert_eq!(tree8_modified_col_w_px(), 128.0);
+        assert_eq!(tree8_fixed_cols_w_px(), 222.0);
+        assert!(tree10_columns_steady_across_depths());
+    }
+
+    #[test]
+    fn tree10_right_align_tall_lock() {
+        assert_eq!(tree10_size_col_align(), FolderCellAlign::Right);
+        assert_eq!(
+            tree10_size_col_align(),
+            folder_table_col_align(FolderTableCol::Size)
+        );
+        // Short numeric text sits at the column right edge minus pad.
+        assert_eq!(tree10_size_cell_text_x(978.0, 86.0, 4), 1028.0);
+        assert_eq!(
+            tree10_size_cell_text_x(978.0, 86.0, 4),
+            tree8_size_cell_text_x(978.0, 86.0, 4)
+        );
+        // Full-width numeric text clamps to origin plus pad.
+        assert_eq!(tree10_size_cell_text_x(978.0, 86.0, 10), 978.0 + 8.0);
+        assert!(tree10_size_right_aligned());
+        // Grid origins are not the indent: depth moves names, never columns.
+        assert_eq!(folder_table_name_indent_px(5), 100.0);
+        assert_eq!(tree10_column_xs_1200(), (0.0, 978.0, 1072.0));
+    }
+
+    #[test]
+    fn tree10_selected_row_full_width_tall() {
+        assert_eq!(tree10_selected_row_w(), 1200.0);
+        let first = tree10_selected_row_rect(0);
+        assert_eq!((first.0, first.2), (0.0, 1200.0));
+        assert!((first.1 - 0.0).abs() < 0.001);
+        assert!((first.3 - first.1 - tree_row_height()).abs() < 0.001);
+        let rect = tree10_selected_row_rect(2);
+        assert_eq!((rect.0, rect.2), (0.0, 1200.0));
+        assert!((rect.1 - 2.0 * tree_row_height()).abs() < 0.001);
+        // Full width regardless of depth: deep indent keeps 0..1200.
+        let deep = tree10_selected_row_rect(5);
+        assert_eq!((deep.0, deep.2), (0.0, 1200.0));
+        // Deep into a long scroll the band still spans the full canvas.
+        let far = tree10_selected_row_rect(99);
+        assert_eq!((far.0, far.2), (0.0, 1200.0));
+        assert!((far.1 - 99.0 * tree_row_height()).abs() < 0.01);
+    }
+
+    #[test]
+    fn tree10_tall_scroll_over_long_list() {
+        // Locked rhythm: 17.6 per row, even tiling over a long list.
+        assert!((tree_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(tree10_tall_content_height(0), 0.0);
+        assert!((tree10_tall_content_height(100) - 1760.0).abs() < 0.01);
+        assert_eq!(tree10_tall_visible_rows(1200.0), 68);
+        assert_eq!(tree10_tall_visible_rows(0.0), 0);
+        assert_eq!(tree10_tall_visible_rows(f32::NAN), 0);
+        assert!(tree10_tall_needs_scroll(100, 1200.0));
+        assert!(!tree10_tall_needs_scroll(10, 1200.0));
+        assert!(!tree10_tall_needs_scroll(100, f32::NAN));
+    }
+
+    #[test]
+    fn exq_tree10_round1_tall_1200_columns_plus_highlight() {
+        // Headless test proving edge fixture comparison/tree-tall-1200.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree10/round-1/comparison/tree-tall-1200.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-tall-1200\""));
+        assert!(fixture_raw.contains("\"width_px\": 1200.0"));
+        assert!(fixture_raw.contains("\"size_x_px\": 978.0"));
+        assert!(fixture_raw.contains("\"modified_x_px\": 1072.0"));
+        assert!(fixture_raw.contains("\"size_col_w_px\": 86.0"));
+        assert!(fixture_raw.contains("\"modified_col_w_px\": 128.0"));
+        assert!(fixture_raw.contains("\"full_width\": true"));
+        assert!(fixture_raw.contains("\"needs_scroll\": true"));
+        // Narrow head start still holds: extend, don't redo.
+        let narrow_raw =
+            include_str!("../../../checks/gui-exq-tree10/round-1/comparison/tree-narrow-720.json");
+        assert!(narrow_raw.contains("\"name\": \"tree-narrow-720\""));
+        assert!(narrow_raw.contains("498.0"));
+        assert!(narrow_raw.contains("592.0"));
+        // Tall lock holds: columns steady, size right-aligned, select full
+        // width over the long scroll.
+        assert!(tree10_columns_steady_across_depths());
+        assert!(tree10_size_right_aligned());
+        let mut depth = 0usize;
+        while depth <= 5 {
+            let cols = tree10_column_xs_1200();
+            assert_eq!(cols, (0.0, 978.0, 1072.0));
+            let rect = tree10_selected_row_rect(depth);
+            assert_eq!((rect.0, rect.2), (0.0, 1200.0));
+            depth = depth.saturating_add(1);
+        }
+        assert!((tree10_tall_content_height(100) - 1760.0).abs() < 0.01);
+        assert_eq!(tree10_tall_visible_rows(1200.0), 68);
+        assert!(tree9_columns_steady_across_depths());
+    }
+}

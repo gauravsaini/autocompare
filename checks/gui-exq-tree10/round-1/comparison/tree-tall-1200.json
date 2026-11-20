@@ -1,0 +1,54 @@
+{
+  "name": "tree-tall-1200",
+  "intent": "Tall 1200 canvas tree: stable size/date column widths over tall canvas, right-aligned size text over long scroll, selected-row full-width highlight tall",
+  "width_px": 1200.0,
+  "height_px": 1200.0,
+  "char_metrics": {
+    "mono_advance_px": 7.0,
+    "cell_pad_x_px": 8.0,
+    "size_chars": 10,
+    "modified_chars": 16
+  },
+  "columns_1200": {
+    "name_x_px": 0.0,
+    "size_x_px": 978.0,
+    "modified_x_px": 1072.0,
+    "name_avail_w_px": 970.0,
+    "size_col_w_px": 86.0,
+    "modified_col_w_px": 128.0,
+    "fixed_trailing_w_px": 222.0,
+    "canvas_right_edge_px": 1200.0
+  },
+  "right_align": {
+    "size_align": "Right",
+    "modified_align": "Left",
+    "size_origin_x_px": 978.0,
+    "size_col_w_px": 86.0,
+    "size_text_x_4chars_px": 1028.0,
+    "size_right_edge_px": 1064.0,
+    "modified_right_edge_px": 1200.0,
+    "grid_origin_not_indent": true
+  },
+  "tall_scroll": {
+    "row_height_px": 17.6,
+    "rows": 100,
+    "content_h_px": 1760.0,
+    "viewport_h_px": 1200.0,
+    "visible_rows": 68,
+    "needs_scroll": true
+  },
+  "label_budget": {
+    "advance_px": 7.0,
+    "max_chars_depth0_at_1200": 132,
+    "max_chars_depth2_at_1200": 129,
+    "max_chars_depth5_at_1200": 124
+  },
+  "selected_row": {
+    "span_x0_px": 0.0,
+    "span_x1_px": 1200.0,
+    "full_width": true,
+    "row_height_px": 17.6,
+    "depth_independent": true
+  },
+  "notes": "folder_table_column_xs(1200.0) -> (0.0, 978.0, 1072.0); 1072.0+128.0=1200.0; size text x = 978+86-8-4*7=1028.0 right-aligned to grid origin; tall 100 rows * 17.6 = 1760.0 > 1200 viewport, 68 visible; selected-row band spans 0..1200 regardless of depth"
+}
