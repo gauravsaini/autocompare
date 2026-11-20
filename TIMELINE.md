@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-theme26 light theme
+
+1. **Light Theme (single color wave, geometry-typo identical)**: theme.rs LIGHT_DELETED_BG/INSERTED_BG/CHANGED_BG/CHANGED_FG/ERROR_BG mirrors + deleted/inserted/changed/accent/error for(dark) helpers + light_diff_accents_aa; app.rs resolve_screenshot_mode (default Light, --screenshot-mode wins, AUTOCOMPARE_DARK_REF keeps dark); main.rs screenshot dispatch. pxdiff before vs after: 390933 of 576000 DIFFERENT bbox (0,0)-(959,595); dark-ref IDENTICAL to before. Edge theme-contrast-720.json AA 17.35/6.49/6.48/5.98/6.91 min 5.32.
+2. **Tests** (before -> after): autocompare-gui 1050 -> 1054 green (including theme26_light_contrast + 3 resolver tests); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; geometric signals unchanged; colors 33 -> 38 justified light-mirrors.
+3. **Files changed**: crates/gui/src/theme.rs, crates/gui/src/app.rs, crates/gui/src/main.rs, checks/gui-exq-theme26/**, TIMELINE.md.
+
 ## UPDATED ON : 2026-11-20
 
 ### Feature (2026-11-20) — folder-sync/merge and text/merge editor feature parity
