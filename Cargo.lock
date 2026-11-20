@@ -499,9 +499,11 @@ dependencies = [
 name = "autocompare-diff"
 version = "0.5.0"
 dependencies = [
+ "flate2",
  "png",
  "symphonia-bundle-mp3",
  "symphonia-core",
+ "zip",
 ]
 
 [[package]]
