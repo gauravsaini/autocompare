@@ -7,6 +7,10 @@
     "AGYX-A-reports": "landed",
     "AGYX-B-sessions": "landed",
     "AGYX-C-diff": "landed",
-    "round-7-verify": "queued"
+    "round-7-verify": "running (sess-local-r7, read-only)",
+    "VFS-D": "retry running (sess-vfs-d2 opencode, agyx backend fail -> fallback)",
+    "SYNC-E": "running (agyx-e-sync)",
+    "MEDIA-F": "running (agyx-f-media)",
+    "CLI-G": "running (agyx-g-cli)"
   }
 }
