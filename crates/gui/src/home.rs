@@ -477,6 +477,293 @@ impl SessionHistory {
 }
 
 // ----------------------------------------------------------------------------
+// Live multi-session store (Wave BV-SES-MODEL): khule compares, record nahi.
+// `SessionSnapshot` / `SessionHistory` precedent reuse: trim/stamp/age wahi
+// semantics; history record hai (reopen ke liye), ye live hai (tabs ke liye).
+// Paint (views.rs, Wave 3) isko read-only dikhata hai; transitions pure
+// headless hain, unknown id graceful no-op hai.
+// ----------------------------------------------------------------------------
+
+/// Ek khula compare session: kind se alag instance (do Text compares ek saath
+/// khul sakte hain). `title` tab label hai (file stem ya folder base, trimmed);
+/// khaali paths par `"{Kind} {id}"` fallback — label kabhi khaali nahi.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Session {
+    /// Ever-increasing id, reuse kabhi nahi (band ke baad bhi nahi).
+    pub id: u64,
+    /// Session type (Text/Folder/...; Home kabhi session nahi).
+    pub kind: Tab,
+    /// Tab label: file stem ya folder base, trimmed.
+    pub title: String,
+    /// Left path (trimmed).
+    pub left: String,
+    /// Right path (trimmed).
+    pub right: String,
+    /// Base path (three-way par, warna khaali; trimmed).
+    pub base: String,
+    /// Us session ka find/scroll cursor.
+    pub cursor: usize,
+    /// Compare ke baad model stale hua ya nahi (v1 me open par false).
+    pub dirty: bool,
+    /// Save waqt (secs, 0 = unknown; `SessionSnapshot` precedent).
+    pub saved_at_secs: u64,
+}
+
+/// Tab label derive karta hai: `left` (khaali par `right`) ka file-stem ya
+/// folder-base; dono khaali par `"{Kind} {id}"` fallback. Pure.
+pub fn session_title_for(kind: Tab, left: &str, right: &str, id: u64) -> String {
+    let picked = if !left.trim().is_empty() {
+        left.trim()
+    } else if !right.trim().is_empty() {
+        right.trim()
+    } else {
+        return format!("{} {id}", kind.title());
+    };
+    let slashy = picked.replace('\\', "/");
+    let no_trail = slashy.trim_end_matches('/');
+    if no_trail.is_empty() {
+        return format!("{} {id}", kind.title());
+    }
+    let seg = match no_trail.rsplit_once('/') {
+        Some((_, tail)) => tail,
+        None => no_trail,
+    };
+    let stem = match seg.rsplit_once('.') {
+        Some((head, _)) if !head.is_empty() => head,
+        _ => seg,
+    };
+    if stem.trim().is_empty() {
+        format!("{} {id}", kind.title())
+    } else {
+        stem.to_string()
+    }
+}
+
+impl Session {
+    /// Session banata hai; paths trim hote hain, title derive hota hai,
+    /// dirty false, waqt unknown (0). Stamp ke liye `with_saved_at` lagao.
+    /// (`SessionSnapshot::new` precedent + id title fallback ke liye.)
+    pub fn new(
+        id: u64,
+        kind: Tab,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        base: impl Into<String>,
+        cursor: usize,
+    ) -> Self {
+        let left: String = left.into();
+        let right: String = right.into();
+        let title = session_title_for(kind, &left, &right, id);
+        Self {
+            id,
+            kind,
+            title,
+            left: left.trim().to_string(),
+            right: right.trim().to_string(),
+            base: base.into().trim().to_string(),
+            cursor,
+            dirty: false,
+            saved_at_secs: 0,
+        }
+    }
+
+    /// Save waqt lagakar wapas deta hai (builder; purana nahi badalta).
+    /// (`SessionSnapshot::with_saved_at` precedent.)
+    pub fn with_saved_at(mut self, now_secs: u64) -> Self {
+        self.saved_at_secs = now_secs;
+        self
+    }
+
+    /// Save ke baad guzra waqt (secs). Unknown waqt ya ulta clock par `None`.
+    /// (`SessionSnapshot::age_secs` precedent.)
+    pub fn age_secs(&self, now_secs: u64) -> Option<u64> {
+        if self.saved_at_secs == 0 || now_secs < self.saved_at_secs {
+            return None;
+        }
+        Some(now_secs - self.saved_at_secs)
+    }
+
+    /// Row timestamp text: guzra waqt ka relative label, unknown par `None`.
+    /// (`SessionSnapshot::age_label` precedent, wahi `recent_age_label`.)
+    pub fn age_label(&self, now_secs: u64) -> Option<String> {
+        self.age_secs(now_secs).map(recent_age_label)
+    }
+}
+
+/// Live multi-session store (history se alag: ye live hai, wo record hai).
+/// Transitions T1-T7 pure headless hain; unknown id par no-op false milta hai.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionList {
+    sessions: Vec<Session>,
+    active: Option<u64>,
+    next_id: u64,
+}
+
+impl SessionList {
+    /// Khaali store (koi session nahi, active `None` = launcher view).
+    pub fn new() -> Self {
+        Self {
+            sessions: Vec::new(),
+            active: None,
+            next_id: 0,
+        }
+    }
+
+    /// T1: session kholta hai — naya id, active wahi, dirty false. Home kind
+    /// par no-op `None` (id consume nahi hota). Cap full par sabse purani
+    /// INACTIVE session girti hai, active kabhi auto-close nahi hota.
+    pub fn open(
+        &mut self,
+        kind: Tab,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        base: impl Into<String>,
+    ) -> Option<u64> {
+        if kind == Tab::Home {
+            return None;
+        }
+        if self.sessions.len() >= HOME_RECENT_MAX {
+            let drop_pos = self
+                .sessions
+                .iter()
+                .position(|item| Some(item.id) != self.active);
+            if let Some(pos) = drop_pos {
+                self.sessions.remove(pos);
+            }
+        }
+        let id = self.next_id;
+        self.next_id = id.wrapping_add(1);
+        self.sessions
+            .push(Session::new(id, kind, left, right, base, 0));
+        self.active = Some(id);
+        Some(id)
+    }
+
+    /// T2: sirf wahi session band hota hai. Active band hua to naya active
+    /// left-neighbour (na ho to right-neighbour); khaali par `None`.
+    /// Unknown id par no-op false.
+    pub fn close(&mut self, id: u64) -> bool {
+        let pos = match self.sessions.iter().position(|item| item.id == id) {
+            Some(pos) => pos,
+            None => return false,
+        };
+        self.sessions.remove(pos);
+        if self.active == Some(id) {
+            self.active = if self.sessions.is_empty() {
+                None
+            } else if pos > 0 {
+                self.sessions.get(pos - 1).map(|item| item.id)
+            } else {
+                self.sessions.first().map(|item| item.id)
+            };
+        }
+        true
+    }
+
+    /// T3: active badalta hai; unknown id par no-op false.
+    pub fn switch(&mut self, id: u64) -> bool {
+        if self.sessions.iter().any(|item| item.id == id) {
+            self.active = Some(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// T4: sirf wahi session rehta hai, active wahi; unknown id par no-op.
+    pub fn close_others(&mut self, id: u64) -> bool {
+        if self.sessions.iter().any(|item| item.id == id) {
+            self.sessions.retain(|item| item.id == id);
+            self.active = Some(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// T5: session ke paths sync karta hai (trimmed, title untouched).
+    /// Switch bridge caller compare/type ke baad chalata hai. Unknown id
+    /// par no-op false.
+    pub fn update_paths(
+        &mut self,
+        id: u64,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        base: impl Into<String>,
+    ) -> bool {
+        match self.sessions.iter_mut().find(|item| item.id == id) {
+            Some(item) => {
+                item.left = left.into().trim().to_string();
+                item.right = right.into().trim().to_string();
+                item.base = base.into().trim().to_string();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// T6: session ka cursor save karta hai. Unknown id par no-op false.
+    pub fn update_cursor(&mut self, id: u64, cursor: usize) -> bool {
+        match self.sessions.iter_mut().find(|item| item.id == id) {
+            Some(item) => {
+                item.cursor = cursor;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// T7: tab label badalta hai (trimmed); blank par no-op false.
+    /// Future double-click rename ke liye hook.
+    pub fn rename(&mut self, id: u64, title: impl Into<String>) -> bool {
+        let title: String = title.into();
+        if title.trim().is_empty() {
+            return false;
+        }
+        match self.sessions.iter_mut().find(|item| item.id == id) {
+            Some(item) => {
+                item.title = title.trim().to_string();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Session id par, na mile to `None`.
+    pub fn get(&self, id: u64) -> Option<&Session> {
+        self.sessions.iter().find(|item| item.id == id)
+    }
+
+    /// Active session, khaali par `None` (launcher view).
+    pub fn active(&self) -> Option<&Session> {
+        match self.active {
+            Some(id) => self.get(id),
+            None => None,
+        }
+    }
+
+    /// Active session id, khaali par `None`.
+    pub fn active_id(&self) -> Option<u64> {
+        self.active
+    }
+
+    /// Sab sessions, khulne ke order me.
+    pub fn list(&self) -> &[Session] {
+        &self.sessions
+    }
+
+    /// Khule sessions ki ginti.
+    pub fn len(&self) -> usize {
+        self.sessions.len()
+    }
+
+    /// Koi session khula hai ya nahi.
+    pub fn is_empty(&self) -> bool {
+        self.sessions.is_empty()
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Recent list geometry (first): rows, gaps, pad — sab maujooda rhythm tokens
 // se derive, koi magic number nahi, colors untouched.
 // ----------------------------------------------------------------------------
@@ -1371,5 +1658,161 @@ mod tests {
         assert_eq!(super::HOME_SECTION_GAP, GEO_SECTION_GAP);
         assert!((super::home_recent_section_top(200.0) - 208.0).abs() < 0.001);
         assert!(super::home_recent_section_top(f32::NAN).is_nan());
+    }
+
+    #[test]
+    fn session_open_activates_and_home_is_never_a_session() {
+        let mut list = super::SessionList::new();
+        assert!(list.is_empty());
+        assert_eq!(list.active_id(), None);
+        let first = list.open(super::Tab::Text, "a.txt", "b.txt", "");
+        assert_eq!(first, Some(0));
+        assert_eq!(list.active_id(), Some(0));
+        assert_eq!(list.len(), 1);
+        // Home no-op: na session banta hai, na id consume hota hai.
+        assert_eq!(list.open(super::Tab::Home, "a", "b", ""), None);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.active_id(), Some(0));
+        let second = list.open(super::Tab::Folder, "l", "r", "");
+        assert_eq!(second, Some(1));
+        assert_eq!(list.active_id(), Some(1));
+    }
+
+    #[test]
+    fn session_title_derives_stem_and_falls_back() {
+        assert_eq!(
+            super::session_title_for(super::Tab::Text, "a/b/left.txt", "", 3),
+            "left"
+        );
+        assert_eq!(
+            super::session_title_for(super::Tab::Folder, "a/b/mydir/", "", 4),
+            "mydir"
+        );
+        assert_eq!(
+            super::session_title_for(super::Tab::Text, "", "r.txt", 5),
+            "r"
+        );
+        assert_eq!(
+            super::session_title_for(super::Tab::Text, "", "   ", 6),
+            "Text 6"
+        );
+        assert_eq!(
+            super::session_title_for(super::Tab::FolderMerge, "", "", 7),
+            "FolderMerge 7"
+        );
+        let mut list = super::SessionList::new();
+        let id = list
+            .open(super::Tab::Text, "  spaced.txt ", "b", "")
+            .unwrap_or(99);
+        assert_eq!(list.get(id).map(|s| s.title.as_str()), Some("spaced"));
+        assert_eq!(list.get(id).map(|s| s.left.as_str()), Some("spaced.txt"));
+    }
+
+    #[test]
+    fn session_close_picks_neighbour_and_unknown_is_noop() {
+        let mut list = super::SessionList::new();
+        assert!(!list.close(42));
+        let a = list.open(super::Tab::Text, "a", "b", "").unwrap_or(99);
+        let b = list.open(super::Tab::Folder, "c", "d", "").unwrap_or(99);
+        let c = list.open(super::Tab::Hex, "e", "f", "").unwrap_or(99);
+        // Beech wala band: active (c) untouched.
+        assert!(list.close(b));
+        assert_eq!(list.active_id(), Some(c));
+        assert_eq!(list.len(), 2);
+        // Active aakhri band: left-neighbour (a) active.
+        assert!(list.close(c));
+        assert_eq!(list.active_id(), Some(a));
+        // Active pehla band: right-neighbour active hota, yahan khaali.
+        assert!(list.close(a));
+        assert_eq!(list.active_id(), None);
+        assert!(list.is_empty());
+        assert!(!list.close(a));
+    }
+
+    #[test]
+    fn session_close_first_active_picks_right_neighbour() {
+        let mut list = super::SessionList::new();
+        let a = list.open(super::Tab::Text, "a", "b", "").unwrap_or(99);
+        let b = list.open(super::Tab::Folder, "c", "d", "").unwrap_or(99);
+        assert!(list.switch(a));
+        assert!(list.close(a));
+        assert_eq!(list.active_id(), Some(b));
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn session_switch_and_close_others_gate_unknown() {
+        let mut list = super::SessionList::new();
+        let a = list.open(super::Tab::Text, "a", "b", "").unwrap_or(99);
+        let b = list.open(super::Tab::Folder, "c", "d", "").unwrap_or(99);
+        assert_eq!(list.active_id(), Some(b));
+        assert!(list.switch(a));
+        assert_eq!(list.active().map(|s| s.id), Some(a));
+        assert!(!list.switch(999));
+        assert_eq!(list.active_id(), Some(a));
+        assert!(!list.close_others(999));
+        assert_eq!(list.len(), 2);
+        assert!(list.close_others(b));
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.active_id(), Some(b));
+    }
+
+    #[test]
+    fn session_cap_drops_oldest_inactive_never_active() {
+        let mut list = super::SessionList::new();
+        for idx in 0..super::HOME_RECENT_MAX {
+            let id = list
+                .open(super::Tab::Text, format!("l{idx}"), "r", "")
+                .unwrap_or(99);
+            assert_eq!(id, idx as u64);
+        }
+        assert_eq!(list.len(), super::HOME_RECENT_MAX);
+        // Sabse purana (id 0) active rakho, phir 9th kholo.
+        assert!(list.switch(0));
+        let ninth = list.open(super::Tab::Text, "new", "r", "");
+        assert_eq!(ninth, Some(super::HOME_RECENT_MAX as u64));
+        assert_eq!(list.len(), super::HOME_RECENT_MAX);
+        // Oldest inactive (id 1) gira, active (id 0) bacha.
+        assert!(list.get(1).is_none());
+        assert_eq!(list.get(0).map(|s| s.id), Some(0));
+        assert_eq!(list.active_id(), ninth);
+        // Id reuse kabhi nahi: band ke baad bhi next_id badhta hai.
+        assert!(list.close(ninth.unwrap_or(99)));
+        let reopened = list.open(super::Tab::Text, "x", "y", "");
+        assert_eq!(reopened, Some(super::HOME_RECENT_MAX as u64 + 1));
+    }
+
+    #[test]
+    fn session_update_paths_cursor_and_rename_trim() {
+        let mut list = super::SessionList::new();
+        let id = list.open(super::Tab::Text, "a", "b", "").unwrap_or(99);
+        assert!(list.update_paths(id, "  l.txt ", "r.txt", " "));
+        assert_eq!(list.get(id).map(|s| s.left.as_str()), Some("l.txt"));
+        assert_eq!(list.get(id).map(|s| s.base.as_str()), Some(""));
+        // Title T5 par untouched (rename hook alag hai).
+        assert_eq!(list.get(id).map(|s| s.title.as_str()), Some("a"));
+        assert!(list.update_cursor(id, 7));
+        assert_eq!(list.get(id).map(|s| s.cursor), Some(7));
+        assert!(!list.update_paths(999, "x", "y", ""));
+        assert!(!list.update_cursor(999, 1));
+        // Blank rename no-op, unknown no-op, trim rename ok.
+        assert!(!list.rename(id, "   "));
+        assert_eq!(list.get(id).map(|s| s.title.as_str()), Some("a"));
+        assert!(!list.rename(999, "zed"));
+        assert!(list.rename(id, "  custom  "));
+        assert_eq!(list.get(id).map(|s| s.title.as_str()), Some("custom"));
+    }
+
+    #[test]
+    fn session_stamp_and_age_mirror_snapshot_precedent() {
+        let plain = super::Session::new(3, super::Tab::Text, "l", "r", "", 0);
+        assert_eq!(plain.saved_at_secs, 0);
+        assert!(!plain.dirty);
+        assert!(plain.age_secs(1_000).is_none());
+        assert!(plain.age_label(1_000).is_none());
+        let stamped = plain.with_saved_at(1_000);
+        assert_eq!(stamped.age_secs(999), None);
+        assert_eq!(stamped.age_secs(1_060), Some(60));
+        assert_eq!(stamped.age_label(1_060), Some(String::from("1m ago")));
     }
 }
