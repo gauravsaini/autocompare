@@ -1,0 +1,97 @@
+Compare two audio files (WAV, MP3) sample by sample
+
+Usage: autocompare audio [OPTIONS] <LEFT> <RIGHT>
+
+Arguments:
+  <LEFT>
+          Left file path
+
+  <RIGHT>
+          Right file path
+
+Options:
+      --color <COLOR>
+          When to color output
+
+          Possible values:
+          - auto:   Detect terminal capability automatically
+          - always: Force ANSI color sequences on
+          - never:  Suppress all ANSI color sequences
+          
+          [default: auto]
+
+      --report <REPORT>
+          Generate comparison report: format:path (html, text, xml, patch)
+
+      --ro
+          Read-only mode for VCS tools and sessions
+
+      --ro1
+          Read-only mode for left input
+
+      --ro2
+          Read-only mode for right input
+
+      --automerge
+          Automatically merge when there are no conflicts
+
+      --mergeoutput <MERGEOUTPUT>
+          Output destination path for 3-way merge results
+
+      --vcs1 <VCS1>
+          VCS input 1 alias (typically left/local)
+
+      --vcs2 <VCS2>
+          VCS input 2 alias (typically right/remote)
+
+      --vcs3 <VCS3>
+          VCS input 3 alias (typically base/ancestor)
+
+      --vcs4 <VCS4>
+          VCS input 4 alias (typically output/merged)
+
+      --title1 <TITLE1>
+          VCS title/label for left / first input
+
+      --title2 <TITLE2>
+          VCS title/label for right / second input
+
+      --title3 <TITLE3>
+          VCS title/label for center / base input
+
+      --title4 <TITLE4>
+          VCS title/label for output input
+
+      --session <SESSION>
+          Path to a session document to load and execute
+
+      --save-session <SAVE_SESSION>
+          Save the current comparison session configuration to path
+
+      --exit-code-mode <EXIT_CODE_MODE>
+          Exit code convention mode: diff (0/1/2) or bc (Beyond Compare return codes)
+
+          Possible values:
+          - diff: Standard diff(1) exit codes: 0 = same, 1 = different / conflicts, 2 = error
+          - bc:   Beyond Compare exit codes: 0 = success, 11 = binary diff, 13 = rules diff, 14 = conflicts
+          
+          [default: diff]
+
+      --bc-exit-code
+          Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts)
+
+      --report-title <REPORT_TITLE>
+          Title override for comparison reports
+
+      --solo
+          Run in a separate solo process without reusing background instances
+
+      --nobackups
+          Suppress backup file creation during merge/save operations
+
+      --reviewconflicts
+          Automatically review conflicts in interactive mode if present
+
+  -h, --help
+          Print help (see a summary with '-h')
+exit:0
