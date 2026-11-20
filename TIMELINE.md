@@ -505,3 +505,9 @@
 1. **Views Narrow-720 Dual Panes & Center Gutter**: dual text-compare panes keep symmetric widths from the space scale at 720px (two panes + 20px center gutter), file-bar height locked to TypoRole chrome rhythm, center gutter column x from char metrics with markers only at changed rows, and edge fixture `comparison/views-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1009 green (including `exq_viewfill8` narrow panes tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-viewfill8/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter10 markers plus viewport
+
+1. **Gutter Markers & Viewport at Narrow 720px**: marker x from char metrics at narrow widths (`gutter_side_layout_720`, `gutter_side_column_x_720` 350.0, `gutter_side_arrow_cx_720` 360.0 canvas middle, glyph 354..366, hit band 348..372; center column 348.0, cx 360.0), padded click viewport bottom floor lock (`gutter_viewport_rect_padded` floor >= 4px for row 999 @400px), marker visibility only on changed rows (`gutter_marker_visible` and `gutter_side_marker_visible`), and edge fixture `comparison/gutter-narrow-720.json`.
+2. **Tests** (before → after): autocompare-gui 1009 green (including `gutter10_narrow_720_marker_alignment_from_char_metrics`); clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter10/**`, `TIMELINE.md`.
