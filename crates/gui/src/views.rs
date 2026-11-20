@@ -494,6 +494,14 @@ pub fn toolbar_icon_gap() -> f32 {
     TIGHT_GAP
 }
 
+/// Icon+label cluster gap (px): [`SECTION_GAP`] (8) reuse taaki icon-led
+/// action buttons (Swap/Reload, Prev/Next) ke beech BC jaisi saans ho.
+/// Glyph-to-text inner rhythm [`toolbar_icon_gap`] (TIGHT_GAP 4) par rehta
+/// hai, cluster gap ek step upar. Koi naya size nahi; pure; unit-tested.
+pub fn toolbar_cluster_gap() -> f32 {
+    SECTION_GAP
+}
+
 /// Toolbar button typo role: [`chrome_tab_role`] (Body 13 proportional)
 /// reuse — buttons chrome me rahen, mono me na jaen. Koi naya
 /// size/weight nahi; pure; unit-tested.
@@ -518,8 +526,9 @@ pub fn toolbar_reload_label() -> String {
 // App row (app.rs toolbar, NO-TOUCH is wave me) agle wave me is painter par
 // jayegi; tab tak ye fn `toolbar_*` contract ka live call-site hai
 // (labels/role/glyphs se `dead_code` hata, tests live). Geometry:
-// [`session_toolbar_button_size`] floor (96x24, min_size) + [`TIGHT_GAP`]
-// rhythm (App `toolbar_item_gap` mirror, same value); typo:
+// [`session_toolbar_button_size`] floor (96x24, min_size) + cluster gap
+// [`toolbar_cluster_gap`] (SECTION_GAP 8; App `toolbar_item_gap` apni row
+// ka TIGHT_GAP mirror rakhta hai, NO-TOUCH); typo:
 // [`toolbar_button_role`] chrome (Body 13 proportional). Colors: existing
 // button style reuse, koi naya hue nahi.
 // ----------------------------------------------------------------------------
@@ -624,13 +633,13 @@ pub fn action_bar_row_height() -> f32 {
     session_toolbar_button_size().1
 }
 
-/// Action-bar min content width (px): do uniform buttons + ek gap
-/// (`2 * tool_w + icon_gap` = 196) — row 1 aur row 2 dono isi floor par,
-/// isliye ek hi number dono rows cover karta hai (badge/cursor dock
+/// Action-bar min content width (px): do uniform buttons + ek cluster
+/// gap (`2 * tool_w + cluster_gap` = 200) — row 1 aur row 2 dono isi floor
+/// par, isliye ek hi number dono rows cover karta hai (badge/cursor dock
 /// right-end par grow karte hain, floor nahi badhate). Pure; unit-tested.
 pub fn action_bar_min_width() -> f32 {
     let (tool_w, _) = session_toolbar_button_size();
-    2.0 * tool_w + toolbar_icon_gap()
+    2.0 * tool_w + toolbar_cluster_gap()
 }
 
 /// Tang window par bar h-scroll mangta hai ya nahi: `avail` floor
@@ -655,6 +664,14 @@ pub fn action_bar_cursor_text(cursor: &str) -> Option<String> {
     }
 }
 
+/// Jump-cluster readout gap (px): N/M badge aur 1:1 cursor readout ke
+/// beech [`SECTION_GAP`] (8) — readout badge se alag padhe (BC bottom-bar
+/// air); blank cursor par gap bhi skip hota hai (koi trailing hawa nahi).
+/// Pure; unit-tested.
+pub fn action_bar_readout_gap() -> f32 {
+    SECTION_GAP
+}
+
 /// Session action buttons (row 1): Swap + Reload ek hi `horizontal` me.
 /// [`paint_session_toolbar`] live call-site aur [`paint_session_action_bar`]
 /// row 1 dono isi par hain (ek shape, do caller — dup nahi). Geometry/typo
@@ -663,7 +680,7 @@ pub fn paint_toolbar_action_buttons(ui: &mut Ui, enabled: bool) -> ToolbarAction
     let (tool_w, tool_h) = session_toolbar_button_size();
     let mut hit = ToolbarAction::None;
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = toolbar_icon_gap();
+        ui.spacing_mut().item_spacing.x = toolbar_cluster_gap();
         if ui
             .add_enabled(
                 enabled,
@@ -690,17 +707,18 @@ pub fn paint_toolbar_action_buttons(ui: &mut Ui, enabled: bool) -> ToolbarAction
 
 /// Jump cluster (row 2): Prev/Next arrows + N/M badge
 /// ([`diff_nav_count_label`]: `Some` par "p/N", bina selection "0/N") +
-/// 1:1 cursor readout right-dock (khali par hidden). Geometry: full-width
-/// row (`avail x row_h`), [`TIGHT_GAP`] rhythm, right-end dock + [`BADGE_PAD`]
-/// (status-bar precedent); typo: buttons chrome role, badge/cursor
-/// [`status_side_role`] (Small 11 weak). `enabled` false par arrows grey.
+/// 1:1 cursor readout right-dock (khali par hidden, gap samet skip).
+/// Geometry: full-width row (`avail x row_h`), cluster gap buttons ke
+/// beech, badge-cursor beech [`action_bar_readout_gap`], right-end dock +
+/// [`BADGE_PAD`] (status-bar precedent); typo: buttons chrome role, badge/
+/// cursor [`status_side_role`] (Small 11 weak). `enabled` false par arrows grey.
 pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavState) -> ActionBarNav {
     let (tool_w, tool_h) = session_toolbar_button_size();
     let mut hit = ActionBarNav::None;
     let avail = ui.available_width();
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, action_bar_row_height()));
-        ui.spacing_mut().item_spacing.x = toolbar_icon_gap();
+        ui.spacing_mut().item_spacing.x = toolbar_cluster_gap();
         if ui
             .add_enabled(
                 enabled,
@@ -729,6 +747,7 @@ pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavStat
                 status_side_role().rich(diff_nav_count_label(state.position, state.total).as_str()),
             );
             if let Some(cursor) = action_bar_cursor_text(&state.cursor) {
+                ui.add_space(action_bar_readout_gap());
                 ui.label(status_side_role().rich(cursor.as_str()));
             }
         });
@@ -989,9 +1008,9 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
 // `paint_tabs` (10 fixed mode buttons) untouched rehti hai; ye patti live
 // `SessionList` instances dikhati hai. App caller wiring agle wave ka hai
 // (contract-only, `home_recent_row_title` precedent); tests live hain.
-// Geometry: TIGHT_GAP rhythm + TAB_BOTTOM_GAP; typo: chrome_tab_role
-// (Body 13 proportional); colors: existing selectable style reuse, koi
-// naya hue nahi.
+// Geometry: close gap (label→close) + strip gap (inter-tab) + TAB_BOTTOM_GAP;
+// typo: chrome_tab_role (Body 13 proportional); colors: existing selectable
+// style reuse, koi naya hue nahi.
 // ----------------------------------------------------------------------------
 
 /// Session tab max width (px): fixed cell + truncate clip, do-line kabhi
@@ -1047,6 +1066,41 @@ pub fn session_tab_close_edge() -> f32 {
     HOME_TOOLBAR_BUTTON_H
 }
 
+/// Tab label-to-close gap (px): [`TAB_BOTTOM_GAP`] (6) reuse — close-x box
+/// label se chipke nahi (BC close box me saans), `TIGHT_GAP` (4) se ek
+/// step upar. Pure; unit-tested.
+pub fn session_tab_close_gap() -> f32 {
+    TAB_BOTTOM_GAP
+}
+
+/// Inter-tab gap (px): [`SECTION_GAP`] (8) — tabs ke beech intra-tab
+/// (label→close) se zyada hawa taaki har tab apne close box samet ek
+/// cluster padhe (BC strip rhythm). Pure; unit-tested.
+pub fn session_tab_strip_gap() -> f32 {
+    SECTION_GAP
+}
+
+/// Strip row width math (px): `tabs` cells, har cell = label max + close
+/// gap + close edge, beech me (`tabs - 1`) strip gaps; 0 tabs par 0.
+/// Caller h-scroll gate isi se lagata hai. Pure; unit-tested.
+pub fn session_tab_strip_width(tabs: usize) -> f32 {
+    if tabs == 0 {
+        return 0.0;
+    }
+    let cell = SESSION_TAB_MAX_W + session_tab_close_gap() + session_tab_close_edge();
+    cell * tabs as f32 + session_tab_strip_gap() * tabs.saturating_sub(1) as f32
+}
+
+/// Tang window par strip h-scroll mangta hai ya nahi: `avail` strip width
+/// se tang par haan, warna nahi. Non-finite ya non-positive `avail` par
+/// false (paint kabhi NaN branch na le). Pure; unit-tested.
+pub fn session_tab_strip_needs_hscroll(tabs: usize, avail: f32) -> bool {
+    if !avail.is_finite() || avail <= 0.0 {
+        return false;
+    }
+    avail < session_tab_strip_width(tabs)
+}
+
 /// Single session tab: label (fixed max width + truncate clip, single line)
 /// ke saath chhota close-x button. Active tab existing selectable style me dikhta
 /// hai, paint_tabs wali highlight reuse hoti hai (koi naya color nahi).
@@ -1057,7 +1111,7 @@ pub fn paint_session_tab(ui: &mut Ui, session: &Session, is_active: bool) -> Ses
     let label = session_tab_label(session);
     let mut hit = SessionAction::None;
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.spacing_mut().item_spacing.x = session_tab_close_gap();
         if ui
             .add_sized(
                 egui::vec2(SESSION_TAB_MAX_W, edge),
@@ -1091,7 +1145,7 @@ pub fn paint_session_tab_strip(ui: &mut Ui, list: &SessionList, action: &mut Ses
         .id_salt("session_tab_strip")
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                ui.spacing_mut().item_spacing.x = session_tab_strip_gap();
                 for session in list.list() {
                     let is_active = list.active_id() == Some(session.id);
                     match paint_session_tab(ui, session, is_active) {
@@ -4474,23 +4528,39 @@ pub fn text_pane_cursor_labels(rows: &[TextRow], selected: Option<usize>) -> (St
     (left, right)
 }
 
+/// Pane-status half width (px): `avail` me se ek [`TIGHT_GAP`] ghata kar
+/// aadha — dono halves barabar taaki right pane ka readout apne pane ke
+/// start par khada ho (BC per-pane left alignment), far-right dock par
+/// nahi. Non-finite ya non-positive `avail` par [`MIN_HALF`] floor (paint
+/// kabhi NaN na khaye). Pure; unit-tested.
+pub fn pane_status_half_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return MIN_HALF;
+    }
+    ((avail - TIGHT_GAP) / 2.0).max(0.0)
+}
+
 /// Segmented pane status bar: bottom row me left-pane cursor + right-pane
-/// cursor side-by-side (BC per-pane `1:1` precedent). Geometry toolbar
-/// precedent (full-width `HEADER_H` row, [`TIGHT_GAP`] spacing, right-end
-/// dock); typo [`chrome_status_role`] (Small weak proportional reuse —
-/// Mono 12 hierarchy rows me rehti hai, status chrome me). Koi naya
+/// cursor barabar halves me, dono left-aligned (BC per-pane `1:1`
+/// precedent — har pane ka readout apne pane ke start par). Geometry
+/// toolbar precedent (full-width `HEADER_H` row, halves beech
+/// [`TIGHT_GAP`]); typo [`chrome_status_role`] (Small weak). Koi naya
 /// size/color/Grid nahi.
 pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
     let (left, right) = text_pane_cursor_labels(rows, selected);
     let avail = ui.available_width();
+    let half = pane_status_half_width(avail);
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, HEADER_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(chrome_status_role().rich(left.as_str()));
-        ui.separator();
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(chrome_status_role().rich(right.as_str()));
-        });
+        ui.add_sized(
+            egui::vec2(half, HEADER_H),
+            egui::Label::new(chrome_status_role().rich(left.as_str())),
+        );
+        ui.add_sized(
+            egui::vec2(half, HEADER_H),
+            egui::Label::new(chrome_status_role().rich(right.as_str())),
+        );
     });
 }
 
@@ -7668,22 +7738,25 @@ mod tests {
     #[test]
     fn action_bar_geometry_reuses_toolbar_floor() {
         // Dono rows ek beat par: 24 floor + TIGHT_GAP stack; min width do
-        // uniform buttons + ek gap (2*96+4 = 196). Koi naya token nahi.
+        // uniform buttons + ek cluster gap (2*96+8 = 200). Koi naya token nahi.
         let (tool_w, tool_h) = session_toolbar_button_size();
         assert_eq!(tool_w, 96.0);
         assert_eq!(action_bar_row_height(), tool_h);
         assert_eq!(action_bar_row_height(), 24.0);
         assert_eq!(action_bar_row_gap(), TIGHT_GAP);
-        assert_eq!(action_bar_min_width(), 2.0 * tool_w + toolbar_icon_gap());
-        assert_eq!(action_bar_min_width(), 196.0);
+        assert_eq!(toolbar_cluster_gap(), SECTION_GAP);
+        assert_eq!(action_bar_readout_gap(), SECTION_GAP);
+        assert_eq!(action_bar_min_width(), 2.0 * tool_w + toolbar_cluster_gap());
+        assert_eq!(action_bar_min_width(), 200.0);
     }
 
     #[test]
     fn action_bar_hscroll_only_when_avail_below_floor() {
-        // Edge fixture actionbar-narrow-180: 180 < 196 par scroll, 700 par
-        // nahi; kharab avail par kabhi NaN-branch nahi.
+        // Edge fixture actionbar-narrow-180 (toolbar2: floor 196 -> 200):
+        // 180 < 200 par scroll, 700 par nahi; kharab avail par kabhi
+        // NaN-branch nahi.
         assert!(action_bar_needs_hscroll(180.0));
-        assert!(!action_bar_needs_hscroll(196.0));
+        assert!(!action_bar_needs_hscroll(200.0));
         assert!(!action_bar_needs_hscroll(700.0));
         assert!(!action_bar_needs_hscroll(f32::NAN));
         assert!(!action_bar_needs_hscroll(0.0));
@@ -11300,10 +11373,32 @@ mod tests {
 
     #[test]
     fn session_strip_overflows_at_eight_tabs() {
-        // Ek tab cell = label max + close edge + beech ka gap.
-        let tab_w = SESSION_TAB_MAX_W + session_tab_close_edge() + TIGHT_GAP;
-        assert!(3.0 * tab_w < 960.0);
-        assert!(8.0 * tab_w > 960.0);
+        // Toolbar2 gaps: cell = label max + close gap (6) + close edge (24)
+        // = 150; beech me strip gap (8). Edge fixture tabstrip-8tabs:
+        // 2 tabs 308 (700 par no-scroll), 8 tabs 1256 (960 par scroll).
+        assert_eq!(session_tab_close_gap(), TAB_BOTTOM_GAP);
+        assert_eq!(session_tab_close_gap(), 6.0);
+        assert_eq!(session_tab_strip_gap(), SECTION_GAP);
+        assert_eq!(session_tab_strip_gap(), 8.0);
+        assert_eq!(session_tab_strip_width(0), 0.0);
+        assert_eq!(session_tab_strip_width(2), 308.0);
+        assert_eq!(session_tab_strip_width(8), 1256.0);
+        assert!(!session_tab_strip_needs_hscroll(2, 700.0));
+        assert!(session_tab_strip_needs_hscroll(8, 960.0));
+        assert!(!session_tab_strip_needs_hscroll(8, 1256.0));
+        assert!(!session_tab_strip_needs_hscroll(8, f32::NAN));
+        assert!(!session_tab_strip_needs_hscroll(8, 0.0));
+    }
+
+    #[test]
+    fn pane_status_halves_share_avail_evenly() {
+        // BC per-pane left alignment: dono halves barabar (700 -> 348+348
+        // + 4 gap); kharab avail par MIN_HALF floor (koi NaN nahi).
+        assert_eq!(pane_status_half_width(700.0), 348.0);
+        assert_eq!(pane_status_half_width(180.0), 88.0);
+        assert_eq!(pane_status_half_width(f32::NAN), MIN_HALF);
+        assert_eq!(pane_status_half_width(0.0), MIN_HALF);
+        assert_eq!(pane_status_half_width(-50.0), MIN_HALF);
     }
 
     // Scene PNG proof (screenshot.rs frozen/NO-TOUCH): live label +
@@ -11393,7 +11488,9 @@ mod tests {
             scene_rect(&mut px, pen_x, strip_y + 4, tab_w, 24, fill);
             scene_rect(
                 &mut px,
-                pen_x.saturating_add(tab_w).saturating_add(4),
+                pen_x
+                    .saturating_add(tab_w)
+                    .saturating_add(session_tab_close_gap() as u32),
                 strip_y + 4,
                 close_w.saturating_sub(8),
                 24,
@@ -11402,7 +11499,8 @@ mod tests {
             pen_x = pen_x
                 .saturating_add(tab_w)
                 .saturating_add(close_w)
-                .saturating_add(TIGHT_GAP as u32);
+                .saturating_add(session_tab_close_gap() as u32)
+                .saturating_add(session_tab_strip_gap() as u32);
         }
         let overflow = pen_x > SCENE_W.saturating_sub(40);
         if overflow {
