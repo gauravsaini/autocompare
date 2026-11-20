@@ -663,6 +663,59 @@ fn apply_id3_frame(tags: &mut MediaTags, frame_id: &str, text: &str) {
     }
 }
 
+/// Compares `extra_tags` key-value pairs by tag name.
+///
+/// Keys present on both sides with equal values count as matching,
+/// same key with different values counts as differing, one-sided
+/// keys count as left/right-only. Duplicate keys on one side are
+/// compared positionally in order; surplus entries are one-sided.
+/// Total: no panics, hostile keys/values pass through untouched.
+fn diff_extra_tags(
+    left: &MediaTags,
+    right: &MediaTags,
+    matching: &mut Vec<(String, String)>,
+    differing: &mut Vec<(String, String, String)>,
+    left_only: &mut Vec<(String, String)>,
+    right_only: &mut Vec<(String, String)>,
+) {
+    use std::collections::{BTreeSet, HashMap};
+    let mut left_by_key: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (k, v) in &left.extra_tags {
+        left_by_key.entry(k.as_str()).or_default().push(v.as_str());
+    }
+    let mut right_by_key: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (k, v) in &right.extra_tags {
+        right_by_key.entry(k.as_str()).or_default().push(v.as_str());
+    }
+    let mut keys: BTreeSet<&str> = BTreeSet::new();
+    for k in left_by_key.keys() {
+        keys.insert(k);
+    }
+    for k in right_by_key.keys() {
+        keys.insert(k);
+    }
+    for key in keys {
+        let l_vals = left_by_key.get(key).cloned().unwrap_or_default();
+        let r_vals = right_by_key.get(key).cloned().unwrap_or_default();
+        let common = l_vals.len().min(r_vals.len());
+        for i in 0..common {
+            let lv = l_vals.get(i).copied().unwrap_or("");
+            let rv = r_vals.get(i).copied().unwrap_or("");
+            if lv == rv {
+                matching.push((key.to_string(), lv.to_string()));
+            } else {
+                differing.push((key.to_string(), lv.to_string(), rv.to_string()));
+            }
+        }
+        for lv in l_vals.iter().skip(common) {
+            left_only.push((key.to_string(), (*lv).to_string()));
+        }
+        for rv in r_vals.iter().skip(common) {
+            right_only.push((key.to_string(), (*rv).to_string()));
+        }
+    }
+}
+
 /// Compares two sets of media tags and reports matches, differences, and unique fields.
 pub fn diff_media_tags(left: &MediaTags, right: &MediaTags) -> MediaTagsDiff {
     let mut matching = Vec::new();
@@ -715,6 +768,25 @@ pub fn diff_media_tags(left: &MediaTags, right: &MediaTags) -> MediaTagsDiff {
         (None, Some(r)) => right_only.push(("Disc".to_string(), r.to_string())),
         (None, None) => {}
     }
+
+    if left.format == right.format {
+        matching.push(("Format".to_string(), format!("{:?}", left.format)));
+    } else {
+        differing.push((
+            "Format".to_string(),
+            format!("{:?}", left.format),
+            format!("{:?}", right.format),
+        ));
+    }
+
+    diff_extra_tags(
+        left,
+        right,
+        &mut matching,
+        &mut differing,
+        &mut left_only,
+        &mut right_only,
+    );
 
     let identical = differing.is_empty() && left_only.is_empty() && right_only.is_empty();
 

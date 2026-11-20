@@ -462,6 +462,18 @@ pub struct PictureDiff {
     pub identical: bool,
 }
 
+impl PictureDiff {
+    /// Fraction of overlapping pixels that differ, in `[0.0, 1.0]`.
+    /// Empty overlap reports `0.0` (nothing to differ on).
+    pub fn differ_ratio(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.differing as f64) / (self.total as f64)
+        }
+    }
+}
+
 /// Compares two images pixel by pixel over their overlap with default options (exact RGBA match).
 pub fn diff_pictures(a: &RgbaImage, b: &RgbaImage) -> PictureDiff {
     diff_pictures_with_options(a, b, &PictureOptions::default())

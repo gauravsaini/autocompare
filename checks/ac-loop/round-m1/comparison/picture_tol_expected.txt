@@ -1,0 +1,9 @@
+# picture_tol_expected.txt — 1x1 px edge
+# a=[100,100,100,255] b=[103,102,101,255]
+# strict (tol 0): differing=1 identical=false
+# relaxed (tol 5): differing=0 identical=true
+# range tight (tol 10, range 3) on [10,10,10,255] vs [14,10,10,255]: differing=1
+# range loose (tol 10, range 5): differing=0
+# hostile PPM b"" and truncated P6 -> None (no panic); 1x1 valid P6 -> Some.
+strict_differing=1
+relaxed_differing=0

@@ -98,7 +98,6 @@ pub fn diff_workbooks(a: &Workbook, b: &Workbook) -> WorkbookDiff {
     let mut sheet_diffs = Vec::new();
     let mut identical = true;
 
-    let b_names: HashSet<&str> = b.sheets.iter().map(|s| s.name.as_str()).collect();
     let mut seen_b = HashSet::new();
 
     for sheet_a in &a.sheets {
@@ -128,7 +127,7 @@ pub fn diff_workbooks(a: &Workbook, b: &Workbook) -> WorkbookDiff {
     }
 
     for sheet_b in &b.sheets {
-        if !seen_b.contains(sheet_b.name.as_str()) && !b_names.contains(sheet_b.name.as_str()) {
+        if !seen_b.contains(sheet_b.name.as_str()) {
             identical = false;
             sheet_diffs.push(SheetDiff {
                 name: sheet_b.name.clone(),

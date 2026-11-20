@@ -69,6 +69,13 @@ pub struct HexDiff {
     pub exact: bool,
 }
 
+impl HexDiff {
+    /// True when both sides are byte-identical under this alignment.
+    pub fn is_identical(&self) -> bool {
+        self.first_diff.is_none() && self.left_len == self.right_len
+    }
+}
+
 /// One formatted aligned row for side-by-side hex display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HexRow {

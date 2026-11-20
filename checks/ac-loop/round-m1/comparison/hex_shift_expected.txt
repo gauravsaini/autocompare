@@ -1,0 +1,11 @@
+# hex_shift_expected.txt — alignment parity edge
+# left  = "AAAA12345678BBBB" (16 bytes)
+# right = "AAAA____12345678BBBB" (20 bytes, 4-byte insert after offset 4)
+# HexAlignment::None     -> first_diff=4, differing runs positional
+# HexAlignment::Fast     -> first_diff=4, one RightOnly{len:4} gap, rest Equal
+# HexAlignment::Complete -> first_diff=4, one RightOnly{len:4} gap, exact=true
+# ByteEditBuffer on left (insert "____" at 4) must equal right bytes.
+complete_ops_contain=RightOnly{len:4}
+complete_exact=true
+fast_first_diff=4
+none_first_diff=4

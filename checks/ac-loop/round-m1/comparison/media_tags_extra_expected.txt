@@ -1,0 +1,9 @@
+# media_tags_extra_expected.txt — hostile/totality edge
+# left  = {title:"Song", format:Mp3, extra:[ENCODER=LAME]}
+# right = {title:"Song", format:Flac, extra:[ENCODER=FLAC-1.4]}
+# diff_media_tags: identical=false, Format in differing, ENCODER in differing.
+# truncated input b"fLaC\x84\x00\x10\x00\x01\x02" -> read_flac_tags returns Some (no panic).
+identical=false
+differing_has=Format
+differing_has=ENCODER(LAME vs FLAC-1.4)
+truncated_flac=Some_no_panic

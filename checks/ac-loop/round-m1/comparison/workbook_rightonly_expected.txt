@@ -1,0 +1,7 @@
+# workbook_rightonly_expected.txt
+# left  sheets: [Shared]
+# right sheets: [Shared, Extra]
+# diff_workbooks must report 2 sheet_diffs; Extra == RightOnly; identical=false.
+sheet_diffs_len=2
+extra_status=RightOnly
+identical=false
