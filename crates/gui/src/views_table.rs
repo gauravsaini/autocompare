@@ -2474,6 +2474,134 @@ pub fn table4_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
     table_column_grid_fit(avail_w, col_widths_px)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table5 round-1: cols plus separators at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: columns stable row heights ke saath align hote hain
+// aur separators visible/symmetric hain; ours me widths drift karte hain aur
+// separators inconsistent hain. Fix table-side only (app.rs/views.rs/home.rs/
+// views_hex.rs/gutter.rs/tree.rs/theme.rs/viewmodel.rs/take.rs/copy.rs
+// NO-TOUCH). Geometry FIRST: col widths char metrics se SPACE pad ke saath
+// (`table5_col_widths_px` -> `table_col_widths_px` delegation, pad SPACE_SM),
+// row height Mono line-height lock (`table5_row_h` 15.6), col gap SPACE_SM
+// single-source (8.0), separators har gap ke beech me (`table5_separator_xs`,
+// dono taraf gap/2 — symmetric), 960px avail 936 par fit gate. Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table5/comparison/table-wide-960.json` ka headless judvaan
+// test sath me hai (column x-positions prove karta hai).
+// ----------------------------------------------------------------------------
+
+/// Table5 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE5_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table5 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — stable row heights, ruler/body desync nahi. Pure; unit-tested.
+pub fn table5_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table5 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table5_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table5 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table5_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table5 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table5_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table5 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table5_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table5 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation — char metrics plus SPACE_SM pad (koi naya math nahi).
+/// Pure; unit-tested.
+pub fn table5_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table5 ek column ki x-position (px): [`table_column_grid_col_x`]
+/// delegation, gap [`table5_col_spacing`] se — col 0 hamesha 0.0.
+/// Kharab input ya range-bahar col par `None`. Pure; unit-tested.
+pub fn table5_col_x(col_idx: usize, col_widths_px: &[f32]) -> Option<f32> {
+    table_column_grid_col_x(col_idx, col_widths_px, table5_col_spacing())
+}
+
+/// Table5 sab columns ki x-positions (px), column order me. Kharab widths
+/// par khali vec (koi aadhi list nahi). Pure; unit-tested.
+pub fn table5_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    while idx < col_widths_px.len() {
+        match table5_col_x(idx, col_widths_px) {
+            Some(x) => out.push(x),
+            None => return Vec::new(),
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Table5 column separators (px): har andaruni gap ke beech me ek line —
+/// `x = col_right_edge + gap / 2`, isliye dono taraf gap/2 clearance
+/// (symmetric). `n` cols par `n - 1` separators; kharab widths par khali
+/// vec. Pure; unit-tested.
+pub fn table5_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    let gap = table5_col_spacing();
+    if !gap.is_finite() || gap < 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut x = 0.0f32;
+    let mut idx = 0usize;
+    while idx.saturating_add(1) < col_widths_px.len() {
+        let w = match col_widths_px.get(idx) {
+            Some(w) if w.is_finite() && *w >= 0.0 => *w,
+            _ => return Vec::new(),
+        };
+        x += w + gap / 2.0;
+        if !x.is_finite() {
+            return Vec::new();
+        }
+        out.push(x);
+        x += gap / 2.0;
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Table5 grid kul px chaudai: [`table_grid_total_w`] reuse taaki col-gap
+/// math kabhi drift na kare. Pure; unit-tested.
+pub fn table5_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table5 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table5_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table5 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table5_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3960,5 +4088,97 @@ mod tests {
         assert!(!table4_column_grid_fit(100.0, &px));
         assert!(table4_col_widths_px(&widths, 0.0).is_empty());
         assert_eq!(table_wide_960_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table5_round1_cols_plus_separators_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // col widths char metrics se SPACE pad ke saath, row height Mono
+        // lock (15.6), separators symmetric (dono taraf gap/2) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table5/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table5/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"col_gap\": 8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Row height Mono line-height lock, avail 960 minus margins.
+        assert!((table5_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table5_row_h(), table_cell_row_h());
+        assert_eq!(
+            table5_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(TABLE5_CANVAS_W, 960.0);
+        assert_eq!(TABLE5_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table5_avail_w(), 936.0);
+        assert_eq!(table5_avail_w(), table_wide_avail_w());
+
+        // 2. Col gap SPACE_SM single-source; underline/weight reuse.
+        assert_eq!(table5_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table5_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table5_col_spacing(), 8.0);
+        assert_eq!(table5_header_underline_w(), 1.0);
+        assert_eq!(
+            table5_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert!(table5_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 3. Col widths char metrics se SPACE_SM pad ke saath: [3,5,6] @8px
+        // -> outer [40,56,64] (chars*8+16), total 176, avail 936 me fit.
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table5_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table5_grid_total_w(&px), 176.0);
+        assert_eq!(table5_grid_total_w(&px), table_grid_total_w(&px));
+        assert!(table5_column_grid_fit(table5_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE5_CANVAS_W, &px));
+        assert!(!table5_column_grid_fit(100.0, &px));
+        assert!(table5_col_widths_px(&widths, 0.0).is_empty());
+
+        // 4. Column x-positions: col 0 at 0, har agli col pichhli widths +
+        // gaps ke baad — [0, 48, 112].
+        assert_eq!(table5_col_x(0, &px), Some(0.0));
+        assert_eq!(table5_col_x(1, &px), Some(48.0));
+        assert_eq!(table5_col_x(2, &px), Some(112.0));
+        assert_eq!(table5_col_x(3, &px), None);
+        assert_eq!(table5_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert!(table5_col_xs(&[]).is_empty());
+
+        // 5. Separators symmetric: har separator dono taraf gap/2 (4.0) —
+        // [44, 108], right-edge se +4 aur agli col se -4.
+        let seps = table5_separator_xs(&px);
+        assert_eq!(seps, vec![44.0, 108.0]);
+        assert_eq!(seps.len(), px.len().saturating_sub(1));
+        let gap = table5_col_spacing();
+        let xs = table5_col_xs(&px);
+        for (k, sep) in seps.iter().enumerate() {
+            let right = xs.get(k).copied().unwrap_or(0.0) + px.get(k).copied().unwrap_or(0.0);
+            let next_left = xs.get(k.saturating_add(1)).copied().unwrap_or(0.0);
+            assert!(((sep - right) - gap / 2.0).abs() < 0.001);
+            assert!(((next_left - sep) - gap / 2.0).abs() < 0.001);
+        }
+        assert!(table5_separator_xs(&[]).is_empty());
+        assert_eq!(table5_visible_rows(600.0), 38);
+        assert_eq!(
+            table5_visible_rows(600.0),
+            table_wide_960_visible_rows(600.0)
+        );
     }
 }

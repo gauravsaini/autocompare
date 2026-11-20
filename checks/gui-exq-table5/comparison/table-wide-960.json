@@ -1,0 +1,51 @@
+{
+  "avail_w": 936.0,
+  "canvas_h": 600.0,
+  "canvas_w": 960.0,
+  "cell_pad": 8.0,
+  "char_w": 8.0,
+  "col_gap": 8.0,
+  "col_spacing": 8.0,
+  "column_xs": [
+    0.0,
+    48.0,
+    112.0
+  ],
+  "grid_gap_y": 4.0,
+  "header": [
+    "ID",
+    "Delta",
+    "Price"
+  ],
+  "header_underline_w": 1.0,
+  "header_weight": 600,
+  "header_weight_name": "strong",
+  "intent": "Table-side table5 round-1 at 960px wide: col widths from char metrics via SPACE_SM pad ([3,5,6] -> [40,56,64], total 176, avail 936 fit), row height Mono line-height lock (15.6), col gap SPACE_SM single-source (8), separators symmetric at gap/2 ([44,108]: right-edge +4, next-col -4), column x-positions [0,48,112], header underline 1px via TEXT_INLINE_SPAN_UNDERLINE_W, header weight strong/600 via TYPO_WEIGHT_SEMIBOLD, colors frozen.",
+  "mono_line_height": 15.6,
+  "name": "table-wide-960",
+  "needs_hscroll": false,
+  "origin": [
+    12.0,
+    12.0
+  ],
+  "outer_widths_px": [
+    40.0,
+    56.0,
+    64.0
+  ],
+  "panes_h": 600.0,
+  "row_gap": 4.0,
+  "row_height": 15.6,
+  "row_sym_pad": 4.0,
+  "separator_xs": [
+    44.0,
+    108.0
+  ],
+  "total_w": 176.0,
+  "visible_rows": 38,
+  "widths_chars": [
+    3,
+    5,
+    6
+  ]
+}
