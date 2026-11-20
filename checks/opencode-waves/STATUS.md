@@ -1484,3 +1484,10 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## 2026-11-20 — Wave BZ-SEL2 launched (P0-2 selective highlight paint wiring, retry)
 - Sess sess-sel-bz, OWNS views.rs + checks/gui-selwire-bz. Scope: dead-code helpers ko live paint me wire + fixture visibility proof. Shared-workdir savdhani prompt me (sibling-dirt check before trusting test results).
+
+## 2026-11-20 — Wave BZ-SEL2 landed + pushed (P0-2 selective filler hatch wiring)
+- Commit `42b7d59` feat(gui): wire selective filler hatch into text paint (OWNS views.rs + checks/gui-selwire-bz).
+- Gates: 655 green (654 -> +1), clippy zero, fmt clean, banned zero, PNGs magic ok, STATUS untouched.
+- Colors note: 3 added Color32 touches me 2 test-only (TRANSPARENT/WHITE palette lock) + 1 fn-signature param type — production me koi naya hue nahi.
+- Wave discipline: clean-tree baseline (654 green) pehle lock kiya, phir implement — BX wali contamination galti nahi dohrai.
+- P0-2 done. Next: localrun round-3 (poora gap re-verify: session tabs + selective highlight + pathmeta).
