@@ -1500,3 +1500,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Waves CB-CALLER + CC-DARKRC landed + pushed
 - `07a8db8` feat(gui): session tab strip caller wiring + T5/T6 bridge (OWNS app.rs + checks/gui-sescaller-cb). Gates: 659 green (655 -> +4), clippy/fmt/banned/colors/PNG clean, STATUS untouched. Fixture byte-identical justified (renderer frozen, wiring headless-tested). Follow-up: mode-tab click session adopt + T7 rename.
 - `fac1bd5` docs(gui): light-vs-dark root-cause locked (checks/gui-darkroot-cc only, source ZERO touch). Fix options A/B/C REPORT me; C (persist+fixture param) alag wave.
+
+## 2026-11-20 — Wave CA-LOCALRUN3 launched (full gap re-verify round-3)
+- Sess sess-local-ca, READ-ONLY (zero source change), OWNS checks/gui-localrun-ca. Live-vs-fixture gap DELTA (bu2 -> ca) + bachi gaps follow-up.
