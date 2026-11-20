@@ -986,3 +986,81 @@ fn toolspec_conflict_nav_and_live_log_cover_plan_and_report() {
 
     cleanup(&base);
 }
+
+#[test]
+fn mirror_prune_suppresses_nested_orphan_subtree() {
+    use autocompare_compare::apply_sync;
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    one(&left, "keep.txt", "k\n");
+    for rel in [
+        "orphan/top.txt",
+        "orphan/a/mid.txt",
+        "orphan/a/b/leaf.txt",
+        "orphan/a/b/c/deep.txt",
+    ] {
+        one(&right, rel, "orphan\n");
+    }
+
+    let mirror = opts(SyncDirection::LeftToRight, true);
+    let plan = plan_sync(&left, &right, &mirror).unwrap();
+    assert!(!plan.truncated);
+
+    // Dry run is read-only: nothing copied, nothing pruned.
+    assert!(left.join("keep.txt").exists());
+    assert!(!right.join("keep.txt").exists());
+    assert!(right.join("orphan/a/b/c/deep.txt").exists());
+
+    assert_eq!(
+        step(&plan, "keep.txt").map(|s| s.action),
+        Some(SyncAction::CopyToRight)
+    );
+    let dir = step(&plan, "orphan").unwrap();
+    assert_eq!(dir.action, SyncAction::DeleteRight);
+    assert!(dir.is_dir);
+    for rel in [
+        "orphan/top.txt",
+        "orphan/a",
+        "orphan/a/mid.txt",
+        "orphan/a/b",
+        "orphan/a/b/leaf.txt",
+        "orphan/a/b/c",
+        "orphan/a/b/c/deep.txt",
+    ] {
+        assert!(step(&plan, rel).is_none(), "suppressed step: {rel}");
+        assert!(skipped(&plan, rel).is_none(), "suppressed skip: {rel}");
+    }
+
+    let report = apply_sync(&left, &right, &plan).unwrap();
+    assert!(report.failed.is_empty());
+    assert_eq!(report.copied, 1);
+    assert_eq!(report.deleted, 1, "one remove_dir_all for the orphan root");
+    assert_eq!(std::fs::read(right.join("keep.txt")).unwrap(), b"k\n");
+    assert!(!right.join("orphan").exists());
+
+    // Update without prune never deletes: orphans are skipped, not planned.
+    let update = opts(SyncDirection::LeftToRight, false);
+    let base2 = temp_root();
+    let (left2, right2) = make_pair(&base2);
+    one(&left2, "keep.txt", "k\n");
+    for rel in [
+        "orphan/top.txt",
+        "orphan/a/mid.txt",
+        "orphan/a/b/leaf.txt",
+        "orphan/a/b/c/deep.txt",
+    ] {
+        one(&right2, rel, "orphan\n");
+    }
+    let plan2 = plan_sync(&left2, &right2, &update).unwrap();
+    assert!(step(&plan2, "orphan").is_none());
+    assert!(
+        plan2
+            .steps
+            .iter()
+            .all(|s| !matches!(s.action, SyncAction::DeleteLeft | SyncAction::DeleteRight))
+    );
+
+    cleanup(&base);
+    cleanup(&base2);
+}

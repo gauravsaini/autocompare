@@ -1,0 +1,28 @@
+edge: nested-orphan-prune (Mirror LeftToRight + prune, deep right-only subtree)
+
+LEFT                          RIGHT                                        EXPECT (Mirror L2R, prune=true)
+keep.txt (left-only)          -                                            CopyToRight keep.txt; dry-run copies nothing
+-                             orphan/top.txt (right-only)                  NO step/skip: dies with orphan dir delete
+-                             orphan/a/mid.txt (right-only)                NO step/skip: suppressed descendant
+-                             orphan/a/b/leaf.txt (right-only)             NO step/skip: suppressed descendant
+-                             orphan/a/b/c/deep.txt (right-only)           NO step/skip: suppressed descendant
+
+PLAN (proven by mirror_prune_suppresses_nested_orphan_subtree):
+- exactly 2 steps: CopyToRight keep.txt + DeleteRight orphan (is_dir)
+- zero steps and zero skips for any rel under orphan/
+- dry_run changes nothing on disk
+- UpdateRight (prune=false) plans no deletes; right-only leaves are
+  skipped as "only on the right side" instead
+
+APPLY (proven by same test):
+- report.copied == 1, report.deleted == 1, failed empty
+- left/keep.txt bytes land on right/keep.txt
+- right/orphan removed wholesale via remove_dir_all (all 4 nested files gone)
+
+TREE (folder.rs, covered in folder_tree_expand_collapse_and_visibility):
+- orphan visible only when ancestors expanded; expand_all/collapse_all round-trip
+- direct_children("orphan") == [orphan/a]; all_descendants("orphan") covers depth 3
+
+JOBS (jobs.rs, covered by spawn_sync_run + cancel tests):
+- spawn_sync_run Mirror dry-run totals == steps; progress total == steps; queue <= 64
+- precancelled token -> Cancelled status; cancel() mid-run -> Error::Cancelled
