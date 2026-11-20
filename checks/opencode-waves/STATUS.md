@@ -1551,3 +1551,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - P1-4 CTA live FIXED (single-line photo-proof). P1-2/P1-3 paints, CG mode-T7, CI persist+light-mode code-green. Fixtures 4/4 byte-stable, 669 green, harness PASS.
 - SABSE BADI GAP: live-dark FAIL — CE+CI ke baad bhi live app LIGHT khulta hai. Badge semantics: flag true par ctx light (desync). Storage-dir theory fit nahi hoti. Follow-up CK wave me.
 - Baaki: live Text-tab captures (tab-switch rule khule tab), multi-session strip live, toolbar pixel-verify, CLI --screenshot-mode flag.
+
+## 2026-11-20 — Waves CK-DARKBUG + CL-TOOLWIRE launched (2 parallel, disjoint)
+- CK-DARKBUG (sess-dark-ck): live-dark FAIL root-cause (eframe 0.37 behavior) + 1-jagah fix + live-dark photo-proof. OWNS main.rs + app.rs + checks/gui-darkbug-ck.
+- CL-TOOLWIRE (sess-tool-cl): P2-1 toolbar call-site wiring (dead_code hatao). OWNS views.rs + checks/gui-toolwire-cl.
+- Queue: round-5 (tab-switch allowed interactive captures) dono ke baad.
