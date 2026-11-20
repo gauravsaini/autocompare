@@ -1557,6 +1557,295 @@ pub fn text_panes_height(avail_h: f32) -> f32 {
 }
 
 // ----------------------------------------------------------------------------
+// Viewmodel Density + Row-Height Tokens (MODEL10 headless)
+// ----------------------------------------------------------------------------
+//
+// Gap / Rhythm Audit: Text rows (`views.rs` paint) live `row_height_for_line`
+// par chalte hain, fixtures (`screenshot.rs`) 24px rows par, aur folder
+// tree (`tree.rs`) 24px `FOLDER_ROW_HEIGHT` par. Mono 12pt line-height 15.6px
+// (max 13pt 16.9px), Body 13pt line-height 18.2px, Caption 12pt 14.4px.
+// Row-height agar line-height se chhota ho to text ascenders/descenders
+// clip ho jaate hain.
+//
+// Ye section density tokens + row-height formulas ka single source hai:
+// - `Compact`: maximum information density, text 18.0px (table parity),
+//   folder 20.0px (body 18.2px se upar — zero clip floor).
+// - `Comfortable`: default 24.0px (`SPACE_XL`, screenshot/tree parity).
+// - `Spacious`: relaxed 28.0px (`CHROME_HEADER_BAR_H` parity).
+// - Viewport audits at canonical 960x600 and 720px fallback prove zero
+//   vertical or horizontal text clipping. Pure; unit-tested.
+
+/// Compact text row height (px): 18.0.
+/// Parity with table grid row height (`views_table::TABLE_GRID_ROW_H`).
+/// Accommodates `TypoRole::Mono` (15.6px line-height) with 2.4px padding,
+/// and `TYPO_MONO_SIZE_MAX` (16.9px line-height) with 1.1px padding,
+/// ensuring zero vertical glyph clipping.
+pub const TEXT_ROW_HEIGHT_COMPACT: f32 = 18.0;
+
+/// Comfortable text row height (px): 24.0.
+/// Parity with screenshot fixtures (`screenshot.rs` 24px row_h) and [`crate::theme::SPACE_XL`].
+pub const TEXT_ROW_HEIGHT_COMFORTABLE: f32 = 24.0;
+
+/// Spacious text row height (px): 28.0.
+/// Relaxed vertical rhythm matching [`crate::theme::CHROME_HEADER_BAR_H`].
+pub const TEXT_ROW_HEIGHT_SPACIOUS: f32 = 28.0;
+
+/// Compact folder row height (px): 20.0 (`SPACE_LG` 16.0 + `SPACE_XS` 4.0).
+/// Minimum safe height for folder paths (`TypoRole::Body` 18.2px line-height)
+/// with 1.8px padding, preventing any descender/ascender clipping.
+pub const FOLDER_ROW_HEIGHT_COMPACT: f32 = 20.0;
+
+/// Comfortable folder row height (px): 24.0.
+/// Parity with [`crate::tree::FOLDER_ROW_HEIGHT`] and [`crate::theme::SPACE_XL`].
+pub const FOLDER_ROW_HEIGHT_COMFORTABLE: f32 = 24.0;
+
+/// Spacious folder row height (px): 28.0.
+/// Relaxed folder tree rhythm matching [`crate::theme::CHROME_HEADER_BAR_H`].
+pub const FOLDER_ROW_HEIGHT_SPACIOUS: f32 = 28.0;
+
+/// Viewmodel density mode governing row heights and vertical rhythm across
+/// text diff and folder tree views.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum RowDensity {
+    /// Dense packing: maximum visible rows (18px text, 20px folder).
+    Compact,
+    /// Canonical default: balanced readability and touch targets (24px text, 24px folder).
+    #[default]
+    Comfortable,
+    /// Relaxed packing: spacious readability and touch targets (28px text, 28px folder).
+    Spacious,
+}
+
+/// Alias for folder tree density parametrization (`tree.rs` parity).
+pub type FolderDensity = RowDensity;
+/// Alias for text view density parametrization.
+pub type TextDensity = RowDensity;
+
+impl RowDensity {
+    /// Text row height in pixels for this density.
+    pub const fn text_row_height(self) -> f32 {
+        match self {
+            Self::Compact => TEXT_ROW_HEIGHT_COMPACT,
+            Self::Comfortable => TEXT_ROW_HEIGHT_COMFORTABLE,
+            Self::Spacious => TEXT_ROW_HEIGHT_SPACIOUS,
+        }
+    }
+
+    /// Folder row height in pixels for this density.
+    pub const fn folder_row_height(self) -> f32 {
+        match self {
+            Self::Compact => FOLDER_ROW_HEIGHT_COMPACT,
+            Self::Comfortable => FOLDER_ROW_HEIGHT_COMFORTABLE,
+            Self::Spacious => FOLDER_ROW_HEIGHT_SPACIOUS,
+        }
+    }
+
+    /// Vertical padding budget (px) for standard 12pt mono text (15.6px line-height).
+    pub fn text_row_pad(self) -> f32 {
+        let pad = (self.text_row_height() - crate::theme::TypoRole::Mono.line_height_px()) / 2.0;
+        pad.max(0.0)
+    }
+
+    /// Vertical padding budget (px) for 13pt body folder text (18.2px line-height).
+    pub fn folder_row_pad(self) -> f32 {
+        let pad = (self.folder_row_height() - crate::theme::TypoRole::Body.line_height_px()) / 2.0;
+        pad.max(0.0)
+    }
+
+    /// Display label for UI density toggles and menus.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Compact => "Compact",
+            Self::Comfortable => "Comfortable",
+            Self::Spacious => "Spacious",
+        }
+    }
+
+    /// Number of fully visible text rows in `avail_h`. Non-finite or non-positive yields 0.
+    pub fn text_viewport_capacity(self, avail_h: f32) -> usize {
+        let h = self.text_row_height();
+        if !avail_h.is_finite() || avail_h <= 0.0 || h <= 0.0 {
+            0
+        } else {
+            (avail_h / h).floor() as usize
+        }
+    }
+
+    /// Number of fully visible folder rows in `avail_h`. Non-finite or non-positive yields 0.
+    pub fn folder_viewport_capacity(self, avail_h: f32) -> usize {
+        let h = self.folder_row_height();
+        if !avail_h.is_finite() || avail_h <= 0.0 || h <= 0.0 {
+            0
+        } else {
+            (avail_h / h).floor() as usize
+        }
+    }
+
+    /// Ruled trailing blank rows to fill viewport below `visible_len` rows.
+    pub fn text_fill_rows(self, panes_h: f32, visible_len: usize) -> usize {
+        textcenter_fill_rows(panes_h, self.text_row_height(), visible_len)
+    }
+}
+
+/// Returns the text row height in pixels for the given density.
+pub fn text_row_height_for_density(density: RowDensity) -> f32 {
+    density.text_row_height()
+}
+
+/// Returns the folder row height in pixels for the given density.
+pub fn folder_row_height_for_density(density: RowDensity) -> f32 {
+    density.folder_row_height()
+}
+
+/// Clip risk detector: returns true if `row_h < line_h`, meaning glyph
+/// ascenders or descenders would be cropped by the row boundary.
+/// Non-finite or non-positive dimensions also report clip risk.
+pub fn row_height_has_clip_risk(row_h: f32, line_h: f32) -> bool {
+    if !row_h.is_finite() || !line_h.is_finite() || row_h <= 0.0 || line_h <= 0.0 {
+        return true;
+    }
+    row_h < line_h
+}
+
+/// Absolute minimum row height (px) required for `line_h` to avoid clipping.
+/// Adds the minimum 1.0px floor so lines never touch the bounding box.
+pub fn min_safe_row_height_for_line(line_h: f32) -> f32 {
+    if !line_h.is_finite() || line_h <= 0.0 {
+        0.0
+    } else {
+        line_h + 1.0
+    }
+}
+
+/// Character capacity for a text pane of width `pane_w` given character advance `advance_px`.
+/// Non-finite or degenerate arguments yield 0. Pure; unit-tested.
+pub fn text_pane_char_capacity(pane_w: u32, advance_px: f32) -> usize {
+    if !advance_px.is_finite() || advance_px <= 0.0 || pane_w == 0 {
+        0
+    } else {
+        (pane_w as f32 / advance_px).floor() as usize
+    }
+}
+
+/// Audit result for viewmodel row heights and density at canonical and fallback viewports.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ViewportDensityAudit {
+    /// Canonical 960x600 text pane width (px) at 50/50 split.
+    pub canonical_text_pane_w: u32,
+    /// 720px fallback text pane width (px) at 50/50 split.
+    pub fallback_text_pane_w: u32,
+    /// Canonical 960x600 textcenter pane width (px) at 50/50 split.
+    pub canonical_textcenter_pane_w: u32,
+    /// 720px fallback textcenter pane width (px) at 50/50 split.
+    pub fallback_textcenter_pane_w: u32,
+    /// Canonical 960x600 folder path column available width at depth 0 (px).
+    pub canonical_folder_path_w_d0: f32,
+    /// 720px fallback folder path column available width at depth 0 (px).
+    pub fallback_folder_path_w_d0: f32,
+    /// 720px fallback folder path column available width at depth 3 (px).
+    pub fallback_folder_path_w_d3: f32,
+    /// Text visible capacity at 960x600 (panes_h = 476.0px) for [Compact, Comfortable, Spacious].
+    pub text_capacity_600: [usize; 3],
+    /// Text visible capacity at 720x450 fallback (panes_h = 326.0px) for [Compact, Comfortable, Spacious].
+    pub text_capacity_450: [usize; 3],
+    /// Folder visible capacity at 960x600 for [Compact, Comfortable, Spacious].
+    pub folder_capacity_600: [usize; 3],
+    /// Folder visible capacity at 720x450 fallback for [Compact, Comfortable, Spacious].
+    pub folder_capacity_450: [usize; 3],
+    /// Zero clipping confirmed across all density modes and viewports.
+    pub zero_clipping_verified: bool,
+}
+
+/// Runs a comprehensive headless audit of row-height and density tokens at
+/// 960x600 and 720px fallback. Verifies that zero text clipping occurs.
+pub fn audit_viewmodel_density() -> ViewportDensityAudit {
+    let (c_l, _) = dual_pane_widths(crate::theme::VIEWPORT_W, 0.50);
+    let (f_l, _) = dual_pane_widths(crate::theme::VIEWPORT_MIN_W, 0.50);
+    let (tc_c_l, _) = textcenter_pane_widths(crate::theme::VIEWPORT_W, 0.50);
+    let (tc_f_l, _) = textcenter_pane_widths(crate::theme::VIEWPORT_MIN_W, 0.50);
+
+    // Available panes height for 600px canonical and 450px fallback viewports
+    // (excluding 124px header/toolbar/status chrome)
+    let panes_h_600 = 476.0;
+    let panes_h_450 = 326.0;
+
+    let text_capacity_600 = [
+        RowDensity::Compact.text_viewport_capacity(panes_h_600),
+        RowDensity::Comfortable.text_viewport_capacity(panes_h_600),
+        RowDensity::Spacious.text_viewport_capacity(panes_h_600),
+    ];
+    let text_capacity_450 = [
+        RowDensity::Compact.text_viewport_capacity(panes_h_450),
+        RowDensity::Comfortable.text_viewport_capacity(panes_h_450),
+        RowDensity::Spacious.text_viewport_capacity(panes_h_450),
+    ];
+    let folder_capacity_600 = [
+        RowDensity::Compact.folder_viewport_capacity(panes_h_600),
+        RowDensity::Comfortable.folder_viewport_capacity(panes_h_600),
+        RowDensity::Spacious.folder_viewport_capacity(panes_h_600),
+    ];
+    let folder_capacity_450 = [
+        RowDensity::Compact.folder_viewport_capacity(panes_h_450),
+        RowDensity::Comfortable.folder_viewport_capacity(panes_h_450),
+        RowDensity::Spacious.folder_viewport_capacity(panes_h_450),
+    ];
+
+    let mut zero_clipping = true;
+
+    // Check vertical clipping against typographic line heights
+    let mono_line_h = crate::theme::TypoRole::Mono.line_height_px(); // 15.6
+    let mono_max_line_h =
+        crate::theme::TYPO_MONO_SIZE_MAX * crate::theme::TypoRole::Mono.line_height(); // 16.9
+    let body_line_h = crate::theme::TypoRole::Body.line_height_px(); // 18.2
+
+    for &d in &[
+        RowDensity::Compact,
+        RowDensity::Comfortable,
+        RowDensity::Spacious,
+    ] {
+        if row_height_has_clip_risk(d.text_row_height(), mono_line_h) {
+            zero_clipping = false;
+        }
+        if row_height_has_clip_risk(d.text_row_height(), mono_max_line_h) {
+            zero_clipping = false;
+        }
+        if row_height_has_clip_risk(d.folder_row_height(), body_line_h) {
+            zero_clipping = false;
+        }
+    }
+
+    let folder_side_w = crate::tree::folder_grid_side_px(); // 452.0
+    let path_min_w = crate::tree::folder_column_min_px(crate::tree::FolderColumn::Path); // 184.0
+
+    // Check 960 and 720 horizontal clearances
+    let c_path_d0 =
+        crate::theme::VIEWPORT_W as f32 - folder_side_w - crate::tree::tree_indent_for_depth(0);
+    let f_path_d0 =
+        crate::theme::VIEWPORT_MIN_W as f32 - folder_side_w - crate::tree::tree_indent_for_depth(0);
+    let f_path_d3 =
+        crate::theme::VIEWPORT_MIN_W as f32 - folder_side_w - crate::tree::tree_indent_for_depth(3);
+
+    if c_path_d0 < path_min_w || f_path_d0 < path_min_w || f_path_d3 < path_min_w {
+        zero_clipping = false;
+    }
+
+    ViewportDensityAudit {
+        canonical_text_pane_w: c_l,
+        fallback_text_pane_w: f_l,
+        canonical_textcenter_pane_w: tc_c_l,
+        fallback_textcenter_pane_w: tc_f_l,
+        canonical_folder_path_w_d0: c_path_d0,
+        fallback_folder_path_w_d0: f_path_d0,
+        fallback_folder_path_w_d3: f_path_d3,
+        text_capacity_600,
+        text_capacity_450,
+        folder_capacity_600,
+        folder_capacity_450,
+        zero_clipping_verified: zero_clipping,
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Hex
 // ----------------------------------------------------------------------------
 
@@ -4825,5 +5114,191 @@ mod tests {
         assert!(textcenter_hunk_head(&model.rows, 2));
         let (lx, gx, rx) = textcenter_x_positions(960, 0.5);
         assert!(lx < gx && gx < rx);
+    }
+
+    // ---- viewmodel density + row-height tests (MODEL10) ----
+
+    #[test]
+    fn density_tokens_strictly_greater_than_line_heights() {
+        use crate::theme::{CHROME_HEADER_BAR_H, SPACE_XL, TYPO_MONO_SIZE_MAX, TypoRole};
+        use crate::tree::FOLDER_ROW_HEIGHT;
+
+        // Text row heights strictly exceed mono line heights (no vertical clip)
+        let mono_line_h = TypoRole::Mono.line_height_px(); // 15.6
+        let mono_max_line_h = TYPO_MONO_SIZE_MAX * TypoRole::Mono.line_height(); // 16.9
+        assert!(TEXT_ROW_HEIGHT_COMPACT > mono_line_h);
+        assert!(TEXT_ROW_HEIGHT_COMPACT > mono_max_line_h);
+        assert!(TEXT_ROW_HEIGHT_COMFORTABLE > TEXT_ROW_HEIGHT_COMPACT);
+        assert!(TEXT_ROW_HEIGHT_SPACIOUS > TEXT_ROW_HEIGHT_COMFORTABLE);
+
+        // Folder row heights strictly exceed body line height (no vertical clip)
+        let body_line_h = TypoRole::Body.line_height_px(); // 18.2
+        assert!(FOLDER_ROW_HEIGHT_COMPACT > body_line_h);
+        assert!(FOLDER_ROW_HEIGHT_COMFORTABLE > FOLDER_ROW_HEIGHT_COMPACT);
+        assert!(FOLDER_ROW_HEIGHT_SPACIOUS > FOLDER_ROW_HEIGHT_COMFORTABLE);
+
+        // Parity with existing design tokens
+        assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, SPACE_XL);
+        assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, 24.0);
+        assert_eq!(FOLDER_ROW_HEIGHT_COMFORTABLE, FOLDER_ROW_HEIGHT);
+        assert_eq!(FOLDER_ROW_HEIGHT_COMFORTABLE, 24.0);
+        assert_eq!(TEXT_ROW_HEIGHT_SPACIOUS, CHROME_HEADER_BAR_H);
+        assert_eq!(TEXT_ROW_HEIGHT_SPACIOUS, 28.0);
+        assert_eq!(FOLDER_ROW_HEIGHT_SPACIOUS, 28.0);
+    }
+
+    #[test]
+    fn density_enum_methods_and_labels() {
+        assert_eq!(RowDensity::default(), RowDensity::Comfortable);
+        assert_eq!(RowDensity::Compact.label(), "Compact");
+        assert_eq!(RowDensity::Comfortable.label(), "Comfortable");
+        assert_eq!(RowDensity::Spacious.label(), "Spacious");
+
+        assert_eq!(
+            RowDensity::Compact.text_row_height(),
+            TEXT_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            RowDensity::Comfortable.text_row_height(),
+            TEXT_ROW_HEIGHT_COMFORTABLE
+        );
+        assert_eq!(
+            RowDensity::Spacious.text_row_height(),
+            TEXT_ROW_HEIGHT_SPACIOUS
+        );
+
+        assert_eq!(
+            RowDensity::Compact.folder_row_height(),
+            FOLDER_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            RowDensity::Comfortable.folder_row_height(),
+            FOLDER_ROW_HEIGHT_COMFORTABLE
+        );
+        assert_eq!(
+            RowDensity::Spacious.folder_row_height(),
+            FOLDER_ROW_HEIGHT_SPACIOUS
+        );
+
+        // Standalone functions
+        assert_eq!(
+            text_row_height_for_density(RowDensity::Compact),
+            TEXT_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            folder_row_height_for_density(RowDensity::Compact),
+            FOLDER_ROW_HEIGHT_COMPACT
+        );
+
+        // Text padding budgets
+        assert!((RowDensity::Compact.text_row_pad() - 1.2).abs() < 0.01);
+        assert!((RowDensity::Comfortable.text_row_pad() - 4.2).abs() < 0.01);
+        assert!((RowDensity::Spacious.text_row_pad() - 6.2).abs() < 0.01);
+
+        // Folder padding budgets
+        assert!((RowDensity::Compact.folder_row_pad() - 0.9).abs() < 0.01);
+        assert!((RowDensity::Comfortable.folder_row_pad() - 2.9).abs() < 0.01);
+        assert!((RowDensity::Spacious.folder_row_pad() - 4.9).abs() < 0.01);
+    }
+
+    #[test]
+    fn clip_risk_detector_and_min_safe_height() {
+        // row_h >= line_h -> no clip risk
+        assert!(!row_height_has_clip_risk(18.0, 15.6));
+        assert!(!row_height_has_clip_risk(24.0, 18.2));
+        assert!(!row_height_has_clip_risk(18.2, 18.2));
+
+        // row_h < line_h -> clip risk
+        assert!(row_height_has_clip_risk(15.0, 15.6));
+        assert!(row_height_has_clip_risk(18.0, 18.2));
+
+        // Degenerate inputs report clip risk defensively
+        assert!(row_height_has_clip_risk(f32::NAN, 15.6));
+        assert!(row_height_has_clip_risk(18.0, f32::NAN));
+        assert!(row_height_has_clip_risk(0.0, 15.6));
+        assert!(row_height_has_clip_risk(-5.0, 15.6));
+        assert!(row_height_has_clip_risk(18.0, -1.0));
+
+        // min_safe_row_height_for_line adds 1.0px floor
+        assert_eq!(min_safe_row_height_for_line(15.6), 16.6);
+        assert_eq!(min_safe_row_height_for_line(18.2), 19.2);
+        assert_eq!(min_safe_row_height_for_line(0.0), 0.0);
+        assert_eq!(min_safe_row_height_for_line(-4.0), 0.0);
+        assert_eq!(min_safe_row_height_for_line(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn viewport_capacity_and_fill_rows() {
+        let panes_h = 476.0;
+
+        // Text capacities
+        assert_eq!(
+            RowDensity::Compact.text_viewport_capacity(panes_h),
+            26 // 476 / 18 = 26.44
+        );
+        assert_eq!(
+            RowDensity::Comfortable.text_viewport_capacity(panes_h),
+            19 // 476 / 24 = 19.83
+        );
+        assert_eq!(
+            RowDensity::Spacious.text_viewport_capacity(panes_h),
+            17 // 476 / 28 = 17.0
+        );
+
+        // Folder capacities
+        assert_eq!(
+            RowDensity::Compact.folder_viewport_capacity(panes_h),
+            23 // 476 / 20 = 23.8
+        );
+        assert_eq!(
+            RowDensity::Comfortable.folder_viewport_capacity(panes_h),
+            19 // 476 / 24 = 19.83
+        );
+        assert_eq!(
+            RowDensity::Spacious.folder_viewport_capacity(panes_h),
+            17 // 476 / 28 = 17.0
+        );
+
+        // Degenerate capacities yield 0
+        assert_eq!(RowDensity::Compact.text_viewport_capacity(0.0), 0);
+        assert_eq!(RowDensity::Compact.text_viewport_capacity(-10.0), 0);
+        assert_eq!(RowDensity::Compact.text_viewport_capacity(f32::NAN), 0);
+
+        // Fill rows helper
+        assert_eq!(
+            RowDensity::Comfortable.text_fill_rows(600.0, 6),
+            textcenter_fill_rows(600.0, 24.0, 6)
+        );
+
+        // Text pane char capacity
+        assert_eq!(text_pane_char_capacity(460, 7.2), 63);
+        assert_eq!(text_pane_char_capacity(340, 7.2), 47);
+        assert_eq!(text_pane_char_capacity(0, 7.2), 0);
+        assert_eq!(text_pane_char_capacity(460, 0.0), 0);
+        assert_eq!(text_pane_char_capacity(460, f32::NAN), 0);
+    }
+
+    #[test]
+    fn audit_viewmodel_density_proves_zero_clipping_at_960_and_720() {
+        let audit = audit_viewmodel_density();
+        assert!(audit.zero_clipping_verified);
+
+        // Widths
+        assert_eq!(audit.canonical_text_pane_w, 460);
+        assert_eq!(audit.fallback_text_pane_w, 340);
+        assert_eq!(audit.canonical_textcenter_pane_w, 436);
+        assert_eq!(audit.fallback_textcenter_pane_w, 316);
+
+        // Folder clearances
+        let min_path_w = crate::tree::folder_column_min_px(crate::tree::FolderColumn::Path);
+        assert!(audit.canonical_folder_path_w_d0 >= min_path_w);
+        assert!(audit.fallback_folder_path_w_d0 >= min_path_w);
+        assert!(audit.fallback_folder_path_w_d3 >= min_path_w);
+
+        // Capacities
+        assert_eq!(audit.text_capacity_600, [26, 19, 17]);
+        assert_eq!(audit.text_capacity_450, [18, 13, 11]);
+        assert_eq!(audit.folder_capacity_600, [23, 19, 17]);
+        assert_eq!(audit.folder_capacity_450, [16, 13, 11]);
     }
 }

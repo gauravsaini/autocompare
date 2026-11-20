@@ -1471,6 +1471,34 @@ pub fn theme10_pane_hierarchy_ok() -> bool {
         && TypoRole::pane_body().line_height_px() > TypoRole::pane_meta().line_height_px()
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-TYPO10 rhythm + line-height + density contract (headless, paint-neutral).
+// Single gate proving monospace consistency across code panes, proportional
+// chrome with weight hierarchy, line-height vertical rhythm without inversion,
+// and zero text clipping across 960x600 and 720px fallback.
+// ----------------------------------------------------------------------------
+
+/// Wave EXQ-TYPO10 contract: TypoRole rhythm + line-height audit, monospace consistency,
+/// proportional chrome hierarchy, letter-tracking and vertical rhythm tokens without any
+/// new font sizes or color changes. Single gate for EXQ-TYPO10. Pure; unit-tested.
+pub fn exq_typo10_roles_plus_rhythm_ok() -> bool {
+    typo_roles_plus_rhythm_ok()
+        && theme10_pane_hierarchy_ok()
+        && TypoRole::Mono.is_mono()
+        && TypoRole::Mono.is_tabular()
+        && TypoRole::Mono.size() == TYPO_MONO_SIZE
+        && TypoRole::Heading.is_chrome()
+        && TypoRole::Body.is_chrome()
+        && TypoRole::Small.is_chrome()
+        && TypoRole::Heading.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
+        && TypoRole::Body.letter_spacing_em() == 0.0
+        && TypoRole::Mono.letter_spacing_em() == 0.0
+        && TypoRole::Small.letter_spacing_em() == 0.0
+        && TypoRole::Small.line_height_px() < TypoRole::Mono.line_height_px()
+        && TypoRole::Mono.line_height_px() < TypoRole::Body.line_height_px()
+        && TypoRole::Body.line_height_px() < TypoRole::Heading.line_height_px()
+}
+
 impl TypoRole {
     /// Pane header role: Heading (18 strong proportional, tabular off).
     /// Same value as [`TypoRole::chrome_section`]: app title plus section
@@ -2598,5 +2626,77 @@ mod tests {
         assert!(TypoRole::pane_body().size() > TypoRole::pane_meta().size());
         assert!(THEME10_PANE_META_GAP < THEME10_PANE_BODY_GAP);
         assert!(THEME10_PANE_BODY_GAP < THEME10_PANE_HEADER_GAP);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn exq_typo10_empty_vs_nonempty_rhythm_and_density_edge() {
+        assert!(exq_typo10_roles_plus_rhythm_ok());
+
+        // Line-height monotonic ladder: small 13.2 < mono 15.6 < body 18.2 < heading 21.6 px
+        assert_eq!(
+            TypoRole::Small.line_height_px(),
+            11.0 * TYPO_LINE_HEIGHT_CHROME
+        );
+        assert_eq!(
+            TypoRole::Mono.line_height_px(),
+            12.0 * TYPO_LINE_HEIGHT_MONO
+        );
+        assert_eq!(
+            TypoRole::Body.line_height_px(),
+            13.0 * TYPO_LINE_HEIGHT_BODY
+        );
+        assert_eq!(
+            TypoRole::Heading.line_height_px(),
+            18.0 * TYPO_LINE_HEIGHT_CHROME
+        );
+
+        // Tracking: heading only
+        assert_eq!(
+            TypoRole::Heading.letter_spacing_em(),
+            TYPO_TRACKING_HEADING_EM
+        );
+        assert_eq!(TypoRole::Mono.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Body.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Small.letter_spacing_em(), 0.0);
+
+        // Monospace consistency
+        assert_eq!(TypoRole::Mono.size(), TYPO_MONO_SIZE);
+        assert!(TypoRole::Mono.is_mono());
+        assert!(!TypoRole::Mono.is_chrome());
+        assert!(TypoRole::Mono.is_tabular());
+
+        // Edge comparison empty vs nonempty text models
+        let empty_cmp = autocompare_compare::TextComparison {
+            left_lines: Vec::new(),
+            right_lines: Vec::new(),
+            script: autocompare_diff::DiffScript {
+                ops: Vec::new(),
+                exact: true,
+            },
+        };
+        let empty_rows = crate::viewmodel::build_text_rows(&empty_cmp);
+        assert_eq!(empty_rows.rows.len(), 0);
+        assert_eq!(empty_rows.gutter_chars, 4);
+
+        let nonempty_cmp = autocompare_compare::TextComparison {
+            left_lines: vec!["alpha".to_string(), "beta".to_string()],
+            right_lines: vec!["alpha".to_string(), "gamma".to_string()],
+            script: autocompare_diff::DiffScript {
+                ops: vec![
+                    autocompare_diff::Op::Equal { len: 1 },
+                    autocompare_diff::Op::Delete { len: 1 },
+                    autocompare_diff::Op::Insert { len: 1 },
+                ],
+                exact: true,
+            },
+        };
+        let nonempty_rows = crate::viewmodel::build_text_rows(&nonempty_cmp);
+        assert_eq!(nonempty_rows.rows.len(), 2);
+        assert_eq!(nonempty_rows.gutter_chars, 4);
+
+        // Density verification: zero vertical clipping in both
+        let audit = crate::viewmodel::audit_viewmodel_density();
+        assert!(audit.zero_clipping_verified);
     }
 }

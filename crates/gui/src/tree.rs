@@ -1062,6 +1062,12 @@ pub fn folder_row_height() -> f32 {
     FOLDER_ROW_HEIGHT
 }
 
+/// Density-aware folder row height (px): compact 20px, comfortable 24px, spacious 28px.
+/// Reuses [`crate::viewmodel::folder_row_height_for_density`]. Pure; unit-tested.
+pub fn folder_row_height_for_density(density: crate::viewmodel::FolderDensity) -> f32 {
+    crate::viewmodel::folder_row_height_for_density(density)
+}
+
 /// Paint header height (px).
 pub fn folder_header_height() -> f32 {
     FOLDER_HEADER_HEIGHT
@@ -5756,5 +5762,21 @@ mod exq_tree5_tests {
             folder_typo_for_column(FolderColumn::Path).size
         );
         assert_eq!(folder_gutter_arrow_typo().size, folder_header_typo().size);
+    }
+
+    #[test]
+    fn tree_density_row_height_matches_viewmodel_tokens() {
+        assert_eq!(
+            folder_row_height_for_density(crate::viewmodel::RowDensity::Compact),
+            crate::viewmodel::FOLDER_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            folder_row_height_for_density(crate::viewmodel::RowDensity::Comfortable),
+            FOLDER_ROW_HEIGHT
+        );
+        assert_eq!(
+            folder_row_height_for_density(crate::viewmodel::RowDensity::Spacious),
+            crate::viewmodel::FOLDER_ROW_HEIGHT_SPACIOUS
+        );
     }
 }
