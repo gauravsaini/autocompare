@@ -144,3 +144,12 @@
 1. **Scope**: Clean-room depth across `autocompare-sessions`, `autocompare-reports`, and `autocompare-vfs` verified via unified ac-loop harness with 10/10 CLI parity, GUI geo-typo PASS, and live BC observe.
 2. **Tests** (before → after): 102 → 124 tests passed across 3 crates (reports: 28/28, sessions: 62/62, vfs: 34/34), clippy zero warnings, rustfmt clean, zero unsafe, zero unwrap/expect/panic/todo in non-test code, zero allow(dead_code).
 3. **Files changed**: `checks/ac-loop/round-sessrep/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-20
+
+### Verification (2026-11-20) — Exquisite GUI geometry and typography round-exq4 verified
+
+1. **GUI Geometry & Typography Wave-4**: Verified responsive layout with zero clipped text, 960x600 canvas + 720px narrow fallback proof PNG (12,992 bytes, distinct 256), `TypoRole` single-sourcing across views, frozen colors, and new edge-04 fixture.
+2. **Tests** (before → after): autocompare-gui 714 → 726 passed, 0 failed; clippy zero warnings (`-D warnings`); rustfmt clean; zero unsafe; zero unwrap/expect/panic/todo in non-test code; ac-loop round-exq4 RESULT: PASS.
+3. **Files changed**: `crates/gui/src/{screenshot,views}.rs`, `checks/ac-loop/round-exq4/**`, `TIMELINE.md`.
