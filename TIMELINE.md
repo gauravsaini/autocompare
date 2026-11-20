@@ -368,3 +368,9 @@
 1. **Table Cols & Separators at 960px**: column widths from char metrics via space pad, row height locked to TypoRole Mono line-height, header underline plus strong weight.
 2. **Tests** (before → after): autocompare-gui all green (962 passed); clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table5/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter7 markers plus tall
+
+1. **Gutter Markers & Tall File at 1200px**: change markers with symmetric hit-slop in center gutter, tall-file fixture lock, marker placement from space scale.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter7/**`, `TIMELINE.md`.
