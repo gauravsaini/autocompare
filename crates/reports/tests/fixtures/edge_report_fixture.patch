@@ -1,0 +1,9 @@
+--- a/tests/data/"special" & <sample>/файл_ünicöde_🎉.rs	2026-11-20 00:00:00 +0000
++++ b/tests/data/"special" & <sample>/файл_ünicöde_🎉.rs	2026-11-20 01:00:00 +0000
+@@ -0,0 +1,1 @@
++// File created from template: 🚀
+@@ -999999,3 +1000000,3 @@
+ let old_metric = compute_old_metric();
+-    println!("Old value: {}", old_metric);
++    println!("New value: {}", new_metric);
+!    assert!(new_metric < 100);

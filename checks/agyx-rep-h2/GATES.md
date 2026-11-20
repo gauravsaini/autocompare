@@ -11,7 +11,7 @@ Scope:
 
 ### Gate 1 (G1): Cargo test suite green
 - CHECK: CARGO_TARGET_DIR=/tmp/target-agyx-s2 CARGO_BUILD_JOBS=2 cargo test -p autocompare-reports
-- EXPECT: test result: ok.
+- EXPECT: test result: ok. (31 passed)
 
 ### Gate 2 (G2): Clippy zero warnings
 - CHECK: CARGO_TARGET_DIR=/tmp/target-agyx-s2 cargo clippy -p autocompare-reports --all-targets -- -D warnings
@@ -26,9 +26,9 @@ Scope:
 - EXPECT: exit 1 (zero matches in non-test source)
 
 ### Gate 5 (G5): Builder snapshot coverage and edge fixture added
-- CHECK: CARGO_TARGET_DIR=/tmp/target-agyx-s2 CARGO_BUILD_JOBS=2 cargo test -p autocompare-reports -- test_builder_snapshots test_edge_hunk_boundaries_and_special_paths
-- EXPECT: test result: ok.
+- CHECK: CARGO_TARGET_DIR=/tmp/target-agyx-s2 CARGO_BUILD_JOBS=2 cargo test -p autocompare-reports -- test_builder_snapshots test_edge_hunk_boundaries_and_special_paths test_edge_fixture_snapshot_match
+- EXPECT: test result: ok. (3 passed)
 
 ### Gate 6 (G6): Pathspec clean verification
-- CHECK: git status --porcelain
+- CHECK: git status --porcelain (staged files strictly inside OWNS paths)
 - EXPECT: zero modifications outside OWNS paths

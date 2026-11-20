@@ -633,7 +633,7 @@ fn test_edge_crlf_and_whitespace_preservation() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-1/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-1/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -691,7 +691,7 @@ fn test_edge_pure_insertions_and_pure_deletions_sbs() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-2/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-2/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -756,7 +756,7 @@ fn test_edge_unicode_cjk_emoji_rtl_rendering() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-3/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-3/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -856,7 +856,7 @@ fn test_edge_context_filter_boundaries() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-4/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-4/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -906,7 +906,7 @@ fn test_edge_patch_builder_timestamps() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-5/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-5/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -1045,7 +1045,7 @@ fn test_edge_multiformat_bundles_parity() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(|p| p.parent())
-            .map(|p| p.join("checks/agyx-rep-h/round-6/comparison"))
+            .map(|p| p.join("checks/agyx-rep-h2/round-6/comparison"))
     });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
@@ -1613,4 +1613,95 @@ fn test_edge_hunk_boundaries_and_special_paths() {
     assert!(patch.contains("@@ -0,0 +1,1 @@\n"));
     assert!(patch.contains("+// File created from template\n"));
     assert!(patch.contains("@@ -999999,2 +1000000,2 @@\n"));
+}
+
+#[test]
+fn test_edge_fixture_snapshot_match() {
+    let fixture_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("edge_report_fixture.patch");
+    let raw_fixture: String = std::fs::read_to_string(&fixture_path).unwrap_or_default();
+    assert!(
+        !raw_fixture.is_empty(),
+        "fixture file must exist and be readable"
+    );
+
+    let special_path = "tests/data/\"special\" & <sample>/файл_ünicöde_🎉.rs";
+    let hunks = vec![
+        Hunk::new(
+            0,
+            0,
+            1,
+            1,
+            vec![HunkLine::insert("// File created from template: 🚀", 1)],
+        ),
+        Hunk::new(
+            999_999,
+            3,
+            1_000_000,
+            3,
+            vec![
+                HunkLine::unchanged("let old_metric = compute_old_metric();", 999_999, 1_000_000),
+                HunkLine::delete("    println!(\"Old value: {}\", old_metric);", 1_000_000),
+                HunkLine::insert("    println!(\"New value: {}\", new_metric);", 1_000_001),
+                HunkLine::modify("    assert!(new_metric < 100);", 1_000_001, 1_000_002),
+            ],
+        ),
+    ];
+
+    let input = ReportInput::auto(special_path, hunks);
+
+    // 1. Verify PatchReportBuilder matches the edge fixture byte-for-byte
+    let rendered_patch = PatchReportBuilder::new(&input)
+        .with_paths(special_path, special_path)
+        .with_timestamps("2026-11-20 00:00:00 +0000", "2026-11-20 01:00:00 +0000")
+        .unified()
+        .render();
+
+    assert_eq!(rendered_patch, raw_fixture);
+
+    // 2. Verify HtmlMonoBuilder and HtmlColorBuilder with dedicated methods & add_child_anchor
+    let mut mono_builder = HtmlMonoBuilder::new(&input)
+        .side_by_side()
+        .with_subtitle("Mono Edge Fixture Verification")
+        .with_breadcrumb("Root", "../index.html")
+        .with_parent_anchor("Parent", "../parent.html");
+    mono_builder.add_child_anchor(
+        ChildReportAnchor::new("Child Aux", "aux.html")
+            .with_status("Modified")
+            .with_stats(DiffStats::new(1, 1, 1, 10)),
+    );
+    let mono_out = mono_builder.render();
+    assert!(mono_out.contains("diff-table-sbs"));
+    assert!(mono_out.contains("Mono Edge Fixture Verification"));
+    assert!(mono_out.contains("&quot;special&quot; &amp; &lt;sample&gt;/файл_ünicöde_🎉.rs"));
+    assert!(mono_out.contains("Child Aux"));
+    assert!(mono_out.contains("999999"));
+    assert!(mono_out.contains("1000000"));
+
+    let mut color_builder = HtmlColorBuilder::new(&input)
+        .diffs_only()
+        .with_subtitle("Color Diffs Only");
+    color_builder.add_child_anchor(ChildReportAnchor::new("Child 2", "child2.html"));
+    let color_out = color_builder.render();
+    assert!(color_out.contains("Color Diffs Only"));
+    assert!(!color_out.contains("let old_metric = compute_old_metric();")); // unchanged filtered out
+    assert!(color_out.contains("Old value:"));
+    assert!(color_out.contains("New value:"));
+
+    // 3. Verify TextReportBuilder and XmlReportBuilder with add_child_anchor
+    let mut text_builder = TextReportBuilder::new(&input).with_line_numbers(true);
+    text_builder.add_child_anchor(ChildReportAnchor::new("Child Text", "child.txt"));
+    let text_out = text_builder.render();
+    assert!(text_out.contains("999999"));
+    assert!(text_out.contains("1000000"));
+    assert!(text_out.contains("Child Text -> child.txt"));
+
+    let mut xml_builder = XmlReportBuilder::new(&input);
+    xml_builder.add_child_anchor(ChildReportAnchor::new("Child XML", "child.xml"));
+    let xml_out = xml_builder.render();
+    assert!(xml_out.contains("<diff-report xmlns=\"urn:autocompare:report:v1\">"));
+    assert!(xml_out.contains("old-start=\"999999\""));
+    assert!(xml_out.contains("Child XML</child-report>"));
 }
