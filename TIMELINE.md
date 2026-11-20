@@ -632,3 +632,9 @@
 1. **Text Typography**: body/mono/small role sizes from TYPO_* tokens, line-height-derived row heights, line-number column from char metrics, letter-spacing, baseline offsets. Touch ONLY text-region helpers + paint_text_body call sites (text_body_role, text_linenum_column_width_from_metrics, text_typo17_row_height, etc.). Colors frozen at 33 touches. Edge fixture comparison/typo-tall-1200.json + headless test typo17_tall1200_numbers_aligned.
 2. **Tests** (before -> after): autocompare-gui 1040 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate IDENTICAL (views.rs egui path does not feed fixture pixels — same structural block as chrome17; live-window verification pending). Note: leaf also drafted out-of-OWNS crates/sessions edits in its worktree — deliberately left uncommitted and excluded from landing.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-typo17/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-shot19 fixture typo pixels
+
+1. **Fixture Typo Pixels (visual-spec-first)**: screenshot.rs fixture renderer mirrors the typo17 look — line-number column with char-metric inset, line-height row rhythm with breathing room, stable baselines. Shot15 gutter + markers and shot18 chrome intact. pxdiff vs baseline: 97239 of 576000 DIFFERENT, bbox (12,179)-(935,341), VERDICT DIFFERENT (independently re-verified).
+2. **Tests** (before -> after): autocompare-gui 1041 green (including shot19_typotall_numbers_aligned); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-shot19/**, TIMELINE.md.
