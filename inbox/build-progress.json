@@ -21,6 +21,7 @@
   "ORCH-MS-RULES": "fetched microsoft rust-guidelines all.txt, applied M-DESIGN-FOR-AI idiomatic APIs docs strong-types testable coverage, enforced in exq8 prompt",
   "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)",
   "ORCH-OBSERVE2": "capture/live-observe-orch-2.md written, 4 waves idle but alive, no kill",
+  "ORCH-RESCUE-EXQ7": "2026-11-20 22:24 AEDT exq7 24m idle killed slot freed WIP +1983 preserved, home1 launched sess-opencode-guihome1 OWNS home.rs+tree.rs+checks/gui-home1",
   "ORCH-STEER-FMT": "agents must run cargo fmt scoped (-p own-crate); workspace-wide fmt touches cross-OWNS files (cli runner/session_cmd reverted)",
   "ORCH-SWEEP-NOTE": "orchestrator commits must use pathspec (git commit <paths>) not bare commit, else staged agent work gets swept; corrected going forward",
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
