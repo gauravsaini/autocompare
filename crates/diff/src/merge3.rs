@@ -8,7 +8,8 @@
 //! conflict block with the exact marker lines `<<<<<<< left`,
 //! `=======` and `>>>>>>> right`.
 
-use crate::{DiffScript, Op, diff_lines};
+use crate::text_diff::{DiffAlgorithm, diff as diff_with_algo};
+use crate::{DiffScript, Op};
 
 /// A structured block in a 3-way merge.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,8 +124,19 @@ fn emit_side(out: &mut Vec<String>, base: &[&str], gs: usize, ge: usize, edits: 
 
 /// Computes structured 3-way merge blocks for `base`, `left`, and `right`.
 pub(crate) fn merge3_blocks(base: &[&str], left: &[&str], right: &[&str]) -> Vec<Merge3Block> {
-    let le = script_to_edits(base.len(), &diff_lines(base, left), left);
-    let re = script_to_edits(base.len(), &diff_lines(base, right), right);
+    merge3_blocks_with_algorithm(base, left, right, DiffAlgorithm::Myers)
+}
+
+/// Computes structured 3-way merge blocks with an explicit diff algorithm
+/// (Myers minimal vs Patience human-readable). Headless; never panics.
+pub(crate) fn merge3_blocks_with_algorithm(
+    base: &[&str],
+    left: &[&str],
+    right: &[&str],
+    algorithm: DiffAlgorithm,
+) -> Vec<Merge3Block> {
+    let le = script_to_edits(base.len(), &diff_with_algo(base, left, algorithm), left);
+    let re = script_to_edits(base.len(), &diff_with_algo(base, right, algorithm), right);
     let n = base.len();
     let mut out: Vec<Merge3Block> = Vec::new();
     let (mut i, mut j, mut p) = (0usize, 0usize, 0usize);
@@ -245,7 +257,18 @@ pub(crate) fn merge3_blocks(base: &[&str], left: &[&str], right: &[&str]) -> Vec
 /// Three-way merge of `base`, `left` and `right`. Never panics; the
 /// result is always complete lines.
 pub(crate) fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
-    let blocks = merge3_blocks(base, left, right);
+    merge3_with_algorithm(base, left, right, DiffAlgorithm::Myers)
+}
+
+/// Three-way merge with explicit diff algorithm (Myers/Patience).
+/// Never panics; always complete lines.
+pub(crate) fn merge3_with_algorithm(
+    base: &[&str],
+    left: &[&str],
+    right: &[&str],
+    algorithm: DiffAlgorithm,
+) -> Vec<String> {
+    let blocks = merge3_blocks_with_algorithm(base, left, right, algorithm);
     let mut out: Vec<String> = Vec::new();
     for block in blocks {
         match block {

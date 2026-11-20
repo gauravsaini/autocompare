@@ -237,6 +237,229 @@ pub fn take_conflict_block_height_px(line_count: usize) -> f32 {
     line_count as f32 * crate::theme::TypoRole::Mono.line_height_px()
 }
 
+// ----------------------------------------------------------------------------
+// Thin Take wiring over autocompare-diff (headless, no egui, no I/O).
+// BC parity: Left / Center (=ancestor/base) / Right. Stepper + editable
+// output buffer + save-to-output text live here; model lives in diff.
+// ----------------------------------------------------------------------------
+
+use autocompare_diff::merge::{
+    MergeSession as DiffMergeSession, TakeChoice as DiffTakeChoice,
+    TakeResolution as DiffTakeResolution, TextBuffer as DiffTextBuffer,
+};
+use autocompare_diff::text_diff::DiffAlgorithm;
+
+/// BC-parity take side: Left / Center (ancestor) / Right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TakeSide {
+    Left,
+    Center,
+    Right,
+}
+
+/// Label for a take side (paint parity): "Take Left/Center/Right".
+pub fn take_side_label(side: TakeSide) -> &'static str {
+    match side {
+        TakeSide::Left => "Take Left",
+        TakeSide::Center => "Take Center",
+        TakeSide::Right => "Take Right",
+    }
+}
+
+impl TakeSide {
+    /// Maps to this crate's marker-level [`TakeChoice`] (Center == Base).
+    pub fn to_gui_choice(self) -> TakeChoice {
+        match self {
+            Self::Left => TakeChoice::Left,
+            Self::Center => TakeChoice::Base,
+            Self::Right => TakeChoice::Right,
+        }
+    }
+
+    /// Maps to the diff engine's [`DiffTakeChoice`] (Center == Base).
+    pub fn to_diff_choice(self) -> DiffTakeChoice {
+        match self {
+            Self::Left => DiffTakeChoice::Left,
+            Self::Center => DiffTakeChoice::Base,
+            Self::Right => DiffTakeChoice::Right,
+        }
+    }
+}
+
+/// Joins output lines into save-to-output text (BC parity): `"\n"` join
+/// plus trailing newline when non-empty, empty stays empty. Pure.
+pub fn join_take_output(lines: &[String]) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    for (idx, line) in lines.iter().enumerate() {
+        if idx > 0 {
+            out.push('\n');
+        }
+        out.push_str(line);
+    }
+    out.push('\n');
+    out
+}
+
+/// Thin 3-way Take session: owns the diff [`DiffMergeSession`], an
+/// editable output [`DiffTextBuffer`], and a conflict stepper cursor.
+/// Paint calls `take_*` / `step_*`, edits via `buffer_mut`, saves via
+/// [`TakeSession::output_text`]. No egui, no I/O, never panics.
+pub struct TakeSession {
+    session: DiffMergeSession,
+    buffer: DiffTextBuffer,
+    cursor: Option<usize>,
+}
+
+impl TakeSession {
+    /// Builds a 3-way session (Myers) and syncs the editable buffer.
+    pub fn new(base: &[&str], left: &[&str], right: &[&str]) -> Self {
+        Self::new_with_algorithm(base, left, right, DiffAlgorithm::Myers)
+    }
+
+    /// Builds a 3-way session with explicit diff algorithm.
+    pub fn new_with_algorithm(
+        base: &[&str],
+        left: &[&str],
+        right: &[&str],
+        algorithm: DiffAlgorithm,
+    ) -> Self {
+        let session = DiffMergeSession::new_with_algorithm(base, left, right, algorithm);
+        let buffer = DiffTextBuffer::from_lines(session.render_lines());
+        let cursor = session.first_unresolved();
+        Self {
+            session,
+            buffer,
+            cursor,
+        }
+    }
+
+    /// Total conflict blocks.
+    pub fn conflict_count(&self) -> usize {
+        self.session.conflict_count()
+    }
+
+    /// Unresolved conflict blocks.
+    pub fn unresolved_count(&self) -> usize {
+        self.session.unresolved_count()
+    }
+
+    /// True when every conflict has a take decision.
+    pub fn is_fully_resolved(&self) -> bool {
+        self.session.is_fully_resolved()
+    }
+
+    /// Stepper cursor (current conflict id, if any).
+    pub fn current(&self) -> Option<usize> {
+        self.cursor
+    }
+
+    /// Steps to the first unresolved conflict.
+    pub fn step_to_first(&mut self) -> Option<usize> {
+        self.cursor = self.session.first_unresolved();
+        self.cursor
+    }
+
+    /// Steps to the next unresolved conflict after the cursor.
+    pub fn step_to_next(&mut self) -> Option<usize> {
+        let from = self.cursor.unwrap_or(usize::MAX);
+        // `next_unresolved` needs strictly-greater id; at end wrap to first.
+        let next = if self.cursor.is_some() {
+            self.session.next_unresolved(from)
+        } else {
+            self.session.first_unresolved()
+        };
+        self.cursor = next.or_else(|| self.session.first_unresolved());
+        self.cursor
+    }
+
+    /// Steps to the previous unresolved conflict before the cursor.
+    pub fn step_to_prev(&mut self) -> Option<usize> {
+        let next = match self.cursor {
+            Some(from) => self
+                .session
+                .prev_unresolved(from)
+                .or_else(|| self.session.first_unresolved()),
+            None => self.session.first_unresolved(),
+        };
+        self.cursor = next;
+        self.cursor
+    }
+
+    /// Takes `side` for conflict `id` and re-syncs the output buffer.
+    pub fn take(&mut self, id: usize, side: TakeSide) -> bool {
+        let ok = self
+            .session
+            .resolve_conflict(id, DiffTakeResolution::Choice(side.to_diff_choice()));
+        if ok {
+            self.cursor = Some(id);
+            self.sync_buffer();
+        }
+        ok
+    }
+
+    /// Takes Left for conflict `id`.
+    pub fn take_left(&mut self, id: usize) -> bool {
+        self.take(id, TakeSide::Left)
+    }
+
+    /// Takes Center (ancestor/base) for conflict `id`.
+    pub fn take_center(&mut self, id: usize) -> bool {
+        self.take(id, TakeSide::Center)
+    }
+
+    /// Takes Right for conflict `id`.
+    pub fn take_right(&mut self, id: usize) -> bool {
+        self.take(id, TakeSide::Right)
+    }
+
+    /// Takes `side` for every conflict and re-syncs the buffer.
+    pub fn take_all(&mut self, side: TakeSide) {
+        match side {
+            TakeSide::Left => self.session.take_all_left(),
+            TakeSide::Center => self.session.take_all_center(),
+            TakeSide::Right => self.session.take_all_right(),
+        }
+        self.sync_buffer();
+    }
+
+    /// Clears one conflict back to unresolved and re-syncs the buffer.
+    pub fn clear(&mut self, id: usize) -> bool {
+        let ok = self.session.clear_resolution(id);
+        if ok {
+            self.sync_buffer();
+        }
+        ok
+    }
+
+    /// Rendered output lines (markers for unresolved conflicts).
+    pub fn output_lines(&self) -> Vec<String> {
+        self.session.render_lines()
+    }
+
+    /// Save-to-output text (BC parity trailing newline).
+    pub fn output_text(&self) -> String {
+        join_take_output(&self.output_lines())
+    }
+
+    /// Editable output buffer (synced after every take/clear).
+    pub fn buffer(&self) -> &DiffTextBuffer {
+        &self.buffer
+    }
+
+    /// Mutable editable output buffer (typing, undo/redo live here).
+    pub fn buffer_mut(&mut self) -> &mut DiffTextBuffer {
+        &mut self.buffer
+    }
+
+    /// Re-syncs the editable buffer from the session render.
+    pub fn sync_buffer(&mut self) {
+        self.buffer = DiffTextBuffer::from_lines(self.session.render_lines());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,5 +572,62 @@ mod tests {
         let one = take_conflict_block_height_px(1);
         assert!((one - 15.6).abs() < 0.01);
         assert!((take_conflict_block_height_px(4) - one * 4.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn take_side_maps_center_to_base_and_labels() {
+        assert_eq!(take_side_label(TakeSide::Left), "Take Left");
+        assert_eq!(take_side_label(TakeSide::Center), "Take Center");
+        assert_eq!(take_side_label(TakeSide::Right), "Take Right");
+        assert_eq!(TakeSide::Center.to_gui_choice(), TakeChoice::Base);
+        assert_eq!(TakeSide::Center.to_diff_choice(), DiffTakeChoice::Base);
+    }
+
+    #[test]
+    fn take_session_conflict_stepper_and_output() {
+        let base = ["common", "base_val", "tail"];
+        let left = ["common", "left_val", "tail"];
+        let right = ["common", "right_val", "tail"];
+        let mut sess = TakeSession::new(&base, &left, &right);
+        assert_eq!(sess.conflict_count(), 1);
+        assert_eq!(sess.unresolved_count(), 1);
+        assert_eq!(sess.current(), Some(0));
+        assert!(sess.take_center(0));
+        assert_eq!(sess.output_lines(), vec!["common", "base_val", "tail"]);
+        assert_eq!(sess.output_text(), "common\nbase_val\ntail\n");
+        assert!(sess.is_fully_resolved());
+        // Editable buffer syncs and supports undo.
+        assert_eq!(sess.buffer().lines(), &["common", "base_val", "tail"]);
+        sess.buffer_mut().replace_line(1, "edited".to_string());
+        assert_eq!(sess.buffer().line(1), Some("edited"));
+        assert!(sess.buffer_mut().undo());
+        assert_eq!(sess.buffer().line(1), Some("base_val"));
+    }
+
+    #[test]
+    fn take_session_stepper_next_prev_and_take_all() {
+        let base = ["a", "b"];
+        let left = ["a_l", "b_l"];
+        let right = ["a_r", "b_r"];
+        let mut sess = TakeSession::new(&base, &left, &right);
+        assert_eq!(sess.conflict_count(), 1);
+        assert_eq!(sess.step_to_first(), Some(0));
+        assert_eq!(sess.step_to_next(), Some(0));
+        assert_eq!(sess.step_to_prev(), Some(0));
+        sess.take_all(TakeSide::Right);
+        assert!(sess.is_fully_resolved());
+        assert_eq!(sess.output_lines(), vec!["a_r", "b_r"]);
+        assert!(sess.clear(0));
+        assert_eq!(sess.unresolved_count(), 1);
+    }
+
+    #[test]
+    fn join_take_output_trailing_newline_parity() {
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(join_take_output(&empty), String::new());
+        assert_eq!(
+            join_take_output(&["x".to_string(), "y".to_string()]),
+            "x\ny\n"
+        );
     }
 }

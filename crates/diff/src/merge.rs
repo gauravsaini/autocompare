@@ -3,7 +3,8 @@
 //! Layer 0: no panics, no unwrap/expect in non-test code, no unsafe.
 
 use crate::diff_lines;
-use crate::merge3::{Merge3Block, merge3_blocks};
+use crate::merge3::{Merge3Block, merge3_blocks, merge3_blocks_with_algorithm};
+use crate::text_diff::DiffAlgorithm;
 
 // ----------------------------------------------------------------------------
 // Editable Text Buffer with Undo / Redo
@@ -497,6 +498,18 @@ pub enum TakeChoice {
     BothRightFirst,
 }
 
+impl TakeChoice {
+    /// BC-parity alias: Center is the ancestor/base side.
+    /// `TakeChoice::Center` is exactly `Base`; no new behavior.
+    #[allow(non_upper_case_globals)]
+    pub const Center: Self = Self::Base;
+
+    /// True for the center/ancestor side (`Base` / `Center`).
+    pub fn is_center(self) -> bool {
+        matches!(self, Self::Base)
+    }
+}
+
 /// Resolution state for a merge conflict.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TakeResolution {
@@ -540,6 +553,39 @@ impl MergeSession {
     /// Constructs a new 3-way merge session from base, left, and right lines.
     pub fn new(base: &[&str], left: &[&str], right: &[&str]) -> Self {
         let raw_blocks = merge3_blocks(base, left, right);
+        let mut blocks = Vec::with_capacity(raw_blocks.len());
+        let mut conflict_id = 0usize;
+
+        for raw in raw_blocks {
+            match raw {
+                Merge3Block::Clean(lines) => {
+                    blocks.push(MergeBlock::Clean(lines));
+                }
+                Merge3Block::Conflict { base, left, right } => {
+                    blocks.push(MergeBlock::Conflict {
+                        id: conflict_id,
+                        base,
+                        left,
+                        right,
+                        resolution: None,
+                    });
+                    conflict_id += 1;
+                }
+            }
+        }
+
+        Self { blocks }
+    }
+
+    /// Constructs a 3-way merge session with explicit diff algorithm
+    /// (Myers minimal vs Patience readable). Headless; never panics.
+    pub fn new_with_algorithm(
+        base: &[&str],
+        left: &[&str],
+        right: &[&str],
+        algorithm: DiffAlgorithm,
+    ) -> Self {
+        let raw_blocks = merge3_blocks_with_algorithm(base, left, right, algorithm);
         let mut blocks = Vec::with_capacity(raw_blocks.len());
         let mut conflict_id = 0usize;
 
@@ -700,6 +746,11 @@ impl MergeSession {
         self.resolve_conflict(conflict_id, TakeResolution::Choice(TakeChoice::Base))
     }
 
+    /// Resolves conflict `conflict_id` by taking Center (ancestor/base, BC parity).
+    pub fn take_center(&mut self, conflict_id: usize) -> bool {
+        self.take_base(conflict_id)
+    }
+
     /// Resolves conflict `conflict_id` by taking Both with Left lines first.
     pub fn take_both_left_first(&mut self, conflict_id: usize) -> bool {
         self.resolve_conflict(
@@ -809,6 +860,11 @@ impl MergeSession {
                 *resolution = Some(TakeResolution::Choice(TakeChoice::Base));
             }
         }
+    }
+
+    /// Bulk action: resolve all conflicts by taking center (BC parity for base).
+    pub fn take_all_center(&mut self) {
+        self.take_all_base();
     }
 
     /// Renders the resulting lines using standard default conflict markers.
@@ -1742,5 +1798,28 @@ mod tests {
         let both_deleted = MergeSession::new(&base2, &empty, &empty);
         assert_eq!(both_deleted.conflict_count(), 0);
         assert_eq!(both_deleted.render_lines(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_take_center_alias_and_algorithm_parity() {
+        assert_eq!(TakeChoice::Center, TakeChoice::Base);
+        assert!(TakeChoice::Center.is_center());
+        assert!(!TakeChoice::Left.is_center());
+        let base = ["common", "base_val", "tail"];
+        let left = ["common", "left_val", "tail"];
+        let right = ["common", "right_val", "tail"];
+        for algo in [
+            crate::text_diff::DiffAlgorithm::Myers,
+            crate::text_diff::DiffAlgorithm::Patience,
+        ] {
+            let mut session = MergeSession::new_with_algorithm(&base, &left, &right, algo);
+            assert_eq!(session.conflict_count(), 1);
+            assert!(session.take_center(0));
+            assert_eq!(session.render_lines(), vec!["common", "base_val", "tail"]);
+            let mut centered = MergeSession::new_with_algorithm(&base, &left, &right, algo);
+            centered.take_all_center();
+            assert!(centered.is_fully_resolved());
+            assert_eq!(centered.render_lines(), vec!["common", "base_val", "tail"]);
+        }
     }
 }

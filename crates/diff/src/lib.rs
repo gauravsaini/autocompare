@@ -107,3 +107,14 @@ pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
 pub fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
     merge3::merge3(base, left, right)
 }
+
+/// Three-way merge with explicit diff algorithm (Myers/Patience).
+/// Never panics; always complete lines.
+pub fn merge3_with_algorithm(
+    base: &[&str],
+    left: &[&str],
+    right: &[&str],
+    algorithm: crate::text_diff::DiffAlgorithm,
+) -> Vec<String> {
+    merge3::merge3_with_algorithm(base, left, right, algorithm)
+}

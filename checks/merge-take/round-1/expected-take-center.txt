@@ -1,0 +1,5 @@
+common header
+base_val
+common mid
+base_tail
+common footer
