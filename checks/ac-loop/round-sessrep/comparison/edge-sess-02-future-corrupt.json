@@ -1,0 +1,20 @@
+{
+  "schema_version": 999,
+  "name": "Far Future Session",
+  "tabs": [
+    {
+      "id": "tab-future-1",
+      "title": "Quantum Diff",
+      "session_type": "quantum_text",
+      "left_path": "hyper://node-a/state",
+      "right_path": "hyper://node-b/state",
+      "read_only": false,
+      "locked": false,
+      "options": {
+        "entangled": "true"
+      }
+    }
+  ],
+  "active_tab_index": 0,
+  "locked": false
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "created_at_epoch_secs": 1732125600,
+  "generator": "autocompare-vfs 0.5.0",
+  "root_name": "project-root",
+  "description": "Snapshot of project root directory for clean-room comparison",
+  "entries": [
+    {
+      "path": "src",
+      "is_dir": true,
+      "size": 0,
+      "mtime_epoch_secs": 1732125500,
+      "crc32": null,
+      "mode": 493
+    },
+    {
+      "path": "src/lib.rs",
+      "is_dir": false,
+      "size": 1024,
+      "mtime_epoch_secs": 1732125505,
+      "crc32": 3735928559,
+      "mode": 420
+    },
+    {
+      "path": "Cargo.toml",
+      "is_dir": false,
+      "size": 512,
+      "mtime_epoch_secs": 1732125510,
+      "crc32": 2863311530,
+      "mode": 420
+    }
+  ]
+}

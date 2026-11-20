@@ -1,0 +1,5 @@
+// Multi-language localization baseline
+const greeting = "Hello, world! 🌍";
+const cjkText = "自动比较 - 跨平台差异分析 (日本語と中文)";
+const rtlPhrase = "مرحبا بالعالم - سلام دنیا";
+const crlfLine = "CRLF preserved\r\n";

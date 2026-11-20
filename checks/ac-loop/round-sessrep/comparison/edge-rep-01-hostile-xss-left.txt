@@ -1,0 +1,7 @@
+function authenticate(user) {
+    // Normal comment with ampersand & brackets
+    if (user.role === "admin" && user.verified) {
+        return "<div class='greeting'>Welcome, " + user.name + "</div>";
+    }
+    return "<div class='error'>Access Denied</div>";
+}

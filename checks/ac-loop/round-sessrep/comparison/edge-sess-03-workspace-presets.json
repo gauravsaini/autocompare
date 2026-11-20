@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "Production Review Workspace",
+  "locked": true,
+  "active_session_index": 0,
+  "sessions": [
+    {
+      "id": "sess-main",
+      "name": "Core Crates Diff",
+      "locked": true,
+      "active_tab_index": 0,
+      "tabs": [
+        {
+          "id": "tab-folder-sync",
+          "title": "Crates Sync Review",
+          "session_type": "folder",
+          "left_path": "crates/sessions",
+          "right_path": "crates/reports",
+          "read_only": true,
+          "locked": true,
+          "options": {
+            "sync.mode": "Mirror",
+            "folder.depth_limit": "2",
+            "folder.content_compare": "true",
+            "folder.include": "*.rs,Cargo.toml",
+            "folder.exclude": "target/*"
+          }
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "schema_version": 1,
+    "theme": "dark",
+    "tab_size": 4,
+    "show_line_numbers": true,
+    "custom_grammar_presets": {
+      "Rust (Strict)": {
+        "extensions": ["rs"],
+        "line_comment": "//",
+        "block_comment_start": "/*",
+        "block_comment_end": "*/",
+        "keywords": ["fn", "let", "mut", "pub", "struct", "enum", "impl", "trait"]
+      }
+    }
+  }
+}

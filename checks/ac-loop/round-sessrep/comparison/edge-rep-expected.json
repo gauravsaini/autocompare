@@ -1,0 +1,29 @@
+{
+  "html": {
+    "escaping_contract": {
+      "angle_brackets": "&lt; and &gt; escaped in all text nodes",
+      "quotes": "&quot; and &#39; escaped in attribute contexts",
+      "ampersand": "&amp; strictly preserved and not double-escaped"
+    },
+    "features": [
+      "color_mode",
+      "monochrome_mode",
+      "side_by_side",
+      "parent_navigation_breadcrumbs",
+      "linked_child_reports"
+    ]
+  },
+  "xml": {
+    "escaping_contract": {
+      "cdata_or_entities": "All line content and file names safely escaped",
+      "statistics": "additions, deletions, modifications, unchanged counts exact"
+    }
+  },
+  "patch": {
+    "formats": [
+      "unified_diff",
+      "context_diff"
+    ],
+    "header_spec": "--- a/path\n+++ b/path\n@@ -start,count +start,count @@"
+  }
+}

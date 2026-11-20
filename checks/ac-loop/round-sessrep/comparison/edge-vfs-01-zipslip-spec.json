@@ -1,0 +1,17 @@
+{
+  "hostile_traversal_paths": [
+    "../../../../etc/shadow",
+    "../../etc/passwd",
+    "foo/../../bar/../../../secret.key",
+    "/absolute/root/file.txt",
+    "C:\\Windows\\System32\\cmd.exe",
+    "nul_byte\u0000in_filename.txt",
+    ""
+  ],
+  "expected_behavior": {
+    "vfs_path": "Rejects with VfsError::InvalidPath or sanitize traversal",
+    "archive_zip": "ZipSlip protection blocks any entry resolving outside extraction root",
+    "archive_tar": "Tar path sanitization prevents extraction outside root directory",
+    "local_fs": "Refuses symlink cycle traversal and confines paths to root"
+  }
+}

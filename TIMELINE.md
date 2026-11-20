@@ -113,3 +113,11 @@
 1. **GUI Geometry & Typography**: Validated responsive layout (960x600 default + 720px fallback) with zero clipped text, monospace typography consistency, headless-first viewmodel logic, and frozen colors. Verified via ac-loop round-exq3 harness with new edge fixtures under comparison/.
 2. **Tests** (before → after): autocompare-gui 703 → 714 passed, 0 failed; clippy 0 warnings; cargo fmt clean; zero allow(dead_code); screenshot after.png valid.
 3. **Files changed**: `crates/gui/src/*`, `checks/ac-loop/round-exq3/*`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-20
+
+### Verification (2026-11-20) — ac-loop round-sessrep clean-room depth verified
+
+1. **Scope**: Clean-room depth across `autocompare-sessions`, `autocompare-reports`, and `autocompare-vfs` verified via unified ac-loop harness with 10/10 CLI parity, GUI geo-typo PASS, and live BC observe.
+2. **Tests** (before → after): 102 → 124 tests passed across 3 crates (reports: 28/28, sessions: 62/62, vfs: 34/34), clippy zero warnings, rustfmt clean, zero unsafe, zero unwrap/expect/panic/todo in non-test code, zero allow(dead_code).
+3. **Files changed**: `checks/ac-loop/round-sessrep/**`, `TIMELINE.md`.

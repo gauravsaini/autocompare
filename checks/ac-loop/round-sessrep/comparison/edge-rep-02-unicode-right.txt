@@ -1,0 +1,5 @@
+// Multi-language localization baseline (updated with emojis and RTL edits)
+const greeting = "Hello, Rustaceans! 🦀 🚀 ⚡";
+const cjkText = "自动比较 2.0 - 高性能深度对比 (日本語と中文・韓国語)";
+const rtlPhrase = "مرحبا بكم في المقارنة التلقائية - سلام دنیا 🕊️";
+const crlfLine = "CRLF preserved and extended\r\n";
