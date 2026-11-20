@@ -7569,3 +7569,210 @@ mod exq_tree8_tests {
         }
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE9: narrow 720px arrows + char-metric ellipsis + full-width select.
+// BC folder compare tree at narrow width: expander chevron keeps equal
+// hit-slop both sides, long names truncate to char metrics with `…`, and
+// the selected-row highlight still spans the full canvas. Geometry FIRST:
+// slop from SPACE_XS, step from SPACE_MD, widths from FOLDER_MONO_ADVANCE
+// plus pad, grid origins from folder_table_column_xs(720). Typography
+// SECOND: locked Mono row rhythm reuse (17.6), no new sizes. Colors FROZEN.
+// WIRING (paint): narrow hits from tree9_expander_hit_rect, names from
+// tree9_ellipsis_label, select band from tree9_selected_row_rect.
+// ----------------------------------------------------------------------------
+
+/// TREE9 narrow canvas width px: 720 reference (dual-pane fallback parity).
+pub const TREE9_CANVAS_NARROW_W: f32 = 720.0;
+
+/// Narrow grid column origins `(name_x, size_x, mod_x)` px at 720:
+/// `(0.0, 498.0, 592.0)`. Size/mod origins stay depth-independent.
+/// Pure; unit-tested.
+pub fn tree9_column_xs_720() -> (f32, f32, f32) {
+    folder_table_column_xs(TREE9_CANVAS_NARROW_W)
+}
+
+/// Narrow name column avail width px at 720: `490.0` char metrics budget.
+/// Pure; unit-tested.
+pub fn tree9_name_avail_w_720() -> f32 {
+    folder_table_name_avail_w(TREE9_CANVAS_NARROW_W)
+}
+
+/// TREE9 arrow hit-slop px: one XS step from the space scale (4.0).
+/// Single source for symmetric narrow chevron hits. Pure; unit-tested.
+pub fn tree9_expander_hit_slop() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Narrow expander hit rect `(x0, y0, x1, y1)` px: legacy cell widened by
+/// [`TREE9_CANVAS_NARROW_W`]-independent symmetric slop on BOTH sides.
+/// Vertical span is the locked Mono row height so stacked rows tile.
+/// Pure; unit-tested.
+pub fn tree9_expander_hit_rect(depth: usize, row_top: f32) -> (f32, f32, f32, f32) {
+    tree_expander_hit_rect_symmetric(depth, row_top)
+}
+
+/// Whether the narrow expander hit rect carries symmetric x slop at
+/// (`depth`, `row_top`): left slop == right slop == SPACE_XS.
+/// Pure; unit-tested.
+pub fn tree9_expander_symmetric(depth: usize, row_top: f32) -> bool {
+    tree7_expander_symmetric(depth, row_top)
+}
+
+/// Narrow name label max chars for `depth`: char-boundary budget
+/// (`(490 - indent) / mono_advance`, floor) from char metrics.
+/// Pure; unit-tested.
+pub fn tree9_label_max_chars(depth: usize) -> usize {
+    tree_label_max_chars(TREE9_CANVAS_NARROW_W, depth)
+}
+
+/// Whether a narrow label needs ellipsis at `depth` (char count budget).
+/// Pure; unit-tested.
+pub fn tree9_label_needs_ellipsis(label: &str, depth: usize) -> bool {
+    tree_orphan_label_needs_ellipsis(label, TREE9_CANVAS_NARROW_W, depth)
+}
+
+/// Narrow truncated name label with `…`: char-boundary clamp with
+/// separator backtrack, never splitting bytes. Pure; unit-tested.
+pub fn tree9_ellipsis_label(label: &str, depth: usize) -> String {
+    tree_orphan_ellipsis_label(label, TREE9_CANVAS_NARROW_W, depth)
+}
+
+/// Narrow grid origins stay steady across depths `0..=8` at 720:
+/// every depth reads `(0.0, 498.0, 592.0)`. Pure; unit-tested.
+pub fn tree9_columns_steady_across_depths() -> bool {
+    let mut depth = 0usize;
+    while depth <= 8 {
+        let cols = folder_table_column_xs(TREE9_CANVAS_NARROW_W);
+        let steady = cols.0 == 0.0 && cols.1 == 498.0 && cols.2 == 592.0;
+        if !steady {
+            return false;
+        }
+        depth = depth.saturating_add(1);
+    }
+    true
+}
+
+/// Narrow selected-row highlight rect `(x0, y0, x1, y1)` px at 720: full
+/// canvas width `0.0..720.0`, locked row height, even tiling.
+/// Depth-independent: indent never narrows the band. Pure; unit-tested.
+pub fn tree9_selected_row_rect(row_idx: usize) -> (f32, f32, f32, f32) {
+    let top = tree_row_top(row_idx);
+    (0.0, top, TREE9_CANVAS_NARROW_W, top + tree_row_height())
+}
+
+/// Narrow selected-row highlight width px: full canvas `720.0`.
+/// Pure; unit-tested.
+pub fn tree9_selected_row_w() -> f32 {
+    TREE9_CANVAS_NARROW_W
+}
+
+#[cfg(test)]
+mod exq_tree9_tests {
+    use super::*;
+
+    #[test]
+    fn tree9_narrow_columns_from_char_metrics() {
+        assert_eq!(TREE9_CANVAS_NARROW_W, 720.0);
+        assert_eq!(tree9_column_xs_720(), (0.0, 498.0, 592.0));
+        assert_eq!(tree9_column_xs_720(), folder_table_column_xs(720.0));
+        assert_eq!(tree9_name_avail_w_720(), 490.0);
+        assert_eq!(tree9_name_avail_w_720(), folder_table_name_avail_w(720.0));
+        let (_, _, mod_x) = tree9_column_xs_720();
+        assert_eq!(
+            mod_x + folder_table_col_min_px(FolderTableCol::Modified),
+            720.0
+        );
+        assert!(tree9_columns_steady_across_depths());
+    }
+
+    #[test]
+    fn tree9_arrows_symmetric_from_space_scale() {
+        assert_eq!(tree9_expander_hit_slop(), crate::theme::SPACE_XS);
+        assert_eq!(tree9_expander_hit_slop(), 4.0);
+        assert_eq!(tree_indent_step(), crate::theme::SPACE_MD);
+        // Depth-1 rect: cell 12.0..28.0 widened by 4.0 each side.
+        let rect = tree9_expander_hit_rect(1, 24.0);
+        assert_eq!(rect.0, 8.0);
+        assert_eq!(rect.2, 32.0);
+        assert!((rect.3 - rect.1 - tree_row_height()).abs() < 0.001);
+        assert!(tree9_expander_symmetric(0, 0.0));
+        assert!(tree9_expander_symmetric(1, 24.0));
+        assert!(tree9_expander_symmetric(5, 5.0 * tree_row_height()));
+        // Slop symmetric: left widening == right widening == SPACE_XS.
+        let legacy = folder_expander_hit_rect(1, 24.0);
+        assert_eq!(legacy.0 - rect.0, tree9_expander_hit_slop());
+        assert_eq!(rect.2 - legacy.2, tree9_expander_hit_slop());
+    }
+
+    #[test]
+    fn tree9_narrow_ellipsis_from_char_metrics() {
+        // Narrow budgets: (490-40)/7 = 64, (490-64)/7 = 60.
+        assert_eq!(tree9_label_max_chars(0), 64);
+        assert_eq!(tree9_label_max_chars(2), 60);
+        assert_eq!(tree9_label_max_chars(2), tree_label_max_chars(720.0, 2));
+        let short = "orphan-left.txt";
+        assert!(!tree9_label_needs_ellipsis(short, 0));
+        assert_eq!(tree9_ellipsis_label(short, 0), short);
+        let long_label =
+            "src/gui/narrow-orphan-very-long-filename-that-must-clip-at-720px-width.rs";
+        assert!(tree9_label_needs_ellipsis(long_label, 2));
+        let clipped = tree9_ellipsis_label(long_label, 2);
+        assert!(clipped.chars().count() <= 60);
+        assert!(clipped.chars().count() >= 30);
+        assert!(clipped.ends_with('…'));
+        assert_eq!(tree9_ellipsis_label("", 2), "");
+    }
+
+    #[test]
+    fn tree9_selected_row_full_width_at_720() {
+        assert_eq!(tree9_selected_row_w(), 720.0);
+        let first = tree9_selected_row_rect(0);
+        assert_eq!((first.0, first.2), (0.0, 720.0));
+        assert!((first.1 - 0.0).abs() < 0.001);
+        assert!((first.3 - first.1 - tree_row_height()).abs() < 0.001);
+        let rect = tree9_selected_row_rect(2);
+        assert_eq!((rect.0, rect.2), (0.0, 720.0));
+        assert!((rect.1 - 2.0 * tree_row_height()).abs() < 0.001);
+        // Full width regardless of depth: deep indent keeps 0..720.
+        assert_eq!(folder_table_name_indent_px(5), 100.0);
+        let deep = tree9_selected_row_rect(5);
+        assert_eq!((deep.0, deep.2), (0.0, 720.0));
+    }
+
+    #[test]
+    fn exq_tree9_round1_narrow_720_arrows_plus_ellipsis() {
+        // Headless test proving edge fixture comparison/tree-narrow-720.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree9/round-1/comparison/tree-narrow-720.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-narrow-720\""));
+        assert!(fixture_raw.contains("\"width_px\": 720.0"));
+        assert!(fixture_raw.contains("\"hit_slop_px\": 4.0"));
+        assert!(fixture_raw.contains("\"symmetric\": true"));
+        assert!(fixture_raw.contains("498.0"));
+        assert!(fixture_raw.contains("592.0"));
+        assert!(fixture_raw.contains("\"full_width\": true"));
+        assert!(fixture_raw.contains("\"ends_with\": \"…\""));
+        // Narrow lock holds: columns steady, arrows symmetric, ellipsis
+        // truncates, select spans the full 720 canvas.
+        assert!(tree9_columns_steady_across_depths());
+        let mut depth = 0usize;
+        while depth <= 5 {
+            assert!(tree9_expander_symmetric(
+                depth,
+                depth as f32 * tree_row_height()
+            ));
+            let cols = tree9_column_xs_720();
+            assert_eq!(cols, (0.0, 498.0, 592.0));
+            let rect = tree9_selected_row_rect(depth);
+            assert_eq!((rect.0, rect.2), (0.0, 720.0));
+            depth = depth.saturating_add(1);
+        }
+        let long_label =
+            "src/gui/narrow-orphan-very-long-filename-that-must-clip-at-720px-width.rs";
+        assert!(tree9_label_needs_ellipsis(long_label, 2));
+        let clipped = tree9_ellipsis_label(long_label, 2);
+        assert!(clipped.chars().count() <= tree9_label_max_chars(2));
+        assert!(clipped.ends_with('…'));
+    }
+}
