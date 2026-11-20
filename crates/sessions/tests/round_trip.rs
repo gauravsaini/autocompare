@@ -5,6 +5,7 @@
     clippy::indexing_slicing
 )]
 
+use autocompare_sessions::settings::GrammarPreset;
 use autocompare_sessions::{
     AppSettings, CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
     CURRENT_WORKSPACE_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, WindowLayout,
@@ -16,18 +17,21 @@ use std::collections::HashMap;
 fn test_session_document_round_trip() {
     let mut tab1 = SessionTab::new("tab-1", "Compare Cargo.toml")
         .with_paths("/left/Cargo.toml", "/right/Cargo.toml")
-        .with_session_type("text");
+        .with_session_type("text")
+        .with_locked(false);
     tab1.read_only = true;
     tab1.options
         .insert("ignore_whitespace".to_string(), "true".to_string());
 
     let tab2 = SessionTab::new("tab-2", "Compare Src Tree")
         .with_paths("/left/src", "/right/src")
-        .with_session_type("folder");
+        .with_session_type("folder")
+        .with_locked(true);
 
     let mut doc = SessionDocument::with_tabs(vec![tab1, tab2]);
     doc.active_tab_index = 1;
     doc.name = Some("Workspace Session Alpha".to_string());
+    doc.set_locked(false);
 
     // JSON compact round-trip
     let json_compact = doc.to_json().expect("serialize compact");
@@ -37,6 +41,8 @@ fn test_session_document_round_trip() {
         loaded_compact.schema_version,
         CURRENT_SESSION_SCHEMA_VERSION
     );
+    assert!(!loaded_compact.is_locked());
+    assert!(loaded_compact.tabs[1].locked);
 
     // JSON pretty round-trip
     let json_pretty = doc.to_json_pretty().expect("serialize pretty");
@@ -49,6 +55,33 @@ fn test_session_document_round_trip() {
     doc.save_to_file(&file_path).expect("save to file");
     let loaded_file = SessionDocument::load_from_file(&file_path).expect("load from file");
     assert_eq!(doc, loaded_file);
+    let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_locked_session_round_trip_and_guard() {
+    let tab = SessionTab::new("tab-locked", "Protected Session")
+        .with_paths("/src/a.rs", "/src/b.rs")
+        .with_locked(true);
+    let doc = SessionDocument::with_tabs(vec![tab]).with_locked(true);
+    assert!(doc.is_locked());
+
+    let json = doc.to_json_pretty().expect("serialize locked session");
+    let loaded = SessionDocument::from_json(&json).expect("deserialize locked session");
+    assert_eq!(doc, loaded);
+    assert!(loaded.is_locked());
+    assert!(loaded.tabs[0].locked);
+
+    // Guard test: save_to_file fails when locked
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("test_locked_sess_{}.json", std::process::id()));
+    assert!(doc.save_to_file(&file_path).is_err());
+    // Force save succeeds
+    assert!(doc.save_to_file_force(&file_path).is_ok());
+
+    let loaded_from_disk =
+        SessionDocument::load_from_file(&file_path).expect("load locked from file");
+    assert!(loaded_from_disk.is_locked());
     let _ = std::fs::remove_file(file_path);
 }
 
@@ -71,6 +104,7 @@ fn test_workspace_document_round_trip() {
     });
     doc.recent_paths = vec!["/recent/a".to_string(), "/recent/b".to_string()];
     doc.metadata = metadata;
+    doc.set_locked(false);
 
     // JSON compact round-trip
     let json_compact = doc.to_json().expect("serialize compact");
@@ -92,6 +126,28 @@ fn test_workspace_document_round_trip() {
     doc.save_to_file(&file_path).expect("save to file");
     let loaded_file = WorkspaceDocument::load_from_file(&file_path).expect("load from file");
     assert_eq!(doc, loaded_file);
+    let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_locked_workspace_round_trip_and_guard() {
+    let doc = WorkspaceDocument::new("Locked Parity Workspace")
+        .with_session_paths(vec!["/locked/s1.json".to_string()])
+        .with_locked(true);
+    assert!(doc.is_locked());
+
+    let json = doc.to_json_pretty().expect("serialize locked workspace");
+    let loaded = WorkspaceDocument::from_json(&json).expect("deserialize locked workspace");
+    assert_eq!(doc, loaded);
+    assert!(loaded.is_locked());
+
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("test_locked_ws_{}.json", std::process::id()));
+    assert!(doc.save_to_file(&file_path).is_err());
+    assert!(doc.save_to_file_force(&file_path).is_ok());
+
+    let loaded_disk = WorkspaceDocument::load_from_file(&file_path).expect("load from file");
+    assert!(loaded_disk.is_locked());
     let _ = std::fs::remove_file(file_path);
 }
 
@@ -150,11 +206,13 @@ fn test_workspace_config_round_trip() {
 fn test_session_config_round_trip() {
     let tab = SessionTab::new("tab-cfg", "Config Tab")
         .with_paths("/left", "/right")
-        .with_session_type("folder");
-    let config = SessionConfig::with_tabs(vec![tab]);
+        .with_session_type("folder")
+        .with_locked(true);
+    let config = SessionConfig::with_tabs(vec![tab]).with_locked(true);
     let json = config.to_json().expect("serialize SessionConfig");
     let loaded = SessionConfig::from_json(&json).expect("deserialize SessionConfig");
     assert_eq!(config, loaded);
+    assert!(loaded.is_locked());
 }
 
 #[test]
@@ -194,4 +252,32 @@ fn test_app_settings_round_trip() {
     let loaded_file = AppSettings::load_from_file(&file_path).expect("load from file");
     assert_eq!(settings, loaded_file);
     let _ = std::fs::remove_file(file_path);
+}
+
+#[test]
+fn test_app_settings_custom_grammar_presets_round_trip() {
+    let custom_preset = GrammarPreset::new("kotlin")
+        .with_extensions(vec!["kt".to_string(), "kts".to_string()])
+        .with_line_comment("//")
+        .with_block_comment("/*", "*/")
+        .with_ignore_case(false);
+
+    let mut settings = AppSettings::new();
+    settings.add_grammar_preset(custom_preset);
+    assert_eq!(
+        settings
+            .find_preset_for_extension("kt")
+            .map(|p| p.name.as_str()),
+        Some("kotlin")
+    );
+
+    let json = settings.to_json_pretty().expect("serialize settings");
+    let loaded = AppSettings::from_json(&json).expect("deserialize settings");
+    assert_eq!(settings, loaded);
+    assert_eq!(
+        loaded
+            .find_preset_for_extension(".kts")
+            .map(|p| p.name.as_str()),
+        Some("kotlin")
+    );
 }

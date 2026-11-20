@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "Enterprise Audit Workspace",
+  "session_paths": [
+    "/sessions/audit_q1.json",
+    "/sessions/audit_q2.json"
+  ],
+  "active_session": "/sessions/audit_q1.json",
+  "window_layout": {
+    "width": 1920,
+    "height": 1080,
+    "is_maximized": true
+  },
+  "recent_paths": [
+    "/recent/audit_2026.log"
+  ],
+  "metadata": {
+    "department": "Security",
+    "retention_days": "365"
+  },
+  "locked": true
+}

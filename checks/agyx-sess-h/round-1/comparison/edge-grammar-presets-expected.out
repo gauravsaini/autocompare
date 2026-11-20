@@ -1,0 +1,14 @@
+schema_version: 1
+theme: nord_dark
+keymap: vim
+grammar_preset_name: rust
+grammar_presets_count: 3
+preset[0].name: rust (ext: rs, line: //, block: /*..*/, ignore_case: false)
+preset[1].name: python (ext: py,pyw, line: #, block: none, ignore_case: false)
+preset[2].name: sql (ext: sql, line: --, block: /*..*/, ignore_case: true)
+font_family: JetBrains Mono
+font_size: 14
+tab_size: 4
+auto_save: false
+show_line_numbers: true
+extra.editor_cursor_blink: true

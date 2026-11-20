@@ -1,0 +1,10 @@
+schema_version: 1
+name: Production Release Comparison
+locked: true
+tabs_count: 1
+tab[0].id: tab-locked-1
+tab[0].locked: true
+tab[0].read_only: true
+tab[0].left_path: /var/data/release_v1.0.rs
+tab[0].right_path: /var/data/release_v1.1.rs
+tab[0].options.ignore_unimportant: true

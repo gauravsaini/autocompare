@@ -21,11 +21,13 @@ fn test_migrate_session_v0_unversioned() {
                 "session_type": "text",
                 "left_path": "/old/left.txt",
                 "right_path": "/old/right.txt",
-                "read_only": true
+                "read_only": true,
+                "locked": true
             }
         ],
         "active_tab_index": 0,
-        "name": "Old Session"
+        "name": "Old Session",
+        "locked": true
     }"#;
 
     let doc = migrate(v0_json).expect("v0 unversioned migration should succeed");
@@ -36,6 +38,8 @@ fn test_migrate_session_v0_unversioned() {
     assert_eq!(doc.tabs[0].left_path.as_deref(), Some("/old/left.txt"));
     assert_eq!(doc.tabs[0].right_path.as_deref(), Some("/old/right.txt"));
     assert!(doc.tabs[0].read_only);
+    assert!(doc.tabs[0].locked);
+    assert!(doc.locked);
     assert_eq!(doc.name.as_deref(), Some("Old Session"));
 }
 
@@ -43,12 +47,14 @@ fn test_migrate_session_v0_unversioned() {
 fn test_migrate_session_v0_explicit_zero_and_legacy_fields() {
     let v0_json = r#"{
         "schema_version": 0,
+        "is_locked": true,
         "sessions": [
             {
                 "name": "Legacy Tab",
                 "left": "/legacy/left.txt",
                 "right": "/legacy/right.txt",
-                "type": "table"
+                "type": "table",
+                "is_locked": true
             }
         ]
     }"#;
@@ -60,6 +66,8 @@ fn test_migrate_session_v0_explicit_zero_and_legacy_fields() {
     assert_eq!(doc.tabs[0].left_path.as_deref(), Some("/legacy/left.txt"));
     assert_eq!(doc.tabs[0].right_path.as_deref(), Some("/legacy/right.txt"));
     assert_eq!(doc.tabs[0].session_type, "table");
+    assert!(doc.locked);
+    assert!(doc.tabs[0].locked);
 }
 
 #[test]
@@ -82,6 +90,7 @@ fn test_migrate_session_v0_bare_array() {
     assert_eq!(doc.tabs.len(), 2);
     assert_eq!(doc.tabs[0].title, "Tab One");
     assert_eq!(doc.tabs[1].title, "Tab Two");
+    assert!(!doc.locked);
 }
 
 #[test]
@@ -96,6 +105,7 @@ fn test_migrate_session_v0_array_of_string_paths() {
     assert_eq!(doc.tabs.len(), 2);
     assert_eq!(doc.tabs[0].left_path.as_deref(), Some("/file/a.txt"));
     assert_eq!(doc.tabs[1].left_path.as_deref(), Some("/file/b.txt"));
+    assert!(!doc.locked);
 }
 
 #[test]
@@ -110,17 +120,21 @@ fn test_migrate_session_current_v1() {
                 "left_path": null,
                 "right_path": null,
                 "read_only": false,
+                "locked": true,
                 "options": {}
             }
         ],
         "active_tab_index": 0,
-        "name": "V1 Doc"
+        "name": "V1 Doc",
+        "locked": true
     }"#;
 
     let doc = migrate(v1_json).expect("v1 should pass through cleanly");
     assert_eq!(doc.schema_version, 1);
     assert_eq!(doc.tabs.len(), 1);
     assert_eq!(doc.tabs[0].title, "Current V1");
+    assert!(doc.locked);
+    assert!(doc.tabs[0].locked);
 }
 
 #[test]
@@ -162,13 +176,15 @@ fn test_migrate_session_future_version_error() {
 fn test_migrate_workspace_v0_and_future() {
     let v0_json = r#"{
         "name": "Legacy Workspace",
-        "sessions": ["/path/s1.json", "/path/s2.json"]
+        "sessions": ["/path/s1.json", "/path/s2.json"],
+        "locked": true
     }"#;
 
     let ws = migrate_workspace(v0_json).expect("v0 workspace migration should succeed");
     assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
     assert_eq!(ws.name, "Legacy Workspace");
     assert_eq!(ws.session_paths.len(), 2);
+    assert!(ws.locked);
 
     let future_json = r#"{
         "schema_version": 3,
@@ -209,6 +225,7 @@ fn test_migrate_workspace_bare_array_of_paths_and_objects() {
             "/workspace/sess5.json"
         ]
     );
+    assert!(!ws.locked);
 
     let config = migrate_workspace_config(array_json).expect("migrate_workspace_config bare array");
     assert_eq!(config.session_paths.len(), 5);
@@ -233,7 +250,8 @@ fn test_migrate_workspace_legacy_aliases_and_config() {
             "sync_mode": "mirror",
             "count": 5,
             "enabled": true
-        }
+        },
+        "read_only_workspace": true
     }"#;
 
     let ws = migrate_workspace_config(legacy_json).expect("legacy aliases should migrate cleanly");
@@ -246,6 +264,7 @@ fn test_migrate_workspace_legacy_aliases_and_config() {
     assert_eq!(win.height, 1080);
     assert!(win.is_maximized);
     assert_eq!(ws.recent_paths, vec!["/recent1", "/recent2"]);
+    assert!(ws.locked);
     assert_eq!(
         ws.metadata.get("sync_mode").map(String::as_str),
         Some("mirror")
@@ -277,6 +296,7 @@ fn test_migrate_settings_v0_and_aliases_and_future() {
     assert_eq!(settings.theme, "solarized_dark");
     assert_eq!(settings.keymap, "emacs");
     assert_eq!(settings.grammar_preset_name, "c_cpp");
+    assert!(!settings.grammar_presets.is_empty());
 
     let future_json = r#"{
         "schema_version": 42,
@@ -292,4 +312,31 @@ fn test_migrate_settings_v0_and_aliases_and_future() {
         }
         other => panic!("expected UnsupportedVersion, got {other:?}"),
     }
+}
+
+#[test]
+fn test_migrate_settings_v0_custom_grammar_presets() {
+    let v0_json = r##"{
+        "theme": "monokai",
+        "grammar_preset_name": "ruby",
+        "grammar_presets": [
+            {
+                "name": "elixir",
+                "extensions": ["ex", "exs"],
+                "line_comment_prefix": "#",
+                "ignore_case": false
+            }
+        ]
+    }"##;
+
+    let settings = migrate_settings(v0_json).expect("v0 settings with presets");
+    assert_eq!(settings.theme, "monokai");
+    assert_eq!(settings.grammar_preset_name, "ruby");
+    assert_eq!(settings.grammar_presets.len(), 1);
+    assert_eq!(
+        settings
+            .find_preset_for_extension("ex")
+            .map(|p| p.name.as_str()),
+        Some("elixir")
+    );
 }

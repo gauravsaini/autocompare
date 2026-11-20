@@ -63,6 +63,8 @@ fn test_type_specific_corrupt_input_returns_err() {
         "{\"schema_version\": 0, \"tabs\": 123}",
         "{\"schema_version\": 0, \"tabs\": [false]}",
         "{\"schema_version\": 1, \"tabs\": [{\"id\": 123}]}",
+        "{\"schema_version\": 1, \"locked\": \"not_a_bool\"}",
+        "{\"schema_version\": 1, \"tabs\": [{\"id\": \"t1\", \"title\": \"T\", \"locked\": 99}]}",
     ];
 
     for (i, sample) in session_corrupt.iter().enumerate() {
@@ -70,6 +72,21 @@ fn test_type_specific_corrupt_input_returns_err() {
         assert!(
             res.is_err(),
             "Session corrupt sample #{i} ({sample:?}) must return Err, got: {res:?}"
+        );
+    }
+}
+
+#[test]
+fn test_workspace_corrupt_locked_returns_err() {
+    let ws_corrupt = [
+        "{\"schema_version\": 1, \"locked\": \"true_string\"}",
+        "{\"schema_version\": 1, \"name\": \"ws\", \"locked\": [true]}",
+    ];
+    for (i, sample) in ws_corrupt.iter().enumerate() {
+        let res = migrate_workspace(sample);
+        assert!(
+            res.is_err(),
+            "Workspace corrupt sample #{i} ({sample:?}) must return Err, got: {res:?}"
         );
     }
 }
@@ -91,6 +108,8 @@ fn test_fuzzed_hostile_inputs_never_panic() {
         "{\"metadata\": {\"key\": null}}",
         "{{{{{{{{{{{}}}}}}}}}}}",
         "[null, null, false, 0, \"\"]",
+        "{\"grammar_presets\": \"not_array\"}",
+        "{\"grammar_presets\": [1, 2, 3]}",
     ];
 
     for sample in hostile_inputs {

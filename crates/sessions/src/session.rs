@@ -29,6 +29,9 @@ pub struct SessionTab {
     /// Whether this tab is marked read-only.
     #[serde(default)]
     pub read_only: bool,
+    /// Whether this tab is locked against modification.
+    #[serde(default)]
+    pub locked: bool,
     /// Additional session-specific options.
     #[serde(default)]
     pub options: HashMap<String, String>,
@@ -48,6 +51,7 @@ impl SessionTab {
             left_path: None,
             right_path: None,
             read_only: false,
+            locked: false,
             options: HashMap::new(),
         }
     }
@@ -62,6 +66,12 @@ impl SessionTab {
     /// Builder method to set the session type.
     pub fn with_session_type(mut self, session_type: impl Into<String>) -> Self {
         self.session_type = session_type.into();
+        self
+    }
+
+    /// Builder method to set whether this tab is locked.
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
         self
     }
 }
@@ -79,6 +89,9 @@ pub struct SessionDocument {
     /// Optional user-assigned session name.
     #[serde(default)]
     pub name: Option<String>,
+    /// Whether this session is locked against accidental modification or overwrite.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 impl Default for SessionDocument {
@@ -88,6 +101,7 @@ impl Default for SessionDocument {
             tabs: Vec::new(),
             active_tab_index: 0,
             name: None,
+            locked: false,
         }
     }
 }
@@ -105,7 +119,24 @@ impl SessionDocument {
             tabs,
             active_tab_index: 0,
             name: None,
+            locked: false,
         }
+    }
+
+    /// Returns true if the session document is locked against modification.
+    pub fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Sets whether the session document is locked.
+    pub fn set_locked(&mut self, locked: bool) {
+        self.locked = locked;
+    }
+
+    /// Builder method to set whether the session is locked.
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
+        self
     }
 
     /// Serializes the session document to a compact JSON string.
@@ -124,7 +155,21 @@ impl SessionDocument {
     }
 
     /// Saves the session document as pretty-printed JSON to the specified file path.
+    ///
+    /// If the session is locked (`self.locked == true`), returns an I/O PermissionDenied error.
+    /// To bypass the lock check, use [`save_to_file_force`].
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
+        if self.locked {
+            return Err(SessionError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Cannot overwrite locked session document; unlock or use save_to_file_force",
+            )));
+        }
+        self.save_to_file_force(path)
+    }
+
+    /// Saves the session document unconditionally, bypassing any lock check.
+    pub fn save_to_file_force<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
         let json = self.to_json_pretty()?;
         std::fs::write(path, json).map_err(SessionError::Io)
     }
@@ -244,11 +289,19 @@ fn migrate_v0_object(
         .and_then(|v| v.as_str())
         .map(ToString::to_string);
 
+    let locked = map
+        .get("locked")
+        .or_else(|| map.get("is_locked"))
+        .or_else(|| map.get("read_only_session"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     Ok(SessionDocument {
         schema_version: CURRENT_SESSION_SCHEMA_VERSION,
         tabs,
         active_tab_index,
         name,
+        locked,
     })
 }
 
@@ -259,6 +312,7 @@ fn migrate_v0_array(items: &[serde_json::Value]) -> Result<SessionDocument, Sess
         tabs,
         active_tab_index: 0,
         name: None,
+        locked: false,
     })
 }
 
@@ -309,6 +363,12 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
+                let locked = tab_map
+                    .get("locked")
+                    .or_else(|| tab_map.get("is_locked"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
                 let mut options = HashMap::new();
                 if let Some(serde_json::Value::Object(opts_map)) = tab_map.get("options") {
                     for (k, v) in opts_map {
@@ -325,6 +385,7 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     left_path,
                     right_path,
                     read_only,
+                    locked,
                     options,
                 });
             }
@@ -336,6 +397,7 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     left_path: Some(path_str.clone()),
                     right_path: None,
                     read_only: false,
+                    locked: false,
                     options: HashMap::new(),
                 });
             }
@@ -369,30 +431,36 @@ mod tests {
     fn test_session_tab_builder() {
         let tab = SessionTab::new("tab-1", "My Tab")
             .with_paths("/a", "/b")
-            .with_session_type("hex");
+            .with_session_type("hex")
+            .with_locked(true);
         assert_eq!(tab.id, "tab-1");
         assert_eq!(tab.title, "My Tab");
         assert_eq!(tab.session_type, "hex");
         assert_eq!(tab.left_path.as_deref(), Some("/a"));
         assert_eq!(tab.right_path.as_deref(), Some("/b"));
         assert!(!tab.read_only);
+        assert!(tab.locked);
     }
 
     #[test]
     fn test_session_document_roundtrip_unit() {
         let tab = SessionTab::new("t1", "Tab 1").with_paths("/left", "/right");
-        let doc = SessionDocument::with_tabs(vec![tab]);
+        let doc = SessionDocument::with_tabs(vec![tab]).with_locked(true);
+        assert!(doc.is_locked());
         let json = doc.to_json().expect("to_json");
         let parsed = SessionDocument::from_json(&json).expect("from_json");
         assert_eq!(doc, parsed);
+        assert!(parsed.is_locked());
     }
 
     #[test]
     fn test_v0_migration_unit() {
-        let v0 = r#"{"tabs": [{"id": "t", "title": "T"}]}"#;
+        let v0 = r#"{"tabs": [{"id": "t", "title": "T", "locked": true}], "locked": true}"#;
         let doc = migrate(v0).expect("migrate");
         assert_eq!(doc.schema_version, CURRENT_SESSION_SCHEMA_VERSION);
         assert_eq!(doc.tabs.len(), 1);
+        assert!(doc.locked);
+        assert!(doc.tabs[0].locked);
     }
 
     #[test]
@@ -404,5 +472,16 @@ mod tests {
     #[test]
     fn test_corrupt_unit() {
         assert!(migrate("not json").is_err());
+    }
+
+    #[test]
+    fn test_locked_save_guard() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join(format!("test_locked_guard_{}.json", std::process::id()));
+        let mut doc = SessionDocument::new();
+        doc.set_locked(true);
+        assert!(doc.save_to_file(&path).is_err());
+        assert!(doc.save_to_file_force(&path).is_ok());
+        let _ = std::fs::remove_file(path);
     }
 }

@@ -1,0 +1,11 @@
+schema_version: 1
+name: Enterprise Audit Workspace
+locked: true
+session_paths_count: 2
+active_session: /sessions/audit_q1.json
+window_layout.width: 1920
+window_layout.height: 1080
+window_layout.is_maximized: true
+recent_paths_count: 1
+metadata.department: Security
+metadata.retention_days: 365

@@ -54,6 +54,9 @@ pub struct WorkspaceDocument {
     /// Arbitrary metadata or user tags.
     #[serde(default)]
     pub metadata: HashMap<String, String>,
+    /// Whether this workspace is locked against accidental modification or overwrite.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 fn default_workspace_version() -> u32 {
@@ -70,6 +73,7 @@ impl Default for WorkspaceDocument {
             window_layout: None,
             recent_paths: Vec::new(),
             metadata: HashMap::new(),
+            locked: false,
         }
     }
 }
@@ -85,6 +89,7 @@ impl WorkspaceDocument {
             window_layout: None,
             recent_paths: Vec::new(),
             metadata: HashMap::new(),
+            locked: false,
         }
     }
 
@@ -118,6 +123,22 @@ impl WorkspaceDocument {
         self
     }
 
+    /// Builder method to set whether the workspace is locked.
+    pub fn with_locked(mut self, locked: bool) -> Self {
+        self.locked = locked;
+        self
+    }
+
+    /// Returns true if the workspace document is locked.
+    pub fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// Sets whether the workspace document is locked.
+    pub fn set_locked(&mut self, locked: bool) {
+        self.locked = locked;
+    }
+
     /// Adds a session path to the workspace.
     pub fn add_session_path(&mut self, path: impl Into<String>) {
         self.session_paths.push(path.into());
@@ -149,7 +170,21 @@ impl WorkspaceDocument {
     }
 
     /// Saves the workspace document as pretty-printed JSON to the specified file path.
+    ///
+    /// If the workspace is locked (`self.locked == true`), returns an I/O PermissionDenied error.
+    /// To bypass the lock check, use [`save_to_file_force`].
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
+        if self.locked {
+            return Err(SessionError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Cannot overwrite locked workspace document; unlock or use save_to_file_force",
+            )));
+        }
+        self.save_to_file_force(path)
+    }
+
+    /// Saves the workspace document unconditionally, bypassing any lock check.
+    pub fn save_to_file_force<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
         let json = self.to_json_pretty()?;
         std::fs::write(path, json).map_err(SessionError::Io)
     }
@@ -266,6 +301,7 @@ fn migrate_v0_array(items: &[serde_json::Value]) -> Result<WorkspaceDocument, Se
         window_layout: None,
         recent_paths: Vec::new(),
         metadata: HashMap::new(),
+        locked: false,
     })
 }
 
@@ -396,6 +432,13 @@ fn migrate_v0_object(
         }
     }
 
+    let locked = map
+        .get("locked")
+        .or_else(|| map.get("is_locked"))
+        .or_else(|| map.get("read_only_workspace"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     Ok(WorkspaceDocument {
         schema_version: CURRENT_WORKSPACE_SCHEMA_VERSION,
         name,
@@ -404,6 +447,7 @@ fn migrate_v0_object(
         window_layout,
         recent_paths,
         metadata,
+        locked,
     })
 }
 
@@ -427,16 +471,19 @@ mod tests {
                 height: 900,
                 is_maximized: true,
             })
-            .with_recent_paths(vec!["/recent.txt".to_string()]);
+            .with_recent_paths(vec!["/recent.txt".to_string()])
+            .with_locked(true);
         assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
         assert_eq!(ws.name, "Test WS");
         assert_eq!(ws.session_paths.len(), 1);
         assert_eq!(ws.active_session.as_deref(), Some("/session1.json"));
         assert!(ws.window_layout.as_ref().unwrap().is_maximized);
+        assert!(ws.is_locked());
 
         let json = ws.to_json().expect("to_json");
         let parsed = WorkspaceDocument::from_json(&json).expect("from_json");
         assert_eq!(ws, parsed);
+        assert!(parsed.is_locked());
     }
 
     #[test]
@@ -445,12 +492,15 @@ mod tests {
         cfg.add_session_path("/session/a.json");
         cfg.add_recent_path("/path/recent.rs");
         cfg.set_metadata("theme_override", "dark");
+        cfg.set_locked(true);
+        assert!(cfg.is_locked());
 
         let json_pretty = cfg.to_json_pretty().expect("to_json_pretty");
         let loaded = migrate_workspace_config(&json_pretty).expect("migrate_workspace_config");
         assert_eq!(loaded.name, "Config WS");
         assert_eq!(loaded.session_paths, vec!["/session/a.json"]);
         assert_eq!(loaded.recent_paths, vec!["/path/recent.rs"]);
+        assert!(loaded.is_locked());
         assert_eq!(
             loaded.metadata.get("theme_override").map(String::as_str),
             Some("dark")
@@ -459,11 +509,12 @@ mod tests {
 
     #[test]
     fn test_workspace_v0_migration_unit() {
-        let v0 = r#"{"name": "Old", "sessions": ["/path/s"]}"#;
+        let v0 = r#"{"name": "Old", "sessions": ["/path/s"], "locked": true}"#;
         let ws = migrate_workspace(v0).expect("migrate");
         assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
         assert_eq!(ws.name, "Old");
         assert_eq!(ws.session_paths.len(), 1);
+        assert!(ws.locked);
     }
 
     #[test]
@@ -481,7 +532,8 @@ mod tests {
                 "maximized": true
             },
             "history": ["/hist1", {"path": "/hist2"}],
-            "tags": {"project": "alpha", "level": 42}
+            "tags": {"project": "alpha", "level": 42},
+            "is_locked": true
         }"#;
 
         let ws = migrate_workspace(v0).expect("migrate legacy aliases");
@@ -493,6 +545,7 @@ mod tests {
         assert_eq!(layout.height, 1000);
         assert!(layout.is_maximized);
         assert_eq!(ws.recent_paths, vec!["/hist1", "/hist2"]);
+        assert!(ws.locked);
         assert_eq!(
             ws.metadata.get("project").map(String::as_str),
             Some("alpha")
@@ -519,11 +572,22 @@ mod tests {
                 "/workspace/session3.json"
             ]
         );
+        assert!(!ws.locked);
     }
 
     #[test]
     fn test_workspace_future_version_unit() {
         let v2 = r#"{"schema_version": 2, "name": "Future"}"#;
         assert!(migrate_workspace(v2).is_err());
+    }
+
+    #[test]
+    fn test_locked_workspace_save_guard() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join(format!("test_ws_locked_guard_{}.json", std::process::id()));
+        let ws = WorkspaceDocument::new("Locked Workspace").with_locked(true);
+        assert!(ws.save_to_file(&path).is_err());
+        assert!(ws.save_to_file_force(&path).is_ok());
+        let _ = std::fs::remove_file(path);
     }
 }

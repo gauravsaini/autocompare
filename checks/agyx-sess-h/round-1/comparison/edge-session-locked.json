@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "tabs": [
+    {
+      "id": "tab-locked-1",
+      "title": "Locked Release Diff",
+      "session_type": "text",
+      "left_path": "/var/data/release_v1.0.rs",
+      "right_path": "/var/data/release_v1.1.rs",
+      "read_only": true,
+      "locked": true,
+      "options": {
+        "ignore_unimportant": "true"
+      }
+    }
+  ],
+  "active_tab_index": 0,
+  "name": "Production Release Comparison",
+  "locked": true
+}
