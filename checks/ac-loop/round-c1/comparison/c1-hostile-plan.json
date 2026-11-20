@@ -1,0 +1,10 @@
+{
+  "steps": [
+    { "rel_path": "../evil", "is_dir": false, "action": "CopyToRight" },
+    { "rel_path": "/abs", "is_dir": false, "action": "DeleteRight" },
+    { "rel_path": "", "is_dir": false, "action": "CopyToRight" },
+    { "rel_path": "real.txt", "is_dir": false, "action": "CopyToRight" }
+  ],
+  "skipped": [],
+  "truncated": false
+}

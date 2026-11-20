@@ -1,0 +1,13 @@
+{
+  "fixture": "c1-symlink-cycle.sh (builds live trees under $TMPDIR)",
+  "expected": {
+    "exit": 1,
+    "contains": ["selfloop", "leaf.txt", "keep.txt"],
+    "never_contains": ["selfloop/"],
+    "selfloop_entry": { "rel_path": "selfloop", "is_dir": false, "status": "LeftOnly" }
+  },
+  "notes": [
+    "Symlinks are never followed: the loop terminates and outside content never appears.",
+    "Enforced headless by compare_folders_does_not_follow_symlinks and compare_folders_dir_symlink_loop_terminates."
+  ]
+}

@@ -11,7 +11,8 @@
 mod common;
 
 use autocompare_compare::{
-    Error, SyncAction, SyncDirection, SyncOptions, SyncPlan, SyncStep, apply_sync, plan_sync,
+    Error, FolderOptions, SyncAction, SyncDirection, SyncOptions, SyncPlan, SyncStep, apply_sync,
+    plan_sync, plan_sync_with_compare,
 };
 use common::{cleanup, fixed_time, set_mtime, temp_root, write};
 use std::path::{Path, PathBuf};
@@ -292,15 +293,156 @@ fn plan_prune_r2l_deletes_left_only_files_and_dirs() {
 #[test]
 fn plan_reports_truncated_false_on_shallow_trees() {
     // plan_sync always compares with FolderOptions::default()
-    // (depth_limit 32), so a deep-tree truncation cannot be provoked
-    // from the outside; plumbing folder options through SyncOptions
-    // is future work. The flag is asserted where it is observable:
-    // false on normal trees.
+    // (depth_limit 32): shallow trees never truncate. Deeper
+    // truncation is plumbed through plan_sync_with_compare (see the
+    // depth test below).
     let base = temp_root();
     let (left, right) = make_pair(&base);
     one(&left, "a.txt", "a\n");
     let plan = plan_sync(&left, &right, &opts(SyncDirection::LeftToRight, false)).unwrap();
     assert!(!plan.truncated);
+    cleanup(&base);
+}
+
+#[test]
+fn plan_with_compare_depth_limit_truncates_and_skips_deeper() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    let t = fixed_time();
+    pair(&left, &right, "top.txt", "top\n", t);
+    pair(&left, &right, "sub/mid.txt", "mid\n", t);
+    one(&left, "sub/deep/leaf.txt", "leaf\n");
+
+    let compare = FolderOptions {
+        depth_limit: 1,
+        ..FolderOptions::default()
+    };
+    let sync_opts = opts(SyncDirection::LeftToRight, false);
+    let plan = plan_sync_with_compare(&left, &right, &sync_opts, &compare).unwrap();
+    assert!(plan.truncated, "depth cut must be reported");
+    let rels: Vec<&str> = plan.steps.iter().map(|s| s.rel_path.as_str()).collect();
+    assert!(
+        !rels.iter().any(|r| r.starts_with("sub/deep")),
+        "deeper entries are not planned: {rels:?}"
+    );
+    assert!(
+        plan.skipped
+            .iter()
+            .all(|(path, _)| !path.starts_with("sub/deep")),
+        "deeper entries are not even reported as skipped"
+    );
+
+    // The same tree with default comparison walks everything.
+    let full = plan_sync(&left, &right, &sync_opts).unwrap();
+    assert!(!full.truncated);
+    assert!(
+        full.steps.iter().any(|s| s.rel_path == "sub/deep/leaf.txt"),
+        "default walk plans the deep leaf"
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn plan_with_compare_include_filter_limits_mirror_prune() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    let t = fixed_time();
+    pair(&left, &right, "keep.txt", "k\n", t);
+    one(&left, "new.txt", "n\n");
+    one(&right, "extra.txt", "e\n");
+    one(&right, "extra.log", "logged\n");
+
+    let compare = FolderOptions {
+        include: Some("*.txt".into()),
+        ..FolderOptions::default()
+    };
+    let mirror = opts(SyncDirection::LeftToRight, true);
+    let plan = plan_sync_with_compare(&left, &right, &mirror, &compare).unwrap();
+    assert!(!plan.truncated);
+    let rels: Vec<&str> = plan.steps.iter().map(|s| s.rel_path.as_str()).collect();
+    assert!(rels.contains(&"new.txt"), "matched left-only is copied");
+    assert!(rels.contains(&"extra.txt"), "matched right-only is pruned");
+    assert!(
+        !rels.iter().any(|r| r.ends_with(".log")),
+        "filtered-out names are never planned: {rels:?}"
+    );
+    assert!(
+        plan.skipped.iter().all(|(path, _)| !path.ends_with(".log")),
+        "filtered-out names are not reported either"
+    );
+    assert_eq!(
+        step(&plan, "extra.txt").map(|s| s.action),
+        Some(SyncAction::DeleteRight)
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn plan_with_compare_content_compare_flags_same_size_bytes() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    let t = fixed_time();
+    // Same size, different bytes, pinned mtimes: the default
+    // size+mtime rule calls this Same.
+    one(&left, "c.bin", "aaaa");
+    one(&right, "c.bin", "aaab");
+    set_mtime(&left.join("c.bin"), t);
+    set_mtime(&right.join("c.bin"), t);
+
+    let sync_opts = opts(SyncDirection::LeftToRight, false);
+    let plain = plan_sync(&left, &right, &sync_opts).unwrap();
+    assert!(step(&plain, "c.bin").is_none());
+    assert!(skipped(&plain, "c.bin").is_none());
+
+    let compare = FolderOptions {
+        content_compare: true,
+        ..FolderOptions::default()
+    };
+    let compared = plan_sync_with_compare(&left, &right, &sync_opts, &compare).unwrap();
+    assert!(step(&compared, "c.bin").is_none());
+    assert_eq!(
+        skipped(&compared, "c.bin"),
+        Some("content differs; no side wins")
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn sync_planner_compare_options_drive_dry_run_and_apply() {
+    use autocompare_compare::{SyncMode, SyncPlanner};
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    let t = fixed_time();
+    pair(&left, &right, "same.txt", "same\n", t);
+    one(&left, "new.txt", "n\n");
+    one(&right, "extra.txt", "e\n");
+    one(&right, "junk.log", "j\n");
+
+    let planner =
+        SyncPlanner::new(&left, &right, SyncMode::Mirror).with_compare_options(FolderOptions {
+            exclude: Some("*.log".into()),
+            ..FolderOptions::default()
+        });
+    assert_eq!(planner.compare_options().exclude.as_deref(), Some("*.log"));
+    let plan = planner.dry_run().unwrap();
+    assert!(!plan.truncated);
+    let rels: Vec<&str> = plan.steps.iter().map(|s| s.rel_path.as_str()).collect();
+    assert!(rels.contains(&"new.txt"));
+    assert!(rels.contains(&"extra.txt"));
+    assert!(
+        !rels.iter().any(|r| r.ends_with(".log")),
+        "filtered junk is not pruned: {rels:?}"
+    );
+
+    let report = planner.apply(&plan).unwrap();
+    assert!(report.is_success());
+    assert!(right.join("new.txt").exists());
+    assert!(!right.join("extra.txt").exists());
+    assert!(
+        right.join("junk.log").exists(),
+        "filtered-out right-only file survives Mirror"
+    );
     cleanup(&base);
 }
 
@@ -424,6 +566,11 @@ fn apply_refuses_unsafe_rel_paths() {
                 action: SyncAction::DeleteRight,
             },
             SyncStep {
+                rel_path: String::new(),
+                is_dir: false,
+                action: SyncAction::CopyToRight,
+            },
+            SyncStep {
                 rel_path: "real.txt".into(),
                 is_dir: false,
                 action: SyncAction::CopyToRight,
@@ -439,6 +586,7 @@ fn apply_refuses_unsafe_rel_paths() {
         vec![
             ("../evil".to_owned(), "unsafe path".to_owned()),
             ("/abs".to_owned(), "unsafe path".to_owned()),
+            (String::new(), "unsafe path".to_owned()),
         ]
     );
     // Nothing outside the roots was touched.

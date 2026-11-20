@@ -74,6 +74,97 @@ impl SessionTab {
         self.locked = locked;
         self
     }
+
+    /// Builder method to record the folder-sync mode for this tab
+    /// (`"update-right"`, `"update-left"`, `"both"`, `"mirror"`).
+    /// Stored as the `sync.mode` option; free-form so future modes
+    /// load without migration.
+    pub fn with_sync_mode(mut self, mode: impl Into<String>) -> Self {
+        self.set_sync_mode(mode);
+        self
+    }
+
+    /// Returns the recorded folder-sync mode, if any.
+    pub fn sync_mode(&self) -> Option<&str> {
+        self.options.get("sync.mode").map(String::as_str)
+    }
+
+    /// Records the folder-sync mode for this tab.
+    pub fn set_sync_mode(&mut self, mode: impl Into<String>) {
+        self.options.insert("sync.mode".to_string(), mode.into());
+    }
+
+    /// Returns the recorded folder depth limit, if present and valid.
+    /// Missing or corrupt values report `None` (caller falls back to
+    /// the comparison default) instead of failing the session load.
+    pub fn folder_depth_limit(&self) -> Option<usize> {
+        self.options
+            .get("folder.depth_limit")
+            .and_then(|raw| raw.parse::<usize>().ok())
+    }
+
+    /// Records the folder depth limit for this tab.
+    pub fn set_folder_depth_limit(&mut self, limit: usize) {
+        self.options
+            .insert("folder.depth_limit".to_string(), limit.to_string());
+    }
+
+    /// Returns whether content compare was recorded for this tab.
+    /// Missing or corrupt values report `false` (the safe default).
+    pub fn folder_content_compare(&self) -> bool {
+        self.options
+            .get("folder.content_compare")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to compare folder file bytes for this tab.
+    pub fn set_folder_content_compare(&mut self, value: bool) {
+        self.options
+            .insert("folder.content_compare".to_string(), value.to_string());
+    }
+
+    /// Returns whether case-insensitive name matching was recorded.
+    pub fn folder_case_insensitive(&self) -> bool {
+        self.options
+            .get("folder.case_insensitive")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records case-insensitive name matching for this tab.
+    pub fn set_folder_case_insensitive(&mut self, value: bool) {
+        self.options
+            .insert("folder.case_insensitive".to_string(), value.to_string());
+    }
+
+    /// Returns the recorded include glob, if any.
+    pub fn folder_include(&self) -> Option<&str> {
+        self.options.get("folder.include").map(String::as_str)
+    }
+
+    /// Records the include glob; an empty value clears it.
+    pub fn set_folder_include(&mut self, pattern: impl Into<String>) {
+        let pattern = pattern.into();
+        if pattern.is_empty() {
+            self.options.remove("folder.include");
+        } else {
+            self.options.insert("folder.include".to_string(), pattern);
+        }
+    }
+
+    /// Returns the recorded exclude glob, if any.
+    pub fn folder_exclude(&self) -> Option<&str> {
+        self.options.get("folder.exclude").map(String::as_str)
+    }
+
+    /// Records the exclude glob; an empty value clears it.
+    pub fn set_folder_exclude(&mut self, pattern: impl Into<String>) {
+        let pattern = pattern.into();
+        if pattern.is_empty() {
+            self.options.remove("folder.exclude");
+        } else {
+            self.options.insert("folder.exclude".to_string(), pattern);
+        }
+    }
 }
 
 /// A serialized session document containing one or more tabs.
@@ -483,5 +574,56 @@ mod tests {
         assert!(doc.save_to_file(&path).is_err());
         assert!(doc.save_to_file_force(&path).is_ok());
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_folder_sync_options_roundtrip() {
+        let mut tab = SessionTab::new("f1", "Folder")
+            .with_paths("/left", "/right")
+            .with_session_type("folder")
+            .with_sync_mode("mirror");
+        assert_eq!(tab.sync_mode(), Some("mirror"));
+        assert_eq!(tab.folder_depth_limit(), None);
+        assert!(!tab.folder_content_compare());
+        assert!(!tab.folder_case_insensitive());
+        assert_eq!(tab.folder_include(), None);
+        assert_eq!(tab.folder_exclude(), None);
+
+        tab.set_folder_depth_limit(4);
+        tab.set_folder_content_compare(true);
+        tab.set_folder_case_insensitive(true);
+        tab.set_folder_include("*.txt");
+        tab.set_folder_exclude("*.log");
+        assert_eq!(tab.folder_depth_limit(), Some(4));
+        assert!(tab.folder_content_compare());
+        assert!(tab.folder_case_insensitive());
+        assert_eq!(tab.folder_include(), Some("*.txt"));
+        assert_eq!(tab.folder_exclude(), Some("*.log"));
+
+        // Clearing a glob removes the key; JSON keeps everything.
+        tab.set_folder_include("");
+        assert_eq!(tab.folder_include(), None);
+        let doc = SessionDocument::with_tabs(vec![tab]);
+        let json = doc.to_json().expect("to_json");
+        let parsed = SessionDocument::from_json(&json).expect("from_json");
+        assert_eq!(doc, parsed);
+        let back = parsed.tabs.first().expect("one tab");
+        assert_eq!(back.sync_mode(), Some("mirror"));
+        assert_eq!(back.folder_depth_limit(), Some(4));
+        assert!(back.folder_content_compare());
+    }
+
+    #[test]
+    fn test_folder_options_corrupt_values_fall_back() {
+        let mut tab = SessionTab::new("f2", "Folder");
+        tab.options
+            .insert("folder.depth_limit".to_string(), "deep".to_string());
+        tab.options.insert(
+            "folder.content_compare".to_string(),
+            "yes-please".to_string(),
+        );
+        assert_eq!(tab.folder_depth_limit(), None);
+        assert!(!tab.folder_content_compare());
+        assert!(!tab.folder_case_insensitive());
     }
 }

@@ -1,0 +1,16 @@
+{
+  "fixture": "c1-hostile-plan.json applied with left/real.txt present",
+  "expected": {
+    "copied": 1,
+    "deleted": 0,
+    "failed": [
+      ["../evil", "unsafe path"],
+      ["/abs", "unsafe path"],
+      ["", "unsafe path"]
+    ]
+  },
+  "notes": [
+    "No crash, no write outside the roots: every hostile rel_path is refused as 'unsafe path' and the safe step still applies.",
+    "Enforced by apply_refuses_unsafe_rel_paths (plus empty-rel case covered by under())."
+  ]
+}

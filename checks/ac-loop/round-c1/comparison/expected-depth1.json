@@ -1,0 +1,16 @@
+{
+  "fixture": "c1-deep",
+  "compare": { "depth_limit": 1, "content_compare": false },
+  "expected": {
+    "entries": [
+      { "rel_path": "sub", "is_dir": true, "status": "LeftOnly" },
+      { "rel_path": "top.txt", "is_dir": false, "status": "Different" }
+    ],
+    "truncated": true
+  },
+  "notes": [
+    "top.txt differs in size on both sides, so Different holds regardless of checkout mtimes.",
+    "sub exists only on the left; the walk still probes it for children and reports truncated=true at the depth cut.",
+    "sub/mid.txt and sub/deep/leaf.txt appear only with depth_limit >= 2/3 (see sync depth test with pinned mtimes)."
+  ]
+}

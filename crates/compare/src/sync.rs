@@ -32,14 +32,30 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
-    Error, FolderEntry, FolderOptions, FolderStatus, Result, SyncAction, SyncDirection,
-    SyncOptions, SyncPlan, SyncReport, SyncStep, compare_folders, compare_folders_cancellable,
+    Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, Result, SyncAction,
+    SyncDirection, SyncOptions, SyncPlan, SyncReport, SyncStep, compare_folders,
+    compare_folders_cancellable,
 };
 
 /// Builds a sync plan from a folder comparison. See the crate
 /// documentation for the rules.
 pub(crate) fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result<SyncPlan> {
     plan_sync_cancellable(left, right, opts, None)
+}
+
+/// Builds a sync plan with explicit folder comparison rules (depth
+/// limit, content compare, case folding, include/exclude filters).
+/// Read-only like [`plan_sync`]: the comparison walk is the only
+/// filesystem access. Truncation and filtering flow into the plan:
+/// entries below the depth cut are not planned (`truncated` is
+/// set) and filtered-out names appear in neither steps nor skips.
+pub fn plan_sync_with_compare(
+    left: &Path,
+    right: &Path,
+    opts: &SyncOptions,
+    compare: &FolderOptions,
+) -> Result<SyncPlan> {
+    plan_sync_with_compare_cancellable(left, right, opts, compare, None)
 }
 
 /// Progress callback for sync application: `(current_index, total_steps, current_rel_path)`.
@@ -52,18 +68,43 @@ pub fn plan_sync_cancellable(
     opts: &SyncOptions,
     cancel: Option<&AtomicBool>,
 ) -> Result<SyncPlan> {
+    plan_sync_with_compare_cancellable(left, right, opts, &FolderOptions::default(), cancel)
+}
+
+/// Builds a sync plan with explicit comparison rules and
+/// cancellation support.
+pub fn plan_sync_with_compare_cancellable(
+    left: &Path,
+    right: &Path,
+    opts: &SyncOptions,
+    compare: &FolderOptions,
+    cancel: Option<&AtomicBool>,
+) -> Result<SyncPlan> {
     require_dir(left)?;
     require_dir(right)?;
 
     let comparison = match cancel {
-        Some(c) => compare_folders_cancellable(left, right, &FolderOptions::default(), c)?,
-        None => compare_folders(left, right, &FolderOptions::default())?,
+        Some(c) => compare_folders_cancellable(left, right, compare, c)?,
+        None => compare_folders(left, right, compare)?,
     };
 
     if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
         return Err(Error::Cancelled);
     }
 
+    build_plan(&comparison, left, right, opts, cancel)
+}
+
+/// Turns a finished comparison into steps and skips, honouring
+/// direction and prune. One-sided prune deletes suppress their
+/// whole subtree. Cancellation is re-checked per entry.
+fn build_plan(
+    comparison: &FolderComparison,
+    left: &Path,
+    right: &Path,
+    opts: &SyncOptions,
+    cancel: Option<&AtomicBool>,
+) -> Result<SyncPlan> {
     let mut plan = SyncPlan {
         steps: Vec::new(),
         skipped: Vec::new(),
@@ -382,15 +423,20 @@ pub struct SyncPlanner {
     left: PathBuf,
     right: PathBuf,
     mode: SyncMode,
+    compare: FolderOptions,
 }
 
 impl SyncPlanner {
     /// Creates a new `SyncPlanner` for the given roots and sync mode.
+    /// Comparison rules default to [`FolderOptions::default`]; use
+    /// [`Self::with_compare_options`] to mirror a folder view with
+    /// depth limits, content compare or name filters.
     pub fn new(left: impl AsRef<Path>, right: impl AsRef<Path>, mode: SyncMode) -> Self {
         Self {
             left: left.as_ref().to_path_buf(),
             right: right.as_ref().to_path_buf(),
             mode,
+            compare: FolderOptions::default(),
         }
     }
 
@@ -418,7 +464,7 @@ impl SyncPlanner {
 
     /// Generates the sync plan without modifying the filesystem (dry-run).
     pub fn dry_run(&self) -> Result<SyncPlan> {
-        plan_sync(&self.left, &self.right, &self.options())
+        plan_sync_with_compare(&self.left, &self.right, &self.options(), &self.compare)
     }
 
     /// Generates the sync plan. Equivalent to [`Self::dry_run`].
@@ -457,6 +503,23 @@ impl SyncPlanner {
         self
     }
 
+    /// Comparison rules this planner plans with (depth limit,
+    /// content compare, case folding, name filters).
+    pub fn compare_options(&self) -> &FolderOptions {
+        &self.compare
+    }
+
+    /// Updates the comparison rules this planner plans with.
+    pub fn set_compare_options(&mut self, compare: FolderOptions) {
+        self.compare = compare;
+    }
+
+    /// Returns a new `SyncPlanner` with the given comparison rules.
+    pub fn with_compare_options(mut self, compare: FolderOptions) -> Self {
+        self.compare = compare;
+        self
+    }
+
     /// Returns whether this planner is in mirror mode.
     pub fn is_mirror(&self) -> bool {
         matches!(self.mode, SyncMode::Mirror)
@@ -475,7 +538,13 @@ impl SyncPlanner {
 
     /// Runs planning and application with cancellation support.
     pub fn run_cancellable(&self, cancel: &AtomicBool) -> Result<SyncReport> {
-        let plan = plan_sync_cancellable(&self.left, &self.right, &self.options(), Some(cancel))?;
+        let plan = plan_sync_with_compare_cancellable(
+            &self.left,
+            &self.right,
+            &self.options(),
+            &self.compare,
+            Some(cancel),
+        )?;
         apply_sync_cancellable(&self.left, &self.right, &plan, Some(cancel), None)
     }
 

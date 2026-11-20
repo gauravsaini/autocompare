@@ -396,8 +396,25 @@ pub struct SyncReport {
 /// With `prune`, one-sided entries on the losing side are deleted
 /// instead of being left alone. Symlinks are never followed, so they
 /// are never copied or deleted.
+///
+/// The walk uses [`FolderOptions::default`]; for depth limits,
+/// content compare or name filters see [`plan_sync_with_compare`].
 pub fn plan_sync(left: &Path, right: &Path, opts: &SyncOptions) -> Result<SyncPlan> {
     sync::plan_sync(left, right, opts)
+}
+
+/// Builds a sync plan with explicit folder comparison rules. Same
+/// rules as [`plan_sync`], but the walk honours `compare` (depth
+/// limit, content compare, case folding, include/exclude filters):
+/// deeper entries are not planned and the plan reports `truncated`,
+/// filtered-out names appear in neither steps nor skips.
+pub fn plan_sync_with_compare(
+    left: &Path,
+    right: &Path,
+    opts: &SyncOptions,
+    compare: &FolderOptions,
+) -> Result<SyncPlan> {
+    sync::plan_sync_with_compare(left, right, opts, compare)
 }
 
 /// Applies a plan: copies files (creating parent directories as

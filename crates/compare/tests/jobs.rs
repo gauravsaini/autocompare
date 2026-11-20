@@ -155,6 +155,85 @@ fn job_runner_bounded_progress_queue_and_polling() {
 }
 
 #[test]
+fn job_runner_sync_plan_with_compare_respects_filter() {
+    let temp = tempdir().expect("tempdir");
+    let left = temp.path().join("left");
+    let right = temp.path().join("right");
+    std::fs::create_dir_all(&left).expect("create left");
+    std::fs::create_dir_all(&right).expect("create right");
+
+    std::fs::write(left.join("new.txt"), "sync content").expect("write left");
+    std::fs::write(right.join("junk.log"), "junk").expect("write right");
+
+    let planner =
+        SyncPlanner::new(&left, &right, SyncMode::Mirror).with_compare_options(FolderOptions {
+            include: Some("*.txt".into()),
+            ..Default::default()
+        });
+    let sync_opts = planner.options();
+    let compare_opts = planner.compare_options().clone();
+
+    let plan_handle =
+        JobRunner::spawn_sync_plan_with_compare(&left, &right, sync_opts, compare_opts);
+    let plan = plan_handle.join().expect("plan should succeed");
+    let rels: Vec<&str> = plan.steps.iter().map(|s| s.rel_path.as_str()).collect();
+    assert!(rels.contains(&"new.txt"), "matched file planned: {rels:?}");
+    assert!(
+        !rels.iter().any(|r| r.ends_with(".log")),
+        "filtered junk never planned: {rels:?}"
+    );
+}
+
+#[test]
+fn job_runner_progress_visible_before_join_and_drained() {
+    let handle = JobRunner::spawn(|_cancel, progress| {
+        progress(JobProgress::new(1, Some(2), "step 1"));
+        sleep(Duration::from_millis(150));
+        progress(JobProgress::new(2, Some(2), "done"));
+        Ok("finished")
+    });
+
+    // The job sleeps mid-run, so progress must be observable first.
+    let mut seen = false;
+    for _ in 0..100 {
+        if handle.progress().is_some() {
+            seen = true;
+            break;
+        }
+        sleep(Duration::from_millis(5));
+    }
+    assert!(seen, "latest progress must be visible before join");
+    assert!(
+        !handle.is_finished() || handle.progress().is_some(),
+        "job either still runs or already reported"
+    );
+
+    let res = handle.join().expect("job should succeed");
+    assert_eq!(res, "finished");
+}
+
+#[test]
+fn job_runner_history_survives_join_via_drain_before_join() {
+    let handle = JobRunner::spawn(|_cancel, progress| {
+        for i in 1..=3 {
+            progress(JobProgress::new(i, Some(3), format!("step {i}")));
+        }
+        sleep(Duration::from_millis(50));
+        Ok("done")
+    });
+
+    sleep(Duration::from_millis(120));
+    let drained = handle.drain_progress();
+    assert!(
+        !drained.is_empty(),
+        "bounded history must buffer emitted updates"
+    );
+    assert!(drained.iter().any(|p| p.message == "step 1"));
+    let res = handle.join().expect("job should succeed");
+    assert_eq!(res, "done");
+}
+
+#[test]
 fn job_runner_folder_merge_background_cancellation() {
     let temp = tempdir().expect("tempdir");
     let base = temp.path().join("base");

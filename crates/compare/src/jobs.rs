@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use crate::folder_merge::{apply_tree_merge_cancellable, plan_tree_merge_cancellable};
-use crate::sync::{apply_sync_cancellable, plan_sync_cancellable};
+use crate::sync::{apply_sync_cancellable, plan_sync_with_compare_cancellable};
 use crate::{
     Error, FolderComparison, FolderOptions, Result, SyncOptions, SyncPlan, SyncReport,
     TreeMergePlan, TreeMergeReport, compare_folders_cancellable,
@@ -145,11 +145,16 @@ impl<T> JobHandle<T> {
     ///
     /// # Errors
     ///
-    /// Returns the underlying operation error, or an [`Error::Io`] if the
-    /// worker thread panicked or could not be joined.
+    /// Returns the underlying operation error; a worker thread that
+    /// panicked, failed to spawn, or could not be joined becomes a
+    /// structured [`Error::Io`] ("background-job"), never a panic
+    /// and never a misleading [`Error::Cancelled`].
     pub fn join(mut self) -> Result<T> {
         let Some(thread) = self.thread.take() else {
-            return Err(Error::Cancelled);
+            return Err(Error::Io {
+                path: "background-job".to_string(),
+                source: std::io::Error::other("worker thread failed to spawn"),
+            });
         };
         match thread.join() {
             Ok(res) => res,
@@ -249,11 +254,25 @@ impl JobRunner {
         right: impl AsRef<Path>,
         opts: SyncOptions,
     ) -> JobHandle<SyncPlan> {
+        Self::spawn_sync_plan_with_compare(left, right, opts, FolderOptions::default())
+    }
+
+    /// Spawns a background sync planning job with explicit folder
+    /// comparison rules (depth limit, content compare, name
+    /// filters): the background plan mirrors the folder view it
+    /// was previewed with.
+    pub fn spawn_sync_plan_with_compare(
+        left: impl AsRef<Path>,
+        right: impl AsRef<Path>,
+        opts: SyncOptions,
+        compare: FolderOptions,
+    ) -> JobHandle<SyncPlan> {
         let left = left.as_ref().to_path_buf();
         let right = right.as_ref().to_path_buf();
         Self::spawn(move |cancel, progress| {
             progress(JobProgress::new(0, None, "Planning sync..."));
-            let plan = plan_sync_cancellable(&left, &right, &opts, Some(&cancel))?;
+            let plan =
+                plan_sync_with_compare_cancellable(&left, &right, &opts, &compare, Some(&cancel))?;
             progress(JobProgress::new(
                 plan.steps.len(),
                 Some(plan.steps.len()),

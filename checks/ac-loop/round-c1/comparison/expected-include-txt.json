@@ -1,0 +1,21 @@
+{
+  "fixture": "c1-filter",
+  "compare": { "include": "*.txt" },
+  "sync": { "direction": "LeftToRight", "prune": true, "mode": "Mirror" },
+  "expected": {
+    "steps": [
+      { "rel_path": "new.txt", "is_dir": false, "action": "CopyToRight" },
+      { "rel_path": "extra.txt", "is_dir": false, "action": "DeleteRight" }
+    ],
+    "skipped": [
+      ["keep.txt", "content differs; no side wins"]
+    ],
+    "absent_everywhere": ["extra.log"],
+    "truncated": false
+  },
+  "notes": [
+    "extra.log is right-only but filtered out by include=*.txt: no step, no skip line, and Mirror does NOT prune it.",
+    "keep.txt differs in size, so no side wins: skipped with reason, never copied.",
+    "Enforced by plan_with_compare_include_filter_limits_mirror_prune and sync_planner_compare_options_drive_dry_run_and_apply (pinned mtimes)."
+  ]
+}
