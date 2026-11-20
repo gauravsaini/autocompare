@@ -3565,10 +3565,13 @@ fn paint_text_body(
     // Geometry FIRST (bottom-waste fix): the panes row fills the
     // remaining viewport height instead of shrinking to content.
     // Budget captured before the row consumes it (nav toolbar, cursor
-    // strip and status bar already spent above); the list column keeps
-    // it as its floor and the minimap pins to the same height, so short
-    // content scrolls in a full-height viewport with zero bottom waste.
-    let panes_h = viewmodel::text_panes_height(ui.available_height());
+    // strip and status bar already spent above) minus the bottom stack
+    // ([`text_bottom_stack_height_px`]: per-pane strips + legend), so
+    // the strips sit inside the viewport instead of below the fold; the
+    // list column keeps it as its floor and the minimap pins to the same
+    // height, so short content scrolls in a full-height viewport with
+    // zero bottom waste.
+    let panes_h = text_panes_height_reserved(ui.available_height());
     ui.horizontal(|ui| {
         // Main diff scroll area
         ui.vertical(|ui| {
@@ -5699,28 +5702,20 @@ pub fn text_pane_needs_hscroll(content_w: f32, avail_w: f32) -> bool {
     content_w > avail_w
 }
 
-/// Segmented pane status with bottom detail: bottom row me left/right pane
-/// halves barabar, dono left-aligned (BC per-pane `1:1` precedent — har pane
-/// ka readout apne pane ke start par), har half me cursor label + selected
-/// line ka preview (`L3 | content`; missing side ya no-selection par label
-/// akela, koi fake preview nahi). Geometry thin chrome bar
-/// ([`text_pane_status_height_px`]: Small 13.2 + [`ROW_PAD`] = 15.2, not
-/// the 28px toolbar [`HEADER_H`]), halves beech [`TIGHT_GAP`], truncate clip
-/// taaki lambi line bar ko lamba na kare — single-row lock); typo Mono
-/// (code content reuse, koi naya size nahi); colors untouched.
+/// Segmented pane status with cursor/format/counts: bottom row me
+/// left/right pane halves barabar, dono left-aligned (status20 fixture
+/// `cursor | format | result` precedent — har pane ka readout apne pane
+/// ke start par), har half me live cursor + format word + honest side
+/// counts (`3:1 | Text: exact | 2 equal, 1 changed, 1 deleted`; khali
+/// rows ya no-selection par `- | Text: exact`, koi fake preview nahi).
+/// Geometry thin chrome bar ([`text_pane_status_height_px`]: Small 13.2
+/// + [`ROW_PAD`] = 15.2, not the 28px toolbar [`HEADER_H`]), halves
+/// beech [`TIGHT_GAP`], truncate clip taaki lambi line bar ko lamba na
+/// kare — single-row lock); typo Mono (koi naya size nahi); colors
+/// untouched.
 pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
-    let (left_label, right_label) = text_pane_cursor_labels(rows, selected);
-    let budget = text_pane_detail_budget();
-    let left = text_pane_detail_label(
-        &left_label,
-        &text_pane_preview_side(rows, selected, true),
-        budget,
-    );
-    let right = text_pane_detail_label(
-        &right_label,
-        &text_pane_preview_side(rows, selected, false),
-        budget,
-    );
+    let left = text_pane_status_side_line(rows, selected, true);
+    let right = text_pane_status_side_line(rows, selected, false);
     let avail = ui.available_width();
     let half = pane_status_half_width(avail);
     let bar_h = text_pane_status_height_px();
@@ -5736,6 +5731,103 @@ pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<us
             egui::Label::new(TypoRole::Mono.rich(right.as_str())).truncate(),
         );
     });
+}
+
+// ----------------------------------------------------------------------------
+// EXQUISITE LEGEND25: live bottom bar mirrors the status20 fixture strips.
+//
+// Per-pane strips carry `cursor | format | result` lines (cursor live
+// selection se, format `Text: exact`, result honest side counts), and the
+// legend strip paints 4 equal cells (marker swatch + label + dividers).
+// Geometry FIRST (34.4px bottom stack reserved from panes; equal cells),
+// typography SECOND (existing roles), colors FROZEN (palette reuse).
+// ----------------------------------------------------------------------------
+
+/// Bottom stack height (px): per-pane strip + gap + legend strip
+/// (15.2 + 4.0 + 15.2 = 34.4) — status12 `status_bottom_stack_h` parity.
+/// [`paint_text_body`] reserves this from the panes height so both strips
+/// sit inside the viewport instead of below the fold. Pure; unit-tested.
+pub fn text_bottom_stack_height_px() -> f32 {
+    text_pane_status_height_px() + text_legend_gap_px() + text_legend_strip_height_px()
+}
+
+/// Panes-list budget with the bottom stack reserved: `avail_h` me se
+/// [`text_bottom_stack_height_px`] ghata kar bacha panes ko, phir existing
+/// [`viewmodel::text_panes_height`] floor. Non-finite ya non-positive
+/// input callee floor par pin hota hai (paint kabhi NaN na khaye).
+/// Pure; unit-tested.
+pub fn text_panes_height_reserved(avail_h: f32) -> f32 {
+    viewmodel::text_panes_height(avail_h - text_bottom_stack_height_px())
+}
+
+/// Text pane format word: live text compare hamesha exact hota hai
+/// (wrap/syntax sirf display prefs hain) — status20 fixture `Text: exact`
+/// parity, honest constant, koi fake stat nahi. Pure; unit-tested.
+pub fn text_pane_format_word() -> &'static str {
+    "Text: exact"
+}
+
+/// One pane ka result word: equal/changed counts dono sides par, plus
+/// left par deleted / right par inserted (status20 fixture rhythm:
+/// `2 equal, 1 changed, 1 deleted`). Zero parts girte hain (koi fake
+/// `0 deleted` nahi); khali rows par khali (caller `-` fallback deta
+/// hai). Pure; unit-tested.
+pub fn text_pane_result_word(rows: &[TextRow], is_left: bool) -> String {
+    let mut equal = 0usize;
+    let mut changed = 0usize;
+    let mut side = 0usize;
+    for row in rows {
+        match row.kind {
+            TextRowKind::Equal => equal = equal.saturating_add(1),
+            TextRowKind::Changed => changed = changed.saturating_add(1),
+            TextRowKind::Deleted => {
+                if is_left {
+                    side = side.saturating_add(1);
+                }
+            }
+            TextRowKind::Inserted => {
+                if !is_left {
+                    side = side.saturating_add(1);
+                }
+            }
+        }
+    }
+    let mut parts = Vec::new();
+    if equal > 0 {
+        parts.push(format!("{equal} equal"));
+    }
+    if changed > 0 {
+        parts.push(format!("{changed} changed"));
+    }
+    if side > 0 {
+        if is_left {
+            parts.push(format!("{side} deleted"));
+        } else {
+            parts.push(format!("{side} inserted"));
+        }
+    }
+    parts.join(", ")
+}
+
+/// Per-pane status side line: `cursor | format | result` (status20
+/// `format_pane_status_line` rhythm) — cursor live selection se
+/// ([`viewmodel::cursor_label`], bina selection `-`), format
+/// [`text_pane_format_word`], result [`text_pane_result_word`]. Join +
+/// `-` fallback existing [`viewmodel::path_segmented_status_line`] reuse
+/// (koi naya join nahi). Pure; unit-tested.
+pub fn text_pane_status_side_line(
+    rows: &[TextRow],
+    selected: Option<usize>,
+    is_left: bool,
+) -> String {
+    let cursor = viewmodel::cursor_label(viewmodel::cursor_pos_for(selected));
+    let status = viewmodel::path_segmented_status_for(
+        cursor.as_str(),
+        text_pane_format_word(),
+        text_pane_result_word(rows, is_left).as_str(),
+        "",
+    );
+    viewmodel::path_segmented_status_line(&status)
 }
 
 // ----------------------------------------------------------------------------
@@ -5797,6 +5889,68 @@ pub fn text_legend_gap_px() -> f32 {
     TIGHT_GAP
 }
 
+/// Legend cell width (px): `avail` ka chautha hissa — 4 equal cells
+/// (status20 fixture 4-zone rhythm: 960 par 240, 720 par 180). Non-finite
+/// ya non-positive `avail` par 0 (paint kabhi NaN na khaye). Pure;
+/// unit-tested.
+pub fn text_legend_cell_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return 0.0;
+    }
+    (avail / 4.0).max(0.0)
+}
+
+/// Legend marker swatch size (px): [`crate::theme::SPACE_SM`] (8.0)
+/// square — key cell ke andar chhota rang-namuna, label se ek
+/// [`TIGHT_GAP`] par. Koi naya size nahi. Pure; unit-tested.
+pub fn text_legend_marker_px() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Legend marker ink per cell: frozen palette reuse — differences par
+/// [`CHANGED_BG`], same par per-mode track ([`track_for`]), insert par
+/// [`INSERTED_BG`], overview par [`DELETED_BG`]. Har cell ka namuna bar
+/// face se alag dikhta hai (live-pixel gate isi par hai). Koi naya hue
+/// nahi. Pure; unit-tested.
+pub fn text_legend_marker_ink(index: usize, dark: bool) -> Color32 {
+    match index % 4 {
+        0 => CHANGED_BG,
+        1 => track_for(dark),
+        2 => INSERTED_BG,
+        _ => DELETED_BG,
+    }
+}
+
+/// Legend cell label budget (chars): cell me se marker + leads ghata kar
+/// bachi px chaudai ko mono advance ([`text_char_metric_width`]) se
+/// baant-ta hai — 720 par 180-20=160px = 22 chars. Non-finite ya tang
+/// cell par 0 (paint kabhi NaN/negative na khaye). Pure; unit-tested.
+pub fn text_legend_cell_budget_chars(cell_w: f32) -> usize {
+    if !cell_w.is_finite() || cell_w <= 0.0 {
+        return 0;
+    }
+    let px = cell_w - (2.0 * TIGHT_GAP + text_legend_marker_px() + BADGE_PAD);
+    if px <= 0.0 {
+        return 0;
+    }
+    let char_w = text_char_metric_width();
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0;
+    }
+    (px / char_w) as usize
+}
+
+/// Legend cell label: budget ke andar poori, warna `budget` chars +
+/// `...` (fixture `clip_to_width` ellipsis precedent — bar kabhi lamba
+/// na ho, single-row lock). Pure; unit-tested.
+pub fn text_legend_cell_label(seg: &str, budget: usize) -> String {
+    if seg.chars().count() <= budget {
+        return seg.to_string();
+    }
+    let head: String = seg.chars().take(budget).collect();
+    format!("{head}...")
+}
+
 /// Bottom legend key segments: static key, not state — har entry ek
 /// fixed label hai (BC bottom-bar key precedent), isliye khali model par
 /// bhi honest rehta hai (koi fake count/preview nahi). Pure; unit-tested.
@@ -5825,25 +5979,58 @@ pub fn text_legend_role() -> TypoRole {
 }
 
 /// Bottom legend strip: static key row (Unimportant differences | Same |
-/// Insert | Load). Geometry thin bar ([`text_legend_strip_height_px`],
-/// [`TIGHT_GAP`] spacing, separators); typo [`text_legend_role`].
-/// Fixed short labels never stretch the bar — no clip math needed.
-/// Koi state mutate nahi, koi naya size/color nahi.
+/// Insert | Load) in 4 equal cells ([`text_legend_cell_width`]), har cell
+/// me marker swatch ([`text_legend_marker_px`], [`text_legend_marker_ink`])
+/// + label ([`text_legend_cell_label`] budget clip) aur cell bounds par
+/// 1px dim dividers (status20 fixture 4-zone rhythm). Geometry thin bar
+/// ([`text_legend_strip_height_px`]); typo [`text_legend_role`]; fixed
+/// short labels kabhi bar ko lamba nahi karte — single-row lock. Koi
+/// state mutate nahi, koi naya size/color nahi.
 pub fn paint_text_legend_bar(ui: &mut Ui) {
     let avail = ui.available_width();
     let bar_h = text_legend_strip_height_px();
-    ui.horizontal(|ui| {
-        ui.set_min_size(egui::vec2(avail, bar_h));
-        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        let mut first = true;
-        for seg in text_legend_segments() {
-            if !first {
-                ui.separator();
-            }
-            first = false;
-            ui.label(text_legend_role().rich(seg));
+    let cell_w = text_legend_cell_width(avail);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(avail, bar_h), egui::Sense::hover());
+    if !rect.is_positive() || cell_w <= 0.0 {
+        return;
+    }
+    let dark = ui.visuals().dark_mode;
+    let font_id = text_legend_role().resolved_font_id(ui.style());
+    let text_color = ui.visuals().weak_text_color();
+    let dim = dim_for(dark);
+    let marker = text_legend_marker_px();
+    let center_y = rect.center().y;
+    let budget = text_legend_cell_budget_chars(cell_w);
+    let mut idx = 0usize;
+    for seg in text_legend_segments() {
+        let cell_x = rect.min.x + idx as f32 * cell_w;
+        if idx > 0 {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(
+                    egui::pos2(cell_x, rect.min.y + TIGHT_GAP),
+                    egui::vec2(1.0, bar_h - 2.0 * TIGHT_GAP),
+                ),
+                0.0,
+                dim,
+            );
         }
-    });
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(
+                egui::pos2(cell_x + TIGHT_GAP, center_y - marker / 2.0),
+                egui::vec2(marker, marker),
+            ),
+            0.0,
+            text_legend_marker_ink(idx, dark),
+        );
+        ui.painter().text(
+            egui::pos2(cell_x + 2.0 * TIGHT_GAP + marker, center_y),
+            egui::Align2::LEFT_CENTER,
+            text_legend_cell_label(seg, budget),
+            font_id.clone(),
+            text_color,
+        );
+        idx = idx.saturating_add(1);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -9420,6 +9607,113 @@ mod tests {
             "Unimportant differences | Same | Insert | Load"
         );
         assert!(fixture_raw.contains("\"status_bottom_stack_h\": 34.4"));
+    }
+
+    #[test]
+    fn legend25_narrow720_no_overlap() {
+        // Mirrors checks/gui-exq-legend25/round-1/comparison/legend-narrow-720.json:
+        // narrow 720px canvas — 4 equal legend cells (180px each, dividers at
+        // 180/360/540) with marker ink per cell, labels truncate inside the
+        // per-cell budget; per-pane status halves (358px each) sit side by
+        // side with a 4px gap; the 34.4px bottom stack is reserved from the
+        // panes height so the legend never overlaps pane content. Geometry
+        // FIRST, typography SECOND, colors FROZEN.
+        use viewmodel::TextRow;
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-legend25/round-1/comparison/legend-narrow-720.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"legend-narrow-720\""));
+        // 1. Layout boundary: 720 side-by-side, 719 stacked.
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        // 2. Equal cells at 720: 4 x 180, dividers at 180/360/540.
+        let cell_720 = text_legend_cell_width(720.0);
+        assert!((cell_720 - 180.0).abs() < 0.01);
+        assert!((text_legend_cell_width(960.0) - 240.0).abs() < 0.01);
+        assert_eq!(text_legend_cell_width(f32::NAN), 0.0);
+        assert_eq!(text_legend_cell_width(0.0), 0.0);
+        for mult in [1.0f32, 2.0, 3.0] {
+            let divider = mult * cell_720;
+            assert!(fixture_raw.contains(&format!("{divider}")));
+        }
+        // 3. Labels fit the per-cell budget: longest segment full at 960,
+        // truncated with ellipsis inside the 22-char budget at 720.
+        assert_eq!(text_legend_cell_budget_chars(180.0), 22);
+        assert_eq!(text_legend_marker_px(), crate::theme::SPACE_SM);
+        for seg in text_legend_segments() {
+            let full = text_legend_cell_label(seg, text_legend_cell_budget_chars(240.0));
+            assert_eq!(full, seg);
+            let narrow = text_legend_cell_label(seg, text_legend_cell_budget_chars(180.0));
+            assert!(narrow.chars().count() <= 22 + 3);
+        }
+        assert_eq!(text_legend_cell_label("Same", 22), "Same");
+        assert!(text_legend_cell_label("Unimportant differences", 22).ends_with("..."));
+        // 4. Marker inks: 4 distinct frozen tones, zero new hues.
+        let [ink0, ink1, ink2, ink3] = [
+            text_legend_marker_ink(0, true),
+            text_legend_marker_ink(1, true),
+            text_legend_marker_ink(2, true),
+            text_legend_marker_ink(3, true),
+        ];
+        assert!(ink0 != ink1 && ink0 != ink2 && ink0 != ink3);
+        assert!(ink1 != ink2 && ink1 != ink3);
+        assert!(ink2 != ink3);
+        assert_eq!(text_legend_marker_ink(4, true), ink0);
+        // 5. Bottom stack reserved: 34.4 off the panes budget, floored.
+        assert!((text_bottom_stack_height_px() - 34.4).abs() < 0.01);
+        assert!((text_panes_height_reserved(600.0) - (600.0 - 34.4)).abs() < 0.01);
+        assert!(text_panes_height_reserved(600.0) < 600.0);
+        assert_eq!(
+            text_panes_height_reserved(f32::NAN),
+            viewmodel::text_panes_height(f32::NAN)
+        );
+        // 6. Per-pane halves at 720: 358 each across the 4px gap.
+        assert_eq!(pane_status_half_width(720.0), 358.0);
+        // 7. Side lines honest: empty model carries no fake counts.
+        let empty: Vec<TextRow> = Vec::new();
+        assert_eq!(
+            text_pane_status_side_line(&empty, None, true),
+            "- | Text: exact"
+        );
+        assert_eq!(
+            text_pane_status_side_line(&empty, None, false),
+            "- | Text: exact"
+        );
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Deleted,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            text_pane_status_side_line(&rows, Some(2), true),
+            "3:1 | Text: exact | 2 equal, 1 changed, 1 deleted"
+        );
+        assert_eq!(
+            text_pane_status_side_line(&rows, Some(2), false),
+            "3:1 | Text: exact | 2 equal, 1 changed, 1 inserted"
+        );
+        // 8. Toolbar22 glyphs, gutter23 track, filebar chrome intact.
+        assert_eq!(TOOLBAR_GLYPH_W, 12.0);
+        assert!((text_center_gutter_width() - 20.0).abs() < 0.01);
+        assert!((text_pane_status_height_px() - 15.2).abs() < 0.01);
+        assert_eq!(text_legend_segments().len(), 4);
     }
 
     #[test]
