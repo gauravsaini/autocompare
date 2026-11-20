@@ -40,7 +40,16 @@ fn main() {
     }
 
     if let Some(path_str) = screenshot_target {
-        if let Err(err) = screenshot::render_fixture_png(std::path::Path::new(&path_str)) {
+        let mode = match screenshot::screenshot_mode_from_args(&args) {
+            Ok(mode) => mode,
+            Err(err) => {
+                eprintln!("autocompare-gui: {err}");
+                std::process::exit(2);
+            }
+        };
+        if let Err(err) =
+            screenshot::render_fixture_png_with_mode(std::path::Path::new(&path_str), mode)
+        {
             eprintln!("screenshot failed: {err}");
             std::process::exit(1);
         }

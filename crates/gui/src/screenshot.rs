@@ -169,6 +169,42 @@ pub fn render_fixture_png_with_mode(out_path: &Path, mode: FixtureMode) -> Resul
     render_fixture_png_routed(out_path)
 }
 
+/// CP-LIGHTFLAG: `--screenshot-mode <dark|light>` CLI value nikalo.
+/// Default dark taaki flag ke bina render byte-stable rahe. Unknown ya
+/// missing value par `Err` (caller exit-code 2 deta hai, opener precedent).
+/// Pure; headless-tested, GUI nahi khulta.
+pub fn screenshot_mode_from_args(args: &[String]) -> Result<FixtureMode, String> {
+    let mut mode = FixtureMode::Dark;
+    let mut rest: &[String] = match args.get(1..) {
+        Some(rest) => rest,
+        None => return Ok(mode),
+    };
+    while let Some((head, tail)) = rest.split_first() {
+        if head.as_str() == "--screenshot-mode" {
+            match tail.split_first() {
+                Some((value, after)) if !value.starts_with("--") => {
+                    match value.as_str() {
+                        "dark" => mode = FixtureMode::Dark,
+                        "light" => mode = FixtureMode::Light,
+                        _ => {
+                            return Err(format!("unknown --screenshot-mode '{value}': dark/light"));
+                        }
+                    }
+                    rest = after;
+                }
+                _ => {
+                    return Err(String::from(
+                        "--screenshot-mode needs a value: --screenshot-mode dark|light",
+                    ));
+                }
+            }
+        } else {
+            rest = tail;
+        }
+    }
+    Ok(mode)
+}
+
 /// Mode guard ke andar route dispatch (shared, testable core).
 fn render_fixture_png_routed(out_path: &Path) -> Result<(), String> {
     let lower = match out_path.file_name().and_then(|name| name.to_str()) {
@@ -4128,6 +4164,72 @@ mod tests {
         assert!(render_fixture_png(&after_out).is_ok());
         let after_bytes = std::fs::read(&after_out).unwrap_or_default();
         assert_eq!(after_bytes, dark_bytes);
+    }
+
+    #[test]
+    fn screenshot_mode_flag_defaults_dark_and_accepts_light() {
+        let prog = String::from("autocompare-gui");
+        assert_eq!(
+            screenshot_mode_from_args(std::slice::from_ref(&prog)),
+            Ok(FixtureMode::Dark)
+        );
+        assert_eq!(
+            screenshot_mode_from_args(&[
+                prog.clone(),
+                String::from("--screenshot"),
+                String::from("a.png")
+            ]),
+            Ok(FixtureMode::Dark)
+        );
+        assert_eq!(
+            screenshot_mode_from_args(&[
+                prog.clone(),
+                String::from("--screenshot"),
+                String::from("a.png"),
+                String::from("--screenshot-mode"),
+                String::from("light"),
+            ]),
+            Ok(FixtureMode::Light)
+        );
+        assert_eq!(
+            screenshot_mode_from_args(&[
+                prog.clone(),
+                String::from("--screenshot-mode"),
+                String::from("dark"),
+            ]),
+            Ok(FixtureMode::Dark)
+        );
+        assert!(
+            screenshot_mode_from_args(&[
+                prog.clone(),
+                String::from("--screenshot-mode"),
+                String::from("sepia"),
+            ])
+            .is_err()
+        );
+        assert!(screenshot_mode_from_args(&[prog, String::from("--screenshot-mode"),]).is_err());
+        // CLI light render dark se alag bytes deta hai (flag-to-PNG proof).
+        let dir = std::env::temp_dir();
+        let cli_dark = dir.join("vis-lightflag-cli-dark.png");
+        let cli_light = dir.join("vis-lightflag-cli-light.png");
+        assert!(
+            render_fixture_png_with_mode(
+                &cli_dark,
+                screenshot_mode_from_args(&[
+                    String::from("autocompare-gui"),
+                    String::from("--screenshot-mode"),
+                    String::from("dark"),
+                ])
+                .unwrap_or_default()
+            )
+            .is_ok()
+        );
+        assert!(render_fixture_png_with_mode(&cli_light, FixtureMode::Light).is_ok());
+        let dark_bytes = std::fs::read(&cli_dark).unwrap_or_default();
+        let light_bytes = std::fs::read(&cli_light).unwrap_or_default();
+        assert!(png_magic_ok(&dark_bytes));
+        assert!(png_magic_ok(&light_bytes));
+        assert_ne!(dark_bytes, light_bytes);
     }
 
     #[test]
