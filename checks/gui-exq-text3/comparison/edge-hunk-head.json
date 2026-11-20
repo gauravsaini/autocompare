@@ -1,0 +1,8 @@
+{
+  "name": "edge-hunk-head",
+  "intent": "center gutter arrows per hunk, not per row",
+  "rows": ["Changed", "Changed", "Equal", "Inserted"],
+  "expected_heads": [true, false, false, true],
+  "gutter_width_px": 48.0,
+  "notes": "second Changed is continuation (blank click-to-select); Inserted after Equal heads again"
+}

@@ -133,6 +133,27 @@ pub fn text_gutter_has_copy(kind: TextRowKind) -> bool {
     kind != TextRowKind::Equal
 }
 
+/// Center-gutter hunk head: contiguous diff block ka pehla row.
+/// BC center bar har hunk par ek arrow/marker dikhata hai, har row par
+/// nahi — continuation rows blank click-to-select rehti hain taaki gutter
+/// fixed width me rahe bina per-row button clutter ke. Gate
+/// [`text_gutter_has_copy`] reuse; Equal kabhi head nahi. Pure; unit-tested.
+pub fn text_center_hunk_head(rows: &[TextRow], idx: usize) -> bool {
+    let Some(row) = rows.get(idx) else {
+        return false;
+    };
+    if !text_center_hunk_marker(row.kind) {
+        return false;
+    }
+    if idx == 0 {
+        return true;
+    }
+    match rows.get(idx.saturating_sub(1)) {
+        Some(prev) => !text_center_hunk_marker(prev.kind),
+        None => true,
+    }
+}
+
 /// Narrow breakpoint px: [`crate::theme::VIEWPORT_MIN_W`] reuse (720) —
 /// isse tang window par side-by-side panes stacked wrap me jate hain
 /// taaki 960x600 canvas par do pane + tang par ek-ek pane bina clip ke
@@ -3237,7 +3258,7 @@ fn paint_text_body(
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
-                                            if text_center_hunk_marker(row.kind) {
+                                            if text_center_hunk_head(&model.rows, orig) {
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                                                     if ui
@@ -3461,7 +3482,7 @@ fn paint_text_body(
 
                                 ui.vertical(|ui| {
                                     ui.set_width(text_center_gutter_width());
-                                    if text_center_hunk_marker(row.kind) {
+                                    if text_center_hunk_head(&model.rows, orig) {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                                             if ui
@@ -7047,6 +7068,38 @@ mod tests {
         assert!(text_gutter_has_copy(TextRowKind::Deleted));
         assert!(text_gutter_has_copy(TextRowKind::Inserted));
         assert!(!text_gutter_has_copy(TextRowKind::Equal));
+    }
+
+    #[test]
+    fn text_center_hunk_head_groups_contiguous_diffs() {
+        // Mirrors checks/gui-exq-text3/comparison/edge-hunk-head.json:
+        // Changed+Changed share one hunk (second stays blank), Equal never
+        // heads, next diff after Equal heads again. OOB/empty never head.
+        use viewmodel::TextRow;
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                ..Default::default()
+            },
+        ];
+        assert!(text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 1));
+        assert!(!text_center_hunk_head(&rows, 2));
+        assert!(text_center_hunk_head(&rows, 3));
+        assert!(!text_center_hunk_head(&rows, 4));
+        assert!(!text_center_hunk_head(&[], 0));
     }
 
     #[test]
