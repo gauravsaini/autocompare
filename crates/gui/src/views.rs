@@ -2514,6 +2514,48 @@ pub fn paint_text_with_prefs(ui: &mut Ui, model: &mut TextRows, prefs: &TextView
     paint_text_body(ui, model, prefs, None);
 }
 
+/// Cursor + focused-line preview strip: status bar ke UPAR paint hota hai.
+/// Line 1 me cursor label + line_no/kind, uske neeche left/right preview
+/// text lines. Preview None (no selection/OOB) par strip skip, koi fake
+/// row nahi. Geometry: toolbar precedent (horizontal + TIGHT_GAP); typo:
+/// line 1 chrome_status_role, preview lines Mono. Koi naya size/color/
+/// Grid/add_space nahi; koi state mutate nahi.
+pub fn paint_text_cursor_strip(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
+    let preview = match viewmodel::focused_line_preview_for(rows, selected) {
+        Some(found) => found,
+        None => return,
+    };
+    let cursor = viewmodel::cursor_label(viewmodel::cursor_pos_for(selected));
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.label(
+            chrome_status_role().rich(format!("{} | {} {}", cursor, preview.line_no, preview.kind)),
+        );
+    });
+    ui.label(TypoRole::Mono.rich(preview.left.as_str()));
+    ui.label(TypoRole::Mono.rich(preview.right.as_str()));
+}
+
+/// 3-zone text status bar: left filter+counts, mid focused verdict, right
+/// nav badge + hints. Geometry: toolbar precedent (avail x HEADER_H row,
+/// TIGHT_GAP spacing, right-end dock + BADGE_PAD); typo: chrome_status_role.
+/// Koi naya size/color/Grid/add_space nahi; `zones` BT model
+/// (`status_zones_for`) se aata hai, yahan koi count/nav math nahi.
+pub fn paint_text_status_bar(ui: &mut Ui, zones: &viewmodel::StatusZones) {
+    let avail = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail, HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.label(chrome_status_role().rich(zones.left.as_str()));
+        ui.separator();
+        ui.label(chrome_status_role().rich(zones.mid.as_str()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(BADGE_PAD);
+            ui.label(chrome_status_role().rich(zones.right.as_str()));
+        });
+    });
+}
+
 /// Find-aware text body: `find` None par plain text view jaisa, Some par
 /// per-match blocks (current = inverted block, others = underline line;
 /// [`FindPaintCtx`] se). Public wrappers (`paint_text_with_prefs` /
@@ -2688,14 +2730,10 @@ fn paint_text_body(
         model.selected = Some(idx);
     }
 
-    let selected_text = match model.selected {
-        Some(i) => format!("selected row {i}"),
-        None => "no selection".to_string(),
-    };
-    ui.label(TypoRole::Small.rich(format!(
-        "{} rows ({} shown): {} diffs, {} same | {selected_text}",
-        counts.total, counts.shown, counts.diffs, counts.sames
-    )));
+    let mid = viewmodel::focused_kind_label(&model.rows, model.selected);
+    let zones = viewmodel::status_zones_for(&counts, model.filter, mid, &nav_badge);
+    paint_text_cursor_strip(ui, &model.rows, model.selected);
+    paint_text_status_bar(ui, &zones);
 
     let font_id = TypoRole::Mono.resolved_font_id(ui.style());
     let row_height = row_height_for_line(text_row_height(ui));
@@ -10473,5 +10511,63 @@ mod tests {
         assert_ne!(two_px, eight_px);
         assert_ne!(two_bytes, eight_bytes);
         assert_ne!(two_bytes, empty_bytes);
+    }
+
+    #[test]
+    fn text_status_wiring_zones_use_focused_verdict_and_nav_badge() {
+        // Paint call-site ka data flow (BT model reuse, koi math duplicate
+        // nahi): counts + filter + focused verdict + nav badge -> zones.
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Equal,
+                left_no: Some(1),
+                right_no: Some(1),
+                left: "a".to_string(),
+                right: "a".to_string(),
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                left_no: Some(2),
+                right_no: Some(2),
+                left: "b".to_string(),
+                right: "c".to_string(),
+                ..Default::default()
+            },
+        ];
+        let counts = viewmodel::filter_counts(&rows, viewmodel::TextFilter::Differences);
+        let mid = viewmodel::focused_kind_label(&rows, Some(1));
+        let badge = diff_nav_count_label(diff_nav_position(&rows, Some(1)), diff_nav_total(&rows));
+        let zones =
+            viewmodel::status_zones_for(&counts, viewmodel::TextFilter::Differences, mid, &badge);
+        assert!(zones.left.contains("Differences"));
+        assert!(zones.left.contains("2 rows (1 shown)"));
+        assert_eq!(zones.mid, "Changed");
+        assert!(zones.right.contains(&badge));
+        assert!(zones.right.contains("F3"));
+    }
+
+    #[test]
+    fn text_cursor_strip_skips_without_preview() {
+        // Strip skip condition: preview None (no selection/OOB) par paint
+        // kuch nahi karta, koi fake row nahi; cursor label tab "-" hai.
+        let rows = vec![TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(2),
+            right_no: Some(2),
+            left: "b".to_string(),
+            right: "c".to_string(),
+            ..Default::default()
+        }];
+        assert!(viewmodel::focused_line_preview_for(&rows, None).is_none());
+        assert!(viewmodel::focused_line_preview_for(&rows, Some(99)).is_none());
+        assert_eq!(
+            viewmodel::cursor_label(viewmodel::cursor_pos_for(None)),
+            "-"
+        );
+        assert_eq!(
+            viewmodel::cursor_label(viewmodel::cursor_pos_for(Some(0))),
+            "1:1"
+        );
     }
 }
