@@ -1,0 +1,20 @@
+schema_version: 1
+name: Enterprise 3-Way Merge Session
+locked: true
+tabs_count: 2
+tab[0].id: tab-merge-text-1
+tab[0].session_type: merge
+tab[0].base_path: /repo/ancestor_common.rs
+tab[0].left_path: /repo/branch_feature.rs
+tab[0].right_path: /repo/main.rs
+tab[0].output_path: /repo/merged_result.rs
+tab[0].locked: true
+tab[0].options.merge.auto_merge: true
+tab[0].options.merge.conflict_strategy: manual
+tab[1].id: tab-merge-folder-2
+tab[1].session_type: folder_merge
+tab[1].base_path: /build/release_base
+tab[1].left_path: /build/release_left
+tab[1].right_path: /build/release_right
+tab[1].output_path: /build/release_output
+tab[1].locked: false

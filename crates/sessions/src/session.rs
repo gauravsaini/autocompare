@@ -4,8 +4,8 @@ use std::path::Path;
 
 use crate::error::SessionError;
 pub use crate::options::{
-    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, PictureCompareOptions,
-    SyncCompareOptions, TableCompareOptions, TextCompareOptions,
+    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, MergeCompareOptions,
+    PictureCompareOptions, SyncCompareOptions, TableCompareOptions, TextCompareOptions,
 };
 
 /// The current schema version for SessionDocument.
@@ -21,7 +21,7 @@ pub struct SessionTab {
     pub id: String,
     /// Display title for the tab.
     pub title: String,
-    /// Type of compare session (e.g., "text", "folder", "table", "hex", "picture", "audio", "sync").
+    /// Type of compare session (e.g., "text", "folder", "table", "hex", "picture", "audio", "sync", "merge", "folder_merge").
     #[serde(default = "default_tab_type")]
     pub session_type: String,
     /// Optional left path or URI.
@@ -30,6 +30,12 @@ pub struct SessionTab {
     /// Optional right path or URI.
     #[serde(default)]
     pub right_path: Option<String>,
+    /// Optional base/ancestor path for 3-way merge sessions.
+    #[serde(default)]
+    pub base_path: Option<String>,
+    /// Optional output target path for merge sessions.
+    #[serde(default)]
+    pub output_path: Option<String>,
     /// Whether this tab is marked read-only.
     #[serde(default)]
     pub read_only: bool,
@@ -54,6 +60,8 @@ impl SessionTab {
             session_type: default_tab_type(),
             left_path: None,
             right_path: None,
+            base_path: None,
+            output_path: None,
             read_only: false,
             locked: false,
             options: HashMap::new(),
@@ -144,10 +152,65 @@ impl SessionTab {
             .with_paths(left, right)
     }
 
+    /// Creates a new 3-way text merge comparison tab.
+    pub fn new_merge(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        base: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        output: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("merge")
+            .with_merge_paths(base, left, right, output)
+    }
+
+    /// Creates a new 3-way folder merge comparison tab.
+    pub fn new_folder_merge(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        base: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        output: impl Into<String>,
+    ) -> Self {
+        Self::new(id, title)
+            .with_session_type("folder_merge")
+            .with_merge_paths(base, left, right, output)
+    }
+
     /// Builder method to set left and right paths.
     pub fn with_paths(mut self, left: impl Into<String>, right: impl Into<String>) -> Self {
         self.left_path = Some(left.into());
         self.right_path = Some(right.into());
+        self
+    }
+
+    /// Builder method to set 3-way merge paths (base, left, right, output).
+    pub fn with_merge_paths(
+        mut self,
+        base: impl Into<String>,
+        left: impl Into<String>,
+        right: impl Into<String>,
+        output: impl Into<String>,
+    ) -> Self {
+        self.base_path = Some(base.into());
+        self.left_path = Some(left.into());
+        self.right_path = Some(right.into());
+        self.output_path = Some(output.into());
+        self
+    }
+
+    /// Builder method to set the base/ancestor path.
+    pub fn with_base_path(mut self, base: impl Into<String>) -> Self {
+        self.base_path = Some(base.into());
+        self
+    }
+
+    /// Builder method to set the output destination path.
+    pub fn with_output_path(mut self, output: impl Into<String>) -> Self {
+        self.output_path = Some(output.into());
         self
     }
 
@@ -596,6 +659,50 @@ impl SessionTab {
         self.options
             .insert("picture.tolerance".to_string(), tolerance.to_string());
     }
+
+    // --- Merge properties ---
+
+    /// Extracts structured 3-way merge options.
+    pub fn merge_options(&self) -> MergeCompareOptions {
+        MergeCompareOptions::from_map(&self.options)
+    }
+
+    /// Sets structured 3-way merge options.
+    pub fn set_merge_options(&mut self, opts: &MergeCompareOptions) {
+        opts.write_to_map(&mut self.options);
+    }
+
+    /// Builder method to configure structured 3-way merge options.
+    pub fn with_merge_options(mut self, opts: MergeCompareOptions) -> Self {
+        opts.write_to_map(&mut self.options);
+        self
+    }
+
+    /// Returns the recorded conflict resolution strategy, if any.
+    pub fn merge_conflict_strategy(&self) -> Option<&str> {
+        self.options
+            .get("merge.conflict_strategy")
+            .map(String::as_str)
+    }
+
+    /// Records the conflict resolution strategy for this tab.
+    pub fn set_merge_conflict_strategy(&mut self, strategy: impl Into<String>) {
+        self.options
+            .insert("merge.conflict_strategy".to_string(), strategy.into());
+    }
+
+    /// Returns whether auto-merge is recorded for this tab.
+    pub fn merge_auto_merge(&self) -> bool {
+        self.options
+            .get("merge.auto_merge")
+            .is_some_and(|raw| raw == "true")
+    }
+
+    /// Records whether to auto-merge non-conflicting changes for this tab.
+    pub fn set_merge_auto_merge(&mut self, auto: bool) {
+        self.options
+            .insert("merge.auto_merge".to_string(), auto.to_string());
+    }
 }
 
 /// A serialized session document containing one or more tabs.
@@ -860,6 +967,11 @@ fn migrate_v0_object(
                 || map.contains_key("left")
                 || map.contains_key("right_path")
                 || map.contains_key("right")
+                || map.contains_key("base_path")
+                || map.contains_key("base")
+                || map.contains_key("ancestor")
+                || map.contains_key("output_path")
+                || map.contains_key("output")
                 || map.contains_key("session_type")
             {
                 let single_val = serde_json::Value::Object(map.clone());
@@ -963,6 +1075,24 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     .or_else(|| tab_map.get("rhs"))
                     .or_else(|| tab_map.get("target"))
                     .or_else(|| tab_map.get("dest"))
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+
+                let base_path = tab_map
+                    .get("base_path")
+                    .or_else(|| tab_map.get("base"))
+                    .or_else(|| tab_map.get("ancestor"))
+                    .or_else(|| tab_map.get("center"))
+                    .or_else(|| tab_map.get("path_base"))
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
+
+                let output_path = tab_map
+                    .get("output_path")
+                    .or_else(|| tab_map.get("output"))
+                    .or_else(|| tab_map.get("out"))
+                    .or_else(|| tab_map.get("result"))
+                    .or_else(|| tab_map.get("merged"))
                     .and_then(|v| v.as_str())
                     .map(ToString::to_string);
 
@@ -1131,6 +1261,24 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     "picture.tolerance",
                     &mut options,
                 );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["conflict_strategy", "merge.conflict_strategy"],
+                    "merge.conflict_strategy",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["auto_merge", "merge.auto_merge"],
+                    "merge.auto_merge",
+                    &mut options,
+                );
+                check_and_insert_legacy_option(
+                    tab_map,
+                    &["alignment", "merge.alignment"],
+                    "merge.alignment",
+                    &mut options,
+                );
 
                 tabs.push(SessionTab {
                     id,
@@ -1138,6 +1286,8 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     session_type,
                     left_path,
                     right_path,
+                    base_path,
+                    output_path,
                     read_only,
                     locked,
                     options,
@@ -1150,36 +1300,75 @@ fn parse_v0_tabs(items: &[serde_json::Value]) -> Result<Vec<SessionTab>, Session
                     session_type: default_tab_type(),
                     left_path: Some(path_str.clone()),
                     right_path: None,
+                    base_path: None,
+                    output_path: None,
                     read_only: false,
                     locked: false,
                     options: HashMap::new(),
                 });
             }
-            serde_json::Value::Array(pair) => {
-                let left = pair
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .map(ToString::to_string);
-                let right = pair
-                    .get(1)
-                    .and_then(|v| v.as_str())
-                    .map(ToString::to_string);
-                let title = match (&left, &right) {
-                    (Some(l), Some(r)) => format!("{l} vs {r}"),
-                    (Some(l), None) => l.clone(),
-                    (None, Some(r)) => r.clone(),
-                    (None, None) => format!("tab-{}", idx.saturating_add(1)),
-                };
-                tabs.push(SessionTab {
-                    id: format!("tab-{}", idx.saturating_add(1)),
-                    title,
-                    session_type: default_tab_type(),
-                    left_path: left,
-                    right_path: right,
-                    read_only: false,
-                    locked: false,
-                    options: HashMap::new(),
-                });
+            serde_json::Value::Array(items) => {
+                if items.len() >= 4 {
+                    let base = items
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let left = items
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let right = items
+                        .get(2)
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let output = items
+                        .get(3)
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let title = match (&left, &right) {
+                        (Some(l), Some(r)) => format!("{l} vs {r} (merge)"),
+                        _ => format!("tab-{}", idx.saturating_add(1)),
+                    };
+                    tabs.push(SessionTab {
+                        id: format!("tab-{}", idx.saturating_add(1)),
+                        title,
+                        session_type: "merge".to_string(),
+                        left_path: left,
+                        right_path: right,
+                        base_path: base,
+                        output_path: output,
+                        read_only: false,
+                        locked: false,
+                        options: HashMap::new(),
+                    });
+                } else {
+                    let left = items
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let right = items
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string);
+                    let title = match (&left, &right) {
+                        (Some(l), Some(r)) => format!("{l} vs {r}"),
+                        (Some(l), None) => l.clone(),
+                        (None, Some(r)) => r.clone(),
+                        (None, None) => format!("tab-{}", idx.saturating_add(1)),
+                    };
+                    tabs.push(SessionTab {
+                        id: format!("tab-{}", idx.saturating_add(1)),
+                        title,
+                        session_type: default_tab_type(),
+                        left_path: left,
+                        right_path: right,
+                        base_path: None,
+                        output_path: None,
+                        read_only: false,
+                        locked: false,
+                        options: HashMap::new(),
+                    });
+                }
             }
             _ => {
                 return Err(SessionError::CorruptInput(
@@ -1404,5 +1593,42 @@ mod tests {
         let tbl_opts = tbl_tab.table_options();
         assert_eq!(tbl_opts.delimiter, Some('\t'));
         assert!(!tbl_opts.header);
+    }
+
+    #[test]
+    fn test_merge_tab_builder_and_options() {
+        let mut tab = SessionTab::new_merge(
+            "m1",
+            "3-Way Merge Tab",
+            "/base.rs",
+            "/left.rs",
+            "/right.rs",
+            "/out.rs",
+        )
+        .with_locked(true);
+        assert_eq!(tab.session_type, "merge");
+        assert_eq!(tab.base_path.as_deref(), Some("/base.rs"));
+        assert_eq!(tab.left_path.as_deref(), Some("/left.rs"));
+        assert_eq!(tab.right_path.as_deref(), Some("/right.rs"));
+        assert_eq!(tab.output_path.as_deref(), Some("/out.rs"));
+        assert!(tab.locked);
+
+        tab.set_merge_auto_merge(true);
+        tab.set_merge_conflict_strategy("manual");
+        assert!(tab.merge_auto_merge());
+        assert_eq!(tab.merge_conflict_strategy(), Some("manual"));
+
+        let opts = tab.merge_options();
+        assert!(opts.auto_merge);
+        assert_eq!(opts.conflict_strategy.as_deref(), Some("manual"));
+
+        let doc = SessionDocument::with_tabs(vec![tab]);
+        let json = doc.to_json_pretty().expect("to_json_pretty");
+        let parsed = SessionDocument::from_json(&json).expect("from_json");
+        assert_eq!(doc, parsed);
+        let tab_back = parsed.tabs.first().expect("tab back");
+        assert_eq!(tab_back.base_path.as_deref(), Some("/base.rs"));
+        assert_eq!(tab_back.output_path.as_deref(), Some("/out.rs"));
+        assert!(tab_back.merge_auto_merge());
     }
 }

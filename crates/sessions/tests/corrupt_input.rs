@@ -197,3 +197,10 @@ fn test_error_display_and_source() {
     assert!(io_err.source().is_some());
     assert!(format!("{io_err}").contains("file not found"));
 }
+
+#[test]
+fn test_from_json_corrupt_3way_merge() {
+    let bad_merge = "{\"schema_version\": 1, \"tabs\": [{\"id\": \"t1\", \"title\": \"T\", \"base_path\": 12345}]}";
+    let res = SessionDocument::from_json(bad_merge);
+    assert!(res.is_err());
+}

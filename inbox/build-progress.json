@@ -116,5 +116,7 @@
   "WAVE-GUI-EXQ5B": "landed b0520b1 (30 files OWNS-clean, REPORT PASS, PNG magic ok, cargo-fmt clean, banned 0) pushed",
   "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)",
   "WAVE-TEXT3": "landed 6736b59 (181 ins OWNS-clean, REPORT PASS, cargo-fmt clean, clippy 0, banned test-only, 18 suites green) pushed",
-  "ORCH-MIX-VFS": "2026-11-20 21:19 AEDT opencode vfs3 sess-opencode-vfs3 launched (crates/vfs + round-vfs3), active: s1+s2+vfs3"
+  "ORCH-MIX-VFS": "2026-11-20 21:19 AEDT opencode vfs3 sess-opencode-vfs3 launched (crates/vfs + round-vfs3), active: s1+s2+vfs3",
+  "ORCH-STEER-FMT": "agents must run cargo fmt scoped (-p own-crate); workspace-wide fmt touches cross-OWNS files (cli runner/session_cmd reverted)",
+  "ORCH-ACTIVE": "2026-11-20 21:22 AEDT active: agyx s1 (sessions+tests) + s2 (reports) + opencode vfs3 (early); orch-local build running"
 }

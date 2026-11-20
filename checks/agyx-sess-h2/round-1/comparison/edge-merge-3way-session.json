@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "tabs": [
+    {
+      "id": "tab-merge-text-1",
+      "title": "Merge Feature Branch to Main",
+      "session_type": "merge",
+      "left_path": "/repo/branch_feature.rs",
+      "right_path": "/repo/main.rs",
+      "base_path": "/repo/ancestor_common.rs",
+      "output_path": "/repo/merged_result.rs",
+      "read_only": false,
+      "locked": true,
+      "options": {
+        "merge.auto_merge": "true",
+        "merge.conflict_strategy": "manual",
+        "merge.alignment": "patience",
+        "text.ignore_whitespace": "true"
+      }
+    },
+    {
+      "id": "tab-merge-folder-2",
+      "title": "3-Way Release Directory Merge",
+      "session_type": "folder_merge",
+      "left_path": "/build/release_left",
+      "right_path": "/build/release_right",
+      "base_path": "/build/release_base",
+      "output_path": "/build/release_output",
+      "read_only": false,
+      "locked": false,
+      "options": {
+        "folder.content_compare": "true",
+        "folder.quick_compare": "crc"
+      }
+    }
+  ],
+  "active_tab_index": 0,
+  "name": "Enterprise 3-Way Merge Session",
+  "locked": true
+}

@@ -16,8 +16,8 @@ pub mod workspace;
 
 pub use error::SessionError;
 pub use options::{
-    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, PictureCompareOptions,
-    SyncCompareOptions, TableCompareOptions, TextCompareOptions,
+    AudioCompareOptions, FolderCompareOptions, HexCompareOptions, MergeCompareOptions,
+    PictureCompareOptions, SyncCompareOptions, TableCompareOptions, TextCompareOptions,
 };
 pub use session::{
     CURRENT_SESSION_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, migrate,

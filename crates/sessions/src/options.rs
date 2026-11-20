@@ -573,3 +573,66 @@ impl AudioCompareOptions {
         }
     }
 }
+
+/// Options tuning 3-way text and folder merge comparison behaviour for a session tab.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct MergeCompareOptions {
+    /// Strategy or mode for conflict resolution ("manual", "take_left", "take_right", "take_ancestor").
+    pub conflict_strategy: Option<String>,
+    /// Whether to automatically merge non-conflicting changes.
+    pub auto_merge: bool,
+    /// Alignment algorithm used for 3-way diff (e.g. "myers", "patience").
+    pub alignment: Option<String>,
+}
+
+impl MergeCompareOptions {
+    /// Extracts merge options from options map.
+    pub fn from_map(options: &HashMap<String, String>) -> Self {
+        let conflict_strategy = options
+            .get("merge.conflict_strategy")
+            .filter(|v| !v.is_empty())
+            .cloned();
+
+        let auto_merge = options.get("merge.auto_merge").is_some_and(|v| v == "true");
+
+        let alignment = options
+            .get("merge.alignment")
+            .filter(|v| !v.is_empty())
+            .cloned();
+
+        Self {
+            conflict_strategy,
+            auto_merge,
+            alignment,
+        }
+    }
+
+    /// Serializes merge options into key-value pairs in the options map.
+    pub fn write_to_map(&self, options: &mut HashMap<String, String>) {
+        if let Some(ref cs) = self.conflict_strategy {
+            if !cs.is_empty() {
+                options.insert("merge.conflict_strategy".to_string(), cs.clone());
+            } else {
+                options.remove("merge.conflict_strategy");
+            }
+        } else {
+            options.remove("merge.conflict_strategy");
+        }
+
+        if self.auto_merge {
+            options.insert("merge.auto_merge".to_string(), "true".to_string());
+        } else {
+            options.remove("merge.auto_merge");
+        }
+
+        if let Some(ref alg) = self.alignment {
+            if !alg.is_empty() {
+                options.insert("merge.alignment".to_string(), alg.clone());
+            } else {
+                options.remove("merge.alignment");
+            }
+        } else {
+            options.remove("merge.alignment");
+        }
+    }
+}

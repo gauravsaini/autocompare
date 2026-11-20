@@ -471,3 +471,80 @@ fn test_migrate_workspace_v0_geometry_alias() {
     assert!(geom.is_maximized);
     assert!(ws.is_locked());
 }
+
+#[test]
+fn test_migrate_session_v0_3way_merge_with_aliases() {
+    let v0_json = r#"{
+        "schema_version": 0,
+        "tabs": [
+            {
+                "id": "tab-merge-v0",
+                "title": "Legacy 3-Way Merge",
+                "session_type": "merge",
+                "ancestor": "/old/base.rs",
+                "lhs": "/old/branch.rs",
+                "rhs": "/old/main.rs",
+                "result": "/old/merged.rs",
+                "conflict_strategy": "take_left",
+                "auto_merge": true,
+                "is_locked": true
+            }
+        ]
+    }"#;
+
+    let doc = migrate(v0_json).expect("migrate 3-way merge v0 aliases");
+    assert_eq!(doc.schema_version, CURRENT_SESSION_SCHEMA_VERSION);
+    assert_eq!(doc.tabs.len(), 1);
+
+    let t0 = doc.tabs.first().expect("tab 0");
+    assert_eq!(t0.id, "tab-merge-v0");
+    assert_eq!(t0.title, "Legacy 3-Way Merge");
+    assert_eq!(t0.base_path.as_deref(), Some("/old/base.rs"));
+    assert_eq!(t0.left_path.as_deref(), Some("/old/branch.rs"));
+    assert_eq!(t0.right_path.as_deref(), Some("/old/main.rs"));
+    assert_eq!(t0.output_path.as_deref(), Some("/old/merged.rs"));
+    assert!(t0.locked);
+
+    let merge_opts = t0.merge_options();
+    assert_eq!(merge_opts.conflict_strategy.as_deref(), Some("take_left"));
+    assert!(merge_opts.auto_merge);
+}
+
+#[test]
+fn test_migrate_session_v0_4way_path_array() {
+    let v0_json = r#"[
+        ["/base.rs", "/left.rs", "/right.rs", "/out.rs"]
+    ]"#;
+
+    let doc = migrate(v0_json).expect("migrate 4-tuple path array");
+    assert_eq!(doc.schema_version, CURRENT_SESSION_SCHEMA_VERSION);
+    assert_eq!(doc.tabs.len(), 1);
+
+    let t0 = doc.tabs.first().expect("tab 0");
+    assert_eq!(t0.session_type, "merge");
+    assert_eq!(t0.base_path.as_deref(), Some("/base.rs"));
+    assert_eq!(t0.left_path.as_deref(), Some("/left.rs"));
+    assert_eq!(t0.right_path.as_deref(), Some("/right.rs"));
+    assert_eq!(t0.output_path.as_deref(), Some("/out.rs"));
+}
+
+#[test]
+fn test_migrate_workspace_v0_null_and_empty_fields() {
+    let v0_json = r#"{
+        "name": "Empty WS",
+        "sessions": null,
+        "active": null,
+        "window": null,
+        "recent": null,
+        "meta": null
+    }"#;
+
+    let ws = migrate_workspace(v0_json).expect("migrate workspace with null fields");
+    assert_eq!(ws.schema_version, CURRENT_WORKSPACE_SCHEMA_VERSION);
+    assert_eq!(ws.name, "Empty WS");
+    assert!(ws.session_paths.is_empty());
+    assert!(ws.active_session.is_none());
+    assert!(ws.window_layout.is_none());
+    assert!(ws.recent_paths.is_empty());
+    assert!(ws.metadata.is_empty());
+}

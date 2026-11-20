@@ -419,3 +419,99 @@ fn test_session_tab_options_depth_round_trip() {
     let aud_opts = t6.audio_options();
     assert_eq!(aud_opts.sample_rate, Some(44100));
 }
+
+#[test]
+fn test_session_tab_3way_merge_round_trip() {
+    use autocompare_sessions::MergeCompareOptions;
+
+    let mut tab_text_merge = SessionTab::new_merge(
+        "tab-m1",
+        "Merge Logic Feature",
+        "/src/base.rs",
+        "/src/feature.rs",
+        "/src/main.rs",
+        "/src/output.rs",
+    )
+    .with_locked(true);
+
+    tab_text_merge.set_merge_options(&MergeCompareOptions {
+        conflict_strategy: Some("take_left".to_string()),
+        auto_merge: true,
+        alignment: Some("patience".to_string()),
+    });
+
+    let tab_folder_merge = SessionTab::new_folder_merge(
+        "tab-fm2",
+        "Merge Folder Trees",
+        "/repo/base",
+        "/repo/left",
+        "/repo/right",
+        "/repo/out",
+    );
+
+    let doc = SessionDocument::with_tabs(vec![tab_text_merge, tab_folder_merge])
+        .with_name("Active 3-Way Merge Session")
+        .with_locked(false);
+
+    let json = doc.to_json_pretty().expect("serialize merge session doc");
+    let loaded = SessionDocument::from_json(&json).expect("deserialize merge session doc");
+    assert_eq!(doc, loaded);
+    assert_eq!(loaded.tab_count(), 2);
+
+    let t0 = loaded.tabs.first().expect("tab 0");
+    assert_eq!(t0.session_type, "merge");
+    assert_eq!(t0.base_path.as_deref(), Some("/src/base.rs"));
+    assert_eq!(t0.left_path.as_deref(), Some("/src/feature.rs"));
+    assert_eq!(t0.right_path.as_deref(), Some("/src/main.rs"));
+    assert_eq!(t0.output_path.as_deref(), Some("/src/output.rs"));
+    assert!(t0.locked);
+
+    let merge_opts = t0.merge_options();
+    assert_eq!(merge_opts.conflict_strategy.as_deref(), Some("take_left"));
+    assert!(merge_opts.auto_merge);
+    assert_eq!(merge_opts.alignment.as_deref(), Some("patience"));
+
+    let t1 = loaded.tabs.get(1).expect("tab 1");
+    assert_eq!(t1.session_type, "folder_merge");
+    assert_eq!(t1.base_path.as_deref(), Some("/repo/base"));
+    assert_eq!(t1.output_path.as_deref(), Some("/repo/out"));
+}
+
+#[test]
+fn test_edge_fixture_merge_3way_round_trip() {
+    let content = include_str!(
+        "../../../checks/agyx-sess-h2/round-1/comparison/edge-merge-3way-session.json"
+    );
+    let doc = SessionDocument::from_json(content).expect("parse edge merge fixture");
+
+    assert_eq!(doc.schema_version, 1);
+    assert_eq!(doc.name.as_deref(), Some("Enterprise 3-Way Merge Session"));
+    assert!(doc.is_locked());
+    assert_eq!(doc.tab_count(), 2);
+
+    let t0 = doc.tabs.first().expect("tab 0");
+    assert_eq!(t0.id, "tab-merge-text-1");
+    assert_eq!(t0.session_type, "merge");
+    assert_eq!(t0.base_path.as_deref(), Some("/repo/ancestor_common.rs"));
+    assert_eq!(t0.left_path.as_deref(), Some("/repo/branch_feature.rs"));
+    assert_eq!(t0.right_path.as_deref(), Some("/repo/main.rs"));
+    assert_eq!(t0.output_path.as_deref(), Some("/repo/merged_result.rs"));
+    assert!(t0.locked);
+
+    let opts = t0.merge_options();
+    assert!(opts.auto_merge);
+    assert_eq!(opts.conflict_strategy.as_deref(), Some("manual"));
+    assert_eq!(opts.alignment.as_deref(), Some("patience"));
+
+    let t1 = doc.tabs.get(1).expect("tab 1");
+    assert_eq!(t1.id, "tab-merge-folder-2");
+    assert_eq!(t1.session_type, "folder_merge");
+    assert_eq!(t1.base_path.as_deref(), Some("/build/release_base"));
+    assert_eq!(t1.output_path.as_deref(), Some("/build/release_output"));
+    assert!(!t1.locked);
+
+    // Round-trip serialize & deserialize
+    let json_pretty = doc.to_json_pretty().expect("serialize pretty");
+    let doc2 = SessionDocument::from_json(&json_pretty).expect("deserialize roundtrip");
+    assert_eq!(doc, doc2);
+}

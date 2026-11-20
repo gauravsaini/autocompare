@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "theme": "nord_dark",
+  "keymap": "vim",
+  "grammar_preset_name": "rust",
+  "grammar_presets": [
+    {
+      "name": "rust",
+      "extensions": ["rs"],
+      "line_comment_prefix": "//",
+      "block_comment_start": "/*",
+      "block_comment_end": "*/",
+      "ignore_case": false
+    },
+    {
+      "name": "python",
+      "extensions": ["py", "pyw"],
+      "line_comment_prefix": "#",
+      "block_comment_start": null,
+      "block_comment_end": null,
+      "ignore_case": false
+    },
+    {
+      "name": "sql",
+      "extensions": ["sql"],
+      "line_comment_prefix": "--",
+      "block_comment_start": "/*",
+      "block_comment_end": "*/",
+      "ignore_case": true
+    }
+  ],
+  "font_family": "JetBrains Mono",
+  "font_size": 14,
+  "tab_size": 4,
+  "auto_save": false,
+  "show_line_numbers": true,
+  "extra": {
+    "editor_cursor_blink": "true"
+  }
+}
