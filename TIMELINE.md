@@ -553,3 +553,9 @@
 1. **Tree Narrow-720 Arrows & Truncation**: expand/collapse arrow hit rects symmetric slop from space scale at 720px narrow, truncated name width from char metrics, selected-row full width, and edge fixture `comparison/tree-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1019 green (including `tree9_*` narrow arrows tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree9/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-copy12 narrow plus hits
+
+1. **Copy Narrow-720 Hits & Pitch Lock**: copy hit bands centered at 720px narrow canvas, stacked arrow pitch locked at narrow widths, per-hunk action baseline steady, and edge fixture `comparison/copy-narrow-720.json` (tall-1200 fixture reused).
+2. **Tests** (before → after): autocompare-gui 1026 green (including `copy12_*` narrow hits tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy12/**`, `TIMELINE.md`.
