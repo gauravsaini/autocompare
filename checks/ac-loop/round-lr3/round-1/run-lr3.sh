@@ -76,7 +76,9 @@ PY
 echo "PNG_3_OK"
 
 # --- dist: release tarball + sha256 (owned path only) ---
-cargo build --release -p autocompare-cli -p autocompare-gui --manifest-path "$ROOT/Cargo.toml" || exit 9
+# NOTE: release profile sets lto=true + codegen-units=1 (fat-LTO link needs GBs of
+# scratch); on low-disk runners override via env only (no Cargo.toml touch).
+CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 cargo build --release -p autocompare-cli -p autocompare-gui --manifest-path "$ROOT/Cargo.toml" || exit 9
 SHA=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo nogit)
 printf '%s %s\n' "$VERSION" "$SHA" > "$DIST/VERSION"
 tar -czf "$DIST/autocompare-$VERSION-macos-$ARCH.tar.gz" -C "$ROOT/target/release" autocompare autocompare-gui -C "$DIST" VERSION
