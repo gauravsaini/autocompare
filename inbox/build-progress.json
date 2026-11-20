@@ -20,6 +20,7 @@
   "ORCH-MIX6-EXQ8": "2026-11-20 22:18 AEDT exq8 launched sess-opencode-guiexq8 OWNS views.rs+viewmodel.rs+checks/gui-exq8, mix now 2 opencode + 2 agyx at cap 4, exq7 741 green WIP, uxkey+clivcs2 WIP 22:09 edits, logs silent-buffered but PIDs live",
   "ORCH-MS-RULES": "fetched microsoft rust-guidelines all.txt, applied M-DESIGN-FOR-AI idiomatic APIs docs strong-types testable coverage, enforced in exq8 prompt",
   "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)",
+  "ORCH-OBSERVE2": "capture/live-observe-orch-2.md written, 4 waves idle but alive, no kill",
   "ORCH-STEER-FMT": "agents must run cargo fmt scoped (-p own-crate); workspace-wide fmt touches cross-OWNS files (cli runner/session_cmd reverted)",
   "ORCH-SWEEP-NOTE": "orchestrator commits must use pathspec (git commit <paths>) not bare commit, else staged agent work gets swept; corrected going forward",
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
