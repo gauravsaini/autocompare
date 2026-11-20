@@ -380,3 +380,9 @@
 1. **Text Rows & Highlight at 960px**: uniform Mono row heights with over/under fixtures, full-width changed-row highlight, edge-rows uniformity lock.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text9/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-hex6 nibble plus ascii
+
+1. **Hex Nibble & ASCII at 960px**: nibble group gap from single-source helper, ASCII pane x from grid origin, ruler ticks aligned to byte columns.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex6/**`, `TIMELINE.md`.
