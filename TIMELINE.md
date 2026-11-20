@@ -722,3 +722,9 @@
 1. **Overview minimap fix**: screenshot.rs unclosed delimiter fix + gutter_padded_y_for_row + gutter_overview_geometry_padded reuse, center gutter + right overview strip live mapping, 720px narrow intact. Agyx swarm single-task trial PASS — mix consistent, opencode default + agyx swarm parallel ok.
 2. **Tests**: exquisite harness RESULT: PASS (11059B magic ok); headless gutter mapping green; fmt clean; banned 0; colors 38 frozen.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-gutter28/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(compare): folder30 sync prune + jobs
+
+1. **Folder parity**: engine already correct, minimal 78-line sync prune test + nested-orphan 4-deep fixture, parity harness RESULT: PASS 10/10.
+2. **Tests**: autocompare-compare sync green; clippy -D warnings clean; fmt clean; banned 0.
+3. **Files changed**: crates/compare/tests/sync.rs, checks/ac-loop/round-folder30/**, TIMELINE.md.
