@@ -523,14 +523,14 @@ pub fn toolbar_reload_label() -> String {
     format!("{TOOLBAR_RELOAD_GLYPH} Reload / Recompare")
 }
 
-/// Toolbar glyph slot width (px): fixed 12px left of the label (fixture
-/// `icon_box` = 12 parity). Pure; unit-tested.
-pub const TOOLBAR_GLYPH_W: f32 = 12.0;
+/// Toolbar glyph slot width (px): fixed 16px left of the label (fixture
+/// `icon_box` = 16 parity). Pure; unit-tested.
+pub const TOOLBAR_GLYPH_W: f32 = 16.0;
 
-/// Toolbar glyph slot height (px): 12px square slot, vertically centered
-/// in the 24px button (fixture `(24 - 12) / 2 = 6` lead parity). Pure;
+/// Toolbar glyph slot height (px): 16px square slot, vertically centered
+/// in the 24px button (fixture `(24 - 16) / 2 = 4` lead parity). Pure;
 /// unit-tested.
-pub const TOOLBAR_GLYPH_H: f32 = 12.0;
+pub const TOOLBAR_GLYPH_H: f32 = 16.0;
 
 /// Toolbar glyph slot width accessor (paint slot isi se banta hai).
 /// Pure; unit-tested.
@@ -552,7 +552,7 @@ pub fn toolbar_glyph_variant(index: usize) -> usize {
     index % 4
 }
 
-/// Toolbar glyph mark rects (px, slot-local 12x12 origin): the same
+/// Toolbar glyph mark rects (px, slot-local 16x16 origin): the same
 /// geometric marks the fixture paints (`fill_rect` only, dim hue reuse):
 /// 0 solid block, 1 twin horizontal bars, 2 side bars, 3 stepped wedge,
 /// 4 Prev `<` chevron triple, 5 Next `>` chevron triple. Chevron cells
@@ -560,32 +560,32 @@ pub fn toolbar_glyph_variant(index: usize) -> usize {
 /// `chevron_cells` / `chevron_span` parity). Pure; unit-tested.
 pub fn toolbar_glyph_rects(variant: usize) -> Vec<(f32, f32, f32, f32)> {
     match variant {
-        1 => vec![(0.0, 0.0, 12.0, 3.0), (0.0, 9.0, 12.0, 3.0)],
-        2 => vec![(0.0, 0.0, 3.0, 12.0), (9.0, 0.0, 3.0, 12.0)],
+        1 => vec![(0.0, 0.0, 16.0, 4.0), (0.0, 12.0, 16.0, 4.0)],
+        2 => vec![(0.0, 0.0, 4.0, 16.0), (12.0, 0.0, 4.0, 16.0)],
         3 => vec![
-            (0.0, 0.0, 12.0, 4.0),
-            (2.0, 4.0, 8.0, 4.0),
-            (4.0, 8.0, 4.0, 4.0),
+            (0.0, 0.0, 16.0, 5.0),
+            (3.0, 5.0, 10.0, 6.0),
+            (6.0, 11.0, 4.0, 5.0),
         ],
         4 => vec![
-            (8.0, 1.0, 2.0, 2.0),
-            (6.0, 3.0, 2.0, 2.0),
-            (4.0, 5.0, 2.0, 2.0),
+            (10.0, 3.0, 2.0, 2.0),
+            (8.0, 5.0, 2.0, 2.0),
             (6.0, 7.0, 2.0, 2.0),
             (8.0, 9.0, 2.0, 2.0),
+            (10.0, 11.0, 2.0, 2.0),
         ],
         5 => vec![
-            (2.0, 1.0, 2.0, 2.0),
             (4.0, 3.0, 2.0, 2.0),
             (6.0, 5.0, 2.0, 2.0),
-            (4.0, 7.0, 2.0, 2.0),
-            (2.0, 9.0, 2.0, 2.0),
+            (8.0, 7.0, 2.0, 2.0),
+            (6.0, 9.0, 2.0, 2.0),
+            (4.0, 11.0, 2.0, 2.0),
         ],
-        _ => vec![(0.0, 0.0, 12.0, 12.0)],
+        _ => vec![(0.0, 0.0, 16.0, 16.0)],
     }
 }
 
-/// Toolbar glyph slot rect inside a button rect: 12px box starting
+/// Toolbar glyph slot rect inside a button rect: 16px box starting
 /// [`toolbar_glyph_lead`] inside the left edge, vertically centered.
 /// Pure (egui math only, no context); unit-tested.
 pub fn toolbar_glyph_slot(button: egui::Rect) -> egui::Rect {
@@ -9710,7 +9710,7 @@ mod tests {
             "3:1 | Text: exact | 2 equal, 1 changed, 1 inserted"
         );
         // 8. Toolbar22 glyphs, gutter23 track, filebar chrome intact.
-        assert_eq!(TOOLBAR_GLYPH_W, 12.0);
+        assert_eq!(TOOLBAR_GLYPH_W, 16.0);
         assert!((text_center_gutter_width() - 20.0).abs() < 0.01);
         assert!((text_pane_status_height_px() - 15.2).abs() < 0.01);
         assert_eq!(text_legend_segments().len(), 4);
@@ -10700,41 +10700,40 @@ mod tests {
     fn toolbar22_live_glyph_slots() {
         // Mirrors checks/gui-exq-toolbar22/round-1/comparison/toolbar-live-1200.json:
         // tall/scroll — toolbar band 24+8+24=56 stable, har button par fixed
-        // 12px glyph slot left-of-label (fixture shown%4 rhythm), chevron
+        // 16px glyph slot left-of-label (fixture shown%4 rhythm), chevron
         // triples nav row me, koi overlap nahi. Sab existing tokens reuse.
         let fixture_raw = include_str!(
             "../../../checks/gui-exq-toolbar22/round-1/comparison/toolbar-live-1200.json"
         );
         assert!(fixture_raw.contains("\"name\": \"toolbar-live-1200\""));
-        assert!(fixture_raw.contains("\"glyph_w\": 12.0"));
         assert!(fixture_raw.contains("\"band_h\": 56.0"));
-        // 1. Slot geometry: fixed 12px box, 4px lead, vertically centered.
-        assert_eq!(TOOLBAR_GLYPH_W, 12.0);
-        assert_eq!(TOOLBAR_GLYPH_H, 12.0);
-        assert_eq!(toolbar_glyph_width(), 12.0);
+        // 1. Slot geometry: fixed 16px box, 4px lead, vertically centered.
+        assert_eq!(TOOLBAR_GLYPH_W, 16.0);
+        assert_eq!(TOOLBAR_GLYPH_H, 16.0);
+        assert_eq!(toolbar_glyph_width(), 16.0);
         assert_eq!(toolbar_glyph_lead(), TIGHT_GAP);
         assert_eq!(toolbar_glyph_lead(), 4.0);
         let button = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(96.0, 24.0));
         let slot = toolbar_glyph_slot(button);
         assert_eq!(slot.min.x, 104.0);
-        assert_eq!(slot.min.y, 56.0);
-        assert_eq!(slot.width(), 12.0);
-        assert_eq!(slot.height(), 12.0);
+        assert_eq!(slot.min.y, 54.0);
+        assert_eq!(slot.width(), 16.0);
+        assert_eq!(slot.height(), 16.0);
         // 2. Variant rhythm: fixture shown%4 (0 solid, 1 twin, 2 sides, 3 wedge).
         assert_eq!(toolbar_glyph_variant(0), 0);
         assert_eq!(toolbar_glyph_variant(1), 1);
         assert_eq!(toolbar_glyph_variant(5), 1);
-        assert_eq!(toolbar_glyph_rects(0), vec![(0.0, 0.0, 12.0, 12.0)]);
+        assert_eq!(toolbar_glyph_rects(0), vec![(0.0, 0.0, 16.0, 16.0)]);
         assert_eq!(
             toolbar_glyph_rects(1),
-            vec![(0.0, 0.0, 12.0, 3.0), (0.0, 9.0, 12.0, 3.0)]
+            vec![(0.0, 0.0, 16.0, 4.0), (0.0, 12.0, 16.0, 4.0)]
         );
         assert_eq!(
             toolbar_glyph_rects(2),
-            vec![(0.0, 0.0, 3.0, 12.0), (9.0, 0.0, 3.0, 12.0)]
+            vec![(0.0, 0.0, 4.0, 16.0), (12.0, 0.0, 4.0, 16.0)]
         );
         assert_eq!(toolbar_glyph_rects(3).len(), 3);
-        // 3. Chevrons: 5 cells of 2x2, 6x10 span centered in the 12px slot.
+        // 3. Chevrons: 5 cells of 2x2, 6x10 span centered in the 16px slot.
         for variant in [4, 5] {
             let bars = toolbar_glyph_rects(variant);
             assert_eq!(bars.len(), 5);
@@ -10758,6 +10757,66 @@ mod tests {
         assert_eq!(toolbar_button_pair_width(), 200.0);
         assert_eq!(toolbar_button_row_side_air(1200.0), 500.0);
         assert_eq!(action_nav_arrow_gap(), 8.0);
+    }
+
+    #[test]
+    fn chrome27_toolbar16_band1200() {
+        // Mirrors checks/gui-exq-chrome27/round-1/comparison/toolbar-16-1200.json:
+        // 1200px avail par 16px glyph box, band 24+8+24=56 stable, no h-scroll.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-chrome27/round-1/comparison/toolbar-16-1200.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"toolbar-16-1200\""));
+        assert!(fixture_raw.contains("\"glyph_w\": 16.0"));
+        assert!(fixture_raw.contains("\"band_h\": 56.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll_1200\": false"));
+        // 1. Slot: 16px box at 4px lead, vertically centered in 24px button.
+        assert_eq!(TOOLBAR_GLYPH_W, 16.0);
+        assert_eq!(TOOLBAR_GLYPH_H, 16.0);
+        let button = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(96.0, 24.0));
+        let slot = toolbar_glyph_slot(button);
+        assert_eq!((slot.width(), slot.height()), (16.0, 16.0));
+        assert_eq!(slot.min.x, 4.0);
+        assert_eq!(slot.min.y, 4.0);
+        // 2. Rects stay inside the 16px slot.
+        for variant in [0, 1, 2, 3, 4, 5] {
+            for (dx, dy, w, h) in toolbar_glyph_rects(variant) {
+                assert!(dx >= 0.0 && dy >= 0.0);
+                assert!(dx + w <= 16.0 && dy + h <= 16.0);
+            }
+        }
+        // 3. Band stable + 1200px no h-scroll, pair floor intact.
+        assert_eq!(action_bar_row_height(), 24.0);
+        assert_eq!(action_bar_row_gap(), 8.0);
+        assert_eq!(
+            action_bar_row_height() + action_bar_row_gap() + action_bar_row_height(),
+            56.0
+        );
+        assert!(!action_bar_needs_hscroll(1200.0));
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(toolbar_button_row_side_air(1200.0), 500.0);
+    }
+
+    #[test]
+    fn chrome27_toolbar16_narrow700_wrap() {
+        // Mirrors checks/gui-exq-chrome27/round-1/comparison/toolbar-16-narrow700.json:
+        // 700px avail (below the 720 Stacked wrap breakpoint) — band stays
+        // 24+8+24=56, no h-scroll, panes stack.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-chrome27/round-1/comparison/toolbar-16-narrow700.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"toolbar-16-narrow700\""));
+        assert!(fixture_raw.contains("\"band_h\": 56.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll_700\": false"));
+        assert_eq!(
+            action_bar_row_height() + action_bar_row_gap() + action_bar_row_height(),
+            56.0
+        );
+        assert!(!action_bar_needs_hscroll(700.0));
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(toolbar_button_row_side_air(700.0), 250.0);
+        assert_eq!(text_layout_for_width(700.0), TextLayout::Stacked);
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
     }
 
     #[test]

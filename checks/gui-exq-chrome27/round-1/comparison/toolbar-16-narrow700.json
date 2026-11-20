@@ -1,0 +1,22 @@
+{
+  "name": "toolbar-16-narrow700",
+  "intent": "Chrome27b narrow edge: at 700px avail (below the 720 Stacked wrap breakpoint) the toolbar band stays 24+8+24=56 with no h-scroll; 16px glyph boxes stay inside their slots and text panes stack.",
+  "canvas_w": 700,
+  "canvas_h": 900,
+  "inputs": {
+    "avail_w": 700.0,
+    "button_min": [96.0, 24.0]
+  },
+  "assertions": {
+    "glyph_w": 16.0,
+    "glyph_h": 16.0,
+    "band_h": 56.0,
+    "row_h": 24.0,
+    "row_gap": 8.0,
+    "min_pair_width": 200.0,
+    "side_air_700": 250.0,
+    "needs_hscroll_700": false,
+    "text_layout_700": "Stacked",
+    "text_layout_720": "SideBySide"
+  }
+}
