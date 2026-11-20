@@ -650,3 +650,9 @@
 1. **Fixture Status Strips**: screenshot.rs renderer now paints per-pane strips (cursor position, format word, result counts) plus a 4-segment bottom legend (Differences/Same/Insert/Overview). Shot15 gutter/markers, shot18 chrome, shot19 typo rows intact. pxdiff vs baseline: 17873 of 576000 DIFFERENT, bbox (0,542)-(959,584) bottom-strip region, VERDICT DIFFERENT (independently re-verified).
 2. **Tests** (before -> after): autocompare-gui 1043 green (including status20_narrow720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-status20/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-toolbar21 fixture toolbar icons
+
+1. **Fixture Toolbar Icons**: screenshot.rs toolbar buttons now carry original 12px geometric glyph marks (fill_rect only, existing palette) left of labels; second nav row adds two chevron triangles on Prev/Next rhythm. Gutter/markers/chrome/typo/status intact. pxdiff vs baseline: 1995 of 576000 DIFFERENT, bbox (16,120)-(866,162) toolbar band only, VERDICT DIFFERENT (independently re-verified).
+2. **Tests** (before -> after): autocompare-gui 1044 green (including toolbar21_narrow720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Note: leaf also drafted out-of-OWNS crates/sessions edits in its worktree — deliberately left uncommitted and excluded from landing.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-toolbar21/**, TIMELINE.md.
