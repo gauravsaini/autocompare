@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>src/main.rs - Diff Report</title>
+  <style>
+
+    :root {
+      --bg: #ffffff;
+      --fg: #000000;
+      --border: #333333;
+      --line-no-fg: #555555;
+      --hunk-header-bg: #e6e6e6;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    body { font-family: var(--font-mono); margin: 0; padding: 24px; background: var(--bg); color: var(--fg); line-height: 1.4; }
+    .parent-nav { margin-bottom: 16px; }
+    .parent-report-link { display: inline-block; font-size: 12px; font-weight: bold; color: #000000; text-decoration: none; padding: 3px 8px; border: 1px solid var(--border); }
+    .parent-report-link:hover { text-decoration: underline; }
+    .report-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--border); }
+    .report-title { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; }
+    .report-subtitle { margin: 0 0 12px 0; font-size: 13px; font-style: italic; }
+    .diff-stats { display: flex; gap: 16px; font-size: 12px; margin-top: 8px; }
+    .stat-item { border: 1px solid var(--border); padding: 2px 6px; }
+    .child-reports { margin-bottom: 24px; padding: 12px; border: 1px dashed var(--border); }
+    .child-reports h2 { margin: 0 0 8px 0; font-size: 14px; text-transform: uppercase; }
+    .child-report-list { margin: 0; padding-left: 20px; }
+    .child-report-item { margin-bottom: 6px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .child-report-anchor { color: #000000; font-weight: bold; }
+    .child-status-badge { border: 1px solid #000000; padding: 1px 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    .child-stats-badge { font-size: 11px; }
+    .diff-container { border: 2px solid var(--border); }
+    .diff-hunk { border-bottom: 1px solid var(--border); }
+    .diff-hunk:last-child { border-bottom: none; }
+    .hunk-header { background: var(--hunk-header-bg); font-weight: bold; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+    .diff-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .diff-table-sbs { table-layout: fixed; font-size: 11px; }
+    .sbs-header-row th { background: var(--hunk-header-bg); font-weight: bold; padding: 4px 6px; font-size: 11px; border-bottom: 1px solid var(--border); text-align: left; }
+    .sbs-left-title { border-right: 2px solid var(--border); width: 50%; }
+    .sbs-right-title { width: 50%; }
+    .sbs-cell-left-content { border-right: 2px solid var(--border); }
+    .sbs-empty { background-color: #f2f2f2; }
+    .diff-line td { padding: 1px 4px; }
+    .line-no { width: 40px; text-align: right; color: var(--line-no-fg); user-select: none; }
+    .line-marker { width: 16px; text-align: center; font-weight: bold; }
+    .line-content pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; }
+    .line-insert { font-weight: bold; }
+    .line-delete { text-decoration: line-through; }
+    .line-modify { font-style: italic; }
+    .report-footer { margin-top: 32px; font-size: 11px; text-align: center; border-top: 1px solid var(--border); padding-top: 8px; }
+    @media print {
+      body { margin: 0; padding: 10mm; font-size: 9pt; background: #fff !important; color: #000 !important; }
+      .report-header { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #000; }
+      .report-title { font-size: 16pt; }
+      .diff-container { border: 1px solid #000; break-inside: avoid; page-break-inside: avoid; }
+      .diff-hunk { break-inside: avoid; page-break-inside: avoid; }
+      .child-reports { border: 1px solid #000; break-inside: avoid; }
+      .report-footer { margin-top: 16px; border-top: 1px solid #000; }
+      a { color: #000 !important; text-decoration: underline !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <h1 class="report-title">src/main.rs</h1>
+    <p class="report-subtitle">Sample Monochrome Unified Diff Report</p>
+    <div class="diff-stats">
+      <span class="stat-item stat-additions">+1 additions</span>
+      <span class="stat-item stat-deletions">-1 deletions</span>
+      <span class="stat-item stat-modifications">~1 modifications</span>
+      <span class="stat-item stat-unchanged">=2 unchanged</span>
+    </div>
+  </header>
+
+  <nav class="child-reports" id="child-reports">
+    <h2 class="section-title">Linked Child Reports</h2>
+    <ul class="child-report-list">
+      <li class="child-report-item"><a class="child-report-anchor" href="submodule/report.html">Submodule Diff</a></li>
+      <li class="child-report-item"><a class="child-report-anchor" href="config/report.html">Config Diff</a></li>
+    </ul>
+  </nav>
+
+  <main class="diff-container">
+    <section class="diff-hunk">
+      <div class="hunk-header"><code>@@ -1,5 +1,6 @@</code></div>
+      <table class="diff-table">
+        <tr class="diff-line line-unchanged">
+          <td class="line-no line-no-old">1</td>
+          <td class="line-no line-no-new">1</td>
+          <td class="line-marker">&nbsp;</td>
+          <td class="line-content"><pre>fn main() {</pre></td>
+        </tr>
+        <tr class="diff-line line-delete">
+          <td class="line-no line-no-old">2</td>
+          <td class="line-no line-no-new"></td>
+          <td class="line-marker">-</td>
+          <td class="line-content"><pre>    println!(&quot;Hello, old world!&quot;);</pre></td>
+        </tr>
+        <tr class="diff-line line-insert">
+          <td class="line-no line-no-old"></td>
+          <td class="line-no line-no-new">2</td>
+          <td class="line-marker">+</td>
+          <td class="line-content"><pre>    println!(&quot;Hello, new world!&quot;);</pre></td>
+        </tr>
+        <tr class="diff-line line-modify">
+          <td class="line-no line-no-old">3</td>
+          <td class="line-no line-no-new">3</td>
+          <td class="line-marker">!</td>
+          <td class="line-content"><pre>    let version = &quot;1.0.0&quot;;</pre></td>
+        </tr>
+        <tr class="diff-line line-unchanged">
+          <td class="line-no line-no-old">4</td>
+          <td class="line-no line-no-new">4</td>
+          <td class="line-marker">&nbsp;</td>
+          <td class="line-content"><pre>}</pre></td>
+        </tr>
+      </table>
+    </section>
+  </main>
+
+  <footer class="report-footer">
+    <p>Generated by autocompare-reports</p>
+  </footer>
+</body>
+</html>

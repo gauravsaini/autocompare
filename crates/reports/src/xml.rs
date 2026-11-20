@@ -1,13 +1,15 @@
 //! XML diff report generator.
 
-use crate::{ChildReportAnchor, Hunk, ReportInput, escape_xml};
+use crate::{ChildReportAnchor, Hunk, ParentReportAnchor, ReportFilter, ReportInput, escape_xml};
 
 /// Builder for XML diff reports.
 #[derive(Debug, Clone)]
 pub struct XmlReportBuilder<'a> {
     input: &'a ReportInput,
     child_anchors: Vec<ChildReportAnchor>,
+    parent_anchor: Option<ParentReportAnchor>,
     subtitle: Option<String>,
+    filter: ReportFilter,
 }
 
 impl<'a> XmlReportBuilder<'a> {
@@ -16,7 +18,9 @@ impl<'a> XmlReportBuilder<'a> {
         Self {
             input,
             child_anchors: Vec::new(),
+            parent_anchor: None,
             subtitle: None,
+            filter: ReportFilter::All,
         }
     }
 
@@ -32,10 +36,27 @@ impl<'a> XmlReportBuilder<'a> {
         self
     }
 
+    /// Sets a parent report anchor for back-link navigation.
+    pub fn with_parent_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.parent_anchor = Some(ParentReportAnchor::new(title, href));
+        self
+    }
+
     /// Sets an optional subtitle.
     pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
         self
+    }
+
+    /// Sets a display filter for diff lines.
+    pub fn with_filter(mut self, filter: ReportFilter) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Filters the report to show differences only.
+    pub fn diffs_only(self) -> Self {
+        self.with_filter(ReportFilter::DiffsOnly)
     }
 
     /// Renders the XML report document string.
@@ -48,6 +69,14 @@ impl<'a> XmlReportBuilder<'a> {
         out.push_str("  <title>");
         out.push_str(&escape_xml(&self.input.title));
         out.push_str("</title>\n");
+
+        if let Some(ref parent) = self.parent_anchor {
+            out.push_str("  <parent-report href=\"");
+            out.push_str(&escape_xml(&parent.href));
+            out.push_str("\">");
+            out.push_str(&escape_xml(&parent.title));
+            out.push_str("</parent-report>\n");
+        }
 
         if let Some(ref sub) = self.subtitle {
             out.push_str("  <subtitle>");
@@ -74,16 +103,37 @@ impl<'a> XmlReportBuilder<'a> {
             for anchor in &self.child_anchors {
                 out.push_str("    <child-report href=\"");
                 out.push_str(&escape_xml(&anchor.href));
-                out.push_str("\">");
+                out.push('"');
+
+                if let Some(ref status) = anchor.status {
+                    out.push_str(" status=\"");
+                    out.push_str(&escape_xml(status));
+                    out.push('"');
+                }
+
+                if let Some(ref stats) = anchor.stats {
+                    out.push_str(" additions=\"");
+                    out.push_str(&stats.additions.to_string());
+                    out.push_str("\" deletions=\"");
+                    out.push_str(&stats.deletions.to_string());
+                    out.push_str("\" modifications=\"");
+                    out.push_str(&stats.modifications.to_string());
+                    out.push('"');
+                }
+
+                out.push('>');
                 out.push_str(&escape_xml(&anchor.title));
                 out.push_str("</child-report>\n");
             }
             out.push_str("  </child-reports>\n");
         }
 
+        // Apply filter
+        let effective_input = self.input.filtered(self.filter);
+
         // Hunks
         out.push_str("  <hunks>\n");
-        for hunk in &self.input.hunks {
+        for hunk in &effective_input.hunks {
             render_xml_hunk(&mut out, hunk);
         }
         out.push_str("  </hunks>\n");

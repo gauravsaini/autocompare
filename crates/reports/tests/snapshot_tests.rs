@@ -1,9 +1,9 @@
 use autocompare_reports::{
-    ChildReportAnchor, DiffStats, HtmlColorBuilder, HtmlMonoBuilder, HtmlReportBuilder, HtmlTheme,
-    Hunk, HunkLine, PatchReportBuilder, ReportInput, TextReportBuilder, XmlReportBuilder,
-    render_context_patch, render_html, render_html_color, render_html_mono,
-    render_html_with_children, render_patch, render_text, render_text_with_children, render_xml,
-    render_xml_with_children,
+    ChildReportAnchor, DiffStats, HtmlColorBuilder, HtmlLayout, HtmlMonoBuilder, HtmlReportBuilder,
+    HtmlTheme, Hunk, HunkLine, LinkedReportBundle, PatchReportBuilder, ReportFilter, ReportInput,
+    TextReportBuilder, XmlReportBuilder, render_context_patch, render_html, render_html_bundle,
+    render_html_color, render_html_mono, render_html_side_by_side, render_html_with_children,
+    render_patch, render_text, render_text_with_children, render_xml, render_xml_with_children,
 };
 
 fn make_fixture() -> (ReportInput, Vec<ChildReportAnchor>) {
@@ -118,14 +118,170 @@ fn test_html_mono_snapshot() {
 }
 
 #[test]
+fn test_html_side_by_side_layout() {
+    let (input, _) = make_fixture();
+
+    let sbs_color = HtmlReportBuilder::color(&input)
+        .side_by_side()
+        .with_subtitle("Side-by-Side Color Test")
+        .render();
+
+    assert!(sbs_color.contains("diff-table diff-table-sbs"));
+    assert!(
+        sbs_color
+            .contains("<th colspan=\"3\" class=\"sbs-side-title sbs-left-title\">Left (Old)</th>")
+    );
+    assert!(
+        sbs_color.contains(
+            "<th colspan=\"3\" class=\"sbs-side-title sbs-right-title\">Right (New)</th>"
+        )
+    );
+    assert!(sbs_color.contains("sbs-row"));
+    assert!(sbs_color.contains("sbs-cell-left-content"));
+    assert!(sbs_color.contains("Hello, old world!"));
+    assert!(sbs_color.contains("Hello, new world!"));
+
+    let sbs_mono = HtmlReportBuilder::mono(&input).side_by_side().render();
+
+    assert!(sbs_mono.contains("diff-table diff-table-sbs"));
+    assert!(sbs_mono.contains("sbs-header-row"));
+    assert!(sbs_mono.contains("Left (Old)"));
+    assert!(sbs_mono.contains("Right (New)"));
+
+    let conv_sbs = render_html_side_by_side(&input, HtmlTheme::Color);
+    assert!(conv_sbs.contains("diff-table-sbs"));
+}
+
+#[test]
+fn test_html_parent_navigation_breadcrumb() {
+    let (input, _) = make_fixture();
+
+    let out = HtmlReportBuilder::color(&input)
+        .with_parent_anchor("Folder Root", "../summary.html")
+        .render();
+
+    assert!(out.contains("<nav class=\"parent-nav\" id=\"parent-nav\">"));
+    assert!(out.contains("<a class=\"parent-report-link\" href=\"../summary.html\">&larr; Back to Parent Report: Folder Root</a>"));
+
+    let mono_out = HtmlReportBuilder::mono(&input)
+        .with_parent_anchor("Folder Root", "../summary.html")
+        .render();
+
+    assert!(mono_out.contains("<nav class=\"parent-nav\" id=\"parent-nav\">"));
+    assert!(mono_out.contains("<a class=\"parent-report-link\" href=\"../summary.html\">&larr; Back to Parent Report: Folder Root</a>"));
+}
+
+#[test]
+fn test_html_rich_child_badges_and_stats() {
+    let (input, _) = make_fixture();
+    let detailed_children = vec![
+        ChildReportAnchor::new("crates/reports/src/lib.rs", "lib.html")
+            .with_status("Modified")
+            .with_stats(DiffStats::new(12, 3, 2, 200)),
+        ChildReportAnchor::new("crates/reports/src/archive.rs", "archive.html")
+            .with_status("Left Only")
+            .with_stats(DiffStats::new(0, 50, 0, 0)),
+    ];
+
+    let out = HtmlReportBuilder::color(&input)
+        .with_child_anchors(detailed_children)
+        .render();
+
+    assert!(out.contains("<span class=\"child-status-badge\">Modified</span>"));
+    assert!(out.contains("<span class=\"child-stats-badge\">(+12, -3, ~2)</span>"));
+    assert!(out.contains("<span class=\"child-status-badge\">Left Only</span>"));
+    assert!(out.contains("<span class=\"child-stats-badge\">(+0, -50, ~0)</span>"));
+}
+
+#[test]
+fn test_mono_print_styling_rules() {
+    let (input, _) = make_fixture();
+    let mono_report = render_html_mono(&input);
+
+    assert!(mono_report.contains("@media print"));
+    assert!(mono_report.contains("page-break-inside: avoid"));
+    assert!(mono_report.contains("text-decoration: line-through"));
+    assert!(mono_report.contains("font-weight: bold"));
+    assert!(mono_report.contains("font-style: italic"));
+}
+
+#[test]
+fn test_linked_report_bundle() {
+    let (parent_input, _) = make_fixture();
+
+    let child_hunks = vec![Hunk::new(
+        1,
+        2,
+        1,
+        2,
+        vec![
+            HunkLine::delete("old line", 1),
+            HunkLine::insert("new line", 1),
+        ],
+    )];
+    let child_input = ReportInput::new("sub/file.rs", child_hunks, DiffStats::new(1, 1, 0, 0));
+
+    let bundle = LinkedReportBundle::new("Project Compare", "index.html", parent_input).with_child(
+        "sub/file.rs",
+        "sub_file.html",
+        Some("Different".to_string()),
+        child_input,
+    );
+
+    let (parent_html, child_reports) =
+        render_html_bundle(&bundle, HtmlTheme::Color, HtmlLayout::SideBySide);
+
+    // Parent contains link to child with status badge
+    assert!(
+        parent_html
+            .contains("<a class=\"child-report-anchor\" href=\"sub_file.html\">sub/file.rs</a>")
+    );
+    assert!(parent_html.contains("<span class=\"child-status-badge\">Different</span>"));
+
+    // Child contains back-link to parent index
+    assert_eq!(child_reports.len(), 1);
+    let first_child = child_reports.first();
+    assert!(first_child.is_some());
+    if let Some((child_filename, child_html)) = first_child {
+        assert_eq!(child_filename, "sub_file.html");
+        assert!(child_html.contains("<a class=\"parent-report-link\" href=\"index.html\">&larr; Back to Parent Report: Project Compare</a>"));
+        assert!(child_html.contains("<p class=\"report-subtitle\">Status: Different</p>"));
+        assert!(child_html.contains("diff-table diff-table-sbs"));
+    }
+}
+
+#[test]
+fn test_report_filter_diffs_only() {
+    let (input, _) = make_fixture();
+
+    let filtered = input.filtered(ReportFilter::DiffsOnly);
+    assert_eq!(filtered.hunks.len(), 1);
+    let first_hunk = filtered.hunks.first();
+    assert!(first_hunk.is_some());
+    if let Some(h) = first_hunk {
+        assert_eq!(h.lines.len(), 3); // Delete, Insert, Modify only (unchanged omitted)
+    }
+
+    let html_diffs = HtmlReportBuilder::color(&input).diffs_only().render();
+    assert!(html_diffs.contains("Hello, old world!"));
+    assert!(html_diffs.contains("Hello, new world!"));
+    assert!(!html_diffs.contains("fn main() {"));
+
+    let txt_diffs = TextReportBuilder::new(&input).diffs_only().render();
+    assert!(!txt_diffs.contains("fn main() {"));
+}
+
+#[test]
 fn test_plain_text_snapshot() {
     let (input, children) = make_fixture();
 
     let out = TextReportBuilder::new(&input)
         .with_child_anchors(children.clone())
+        .with_parent_anchor("Master Run", "master.txt")
         .render();
 
     assert!(out.contains("DIFF REPORT: src/main.rs"));
+    assert!(out.contains("PARENT REPORT: Master Run (master.txt)"));
     assert!(out.contains("SUMMARY:"));
     assert!(out.contains("  Additions:     1"));
     assert!(out.contains("  Deletions:     1"));
@@ -167,12 +323,14 @@ fn test_xml_snapshot() {
 
     let out = XmlReportBuilder::new(&input)
         .with_child_anchors(children.clone())
+        .with_parent_anchor("Folder Diff", "index.xml")
         .with_subtitle("XML Test Fixture")
         .render();
 
     assert!(out.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
     assert!(out.contains("<diff-report xmlns=\"urn:autocompare:report:v1\">"));
     assert!(out.contains("<title>src/main.rs</title>"));
+    assert!(out.contains("<parent-report href=\"index.xml\">Folder Diff</parent-report>"));
     assert!(out.contains("<subtitle>XML Test Fixture</subtitle>"));
     assert!(out.contains("<stats additions=\"1\" deletions=\"1\" modifications=\"1\" unchanged=\"2\" total-changes=\"3\" />"));
     assert!(out.contains("<child-reports>"));
@@ -260,15 +418,18 @@ fn test_hostile_input_escaping_never_panics() {
     // 1. HTML Color & Mono
     let html_color = HtmlReportBuilder::color(&input)
         .with_child_anchors(hostile_children.clone())
+        .with_parent_anchor("parent<script>", "parent.html?a=1&b=2")
         .render();
     assert!(!html_color.contains("<script>alert"));
     assert!(html_color.contains(
         "&lt;script&gt;alert(&quot;XSS &amp; attack &#39;quoted&#39;&quot;);&lt;/script&gt;"
     ));
     assert!(html_color.contains("&amp;&quot;&#39;&lt;script&gt;"));
+    assert!(html_color.contains("parent&lt;script&gt;"));
 
     let html_mono = HtmlReportBuilder::mono(&input)
         .with_child_anchors(hostile_children.clone())
+        .side_by_side()
         .render();
     assert!(!html_mono.contains("<script>alert"));
     assert!(html_mono.contains("&lt;script&gt;"));
@@ -306,4 +467,101 @@ fn test_empty_input_never_panics() {
 
     let patch = render_patch(&input);
     assert!(patch.contains("--- a/\n+++ b/\n"));
+}
+
+#[test]
+fn test_generate_sample_artifacts_for_evidence() {
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-reports-a"));
+
+    let Some(dir) = out_dir else {
+        return;
+    };
+    let _ = std::fs::create_dir_all(&dir);
+
+    let (input, children) = make_fixture();
+
+    // 1. Color Unified
+    let color_unified = HtmlReportBuilder::color(&input)
+        .with_child_anchors(children.clone())
+        .with_subtitle("Sample Color Unified Diff Report")
+        .render();
+    let _ = std::fs::write(dir.join("sample_color_unified.html"), color_unified);
+
+    // 2. Mono Unified
+    let mono_unified = HtmlReportBuilder::mono(&input)
+        .with_child_anchors(children.clone())
+        .with_subtitle("Sample Monochrome Unified Diff Report")
+        .render();
+    let _ = std::fs::write(dir.join("sample_mono_unified.html"), mono_unified);
+
+    // 3. Color Side-by-Side
+    let color_sbs = HtmlReportBuilder::color(&input)
+        .side_by_side()
+        .with_child_anchors(children.clone())
+        .with_subtitle("Sample Color Side-by-Side Diff Report")
+        .render();
+    let _ = std::fs::write(dir.join("sample_color_side_by_side.html"), color_sbs);
+
+    // 4. Mono Side-by-Side
+    let mono_sbs = HtmlReportBuilder::mono(&input)
+        .side_by_side()
+        .with_child_anchors(children.clone())
+        .with_subtitle("Sample Monochrome Side-by-Side Diff Report (Print/Accessibility)")
+        .render();
+    let _ = std::fs::write(dir.join("sample_mono_side_by_side.html"), mono_sbs);
+
+    // 5. Linked Bundle (Parent Index + Child Report with back-link)
+    let child_hunks = vec![Hunk::new(
+        1,
+        2,
+        1,
+        2,
+        vec![
+            HunkLine::delete("let old_api = true;", 1),
+            HunkLine::insert("let new_api = true;", 1),
+        ],
+    )];
+    let child_input = ReportInput::new(
+        "crates/reports/src/html.rs",
+        child_hunks,
+        DiffStats::new(1, 1, 0, 0),
+    );
+
+    let bundle = LinkedReportBundle::new(
+        "Workspace Compare Root",
+        "sample_parent_index.html",
+        input.clone(),
+    )
+    .with_child(
+        "crates/reports/src/html.rs",
+        "sample_child_report.html",
+        Some("Modified".to_string()),
+        child_input,
+    );
+
+    let (parent_html, child_reports) =
+        render_html_bundle(&bundle, HtmlTheme::Color, HtmlLayout::SideBySide);
+    let _ = std::fs::write(dir.join("sample_parent_index.html"), parent_html);
+    if let Some((_, child_html)) = child_reports.first() {
+        let _ = std::fs::write(dir.join("sample_child_report.html"), child_html);
+    }
+
+    // 6. Plain Text
+    let txt = TextReportBuilder::new(&input)
+        .with_child_anchors(children)
+        .with_parent_anchor("Workspace Root", "summary.txt")
+        .with_line_numbers(true)
+        .render();
+    let _ = std::fs::write(dir.join("sample_text_report.txt"), txt);
+
+    // 7. XML
+    let xml = render_xml(&input);
+    let _ = std::fs::write(dir.join("sample_xml_report.xml"), xml);
+
+    // 8. Patch
+    let patch = render_patch(&input);
+    let _ = std::fs::write(dir.join("sample_unified.patch"), patch);
 }

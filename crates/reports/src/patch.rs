@@ -1,6 +1,6 @@
 //! Unified and context patch diff report generator.
 
-use crate::{LineChange, ReportInput};
+use crate::{LineChange, ReportFilter, ReportInput};
 
 /// Patch output format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -19,6 +19,7 @@ pub struct PatchReportBuilder<'a> {
     old_path: Option<String>,
     new_path: Option<String>,
     format: PatchFormat,
+    filter: ReportFilter,
 }
 
 impl<'a> PatchReportBuilder<'a> {
@@ -29,6 +30,7 @@ impl<'a> PatchReportBuilder<'a> {
             old_path: None,
             new_path: None,
             format: PatchFormat::Unified,
+            filter: ReportFilter::All,
         }
     }
 
@@ -67,6 +69,17 @@ impl<'a> PatchReportBuilder<'a> {
         self.format(PatchFormat::Context)
     }
 
+    /// Sets a display filter for diff lines.
+    pub fn with_filter(mut self, filter: ReportFilter) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Filters the report to show differences only.
+    pub fn diffs_only(self) -> Self {
+        self.with_filter(ReportFilter::DiffsOnly)
+    }
+
     /// Renders the patch string.
     pub fn render(&self) -> String {
         let old_p = self
@@ -78,9 +91,11 @@ impl<'a> PatchReportBuilder<'a> {
             .as_deref()
             .unwrap_or(self.input.title.as_str());
 
+        let effective_input = self.input.filtered(self.filter);
+
         match self.format {
-            PatchFormat::Unified => render_unified(self.input, old_p, new_p),
-            PatchFormat::Context => render_context(self.input, old_p, new_p),
+            PatchFormat::Unified => render_unified(&effective_input, old_p, new_p),
+            PatchFormat::Context => render_context(&effective_input, old_p, new_p),
         }
     }
 }

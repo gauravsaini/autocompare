@@ -1,0 +1,22 @@
+================================================================================
+DIFF REPORT: src/main.rs
+PARENT REPORT: Workspace Root (summary.txt)
+================================================================================
+SUMMARY:
+  Additions:     1
+  Deletions:     1
+  Modifications: 1
+  Unchanged:     2
+  Total changes: 3
+--------------------------------------------------------------------------------
+LINKED CHILD REPORTS:
+  * Submodule Diff -> submodule/report.html
+  * Config Diff -> config/report.html
+--------------------------------------------------------------------------------
+@@ -1,5 +1,6 @@
+   1    1   fn main() {
+   2      -     println!("Hello, old world!");
+        2 +     println!("Hello, new world!");
+   3    3 !     let version = "1.0.0";
+   4    4   }
+================================================================================

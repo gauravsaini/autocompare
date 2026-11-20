@@ -1,14 +1,16 @@
 //! Plain-text diff report generator.
 
-use crate::{ChildReportAnchor, Hunk, ReportInput};
+use crate::{ChildReportAnchor, Hunk, ParentReportAnchor, ReportFilter, ReportInput};
 
 /// Builder for plain-text diff reports.
 #[derive(Debug, Clone)]
 pub struct TextReportBuilder<'a> {
     input: &'a ReportInput,
     child_anchors: Vec<ChildReportAnchor>,
+    parent_anchor: Option<ParentReportAnchor>,
     subtitle: Option<String>,
     show_line_numbers: bool,
+    filter: ReportFilter,
 }
 
 impl<'a> TextReportBuilder<'a> {
@@ -17,8 +19,10 @@ impl<'a> TextReportBuilder<'a> {
         Self {
             input,
             child_anchors: Vec::new(),
+            parent_anchor: None,
             subtitle: None,
             show_line_numbers: false,
+            filter: ReportFilter::All,
         }
     }
 
@@ -34,6 +38,12 @@ impl<'a> TextReportBuilder<'a> {
         self
     }
 
+    /// Sets a parent report anchor for back-link navigation.
+    pub fn with_parent_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.parent_anchor = Some(ParentReportAnchor::new(title, href));
+        self
+    }
+
     /// Enables or disables line numbers in output.
     pub fn with_line_numbers(mut self, show: bool) -> Self {
         self.show_line_numbers = show;
@@ -44,6 +54,17 @@ impl<'a> TextReportBuilder<'a> {
     pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
         self
+    }
+
+    /// Sets a display filter for diff lines.
+    pub fn with_filter(mut self, filter: ReportFilter) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    /// Filters the report to show differences only.
+    pub fn diffs_only(self) -> Self {
+        self.with_filter(ReportFilter::DiffsOnly)
     }
 
     /// Renders the plain-text report.
@@ -57,6 +78,14 @@ impl<'a> TextReportBuilder<'a> {
         out.push_str("DIFF REPORT: ");
         out.push_str(&self.input.title);
         out.push('\n');
+
+        if let Some(ref parent) = self.parent_anchor {
+            out.push_str("PARENT REPORT: ");
+            out.push_str(&parent.title);
+            out.push_str(" (");
+            out.push_str(&parent.href);
+            out.push_str(")\n");
+        }
 
         if let Some(ref sub) = self.subtitle {
             out.push_str("Subtitle: ");
@@ -98,16 +127,29 @@ impl<'a> TextReportBuilder<'a> {
         if !self.child_anchors.is_empty() {
             out.push_str("LINKED CHILD REPORTS:\n");
             for anchor in &self.child_anchors {
-                out.push_str(&format!("  * {} -> {}\n", anchor.title, anchor.href));
+                out.push_str(&format!("  * {} -> {}", anchor.title, anchor.href));
+                if let Some(ref status) = anchor.status {
+                    out.push_str(&format!(" [{}]", status));
+                }
+                if let Some(ref stats) = anchor.stats {
+                    out.push_str(&format!(
+                        " (+{}, -{}, ~{})",
+                        stats.additions, stats.deletions, stats.modifications
+                    ));
+                }
+                out.push('\n');
             }
             out.push_str("--------------------------------------------------------------------------------\n");
         }
 
+        // Apply filter
+        let effective_input = self.input.filtered(self.filter);
+
         // Hunks
-        if self.input.hunks.is_empty() {
+        if effective_input.hunks.is_empty() {
             out.push_str("No differences detected.\n");
         } else {
-            for hunk in &self.input.hunks {
+            for hunk in &effective_input.hunks {
                 render_text_hunk(&mut out, hunk, self.show_line_numbers);
             }
         }

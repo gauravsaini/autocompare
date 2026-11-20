@@ -1,10 +1,12 @@
 //! Reporting engine for autocompare.
 //!
-//! Provides decoupled report generation in multiple formats:
-//! - HTML (color and monochrome builders with linked child-report anchors)
-//! - Plain text renderer
-//! - XML renderer
+//! Provides decoupled report generation in multiple formats with Beyond Compare parity:
+//! - HTML (color, monochrome/no-color, unified, side-by-side, linked child reports, parent navigation)
+//! - Plain text renderer (unified, line numbers, child reports, parent navigation)
+//! - XML renderer (machine readable, full stats, child reports, parent navigation)
 //! - Unified and context patch renderer
+
+#![forbid(unsafe_code)]
 
 pub mod html;
 pub mod patch;
@@ -12,8 +14,9 @@ pub mod text;
 pub mod xml;
 
 pub use html::{
-    HtmlColorBuilder, HtmlMonoBuilder, HtmlReportBuilder, HtmlTheme, render_html,
-    render_html_color, render_html_mono, render_html_with_children,
+    HtmlColorBuilder, HtmlLayout, HtmlMonoBuilder, HtmlReportBuilder, HtmlTheme, render_html,
+    render_html_bundle, render_html_color, render_html_mono, render_html_side_by_side,
+    render_html_with_children,
 };
 pub use patch::{
     PatchFormat, PatchReportBuilder, render_context_patch, render_patch, render_unified_patch,
@@ -177,16 +180,61 @@ impl DiffStats {
 pub struct ChildReportAnchor {
     pub title: String,
     pub href: String,
+    pub status: Option<String>,
+    pub stats: Option<DiffStats>,
 }
 
 impl ChildReportAnchor {
-    /// Creates a new child report anchor.
+    /// Creates a new child report anchor with default empty status and stats.
+    pub fn new(title: impl Into<String>, href: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            href: href.into(),
+            status: None,
+            stats: None,
+        }
+    }
+
+    /// Attaches an optional status badge (e.g. "Different", "Left Only", "Right Only", "Identical").
+    pub fn with_status(mut self, status: impl Into<String>) -> Self {
+        self.status = Some(status.into());
+        self
+    }
+
+    /// Attaches optional diff statistics to this child anchor.
+    pub fn with_stats(mut self, stats: DiffStats) -> Self {
+        self.stats = Some(stats);
+        self
+    }
+}
+
+/// Anchor descriptor linking back to a parent or index report (for breadcrumb navigation in child reports).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParentReportAnchor {
+    pub title: String,
+    pub href: String,
+}
+
+impl ParentReportAnchor {
+    /// Creates a new parent report anchor.
     pub fn new(title: impl Into<String>, href: impl Into<String>) -> Self {
         Self {
             title: title.into(),
             href: href.into(),
         }
     }
+}
+
+/// Display filter for diff reports, matching Beyond Compare's display filter options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReportFilter {
+    /// Show all lines (context + differences).
+    #[default]
+    All,
+    /// Show only lines with differences (deletions, insertions, modifications).
+    DiffsOnly,
+    /// Show differences plus up to `context` lines of surrounding unchanged context.
+    Context(usize),
 }
 
 /// Decoupled input for all report builders.
@@ -205,6 +253,197 @@ impl ReportInput {
             hunks,
             stats,
         }
+    }
+
+    /// Returns a filtered clone of this report input based on `ReportFilter`.
+    pub fn filtered(&self, filter: ReportFilter) -> Self {
+        match filter {
+            ReportFilter::All => self.clone(),
+            ReportFilter::DiffsOnly => {
+                let filtered_hunks = self
+                    .hunks
+                    .iter()
+                    .filter_map(|hunk| {
+                        let changed_lines: Vec<HunkLine> = hunk
+                            .lines
+                            .iter()
+                            .filter(|l| l.change != LineChange::Unchanged)
+                            .cloned()
+                            .collect();
+                        if changed_lines.is_empty() {
+                            None
+                        } else {
+                            Some(Hunk::new(
+                                hunk.old_start,
+                                hunk.old_lines,
+                                hunk.new_start,
+                                hunk.new_lines,
+                                changed_lines,
+                            ))
+                        }
+                    })
+                    .collect();
+                Self {
+                    title: self.title.clone(),
+                    hunks: filtered_hunks,
+                    stats: self.stats.clone(),
+                }
+            }
+            ReportFilter::Context(ctx) => {
+                let filtered_hunks = self
+                    .hunks
+                    .iter()
+                    .filter_map(|hunk| {
+                        let total_lines = hunk.lines.len();
+                        let mut include = vec![false; total_lines];
+                        for (idx, line) in hunk.lines.iter().enumerate() {
+                            if line.change != LineChange::Unchanged {
+                                let start = idx.saturating_sub(ctx);
+                                let end =
+                                    (idx.saturating_add(ctx)).min(total_lines.saturating_sub(1));
+                                for slot in
+                                    include.iter_mut().take(end.saturating_add(1)).skip(start)
+                                {
+                                    *slot = true;
+                                }
+                            }
+                        }
+
+                        let selected: Vec<HunkLine> = hunk
+                            .lines
+                            .iter()
+                            .zip(include.iter())
+                            .filter_map(|(l, &inc)| if inc { Some(l.clone()) } else { None })
+                            .collect();
+
+                        if selected.is_empty() {
+                            None
+                        } else {
+                            Some(Hunk::new(
+                                hunk.old_start,
+                                hunk.old_lines,
+                                hunk.new_start,
+                                hunk.new_lines,
+                                selected,
+                            ))
+                        }
+                    })
+                    .collect();
+                Self {
+                    title: self.title.clone(),
+                    hunks: filtered_hunks,
+                    stats: self.stats.clone(),
+                }
+            }
+        }
+    }
+}
+
+/// A bundle representing a master parent report and multiple linked child reports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedReportBundle {
+    pub parent_title: String,
+    pub parent_filename: String,
+    pub parent_input: ReportInput,
+    pub children: Vec<LinkedChildItem>,
+}
+
+/// A child report item within a linked report bundle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedChildItem {
+    pub title: String,
+    pub filename: String,
+    pub status: Option<String>,
+    pub input: ReportInput,
+}
+
+impl LinkedReportBundle {
+    /// Creates a new linked report bundle with a parent report.
+    pub fn new(
+        parent_title: impl Into<String>,
+        parent_filename: impl Into<String>,
+        parent_input: ReportInput,
+    ) -> Self {
+        Self {
+            parent_title: parent_title.into(),
+            parent_filename: parent_filename.into(),
+            parent_input,
+            children: Vec::new(),
+        }
+    }
+
+    /// Appends a child report item to this bundle.
+    pub fn with_child(
+        mut self,
+        title: impl Into<String>,
+        filename: impl Into<String>,
+        status: Option<String>,
+        input: ReportInput,
+    ) -> Self {
+        self.children.push(LinkedChildItem {
+            title: title.into(),
+            filename: filename.into(),
+            status,
+            input,
+        });
+        self
+    }
+
+    /// Adds a child report item to the bundle instance.
+    pub fn add_child(
+        &mut self,
+        title: impl Into<String>,
+        filename: impl Into<String>,
+        status: Option<String>,
+        input: ReportInput,
+    ) -> &mut Self {
+        self.children.push(LinkedChildItem {
+            title: title.into(),
+            filename: filename.into(),
+            status,
+            input,
+        });
+        self
+    }
+
+    /// Renders the parent HTML report and all child HTML reports with mutual navigation links.
+    ///
+    /// Returns `(parent_html, Vec<(child_filename, child_html)>)`.
+    pub fn render_html(
+        &self,
+        theme: HtmlTheme,
+        layout: HtmlLayout,
+    ) -> (String, Vec<(String, String)>) {
+        let mut child_anchors = Vec::with_capacity(self.children.len());
+        for child in &self.children {
+            let mut anchor = ChildReportAnchor::new(&child.title, &child.filename);
+            if let Some(ref st) = child.status {
+                anchor = anchor.with_status(st);
+            }
+            anchor = anchor.with_stats(child.input.stats.clone());
+            child_anchors.push(anchor);
+        }
+
+        let parent_html = HtmlReportBuilder::new(&self.parent_input)
+            .theme(theme)
+            .layout(layout)
+            .with_child_anchors(child_anchors)
+            .render();
+
+        let mut child_reports = Vec::with_capacity(self.children.len());
+        for child in &self.children {
+            let mut builder = HtmlReportBuilder::new(&child.input)
+                .theme(theme)
+                .layout(layout)
+                .with_parent_anchor(&self.parent_title, &self.parent_filename);
+            if let Some(ref st) = child.status {
+                builder = builder.with_subtitle(format!("Status: {}", st));
+            }
+            let child_html = builder.render();
+            child_reports.push((child.filename.clone(), child_html));
+        }
+
+        (parent_html, child_reports)
     }
 }
 

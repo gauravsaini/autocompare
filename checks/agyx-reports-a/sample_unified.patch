@@ -1,0 +1,8 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -1,5 +1,6 @@
+ fn main() {
+-    println!("Hello, old world!");
++    println!("Hello, new world!");
+!    let version = "1.0.0";
+ }
