@@ -621,10 +621,12 @@ pub fn action_nav_next_label() -> &'static str {
     "Next ▶"
 }
 
-/// Two-row stack gap (px): row 1 aur row 2 ke beech [`TIGHT_GAP`] — wahi
-/// rhythm jo har row ke andar hai. Koi naya token nahi; pure; unit-tested.
+/// Two-row stack gap (px): row 1 aur row 2 ke beech [`SECTION_GAP`] (8) —
+/// BC-style roomy toolbar band (24 + 8 + 24 = 56) taaki dono rows ek
+/// saans me padhen; intra-row rhythm [`TIGHT_GAP`] par hi rehta hai.
+/// Koi naya token nahi; pure; unit-tested.
 pub fn action_bar_row_gap() -> f32 {
-    TIGHT_GAP
+    SECTION_GAP
 }
 
 /// Action-bar row height (px): uniform 24 floor
@@ -700,6 +702,34 @@ pub fn toolbar_button_row_side_air(avail: f32) -> f32 {
 /// Pure; unit-tested.
 pub fn action_nav_arrow_gap() -> f32 {
     toolbar_cluster_gap()
+}
+
+/// Narrow-720 toolbar side air (px): [`toolbar_button_row_side_air`] at the
+/// [`TEXT_STACK_BREAKPOINT_W`] fallback (720): (720 − 200)/2 = 260 symmetric.
+/// Non-negative means the button pair centers instead of overlapping the edge.
+/// Pure; unit-tested.
+pub fn chrome17_toolbar_side_air_720() -> f32 {
+    toolbar_button_row_side_air(TEXT_STACK_BREAKPOINT_W)
+}
+
+/// Narrow-720 no-overlap gate: at the 720 fallback the toolbar pair fits with
+/// symmetric air (no forced h-scroll), the 10-tab strip scrolls instead of
+/// squishing, file-bar halves keep their [`MIN_HALF`] floors, the layout sits
+/// on the wrap boundary (720 side-by-side, 719 stacked) so panes never overlap,
+/// and the metadata line stays thin ([`text_meta_line_height_px`] < [`HEADER_H`]).
+/// Pure; unit-tested by `chrome17_narrow720_no_overlap`.
+pub fn chrome17_narrow720_no_overlap_gate() -> bool {
+    let avail = TEXT_STACK_BREAKPOINT_W;
+    let inner = avail - 2.0 * f32::from(OUTER_MARGIN);
+    let (left_w, right_w) = split_field_widths(inner, SPLIT_DEFAULT_FRACTION);
+    chrome17_toolbar_side_air_720() >= 0.0
+        && !action_bar_needs_hscroll(avail)
+        && session_tab_strip_needs_hscroll(10, avail)
+        && text_layout_for_width(avail) == TextLayout::SideBySide
+        && text_layout_for_width(avail - 1.0) == TextLayout::Stacked
+        && left_w >= MIN_HALF
+        && right_w >= MIN_HALF
+        && text_meta_line_height_px() < HEADER_H
 }
 
 /// Session action buttons (row 1): Swap + Reload ek hi `horizontal` me.
@@ -916,7 +946,7 @@ pub fn text_narrow_720b_stacked_width() -> f32 {
 pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), header_bar_height()));
-        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.spacing_mut().item_spacing.x = SECTION_GAP;
         ui.label(chrome_section_role().rich("autocompare"));
         ui.label(
             chrome_status_role().rich(header_note_line("drag & drop or browse | pure engines")),
@@ -1056,7 +1086,7 @@ pub fn paint_home_recent(ui: &mut Ui, history: &SessionHistory, now_secs: u64) {
 /// default proportional) so the tab bar reads as chrome, not code.
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.spacing_mut().item_spacing.x = SECTION_GAP;
         ui.selectable_value(tab, Tab::Home, chrome_tab_role().rich("Home"));
         ui.selectable_value(tab, Tab::Text, chrome_tab_role().rich("Text"));
         ui.selectable_value(tab, Tab::Folder, chrome_tab_role().rich("Folder"));
@@ -1068,7 +1098,7 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
         ui.selectable_value(tab, Tab::FolderMerge, chrome_tab_role().rich("FolderMerge"));
         ui.selectable_value(tab, Tab::Audio, chrome_tab_role().rich("Audio"));
     });
-    ui.add_space(TIGHT_GAP);
+    ui.add_space(TAB_BOTTOM_GAP);
 }
 
 // ----------------------------------------------------------------------------
@@ -9679,13 +9709,15 @@ mod tests {
 
     #[test]
     fn action_bar_geometry_reuses_toolbar_floor() {
-        // Dono rows ek beat par: 24 floor + TIGHT_GAP stack; min width do
-        // uniform buttons + ek cluster gap (2*96+8 = 200). Koi naya token nahi.
+        // Dono rows ek beat par: 24 floor + SECTION_GAP stack (8) taaki
+        // band 24+8+24 = 56 roomy padhe; min width do uniform buttons +
+        // ek cluster gap (2*96+8 = 200). Koi naya token nahi.
         let (tool_w, tool_h) = session_toolbar_button_size();
         assert_eq!(tool_w, 96.0);
         assert_eq!(action_bar_row_height(), tool_h);
         assert_eq!(action_bar_row_height(), 24.0);
-        assert_eq!(action_bar_row_gap(), TIGHT_GAP);
+        assert_eq!(action_bar_row_gap(), SECTION_GAP);
+        assert_eq!(action_bar_row_gap(), 8.0);
         assert_eq!(toolbar_cluster_gap(), SECTION_GAP);
         assert_eq!(action_bar_readout_gap(), SECTION_GAP);
         assert_eq!(action_bar_min_width(), 2.0 * tool_w + toolbar_cluster_gap());
@@ -13408,6 +13440,39 @@ mod tests {
             376.0
         );
         assert_eq!(session_tab_strip_width_for_labels(&[]), 0.0);
+    }
+
+    #[test]
+    fn chrome17_narrow720_no_overlap() {
+        // Edge fixture comparison/chrome-narrow-720.json: 720 fallback par
+        // toolbar pair 200 side air 260 (center, no overlap), action bar fits
+        // (no h-scroll; floor se tang par scroll), 10-tab strip 1572 scrolls
+        // (no squish), file-bar halves floors (180,180 — ek-dusre par nahi),
+        // layout boundary 720/719 SideBySide/Stacked, Browse 120x28 == row 28
+        // (vertical aligned), meta 15.2 < header 28 (thin rhythm, no clash).
+        let raw = include_str!(
+            "../../../checks/gui-exq-chrome17/round-1/comparison/chrome-narrow-720.json"
+        );
+        assert!(raw.contains("\"name\":\"chrome-narrow-720\""));
+        assert_eq!(chrome17_toolbar_side_air_720(), 260.0);
+        assert!(!action_bar_needs_hscroll(TEXT_STACK_BREAKPOINT_W));
+        assert!(action_bar_needs_hscroll(action_bar_min_width() - 1.0));
+        assert_eq!(session_tab_strip_width(10), 1572.0);
+        assert!(session_tab_strip_needs_hscroll(10, TEXT_STACK_BREAKPOINT_W));
+        let inner = TEXT_STACK_BREAKPOINT_W - 2.0 * f32::from(OUTER_MARGIN);
+        assert_eq!(inner, 696.0);
+        assert_eq!(
+            split_field_widths(inner, SPLIT_DEFAULT_FRACTION),
+            (180.0, 180.0)
+        );
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        assert_eq!(path_browse_button_size(), (120.0, 28.0));
+        assert_eq!(HEADER_H, 28.0);
+        assert_eq!(path_browse_button_size().1, HEADER_H);
+        assert!((text_meta_line_height_px() - 15.2).abs() < 0.01);
+        assert!(text_meta_line_height_px() < HEADER_H);
+        assert!(chrome17_narrow720_no_overlap_gate());
     }
 
     #[test]
