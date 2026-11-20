@@ -211,9 +211,10 @@
   "WAVE-TABLE-XLSX": "landed+pushed 861dd28 (REPORT PASS, 96 lib + 40 table integ green, clippy 0, fmt clean, banned 0 non-test, OWNS-clean, PNG noise reverted)",
   "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)"
  },
- "WAVE-TEXT6": "dispatched 2026-11-21 opencode sess-opencode-text6 OWNS views.rs",
- "WAVE-CHROME6": "dispatched 2026-11-21 opencode sess-opencode-chrome6 OWNS app.rs",
- "WAVE-GUTTER6": "dispatched 2026-11-21 agyx gemini-3.8-flash-high OWNS gutter.rs (default gemini-4-neon broken, explicit model fix)",
- "WAVE-COPYTAKE6": "dispatched 2026-11-21 agyx gemini-3.8-flash-high OWNS copy.rs take.rs",
- "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest"
+ "WAVE-TEXT6": "advancing 2026-11-21 00:51 opencode sess-opencode-text6 round-1 created, views WIP",
+ "WAVE-CHROME6": "advancing 2026-11-21 00:51 opencode sess-opencode-chrome6 app.rs 154+17 diff WIP",
+ "WAVE-GUTTER6": "relaunched 2026-11-21 00:51 agyx wrapper gemini-3.8-flash-high rotator 200 OK, OWNS gutter.rs",
+ "WAVE-COPYTAKE6": "relaunched 2026-11-21 00:51 agyx wrapper gemini-3.8-flash-high rotator 200 OK, OWNS copy.rs take.rs",
+ "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest",
+ "AGYX-FIX": "root cause: raw agy -p bypassed rotator, gemini-4-neon 404; agyx wrapper forces gemini-3.8-flash-high via localhost:51200, verified 200"
 }
