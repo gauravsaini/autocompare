@@ -110,5 +110,6 @@
   "SWARM-SESS": "verified+landed 317135d (62 green 25+10+17+10, clippy 0, fmt clean, expect only in cfg-test, allow 0)",
   "WAVE-MEDIA-TABLE2": "landed+pushed fc2448f (18 suites green, clippy 0, REPORT PASS x4) + fix-forward 4edb043 (rustfmt 4 files, base was clean)",
   "ORCH-AGYX-FIX": "agyx wrapper mkdir-lock rotator race fixed, rotator 200s healthy, single-stream verified, staggered parallel allowed max3",
-  "ORCH-MIX": "mix approved: opencode serve-multiplex (gui exquisite + sync/vfs) + agyx staggered swarm (sessions leaf-2.1, reports leaf-2.2-new), disjoint OWNS, backoff exponential"
+  "ORCH-MIX": "mix approved: opencode serve-multiplex (gui exquisite + sync/vfs) + agyx staggered swarm (sessions leaf-2.1, reports leaf-2.2-new), disjoint OWNS, backoff exponential",
+  "ORCH-MIX-DISPATCH": "2026-11-20 21:13 AEDT mix live: opencode gui2-nudge (commit WIP) + opencode text3 sess-opencode-text3 (diff text/merge/grammar) + agyx s1 tmuxagyxs1 (sessions h2) + agyx s2 tmuxagyxs2 (reports rep-h2); probe agyx-ok rotator-200 verified"
 }
