@@ -1545,3 +1545,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## 2026-11-20 — Wave CJ-LOCALRUN4 launched (round-4 re-verify: dark C + P1/P2 closure)
 - Sess sess-local-cj, READ-ONLY (zero source change), OWNS checks/gui-localrun-cj. DELTA ca round-3 -> cj round-4: live dark check, P1/P2 live visibility, fixture light-mode proof + default-dark stability.
+
+## 2026-11-20 — Wave CJ-LOCALRUN4 landed + pushed (round-4: dark C + P1/P2 closure)
+- Commit `5f6369b` docs(gui): ca-to-cj DELTA (OWNS checks/gui-localrun-cj only, source ZERO touch, 17 files).
+- P1-4 CTA live FIXED (single-line photo-proof). P1-2/P1-3 paints, CG mode-T7, CI persist+light-mode code-green. Fixtures 4/4 byte-stable, 669 green, harness PASS.
+- SABSE BADI GAP: live-dark FAIL — CE+CI ke baad bhi live app LIGHT khulta hai. Badge semantics: flag true par ctx light (desync). Storage-dir theory fit nahi hoti. Follow-up CK wave me.
+- Baaki: live Text-tab captures (tab-switch rule khule tab), multi-session strip live, toolbar pixel-verify, CLI --screenshot-mode flag.
