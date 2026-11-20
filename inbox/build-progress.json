@@ -33,6 +33,8 @@
     "SWARM-CLI-K": "running pid 54346 (OWNS cli, checks/agyx-cli-k)",
     "SWARM-EXQ-L": "running opencode default-model (OWNS gui views_hex/views_table/viewmodel/app/theme, checks/gui-exq-l)",
     "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
-    "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)"
+    "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)",
+    "RUN-M-early2": "landed 635d9d9 pushed (10 cmds PASS, 3 PNGs valid, TOP-10 gaps)",
+    "CRAFT-METHOD": "verified /tmp/craft-anything-probe (Study>Build>Check, clean-room engine, pure Rust)"
   }
 }
