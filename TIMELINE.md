@@ -398,3 +398,9 @@
 1. **Home Cards & Gaps at 960px**: card gaps from space scale, card rows from TypoRole chrome line-height, section padding symmetric.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `home.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home4/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-chrome8 toolbar plus filebar
+
+1. **Chrome Toolbar & Filebar at 960px**: toolbar button size from space scale, file-bar height from TypoRole chrome line-height, status strip padding symmetric.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `app.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/app.rs`, `checks/gui-exq-chrome8/**`, `TIMELINE.md`.
