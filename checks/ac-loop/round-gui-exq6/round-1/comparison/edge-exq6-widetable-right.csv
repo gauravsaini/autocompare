@@ -1,0 +1,5 @@
+id,name,region,sku,price,qty,status,owner,updated,note
+1,alpha,north,A-100,9.99,10,open,ann,2026-01-01,first wide row for 720px key-bar wrap check
+2,beta,south,B-200,21.00,4,open,bob,2026-01-02,second row stable
+3,gamma,east,C-300,5.25,40,closed,cat,2026-01-03,third row stable with a fairly long trailing note cell
+4,delta,west,D-400,7.75,12,open,dan,2026-01-04,fourth row stable

@@ -291,7 +291,7 @@ pub fn table_key_badge_label(view: &TableKeyView) -> String {
 pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
     let avail = ui.available_width();
     let mut clicked: Option<usize> = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
         ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
         ui.label(table_section_label_text_role().rich("Key:").strong());
@@ -637,7 +637,7 @@ fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str
 pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
     let avail = ui.available_width();
     let mut out = (false, false);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
         out = paint_table_find_controls(ui, needle, badge);
     });
@@ -1225,7 +1225,7 @@ pub fn paint_table_toolbar(
 ) -> TableToolbarAction {
     let mut action = TableToolbarAction::default();
     let avail = ui.available_width();
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
         let (find_prev, find_next) = paint_table_find_controls(ui, needle, badge);
         if find_prev {
@@ -1378,7 +1378,7 @@ pub fn paint_table_sheet_bar(
 ) {
     let avail = ui.available_width();
     let mut clicked: Option<usize> = None;
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_SHEET_BAR_H));
         ui.spacing_mut().item_spacing.x = TABLE_SHEET_COL_GAP;
         ui.label(table_sheet_label_text_role().rich("Sheet:").strong());
