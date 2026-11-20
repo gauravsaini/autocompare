@@ -362,12 +362,10 @@ pub fn session_toolbar_button_size() -> (f32, f32) {
 
 /// Toolbar swap glyph: `↔` reuse ([`home_recent_row_title`] precedent) —
 /// BC-style icon-led action, koi naya asset nahi. Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub const TOOLBAR_SWAP_GLYPH: &str = "\u{2194}";
 
 /// Toolbar reload glyph: `▶` reuse (paging-nav `Next hunk ▶` precedent:
 /// forward/run affordance) — koi naya asset nahi. Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub const TOOLBAR_RELOAD_GLYPH: &str = "▶";
 
 /// Icon-to-label gap (px): [`TIGHT_GAP`] reuse taaki glyph + label
@@ -380,23 +378,82 @@ pub fn toolbar_icon_gap() -> f32 {
 /// Toolbar button typo role: [`chrome_tab_role`] (Body 13 proportional)
 /// reuse — buttons chrome me rahen, mono me na jaen. Koi naya
 /// size/weight nahi; pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn toolbar_button_role() -> TypoRole {
     chrome_tab_role()
 }
 
 /// Icon-led Swap label: glyph + space + existing English label (label
 /// text unchanged, sirf glyph prefix). Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn toolbar_swap_label() -> String {
     format!("{TOOLBAR_SWAP_GLYPH} Swap Sides")
 }
 
 /// Icon-led Reload label: glyph + space + existing English label (label
 /// text unchanged, sirf glyph prefix). Pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn toolbar_reload_label() -> String {
     format!("{TOOLBAR_RELOAD_GLYPH} Reload / Recompare")
+}
+
+// ----------------------------------------------------------------------------
+// Session toolbar wiring (CL-TOOLWIRE): icon-led Swap/Reload paint call-site.
+// App row (app.rs toolbar, NO-TOUCH is wave me) agle wave me is painter par
+// jayegi; tab tak ye fn `toolbar_*` contract ka live call-site hai
+// (labels/role/glyphs se `dead_code` hata, tests live). Geometry:
+// [`session_toolbar_button_size`] floor (120x28, min_size) + [`TIGHT_GAP`]
+// rhythm (App `toolbar_item_gap` mirror, same value); typo:
+// [`toolbar_button_role`] chrome (Body 13 proportional). Colors: existing
+// button style reuse, koi naya hue nahi.
+// ----------------------------------------------------------------------------
+
+/// Session toolbar hit: Swap vs Reload. Caller (`App`, agle wave) is par
+/// swap/run chalata hai; [`SessionAction`] precedent — paint sirf emit
+/// karta hai, mutate nahi. Pure shape; unit-tested.
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ToolbarAction {
+    /// Koi hit nahi (default).
+    #[default]
+    None,
+    /// Swap click: sides flip + rerun (caller).
+    Swap,
+    /// Reload click: same compare rerun (caller).
+    Reload,
+}
+
+/// Icon-led session toolbar row: Swap + Reload ek hi `horizontal` me.
+/// Labels [`toolbar_swap_label`] / [`toolbar_reload_label`] (glyph prefix,
+/// English text unchanged), typo [`toolbar_button_role`], floor
+/// [`session_toolbar_button_size`] (min_size taaki chhote labels bhi poori
+/// ungli se lagen). `enabled` false par dono grey (App `toolbar_active`
+/// mirror: Home par off).
+#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
+pub fn paint_session_toolbar(ui: &mut Ui, enabled: bool) -> ToolbarAction {
+    let (tool_w, tool_h) = session_toolbar_button_size();
+    let mut hit = ToolbarAction::None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(toolbar_button_role().rich(toolbar_swap_label()))
+                    .min_size(egui::vec2(tool_w, tool_h)),
+            )
+            .clicked()
+        {
+            hit = ToolbarAction::Swap;
+        }
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(toolbar_button_role().rich(toolbar_reload_label()))
+                    .min_size(egui::vec2(tool_w, tool_h)),
+            )
+            .clicked()
+        {
+            hit = ToolbarAction::Reload;
+        }
+    });
+    hit
 }
 
 /// Path-row Browse/Compare button size: 120x28 floor reuse ([`HOME_CARD_BUTTON_MIN_W`]
@@ -6947,6 +7004,15 @@ mod tests {
         // Labels English text unchanged rakhte hain (sirf glyph prefix).
         assert!(toolbar_swap_label().ends_with("Swap Sides"));
         assert!(toolbar_reload_label().ends_with("Reload / Recompare"));
+    }
+
+    #[test]
+    fn toolbar_action_defaults_to_none_with_swap_and_reload() {
+        // Live call-site shape (paint_session_toolbar emits, App agle wave
+        // me swap/run chalata hai): SessionAction precedent — default None,
+        // dono hits alag.
+        assert_eq!(ToolbarAction::default(), ToolbarAction::None);
+        assert_ne!(ToolbarAction::Swap, ToolbarAction::Reload);
     }
 
     #[test]
