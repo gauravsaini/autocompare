@@ -590,3 +590,9 @@
 1. **Toolbar Narrow-720 Buttons & Tabstrip**: icon+label button symmetric hit rects at 720px narrow canvas, tab widths from label metrics (tabstrip-8tabs reused), second-row nav-arrow rhythm, per-pane status halves even split, and edge fixture `comparison/toolbar-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1033 green (including `toolbar11_*` narrow buttons tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-toolbar11/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-status12 tall plus strips
+
+1. **Status Tall-1200 Strips & Legend**: file-bar metadata line rhythm under file bar, per-pane status strip heights + text baselines at 1200px tall canvas, bottom legend strip height, and edge fixture `comparison/status-tall-1200.json`.
+2. **Tests** (before → after): autocompare-gui 1034 green (including `status12_*` tall strips tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-status12/**`, `TIMELINE.md`.
