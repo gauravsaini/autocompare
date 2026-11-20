@@ -1530,3 +1530,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - `799c949` feat(gui): adopt mode-tab clicks into sessions and wire T7 rename bridge (OWNS app.rs + home.rs + checks/gui-modet7-cg). P0-1 follow-ups DONE.
 - Gates: 663 green, clippy/fmt/banned/colors/PNG clean, OWNS clean. CF ka ek `git add -m` slip tha (recovered, sibling sweep nahi hua — verify me dono commits OWNS-clean).
 - Queue: P2-1 toolbar, dark C full (A+B persist+fixture param), round-4 re-verify.
+
+## 2026-11-20 — Waves CH-TOOLBAR + CI-DARKC launched (2 parallel, disjoint)
+- CH-TOOLBAR (sess-tool-ch): P2-1 toolbar icon parity, OWNS views.rs + checks/gui-toolbar-ch.
+- CI-DARKC (sess-dark-ci): dark C full (persist + fixture mode-param, default dark), OWNS main.rs + app.rs + screenshot.rs + checks/gui-darkfull-ci.
+- Queue: round-4 re-verify (dono ke baad).
