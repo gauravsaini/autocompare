@@ -53,7 +53,7 @@
     "SWARM-MEDIA": "landed+pushed 8f8bb84 (strict: 333 green, fmt/clippy per gates clean; 48 unwired helpers under 60 allows disclosed as wiring debt, tests cover them)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
-    "SWARM-PARITY": "diff tests 215 green; compare folder_merge E0061 resolve_file arity (their WIP); reports E0432 still open; awaiting swarm commits",
+    "SWARM-PARITY": "diff 215 + compare 111 green, arity fixed by swarm; reports E0432 only blocker left; awaiting commits",
     "SWARM-REP-H": "rescued+landed 701f0a4 pushed (dead swarm round-6 WIP: sbs row classes, bundle parity; 22 green, clippy 0, fmt clean; 4 over-pinned asserts corrected to renderer contract)",
     "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
