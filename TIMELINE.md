@@ -644,3 +644,9 @@
 1. **Live Center Gutter**: paint_text_body center gutter widened to locked 20px (text_center_gutter_width), yellow hunk-head arrows via text_center_marker_fg on changed rows only, selection bands + floor fill preserved. Fixture already had this from shot15; this is the egui mirror. Colors frozen at 33 touches. Edge fixture comparison/gutter-tall-1200.json + headless test gutter20_tall_gutter_stable.
 2. **Tests** (before -> after): autocompare-gui 1042 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate ABANDONED honestly (fixture path cannot see egui pixels; IDENTICAL is the correct outcome; procedural proof = headless test + suite). Live-window verification pending.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-gutter20/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-status20 fixture status strips
+
+1. **Fixture Status Strips**: screenshot.rs renderer now paints per-pane strips (cursor position, format word, result counts) plus a 4-segment bottom legend (Differences/Same/Insert/Overview). Shot15 gutter/markers, shot18 chrome, shot19 typo rows intact. pxdiff vs baseline: 17873 of 576000 DIFFERENT, bbox (0,542)-(959,584) bottom-strip region, VERDICT DIFFERENT (independently re-verified).
+2. **Tests** (before -> after): autocompare-gui 1043 green (including status20_narrow720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-status20/**, TIMELINE.md.
