@@ -475,3 +475,9 @@
 1. **Toolbar & Filebar at 960px**: Toolbar button size from SPACE scale (SPACE_XL 24h, 96w floor, gaps SPACE_XS/SM, side SPACE_MD symmetric; 9 fit + 1 overflow at 960w), file-bar 21.2h from Small chrome line-height + symmetric XS pads, status strip 21.2h with symmetric XS vertical plus MD horizontal pads and 3 equal 320 segments.
 2. **Tests** (before → after): autocompare-gui 997 green (2 new headless tests); clippy 0 warnings on owned `app.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/app.rs`, `checks/gui-exq-chrome9/**`, `comparison/chrome-bar-960.json`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-home5 search plus indent
+
+1. **Home Search & Indent at 720px**: search field height from TypoRole chrome line-height 13.2, tree indent step 12 reuse, empty-state margins OUTER_MARGIN 12 / SECTION_GAP 8.
+2. **Tests** (before → after): autocompare-gui 997 green; clippy 0 home.rs diags; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home5/**`, `TIMELINE.md`.
