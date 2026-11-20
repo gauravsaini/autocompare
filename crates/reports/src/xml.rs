@@ -194,3 +194,35 @@ pub fn render_xml_with_children(input: &ReportInput, children: &[ChildReportAnch
     }
     builder.render()
 }
+
+/// Convenience function to render a linked report bundle (parent index + child reports) into XML.
+///
+/// Returns `(parent_xml, Vec<(child_filename, child_xml)>)`.
+pub fn render_xml_bundle(bundle: &crate::LinkedReportBundle) -> (String, Vec<(String, String)>) {
+    let mut child_anchors = Vec::with_capacity(bundle.children.len());
+    for child in &bundle.children {
+        let mut anchor = ChildReportAnchor::new(&child.title, &child.filename);
+        if let Some(ref st) = child.status {
+            anchor = anchor.with_status(st);
+        }
+        anchor = anchor.with_stats(child.input.stats.clone());
+        child_anchors.push(anchor);
+    }
+
+    let parent_xml = XmlReportBuilder::new(&bundle.parent_input)
+        .with_child_anchors(child_anchors)
+        .render();
+
+    let mut child_reports = Vec::with_capacity(bundle.children.len());
+    for child in &bundle.children {
+        let mut builder = XmlReportBuilder::new(&child.input)
+            .with_parent_anchor(&bundle.parent_title, &bundle.parent_filename);
+        if let Some(ref st) = child.status {
+            builder = builder.with_subtitle(format!("Status: {}", st));
+        }
+        let child_xml = builder.render();
+        child_reports.push((child.filename.clone(), child_xml));
+    }
+
+    (parent_xml, child_reports)
+}

@@ -1,0 +1,8 @@
+--- a/old/main.rs	2026-11-20 15:00:00 +0000
++++ b/new/main.rs	2026-11-20 15:10:00 +0000
+@@ -1,5 +1,6 @@
+ fn main() {
+-    println!("Hello, old world!");
++    println!("Hello, new world!");
+!    let version = "1.0.0";
+ }

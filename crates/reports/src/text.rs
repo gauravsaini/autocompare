@@ -202,3 +202,40 @@ pub fn render_text_with_children(input: &ReportInput, children: &[ChildReportAnc
     }
     builder.render()
 }
+
+/// Convenience function to render a linked report bundle (parent index + child reports) into plain text.
+///
+/// Returns `(parent_text, Vec<(child_filename, child_text)>)`.
+pub fn render_text_bundle(
+    bundle: &crate::LinkedReportBundle,
+    show_line_numbers: bool,
+) -> (String, Vec<(String, String)>) {
+    let mut child_anchors = Vec::with_capacity(bundle.children.len());
+    for child in &bundle.children {
+        let mut anchor = ChildReportAnchor::new(&child.title, &child.filename);
+        if let Some(ref st) = child.status {
+            anchor = anchor.with_status(st);
+        }
+        anchor = anchor.with_stats(child.input.stats.clone());
+        child_anchors.push(anchor);
+    }
+
+    let parent_text = TextReportBuilder::new(&bundle.parent_input)
+        .with_child_anchors(child_anchors)
+        .with_line_numbers(show_line_numbers)
+        .render();
+
+    let mut child_reports = Vec::with_capacity(bundle.children.len());
+    for child in &bundle.children {
+        let mut builder = TextReportBuilder::new(&child.input)
+            .with_parent_anchor(&bundle.parent_title, &bundle.parent_filename)
+            .with_line_numbers(show_line_numbers);
+        if let Some(ref st) = child.status {
+            builder = builder.with_subtitle(format!("Status: {}", st));
+        }
+        let child_text = builder.render();
+        child_reports.push((child.filename.clone(), child_text));
+    }
+
+    (parent_text, child_reports)
+}

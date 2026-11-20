@@ -482,6 +482,22 @@ struct SbsRow<'b> {
     right: SbsSide<'b>,
 }
 
+/// Change class for a side-by-side row: the first real (numbered, non-equal)
+/// side wins so pure insert/delete rows highlight as a whole.
+fn sbs_row_change_class(row: &SbsRow<'_>) -> &'static str {
+    for side in [&row.left, &row.right] {
+        if side.line_no.is_some() && side.change != LineChange::Unchanged {
+            return match side.change {
+                LineChange::Delete => "line-delete",
+                LineChange::Insert => "line-insert",
+                LineChange::Modify => "line-modify",
+                LineChange::Unchanged => "",
+            };
+        }
+    }
+    ""
+}
+
 fn pair_sbs_lines<'b>(lines: &'b [HunkLine]) -> Vec<SbsRow<'b>> {
     let mut rows = Vec::with_capacity(lines.len());
     let mut i = 0usize;
@@ -603,10 +619,17 @@ fn render_html_side_by_side_hunk(html: &mut String, hunk: &Hunk) {
 
     let rows = pair_sbs_lines(&hunk.lines);
     for row in rows {
-        html.push_str("          <tr class=\"diff-line sbs-row\">\n");
+        let row_cls = sbs_row_change_class(&row);
+        if row_cls.is_empty() {
+            html.push_str("          <tr class=\"diff-line sbs-row\">\n");
+        } else {
+            html.push_str("          <tr class=\"diff-line sbs-row ");
+            html.push_str(row_cls);
+            html.push_str("\">\n");
+        }
 
         // Left side
-        let left_cls = if row.left.line_no.is_none() && row.left.content.is_empty() {
+        let left_cls = if row.left.change == LineChange::Unchanged && row.left.line_no.is_none() {
             "sbs-empty"
         } else {
             match row.left.change {
@@ -641,7 +664,8 @@ fn render_html_side_by_side_hunk(html: &mut String, hunk: &Hunk) {
         html.push_str("</pre></td>\n");
 
         // Right side
-        let right_cls = if row.right.line_no.is_none() && row.right.content.is_empty() {
+        let right_cls = if row.right.change == LineChange::Unchanged && row.right.line_no.is_none()
+        {
             "sbs-empty"
         } else {
             match row.right.change {
@@ -836,7 +860,7 @@ const MONO_CSS: &str = r#"
     .diff-line td { padding: 1px 4px; }
     .line-no { width: 40px; text-align: right; color: var(--line-no-fg); user-select: none; }
     .line-marker { width: 16px; text-align: center; font-weight: bold; }
-    .line-content pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; }
+    .line-content pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; word-break: break-all; }
     .line-insert { font-weight: bold; }
     .line-delete { text-decoration: line-through; }
     .line-modify { font-style: italic; }

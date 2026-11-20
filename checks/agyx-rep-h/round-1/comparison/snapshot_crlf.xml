@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<diff-report xmlns="urn:autocompare:report:v1">
+  <title>crlf_whitespace.rs</title>
+  <stats additions="1" deletions="1" modifications="1" unchanged="2" total-changes="3" />
+  <hunks>
+    <hunk old-start="1" old-lines="5" new-start="1" new-lines="5" header="@@ -1,5 +1,5 @@">
+      <line change="unchanged" old-line="1" new-line="1">fn greet() {
+</line>
+      <line change="delete" old-line="2">	let msg = &quot;hello old&quot;;   
+</line>
+      <line change="insert" new-line="2">	let msg = &quot;hello new&quot;; 
+</line>
+      <line change="modify" old-line="3" new-line="3">    println!(&quot;{}&quot;, msg);
+</line>
+      <line change="unchanged" old-line="4" new-line="4">}
+</line>
+    </hunk>
+  </hunks>
+</diff-report>

@@ -1,9 +1,10 @@
 use autocompare_reports::{
     ChildReportAnchor, DiffStats, HtmlColorBuilder, HtmlLayout, HtmlMonoBuilder, HtmlReportBuilder,
-    HtmlTheme, Hunk, HunkLine, LinkedReportBundle, PatchReportBuilder, ReportFilter, ReportInput,
-    TextReportBuilder, XmlReportBuilder, render_context_patch, render_html, render_html_bundle,
-    render_html_color, render_html_mono, render_html_side_by_side, render_html_with_children,
-    render_patch, render_text, render_text_with_children, render_xml, render_xml_with_children,
+    HtmlTheme, Hunk, HunkLine, LineChange, LinkedReportBundle, PatchReportBuilder, ReportFilter,
+    ReportInput, TextReportBuilder, XmlReportBuilder, render_context_patch, render_html,
+    render_html_bundle, render_html_color, render_html_mono, render_html_side_by_side,
+    render_html_with_children, render_patch, render_text, render_text_with_children, render_xml,
+    render_xml_with_children,
 };
 
 fn make_fixture() -> (ReportInput, Vec<ChildReportAnchor>) {
@@ -564,4 +565,475 @@ fn test_generate_sample_artifacts_for_evidence() {
     // 8. Patch
     let patch = render_patch(&input);
     let _ = std::fs::write(dir.join("sample_unified.patch"), patch);
+}
+
+#[test]
+fn test_edge_crlf_and_whitespace_preservation() {
+    let hunks = vec![Hunk::new(
+        1,
+        5,
+        1,
+        5,
+        vec![
+            HunkLine::unchanged("fn greet() {\r\n", 1, 1),
+            HunkLine::delete("\tlet msg = \"hello old\";   \r\n", 2),
+            HunkLine::insert("\tlet msg = \"hello new\"; \r\n", 2),
+            HunkLine::modify("    println!(\"{}\", msg);\r\n", 3, 3),
+            HunkLine::unchanged("}\r\n", 4, 4),
+        ],
+    )];
+    let stats = DiffStats::new(1, 1, 1, 2);
+    let input = ReportInput::new("crlf_whitespace.rs", hunks, stats);
+
+    // 1. HTML Color & Mono
+    let html_color = HtmlReportBuilder::color(&input).render();
+    assert!(html_color.contains("\tlet msg = &quot;hello old&quot;;   \r\n"));
+    assert!(html_color.contains("\tlet msg = &quot;hello new&quot;; \r\n"));
+    assert!(html_color.contains("    println!(&quot;{}&quot;, msg);\r\n"));
+    assert!(html_color.contains("diff-table"));
+
+    let html_mono = HtmlReportBuilder::mono(&input).side_by_side().render();
+    assert!(html_mono.contains("\tlet msg = &quot;hello old&quot;;   \r\n"));
+    assert!(html_mono.contains("\tlet msg = &quot;hello new&quot;; \r\n"));
+
+    // 2. Plain Text
+    let txt = TextReportBuilder::new(&input)
+        .with_line_numbers(true)
+        .render();
+    // Line-numbered format is `<old> <new> <prefix> <content>`; trailing
+    // whitespace and CRLF inside content are preserved verbatim.
+    assert!(txt.contains("- \tlet msg = \"hello old\";   \r\n"));
+    assert!(txt.contains("+ \tlet msg = \"hello new\"; \r\n"));
+
+    // 3. XML
+    let xml = render_xml(&input);
+    assert!(xml.contains(
+        "<line change=\"delete\" old-line=\"2\">\tlet msg = &quot;hello old&quot;;   \r\n</line>"
+    ));
+    assert!(xml.contains(
+        "<line change=\"insert\" new-line=\"2\">\tlet msg = &quot;hello new&quot;; \r\n</line>"
+    ));
+
+    // 4. Unified & Context Patch
+    let patch = render_patch(&input);
+    assert!(patch.contains("-\tlet msg = \"hello old\";   \r\n"));
+    assert!(patch.contains("+\tlet msg = \"hello new\"; \r\n"));
+
+    let ctx_patch = render_context_patch(&input);
+    assert!(ctx_patch.contains("- \tlet msg = \"hello old\";   \r\n"));
+    assert!(ctx_patch.contains("+ \tlet msg = \"hello new\"; \r\n"));
+
+    // Snapshot artifact generation for round-1 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-1/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_crlf.html"), &html_color);
+        let _ = std::fs::write(dir.join("snapshot_crlf.txt"), &txt);
+        let _ = std::fs::write(dir.join("snapshot_crlf.xml"), &xml);
+        let _ = std::fs::write(dir.join("snapshot_crlf.patch"), &patch);
+    }
+}
+
+#[test]
+fn test_edge_pure_insertions_and_pure_deletions_sbs() {
+    // Pure Deletions
+    let del_hunks = vec![Hunk::new(
+        1,
+        3,
+        1,
+        0,
+        vec![
+            HunkLine::delete("first deleted line", 1),
+            HunkLine::delete("second deleted line", 2),
+            HunkLine::delete("third deleted line", 3),
+        ],
+    )];
+    let del_input = ReportInput::new("deleted.rs", del_hunks, DiffStats::new(0, 3, 0, 0));
+    let sbs_del = HtmlReportBuilder::color(&del_input).side_by_side().render();
+
+    assert!(sbs_del.contains("first deleted line"));
+    assert!(sbs_del.contains("line-delete"));
+    assert!(sbs_del.contains("sbs-empty"));
+
+    // Pure Insertions with blank line preservation
+    let ins_hunks = vec![Hunk::new(
+        1,
+        0,
+        1,
+        3,
+        vec![
+            HunkLine::insert("first inserted line", 1),
+            HunkLine::insert("", 2),
+            HunkLine::insert("third inserted line", 3),
+        ],
+    )];
+    let ins_input = ReportInput::new("inserted.rs", ins_hunks, DiffStats::new(3, 0, 0, 0));
+    let sbs_ins = HtmlReportBuilder::color(&ins_input).side_by_side().render();
+
+    assert!(sbs_ins.contains("first inserted line"));
+    assert!(sbs_ins.contains("third inserted line"));
+    assert!(sbs_ins.contains("line-insert"));
+    assert!(sbs_ins.contains("sbs-empty"));
+    assert!(sbs_ins.contains("diff-line sbs-row line-insert"));
+
+    // Snapshot artifact generation for round-2 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-2/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_pure_deletions_sbs.html"), &sbs_del);
+        let _ = std::fs::write(dir.join("snapshot_pure_insertions_sbs.html"), &sbs_ins);
+    }
+}
+
+#[test]
+fn test_edge_unicode_cjk_emoji_rtl_rendering() {
+    let title = "Unicode & Multilingual 🚀 Test <v2.0>";
+    let hunks = vec![Hunk::new(
+        1,
+        4,
+        1,
+        4,
+        vec![
+            HunkLine::unchanged("«Guillemets» and „German“ quotes", 1, 1),
+            HunkLine::delete("你好，旧世界！ — こんにちは旧世界", 2),
+            HunkLine::insert("你好，新世界！ 🚀 — こんにちは新世界 🎉", 2),
+            HunkLine::modify("مرحبا بالعالم <RTL> vs שלום עולם", 3, 3),
+        ],
+    )];
+    let stats = DiffStats::new(1, 1, 1, 1);
+    let input = ReportInput::new(title, hunks, stats);
+
+    let child = vec![ChildReportAnchor::new(
+        "International 🌏 Submodule",
+        "submodule_🌏.html",
+    )];
+
+    // 1. HTML
+    let html = HtmlReportBuilder::color(&input)
+        .with_child_anchors(child.clone())
+        .with_subtitle("CJK & RTL & Emojis")
+        .render();
+    assert!(html.contains("Unicode &amp; Multilingual 🚀 Test &lt;v2.0&gt;"));
+    assert!(html.contains("你好，新世界！ 🚀 — こんにちは新世界 🎉"));
+    assert!(html.contains("مرحبا بالعالم &lt;RTL&gt; vs שלום עולם"));
+    assert!(html.contains("International 🌏 Submodule"));
+
+    // 2. XML
+    let xml = XmlReportBuilder::new(&input)
+        .with_child_anchors(child)
+        .render();
+    assert!(xml.contains("<title>Unicode &amp; Multilingual 🚀 Test &lt;v2.0&gt;</title>"));
+    assert!(xml.contains("你好，旧世界！ — こんにちは旧世界"));
+    assert!(xml.contains("مرحبا بالعالم &lt;RTL&gt; vs שלום עולם"));
+
+    // 3. Text
+    let txt = render_text(&input);
+    assert!(txt.contains("DIFF REPORT: Unicode & Multilingual 🚀 Test <v2.0>"));
+    assert!(txt.contains("+ 你好，新世界！ 🚀 — こんにちは新世界 🎉"));
+
+    // 4. Patch
+    let patch = render_patch(&input);
+    assert!(patch.contains("-你好，旧世界！ — こんにちは旧世界"));
+    assert!(patch.contains("+你好，新世界！ 🚀 — こんにちは新世界 🎉"));
+
+    // Snapshot artifact generation for round-3 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-3/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_unicode.html"), &html);
+        let _ = std::fs::write(dir.join("snapshot_unicode.xml"), &xml);
+        let _ = std::fs::write(dir.join("snapshot_unicode.txt"), &txt);
+        let _ = std::fs::write(dir.join("snapshot_unicode.patch"), &patch);
+    }
+}
+
+#[test]
+fn test_edge_context_filter_boundaries() {
+    let lines = vec![
+        HunkLine::unchanged("line 1: context", 1, 1),
+        HunkLine::unchanged("line 2: context", 2, 2),
+        HunkLine::unchanged("line 3: context near diff", 3, 3),
+        HunkLine::delete("line 4: deleted", 4),
+        HunkLine::insert("line 4: inserted", 4),
+        HunkLine::unchanged("line 5: context near diff", 5, 5),
+        HunkLine::unchanged("line 6: isolated context gap", 6, 6),
+        HunkLine::unchanged("line 7: context near second diff", 7, 7),
+        HunkLine::modify("line 8: modified", 8, 8),
+        HunkLine::unchanged("line 9: trailing context", 9, 9),
+    ];
+    let hunks = vec![Hunk::new(1, 9, 1, 9, lines)];
+    let stats = DiffStats::new(1, 1, 1, 6);
+    let input = ReportInput::new("filtering.rs", hunks, stats);
+
+    // Context(0): diffs only
+    let ctx0 = input.filtered(ReportFilter::Context(0));
+    assert_eq!(ctx0.hunks.len(), 1);
+    if let Some(h) = ctx0.hunks.first() {
+        let changes: Vec<LineChange> = h.lines.iter().map(|l| l.change).collect();
+        assert_eq!(
+            changes,
+            vec![LineChange::Delete, LineChange::Insert, LineChange::Modify]
+        );
+    }
+
+    // Context(1): 1 line context before/after diffs
+    let ctx1 = input.filtered(ReportFilter::Context(1));
+    assert_eq!(ctx1.hunks.len(), 1);
+    if let Some(h) = ctx1.hunks.first() {
+        // lines included: 3, 4(del), 4(ins), 5, 7, 8(mod), 9 => total 7 lines
+        assert_eq!(h.lines.len(), 7);
+        assert!(
+            h.lines
+                .iter()
+                .any(|l| l.content == "line 3: context near diff")
+        );
+        assert!(
+            h.lines
+                .iter()
+                .any(|l| l.content == "line 5: context near diff")
+        );
+        assert!(
+            h.lines
+                .iter()
+                .any(|l| l.content == "line 7: context near second diff")
+        );
+        assert!(
+            h.lines
+                .iter()
+                .any(|l| l.content == "line 9: trailing context")
+        );
+        // lines 1, 2, 6 should NOT be included
+        assert!(!h.lines.iter().any(|l| l.content == "line 1: context"));
+        assert!(!h.lines.iter().any(|l| l.content == "line 2: context"));
+        assert!(
+            !h.lines
+                .iter()
+                .any(|l| l.content == "line 6: isolated context gap")
+        );
+    }
+
+    // All: all 10 lines
+    let all = input.filtered(ReportFilter::All);
+    if let Some(h) = all.hunks.first() {
+        assert_eq!(h.lines.len(), 10);
+    }
+
+    // Render HTML & Text with Context(1)
+    let html_ctx1 = HtmlReportBuilder::color(&input)
+        .with_filter(ReportFilter::Context(1))
+        .render();
+    assert!(html_ctx1.contains("line 3: context near diff"));
+    assert!(!html_ctx1.contains("line 6: isolated context gap"));
+
+    let txt_ctx1 = TextReportBuilder::new(&input)
+        .with_filter(ReportFilter::Context(1))
+        .render();
+    assert!(txt_ctx1.contains("line 3: context near diff"));
+    assert!(!txt_ctx1.contains("line 6: isolated context gap"));
+
+    // Snapshot artifact generation for round-4 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-4/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_context_filtered.html"), &html_ctx1);
+        let _ = std::fs::write(dir.join("snapshot_context_filtered.txt"), &txt_ctx1);
+    }
+}
+
+#[test]
+fn test_edge_patch_builder_timestamps() {
+    let (input, _) = make_fixture();
+
+    // Unified format with timestamps
+    let unified_ts = PatchReportBuilder::new(&input)
+        .with_paths("old/main.rs", "new/main.rs")
+        .with_timestamps("2026-11-20 15:00:00 +0000", "2026-11-20 15:10:00 +0000")
+        .unified()
+        .render();
+
+    assert!(unified_ts.starts_with(
+        "--- a/old/main.rs\t2026-11-20 15:00:00 +0000\n+++ b/new/main.rs\t2026-11-20 15:10:00 +0000\n"
+    ));
+    assert!(unified_ts.contains("@@ -1,5 +1,6 @@\n"));
+
+    // Context format with timestamps
+    let context_ts = PatchReportBuilder::new(&input)
+        .with_paths("old/main.rs", "new/main.rs")
+        .with_old_timestamp("2026-11-20 15:00:00 +0000")
+        .with_new_timestamp("2026-11-20 15:10:00 +0000")
+        .context()
+        .render();
+
+    assert!(context_ts.starts_with(
+        "*** old/main.rs\t2026-11-20 15:00:00 +0000\n--- new/main.rs\t2026-11-20 15:10:00 +0000\n"
+    ));
+    assert!(context_ts.contains("***************\n"));
+
+    // Backwards compatibility: default without timestamps has no tab or timestamp
+    let default_unified = PatchReportBuilder::new(&input)
+        .with_paths("old/main.rs", "new/main.rs")
+        .unified()
+        .render();
+    assert!(default_unified.starts_with("--- a/old/main.rs\n+++ b/new/main.rs\n"));
+
+    // Snapshot artifact generation for round-5 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-5/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_unified_ts.patch"), &unified_ts);
+        let _ = std::fs::write(dir.join("snapshot_context_ts.patch"), &context_ts);
+    }
+}
+
+#[test]
+fn test_edge_multiformat_bundles_parity() {
+    let (parent_input, _) = make_fixture();
+
+    let child1_input = ReportInput::new(
+        "src/modified.rs",
+        vec![Hunk::new(
+            1,
+            1,
+            1,
+            1,
+            vec![HunkLine::modify("mod line", 1, 1)],
+        )],
+        DiffStats::new(12, 3, 2, 200),
+    );
+    let child2_input = ReportInput::new(
+        "src/deleted.rs",
+        vec![Hunk::new(1, 1, 1, 0, vec![HunkLine::delete("del line", 1)])],
+        DiffStats::new(0, 50, 0, 0),
+    );
+    let child3_input = ReportInput::new(
+        "src/added.rs",
+        vec![Hunk::new(1, 0, 1, 1, vec![HunkLine::insert("add line", 1)])],
+        DiffStats::new(40, 0, 0, 0),
+    );
+    let child4_input = ReportInput::new(
+        "src/same.rs",
+        vec![Hunk::new(
+            1,
+            1,
+            1,
+            1,
+            vec![HunkLine::unchanged("same line", 1, 1)],
+        )],
+        DiffStats::new(0, 0, 0, 100),
+    );
+
+    let bundle = LinkedReportBundle::new("Project Compare", "index.ext", parent_input)
+        .with_child(
+            "src/modified.rs",
+            "modified.ext",
+            Some("Modified".to_string()),
+            child1_input,
+        )
+        .with_child(
+            "src/deleted.rs",
+            "deleted.ext",
+            Some("Left Only".to_string()),
+            child2_input,
+        )
+        .with_child(
+            "src/added.rs",
+            "added.ext",
+            Some("Right Only".to_string()),
+            child3_input,
+        )
+        .with_child(
+            "src/same.rs",
+            "same.ext",
+            Some("Identical".to_string()),
+            child4_input,
+        );
+
+    // 1. HTML Bundle
+    let (parent_html, child_htmls) =
+        render_html_bundle(&bundle, HtmlTheme::Color, HtmlLayout::SideBySide);
+    assert_eq!(child_htmls.len(), 4);
+    assert!(parent_html.contains("src/modified.rs"));
+    assert!(parent_html.contains("src/deleted.rs"));
+    assert!(parent_html.contains("src/added.rs"));
+    assert!(parent_html.contains("src/same.rs"));
+    assert!(parent_html.contains("<span class=\"child-status-badge\">Modified</span>"));
+    assert!(parent_html.contains("<span class=\"child-status-badge\">Left Only</span>"));
+    assert!(parent_html.contains("<span class=\"child-status-badge\">Right Only</span>"));
+    assert!(parent_html.contains("<span class=\"child-status-badge\">Identical</span>"));
+
+    // Verify child back-link in HTML
+    if let Some((filename, html)) = child_htmls.first() {
+        assert_eq!(filename, "modified.ext");
+        assert!(html.contains(
+            "<a class=\"parent-report-link\" href=\"index.ext\">&larr; Back to Parent Report: Project Compare</a>"
+        ));
+        assert!(html.contains("Status: Modified"));
+    }
+
+    // 2. Text Bundle
+    let (parent_txt, child_txts) = autocompare_reports::text::render_text_bundle(&bundle, true);
+    assert_eq!(child_txts.len(), 4);
+    assert!(parent_txt.contains("DIFF REPORT: src/main.rs"));
+    assert!(parent_txt.contains("LINKED CHILD REPORTS:"));
+    assert!(parent_txt.contains("* src/modified.rs -> modified.ext"));
+    assert!(parent_txt.contains("* src/deleted.rs -> deleted.ext"));
+    assert!(parent_txt.contains("* src/added.rs -> added.ext"));
+    assert!(parent_txt.contains("* src/same.rs -> same.ext"));
+
+    if let Some((filename, txt)) = child_txts.first() {
+        assert_eq!(filename, "modified.ext");
+        assert!(txt.contains("PARENT REPORT: Project Compare (index.ext)"));
+        assert!(txt.contains("Subtitle: Status: Modified"));
+    }
+
+    // 3. XML Bundle
+    let (parent_xml, child_xmls) = autocompare_reports::xml::render_xml_bundle(&bundle);
+    assert_eq!(child_xmls.len(), 4);
+    assert!(parent_xml.contains("<child-reports>"));
+    // Bundle anchors carry status + stats, so the renderer emits the rich form.
+    assert!(parent_xml.contains("<child-report href=\"modified.ext\""));
+    assert!(parent_xml.contains(">src/modified.rs</child-report>"));
+    assert!(parent_xml.contains("status=\"Modified\""));
+    assert!(parent_xml.contains("<child-report href=\"deleted.ext\""));
+    assert!(parent_xml.contains(">src/deleted.rs</child-report>"));
+    assert!(parent_xml.contains("status=\"Left Only\""));
+    assert!(parent_xml.contains("<child-report href=\"added.ext\""));
+    assert!(parent_xml.contains(">src/added.rs</child-report>"));
+    assert!(parent_xml.contains("status=\"Right Only\""));
+    assert!(parent_xml.contains("<child-report href=\"same.ext\""));
+    assert!(parent_xml.contains(">src/same.rs</child-report>"));
+    assert!(parent_xml.contains("status=\"Identical\""));
+
+    if let Some((filename, xml)) = child_xmls.first() {
+        assert_eq!(filename, "modified.ext");
+        assert!(xml.contains("<parent-report href=\"index.ext\">Project Compare</parent-report>"));
+        assert!(xml.contains("<subtitle>Status: Modified</subtitle>"));
+    }
+
+    // Snapshot artifact generation for round-6 evidence
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("checks/agyx-rep-h/round-6/comparison"));
+    if let Some(dir) = out_dir {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("snapshot_bundle_parent.html"), &parent_html);
+        let _ = std::fs::write(dir.join("snapshot_bundle_parent.txt"), &parent_txt);
+        let _ = std::fs::write(dir.join("snapshot_bundle_parent.xml"), &parent_xml);
+    }
 }

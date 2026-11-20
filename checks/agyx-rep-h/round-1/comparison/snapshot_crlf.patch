@@ -1,0 +1,13 @@
+--- a/crlf_whitespace.rs
++++ b/crlf_whitespace.rs
+@@ -1,5 +1,5 @@
+ fn greet() {
+
+-	let msg = "hello old";   
+
++	let msg = "hello new"; 
+
+!    println!("{}", msg);
+
+ }
+

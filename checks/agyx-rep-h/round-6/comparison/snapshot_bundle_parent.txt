@@ -1,0 +1,23 @@
+================================================================================
+DIFF REPORT: src/main.rs
+================================================================================
+SUMMARY:
+  Additions:     1
+  Deletions:     1
+  Modifications: 1
+  Unchanged:     2
+  Total changes: 3
+--------------------------------------------------------------------------------
+LINKED CHILD REPORTS:
+  * src/modified.rs -> modified.ext [Modified] (+12, -3, ~2)
+  * src/deleted.rs -> deleted.ext [Left Only] (+0, -50, ~0)
+  * src/added.rs -> added.ext [Right Only] (+40, -0, ~0)
+  * src/same.rs -> same.ext [Identical] (+0, -0, ~0)
+--------------------------------------------------------------------------------
+@@ -1,5 +1,6 @@
+   1    1   fn main() {
+   2      -     println!("Hello, old world!");
+        2 +     println!("Hello, new world!");
+   3    3 !     let version = "1.0.0";
+   4    4   }
+================================================================================

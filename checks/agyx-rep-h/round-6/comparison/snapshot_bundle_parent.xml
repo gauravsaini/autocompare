@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<diff-report xmlns="urn:autocompare:report:v1">
+  <title>src/main.rs</title>
+  <stats additions="1" deletions="1" modifications="1" unchanged="2" total-changes="3" />
+  <child-reports>
+    <child-report href="modified.ext" status="Modified" additions="12" deletions="3" modifications="2">src/modified.rs</child-report>
+    <child-report href="deleted.ext" status="Left Only" additions="0" deletions="50" modifications="0">src/deleted.rs</child-report>
+    <child-report href="added.ext" status="Right Only" additions="40" deletions="0" modifications="0">src/added.rs</child-report>
+    <child-report href="same.ext" status="Identical" additions="0" deletions="0" modifications="0">src/same.rs</child-report>
+  </child-reports>
+  <hunks>
+    <hunk old-start="1" old-lines="5" new-start="1" new-lines="6" header="@@ -1,5 +1,6 @@">
+      <line change="unchanged" old-line="1" new-line="1">fn main() {</line>
+      <line change="delete" old-line="2">    println!(&quot;Hello, old world!&quot;);</line>
+      <line change="insert" new-line="2">    println!(&quot;Hello, new world!&quot;);</line>
+      <line change="modify" old-line="3" new-line="3">    let version = &quot;1.0.0&quot;;</line>
+      <line change="unchanged" old-line="4" new-line="4">}</line>
+    </hunk>
+  </hunks>
+</diff-report>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<diff-report xmlns="urn:autocompare:report:v1">
+  <title>Unicode &amp; Multilingual 🚀 Test &lt;v2.0&gt;</title>
+  <stats additions="1" deletions="1" modifications="1" unchanged="1" total-changes="3" />
+  <child-reports>
+    <child-report href="submodule_🌏.html">International 🌏 Submodule</child-report>
+  </child-reports>
+  <hunks>
+    <hunk old-start="1" old-lines="4" new-start="1" new-lines="4" header="@@ -1,4 +1,4 @@">
+      <line change="unchanged" old-line="1" new-line="1">«Guillemets» and „German“ quotes</line>
+      <line change="delete" old-line="2">你好，旧世界！ — こんにちは旧世界</line>
+      <line change="insert" new-line="2">你好，新世界！ 🚀 — こんにちは新世界 🎉</line>
+      <line change="modify" old-line="3" new-line="3">مرحبا بالعالم &lt;RTL&gt; vs שלום עולם</line>
+    </hunk>
+  </hunks>
+</diff-report>

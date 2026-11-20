@@ -18,6 +18,8 @@ pub struct PatchReportBuilder<'a> {
     input: &'a ReportInput,
     old_path: Option<String>,
     new_path: Option<String>,
+    old_timestamp: Option<String>,
+    new_timestamp: Option<String>,
     format: PatchFormat,
     filter: ReportFilter,
 }
@@ -29,6 +31,8 @@ impl<'a> PatchReportBuilder<'a> {
             input,
             old_path: None,
             new_path: None,
+            old_timestamp: None,
+            new_timestamp: None,
             format: PatchFormat::Unified,
             filter: ReportFilter::All,
         }
@@ -50,6 +54,29 @@ impl<'a> PatchReportBuilder<'a> {
     /// Sets the new file path for the patch header.
     pub fn with_new_path(mut self, new_path: impl Into<String>) -> Self {
         self.new_path = Some(new_path.into());
+        self
+    }
+
+    /// Sets the old and new timestamps for the patch header.
+    pub fn with_timestamps(
+        mut self,
+        old_timestamp: impl Into<String>,
+        new_timestamp: impl Into<String>,
+    ) -> Self {
+        self.old_timestamp = Some(old_timestamp.into());
+        self.new_timestamp = Some(new_timestamp.into());
+        self
+    }
+
+    /// Sets the old timestamp for the patch header.
+    pub fn with_old_timestamp(mut self, old_timestamp: impl Into<String>) -> Self {
+        self.old_timestamp = Some(old_timestamp.into());
+        self
+    }
+
+    /// Sets the new timestamp for the patch header.
+    pub fn with_new_timestamp(mut self, new_timestamp: impl Into<String>) -> Self {
+        self.new_timestamp = Some(new_timestamp.into());
         self
     }
 
@@ -82,33 +109,59 @@ impl<'a> PatchReportBuilder<'a> {
 
     /// Renders the patch string.
     pub fn render(&self) -> String {
-        let old_p = self
-            .old_path
-            .as_deref()
-            .unwrap_or(self.input.title.as_str());
-        let new_p = self
-            .new_path
-            .as_deref()
-            .unwrap_or(self.input.title.as_str());
+        let old_p = match self.old_path.as_deref() {
+            Some(p) => p,
+            None => self.input.title.as_str(),
+        };
+        let new_p = match self.new_path.as_deref() {
+            Some(p) => p,
+            None => self.input.title.as_str(),
+        };
 
         let effective_input = self.input.filtered(self.filter);
 
         match self.format {
-            PatchFormat::Unified => render_unified(&effective_input, old_p, new_p),
-            PatchFormat::Context => render_context(&effective_input, old_p, new_p),
+            PatchFormat::Unified => render_unified(
+                &effective_input,
+                old_p,
+                new_p,
+                self.old_timestamp.as_deref(),
+                self.new_timestamp.as_deref(),
+            ),
+            PatchFormat::Context => render_context(
+                &effective_input,
+                old_p,
+                new_p,
+                self.old_timestamp.as_deref(),
+                self.new_timestamp.as_deref(),
+            ),
         }
     }
 }
 
-fn render_unified(input: &ReportInput, old_p: &str, new_p: &str) -> String {
+fn render_unified(
+    input: &ReportInput,
+    old_p: &str,
+    new_p: &str,
+    old_ts: Option<&str>,
+    new_ts: Option<&str>,
+) -> String {
     let mut out = String::with_capacity(2048);
 
     out.push_str("--- a/");
     out.push_str(old_p);
+    if let Some(ts) = old_ts {
+        out.push('\t');
+        out.push_str(ts);
+    }
     out.push('\n');
 
     out.push_str("+++ b/");
     out.push_str(new_p);
+    if let Some(ts) = new_ts {
+        out.push('\t');
+        out.push_str(ts);
+    }
     out.push('\n');
 
     for hunk in &input.hunks {
@@ -144,15 +197,29 @@ fn render_unified(input: &ReportInput, old_p: &str, new_p: &str) -> String {
     out
 }
 
-fn render_context(input: &ReportInput, old_p: &str, new_p: &str) -> String {
+fn render_context(
+    input: &ReportInput,
+    old_p: &str,
+    new_p: &str,
+    old_ts: Option<&str>,
+    new_ts: Option<&str>,
+) -> String {
     let mut out = String::with_capacity(2048);
 
     out.push_str("*** ");
     out.push_str(old_p);
+    if let Some(ts) = old_ts {
+        out.push('\t');
+        out.push_str(ts);
+    }
     out.push('\n');
 
     out.push_str("--- ");
     out.push_str(new_p);
+    if let Some(ts) = new_ts {
+        out.push('\t');
+        out.push_str(ts);
+    }
     out.push('\n');
 
     for hunk in &input.hunks {

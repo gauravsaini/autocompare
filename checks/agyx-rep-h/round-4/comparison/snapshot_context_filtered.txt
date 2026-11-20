@@ -1,0 +1,19 @@
+================================================================================
+DIFF REPORT: filtering.rs
+================================================================================
+SUMMARY:
+  Additions:     1
+  Deletions:     1
+  Modifications: 1
+  Unchanged:     6
+  Total changes: 3
+--------------------------------------------------------------------------------
+@@ -1,9 +1,9 @@
+  line 3: context near diff
+- line 4: deleted
++ line 4: inserted
+  line 5: context near diff
+  line 7: context near second diff
+! line 8: modified
+  line 9: trailing context
+================================================================================
