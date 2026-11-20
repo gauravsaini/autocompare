@@ -1,0 +1,3 @@
+/very/long/nested/project/path/that/goes/on/and/on/merge-output/2026-11-20/final-result-with-a-long-name.txt
+same prefix line
+old value 123

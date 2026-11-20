@@ -1,0 +1,4 @@
+edge fixture 3: merge-apply out-path row at 720 fallback (geometry: Dry-run checkbox + long out-path + Apply button; field = avail - 164 chrome, MIN_HALF floor; Apply never clips)
+left: checks/ac-loop/round-exq4/comparison/edge-merge-apply-left.txt
+right: checks/ac-loop/round-exq4/comparison/edge-merge-apply-right.txt
+expected: at 720 fallback the out-path field shrinks to floor and scrolls internally, Apply button fully visible, zero clipped text; typography unchanged (Mono 12 badge/summary via TypoRole single-source)

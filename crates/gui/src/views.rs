@@ -61,7 +61,24 @@ pub const TAB_BOTTOM_GAP: f32 = 6.0;
 pub const TREE_INDENT: f32 = crate::theme::GEO_TREE_INDENT_STEP;
 pub const CARD_W: f32 = 240.0;
 pub const CARD_H: f32 = 75.0;
-const BROWSE_RESERVE: f32 = 75.0;
+/// Merge-apply Dry-run checkbox width (px): egui checkbox box +
+/// "Dry-run" label at body scale plus intra spacing. Conservative
+/// upper bound: over-reserve sirf out-path field ghatata hai (field
+/// `TextEdit` andar scroll karta hai, kabhi clip nahi hota), jabki
+/// under-reserve Apply button ko clip karta hai. Pure token.
+pub const MERGE_APPLY_CHECK_W: f32 = 88.0;
+/// Merge-apply Apply button width (px): auto-size "Apply" pill at body
+/// scale plus inter gaps ka conservative bound. Pure token.
+pub const MERGE_APPLY_BUTTON_W: f32 = 64.0;
+
+/// Merge-apply row chrome width (px): Dry-run checkbox plus Apply
+/// button plus three [`TIGHT_GAP`] item gaps. The paint row subtracts
+/// this from `avail` so the out-path field never clips the Apply button
+/// at the 720px fallback (the legacy 75px reserve under-counted real
+/// checkbox-plus-button chrome near 140px). Pure; unit-tested.
+pub fn merge_apply_chrome_width() -> f32 {
+    MERGE_APPLY_CHECK_W + MERGE_APPLY_BUTTON_W + 3.0 * TIGHT_GAP
+}
 const MIN_HALF: f32 = 180.0;
 const MIN_THIRD: f32 = 130.0;
 
@@ -2350,7 +2367,7 @@ pub fn paint_merge_apply(
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
         ui.checkbox(dry_run, "Dry-run");
-        let field_w = (ui.available_width() - BROWSE_RESERVE).max(MIN_HALF);
+        let field_w = (ui.available_width() - merge_apply_chrome_width()).max(MIN_HALF);
         ui.add(
             TextEdit::singleline(out_path)
                 .desired_width(field_w)
@@ -5272,12 +5289,12 @@ pub fn sync_summary_text_size() -> f32 {
     crate::tree::sync_summary_typo().size
 }
 
-/// Badge cell ka `RichText`: mono + model size, delete par strong.
-/// Colors frozen (koi `.color()` nahi). Paint-only.
+/// Badge cell ka `RichText`: [`TypoRole::Mono`] single-source (12 mono),
+/// delete par strong. Sizes/family legacy `.monospace().size()` jaisi hi
+/// hain (model typo 12 mono hai), sirf source ek hua. Colors frozen
+/// (koi `.color()` nahi). Paint-only.
 pub fn sync_badge_rich(badge: &str, direction: crate::tree::SyncRowDirection) -> RichText {
-    let styled = RichText::new(badge)
-        .monospace()
-        .size(sync_badge_text_size(direction));
+    let styled = TypoRole::Mono.rich(badge);
     if sync_badge_is_strong(direction) {
         styled.strong()
     } else {
@@ -5285,13 +5302,11 @@ pub fn sync_badge_rich(badge: &str, direction: crate::tree::SyncRowDirection) ->
     }
 }
 
-/// Summary line ka `RichText`: mono caption, weak tone (App preview
-/// precedent: `monospace().weak()`). Paint-only.
+/// Summary line ka `RichText`: [`TypoRole::Mono`] single-source (12 mono),
+/// weak tone (App preview precedent: `monospace().weak()`). Sizes/family
+/// legacy jaisi hi hain, sirf source ek hua. Paint-only.
 pub fn sync_summary_rich(line: &str) -> RichText {
-    RichText::new(line)
-        .monospace()
-        .size(sync_summary_text_size())
-        .weak()
+    TypoRole::Mono.rich(line).weak()
 }
 
 /// Row selected hai ya nahi: model set ka read-only probe
@@ -7708,6 +7723,14 @@ mod tests {
     }
 
     #[test]
+    fn merge_apply_chrome_covers_checkbox_and_button() {
+        // 88 checkbox + 64 button + 3x4 gaps = 164 (legacy 75 under tha).
+        assert_eq!(merge_apply_chrome_width(), 164.0);
+        // 720 fallback par field floor se upar, Apply kabhi clip nahi.
+        assert!((720.0 - merge_apply_chrome_width()) >= MIN_HALF);
+    }
+
+    #[test]
     fn path_meta_role_is_caption_reuse() {
         assert_eq!(path_meta_role(), TypoRole::caption());
         assert_eq!(path_meta_role(), crate::theme::TypoRole::Small);
@@ -8480,6 +8503,22 @@ mod tests {
             assert_eq!(sync_badge_text_size(dir), crate::tree::FOLDER_SIDE_SIZE);
         }
         assert_eq!(sync_summary_text_size(), crate::tree::FOLDER_SIDE_SIZE);
+    }
+
+    #[test]
+    fn sync_rich_routes_through_mono_role() {
+        // Single-source: badge/summary 12 mono (TypoRole::Mono scale),
+        // delete strong, summary weak. Sizes legacy jaisi hi.
+        use crate::tree::SyncRowDirection;
+        let plain = format!("{:?}", sync_badge_rich("S", SyncRowDirection::CopyToRight));
+        assert!(plain.contains("12.0"));
+        assert!(plain.contains("strong: false"));
+        let del = format!("{:?}", sync_badge_rich("X", SyncRowDirection::DeleteRight));
+        assert!(del.contains("12.0"));
+        assert!(del.contains("strong: true"));
+        let summary = format!("{:?}", sync_summary_rich("3 to copy"));
+        assert!(summary.contains("12.0"));
+        assert!(summary.contains("weak: true"));
     }
 
     #[test]
