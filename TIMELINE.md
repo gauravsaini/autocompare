@@ -451,3 +451,9 @@
 
 1. **Localrun Refresh after hex7/table7/tree8**: all 10 after-*.png recaptured headless 960x600, cli+gui tarballs repacked + VERSION re-pinned, REPORT3.md with geometry/typo deltas vs reference in own words.
 2. **Files changed**: `checks/localrun/REPORT3.md`, `dist/VERSION`, `dist/*.tar.gz`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-text11 gutter plus markers
+
+1. **Text Gutter & Markers at 960px**: center gutter 48 to 20px via SPACE_LG+XS, single => marker 16px symmetric inset changed-only, row height Mono lock 17.6, per-pane status 15.2, 462+462+20+16 math.
+2. **Tests** (before → after): autocompare-gui 987 green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0 (1 panic test-only); exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text11/**`, `TIMELINE.md`.
