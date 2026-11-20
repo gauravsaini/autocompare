@@ -71,5 +71,10 @@
     "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)",
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
     "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace"
-  }
+  },
+  "SWARM-EXQ4": "launched 18:41 agyx /swarm exquisite gui geo-typo OWNS gui+round-exq4, warming 0B (parity/sessrep/exq3 alive, cap 4)",
+  "SWARM-LOCAL4": "launched 18:41 opencode default-model localrun-4 OWNS checks/early-feedback-4 only, no edits",
+  "SWARM-BIN3": "launched 18:41 opencode default-model binary-3 OWNS dist+checks/binary-orch-3 only",
+  "ORCH-BACKOFF": "exponential 30->60->120->240->480 cap, reset on output/commit, no fixed 8s",
+  "ORCH-BC": "BCompare pid 23316 running, outside-observe only, clean-room"
 }
