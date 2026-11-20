@@ -3491,6 +3491,16 @@ fn paint_text_body(
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
+                                            if text_center_gutter_band_fill(is_selected) {
+                                                let band = egui::Rect::from_min_size(
+                                                    ui.min_rect().min,
+                                                    egui::vec2(
+                                                        text_center_gutter_width(),
+                                                        row_height,
+                                                    ),
+                                                );
+                                                ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                            }
                                             if text_center_hunk_head(&model.rows, orig) {
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = TIGHT_GAP;
@@ -3516,13 +3526,17 @@ fn paint_text_body(
                                                     }
                                                 });
                                             } else {
-                                                let (_, resp) = ui.allocate_exact_size(
+                                                let (g_rect, resp) = ui.allocate_exact_size(
                                                     egui::vec2(
                                                         text_center_gutter_width(),
                                                         row_height,
                                                     ),
                                                     egui::Sense::click(),
                                                 );
+                                                if text_center_gutter_band_fill(is_selected) {
+                                                    ui.painter()
+                                                        .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                }
                                                 if resp.clicked() {
                                                     select_action = Some(orig);
                                                 }
@@ -3544,10 +3558,13 @@ fn paint_text_body(
                                         ui.label(left_job);
                                         ui.vertical(|ui| {
                                             ui.set_width(text_center_gutter_width());
-                                            ui.allocate_exact_size(
+                                            let (g_rect, _) = ui.allocate_exact_size(
                                                 egui::vec2(text_center_gutter_width(), row_height),
                                                 egui::Sense::hover(),
                                             );
+                                            if text_center_gutter_band_fill(is_selected) {
+                                                ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                            }
                                         });
                                         ui.label(right_job);
                                         if want_scroll && sub == scroll_sub {
@@ -3715,6 +3732,13 @@ fn paint_text_body(
 
                                 ui.vertical(|ui| {
                                     ui.set_width(text_center_gutter_width());
+                                    if text_center_gutter_band_fill(is_selected) {
+                                        let band = egui::Rect::from_min_size(
+                                            ui.min_rect().min,
+                                            egui::vec2(text_center_gutter_width(), row_height),
+                                        );
+                                        ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                    }
                                     if text_center_hunk_head(&model.rows, orig) {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = TIGHT_GAP;
@@ -3740,10 +3764,13 @@ fn paint_text_body(
                                             }
                                         });
                                     } else {
-                                        let (_, resp) = ui.allocate_exact_size(
+                                        let (g_rect, resp) = ui.allocate_exact_size(
                                             egui::vec2(text_center_gutter_width(), row_height),
                                             egui::Sense::click(),
                                         );
+                                        if text_center_gutter_band_fill(is_selected) {
+                                            ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                        }
                                         if resp.clicked() {
                                             select_action = Some(orig);
                                         }
@@ -4507,6 +4534,16 @@ pub fn text_trailing_blank_rows(panes_h: f32, row_h: f32, visible_len: usize) ->
 /// padhe, logic ek jagah rahe. Pure; unit-tested.
 pub fn text_center_hunk_marker(kind: TextRowKind) -> bool {
     text_gutter_has_copy(kind)
+}
+
+/// Center-gutter selection band: selected row par gutter bhi selected
+/// panes jaisi patti dikhata hai taaki band beech me na toote (BC
+/// continuous selection precedent). Head/blank dono par same gate —
+/// copy arrows band ke upar rehte hain, blank click-to-select band ke
+/// upar. Caller existing [`CHANGED_BG`] reuse karta hai (koi naya
+/// hue/token nahi). Pure; unit-tested.
+pub fn text_center_gutter_band_fill(selected: bool) -> bool {
+    selected
 }
 
 /// Segmented pane status: selected row ke per-side line numbers —
@@ -7349,6 +7386,15 @@ mod tests {
         assert!(text_center_hunk_head(&rows, 3));
         assert!(!text_center_hunk_head(&rows, 4));
         assert!(!text_center_hunk_head(&[], 0));
+    }
+
+    #[test]
+    fn text_center_gutter_band_fills_on_selection_only() {
+        // VIEWFILL7: selected row par center gutter band bhi bharta hai
+        // (head/blank/continuation sab — band beech me na toote), bina
+        // selection kabhi nahi. Copy-gate se independent hai.
+        assert!(text_center_gutter_band_fill(true));
+        assert!(!text_center_gutter_band_fill(false));
     }
 
     #[test]
