@@ -8,6 +8,7 @@ pub struct XmlReportBuilder<'a> {
     input: &'a ReportInput,
     child_anchors: Vec<ChildReportAnchor>,
     parent_anchor: Option<ParentReportAnchor>,
+    breadcrumbs: Vec<ParentReportAnchor>,
     subtitle: Option<String>,
     filter: ReportFilter,
 }
@@ -19,6 +20,7 @@ impl<'a> XmlReportBuilder<'a> {
             input,
             child_anchors: Vec::new(),
             parent_anchor: None,
+            breadcrumbs: Vec::new(),
             subtitle: None,
             filter: ReportFilter::All,
         }
@@ -39,6 +41,18 @@ impl<'a> XmlReportBuilder<'a> {
     /// Sets a parent report anchor for back-link navigation.
     pub fn with_parent_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
         self.parent_anchor = Some(ParentReportAnchor::new(title, href));
+        self
+    }
+
+    /// Appends a breadcrumb link to the parent navigation trail.
+    pub fn with_breadcrumb(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.breadcrumbs.push(ParentReportAnchor::new(title, href));
+        self
+    }
+
+    /// Appends multiple breadcrumb links to the parent navigation trail.
+    pub fn with_breadcrumbs(mut self, crumbs: Vec<ParentReportAnchor>) -> Self {
+        self.breadcrumbs.extend(crumbs);
         self
     }
 
@@ -70,7 +84,17 @@ impl<'a> XmlReportBuilder<'a> {
         out.push_str(&escape_xml(&self.input.title));
         out.push_str("</title>\n");
 
-        if let Some(ref parent) = self.parent_anchor {
+        if !self.breadcrumbs.is_empty() {
+            out.push_str("  <breadcrumbs>\n");
+            for crumb in &self.breadcrumbs {
+                out.push_str("    <breadcrumb href=\"");
+                out.push_str(&escape_xml(&crumb.href));
+                out.push_str("\">");
+                out.push_str(&escape_xml(&crumb.title));
+                out.push_str("</breadcrumb>\n");
+            }
+            out.push_str("  </breadcrumbs>\n");
+        } else if let Some(ref parent) = self.parent_anchor {
             out.push_str("  <parent-report href=\"");
             out.push_str(&escape_xml(&parent.href));
             out.push_str("\">");

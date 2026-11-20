@@ -1,10 +1,11 @@
 use autocompare_reports::{
     ChildReportAnchor, DiffStats, HtmlColorBuilder, HtmlLayout, HtmlMonoBuilder, HtmlReportBuilder,
-    HtmlTheme, Hunk, HunkLine, LineChange, LinkedReportBundle, PatchReportBuilder, ReportFilter,
-    ReportInput, TextReportBuilder, XmlReportBuilder, render_context_patch, render_html,
-    render_html_bundle, render_html_color, render_html_mono, render_html_side_by_side,
-    render_html_with_children, render_patch, render_text, render_text_with_children, render_xml,
-    render_xml_with_children,
+    HtmlTheme, Hunk, HunkLine, LineChange, LinkedReportBundle, ParentReportAnchor, PatchFormat,
+    PatchReportBuilder, ReportFilter, ReportInput, TextReportBuilder, XmlReportBuilder,
+    render_context_patch, render_html, render_html_bundle, render_html_color, render_html_mono,
+    render_html_side_by_side, render_html_with_children, render_patch, render_patch_bundle,
+    render_patch_bundle_combined, render_text, render_text_bundle, render_text_with_children,
+    render_xml, render_xml_bundle, render_xml_with_children,
 };
 
 fn make_fixture() -> (ReportInput, Vec<ChildReportAnchor>) {
@@ -986,7 +987,7 @@ fn test_edge_multiformat_bundles_parity() {
     }
 
     // 2. Text Bundle
-    let (parent_txt, child_txts) = autocompare_reports::text::render_text_bundle(&bundle, true);
+    let (parent_txt, child_txts) = render_text_bundle(&bundle, true);
     assert_eq!(child_txts.len(), 4);
     assert!(parent_txt.contains("DIFF REPORT: src/main.rs"));
     assert!(parent_txt.contains("LINKED CHILD REPORTS:"));
@@ -1002,7 +1003,7 @@ fn test_edge_multiformat_bundles_parity() {
     }
 
     // 3. XML Bundle
-    let (parent_xml, child_xmls) = autocompare_reports::xml::render_xml_bundle(&bundle);
+    let (parent_xml, child_xmls) = render_xml_bundle(&bundle);
     assert_eq!(child_xmls.len(), 4);
     assert!(parent_xml.contains("<child-reports>"));
     // Bundle anchors carry status + stats, so the renderer emits the rich form.
@@ -1036,4 +1037,269 @@ fn test_edge_multiformat_bundles_parity() {
         let _ = std::fs::write(dir.join("snapshot_bundle_parent.txt"), &parent_txt);
         let _ = std::fs::write(dir.join("snapshot_bundle_parent.xml"), &parent_xml);
     }
+}
+
+#[test]
+fn test_multiformat_breadcrumbs_trail() {
+    let (input, _) = make_fixture();
+    let crumbs = vec![
+        ParentReportAnchor::new("Workspace Root", "../index.html"),
+        ParentReportAnchor::new("Crates", "../crates/index.html"),
+        ParentReportAnchor::new("Reports", "index.html"),
+    ];
+
+    // 1. HTML Color Breadcrumbs
+    let html_color = HtmlReportBuilder::color(&input)
+        .with_breadcrumbs(crumbs.clone())
+        .render();
+    assert!(
+        html_color
+            .contains("<nav class=\"parent-nav\" id=\"parent-nav\" aria-label=\"Breadcrumb\">")
+    );
+    assert!(html_color.contains("<ol class=\"breadcrumb-trail\">"));
+    assert!(html_color.contains("<li class=\"breadcrumb-item\"><a class=\"parent-report-link\" href=\"../index.html\">Workspace Root</a> <span class=\"breadcrumb-separator\" aria-hidden=\"true\">&gt;</span></li>"));
+    assert!(html_color.contains("<li class=\"breadcrumb-item\"><a class=\"parent-report-link\" href=\"../crates/index.html\">Crates</a> <span class=\"breadcrumb-separator\" aria-hidden=\"true\">&gt;</span></li>"));
+    assert!(html_color.contains("<li class=\"breadcrumb-item\"><a class=\"parent-report-link\" href=\"index.html\">Reports</a></li>"));
+
+    // 2. HTML Mono Breadcrumbs
+    let html_mono = HtmlReportBuilder::mono(&input)
+        .with_breadcrumbs(crumbs.clone())
+        .render();
+    assert!(html_mono.contains("<ol class=\"breadcrumb-trail\">"));
+    assert!(html_mono.contains("Workspace Root"));
+
+    // 3. Plain Text Breadcrumbs
+    let txt = TextReportBuilder::new(&input)
+        .with_breadcrumbs(vec![
+            ParentReportAnchor::new("Workspace Root", "../index.txt"),
+            ParentReportAnchor::new("Reports", "index.txt"),
+        ])
+        .render();
+    assert!(
+        txt.contains("BREADCRUMBS:\n  Workspace Root (../index.txt) >\n  Reports (index.txt)\n")
+    );
+
+    // 4. XML Breadcrumbs
+    let xml = XmlReportBuilder::new(&input)
+        .with_breadcrumbs(vec![
+            ParentReportAnchor::new("Workspace Root", "../index.xml"),
+            ParentReportAnchor::new("Reports", "index.xml"),
+        ])
+        .render();
+    assert!(xml.contains("  <breadcrumbs>\n    <breadcrumb href=\"../index.xml\">Workspace Root</breadcrumb>\n    <breadcrumb href=\"index.xml\">Reports</breadcrumb>\n  </breadcrumbs>"));
+}
+
+#[test]
+fn test_hunk_methods_and_diffstats_auto() {
+    let hunk1 = Hunk::new(
+        1,
+        3,
+        1,
+        4,
+        vec![
+            HunkLine::unchanged("unchanged 1", 1, 1),
+            HunkLine::delete("deleted line", 2),
+            HunkLine::insert("inserted line 1", 2),
+            HunkLine::insert("inserted line 2", 3),
+        ],
+    );
+    let hunk2 = Hunk::new(
+        10,
+        2,
+        11,
+        2,
+        vec![
+            HunkLine::modify("modified line", 10, 11),
+            HunkLine::unchanged("unchanged 2", 11, 12),
+        ],
+    );
+
+    // Hunk inspections
+    assert!(!hunk1.is_empty());
+    assert_eq!(hunk1.len(), 4);
+    assert_eq!(hunk1.count_old_lines(), 2); // unchanged + delete
+    assert_eq!(hunk1.count_new_lines(), 3); // unchanged + 2 inserts
+
+    assert!(!hunk2.is_empty());
+    assert_eq!(hunk2.len(), 2);
+    assert_eq!(hunk2.count_old_lines(), 2); // modify + unchanged
+    assert_eq!(hunk2.count_new_lines(), 2); // modify + unchanged
+
+    let empty_hunk = Hunk::new(0, 0, 0, 0, Vec::new());
+    assert!(empty_hunk.is_empty());
+    assert_eq!(empty_hunk.len(), 0);
+    assert_eq!(empty_hunk.count_old_lines(), 0);
+    assert_eq!(empty_hunk.count_new_lines(), 0);
+
+    // DiffStats::from_hunks
+    let hunks = vec![hunk1, hunk2];
+    let stats = DiffStats::from_hunks(&hunks);
+    assert_eq!(stats.additions, 2);
+    assert_eq!(stats.deletions, 1);
+    assert_eq!(stats.modifications, 1);
+    assert_eq!(stats.unchanged, 2);
+    assert_eq!(stats.total_changes(), 4);
+
+    // ReportInput::auto
+    let input = ReportInput::auto("auto_stats.rs", hunks);
+    assert_eq!(input.stats, stats);
+}
+
+#[test]
+fn test_patch_bundle_and_combined_rendering() {
+    let hunks_parent = vec![Hunk::new(
+        1,
+        2,
+        1,
+        2,
+        vec![
+            HunkLine::delete("old parent line", 1),
+            HunkLine::insert("new parent line", 1),
+        ],
+    )];
+    let hunks_child = vec![Hunk::new(
+        1,
+        2,
+        1,
+        2,
+        vec![
+            HunkLine::delete("old child line", 1),
+            HunkLine::insert("new child line", 1),
+        ],
+    )];
+
+    let parent_input = ReportInput::auto("src/parent.rs", hunks_parent);
+    let child_input = ReportInput::auto("src/child.rs", hunks_child);
+
+    let bundle = LinkedReportBundle::new("Patch Bundle", "src/parent.rs", parent_input).with_child(
+        "src/child.rs",
+        "src/child.rs",
+        Some("Modified".to_string()),
+        child_input,
+    );
+
+    // 1. Separate patch bundle files
+    let (parent_patch, child_patches) = render_patch_bundle(&bundle, PatchFormat::Unified);
+    assert!(parent_patch.contains("--- a/src/parent.rs\n+++ b/src/parent.rs\n"));
+    assert!(parent_patch.contains("-old parent line\n+new parent line\n"));
+    assert_eq!(child_patches.len(), 1);
+    if let Some((path, patch)) = child_patches.first() {
+        assert_eq!(path, "src/child.rs");
+        assert!(patch.contains("--- a/src/child.rs\n+++ b/src/child.rs\n"));
+        assert!(patch.contains("-old child line\n+new child line\n"));
+    }
+
+    // 2. Combined single patch
+    let combined_unified = render_patch_bundle_combined(&bundle, PatchFormat::Unified);
+    assert!(combined_unified.contains("--- a/src/parent.rs\n+++ b/src/parent.rs\n"));
+    assert!(combined_unified.contains("--- a/src/child.rs\n+++ b/src/child.rs\n"));
+
+    let combined_ctx = render_patch_bundle_combined(&bundle, PatchFormat::Context);
+    assert!(combined_ctx.contains("*** src/parent.rs\n--- src/parent.rs\n"));
+    assert!(combined_ctx.contains("*** src/child.rs\n--- src/child.rs\n"));
+}
+
+#[test]
+fn test_hostile_control_chars_and_null_bytes() {
+    let hostile_content = "Line with \x00NUL\x07BEL and \x1B[31mANSI\x1B[0m and \x0CFF";
+    let hunks = vec![Hunk::new(
+        1,
+        2,
+        1,
+        2,
+        vec![
+            HunkLine::delete(hostile_content, 1),
+            HunkLine::insert("Sanitized line\twith tab and \r\n newline", 1),
+        ],
+    )];
+    let input = ReportInput::auto("hostile_\x00_test.rs", hunks);
+
+    // 1. XML output replaces invalid XML 1.0 chars with \u{FFFD}
+    let xml = render_xml(&input);
+    assert!(!xml.contains('\x00'));
+    assert!(!xml.contains('\x07'));
+    assert!(!xml.contains('\x1B'));
+    assert!(!xml.contains('\x0C'));
+    assert!(xml.contains('\u{FFFD}'));
+    // Tab and newline are valid XML 1.0 and must be preserved
+    assert!(xml.contains('\t'));
+    assert!(xml.contains('\n'));
+
+    // 2. HTML, Text, Patch do not panic
+    let html = render_html_color(&input);
+    assert!(html.contains("Sanitized line"));
+
+    let txt = render_text(&input);
+    assert!(txt.contains("Sanitized line"));
+
+    let patch = render_patch(&input);
+    assert!(patch.contains("+Sanitized line"));
+}
+
+#[test]
+fn test_edge_rtl_bidi_and_zero_width_chars() {
+    let bidi_content = "\u{200E}LTR Mark vs \u{200F}RTL Mark with Persian: فارسی and Zero-Width: A\u{200D}B\u{200C}C";
+    let hunks = vec![Hunk::new(
+        1,
+        1,
+        1,
+        1,
+        vec![HunkLine::modify(bidi_content, 1, 1)],
+    )];
+    let input = ReportInput::auto("bidi_test.rs", hunks);
+
+    let html = render_html_side_by_side(&input, HtmlTheme::Color);
+    assert!(html.contains("فارسی"));
+    assert!(html.contains("A\u{200D}B\u{200C}C"));
+
+    let xml = render_xml(&input);
+    assert!(xml.contains("فارسی"));
+
+    let txt = render_text(&input);
+    assert!(txt.contains("فارسی"));
+
+    let patch = render_patch(&input);
+    assert!(patch.contains("!\u{200E}LTR Mark"));
+    assert!(patch.contains("فارسی"));
+}
+
+#[test]
+fn test_edge_empty_hunks_and_pure_unchanged() {
+    // 1. Multiple empty hunks
+    let empty_hunks = vec![
+        Hunk::new(0, 0, 0, 0, Vec::new()),
+        Hunk::new(5, 0, 5, 0, Vec::new()),
+    ];
+    let input_empty = ReportInput::auto("empty_hunks.rs", empty_hunks);
+    assert_eq!(input_empty.stats.total_changes(), 0);
+
+    let html_empty = render_html_color(&input_empty);
+    assert!(html_empty.contains("diff-container"));
+
+    let txt_empty = render_text(&input_empty);
+    assert!(txt_empty.contains("Total changes: 0"));
+
+    // 2. Pure unchanged hunk
+    let unchanged_hunks = vec![Hunk::new(
+        1,
+        3,
+        1,
+        3,
+        vec![
+            HunkLine::unchanged("alpha", 1, 1),
+            HunkLine::unchanged("beta", 2, 2),
+            HunkLine::unchanged("gamma", 3, 3),
+        ],
+    )];
+    let input_unchanged = ReportInput::auto("identical.rs", unchanged_hunks);
+    assert_eq!(input_unchanged.stats.unchanged, 3);
+    assert_eq!(input_unchanged.stats.total_changes(), 0);
+
+    // Filtering diffs_only on identical file leaves 0 hunks
+    let filtered = input_unchanged.filtered(ReportFilter::DiffsOnly);
+    assert!(filtered.hunks.is_empty());
+    let html_filtered = HtmlReportBuilder::color(&input_unchanged)
+        .diffs_only()
+        .render();
+    assert!(html_filtered.contains("No differences detected."));
 }

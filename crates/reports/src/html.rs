@@ -33,6 +33,7 @@ pub struct HtmlReportBuilder<'a> {
     layout: HtmlLayout,
     child_anchors: Vec<ChildReportAnchor>,
     parent_anchor: Option<ParentReportAnchor>,
+    breadcrumbs: Vec<ParentReportAnchor>,
     subtitle: Option<String>,
     filter: ReportFilter,
 }
@@ -46,6 +47,7 @@ impl<'a> HtmlReportBuilder<'a> {
             layout: HtmlLayout::Unified,
             child_anchors: Vec::new(),
             parent_anchor: None,
+            breadcrumbs: Vec::new(),
             subtitle: None,
             filter: ReportFilter::All,
         }
@@ -126,6 +128,18 @@ impl<'a> HtmlReportBuilder<'a> {
         self
     }
 
+    /// Appends a breadcrumb link to the parent navigation trail.
+    pub fn with_breadcrumb(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.breadcrumbs.push(ParentReportAnchor::new(title, href));
+        self
+    }
+
+    /// Appends multiple breadcrumb links to the parent navigation trail.
+    pub fn with_breadcrumbs(mut self, crumbs: Vec<ParentReportAnchor>) -> Self {
+        self.breadcrumbs.extend(crumbs);
+        self
+    }
+
     /// Sets an optional subtitle.
     pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
@@ -164,7 +178,28 @@ impl<'a> HtmlReportBuilder<'a> {
         html.push_str("  </style>\n</head>\n<body>\n");
 
         // Parent navigation breadcrumb if present
-        if let Some(ref parent) = self.parent_anchor {
+        if !self.breadcrumbs.is_empty() {
+            html.push_str(
+                "  <nav class=\"parent-nav\" id=\"parent-nav\" aria-label=\"Breadcrumb\">\n",
+            );
+            html.push_str("    <ol class=\"breadcrumb-trail\">\n");
+            for (i, crumb) in self.breadcrumbs.iter().enumerate() {
+                html.push_str("      <li class=\"breadcrumb-item\">");
+                html.push_str("<a class=\"parent-report-link\" href=\"");
+                html.push_str(&escape_html(&crumb.href));
+                html.push_str("\">");
+                html.push_str(&escape_html(&crumb.title));
+                html.push_str("</a>");
+                if i.saturating_add(1) < self.breadcrumbs.len() {
+                    html.push_str(
+                        " <span class=\"breadcrumb-separator\" aria-hidden=\"true\">&gt;</span>",
+                    );
+                }
+                html.push_str("</li>\n");
+            }
+            html.push_str("    </ol>\n");
+            html.push_str("  </nav>\n\n");
+        } else if let Some(ref parent) = self.parent_anchor {
             html.push_str("  <nav class=\"parent-nav\" id=\"parent-nav\">\n");
             html.push_str("    <a class=\"parent-report-link\" href=\"");
             html.push_str(&escape_html(&parent.href));
@@ -319,6 +354,18 @@ impl<'a> HtmlColorBuilder<'a> {
         self
     }
 
+    /// Appends a breadcrumb link to the parent navigation trail.
+    pub fn with_breadcrumb(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.inner = self.inner.with_breadcrumb(title, href);
+        self
+    }
+
+    /// Appends multiple breadcrumb links to the parent navigation trail.
+    pub fn with_breadcrumbs(mut self, crumbs: Vec<ParentReportAnchor>) -> Self {
+        self.inner = self.inner.with_breadcrumbs(crumbs);
+        self
+    }
+
     /// Sets an optional subtitle.
     pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.inner = self.inner.with_subtitle(subtitle);
@@ -393,6 +440,18 @@ impl<'a> HtmlMonoBuilder<'a> {
     /// Sets a parent report anchor for back-link navigation.
     pub fn with_parent_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
         self.inner = self.inner.with_parent_anchor(title, href);
+        self
+    }
+
+    /// Appends a breadcrumb link to the parent navigation trail.
+    pub fn with_breadcrumb(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.inner = self.inner.with_breadcrumb(title, href);
+        self
+    }
+
+    /// Appends multiple breadcrumb links to the parent navigation trail.
+    pub fn with_breadcrumbs(mut self, crumbs: Vec<ParentReportAnchor>) -> Self {
+        self.inner = self.inner.with_breadcrumbs(crumbs);
         self
     }
 
@@ -773,6 +832,9 @@ const COLOR_CSS: &str = r#"
     }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 0; padding: 24px; background: var(--bg); color: var(--fg); line-height: 1.5; }
     .parent-nav { margin-bottom: 16px; }
+    .breadcrumb-trail { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+    .breadcrumb-item { display: inline-flex; align-items: center; gap: 8px; }
+    .breadcrumb-separator { color: #8c959f; font-weight: 400; }
     .parent-report-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: #0969da; text-decoration: none; padding: 4px 10px; border-radius: 6px; background: #f6f8fa; border: 1px solid var(--border); }
     .parent-report-link:hover { text-decoration: underline; background: #eaeef2; }
     .report-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
@@ -814,6 +876,33 @@ const COLOR_CSS: &str = r#"
     .line-modify { background-color: var(--mod-bg); color: var(--mod-fg); }
     .line-modify .line-marker { color: var(--mod-fg); }
     .report-footer { margin-top: 32px; font-size: 12px; color: #8c959f; text-align: center; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --fg: #c9d1d9;
+        --border: #30363d;
+        --ins-bg: #033a16;
+        --ins-fg: #3fb950;
+        --ins-border: #238636;
+        --del-bg: #490202;
+        --del-fg: #f85149;
+        --del-border: #da3633;
+        --mod-bg: #341a00;
+        --mod-fg: #d29922;
+        --mod-border: #9e6a03;
+        --hunk-header-bg: #161b22;
+        --hunk-header-fg: #8b949e;
+        --line-no-fg: #6e7681;
+      }
+      .parent-report-link { background: #161b22; color: #58a6ff; }
+      .parent-report-link:hover { background: #21262d; }
+      .breadcrumb-separator { color: #6e7681; }
+      .child-reports { background: #161b22; }
+      .child-report-anchor { color: #58a6ff; }
+      .child-status-badge { background: #0c2d6b; color: #58a6ff; border-color: #1f6feb; }
+      .stat-unchanged { background: #161b22; color: #8b949e; }
+      .sbs-empty { background-color: #0d1117; }
+    }
     @media print {
       body { margin: 0; padding: 12mm; font-size: 9pt; background: #fff !important; color: #000 !important; }
       .diff-container, .diff-hunk, .child-reports { break-inside: avoid; page-break-inside: avoid; }
@@ -832,6 +921,9 @@ const MONO_CSS: &str = r#"
     }
     body { font-family: var(--font-mono); margin: 0; padding: 24px; background: var(--bg); color: var(--fg); line-height: 1.4; }
     .parent-nav { margin-bottom: 16px; }
+    .breadcrumb-trail { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+    .breadcrumb-item { display: inline-flex; align-items: center; gap: 8px; }
+    .breadcrumb-separator { color: #555555; }
     .parent-report-link { display: inline-block; font-size: 12px; font-weight: bold; color: #000000; text-decoration: none; padding: 3px 8px; border: 1px solid var(--border); }
     .parent-report-link:hover { text-decoration: underline; }
     .report-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--border); }

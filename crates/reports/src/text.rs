@@ -8,6 +8,7 @@ pub struct TextReportBuilder<'a> {
     input: &'a ReportInput,
     child_anchors: Vec<ChildReportAnchor>,
     parent_anchor: Option<ParentReportAnchor>,
+    breadcrumbs: Vec<ParentReportAnchor>,
     subtitle: Option<String>,
     show_line_numbers: bool,
     filter: ReportFilter,
@@ -20,6 +21,7 @@ impl<'a> TextReportBuilder<'a> {
             input,
             child_anchors: Vec::new(),
             parent_anchor: None,
+            breadcrumbs: Vec::new(),
             subtitle: None,
             show_line_numbers: false,
             filter: ReportFilter::All,
@@ -41,6 +43,18 @@ impl<'a> TextReportBuilder<'a> {
     /// Sets a parent report anchor for back-link navigation.
     pub fn with_parent_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
         self.parent_anchor = Some(ParentReportAnchor::new(title, href));
+        self
+    }
+
+    /// Appends a breadcrumb link to the parent navigation trail.
+    pub fn with_breadcrumb(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
+        self.breadcrumbs.push(ParentReportAnchor::new(title, href));
+        self
+    }
+
+    /// Appends multiple breadcrumb links to the parent navigation trail.
+    pub fn with_breadcrumbs(mut self, crumbs: Vec<ParentReportAnchor>) -> Self {
+        self.breadcrumbs.extend(crumbs);
         self
     }
 
@@ -79,7 +93,21 @@ impl<'a> TextReportBuilder<'a> {
         out.push_str(&self.input.title);
         out.push('\n');
 
-        if let Some(ref parent) = self.parent_anchor {
+        if !self.breadcrumbs.is_empty() {
+            out.push_str("BREADCRUMBS:\n");
+            for (i, crumb) in self.breadcrumbs.iter().enumerate() {
+                out.push_str("  ");
+                out.push_str(&crumb.title);
+                out.push_str(" (");
+                out.push_str(&crumb.href);
+                out.push(')');
+                if i.saturating_add(1) < self.breadcrumbs.len() {
+                    out.push_str(" >\n");
+                } else {
+                    out.push('\n');
+                }
+            }
+        } else if let Some(ref parent) = self.parent_anchor {
             out.push_str("PARENT REPORT: ");
             out.push_str(&parent.title);
             out.push_str(" (");

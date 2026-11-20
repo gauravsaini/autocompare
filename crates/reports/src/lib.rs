@@ -19,10 +19,11 @@ pub use html::{
     render_html_with_children,
 };
 pub use patch::{
-    PatchFormat, PatchReportBuilder, render_context_patch, render_patch, render_unified_patch,
+    PatchFormat, PatchReportBuilder, render_context_patch, render_patch, render_patch_bundle,
+    render_patch_bundle_combined, render_unified_patch,
 };
-pub use text::{TextReportBuilder, render_text, render_text_with_children};
-pub use xml::{XmlReportBuilder, render_xml, render_xml_with_children};
+pub use text::{TextReportBuilder, render_text, render_text_bundle, render_text_with_children};
+pub use xml::{XmlReportBuilder, render_xml, render_xml_bundle, render_xml_with_children};
 
 /// Represents the classification of a diff line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,6 +146,42 @@ impl Hunk {
             self.old_start, self.old_lines, self.new_start, self.new_lines
         )
     }
+
+    /// Returns true if this hunk contains no diff lines.
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty()
+    }
+
+    /// Returns the total number of diff lines in this hunk.
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    /// Counts lines on the old side (unchanged, delete, modify).
+    pub fn count_old_lines(&self) -> usize {
+        self.lines
+            .iter()
+            .filter(|l| {
+                matches!(
+                    l.change,
+                    LineChange::Unchanged | LineChange::Delete | LineChange::Modify
+                )
+            })
+            .count()
+    }
+
+    /// Counts lines on the new side (unchanged, insert, modify).
+    pub fn count_new_lines(&self) -> usize {
+        self.lines
+            .iter()
+            .filter(|l| {
+                matches!(
+                    l.change,
+                    LineChange::Unchanged | LineChange::Insert | LineChange::Modify
+                )
+            })
+            .count()
+    }
 }
 
 /// Aggregate statistics for a diff report.
@@ -159,6 +196,30 @@ pub struct DiffStats {
 impl DiffStats {
     /// Creates a new diff statistics instance.
     pub fn new(additions: usize, deletions: usize, modifications: usize, unchanged: usize) -> Self {
+        Self {
+            additions,
+            deletions,
+            modifications,
+            unchanged,
+        }
+    }
+
+    /// Computes aggregate statistics directly from a slice of hunks.
+    pub fn from_hunks(hunks: &[Hunk]) -> Self {
+        let mut additions = 0usize;
+        let mut deletions = 0usize;
+        let mut modifications = 0usize;
+        let mut unchanged = 0usize;
+        for hunk in hunks {
+            for line in &hunk.lines {
+                match line.change {
+                    LineChange::Insert => additions = additions.saturating_add(1),
+                    LineChange::Delete => deletions = deletions.saturating_add(1),
+                    LineChange::Modify => modifications = modifications.saturating_add(1),
+                    LineChange::Unchanged => unchanged = unchanged.saturating_add(1),
+                }
+            }
+        }
         Self {
             additions,
             deletions,
@@ -246,8 +307,18 @@ pub struct ReportInput {
 }
 
 impl ReportInput {
-    /// Creates a new report input.
+    /// Creates a new report input with explicit diff statistics.
     pub fn new(title: impl Into<String>, hunks: Vec<Hunk>, stats: DiffStats) -> Self {
+        Self {
+            title: title.into(),
+            hunks,
+            stats,
+        }
+    }
+
+    /// Creates a new report input with diff statistics computed automatically from the hunks.
+    pub fn auto(title: impl Into<String>, hunks: Vec<Hunk>) -> Self {
+        let stats = DiffStats::from_hunks(&hunks);
         Self {
             title: title.into(),
             hunks,
@@ -467,6 +538,8 @@ pub fn escape_html(input: &str) -> String {
 
 /// Escapes XML special characters: `&`, `<`, `>`, `"`, `'`.
 ///
+/// Disallowed XML 1.0 control characters are safely replaced with the Unicode
+/// replacement character (`\u{FFFD}`) to guarantee well-formed output.
 /// Guaranteed never to panic on hostile input.
 pub fn escape_xml(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
@@ -477,6 +550,14 @@ pub fn escape_xml(input: &str) -> String {
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
+            // XML 1.0 section 2.2 disallowed characters:
+            // Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+            c if (c < ' ' && c != '\t' && c != '\n' && c != '\r')
+                || c == '\u{FFFE}'
+                || c == '\u{FFFF}' =>
+            {
+                out.push('\u{FFFD}');
+            }
             other => out.push(other),
         }
     }

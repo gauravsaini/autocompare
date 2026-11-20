@@ -284,3 +284,57 @@ pub fn render_patch(input: &ReportInput) -> String {
 pub fn render_context_patch(input: &ReportInput) -> String {
     PatchReportBuilder::new(input).context().render()
 }
+
+/// Convenience function to render a linked report bundle into unified or context patch files.
+///
+/// Returns `(parent_patch, Vec<(child_filename, child_patch)>)`.
+pub fn render_patch_bundle(
+    bundle: &crate::LinkedReportBundle,
+    format: PatchFormat,
+) -> (String, Vec<(String, String)>) {
+    let parent_patch = PatchReportBuilder::new(&bundle.parent_input)
+        .with_paths(&bundle.parent_filename, &bundle.parent_filename)
+        .format(format)
+        .render();
+
+    let mut child_patches = Vec::with_capacity(bundle.children.len());
+    for child in &bundle.children {
+        let child_patch = PatchReportBuilder::new(&child.input)
+            .with_paths(&child.filename, &child.filename)
+            .format(format)
+            .render();
+        child_patches.push((child.filename.clone(), child_patch));
+    }
+
+    (parent_patch, child_patches)
+}
+
+/// Convenience function to render a linked report bundle combined into a single unified or context patch.
+pub fn render_patch_bundle_combined(
+    bundle: &crate::LinkedReportBundle,
+    format: PatchFormat,
+) -> String {
+    let mut combined = String::with_capacity(4096);
+    if !bundle.parent_input.hunks.is_empty() {
+        let parent_patch = PatchReportBuilder::new(&bundle.parent_input)
+            .with_paths(&bundle.parent_filename, &bundle.parent_filename)
+            .format(format)
+            .render();
+        combined.push_str(&parent_patch);
+    }
+
+    for child in &bundle.children {
+        if !child.input.hunks.is_empty() {
+            let child_patch = PatchReportBuilder::new(&child.input)
+                .with_paths(&child.filename, &child.filename)
+                .format(format)
+                .render();
+            if !combined.is_empty() && !combined.ends_with('\n') {
+                combined.push('\n');
+            }
+            combined.push_str(&child_patch);
+        }
+    }
+
+    combined
+}
