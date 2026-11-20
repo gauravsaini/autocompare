@@ -1,0 +1,10 @@
+error[E0432]: unresolved imports `patch::render_patch_bundle`, `patch::render_patch_bundle_combined`
+  --> crates/reports/src/lib.rs:22:74
+   |
+22 |     PatchFormat, PatchReportBuilder, render_context_patch, render_patch, render_patch_bundle,
+   |                                                                          ^^^^^^^^^^^^^^^^^^^ no `render_patch_bundle` in `patch`
+23 |     render_patch_bundle_combined, render_unified_patch,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `render_patch_bundle_combined` in `patch`
+
+For more information about this error, try `rustc --explain E0432`.
+error: could not compile `autocompare-reports` (lib) due to 1 previous error
