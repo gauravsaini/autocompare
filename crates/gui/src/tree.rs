@@ -2217,8 +2217,11 @@ impl FolderSessionState {
     }
 
     /// Scoped visible tree: drill-down scope + display filters + expanded set.
+    /// Global expanded paths seedhe do (`folder_tree_scoped_global` unhe
+    /// scope-relative karta hai), isliye drill ke andar bhi nested dirs
+    /// khulte hain.
     pub fn scoped_visible_tree(&self, rows: &[FolderRow]) -> Vec<FolderTreeNode> {
-        folder_tree_scoped(rows, &self.drill_down, &self.expanded, &self.display)
+        folder_tree_scoped_global(rows, &self.drill_down, &self.expanded, &self.display)
     }
 
     /// Rows the tree view paints: filtered, then hierarchical or flat.
@@ -5449,5 +5452,309 @@ mod exq_tree4_tests {
             dual_right_cell(&orphan).chars().count(),
             dual_right_cell(&both).chars().count()
         );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TREE5: drill-down scope + filter combined (headless).
+// BC pattern, outside observation only: drilled folder me filter lagane par
+// bhi expand/filter ek saath kaam karte hain — global expanded set scope ke
+// andar bhi nested dirs kholta hai, aur breadcrumb + filter bar + header ka
+// stacked chrome rows ko dhakta nahi (tang window scroll karti hai, crush
+// nahi). Geometry first: scope-relative expanded mapping, stacked chrome
+// (drill bar + filter row + header + tight gaps), scoped visible rows /
+// content / scroll. Typography second: koi naya size nahi — bar/crumb/header
+// typos reuse. Colors frozen: yahan koi hue nahi.
+// WIRING (paint): scoped view `folder_tree_scoped_global` se (global
+// expanded seedha do, mapping andar hota hai); chrome
+// `folder_scoped_chrome_height(wrapped)` se; rows
+// `folder_scoped_visible_rows` se; guides/grid/arrow helpers scope-relative
+// depth par waise hi lagte hain (TREE2/TREE4 tokens reuse).
+// ----------------------------------------------------------------------------
+
+/// Global expanded set ko scope-relative karo: scope ke andar wali dirs ka
+/// prefix utarta hai, scope-bahar aur scope-khud girte hain (scoped view me
+/// unki row hoti nahi). Root par clone (legacy `folder_tree_scoped` parity).
+/// Pure; unit-tested.
+pub fn folder_scope_relative_expanded(
+    expanded: &BTreeSet<String>,
+    scope: &FolderDrillDownScope,
+) -> BTreeSet<String> {
+    if scope.is_root() {
+        return expanded.clone();
+    }
+    let prefix = format!("{}/", scope.current_dir.trim().trim_matches('/'));
+    let mut out = BTreeSet::new();
+    for dir in expanded {
+        if let Some(rel) = dir.strip_prefix(prefix.as_str())
+            && !rel.trim().is_empty()
+        {
+            out.insert(rel.to_string());
+        }
+    }
+    out
+}
+
+/// Scoped tree jo GLOBAL expanded set leta hai: mapping andar hota hai,
+/// phir legacy [`folder_tree_scoped`] (frozen) chalti hai. Root par legacy
+/// ke barabar. `FolderSessionState::scoped_visible_tree` isi se banta hai.
+/// Pure; unit-tested.
+pub fn folder_tree_scoped_global(
+    rows: &[FolderRow],
+    scope: &FolderDrillDownScope,
+    expanded_dirs: &BTreeSet<String>,
+    display: &FolderDisplay,
+) -> Vec<FolderTreeNode> {
+    let relative = folder_scope_relative_expanded(expanded_dirs, scope);
+    folder_tree_scoped(rows, scope, &relative, display)
+}
+
+/// Scoped view ka chrome px: drill bar + gap + filter row + gap + header +
+/// gap (3 tight gaps, dual chrome parity). Drill bar root par bhi dikhta hai
+/// (Root crumb), isliye scope se azad. Paint isi ke baad rows lagata hai.
+/// Pure; headless-tested.
+pub fn folder_scoped_chrome_height(filter_wrapped: bool) -> f32 {
+    DRILL_DOWN_BAR_H
+        + crate::theme::GEO_TIGHT_GAP
+        + folder_filter_row_height(filter_wrapped)
+        + crate::theme::GEO_TIGHT_GAP
+        + FOLDER_HEADER_HEIGHT
+        + crate::theme::GEO_TIGHT_GAP
+}
+
+/// Scoped view me `avail_h` px me fit poori rows: chrome ke baad bachi jagah
+/// me kitne row-height rows. Tang/khali/non-finite budget par 0. Pure.
+pub fn folder_scoped_visible_rows(avail_h: f32, filter_wrapped: bool) -> usize {
+    if !avail_h.is_finite() {
+        return 0;
+    }
+    let inner = avail_h - folder_scoped_chrome_height(filter_wrapped);
+    if inner < FOLDER_ROW_HEIGHT {
+        return 0;
+    }
+    (inner / FOLDER_ROW_HEIGHT) as usize
+}
+
+/// Scoped content height px: chrome + visible rows (khaali ped par bhi
+/// drill bar + filter + header ka frame rehta hai). Pure; headless-tested.
+pub fn folder_scoped_content_height(visible_count: usize, filter_wrapped: bool) -> f32 {
+    folder_scoped_chrome_height(filter_wrapped) + visible_count as f32 * FOLDER_ROW_HEIGHT
+}
+
+/// Scoped view ko scroll window chahiye: content budget se bahar. Non-finite
+/// par false. Pure; headless-tested.
+pub fn folder_scoped_needs_scroll(
+    visible_count: usize,
+    avail_h: f32,
+    filter_wrapped: bool,
+) -> bool {
+    if !avail_h.is_finite() {
+        return false;
+    }
+    folder_scoped_content_height(visible_count, filter_wrapped) > avail_h
+}
+
+/// Scoped height waste px: content ke baad viewport me bachi jagah. Overflow
+/// par 0 (scroll), non-finite par 0. Pure; headless-tested.
+pub fn folder_scoped_height_waste(avail_h: f32, visible_count: usize, filter_wrapped: bool) -> f32 {
+    if !avail_h.is_finite() {
+        return 0.0;
+    }
+    (avail_h - folder_scoped_content_height(visible_count, filter_wrapped)).max(0.0)
+}
+
+#[cfg(test)]
+mod exq_tree5_tests {
+    use super::*;
+
+    fn glyph_row(path: &str, is_dir: bool, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: None,
+            right_size: None,
+            left_time: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    fn sized_row(path: &str, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir: false,
+            glyph,
+            left_size: Some("2048".to_string()),
+            left_time: Some("2026-01-02 03:04".to_string()),
+            right_size: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    fn deep_rows() -> Vec<FolderRow> {
+        vec![
+            glyph_row("a", true, '='),
+            glyph_row("a/d1", true, '='),
+            glyph_row("a/d1/d2", true, '='),
+            glyph_row("a/d1/d2/d3", true, '='),
+            glyph_row("a/d1/d2/d3/d4", true, '='),
+            sized_row("a/d1/d2/d3/d4/deep.txt", '>'),
+            sized_row("orphan-newer.txt", 'L'),
+        ]
+    }
+
+    #[test]
+    fn tree5_relative_expanded_maps_global_to_scope() {
+        let mut global = BTreeSet::new();
+        global.insert("a".to_string());
+        global.insert("a/d1".to_string());
+        global.insert("a/d1/d2".to_string());
+        global.insert("docs".to_string());
+        // Root par clone: mapping kuch nahi badalta.
+        let root = FolderDrillDownScope::new();
+        assert_eq!(folder_scope_relative_expanded(&global, &root), global);
+        // Scope "a/d1": andar wali dirs prefix utarkar, bahar/scope-khud girte hain.
+        let mut scope = FolderDrillDownScope::new();
+        scope.drill_into("a/d1");
+        assert_eq!(
+            folder_scope_relative_expanded(&global, &scope),
+            BTreeSet::from(["d2".to_string()])
+        );
+        // Khali set par khali mapping, kabhi panic nahi.
+        assert!(folder_scope_relative_expanded(&BTreeSet::new(), &scope).is_empty());
+    }
+
+    #[test]
+    fn tree5_global_scoped_tree_opens_nested_with_global_set() {
+        let rows = deep_rows();
+        let display = FolderDisplay::default();
+        let mut global = BTreeSet::new();
+        global.insert("a".to_string());
+        global.insert("a/d1".to_string());
+        global.insert("a/d1/d2".to_string());
+        global.insert("a/d1/d2/d3".to_string());
+        global.insert("a/d1/d2/d3/d4".to_string());
+        // Scope "a/d1/d2": 3 scoped rows (d3, d3/d4, d3/d4/deep.txt), depth relative.
+        let mut scope = FolderDrillDownScope::new();
+        scope.drill_into("a/d1/d2");
+        let tree = folder_tree_scoped_global(&rows, &scope, &global, &display);
+        assert_eq!(tree.len(), 3);
+        assert_eq!(tree.first().map(|n| n.row.rel_path.as_str()), Some("d3"));
+        assert_eq!(tree.first().map(|n| n.depth), Some(0));
+        assert_eq!(
+            tree.get(2).map(|n| n.row.rel_path.as_str()),
+            Some("d3/d4/deep.txt")
+        );
+        assert_eq!(tree.get(2).map(|n| n.depth), Some(2));
+        // Session wiring: global expanded seedha scoped view kholta hai.
+        let mut session = FolderSessionState {
+            expanded: global,
+            ..FolderSessionState::default()
+        };
+        session.drill_into("a/d1/d2");
+        let scoped = session.scoped_visible_tree(&rows);
+        assert_eq!(scoped.len(), 3);
+        // Root par legacy barabar: orphan-newer dikhta hai.
+        session.reset_drill_down();
+        assert_eq!(session.scoped_visible_tree(&rows).len(), 7);
+    }
+
+    #[test]
+    fn tree5_scoped_filter_keeps_orphan_newer_honest() {
+        // Fixture checks/gui-exq-tree5/round-1/comparison/edge-deep-nesting-orphan-newer.json:
+        // scope "a/d1/d2" + Changed filter — orphan scope-bahar, same scope-andar nahi.
+        let rows = deep_rows();
+        let mut scope = FolderDrillDownScope::new();
+        scope.drill_into("a/d1/d2");
+        let mut global = BTreeSet::new();
+        global.insert("a".to_string());
+        global.insert("a/d1".to_string());
+        global.insert("a/d1/d2".to_string());
+        global.insert("a/d1/d2/d3".to_string());
+        global.insert("a/d1/d2/d3/d4".to_string());
+        let changed = FolderDisplay {
+            status: FolderStatusFilter::Changed,
+            ..FolderDisplay::default()
+        };
+        let tree = folder_tree_scoped_global(&rows, &scope, &global, &changed);
+        // Sirf deep.txt (glyph '>'): orphan-newer scope-bahar, dirs '=' chhan jaate hain.
+        assert_eq!(tree.len(), 1);
+        assert_eq!(
+            tree.first().map(|n| n.row.rel_path.as_str()),
+            Some("d3/d4/deep.txt")
+        );
+        // Naam filter scope-relative paths par: "deep" milta hai, "orphan" scope-bahar.
+        let named = FolderDisplay {
+            name_query: String::from("deep"),
+            ..FolderDisplay::default()
+        };
+        let tree = folder_tree_scoped_global(&rows, &scope, &global, &named);
+        assert_eq!(tree.len(), 1);
+        let missing = FolderDisplay {
+            name_query: String::from("orphan"),
+            ..FolderDisplay::default()
+        };
+        assert!(folder_tree_scoped_global(&rows, &scope, &global, &missing).is_empty());
+        // Orphan-newer ke missing sides dash par padded widths barkarar (grid align).
+        let orphan = sized_row("orphan-newer.txt", 'L');
+        assert_eq!(folder_cell_text(&orphan, FolderColumn::RightSize), "-");
+        assert_eq!(
+            pad_folder_cell(
+                &folder_cell_text(&orphan, FolderColumn::RightTime),
+                FOLDER_TIME_CHARS
+            )
+            .chars()
+            .count(),
+            FOLDER_TIME_CHARS
+        );
+    }
+
+    #[test]
+    fn tree5_scoped_chrome_stacks_without_overlap() {
+        // Chrome: 28 + 4 + 24 + 4 + 24 + 4 = 88; wrapped 56 par 120.
+        assert_eq!(folder_scoped_chrome_height(false), 88.0);
+        assert_eq!(folder_scoped_chrome_height(true), 120.0);
+        // 200px budget, unwrapped: (200 - 88) / 24 = 4 poori rows.
+        assert_eq!(folder_scoped_visible_rows(200.0, false), 4);
+        assert_eq!(folder_scoped_visible_rows(80.0, false), 0);
+        assert_eq!(folder_scoped_visible_rows(f32::NAN, false), 0);
+        // Content: chrome + rows; khaali ped par chrome-only frame rehta hai.
+        assert_eq!(folder_scoped_content_height(0, false), 88.0);
+        assert_eq!(folder_scoped_content_height(4, false), 184.0);
+        // 184 <= 200: scroll nahi, waste 16; 5 rows par scroll, waste 0.
+        assert!(!folder_scoped_needs_scroll(4, 200.0, false));
+        assert_eq!(folder_scoped_height_waste(200.0, 4, false), 16.0);
+        assert!(folder_scoped_needs_scroll(5, 200.0, false));
+        assert_eq!(folder_scoped_height_waste(200.0, 5, false), 0.0);
+        assert!(!folder_scoped_needs_scroll(4, f32::NAN, false));
+        assert_eq!(folder_scoped_height_waste(f32::NAN, 4, false), 0.0);
+    }
+
+    #[test]
+    fn tree5_scoped_geometry_reuses_tree2_tree4_tokens() {
+        // Guides scope-relative depth par: count == depth, path x monotonic.
+        assert_eq!(tree_indent_guide_xs(0).len(), 0);
+        assert_eq!(tree_indent_guide_xs(2), vec![8.0, 20.0]);
+        assert_eq!(folder_row_path_x_separated(0), 40.0);
+        assert_eq!(folder_row_path_x_separated(2), 64.0);
+        // Grid side block scoped depth par bhi sthir (960): path aage, side sthir.
+        let (_, lsize_shallow, _, _, _) = folder_grid_column_xs(960.0, 0);
+        let (_, lsize_scoped, _, _, rtime_scoped) = folder_grid_column_xs(960.0, 2);
+        assert_eq!(lsize_shallow, lsize_scoped);
+        assert_eq!(rtime_scoped, 832.0);
+        // Gutter arrows + expander hit poori row (24): drill scope me bhi.
+        assert_eq!(
+            folder_gutter_arrow_hit_rect(48.0, false),
+            (0.0, 48.0, 16.0, 60.0)
+        );
+        assert_eq!(folder_expander_hit_rect(2, 24.0), (24.0, 24.0, 40.0, 48.0));
+        // Typo second: koi naya size nahi — crumb/body + header reuse.
+        assert_eq!(
+            drill_down_crumb_current_typo().size,
+            folder_typo_for_column(FolderColumn::Path).size
+        );
+        assert_eq!(folder_gutter_arrow_typo().size, folder_header_typo().size);
     }
 }
