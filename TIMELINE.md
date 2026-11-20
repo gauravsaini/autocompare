@@ -499,3 +499,9 @@
 1. **Copy Narrow-720 Arrows & Hits**: per-hunk arrows keep symmetric 32px slop hit rects (24px XL floor + 4px XS slop every side, centered at narrow center 360,300) over a 23px char-metric column (1 glyph x 7.0 advance + 2 x 8.0 section-gap bearings), stacked arrows ride locked 19.6px pitch (15.6 Mono row + 4.0 tight gap), copy-line action text (Small 13.2 line) sits dy 1.2 inside one Mono row (15.6px), copy button 32px hit centered, and edge fixture `comparison/copy-narrow-720.json`.
 2. **Tests** (before → after): autocompare-gui 1008 green (including `copy10_narrow_*` narrow arrows/pitch/action-dy/fixture tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy10/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-viewfill8 narrow plus panes
+
+1. **Views Narrow-720 Dual Panes & Center Gutter**: dual text-compare panes keep symmetric widths from the space scale at 720px (two panes + 20px center gutter), file-bar height locked to TypoRole chrome rhythm, center gutter column x from char metrics with markers only at changed rows, and edge fixture `comparison/views-narrow-720.json`.
+2. **Tests** (before → after): autocompare-gui 1009 green (including `exq_viewfill8` narrow panes tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-viewfill8/**`, `TIMELINE.md`.
