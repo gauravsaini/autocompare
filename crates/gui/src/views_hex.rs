@@ -2218,6 +2218,192 @@ pub fn hex_goto_bar_min_w() -> f32 {
     HEX_GOTO_FIELD_W + HEX_GOTO_BADGE_PAD + 2.0 * crate::theme::SPACE_SM
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hexview10: scrollable sync panes plus ruler
+// (paint; caller wiring orchestrator ke paas, is file me paint fns +
+// headless ruler helpers).
+// Gap BC hex half: BC hex compare scrollable sync hex+ASCII panes with ruler
+// dikhata hai — ek taraf hex digits, dusri taraf ASCII, dono ek hi row
+// window par scroll hote hain, upar offset ruler. Ours me sirf hunk summary
+// + sparse `??` grid tha. Ye wave panes + ruler paint karta hai: ruler header
+// (offset + 00..0F + ASCII), dono panes ek hi ScrollArea me (ek scroll = dono
+// sync), narrow <720px par stacked (ASCII hex ke neeche, wahi shared scroll).
+// Geometry FIRST: ruler/body ek hi Grid spacing
+// (`GEO_SECTION_GAP` x, `GEO_TIGHT_GAP` y — `paint_hex` body precedent),
+// header shapes body cells se char-barabar (10/49/18) taaki alag Grids hone
+// par bhi columns align rahen, panes height `hex_panes_height` reuse, row
+// height `hex_grid_row_h` reuse (virtualized `show_rows`), stacked breakpoint
+// `HEX_STACK_BREAKPOINT_W` reuse, beech me `GEO_TIGHT_GAP`. Koi naya token,
+// naya rhythm, naya width nahi.
+// Typography SECOND: ruler + dono panes + stacked lines sab Mono
+// (`hex_row_text_role` reuse), empty note Small — label(13-strong) >
+// content(12-mono) > hint(11) hierarchy, koi naya size nahi.
+// Colors FROZEN: koi Color32/Visuals/painter nahi — sirf labels.
+// Caller signature same rehti hai (slices + hunks caller ke paas, App/viewer
+// struct me koi field edit nahi). Wiring-pending until orchestrator wires
+// the hex tab caller.
+// ----------------------------------------------------------------------------
+
+/// Ruler offset-column header text: `offset` + 4 pad = 10 chars, body ruler
+/// address (`0x00000000` = 10) se char-barabar taaki ruler Grid aur body Grid
+/// alag hone par bhi offset column align rahe (Mono fixed width). Pure.
+pub fn hex_ruler_offset_header() -> String {
+    String::from("offset    ")
+}
+
+/// Ruler me ek hex column ka label (`00`..`0F`, uppercase, 2 chars).
+/// `col >= 16` par `None` (kabhi panic nahi). Pure; unit-tested.
+pub fn hex_ruler_col_label(col: u64) -> Option<String> {
+    if col >= HEX_BYTES_PER_ROW as u64 {
+        return None;
+    }
+    Some(format!("{col:02X}"))
+}
+
+/// Ruler hex-digits header: 16 column labels body hex cell shape me (midline
+/// gap samet 49 chars = `HEX_HEX_PANE_CHARS`), taaki ruler Grid column body
+/// Grid column se char-barabar ho. Pure; unit-tested.
+pub fn hex_ruler_hex_header() -> String {
+    let mut out = String::new();
+    let mut col: u64 = 0;
+    while col < HEX_BYTES_PER_ROW as u64 {
+        if col == HEX_BYTES_PER_ROW as u64 / 2 {
+            out.push(' ');
+        }
+        let Some(label) = hex_ruler_col_label(col) else {
+            break;
+        };
+        out.push_str(&label);
+        out.push(' ');
+        col = col.saturating_add(1);
+    }
+    out
+}
+
+/// Ruler ASCII header: 16 column nibbles body ASCII cell shape me
+/// (`|...|` samet 18 chars), taaki ruler Grid column body se barabar ho.
+/// Pure; unit-tested.
+pub fn hex_ruler_ascii_header() -> String {
+    String::from("|0123456789ABCDEF|")
+}
+
+/// Ruler header row: offset + hex + ASCII, ek hi Grid me body jaisi spacing
+/// (`GEO_SECTION_GAP` x, `GEO_TIGHT_GAP` y) taaki header columns body columns
+/// par baithe. Header shapes body cells se char-barabar (10/49/18), isliye
+/// alag Grid hone par bhi align rehta hai; header scroll ke bahar fixed
+/// rehta hai. Mono role (`hex_row_text_role`), koi naya size/color nahi.
+/// Wiring-pending until orchestrator wires the hex tab caller.
+pub fn paint_hex_ruler(ui: &mut egui::Ui) {
+    egui::Grid::new("hex_ruler_grid")
+        .num_columns(3)
+        .spacing([crate::theme::GEO_SECTION_GAP, crate::theme::GEO_TIGHT_GAP])
+        .show(ui, |ui| {
+            ui.label(hex_row_text_role().rich(hex_ruler_offset_header()));
+            ui.label(hex_row_text_role().rich(hex_ruler_hex_header()));
+            ui.label(hex_row_text_role().rich(hex_ruler_ascii_header()));
+            ui.end_row();
+        });
+}
+
+/// Scrollable sync hex+ASCII panes: dono panes ek hi vertical ScrollArea me,
+/// isliye ek scroll dono ko ek saath le jata hai (desync nahi). Wide par
+/// 3-column Grid (address | hex | ASCII — body precedent, real bytes
+/// `format_hex_grid_cells_with_bytes` se); narrow (`hex_layout_mode`
+/// Stacked, <720px) par har grid row do visual lines me (hex line, phir ASCII
+/// line, wahi address ke saath) — wahi shared scroll, crush nahi. Virtualized
+/// `show_rows` (`hex_grid_row_h`) taaki lambi file me sirf dikhne wali rows
+/// banein. Khali window par honest Small note. Mono role, koi naya
+/// size/color nahi. Slices caller-owned snap se (App fields untouched).
+/// Wiring-pending until orchestrator wires the hex tab caller.
+pub fn paint_hex_sync_panes(
+    ui: &mut egui::Ui,
+    row_starts: &[u64],
+    left: &[u8],
+    right: &[u8],
+    hunks: &[HexHunkView],
+) {
+    if row_starts.is_empty() {
+        ui.label(crate::theme::TypoRole::Small.rich("(no rows in window)"));
+        return;
+    }
+    let avail_w = ui.available_width();
+    let mode = hex_layout_mode(avail_w);
+    let panes_h = hex_panes_height(ui.available_height());
+    let row_h = hex_grid_row_h();
+    match mode {
+        HexLayoutMode::SideBySide => {
+            egui::ScrollArea::vertical()
+                .id_salt("hex_sync_panes")
+                .auto_shrink([false, false])
+                .max_height(panes_h)
+                .show_rows(ui, row_h, row_starts.len(), |ui, range| {
+                    egui::Grid::new("hex_sync_grid")
+                        .num_columns(3)
+                        .spacing([crate::theme::GEO_SECTION_GAP, crate::theme::GEO_TIGHT_GAP])
+                        .show(ui, |ui| {
+                            let mut pos = range.start;
+                            while pos < range.end {
+                                let Some(off) = row_starts.get(pos).copied() else {
+                                    pos = pos.saturating_add(1);
+                                    continue;
+                                };
+                                let (addr, hex, ascii) =
+                                    format_hex_grid_cells_with_bytes(off, left, right, hunks);
+                                ui.label(hex_row_text_role().rich(addr));
+                                ui.label(hex_row_text_role().rich(hex));
+                                ui.label(hex_row_text_role().rich(format!("|{ascii}|")));
+                                ui.end_row();
+                                pos = pos.saturating_add(1);
+                            }
+                        });
+                });
+        }
+        HexLayoutMode::Stacked => {
+            let count = row_starts.len().saturating_mul(2);
+            egui::ScrollArea::vertical()
+                .id_salt("hex_sync_panes_stacked")
+                .auto_shrink([false, false])
+                .max_height(panes_h)
+                .show_rows(ui, row_h, count, |ui, range| {
+                    let mut pos = range.start;
+                    while pos < range.end {
+                        let grid = pos / 2;
+                        let half = pos % 2;
+                        let Some(off) = row_starts.get(grid).copied() else {
+                            pos = pos.saturating_add(1);
+                            continue;
+                        };
+                        let (addr, hex, ascii) =
+                            format_hex_grid_cells_with_bytes(off, left, right, hunks);
+                        if half == 0 {
+                            ui.label(hex_row_text_role().rich(format!("{addr}  {hex}")));
+                        } else {
+                            ui.label(hex_row_text_role().rich(format!("{addr}  |{ascii}|")));
+                        }
+                        pos = pos.saturating_add(1);
+                    }
+                });
+        }
+    }
+}
+
+/// Hex window ke andar panes-plus-ruler block: ruler header upar fixed, ek
+/// tight gap, phir scrollable sync panes. Dono callee fns ka geometry/typo
+/// mirror (wahi spacing, wahi Mono roles); yahan koi naya token/color nahi.
+/// Slices + hunks caller-owned (App fields untouched).
+/// Wiring-pending until orchestrator wires the hex tab caller.
+pub fn paint_hex_panes_plus_ruler(
+    ui: &mut egui::Ui,
+    row_starts: &[u64],
+    left: &[u8],
+    right: &[u8],
+    hunks: &[HexHunkView],
+) {
+    paint_hex_ruler(ui);
+    ui.add_space(crate::theme::GEO_TIGHT_GAP);
+    paint_hex_sync_panes(ui, row_starts, left, right, hunks);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3838,5 +4024,78 @@ mod tests {
         assert_eq!(hex_sync_pane_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_pane_label_text_role(), crate::theme::TypoRole::Body);
+    }
+
+    #[test]
+    fn hex_exq_hexview10_ruler_headers_lock_shapes() {
+        // Ruler header shapes body cells se char-barabar (10/49/18) taaki
+        // alag Grids hone par bhi columns align rahen. Koi naya size nahi.
+        assert_eq!(hex_ruler_col_label(0), Some(String::from("00")));
+        assert_eq!(hex_ruler_col_label(9), Some(String::from("09")));
+        assert_eq!(hex_ruler_col_label(10), Some(String::from("0A")));
+        assert_eq!(hex_ruler_col_label(15), Some(String::from("0F")));
+        assert_eq!(hex_ruler_col_label(16), None);
+        assert_eq!(hex_ruler_col_label(u64::MAX), None);
+        let hex_header = hex_ruler_hex_header();
+        assert_eq!(hex_header.chars().count(), HEX_HEX_PANE_CHARS);
+        assert_eq!(hex_header.chars().count(), 49);
+        assert!(hex_header.contains("00"));
+        assert!(hex_header.contains("0F"));
+        assert_eq!(hex_ruler_offset_header().chars().count(), HEX_RULER_CHARS);
+        assert_eq!(hex_ruler_ascii_header().chars().count(), 18);
+        assert_eq!(hex_ruler_ascii_header(), String::from("|0123456789ABCDEF|"));
+        // Body cell shapes se barabar: addr 10, hex 49, |ascii| 18.
+        let left: Vec<u8> = (0..16).collect();
+        let right: Vec<u8> = (0..16).collect();
+        let hunks = vec![HexHunkView {
+            offset: 0,
+            left_len: 16,
+            right_len: 16,
+        }];
+        let (addr, hex, ascii) = format_hex_grid_cells_with_bytes(0, &left, &right, &hunks);
+        assert_eq!(
+            addr.chars().count(),
+            hex_ruler_offset_header().chars().count()
+        );
+        assert_eq!(hex.chars().count(), hex_header.chars().count());
+        assert_eq!(
+            format!("|{ascii}|").chars().count(),
+            hex_ruler_ascii_header().chars().count()
+        );
+        // Typo second: ruler + row ek hi Mono role, koi naya size nahi.
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hexview10_edge_narrow_stacked_tail() {
+        // Mirrors checks/gui-exq-hexview10/round-1/comparison/
+        // narrow-stacked-tail.json: 700px narrow window (stacked), 48 bytes
+        // + tail push = 49 bytes, diff row 1 + tail row 3 me.
+        assert_eq!(hex_layout_mode(700.0), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(960.0), HexLayoutMode::SideBySide);
+        assert_eq!(hex_row_count(49), 4);
+        assert_eq!(hex_sync_row_starts(0, 8, 49), vec![0, 16, 32, 48]);
+        // Stacked visual rows = grid rows x 2 (hex line + ASCII line).
+        let starts = hex_sync_row_starts(0, 8, 49);
+        assert_eq!(starts.len().saturating_mul(2), 8);
+        let left: Vec<u8> = (0..48).collect();
+        let mut right: Vec<u8> = (0..48).collect();
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        right.push(0xFF);
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(!view.hunks.is_empty());
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, 4), vec![1, 3]);
+        // Panes geometry: 300px me 15.6 row se 19 rows, tail row andar.
+        assert!((hex_grid_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(hex_visible_rows(300.0, hex_grid_row_h()), 19);
+        assert_eq!(hex_chrome_reserve_w(false), 52.0);
+        assert_eq!(hex_grid_avail_w(700.0, false), 648.0);
+        assert!(hex_panes_fit(hex_grid_avail_w(700.0, false), 7.0));
+        // Tail row real bytes ke saath poori 80-char budget me.
+        let text = format_hex_grid_row_with_bytes(48, &left, &right, &view.hunks);
+        assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
     }
 }

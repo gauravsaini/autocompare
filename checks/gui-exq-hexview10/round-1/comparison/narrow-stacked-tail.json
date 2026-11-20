@@ -1,0 +1,39 @@
+{
+  "description": "Wave hexview10 edge narrow-stacked-tail: 700px narrow window stacks (ASCII under hex, shared scroll), 48 bytes + tail push = 49 bytes, diff row 1 + tail row 3; ruler headers char-equal body cells (10/49/18); 300px panes fit 19 rows at 15.6.",
+  "inputs": {
+    "avail_w_narrow": 700.0,
+    "avail_w_wide": 960.0,
+    "left": "bytes 0..48",
+    "right": "bytes 0..48 with [20]=9 plus tail 0xFF (49 bytes)",
+    "panes_h": 300.0,
+    "char_w": 7.0
+  },
+  "assertions": {
+    "layout_narrow": "Stacked",
+    "layout_wide": "SideBySide",
+    "total_rows_49": 4,
+    "row_starts": [
+      0,
+      16,
+      32,
+      48
+    ],
+    "stacked_visual_rows": 8,
+    "ruler_col_0": "00",
+    "ruler_col_15": "0F",
+    "ruler_col_16": null,
+    "ruler_offset_chars": 10,
+    "ruler_hex_chars": 49,
+    "ruler_ascii_chars": 18,
+    "grid_row_h": 15.6,
+    "visible_rows_300": 19,
+    "chrome_reserve_no_ln": 52.0,
+    "grid_avail_700": 648.0,
+    "panes_fit_700_7px": true,
+    "marker_rows": [
+      1,
+      3
+    ],
+    "tail_row_chars": 80
+  }
+}
