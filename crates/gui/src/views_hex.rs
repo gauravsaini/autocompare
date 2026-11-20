@@ -3423,6 +3423,185 @@ pub fn hex_narrow_ruler_sync_ok(char_w: f32) -> bool {
     hex_offset_plus_gap_sync_ok(char_w)
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex31 round-1: live hex geometry.
+// Gap BC hex half: offset gutter never locked to shared spacing, row
+// height floated off the mono metric, dump columns drifted ruler-vs-grid,
+// ASCII pane gap ad-hoc, and no wide-1200 no-scroll lock plus narrow700
+// (<720 breakpoint) stacked edge existed side by side.
+// Geometry FIRST:
+// - Offset gutter width from SPACE tokens: pad `GEO_TIGHT_GAP`
+//   (`SPACE_XS` 4.0), gap `GEO_SECTION_GAP` (`SPACE_SM` 8.0), cell pad
+//   `HEX_CELL_PAD_X` (`SPACE_SM` 8.0) — `hex31_offset_gutter_space_ok`.
+// - Row height from `TypoRole::Mono.line_height_px` (15.6): grid, even,
+//   offset, ruler and wide rows share one source — `hex31_row_h_mono_ok`.
+// - Hex dump columns align ruler-vs-grid from char metrics (even 3-char
+//   step + shared 1-char midline gap) — `hex31_columns_align_ok`.
+// - ASCII pane gap from SPACE tokens (`SPACE_SM`) with pane x leaving
+//   exactly that gap past the hex outer — `hex31_ascii_gap_ok`.
+// - 1200px wide canvas no h-scroll: `SideBySide` + panes total inside
+//   grid avail — `hex31_wide1200_no_hscroll_ok` (fixture hex-wide-1200).
+// - Narrow700 edge (700 < 720 breakpoint): stacked, stacked lines fit,
+//   36 visible rows — `hex31_narrow700_*` (fixture hex-narrow-700).
+// Typography SECOND: grid + ruler + offset + ASCII all Mono, labels Body
+// — `hex31_typo_roles_ok`, koi naya size/token nahi. Colors FROZEN: koi
+// Color32/Visuals nahi. No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Wide canvas width for the no-h-scroll lock (px): 1200.0. Pure.
+pub const HEX_WIDE1200_CANVAS_W: f32 = 1200.0;
+
+/// Wide canvas height for the no-h-scroll lock (px): reference 600.0
+/// (`HEX_CANVAS_H` reuse value, no new rhythm). Pure.
+pub const HEX_WIDE1200_CANVAS_H: f32 = 600.0;
+
+/// Narrow700 canvas width edge (px): 700.0, just under the 720.0
+/// stacking breakpoint so layout must be `Stacked`. Pure.
+pub const HEX_NARROW700_CANVAS_W: f32 = 700.0;
+
+/// Narrow700 canvas height (px): 700.0 (narrow720 precedent). Pure.
+pub const HEX_NARROW700_CANVAS_H: f32 = 700.0;
+
+/// Narrow700 panes height (px): 570.0 (`700.0 - 130.0` chrome reserve,
+/// narrow precedent reuse). Pure.
+pub const HEX_NARROW700_PANES_H: f32 = 570.0;
+
+/// Grid avail width at the 1200px wide canvas (px): `1200 - 52 = 1148`.
+/// Single source over [`hex_grid_avail_w`]. Pure; unit-tested.
+pub fn hex_wide1200_grid_avail_w() -> f32 {
+    hex_grid_avail_w(HEX_WIDE1200_CANVAS_W, false)
+}
+
+/// Panes total width (px) at `char_w`: hex outer + ascii gutter +
+/// ascii outer. `None` on bad `char_w`. Pure; unit-tested.
+pub fn hex31_panes_total_w(char_w: f32) -> Option<f32> {
+    let (hex_outer, ascii_outer) = hex_pane_outer_widths(char_w)?;
+    let total = hex_outer + hex_ascii_gutter_w() + ascii_outer;
+    if !total.is_finite() {
+        return None;
+    }
+    Some(total)
+}
+
+/// Visible rows in the narrow700 panes budget: 36 rows
+/// (`hex_visible_rows(570.0, 15.6)`). Pure; unit-tested.
+pub fn hex31_narrow700_visible_rows() -> u64 {
+    hex_visible_rows(HEX_NARROW700_PANES_H, hex_grid_row_h())
+}
+
+/// Offset gutter widths reuse SPACE tokens only: pad is `GEO_TIGHT_GAP`
+/// (`SPACE_XS`), gap is `GEO_SECTION_GAP` (`SPACE_SM`), cell pad is
+/// `SPACE_SM`. Pure; unit-tested.
+pub fn hex31_offset_gutter_space_ok() -> bool {
+    hex_offset_gutter_pad() == crate::theme::GEO_TIGHT_GAP
+        && hex_offset_gutter_pad() == crate::theme::SPACE_XS
+        && hex_offset_gutter_gap() == crate::theme::GEO_SECTION_GAP
+        && hex_offset_gutter_gap() == crate::theme::SPACE_SM
+        && HEX_CELL_PAD_X == crate::theme::SPACE_SM
+        && hex_ascii_gutter_w() == crate::theme::SPACE_SM
+}
+
+/// Row height reuses `TypoRole::Mono.line_height_px` (15.6): grid, even,
+/// offset and ruler rows share one source. Pure; unit-tested.
+pub fn hex31_row_h_mono_ok() -> bool {
+    let mono = crate::theme::TypoRole::Mono.line_height_px();
+    (mono - 15.6).abs() < 0.001
+        && (hex_grid_row_h() - mono).abs() < 0.001
+        && (hex_even_row_h() - mono).abs() < 0.001
+        && (hex_offset_row_h() - mono).abs() < 0.001
+        && (hex_ruler_row_h() - mono).abs() < 0.001
+        && (hex_wide_row_h() - mono).abs() < 0.001
+}
+
+/// Hex dump columns align ruler-vs-grid at `char_w`: even grid, ruler
+/// col match, nibble-gap symmetry (1-char midline). Pure; unit-tested.
+pub fn hex31_columns_align_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    hex_even_grid_ok(char_w) && hex_ruler_col_align_ok(char_w) && hex_nibble_gap_symmetry_ok(char_w)
+}
+
+/// ASCII pane gap from SPACE tokens at `char_w`: gutter is `SPACE_SM`
+/// and pane x leaves exactly that gap past the hex outer. Pure.
+pub fn hex31_ascii_gap_ok(char_w: f32) -> bool {
+    hex_ascii_gap_space_ok(false, char_w)
+}
+
+/// 1200px wide canvas shows all panes with no h-scroll at `char_w`:
+/// layout stays `SideBySide`, panes total fits grid avail, and the
+/// absolute ASCII end stays inside the canvas. Pure; unit-tested.
+pub fn hex31_wide1200_no_hscroll_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    if hex_layout_mode(HEX_WIDE1200_CANVAS_W) != HexLayoutMode::SideBySide {
+        return false;
+    }
+    if !hex_panes_fit(hex_wide1200_grid_avail_w(), char_w) {
+        return false;
+    }
+    let Some(total) = hex31_panes_total_w(char_w) else {
+        return false;
+    };
+    if total > hex_wide1200_grid_avail_w() {
+        return false;
+    }
+    let Some(ascii_x) = hex_ascii_pane_x(false, char_w) else {
+        return false;
+    };
+    let Some((_, ascii_outer)) = hex_pane_outer_widths(char_w) else {
+        return false;
+    };
+    ascii_x + ascii_outer <= HEX_WIDE1200_CANVAS_W
+}
+
+/// Narrow700 edge stacks at `char_w`: 700 < 720 breakpoint so layout is
+/// `Stacked`, stacked hex/ASCII lines fit the narrow grid avail, and the
+/// panes budget holds 36 visible rows. Pure; unit-tested.
+pub fn hex31_narrow700_stacked_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    if hex_layout_mode(HEX_NARROW700_CANVAS_W) != HexLayoutMode::Stacked {
+        return false;
+    }
+    if hex31_narrow700_visible_rows() != 36 {
+        return false;
+    }
+    hex_stacked_panes_fit(HEX_NARROW700_CANVAS_W, char_w)
+}
+
+/// Typography roles reuse only: grid + ruler + offset + ASCII Mono,
+/// pane labels Body. No new size/token. Pure; unit-tested.
+pub fn hex31_typo_roles_ok() -> bool {
+    hex_cell_text_role() == crate::theme::TypoRole::Mono
+        && hex_sync_pane_text_role() == crate::theme::TypoRole::Mono
+        && hex_ruler_text_role() == crate::theme::TypoRole::Mono
+        && hex_row_text_role() == crate::theme::TypoRole::Mono
+        && hex_offset_text_role() == crate::theme::TypoRole::Mono
+        && hex_nibble_text_role() == crate::theme::TypoRole::Mono
+        && hex_pane_label_text_role() == crate::theme::TypoRole::Body
+        && hex_find_label_text_role() == crate::theme::TypoRole::Body
+        && hex_goto_label_text_role() == crate::theme::TypoRole::Body
+}
+
+/// Combined live hex geometry at `char_w`: gutter + row + columns +
+/// ASCII gap + wide-1200 no-scroll + narrow700 stacked + typo roles.
+/// Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex31_live_hex_geometry_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    hex31_offset_gutter_space_ok()
+        && hex31_row_h_mono_ok()
+        && hex31_columns_align_ok(char_w)
+        && hex31_ascii_gap_ok(char_w)
+        && hex31_wide1200_no_hscroll_ok(char_w)
+        && hex31_narrow700_stacked_ok(char_w)
+        && hex31_typo_roles_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5766,5 +5945,53 @@ mod tests {
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_cell_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex31_live_hex_geometry() {
+        // Headless test proving edge fixture comparison/hex-narrow-700.json:
+        // offset gutter from SPACE tokens, Mono row height, column alignment,
+        // ASCII gap, 1200px no h-scroll, narrow700 stacked edge.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-hex31/comparison/hex-narrow-700.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex31/round-1/comparison/hex-narrow-700.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-narrow-700\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 700.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"Stacked\""));
+        assert!(fixture_raw.contains("\"visible_rows\": 36"));
+        let wide_raw = include_str!("../../../checks/gui-exq-hex31/comparison/hex-wide-1200.json");
+        let wide_r1 =
+            include_str!("../../../checks/gui-exq-hex31/round-1/comparison/hex-wide-1200.json");
+        assert_eq!(wide_raw, wide_r1);
+        assert!(wide_raw.contains("\"name\": \"hex-wide-1200\""));
+        assert!(wide_raw.contains("\"needs_hscroll\": false"));
+
+        let char_w = 7.0;
+        assert!(hex31_offset_gutter_space_ok());
+        assert!(hex31_row_h_mono_ok());
+        assert!(hex31_columns_align_ok(char_w));
+        assert!(!hex31_columns_align_ok(0.0));
+        assert!(hex31_ascii_gap_ok(char_w));
+        assert!(!hex31_ascii_gap_ok(0.0));
+        assert_eq!(HEX_WIDE1200_CANVAS_W, 1200.0);
+        assert_eq!(hex_wide1200_grid_avail_w(), 1148.0);
+        assert!(hex31_wide1200_no_hscroll_ok(char_w));
+        assert!(!hex31_wide1200_no_hscroll_ok(0.0));
+        assert_eq!(HEX_NARROW700_CANVAS_W, 700.0);
+        assert_eq!(HEX_NARROW700_PANES_H, 570.0);
+        assert_eq!(HEX_NARROW700_CANVAS_H - 130.0, HEX_NARROW700_PANES_H);
+        assert_eq!(hex31_narrow700_visible_rows(), 36);
+        assert_eq!(
+            hex_layout_mode(HEX_NARROW700_CANVAS_W),
+            HexLayoutMode::Stacked
+        );
+        assert!(hex31_narrow700_stacked_ok(char_w));
+        assert!(!hex31_narrow700_stacked_ok(0.0));
+        assert!(hex31_typo_roles_ok());
+        assert!(hex31_live_hex_geometry_ok(char_w));
+        assert!(!hex31_live_hex_geometry_ok(0.0));
+        assert!(!hex31_live_hex_geometry_ok(f32::NAN));
     }
 }
