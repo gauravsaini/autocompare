@@ -904,6 +904,18 @@ impl App {
         true
     }
 
+    /// Strip hit bridge: `Switch` par session badlo (paths load andar),
+    /// `Close` par sirf hit band karo, `None` par no-op. Returns true jab
+    /// koi switch/close hua ho. Paint ka ek-frame hit isi se chalta hai.
+    /// Pure caller wiring; headless-tested.
+    pub fn apply_session_action(&mut self, action: views::SessionAction) -> bool {
+        match action {
+            views::SessionAction::None => false,
+            views::SessionAction::Switch(id) => self.switch_session(id),
+            views::SessionAction::Close(id) => self.close_session(id),
+        }
+    }
+
     /// Opens one Home session card: live session open + recent me record
     /// (Home khud record nahi hota). Returns true jab koi session khula ho.
     /// Pure state; paint card click isi ko chalata hai. Headless-tested.
@@ -5021,6 +5033,11 @@ impl eframe::App for App {
             .inner_margin(egui::Margin::same(views::OUTER_MARGIN))
             .show(ui, |ui| {
             views::paint_header(ui, &mut self.dark_mode);
+            // Session strip live wiring (T3/T2): patti mode tabs ke UPAR,
+            // hit par switch/close (switch par paths load bridge ke andar).
+            let mut strip_action = views::SessionAction::None;
+            views::paint_session_tab_strip(ui, &self.sessions, &mut strip_action);
+            self.apply_session_action(strip_action);
             views::paint_tabs(ui, &mut self.tab);
             ui.label(RichText::new(self.session_identity()).small().weak());
             ui.add_space(views::TAB_BOTTOM_GAP);
@@ -5247,6 +5264,10 @@ impl eframe::App for App {
                     );
                 }
             }
+
+            // T5/T6 bridge: type ke baad slots session me save (trimmed
+            // paths + cursor; khaali par no-op). Har frame idempotent hai.
+            self.save_slots_into_active();
 
             let job_running = self.rx.is_some();
             let shown_fraction = self.progress_fraction;
@@ -9387,5 +9408,101 @@ mod tests {
         assert!(app.swap_sides());
         assert!(app.folder_sync_last_report.is_none());
         assert!(app.folder_sync_dry_run);
+    }
+
+    #[test]
+    fn sescaller_apply_switch_loads_paths_and_cursor() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_text_paths("a.txt", "b.txt");
+        app.text_find_cursor = 4;
+        app.set_tab(Tab::Folder);
+        app.set_folder_paths("dir_a", "dir_b");
+        let text_id = app
+            .sessions
+            .list()
+            .iter()
+            .find(|item| item.kind == Tab::Text)
+            .map(|item| item.id);
+        let Some(text_id) = text_id else {
+            return;
+        };
+        assert!(app.apply_session_action(views::SessionAction::Switch(text_id)));
+        assert_eq!(app.current_tab(), Tab::Text);
+        assert_eq!(app.text_paths(), ("a.txt".to_string(), "b.txt".to_string()));
+        assert_eq!(app.text_find_cursor, 4);
+        assert!(app.status.contains("switched session"));
+        assert!(!app.apply_session_action(views::SessionAction::Switch(999_999)));
+        assert!(!app.apply_session_action(views::SessionAction::None));
+    }
+
+    #[test]
+    fn sescaller_apply_close_only_hits_and_neighbours() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.set_tab(Tab::Folder);
+        app.set_tab(Tab::Audio);
+        assert_eq!(app.sessions.len(), 3);
+        let folder_id = app
+            .sessions
+            .list()
+            .iter()
+            .find(|item| item.kind == Tab::Folder)
+            .map(|item| item.id);
+        let Some(folder_id) = folder_id else {
+            return;
+        };
+        assert!(app.apply_session_action(views::SessionAction::Close(folder_id)));
+        assert_eq!(app.sessions.len(), 2);
+        assert_eq!(app.current_tab(), Tab::Audio);
+        assert!(!app.apply_session_action(views::SessionAction::Close(999_999)));
+        assert!(!app.apply_session_action(views::SessionAction::None));
+        let ids: Vec<u64> = app.sessions.list().iter().map(|item| item.id).collect();
+        for id in ids {
+            assert!(app.apply_session_action(views::SessionAction::Close(id)));
+        }
+        assert!(app.sessions.is_empty());
+        assert_eq!(app.current_tab(), Tab::Home);
+    }
+
+    #[test]
+    fn sescaller_typed_paths_saved_into_active() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        // Setter bypass: paint `&mut String` me type karne ka simulation.
+        app.text.left = String::from("  typed_a.txt  ");
+        app.text.right = String::from("typed_b.txt");
+        app.save_slots_into_active();
+        let stored = app
+            .sessions
+            .active()
+            .map(|item| (item.left.clone(), item.right.clone()));
+        assert_eq!(
+            stored,
+            Some(("typed_a.txt".to_string(), "typed_b.txt".to_string()))
+        );
+    }
+
+    #[test]
+    fn sescaller_cursor_saved_and_restored_across_switch() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.text_find_cursor = 7;
+        app.save_slots_into_active();
+        let before = app.sessions.active().map(|item| item.cursor);
+        assert_eq!(before, Some(7));
+        app.set_tab(Tab::Folder);
+        app.text_find_cursor = 0;
+        let text_id = app
+            .sessions
+            .list()
+            .iter()
+            .find(|item| item.kind == Tab::Text)
+            .map(|item| item.id);
+        let Some(text_id) = text_id else {
+            return;
+        };
+        assert!(app.apply_session_action(views::SessionAction::Switch(text_id)));
+        assert_eq!(app.text_find_cursor, 7);
     }
 }
