@@ -1649,7 +1649,9 @@ pub fn format_hex_grid_cells_with_bytes(
     let mut ascii = String::with_capacity(HEX_BYTES_PER_ROW);
     for col in 0..HEX_BYTES_PER_ROW {
         if col == HEX_BYTES_PER_ROW / 2 {
-            hex.push(' ');
+            for _ in 0..HEX_MIDLINE_GAP_CHARS {
+                hex.push(' ');
+            }
         }
         let off = row_start.saturating_add(col as u64);
         if hex_grid_covers_offset(off, hunks) {
@@ -2268,7 +2270,9 @@ pub fn hex_ruler_hex_header() -> String {
     let mut col: u64 = 0;
     while col < HEX_BYTES_PER_ROW as u64 {
         if col == HEX_BYTES_PER_ROW as u64 / 2 {
-            out.push(' ');
+            for _ in 0..HEX_MIDLINE_GAP_CHARS {
+                out.push(' ');
+            }
         }
         let Some(label) = hex_ruler_col_label(col) else {
             break;
@@ -2296,7 +2300,7 @@ pub fn hex_ruler_ascii_header() -> String {
 pub fn paint_hex_ruler(ui: &mut egui::Ui) {
     egui::Grid::new("hex_ruler_grid")
         .num_columns(3)
-        .spacing([crate::theme::GEO_SECTION_GAP, crate::theme::GEO_TIGHT_GAP])
+        .spacing([hex_ruler_grid_gap_x(), hex_ruler_grid_gap_y()])
         .show(ui, |ui| {
             ui.label(hex_row_text_role().rich(hex_ruler_offset_header()));
             ui.label(hex_row_text_role().rich(hex_ruler_hex_header()));
@@ -2339,7 +2343,7 @@ pub fn paint_hex_sync_panes(
                 .show_rows(ui, row_h, row_starts.len(), |ui, range| {
                     egui::Grid::new("hex_sync_grid")
                         .num_columns(3)
-                        .spacing([crate::theme::GEO_SECTION_GAP, crate::theme::GEO_TIGHT_GAP])
+                        .spacing([hex_ruler_grid_gap_x(), hex_ruler_grid_gap_y()])
                         .show(ui, |ui| {
                             let mut pos = range.start;
                             while pos < range.end {
@@ -2400,7 +2404,7 @@ pub fn paint_hex_panes_plus_ruler(
     hunks: &[HexHunkView],
 ) {
     paint_hex_ruler(ui);
-    ui.add_space(crate::theme::GEO_TIGHT_GAP);
+    ui.add_space(hex_ruler_grid_gap_y());
     paint_hex_sync_panes(ui, row_starts, left, right, hunks);
 }
 
@@ -2429,10 +2433,11 @@ pub fn paint_hex_panes_plus_ruler(
 // ----------------------------------------------------------------------------
 
 /// Byte column x-offset within the hex bytes pane: 16 bytes per row (col 0..15).
-/// Columns 0..7 are spaced 3 chars apart (`XX `). At column 8, a 1-character
-/// midline gap separates the two 8-byte nibble groups (`XX  XX`), so columns
-/// 8..15 start at `(col * 3 + 1) * char_w`. Out of range or non-finite `char_w`
-/// returns `None`. Pure; unit-tested.
+/// Columns 0..7 are spaced 3 chars apart (`XX `). At column 8, the shared
+/// [`HEX_MIDLINE_GAP_CHARS`] midline gap separates the two 8-byte nibble
+/// groups (`XX  XX`), so columns 8..15 start at
+/// `(col * 3 + HEX_MIDLINE_GAP_CHARS) * char_w`. Out of range or non-finite
+/// `char_w` returns `None`. Pure; unit-tested.
 pub fn hex_grid_byte_col_x(col: usize, char_w: f32) -> Option<f32> {
     if col >= HEX_BYTES_PER_ROW || !char_w.is_finite() || char_w <= 0.0 {
         return None;
@@ -2440,7 +2445,7 @@ pub fn hex_grid_byte_col_x(col: usize, char_w: f32) -> Option<f32> {
     let char_offset = if col < HEX_BYTES_PER_ROW / 2 {
         col.saturating_mul(3)
     } else {
-        col.saturating_mul(3).saturating_add(1)
+        col.saturating_mul(3).saturating_add(HEX_MIDLINE_GAP_CHARS)
     };
     let x = (char_offset as f32) * char_w;
     if !x.is_finite() {
@@ -2516,6 +2521,77 @@ pub fn hex_stacked_panes_fit(avail_w: f32, char_w: f32) -> bool {
     let avail = hex_grid_avail_w(avail_w, false);
     let needed = 61.0 * char_w;
     needed <= avail
+}
+
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex2 round-2: grid origin + ruler ticks
+// (headless; paint wiring stays with the orchestrator).
+// Gap after-hex.png round-1: panes read cramped vs BC — the byte grid
+// origin floated one gap off the gutter/minimap chrome, ruler ticks had no
+// shared tick spacing, the ruler row height was not locked to the Mono
+// line-height, and the nibble-group midline gap was an inline `+1`.
+// Geometry FIRST: grid origin (x = chrome reserve, y = ruler + one tight
+// gap), ruler Grid gaps reuse `GEO_SECTION_GAP`/`GEO_TIGHT_GAP` (SPACE
+// tokens, no new rhythm), row height reuses `TypoRole::Mono.line_height_px`
+// (no new size), midline gap is one shared char (`HEX_MIDLINE_GAP_CHARS`).
+// Typography SECOND: grid + ruler stay Mono (`hex_row_text_role` reuse),
+// labels stay Body — koi naya size/token nahi. Colors FROZEN: koi
+// Color32/Visuals nahi. No egui paint math here except existing paint fns
+// adopting the gap single-sources below; helpers pure, saturating only.
+// ----------------------------------------------------------------------------
+
+/// Nibble-group midline gap between byte 7 and 8 (chars): one blank column
+/// (`XX  XX`), so post-gap byte columns shift by one char. Single source
+/// for [`hex_grid_byte_col_x`] and [`hex_ruler_hex_header`]. Pure.
+pub const HEX_MIDLINE_GAP_CHARS: usize = 1;
+
+/// Midline gap width (px) at `char_w`: `HEX_MIDLINE_GAP_CHARS * char_w`.
+/// Non-finite or non-positive `char_w` yields 0.0 (paint honest fallback).
+/// Pure; unit-tested.
+pub fn hex_midline_gap_w(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    let w = (HEX_MIDLINE_GAP_CHARS as f32) * char_w;
+    if !w.is_finite() || w <= 0.0 {
+        return 0.0;
+    }
+    w
+}
+
+/// Ruler/body Grid horizontal tick spacing (px): one section gap
+/// (`GEO_SECTION_GAP` = `SPACE_SM`, 8.0). Single source so the ruler header
+/// Grid and the body sync Grid never drift. Pure; unit-tested.
+pub fn hex_ruler_grid_gap_x() -> f32 {
+    crate::theme::GEO_SECTION_GAP
+}
+
+/// Ruler/body Grid vertical tick spacing (px): one tight gap
+/// (`GEO_TIGHT_GAP` = `SPACE_XS`, 4.0). Single source for Grid row gaps
+/// plus the ruler-to-body gap. Pure; unit-tested.
+pub fn hex_ruler_grid_gap_y() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Ruler row height (px): the Mono line-height, same single source as the
+/// body rows ([`hex_grid_row_h`]) so ruler ticks and byte rows share one
+/// vertical rhythm and never desync. Pure; unit-tested.
+pub fn hex_ruler_row_h() -> f32 {
+    hex_grid_row_h()
+}
+
+/// Grid vertical origin y (px): ruler row plus one tight gap — the byte
+/// grid starts exactly below the fixed ruler header. Pure; unit-tested.
+pub fn hex_grid_origin_y() -> f32 {
+    hex_ruler_row_h() + hex_ruler_grid_gap_y()
+}
+
+/// Byte grid origin (px): `(origin_x, origin_y)` — x adjacent to the
+/// gutter/minimap chrome reserve, y below the ruler header. Paint anchors
+/// the first byte row here; gutter markers (`row * row_h`) share the same
+/// row height so markers stay aligned. Pure; unit-tested.
+pub fn hex_grid_origin(show_line_numbers: bool) -> (f32, f32) {
+    (hex_grid_origin_x(show_line_numbers), hex_grid_origin_y())
 }
 
 #[cfg(test)]
@@ -4273,5 +4349,60 @@ mod tests {
         let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
         assert_eq!(hex_gutter_marker_rows(&view.hunks, 2), vec![1]);
         assert!((hex_grid_row_y(1) - 15.6).abs() < 0.001);
+    }
+
+    #[test]
+    fn hex_exq_hex2_round2_origin_ruler_midline() {
+        // Mirrors checks/gui-exq-hex2/round-1/comparison/hex-narrow-720.json:
+        // 720px breakpoint edge — 720 stays SideBySide, 719 stacks; 32
+        // bytes (2 rows, row 1 diff); origin x = chrome reserve (52px),
+        // origin y = ruler row (Mono 15.6) + one tight gap (4.0).
+        assert_eq!(hex_layout_mode(720.0), HexLayoutMode::SideBySide);
+        assert_eq!(hex_layout_mode(719.0), HexLayoutMode::Stacked);
+        // Row height is the Mono line-height, ruler locks to the same row.
+        assert!((hex_grid_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((hex_grid_row_h() - 15.6).abs() < 0.001);
+        assert!((hex_ruler_row_h() - hex_grid_row_h()).abs() < 0.001);
+        // Ruler tick spacing reuses SPACE tokens, no new rhythm.
+        assert_eq!(hex_ruler_grid_gap_x(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(hex_ruler_grid_gap_x(), crate::theme::SPACE_SM);
+        assert_eq!(hex_ruler_grid_gap_y(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(hex_ruler_grid_gap_y(), crate::theme::SPACE_XS);
+        // Grid origin alignment: x = chrome reserve, y = ruler + gap.
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        assert_eq!(hex_chrome_reserve_w(false), 52.0);
+        assert!((hex_grid_origin_y() - 19.6).abs() < 0.001);
+        assert_eq!(hex_grid_origin(false), (52.0, hex_grid_origin_y()));
+        let avail = hex_grid_avail_w(720.0, false);
+        assert_eq!(avail, 668.0);
+        let char_w = 7.0;
+        // Midline gap: one shared char, 7px at 7px char.
+        assert_eq!(HEX_MIDLINE_GAP_CHARS, 1);
+        assert_eq!(hex_midline_gap_w(char_w), 7.0);
+        assert_eq!(hex_midline_gap_w(0.0), 0.0);
+        assert_eq!(hex_midline_gap_w(f32::NAN), 0.0);
+        assert_eq!(hex_grid_byte_col_x(7, char_w), Some(147.0));
+        assert_eq!(hex_grid_byte_col_x(8, char_w), Some(175.0));
+        assert_eq!(
+            hex_grid_byte_col_x(8, char_w).unwrap_or(0.0)
+                - hex_grid_byte_col_x(7, char_w).unwrap_or(0.0),
+            4.0 * char_w
+        );
+        // Stacked + gutter parity at the 720 edge.
+        assert!(hex_stacked_panes_fit(720.0, char_w));
+        assert_eq!(hex_layout_mode(720.0), HexLayoutMode::SideBySide);
+        assert_eq!(hex_row_count(32), 2);
+        assert_eq!(hex_stacked_visual_rows(2), 4);
+        assert!((hex_grid_row_y(1) - hex_ruler_row_h()).abs() < 0.001);
+        let left: Vec<u8> = (0..32).collect();
+        let mut right = left.clone();
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 0xAA;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, 2), vec![1]);
+        // Typo second: grid + ruler stay Mono, no new sizes.
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
     }
 }
