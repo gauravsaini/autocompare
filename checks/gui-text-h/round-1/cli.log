@@ -1,0 +1,25 @@
+warning: function `char_diff` is never used
+   --> crates/diff/src/word_diff.rs:158:15
+    |
+158 | pub(crate) fn char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    |               ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `word_char_diff` is never used
+   --> crates/diff/src/word_diff.rs:228:15
+    |
+228 | pub(crate) fn word_char_diff(a: &str, b: &str) -> Vec<InlineSpan> {
+    |               ^^^^^^^^^^^^^^
+
+RESULT: PASS
+text=1 (want 1)
+text-same=0 (want 0)
+folder=1 (want 1)
+hex=1 (want 1)
+merge=1 (want 1)
+table=1 (want 1)
+sync=1 (want 1)
+picture=1 (want 1)
+folder-merge=1 (want 1)
+audio=1 (want 1)

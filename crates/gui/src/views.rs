@@ -2083,19 +2083,36 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
                 });
             });
             ui.add_space(TIGHT_GAP);
+            let active = merge_pick_for_hunk(&picks, idx);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                 ui.label(TypoRole::Small.rich("Take:"));
-                if ui.small_button("Take Left").clicked() {
+                if ui
+                    .selectable_label(active == Some(viewmodel::TakeChoice::Left), "Take Left")
+                    .on_hover_text("Resolve conflict with Left pane content")
+                    .clicked()
+                {
                     staged = Some(viewmodel::TakeChoice::Left);
                 }
-                if ui.small_button("Take Right").clicked() {
+                if ui
+                    .selectable_label(active == Some(viewmodel::TakeChoice::Right), "Take Right")
+                    .on_hover_text("Resolve conflict with Right pane content")
+                    .clicked()
+                {
                     staged = Some(viewmodel::TakeChoice::Right);
                 }
-                if ui.small_button("Take Base").clicked() {
+                if ui
+                    .selectable_label(active == Some(viewmodel::TakeChoice::Base), "Take Base")
+                    .on_hover_text("Resolve conflict with Base pane content")
+                    .clicked()
+                {
                     staged = Some(viewmodel::TakeChoice::Base);
                 }
-                if ui.small_button("Take Both").clicked() {
+                if ui
+                    .selectable_label(active == Some(viewmodel::TakeChoice::Both), "Take Both")
+                    .on_hover_text("Resolve conflict by keeping both Left and Right")
+                    .clicked()
+                {
                     staged = Some(viewmodel::TakeChoice::Both);
                 }
             });
@@ -2128,16 +2145,32 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
         let mut apply_all_choice: Option<viewmodel::TakeChoice> = None;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-            if ui.button("Take Left (all)").clicked() {
+            if ui
+                .button("Take Left (all)")
+                .on_hover_text("Take Left for all conflict hunks")
+                .clicked()
+            {
                 apply_all_choice = Some(viewmodel::TakeChoice::Left);
             }
-            if ui.button("Take Right (all)").clicked() {
+            if ui
+                .button("Take Right (all)")
+                .on_hover_text("Take Right for all conflict hunks")
+                .clicked()
+            {
                 apply_all_choice = Some(viewmodel::TakeChoice::Right);
             }
-            if ui.button("Take Base (all)").clicked() {
+            if ui
+                .button("Take Base (all)")
+                .on_hover_text("Take Base for all conflict hunks")
+                .clicked()
+            {
                 apply_all_choice = Some(viewmodel::TakeChoice::Base);
             }
-            if ui.button("Take Both (all)").clicked() {
+            if ui
+                .button("Take Both (all)")
+                .on_hover_text("Take Both for all conflict hunks")
+                .clicked()
+            {
                 apply_all_choice = Some(viewmodel::TakeChoice::Both);
             }
         });
@@ -2162,25 +2195,58 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
     paint_merge_three_pane(ui, &model.lines);
     ui.add_space(TIGHT_GAP);
     let row_height = row_height_for_line(text_row_height(ui));
-    egui::ScrollArea::vertical()
-        .id_salt("merge_output_rows")
-        .auto_shrink([false, false])
-        .show_rows(ui, row_height, model.lines.len(), |ui, range| {
-            for i in range {
-                let Some(line) = model.lines.get(i) else {
-                    break;
-                };
-                ui.set_row_height(row_height);
-                let marker = line.starts_with("<<<<<<<")
-                    || line.starts_with("=======")
-                    || line.starts_with(">>>>>>>");
-                let mut text = TypoRole::Mono.rich(line.as_str());
-                if marker {
-                    text = text.color(red_for(dark)).strong();
-                }
-                ui.label(text);
-            }
+    let gutter_dim = dim_for(dark);
+    let gutter_w = format!("{}", model.lines.len()).len().max(3);
+
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("merge_output_rows")
+                .auto_shrink([false, false])
+                .show_rows(ui, row_height, model.lines.len(), |ui, range| {
+                    for i in range {
+                        let Some(line) = model.lines.get(i) else {
+                            break;
+                        };
+                        ui.set_row_height(row_height);
+                        let marker = line.starts_with("<<<<<<<")
+                            || line.starts_with("|||||||")
+                            || line.starts_with("=======")
+                            || line.starts_with(">>>>>>>");
+                        let mut text = TypoRole::Mono.rich(line.as_str());
+                        if marker {
+                            text = text.color(red_for(dark)).strong();
+                        }
+                        ui.horizontal(|ui| {
+                            let lineno =
+                                format!("{:>width$} ", i.saturating_add(1), width = gutter_w);
+                            ui.label(TypoRole::Mono.rich(lineno.as_str()).color(gutter_dim));
+                            ui.label(text);
+                        });
+                    }
+                });
         });
+
+        // Overview ruler for merge conflicts
+        let avail_h = ui.available_height().max(100.0);
+        let geom = crate::gutter::merge_gutter_geometry(&model.lines, avail_h);
+        let bar_w = crate::gutter::gutter_ruler_width(true);
+        let (rect, resp) =
+            ui.allocate_exact_size(egui::vec2(bar_w, avail_h), egui::Sense::click_and_drag());
+        let _ = resp.on_hover_text(format!(
+            "Merge conflict overview: {} conflict hunk(s)",
+            geom.segments.len()
+        ));
+        ui.painter().rect_filled(rect, 0.0, track_for(dark));
+
+        for seg in &geom.segments {
+            let seg_rect = egui::Rect::from_min_max(
+                egui::pos2(rect.min.x, rect.min.y + seg.y_start),
+                egui::pos2(rect.max.x, (rect.min.y + seg.y_end).min(rect.max.y)),
+            );
+            ui.painter().rect_filled(seg_rect, 0.0, CHANGED_BG);
+        }
+    });
 }
 
 // ----------------------------------------------------------------------------
@@ -2775,14 +2841,23 @@ fn paint_text_body(
     let mut nav_action: Option<bool> = None;
     let mut copy_section_action = None;
     let mut copy_line_action = None;
+    let mut copy_all_action = None;
     let nav_avail = ui.available_width();
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(nav_avail, HEADER_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        if ui.small_button("◀ Prev").clicked() {
+        if ui
+            .small_button("◀ Prev")
+            .on_hover_text("Previous difference (Shift+F3 / Ctrl+P)")
+            .clicked()
+        {
             nav_action = Some(false);
         }
-        if ui.small_button("Next ▶").clicked() {
+        if ui
+            .small_button("Next ▶")
+            .on_hover_text("Next difference (F3 / Ctrl+N)")
+            .clicked()
+        {
             nav_action = Some(true);
         }
         ui.separator();
@@ -2796,17 +2871,47 @@ fn paint_text_body(
         ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Same, "Same");
         ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Context, "Context");
         ui.separator();
-        if ui.small_button("Section →").clicked() {
+        if ui
+            .small_button("Section →")
+            .on_hover_text("Copy difference section Left to Right")
+            .clicked()
+        {
             copy_section_action = Some(viewmodel::CopyDirection::LeftToRight);
         }
-        if ui.small_button("← Section").clicked() {
+        if ui
+            .small_button("← Section")
+            .on_hover_text("Copy difference section Right to Left")
+            .clicked()
+        {
             copy_section_action = Some(viewmodel::CopyDirection::RightToLeft);
         }
-        if ui.small_button("Line →").clicked() {
+        if ui
+            .small_button("Line →")
+            .on_hover_text("Copy focused line Left to Right")
+            .clicked()
+        {
             copy_line_action = Some(viewmodel::CopyDirection::LeftToRight);
         }
-        if ui.small_button("← Line").clicked() {
+        if ui
+            .small_button("← Line")
+            .on_hover_text("Copy focused line Right to Left")
+            .clicked()
+        {
             copy_line_action = Some(viewmodel::CopyDirection::RightToLeft);
+        }
+        if ui
+            .small_button("All →")
+            .on_hover_text("Copy all differences Left to Right")
+            .clicked()
+        {
+            copy_all_action = Some(viewmodel::CopyDirection::LeftToRight);
+        }
+        if ui
+            .small_button("← All")
+            .on_hover_text("Copy all differences Right to Left")
+            .clicked()
+        {
+            copy_all_action = Some(viewmodel::CopyDirection::RightToLeft);
         }
         // Badge right-end dock (find-bar precedent): N/M count list se
         // alag na lage, row ke end par ek pad ke saath chipka rehta hai.
@@ -2854,6 +2959,11 @@ fn paint_text_body(
         && viewmodel::copy_line(model, idx, dir).is_ok()
     {
         model.selected = Some(idx);
+    }
+    if let Some(dir) = copy_all_action
+        && crate::copy::copy_all(model, dir).is_ok()
+    {
+        model.selected = None;
     }
 
     let mid = viewmodel::focused_kind_label(&model.rows, model.selected);
@@ -10754,5 +10864,62 @@ mod tests {
             viewmodel::cursor_label(viewmodel::cursor_pos_for(Some(0))),
             "1:1"
         );
+    }
+
+    #[test]
+    fn text_merge_marker_detection_covers_all_merge3_markers() {
+        let markers = ["<<<<<<< left", "||||||| base", "=======", ">>>>>>> right"];
+        for m in markers {
+            assert!(crate::take::is_conflict_marker(m));
+        }
+        assert!(!crate::take::is_conflict_marker("normal text"));
+    }
+
+    #[test]
+    fn text_merge_gutter_geometry_matches_hunks() {
+        let lines = vec![
+            "clean".to_string(),
+            "<<<<<<<".to_string(),
+            "L".to_string(),
+            "|||||||".to_string(),
+            "B".to_string(),
+            "=======".to_string(),
+            "R".to_string(),
+            ">>>>>>>".to_string(),
+            "clean".to_string(),
+        ];
+        let geom = crate::gutter::merge_gutter_geometry(&lines, 200.0);
+        assert_eq!(geom.segments.len(), 1);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        assert_eq!(seg.kind, TextRowKind::Changed);
+    }
+
+    #[test]
+    fn text_compare_copy_all_action_parity() {
+        let mut model = TextRows {
+            rows: vec![
+                TextRow {
+                    kind: TextRowKind::Deleted,
+                    left: "del".to_string(),
+                    right: String::new(),
+                    ..Default::default()
+                },
+                TextRow {
+                    kind: TextRowKind::Inserted,
+                    left: String::new(),
+                    right: "ins".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let copied = crate::copy::copy_all(&mut model, viewmodel::CopyDirection::LeftToRight)
+            .unwrap_or_default();
+        assert_eq!(copied, 2);
+        for row in &model.rows {
+            assert_eq!(row.kind, TextRowKind::Equal);
+        }
     }
 }

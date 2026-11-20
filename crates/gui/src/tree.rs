@@ -1909,12 +1909,34 @@ pub struct FolderSessionState {
     pub sync_mode: SyncModeChoice,
     /// Explicit Apply consent for the current preview.
     pub consented: bool,
+    /// Active drill-down directory scope.
+    pub drill_down: FolderDrillDownScope,
 }
 
 impl FolderSessionState {
     /// Flips one directory in the expanded set.
     pub fn toggle(&mut self, dir: &str) {
         toggle_expanded(&mut self.expanded, dir);
+    }
+
+    /// Active drill-down scope ko update karta hai: directory me drill karta hai.
+    pub fn drill_into(&mut self, dir: &str) {
+        self.drill_down.drill_into(dir);
+    }
+
+    /// Drill-down scope me ek level up jaata hai.
+    pub fn drill_up(&mut self) -> bool {
+        self.drill_down.drill_up()
+    }
+
+    /// Drill-down scope ko reset karta hai.
+    pub fn reset_drill_down(&mut self) {
+        self.drill_down.reset();
+    }
+
+    /// Scoped visible tree: drill-down scope + display filters + expanded set.
+    pub fn scoped_visible_tree(&self, rows: &[FolderRow]) -> Vec<FolderTreeNode> {
+        folder_tree_scoped(rows, &self.drill_down, &self.expanded, &self.display)
     }
 
     /// Rows the tree view paints: filtered, then hierarchical or flat.
@@ -3118,6 +3140,304 @@ pub fn sync_summary_typo() -> FolderTypo {
     }
 }
 
+// ----------------------------------------------------------------------------
+// FolderCompare drill-down scope & breadcrumbs (leaf-3.2 exquisite parity):
+// Manages subfolder drill-down navigation, breadcrumb hierarchy, and
+// scoped tree generation. Pure headless model; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// One breadcrumb segment in a drill-down path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrillDownCrumb {
+    /// Human-readable segment name (e.g. "Root", "src", "gui").
+    pub name: String,
+    /// Target relative path when clicking this crumb (e.g. "" or "src" or "src/gui").
+    pub target_path: String,
+    /// Whether this crumb is the currently active/deepest location.
+    pub is_current: bool,
+}
+
+/// State tracking the current drill-down directory scope in FolderCompare.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FolderDrillDownScope {
+    /// Current directory prefix being drilled into ("" = root, full view).
+    pub current_dir: String,
+}
+
+impl FolderDrillDownScope {
+    /// New scope at repository/folder root.
+    pub fn new() -> Self {
+        Self {
+            current_dir: String::new(),
+        }
+    }
+
+    /// Whether currently at root (no drill-down active).
+    pub fn is_root(&self) -> bool {
+        self.current_dir.trim().is_empty()
+    }
+
+    /// Current nesting depth of drill-down (0 at root).
+    pub fn depth(&self) -> usize {
+        let trimmed = self.current_dir.trim();
+        if trimmed.is_empty() {
+            0
+        } else {
+            trimmed
+                .chars()
+                .filter(|&c| c == '/')
+                .count()
+                .saturating_add(1)
+        }
+    }
+
+    /// Drills into a directory path.
+    pub fn drill_into(&mut self, rel_path: &str) {
+        let trimmed = rel_path.trim().trim_matches('/');
+        if !trimmed.is_empty() {
+            self.current_dir = trimmed.to_string();
+        }
+    }
+
+    /// Navigates up one directory level. Returns whether scope changed.
+    pub fn drill_up(&mut self) -> bool {
+        if self.is_root() {
+            return false;
+        }
+        let trimmed = self.current_dir.trim().trim_matches('/');
+        match trimmed.rfind('/') {
+            Some(pos) => {
+                if let Some(parent) = trimmed.get(..pos) {
+                    self.current_dir = parent.to_string();
+                } else {
+                    self.current_dir.clear();
+                }
+            }
+            None => {
+                self.current_dir.clear();
+            }
+        }
+        true
+    }
+
+    /// Resets drill-down back to root.
+    pub fn reset(&mut self) {
+        self.current_dir.clear();
+    }
+
+    /// Builds the list of breadcrumbs for the current drill-down scope.
+    pub fn breadcrumbs(&self) -> Vec<DrillDownCrumb> {
+        let mut crumbs = Vec::new();
+        let is_root = self.is_root();
+        crumbs.push(DrillDownCrumb {
+            name: "Root".to_string(),
+            target_path: String::new(),
+            is_current: is_root,
+        });
+
+        if !is_root {
+            let trimmed = self.current_dir.trim().trim_matches('/');
+            let mut accum = String::new();
+            let segments: Vec<&str> = trimmed.split('/').collect();
+            let total = segments.len();
+            for (idx, seg) in segments.into_iter().enumerate() {
+                if !accum.is_empty() {
+                    accum.push('/');
+                }
+                accum.push_str(seg);
+                let is_current = idx.saturating_add(1) == total;
+                crumbs.push(DrillDownCrumb {
+                    name: seg.to_string(),
+                    target_path: accum.clone(),
+                    is_current,
+                });
+            }
+        }
+
+        crumbs
+    }
+}
+
+/// Builds a filtered, indented hierarchical view of folder rows scoped to `scope.current_dir`.
+/// If at root, behaves identically to [`folder_tree_filtered`]. When scoped, only rows
+/// inside `current_dir` are included, and their depth is computed relative to the scoped root.
+pub fn folder_tree_scoped(
+    rows: &[FolderRow],
+    scope: &FolderDrillDownScope,
+    expanded_dirs: &BTreeSet<String>,
+    display: &FolderDisplay,
+) -> Vec<FolderTreeNode> {
+    if scope.is_root() {
+        return folder_tree_filtered(rows, expanded_dirs, display);
+    }
+
+    let prefix = format!("{}/", scope.current_dir.trim().trim_matches('/'));
+    let mut scoped_rows = Vec::new();
+
+    for r in rows {
+        if r.rel_path.starts_with(&prefix)
+            && let Some(sub) = r.rel_path.get(prefix.len()..)
+            && !sub.is_empty()
+        {
+            let mut rel_row = r.clone();
+            rel_row.rel_path = sub.to_string();
+            if filter_pass(&rel_row, display) {
+                scoped_rows.push(rel_row);
+            }
+        }
+    }
+
+    folder_tree(&scoped_rows, expanded_dirs)
+}
+
+/// Auto-detects the comparison Tab from a file path extension.
+pub fn detect_tab_for_path(path: &str) -> crate::home::Tab {
+    let lower = path.to_lowercase();
+    let ext = match lower.rsplit_once('.') {
+        Some((_, ext)) => ext.trim(),
+        None => return crate::home::Tab::Text,
+    };
+    match ext {
+        "csv" | "tsv" | "tab" | "xlsx" | "ods" => crate::home::Tab::Table,
+        "png" | "jpg" | "jpeg" | "bmp" | "gif" | "webp" | "ico" | "svg" => {
+            crate::home::Tab::Picture
+        }
+        "wav" | "mp3" | "flac" | "ogg" | "m4a" | "aac" | "opus" => crate::home::Tab::Audio,
+        "bin" | "exe" | "dll" | "so" | "dylib" | "o" | "obj" | "class" | "dat" | "raw" => {
+            crate::home::Tab::Hex
+        }
+        _ => crate::home::Tab::Text,
+    }
+}
+
+/// Drill-down compare intent containing target comparison tab and child paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrillDownCompareIntent {
+    /// Relative path within folder comparison.
+    pub rel_path: String,
+    /// Destination tab detected from file format/extension.
+    pub target_tab: crate::home::Tab,
+    /// Full left path if left root provided.
+    pub left_path: String,
+    /// Full right path if right root provided.
+    pub right_path: String,
+}
+
+/// Builds a drill-down compare intent for a node when double-clicked.
+/// Directories return `None`.
+pub fn drill_down_intent_for_node(
+    left_root: &str,
+    right_root: &str,
+    node: &FolderTreeNode,
+) -> Option<DrillDownCompareIntent> {
+    if node.row.is_dir {
+        return None;
+    }
+    let rel = node.row.rel_path.trim().trim_matches('/');
+    let target_tab = detect_tab_for_path(rel);
+    let left_clean = left_root.trim().trim_end_matches('/');
+    let right_clean = right_root.trim().trim_end_matches('/');
+    let left_path = if left_clean.is_empty() {
+        rel.to_string()
+    } else {
+        format!("{left_clean}/{rel}")
+    };
+    let right_path = if right_clean.is_empty() {
+        rel.to_string()
+    } else {
+        format!("{right_clean}/{rel}")
+    };
+
+    Some(DrillDownCompareIntent {
+        rel_path: rel.to_string(),
+        target_tab,
+        left_path,
+        right_path,
+    })
+}
+
+// ----------------------------------------------------------------------------
+// Drill-down geometry-first contract (widths, heights, margins, padding, align):
+// Rhythm tokens reuse; zero magic numbers; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Drill-down breadcrumb bar height px: standard header bar (`CHROME_HEADER_BAR_H` = 28.0).
+pub const DRILL_DOWN_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Drill-down breadcrumb button height px: standard hit floor (24.0).
+pub const DRILL_DOWN_CRUMB_H: f32 = 24.0;
+/// Drill-down breadcrumb horizontal padding px: section gap (`GEO_SECTION_GAP` = 8.0).
+pub const DRILL_DOWN_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Drill-down breadcrumb item gap px: tight gap (`GEO_TIGHT_GAP` = 4.0).
+pub const DRILL_DOWN_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Drill-down breadcrumb separator width px: standard 12px separator space.
+pub const DRILL_DOWN_SEP_W: f32 = 12.0;
+
+/// Breadcrumb bar height px. Pure.
+pub fn drill_down_bar_height() -> f32 {
+    DRILL_DOWN_BAR_H
+}
+
+/// Breadcrumb button hit height px. Pure.
+pub fn drill_down_crumb_height() -> f32 {
+    DRILL_DOWN_CRUMB_H
+}
+
+/// Breadcrumb horizontal pad px. Pure.
+pub fn drill_down_pad_x() -> f32 {
+    DRILL_DOWN_PAD_X
+}
+
+/// Breadcrumb item gap px. Pure.
+pub fn drill_down_gap() -> f32 {
+    DRILL_DOWN_GAP
+}
+
+/// Breadcrumb button hit area px² for a given label width. Pure.
+pub fn drill_down_crumb_hit_area(label_w: f32) -> f32 {
+    (label_w + DRILL_DOWN_PAD_X * 2.0) * DRILL_DOWN_CRUMB_H
+}
+
+// ----------------------------------------------------------------------------
+// Drill-down typography-second contract (family, weight, line-height, spacing):
+// Single-source from `TypoRole` tokens; zero new point sizes; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Ancestor breadcrumb typography: mono body regular.
+pub fn drill_down_crumb_ancestor_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_BODY_SIZE,
+        strong: false,
+    }
+}
+
+/// Current active breadcrumb typography: mono body strong.
+pub fn drill_down_crumb_current_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_BODY_SIZE,
+        strong: true,
+    }
+}
+
+/// Breadcrumb separator typography: mono caption regular.
+pub fn drill_down_crumb_separator_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_SIDE_SIZE,
+        strong: false,
+    }
+}
+
+/// Drill-down intent hint typography: mono caption regular.
+pub fn drill_down_hint_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_SIDE_SIZE,
+        strong: false,
+    }
+}
+
 #[cfg(test)]
 mod sync_direction_tests {
     use super::*;
@@ -3753,5 +4073,243 @@ mod folderfilter_tests {
         let flat = session.visible_tree(&rows);
         assert_eq!(flat.len(), 1);
         assert!(flat.iter().all(|node| node.depth == 0));
+    }
+
+    #[test]
+    fn drill_down_scope_navigation_and_breadcrumbs() {
+        let mut scope = FolderDrillDownScope::new();
+        assert!(scope.is_root());
+        assert_eq!(scope.depth(), 0);
+        let root_crumbs = scope.breadcrumbs();
+        assert_eq!(root_crumbs.len(), 1);
+        assert_eq!(root_crumbs.first().map(|c| c.name.as_str()), Some("Root"));
+        assert_eq!(
+            root_crumbs.first().map(|c| c.target_path.as_str()),
+            Some("")
+        );
+        assert_eq!(root_crumbs.first().map(|c| c.is_current), Some(true));
+
+        scope.drill_into("src/gui/views");
+        assert!(!scope.is_root());
+        assert_eq!(scope.depth(), 3);
+        let crumbs = scope.breadcrumbs();
+        assert_eq!(crumbs.len(), 4);
+        assert_eq!(crumbs.first().map(|c| c.name.as_str()), Some("Root"));
+        assert_eq!(crumbs.first().map(|c| c.is_current), Some(false));
+        assert_eq!(crumbs.get(1).map(|c| c.name.as_str()), Some("src"));
+        assert_eq!(crumbs.get(1).map(|c| c.target_path.as_str()), Some("src"));
+        assert_eq!(crumbs.get(1).map(|c| c.is_current), Some(false));
+        assert_eq!(crumbs.get(2).map(|c| c.name.as_str()), Some("gui"));
+        assert_eq!(
+            crumbs.get(2).map(|c| c.target_path.as_str()),
+            Some("src/gui")
+        );
+        assert_eq!(crumbs.get(2).map(|c| c.is_current), Some(false));
+        assert_eq!(crumbs.get(3).map(|c| c.name.as_str()), Some("views"));
+        assert_eq!(
+            crumbs.get(3).map(|c| c.target_path.as_str()),
+            Some("src/gui/views")
+        );
+        assert_eq!(crumbs.get(3).map(|c| c.is_current), Some(true));
+
+        assert!(scope.drill_up());
+        assert_eq!(scope.current_dir, "src/gui");
+        assert_eq!(scope.depth(), 2);
+
+        assert!(scope.drill_up());
+        assert_eq!(scope.current_dir, "src");
+        assert_eq!(scope.depth(), 1);
+
+        assert!(scope.drill_up());
+        assert!(scope.is_root());
+        assert_eq!(scope.depth(), 0);
+
+        assert!(!scope.drill_up()); // already at root
+
+        scope.drill_into("test");
+        assert_eq!(scope.depth(), 1);
+        scope.reset();
+        assert!(scope.is_root());
+    }
+
+    #[test]
+    fn drill_down_scoped_folder_tree_filtering() {
+        let rows = vec![
+            FolderRow {
+                rel_path: "root.txt".to_string(),
+                is_dir: false,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            FolderRow {
+                rel_path: "src/a.txt".to_string(),
+                is_dir: false,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            FolderRow {
+                rel_path: "src/gui/b.rs".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+            FolderRow {
+                rel_path: "docs/readme.md".to_string(),
+                is_dir: false,
+                glyph: 'L',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+        ];
+
+        let mut scope = FolderDrillDownScope::new();
+        let display = FolderDisplay::default();
+        let mut expanded = BTreeSet::new();
+        expanded.insert("src".to_string());
+        expanded.insert("src/gui".to_string());
+        expanded.insert("docs".to_string());
+
+        // At root with expanded dirs, all 4 rows present
+        let root_tree = folder_tree_scoped(&rows, &scope, &expanded, &display);
+        assert_eq!(root_tree.len(), 4);
+
+        // Scoped to "src", only 2 items from src, rel_paths stripped of "src/"
+        // "a.txt" has depth 0 (relative root), "gui/b.rs" has parent "gui"
+        scope.drill_into("src");
+        let mut scoped_expanded = BTreeSet::new();
+        scoped_expanded.insert("gui".to_string());
+        let scoped_tree = folder_tree_scoped(&rows, &scope, &scoped_expanded, &display);
+        assert_eq!(scoped_tree.len(), 2);
+        assert_eq!(
+            scoped_tree.first().map(|n| n.row.rel_path.as_str()),
+            Some("a.txt")
+        );
+        assert_eq!(scoped_tree.first().map(|n| n.depth), Some(0));
+        assert_eq!(
+            scoped_tree.get(1).map(|n| n.row.rel_path.as_str()),
+            Some("gui/b.rs")
+        );
+        assert_eq!(scoped_tree.get(1).map(|n| n.depth), Some(1));
+    }
+
+    #[test]
+    fn drill_down_detect_tab_and_compare_intent() {
+        assert_eq!(detect_tab_for_path("data.csv"), crate::home::Tab::Table);
+        assert_eq!(detect_tab_for_path("sheet.xlsx"), crate::home::Tab::Table);
+        assert_eq!(detect_tab_for_path("image.png"), crate::home::Tab::Picture);
+        assert_eq!(detect_tab_for_path("photo.jpeg"), crate::home::Tab::Picture);
+        assert_eq!(detect_tab_for_path("sound.wav"), crate::home::Tab::Audio);
+        assert_eq!(detect_tab_for_path("music.mp3"), crate::home::Tab::Audio);
+        assert_eq!(detect_tab_for_path("binary.bin"), crate::home::Tab::Hex);
+        assert_eq!(detect_tab_for_path("native.dylib"), crate::home::Tab::Hex);
+        assert_eq!(detect_tab_for_path("code.rs"), crate::home::Tab::Text);
+        assert_eq!(detect_tab_for_path("README"), crate::home::Tab::Text);
+
+        let file_node = FolderTreeNode {
+            row: FolderRow {
+                rel_path: "assets/logo.png".to_string(),
+                is_dir: false,
+                glyph: '!',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: true,
+            },
+            depth: 1,
+            is_expanded: false,
+            has_children: false,
+        };
+        let dir_node = FolderTreeNode {
+            row: FolderRow {
+                rel_path: "assets".to_string(),
+                is_dir: true,
+                glyph: '=',
+                left_size: None,
+                right_size: None,
+                left_time: None,
+                right_time: None,
+                changed: false,
+            },
+            depth: 0,
+            is_expanded: true,
+            has_children: true,
+        };
+
+        assert!(drill_down_intent_for_node("/left", "/right", &dir_node).is_none());
+        let intent = drill_down_intent_for_node("/left", "/right", &file_node);
+        assert!(intent.is_some());
+        if let Some(intent) = intent {
+            assert_eq!(intent.rel_path, "assets/logo.png");
+            assert_eq!(intent.target_tab, crate::home::Tab::Picture);
+            assert_eq!(intent.left_path, "/left/assets/logo.png");
+            assert_eq!(intent.right_path, "/right/assets/logo.png");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn drill_down_geometry_and_typography_contracts() {
+        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        assert_eq!(DRILL_DOWN_BAR_H, CHROME_HEADER_BAR_H);
+        assert_eq!(drill_down_bar_height(), 28.0);
+        assert_eq!(DRILL_DOWN_CRUMB_H, 24.0);
+        assert_eq!(drill_down_crumb_height(), 24.0);
+        assert_eq!(DRILL_DOWN_PAD_X, GEO_SECTION_GAP);
+        assert_eq!(drill_down_pad_x(), 8.0);
+        assert_eq!(DRILL_DOWN_GAP, GEO_TIGHT_GAP);
+        assert_eq!(drill_down_gap(), 4.0);
+        assert_eq!(DRILL_DOWN_SEP_W, 12.0);
+
+        let hit_area = drill_down_crumb_hit_area(50.0);
+        assert_eq!(hit_area, (50.0 + 16.0) * 24.0);
+
+        let ancestor_typo = drill_down_crumb_ancestor_typo();
+        assert!(ancestor_typo.mono);
+        assert_eq!(ancestor_typo.size, FOLDER_BODY_SIZE);
+        assert!(!ancestor_typo.strong);
+
+        let current_typo = drill_down_crumb_current_typo();
+        assert!(current_typo.mono);
+        assert_eq!(current_typo.size, FOLDER_BODY_SIZE);
+        assert!(current_typo.strong);
+
+        let sep_typo = drill_down_crumb_separator_typo();
+        assert!(sep_typo.mono);
+        assert_eq!(sep_typo.size, FOLDER_SIDE_SIZE);
+        assert!(!sep_typo.strong);
+
+        let hint_typo = drill_down_hint_typo();
+        assert!(hint_typo.mono);
+        assert_eq!(hint_typo.size, FOLDER_SIDE_SIZE);
+        assert!(!hint_typo.strong);
+    }
+
+    #[test]
+    fn folder_session_state_drill_down_integration() {
+        let mut session = FolderSessionState::default();
+        assert!(session.drill_down.is_root());
+        session.drill_into("src");
+        assert_eq!(session.drill_down.current_dir, "src");
+        assert!(session.drill_up());
+        assert!(session.drill_down.is_root());
+        session.drill_into("gui");
+        session.reset_drill_down();
+        assert!(session.drill_down.is_root());
     }
 }

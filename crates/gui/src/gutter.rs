@@ -346,6 +346,86 @@ pub fn gutter_row_center_y(row: usize, total_rows: usize, height: f32) -> Option
     }
 }
 
+/// Computes thumbnail gutter bar geometry for three-way merge lines containing conflict markers.
+///
+/// Scans lines for `<<<<<<<` to `>>>>>>>` spans and maps each conflict region to a
+/// [`GutterSegment`] with kind [`TextRowKind::Changed`], respecting [`GUTTER_SEGMENT_MIN_H`]
+/// and [`crate::theme::GUTTER_MERGE_GAP`].
+pub fn merge_gutter_geometry(lines: &[String], height: f32) -> GutterGeometry {
+    if lines.is_empty() || !height.is_finite() || height <= 0.0 {
+        return GutterGeometry {
+            total_height: if height.is_finite() {
+                height.max(0.0)
+            } else {
+                0.0
+            },
+            segments: Vec::new(),
+        };
+    }
+
+    let ranges = merge_conflict_line_ranges(lines);
+    let total_f = lines.len() as f32;
+    let mut segments = Vec::new();
+
+    for (start, end) in ranges {
+        let y_start = (start as f32 / total_f) * height;
+        let mut y_end = (end as f32 / total_f) * height;
+        if y_end < y_start + GUTTER_SEGMENT_MIN_H {
+            y_end = (y_start + GUTTER_SEGMENT_MIN_H).min(height);
+        }
+
+        if let Some(last) = segments.last_mut() {
+            let last_seg: &mut GutterSegment = last;
+            if y_start <= last_seg.y_end + crate::theme::GUTTER_MERGE_GAP {
+                last_seg.y_end = last_seg.y_end.max(y_end);
+                continue;
+            }
+        }
+
+        segments.push(GutterSegment {
+            y_start,
+            y_end,
+            kind: TextRowKind::Changed,
+        });
+    }
+
+    GutterGeometry {
+        total_height: height,
+        segments,
+    }
+}
+
+/// Finds all half-open `[start, end)` line ranges of conflict blocks in `lines`.
+pub fn merge_conflict_line_ranges(lines: &[String]) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let mut in_conflict = false;
+    let mut start_idx = 0usize;
+
+    for (idx, line) in lines.iter().enumerate() {
+        if line.starts_with("<<<<<<<") && !in_conflict {
+            in_conflict = true;
+            start_idx = idx;
+        } else if line.starts_with(">>>>>>>") && in_conflict {
+            in_conflict = false;
+            ranges.push((start_idx, idx.saturating_add(1)));
+        }
+    }
+    if in_conflict {
+        ranges.push((start_idx, lines.len()));
+    }
+    ranges
+}
+
+/// Pure helper mapping a ruler y-coordinate directly to a 0-based row index clamped to `0..total_rows`.
+pub fn gutter_ruler_hit_test(y: f32, height: f32, total_rows: usize) -> Option<usize> {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 || !y.is_finite() || y < 0.0 {
+        return None;
+    }
+    let frac = (y / height).clamp(0.0, 1.0);
+    let row = (frac * total_rows as f32).floor() as usize;
+    Some(row.min(total_rows.saturating_sub(1)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -707,5 +787,49 @@ mod tests {
             }
             row = row.saturating_add(1);
         }
+    }
+
+    #[test]
+    fn merge_gutter_geometry_detects_conflict_hunks() {
+        let lines = vec![
+            "h1".to_string(),
+            "<<<<<<<".to_string(),
+            "L".to_string(),
+            "=======".to_string(),
+            "R".to_string(),
+            ">>>>>>>".to_string(),
+            "clean".to_string(),
+        ];
+        let geom = merge_gutter_geometry(&lines, 140.0);
+        assert_eq!(geom.segments.len(), 1);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        assert_eq!(seg.kind, TextRowKind::Changed);
+        assert!(seg.y_start >= 0.0);
+        assert!(seg.y_end <= 140.0);
+    }
+
+    #[test]
+    fn merge_conflict_line_ranges_extracts_hunks() {
+        let lines = vec![
+            "h1".to_string(),
+            "<<<<<<<".to_string(),
+            "L".to_string(),
+            ">>>>>>>".to_string(),
+            "h2".to_string(),
+        ];
+        let ranges = merge_conflict_line_ranges(&lines);
+        assert_eq!(ranges, vec![(1, 4)]);
+    }
+
+    #[test]
+    fn gutter_ruler_hit_test_clamps_and_maps() {
+        assert_eq!(gutter_ruler_hit_test(0.0, 100.0, 10), Some(0));
+        assert_eq!(gutter_ruler_hit_test(50.0, 100.0, 10), Some(5));
+        assert_eq!(gutter_ruler_hit_test(99.9, 100.0, 10), Some(9));
+        assert_eq!(gutter_ruler_hit_test(150.0, 100.0, 10), Some(9));
+        assert_eq!(gutter_ruler_hit_test(-5.0, 100.0, 10), None);
+        assert_eq!(gutter_ruler_hit_test(10.0, 0.0, 10), None);
     }
 }

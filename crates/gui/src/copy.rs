@@ -99,6 +99,44 @@ pub fn copy_section(
     Ok(copied)
 }
 
+/// Copies all difference rows in the model in the given direction.
+///
+/// Skips Equal rows, applies [`apply_copy`] to all non-equal rows.
+/// Returns how many rows were copied.
+pub fn copy_all(model: &mut TextRows, dir: CopyDirection) -> Result<usize, CopyError> {
+    let mut copied = 0usize;
+    let mut idx = 0usize;
+    while idx < model.rows.len() {
+        if let Some(row) = model.rows.get(idx)
+            && row.kind != TextRowKind::Equal
+            && apply_copy(model, idx, dir).is_ok()
+        {
+            copied = copied.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    Ok(copied)
+}
+
+/// Counts how many difference rows can be copied in the model.
+pub fn copyable_diff_count(model: &TextRows) -> usize {
+    let mut count = 0usize;
+    for row in &model.rows {
+        if row.kind != TextRowKind::Equal {
+            count = count.saturating_add(1);
+        }
+    }
+    count
+}
+
+/// Returns whether the specified row index is a copyable difference row.
+pub fn can_copy_row(model: &TextRows, row_idx: usize) -> bool {
+    match model.rows.get(row_idx) {
+        Some(row) => row.kind != TextRowKind::Equal,
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +247,28 @@ mod tests {
         // Out of bounds stays an error.
         let err = copy_section(&mut model2, 99, CopyDirection::LeftToRight);
         assert_eq!(err, Err(CopyError::IndexOutOfBounds));
+    }
+
+    #[test]
+    fn copy_all_copies_every_diff_row_and_preserves_equals() {
+        let mut model = section_model();
+        assert_eq!(copyable_diff_count(&model), 2);
+        let count = copy_all(&mut model, CopyDirection::LeftToRight).unwrap_or_default();
+        assert_eq!(count, 2);
+        assert_eq!(copyable_diff_count(&model), 0);
+        for row in &model.rows {
+            assert_eq!(row.kind, TextRowKind::Equal);
+            assert_eq!(row.left, row.right);
+        }
+    }
+
+    #[test]
+    fn can_copy_row_identifies_diffs_and_bounds() {
+        let model = section_model();
+        assert!(!can_copy_row(&model, 0)); // Equal
+        assert!(can_copy_row(&model, 1)); // Changed
+        assert!(can_copy_row(&model, 2)); // Changed
+        assert!(!can_copy_row(&model, 3)); // Equal
+        assert!(!can_copy_row(&model, 999)); // OOB
     }
 }

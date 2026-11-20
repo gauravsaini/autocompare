@@ -5,6 +5,8 @@
 #![forbid(unsafe_code)]
 #![allow(dead_code)]
 
+use std::collections::BTreeSet;
+
 /// The nine comparison tabs plus the Home launcher view.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Tab {
@@ -1173,6 +1175,254 @@ pub const fn sync_consent_hint(consented: bool, steps: usize) -> &'static str {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Home View session tree model (leaf-3.2 exquisite parity):
+// Hierarchical organization of sessions by category / tab type with
+// expand/collapse state, depth indentation, geometry-first sizing and
+// typography-second role mapping. Pure headless model; paint adoption
+// is disjoint. Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// One node in the Home View session tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTreeNode {
+    /// Unique key string for tree id salt and selection (e.g. "grp:Folder" or "live:42").
+    pub id: String,
+    /// Display title / label.
+    pub label: String,
+    /// Tree depth (0 for root category groups, 1 for session items).
+    pub depth: usize,
+    /// Whether this node is a collapsible group folder.
+    pub is_group: bool,
+    /// Whether this group folder is currently expanded.
+    pub is_expanded: bool,
+    /// Whether this group folder has child sessions.
+    pub has_children: bool,
+    /// Tab kind of the session or group.
+    pub kind: Option<Tab>,
+    /// Live session id if backed by an active/open session.
+    pub session_id: Option<u64>,
+    /// Stamped snapshot if backed by a history record.
+    pub snapshot: Option<SessionSnapshot>,
+}
+
+/// Builds a hierarchical session tree grouping live sessions and history snapshots
+/// by Tab comparison type. An entry is visible if its parent group is contained in `expanded_groups`.
+pub fn build_session_tree(
+    sessions: &[Session],
+    history: &[SessionSnapshot],
+    expanded_groups: &BTreeSet<String>,
+) -> Vec<SessionTreeNode> {
+    let mut nodes = Vec::new();
+
+    let categories = [
+        Tab::Folder,
+        Tab::Text,
+        Tab::Table,
+        Tab::Hex,
+        Tab::Merge,
+        Tab::Sync,
+        Tab::Picture,
+        Tab::FolderMerge,
+        Tab::Audio,
+    ];
+
+    for tab in categories {
+        let group_id = format!("grp:{}", tab.title());
+        let matching_live: Vec<&Session> = sessions.iter().filter(|s| s.kind == tab).collect();
+        let matching_history: Vec<&SessionSnapshot> =
+            history.iter().filter(|s| s.tab == tab).collect();
+        let total_children = matching_live.len().saturating_add(matching_history.len());
+        let has_children = total_children > 0;
+        let is_expanded = expanded_groups.contains(&group_id);
+
+        let group_label = format!("{} ({total_children})", tab.title());
+        nodes.push(SessionTreeNode {
+            id: group_id.clone(),
+            label: group_label,
+            depth: 0,
+            is_group: true,
+            is_expanded,
+            has_children,
+            kind: Some(tab),
+            session_id: None,
+            snapshot: None,
+        });
+
+        if is_expanded {
+            for ses in matching_live {
+                nodes.push(SessionTreeNode {
+                    id: format!("live:{}", ses.id),
+                    label: ses.title.clone(),
+                    depth: 1,
+                    is_group: false,
+                    is_expanded: false,
+                    has_children: false,
+                    kind: Some(tab),
+                    session_id: Some(ses.id),
+                    snapshot: None,
+                });
+            }
+            for (idx, snap) in matching_history.iter().enumerate() {
+                let snap_title = if !snap.left.trim().is_empty() && !snap.right.trim().is_empty() {
+                    format!("{} \u{2194} {}", snap.left.trim(), snap.right.trim())
+                } else if !snap.left.trim().is_empty() {
+                    snap.left.trim().to_string()
+                } else if !snap.right.trim().is_empty() {
+                    snap.right.trim().to_string()
+                } else {
+                    format!("{} #{}", tab.title(), idx.saturating_add(1))
+                };
+                nodes.push(SessionTreeNode {
+                    id: format!("hist:{}:{idx}", tab.title()),
+                    label: snap_title,
+                    depth: 1,
+                    is_group: false,
+                    is_expanded: false,
+                    has_children: false,
+                    kind: Some(tab),
+                    session_id: None,
+                    snapshot: Some((*snap).clone()),
+                });
+            }
+        }
+    }
+
+    nodes
+}
+
+/// Toggles a session category group in the expanded set.
+pub fn toggle_session_group(expanded_groups: &mut BTreeSet<String>, group_id: &str) {
+    if expanded_groups.contains(group_id) {
+        expanded_groups.remove(group_id);
+    } else {
+        expanded_groups.insert(group_id.to_string());
+    }
+}
+
+/// Expands all session category groups.
+pub fn expand_all_session_groups(expanded_groups: &mut BTreeSet<String>) {
+    let categories = [
+        Tab::Folder,
+        Tab::Text,
+        Tab::Table,
+        Tab::Hex,
+        Tab::Merge,
+        Tab::Sync,
+        Tab::Picture,
+        Tab::FolderMerge,
+        Tab::Audio,
+    ];
+    for tab in categories {
+        expanded_groups.insert(format!("grp:{}", tab.title()));
+    }
+}
+
+/// Collapses all session category groups.
+pub fn collapse_all_session_groups(expanded_groups: &mut BTreeSet<String>) {
+    expanded_groups.clear();
+}
+
+// ----------------------------------------------------------------------------
+// Session tree geometry-first contract (widths, heights, margins, padding, indent):
+// Rhythm tokens reuse; zero magic numbers; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Session tree default sidebar width px: card width parity (`HOME_CARD_MIN_W` = 240.0).
+pub const SESSION_TREE_WIDTH: f32 = HOME_CARD_MIN_W;
+/// Session tree row hit height px: standard 24px compact hit row (`HOME_TOOLBAR_BUTTON_H` parity).
+pub const SESSION_TREE_ROW_H: f32 = HOME_TOOLBAR_BUTTON_H;
+/// Session tree indent step px: single-source from theme (`GEO_TREE_INDENT_STEP` = 12.0).
+pub const SESSION_TREE_INDENT_STEP: f32 = crate::theme::GEO_TREE_INDENT_STEP;
+/// Session tree horizontal padding px: card outer pad (`HOME_CARD_PAD` = 8.0).
+pub const SESSION_TREE_PAD_X: f32 = HOME_CARD_PAD;
+/// Session tree vertical padding px: card inner gap (`HOME_CARD_INNER_GAP` = 4.0).
+pub const SESSION_TREE_PAD_Y: f32 = HOME_CARD_INNER_GAP;
+/// Session tree expander triangle width px: standard 16px glyph cell.
+pub const SESSION_TREE_EXPANDER_W: f32 = 16.0;
+/// Session tree session icon / glyph width px: standard 16px icon cell.
+pub const SESSION_TREE_ICON_W: f32 = 16.0;
+
+/// Sidebar width px for session tree. Pure.
+pub fn session_tree_width() -> f32 {
+    SESSION_TREE_WIDTH
+}
+
+/// Row height px for one session tree node. Pure.
+pub fn session_tree_row_height() -> f32 {
+    SESSION_TREE_ROW_H
+}
+
+/// Indent step px for one tree depth level. Pure.
+pub fn session_tree_indent_step() -> f32 {
+    SESSION_TREE_INDENT_STEP
+}
+
+/// Indent in px for a session tree depth. Pure.
+pub fn session_tree_indent_for_depth(depth: usize) -> f32 {
+    (depth as f32) * SESSION_TREE_INDENT_STEP
+}
+
+/// Content label width budget px for a given tree row:
+/// total width minus horizontal padding, indent, expander width, and icon width.
+pub fn session_tree_content_width(total_w: f32, depth: usize) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    let reserved = SESSION_TREE_PAD_X * 2.0
+        + session_tree_indent_for_depth(depth)
+        + SESSION_TREE_EXPANDER_W
+        + SESSION_TREE_ICON_W
+        + HOME_CARD_INNER_GAP;
+    (total_w - reserved).max(0.0)
+}
+
+// ----------------------------------------------------------------------------
+// Session tree typography-second contract (family, weight, line-height, spacing):
+// Single-source from `TypoRole` tokens; zero new point sizes; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Group folder header typography role: medium proportional body (13.0 pt).
+pub const fn session_tree_group_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeButton
+}
+
+/// Session leaf item typography role: regular proportional body (13.0 pt).
+pub const fn session_tree_item_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeButton
+}
+
+/// Session meta / timestamp typography role: caption alias (`TypoRole::caption()`, 11.0 pt weak).
+pub const fn session_tree_meta_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::caption()
+}
+
+/// Group header font point size px.
+pub fn session_tree_group_size() -> f32 {
+    session_tree_group_role().size()
+}
+
+/// Session item font point size px.
+pub fn session_tree_item_size() -> f32 {
+    session_tree_item_role().size()
+}
+
+/// Meta / age font point size px.
+pub fn session_tree_meta_size() -> f32 {
+    session_tree_meta_role().size()
+}
+
+/// Typography contrast check between group header and secondary meta.
+pub fn session_tree_hierarchy_ok() -> bool {
+    let group = session_tree_group_role();
+    let meta = session_tree_meta_role();
+    group.size() > meta.size()
+        && meta.is_small()
+        && meta.is_weak()
+        && group.is_chrome()
+        && meta.is_chrome()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1831,5 +2081,84 @@ mod tests {
         assert_eq!(stamped.age_secs(999), None);
         assert_eq!(stamped.age_secs(1_060), Some(60));
         assert_eq!(stamped.age_label(1_060), Some(String::from("1m ago")));
+    }
+
+    #[test]
+    fn session_tree_build_empty_and_grouped() {
+        let sessions = vec![
+            super::Session::new(1, super::Tab::Folder, "/left/f1", "/right/f1", "", 0),
+            super::Session::new(2, super::Tab::Text, "/left/t1.txt", "/right/t1.txt", "", 0),
+        ];
+        let history = vec![super::SessionSnapshot::new(
+            super::Tab::Folder,
+            "/left/f2",
+            "/right/f2",
+            "",
+            0,
+        )];
+
+        let mut expanded = BTreeSet::new();
+        let tree_collapsed = super::build_session_tree(&sessions, &history, &expanded);
+        assert_eq!(tree_collapsed.len(), 9);
+        assert!(tree_collapsed.iter().all(|n| n.is_group && n.depth == 0));
+
+        let folder_grp = tree_collapsed.iter().find(|n| n.id == "grp:Folder");
+        assert!(folder_grp.is_some());
+        if let Some(f_node) = folder_grp {
+            assert!(f_node.has_children);
+            assert!(f_node.label.contains("(2)"));
+        }
+
+        // Expand Folder group
+        super::toggle_session_group(&mut expanded, "grp:Folder");
+        assert!(expanded.contains("grp:Folder"));
+        let tree_folder_expanded = super::build_session_tree(&sessions, &history, &expanded);
+        assert_eq!(tree_folder_expanded.len(), 11); // 9 groups + 2 children (1 live + 1 hist)
+        let children: Vec<_> = tree_folder_expanded
+            .iter()
+            .filter(|n| n.depth == 1)
+            .collect();
+        assert_eq!(children.len(), 2);
+        assert_eq!(children.first().and_then(|c| c.session_id), Some(1));
+        assert!(children.get(1).and_then(|c| c.snapshot.as_ref()).is_some());
+
+        // Expand all
+        super::expand_all_session_groups(&mut expanded);
+        let tree_all = super::build_session_tree(&sessions, &history, &expanded);
+        assert_eq!(tree_all.len(), 12); // 9 groups + 2 folder children + 1 text child
+
+        // Collapse all
+        super::collapse_all_session_groups(&mut expanded);
+        assert!(expanded.is_empty());
+        let tree_none = super::build_session_tree(&sessions, &history, &expanded);
+        assert_eq!(tree_none.len(), 9);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn session_tree_geometry_and_typography_contract() {
+        use crate::theme::{GEO_TREE_INDENT_STEP, TypoRole};
+        assert_eq!(super::SESSION_TREE_WIDTH, 240.0);
+        assert_eq!(super::session_tree_width(), 240.0);
+        assert_eq!(super::SESSION_TREE_ROW_H, 24.0);
+        assert_eq!(super::session_tree_row_height(), 24.0);
+        assert_eq!(super::SESSION_TREE_INDENT_STEP, GEO_TREE_INDENT_STEP);
+        assert_eq!(super::session_tree_indent_step(), 12.0);
+        assert_eq!(super::session_tree_indent_for_depth(0), 0.0);
+        assert_eq!(super::session_tree_indent_for_depth(1), 12.0);
+        assert_eq!(super::session_tree_indent_for_depth(2), 24.0);
+
+        let content_w = super::session_tree_content_width(240.0, 1);
+        assert!(content_w > 100.0);
+        assert!(content_w < 240.0);
+
+        // Typo contract
+        assert_eq!(super::session_tree_group_role(), TypoRole::HomeButton);
+        assert_eq!(super::session_tree_item_role(), TypoRole::HomeButton);
+        assert_eq!(super::session_tree_meta_role(), TypoRole::caption());
+        assert_eq!(super::session_tree_group_size(), 13.0);
+        assert_eq!(super::session_tree_item_size(), 13.0);
+        assert_eq!(super::session_tree_meta_size(), 11.0);
+        assert!(super::session_tree_hierarchy_ok());
     }
 }

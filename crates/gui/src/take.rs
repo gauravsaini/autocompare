@@ -116,6 +116,91 @@ pub fn resolve_take(
     Ok(out)
 }
 
+/// Resolves all conflict blocks in a merged line stream by taking the chosen candidate.
+///
+/// Replaces every conflict block (`<<<<<<<` ... `>>>>>>>`) with the chosen candidate.
+pub fn resolve_take_all(lines: &[String], choice: TakeChoice) -> Result<Vec<String>, TakeError> {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut i = 0usize;
+
+    while i < lines.len() {
+        let Some(line) = lines.get(i) else {
+            break;
+        };
+
+        if line.starts_with("<<<<<<<") {
+            let mut left_lines = Vec::new();
+            let mut base_lines = Vec::new();
+            let mut right_lines = Vec::new();
+            let mut section = 0; // 0 = left, 1 = base, 2 = right
+            let mut found_end = false;
+
+            i = i.saturating_add(1);
+            while i < lines.len() {
+                let Some(cur) = lines.get(i) else {
+                    break;
+                };
+                if cur.starts_with("|||||||") {
+                    section = 1;
+                } else if cur.starts_with("=======") {
+                    section = 2;
+                } else if cur.starts_with(">>>>>>>") {
+                    found_end = true;
+                    i = i.saturating_add(1);
+                    break;
+                } else {
+                    match section {
+                        0 => left_lines.push(cur.clone()),
+                        1 => base_lines.push(cur.clone()),
+                        2 => right_lines.push(cur.clone()),
+                        _ => {}
+                    }
+                }
+                i = i.saturating_add(1);
+            }
+
+            if !found_end {
+                return Err(TakeError::MalformedConflict);
+            }
+
+            match choice {
+                TakeChoice::Left => out.extend(left_lines),
+                TakeChoice::Right => out.extend(right_lines),
+                TakeChoice::Base => out.extend(base_lines),
+                TakeChoice::Both => {
+                    out.extend(left_lines);
+                    out.extend(right_lines);
+                }
+            }
+            continue;
+        }
+
+        out.push(line.clone());
+        i = i.saturating_add(1);
+    }
+
+    Ok(out)
+}
+
+/// Counts conflict blocks in a merged line stream.
+pub fn conflict_count(lines: &[String]) -> usize {
+    let mut count = 0usize;
+    for line in lines {
+        if line.starts_with("<<<<<<<") {
+            count = count.saturating_add(1);
+        }
+    }
+    count
+}
+
+/// Returns true if the line starts with any of the standard merge3 conflict markers.
+pub fn is_conflict_marker(line: &str) -> bool {
+    line.starts_with("<<<<<<<")
+        || line.starts_with("|||||||")
+        || line.starts_with("=======")
+        || line.starts_with(">>>>>>>")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +243,46 @@ mod tests {
 
         let both = resolve_take(&lines, 0, TakeChoice::Both).unwrap_or_default();
         assert_eq!(both, vec!["L1".to_string(), "R1".to_string()]);
+    }
+
+    #[test]
+    fn resolve_take_all_resolves_every_conflict_block() {
+        let lines = vec![
+            "h1".to_string(),
+            "<<<<<<<".to_string(),
+            "L1".to_string(),
+            "=======".to_string(),
+            "R1".to_string(),
+            ">>>>>>>".to_string(),
+            "mid".to_string(),
+            "<<<<<<<".to_string(),
+            "L2".to_string(),
+            "=======".to_string(),
+            "R2".to_string(),
+            ">>>>>>>".to_string(),
+            "end".to_string(),
+        ];
+        assert_eq!(conflict_count(&lines), 2);
+        let res = resolve_take_all(&lines, TakeChoice::Right).unwrap_or_default();
+        assert_eq!(
+            res,
+            vec![
+                "h1".to_string(),
+                "R1".to_string(),
+                "mid".to_string(),
+                "R2".to_string(),
+                "end".to_string(),
+            ]
+        );
+        assert_eq!(conflict_count(&res), 0);
+    }
+
+    #[test]
+    fn is_conflict_marker_detects_all_four_markers() {
+        assert!(is_conflict_marker("<<<<<<< left"));
+        assert!(is_conflict_marker("||||||| base"));
+        assert!(is_conflict_marker("======="));
+        assert!(is_conflict_marker(">>>>>>> right"));
+        assert!(!is_conflict_marker("normal line"));
     }
 }
