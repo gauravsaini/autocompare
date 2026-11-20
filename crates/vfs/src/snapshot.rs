@@ -3,7 +3,9 @@
 #![forbid(unsafe_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use std::io::{Read, Write};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -35,6 +37,142 @@ pub struct SnapshotDocument {
     pub description: Option<String>,
     /// List of file and folder metadata entries.
     pub entries: Vec<SnapshotEntry>,
+}
+
+impl SnapshotDocument {
+    /// Creates a new snapshot document with default metadata.
+    #[must_use]
+    pub fn new(root_name: impl Into<String>) -> Self {
+        let now_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        Self {
+            schema_version: BCSS_SCHEMA_VERSION,
+            created_at_epoch_secs: now_epoch,
+            generator: "autocompare-vfs v0.5.0".to_string(),
+            root_name: root_name.into(),
+            description: None,
+            entries: Vec::new(),
+        }
+    }
+
+    /// Sets the generator application string.
+    #[must_use]
+    pub fn with_generator(mut self, generator: impl Into<String>) -> Self {
+        self.generator = generator.into();
+        self
+    }
+
+    /// Sets the optional human-readable description.
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Sets the list of entries for this snapshot.
+    #[must_use]
+    pub fn with_entries(mut self, entries: Vec<SnapshotEntry>) -> Self {
+        self.entries = entries;
+        self
+    }
+
+    /// Appends a single entry to the snapshot document.
+    pub fn add_entry(&mut self, entry: SnapshotEntry) {
+        self.entries.push(entry);
+    }
+
+    /// Finds an entry by exact relative path string.
+    #[must_use]
+    pub fn find_entry(&self, path: &str) -> Option<&SnapshotEntry> {
+        self.entries.iter().find(|e| e.path == path)
+    }
+
+    /// Returns the number of regular file entries in this snapshot.
+    #[must_use]
+    pub fn file_count(&self) -> usize {
+        self.entries.iter().filter(|e| !e.is_dir).count()
+    }
+
+    /// Returns the number of directory entries in this snapshot.
+    #[must_use]
+    pub fn dir_count(&self) -> usize {
+        self.entries.iter().filter(|e| e.is_dir).count()
+    }
+
+    /// Returns the sum of sizes across all files in this snapshot.
+    #[must_use]
+    pub fn total_size(&self) -> u64 {
+        let mut total = 0_u64;
+        for e in &self.entries {
+            if !e.is_dir {
+                total = total.saturating_add(e.size);
+            }
+        }
+        total
+    }
+
+    /// Compares two snapshot documents and returns a comparison summary.
+    #[must_use]
+    pub fn diff_summary(&self, other: &Self) -> SnapshotDiffSummary {
+        let left_map: BTreeMap<&str, &SnapshotEntry> =
+            self.entries.iter().map(|e| (e.path.as_str(), e)).collect();
+        let right_map: BTreeMap<&str, &SnapshotEntry> =
+            other.entries.iter().map(|e| (e.path.as_str(), e)).collect();
+
+        let mut matching: usize = 0;
+        let mut modified: usize = 0;
+        let mut unique_left: usize = 0;
+        let mut unique_right: usize = 0;
+
+        for (path, left_entry) in &left_map {
+            match right_map.get(path) {
+                Some(right_entry) => {
+                    let is_match = left_entry.is_dir == right_entry.is_dir
+                        && left_entry.size == right_entry.size
+                        && (left_entry.crc32.is_none()
+                            || right_entry.crc32.is_none()
+                            || left_entry.crc32 == right_entry.crc32);
+                    if is_match {
+                        matching = matching.saturating_add(1);
+                    } else {
+                        modified = modified.saturating_add(1);
+                    }
+                }
+                None => {
+                    unique_left = unique_left.saturating_add(1);
+                }
+            }
+        }
+
+        for path in right_map.keys() {
+            if !left_map.contains_key(path) {
+                unique_right = unique_right.saturating_add(1);
+            }
+        }
+
+        SnapshotDiffSummary {
+            matching,
+            modified,
+            unique_left,
+            unique_right,
+        }
+    }
+}
+
+/// Summary metrics comparing two `.bcss` snapshots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotDiffSummary {
+    /// Number of matching entries.
+    pub matching: usize,
+    /// Number of entries present in both with different size, type, or checksum.
+    pub modified: usize,
+    /// Number of entries present only in left snapshot.
+    pub unique_left: usize,
+    /// Number of entries present only in right snapshot.
+    pub unique_right: usize,
 }
 
 /// A single file or directory record inside a `.bcss` snapshot.
@@ -111,6 +249,8 @@ pub fn deserialize_bcss(raw_bytes: &[u8]) -> Result<SnapshotDocument, VfsError> 
 
 /// Creates a [`SnapshotDocument`] by capturing metadata and CRC32 hashes from an existing [`Vfs`].
 ///
+/// Traversal uses default [`WalkOptions`].
+///
 /// # Errors
 ///
 /// Propagates VFS traversal and read errors.
@@ -120,18 +260,32 @@ pub fn create_snapshot(
     root_name: &str,
     description: Option<String>,
 ) -> Result<SnapshotDocument, VfsError> {
-    let now_epoch_secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
     let options = WalkOptions {
         follow_symlinks: false,
         max_depth: None,
         refuse_cycles: true,
     };
+    create_snapshot_with_options(vfs, root, root_name, description, &options)
+}
 
-    let entries = vfs.walk(root, &options)?;
+/// Creates a [`SnapshotDocument`] with custom [`WalkOptions`].
+///
+/// # Errors
+///
+/// Propagates VFS traversal and read errors.
+pub fn create_snapshot_with_options(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    root_name: &str,
+    description: Option<String>,
+    options: &WalkOptions,
+) -> Result<SnapshotDocument, VfsError> {
+    let now_epoch_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let entries = vfs.walk(root, options)?;
     let mut snapshot_entries = Vec::with_capacity(entries.len());
 
     for entry in entries {
@@ -177,8 +331,17 @@ pub fn create_snapshot(
             }
         };
 
+        let rel_path = match entry.path.strip_prefix(root) {
+            Some(p) if !p.is_root() => p.as_str().to_string(),
+            _ => entry.path.as_str().to_string(),
+        };
+
+        if rel_path.is_empty() {
+            continue;
+        }
+
         snapshot_entries.push(SnapshotEntry {
-            path: entry.path.as_str().to_string(),
+            path: rel_path,
             is_dir,
             size,
             modified_epoch_secs,
@@ -267,10 +430,121 @@ impl SnapshotFs {
         })
     }
 
+    /// Loads a `.bcss` snapshot from raw in-memory bytes (JSON or Gzip compressed).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::CorruptedArchive`] or [`VfsError::SchemaVersionMismatch`] on parse failure.
+    pub fn from_bytes(raw_bytes: &[u8]) -> Result<Self, VfsError> {
+        let doc = deserialize_bcss(raw_bytes)?;
+        Self::new(doc)
+    }
+
+    /// Opens a `.bcss` snapshot file from the local physical filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::NotFound`] if missing, or corruption errors on invalid data.
+    pub fn open_file(path: impl AsRef<Path>) -> Result<Self, VfsError> {
+        let bytes = fs::read(path.as_ref()).map_err(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => VfsError::NotFound(VfsPath::root()),
+            std::io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(VfsPath::root()),
+            _ => VfsError::Io(err),
+        })?;
+        Self::from_bytes(&bytes)
+    }
+
+    /// Serializes this snapshot to formatted JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::CorruptedArchive`] if serialization fails.
+    pub fn to_json_bytes(&self) -> Result<Vec<u8>, VfsError> {
+        serialize_bcss_json(&self.doc)
+    }
+
+    /// Serializes this snapshot to Gzip-compressed JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::Io`] if compression fails.
+    pub fn to_compressed_bytes(&self) -> Result<Vec<u8>, VfsError> {
+        serialize_bcss_compressed(&self.doc)
+    }
+
+    /// Saves this snapshot to a JSON file at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates serialization or I/O errors.
+    pub fn save_json_file(&self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+        let bytes = self.to_json_bytes()?;
+        fs::write(path.as_ref(), bytes).map_err(VfsError::Io)
+    }
+
+    /// Saves this snapshot to a compressed `.bcss` file at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates serialization or I/O errors.
+    pub fn save_compressed_file(&self, path: impl AsRef<Path>) -> Result<(), VfsError> {
+        let bytes = self.to_compressed_bytes()?;
+        fs::write(path.as_ref(), bytes).map_err(VfsError::Io)
+    }
+
     /// Returns a reference to the underlying snapshot document.
     #[must_use]
     pub fn document(&self) -> &SnapshotDocument {
         &self.doc
+    }
+
+    /// Returns the root name associated with this snapshot.
+    #[must_use]
+    pub fn root_name(&self) -> &str {
+        &self.doc.root_name
+    }
+
+    /// Returns the number of regular file entries in this snapshot.
+    #[must_use]
+    pub fn file_count(&self) -> usize {
+        self.entries.values().filter(|m| m.is_file).count()
+    }
+
+    /// Returns the number of directory entries in this snapshot.
+    #[must_use]
+    pub fn dir_count(&self) -> usize {
+        self.entries.values().filter(|m| m.is_dir).count()
+    }
+
+    /// Returns the total byte size of all files in this snapshot.
+    #[must_use]
+    pub fn total_size(&self) -> u64 {
+        let mut total = 0_u64;
+        for meta in self.entries.values() {
+            if meta.is_file {
+                total = total.saturating_add(meta.len);
+            }
+        }
+        total
+    }
+
+    /// Returns a list of all virtual paths in this snapshot.
+    #[must_use]
+    pub fn all_paths(&self) -> Vec<VfsPath> {
+        self.entries.keys().cloned().collect()
+    }
+
+    /// Returns `true` if this snapshot contains the given virtual path.
+    #[must_use]
+    pub fn contains(&self, path: &VfsPath) -> bool {
+        self.entries.contains_key(path)
+    }
+
+    /// Looks up the metadata entry for a path in the snapshot document.
+    #[must_use]
+    pub fn find_entry(&self, path: &VfsPath) -> Option<&SnapshotEntry> {
+        let path_str = path.as_str();
+        self.doc.entries.iter().find(|e| e.path == path_str)
     }
 }
 

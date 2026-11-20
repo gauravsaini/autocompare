@@ -1,19 +1,21 @@
-//! Pure-Rust Zip archive virtual filesystem reader.
+//! Pure-Rust Zip archive virtual filesystem reader and writer.
 
 #![forbid(unsafe_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use zip::ZipArchive;
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 use crate::error::VfsError;
 use crate::path::VfsPath;
-use crate::trait_def::{Vfs, VfsEntry, VfsMeta};
+use crate::trait_def::{Vfs, VfsEntry, VfsMeta, WalkOptions};
 
 #[derive(Debug, Clone)]
 struct ZipItemInfo {
@@ -25,8 +27,92 @@ struct ZipItemInfo {
 #[derive(Debug, Clone)]
 pub struct ZipFs {
     data: Arc<Vec<u8>>,
+    comment: Option<String>,
     entries: BTreeMap<VfsPath, ZipItemInfo>,
     dir_children: BTreeMap<VfsPath, Vec<VfsEntry>>,
+}
+
+/// Creates a new in-memory zip archive from a slice of relative paths and byte payloads.
+///
+/// # Errors
+///
+/// Returns [`VfsError::CorruptedArchive`] if zip construction fails.
+pub fn create_zip_archive(entries: &[(&VfsPath, &[u8])]) -> Result<Vec<u8>, VfsError> {
+    let mut buffer = Vec::new();
+    let mut writer = ZipWriter::new(Cursor::new(&mut buffer));
+    let options = SimpleFileOptions::default();
+
+    for (path, data) in entries {
+        if path.is_root() {
+            continue;
+        }
+        writer
+            .start_file(path.as_str(), options)
+            .map_err(VfsError::from)?;
+        writer.write_all(data).map_err(VfsError::Io)?;
+    }
+    writer.finish().map_err(VfsError::from)?;
+    Ok(buffer)
+}
+
+/// Archives a virtual filesystem tree rooted at `root` into a standard Zip byte vector.
+///
+/// # Errors
+///
+/// Returns VFS or I/O errors encountered during directory traversal and archiving.
+pub fn create_zip_from_vfs(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    options: &WalkOptions,
+) -> Result<Vec<u8>, VfsError> {
+    let entries = vfs.walk(root, options)?;
+    let mut buffer = Vec::new();
+    let mut writer = ZipWriter::new(Cursor::new(&mut buffer));
+    let file_options = SimpleFileOptions::default();
+
+    for entry in entries {
+        let rel_path = if root.is_root() {
+            entry.path.as_str().to_string()
+        } else {
+            match entry.path.strip_prefix(root) {
+                Some(stripped) => {
+                    if stripped.is_root() {
+                        continue;
+                    }
+                    stripped.as_str().to_string()
+                }
+                None => {
+                    if entry.path == *root {
+                        continue;
+                    }
+                    entry.path.as_str().to_string()
+                }
+            }
+        };
+
+        if rel_path.is_empty() {
+            continue;
+        }
+
+        if entry.meta.is_dir {
+            let dir_name = if rel_path.ends_with('/') {
+                rel_path
+            } else {
+                format!("{rel_path}/")
+            };
+            writer
+                .add_directory(&dir_name, file_options)
+                .map_err(VfsError::from)?;
+        } else {
+            writer
+                .start_file(&rel_path, file_options)
+                .map_err(VfsError::from)?;
+            let content = vfs.read_all(&entry.path, 1024 * 1024 * 64)?;
+            writer.write_all(&content).map_err(VfsError::Io)?;
+        }
+    }
+    writer.finish().map_err(VfsError::from)?;
+    Ok(buffer)
 }
 
 impl ZipFs {
@@ -53,6 +139,10 @@ impl ZipFs {
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, VfsError> {
         let cursor = Cursor::new(&bytes);
         let mut archive = ZipArchive::new(cursor).map_err(VfsError::from)?;
+        let comment = std::str::from_utf8(archive.comment())
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string);
 
         let mut entries = BTreeMap::new();
         let mut dir_children: BTreeMap<VfsPath, Vec<VfsEntry>> = BTreeMap::new();
@@ -71,14 +161,20 @@ impl ZipFs {
 
             let path = match VfsPath::new(raw_name) {
                 Ok(p) => p,
-                Err(_) => continue, // Ignore invalid path names
+                Err(_) => continue, // Ignore invalid path names (e.g. traversal)
             };
 
             if path.is_root() {
                 continue;
             }
 
-            let is_dir = file.is_dir() || raw_name.ends_with('/');
+            let unix_mode = file.unix_mode();
+            let is_symlink = unix_mode.is_some_and(|m| (m & 0o170000) == 0o120000);
+            let is_dir = file.is_dir()
+                || raw_name.ends_with('/')
+                || unix_mode.is_some_and(|m| (m & 0o170000) == 0o040000);
+            let readonly = unix_mode.is_some_and(|m| (m & 0o222) == 0);
+
             let len = if is_dir { 0 } else { file.size() };
             let crc32 = if is_dir { None } else { Some(file.crc32()) };
 
@@ -100,9 +196,17 @@ impl ZipFs {
 
             let meta = if is_dir {
                 VfsMeta::directory(modified)
+            } else if is_symlink {
+                VfsMeta::symlink(modified)
             } else {
-                VfsMeta::file(len, modified, crc32)
+                let mut m = VfsMeta::file(len, modified, crc32);
+                m.readonly = readonly;
+                m
             };
+
+            if is_dir {
+                known_dirs.insert(path.clone());
+            }
 
             // Ensure parent directories exist
             let mut curr = path.parent();
@@ -143,9 +247,81 @@ impl ZipFs {
 
         Ok(Self {
             data: Arc::new(bytes),
+            comment,
             entries,
             dir_children,
         })
+    }
+
+    /// Returns the number of distinct items (files and directories) in the archive.
+    #[must_use]
+    pub fn entries_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns the number of regular files in the archive.
+    #[must_use]
+    pub fn file_count(&self) -> usize {
+        self.entries.values().filter(|e| e.meta.is_file).count()
+    }
+
+    /// Returns the number of directories in the archive.
+    #[must_use]
+    pub fn dir_count(&self) -> usize {
+        self.entries.values().filter(|e| e.meta.is_dir).count()
+    }
+
+    /// Returns `true` if the given virtual path exists in the archive.
+    #[must_use]
+    pub fn contains(&self, path: &VfsPath) -> bool {
+        path.is_root() || self.entries.contains_key(path)
+    }
+
+    /// Searches for a virtual path matching `query` case-insensitively.
+    #[must_use]
+    pub fn find_case_insensitive(&self, query: &str) -> Option<VfsPath> {
+        let norm = match VfsPath::new(query) {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
+        self.entries
+            .keys()
+            .find(|p| p.as_str().eq_ignore_ascii_case(norm.as_str()))
+            .cloned()
+    }
+
+    /// Returns a list of all normalized virtual paths present in the archive.
+    #[must_use]
+    pub fn all_paths(&self) -> Vec<VfsPath> {
+        self.entries.keys().cloned().collect()
+    }
+
+    /// Returns the raw archive bytes.
+    #[must_use]
+    pub fn raw_bytes(&self) -> &[u8] {
+        self.data.as_ref().as_slice()
+    }
+
+    /// Returns the total uncompressed bytes of regular files in the archive.
+    #[must_use]
+    pub fn total_uncompressed_bytes(&self) -> u64 {
+        self.entries
+            .values()
+            .filter(|info| info.meta.is_file)
+            .map(|info| info.meta.len)
+            .fold(0_u64, u64::saturating_add)
+    }
+
+    /// Returns the optional archive comment, if present and valid UTF-8.
+    #[must_use]
+    pub fn comment(&self) -> Option<&str> {
+        self.comment.as_deref()
+    }
+
+    /// Returns a list of all normalized virtual paths present in the archive.
+    #[must_use]
+    pub fn file_names(&self) -> Vec<VfsPath> {
+        self.all_paths()
     }
 }
 
@@ -208,11 +384,12 @@ impl Vfs for ZipFs {
         let mut buffer = Vec::with_capacity(item.meta.len as usize);
         zip_file.read_to_end(&mut buffer).map_err(VfsError::Io)?;
 
-        if buffer.len() as u64 > max_bytes {
+        let bytes_read = buffer.len() as u64;
+        if bytes_read > max_bytes {
             return Err(VfsError::FileTooLarge {
                 path: path.clone(),
                 max_bytes,
-                actual: buffer.len() as u64,
+                actual: bytes_read,
             });
         }
 

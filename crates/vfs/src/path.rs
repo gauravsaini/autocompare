@@ -123,6 +123,82 @@ impl VfsPath {
         name.get(ext_start..)
     }
 
+    /// Returns the stem of the file (name without extension).
+    #[must_use]
+    pub fn file_stem(&self) -> Option<&str> {
+        let name = self.file_name()?;
+        match name.rfind('.') {
+            Some(dot_idx) if dot_idx > 0 => name.get(..dot_idx),
+            _ => Some(name),
+        }
+    }
+
+    /// Strips the given base prefix from this path, returning the relative child path.
+    #[must_use]
+    pub fn strip_prefix(&self, base: &Self) -> Option<Self> {
+        if base.is_root() {
+            return Some(self.clone());
+        }
+        if self == base {
+            return Some(Self::root());
+        }
+
+        let base_len = base.0.len();
+        let remainder = self.0.get(base_len..)?;
+        let trimmed = remainder.strip_prefix('/')?;
+        Self::new(trimmed).ok()
+    }
+
+    /// Returns `true` if this path starts with the given base path.
+    #[must_use]
+    pub fn starts_with(&self, base: &Self) -> bool {
+        if base.is_root() {
+            return true;
+        }
+        if self == base {
+            return true;
+        }
+        if let Some(remainder) = self.0.get(base.0.len()..) {
+            remainder.starts_with('/')
+        } else {
+            false
+        }
+    }
+
+    /// Returns `true` if this path string ends with the given suffix.
+    #[must_use]
+    pub fn ends_with(&self, suffix: &str) -> bool {
+        self.0.ends_with(suffix)
+    }
+
+    /// Returns a new path with the given extension replaced or appended.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VfsError::InvalidPath`] if this path is root.
+    pub fn with_extension(&self, ext: &str) -> Result<Self, VfsError> {
+        if self.is_root() {
+            return Err(VfsError::InvalidPath(
+                "cannot set extension on root path".to_string(),
+            ));
+        }
+
+        let stem = self
+            .file_stem()
+            .ok_or_else(|| VfsError::InvalidPath("missing file stem".to_string()))?;
+
+        let new_file_name = if ext.is_empty() {
+            stem.to_string()
+        } else {
+            format!("{stem}.{ext}")
+        };
+
+        match self.parent() {
+            Some(parent) if !parent.is_root() => parent.join(&new_file_name),
+            _ => Self::new(&new_file_name),
+        }
+    }
+
     /// Joins a child path to this path, validating the resulting path.
     ///
     /// # Errors

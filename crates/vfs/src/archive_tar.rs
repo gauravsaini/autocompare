@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor, Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
@@ -14,7 +14,7 @@ use tar::Archive;
 
 use crate::error::VfsError;
 use crate::path::VfsPath;
-use crate::trait_def::{Vfs, VfsEntry, VfsMeta};
+use crate::trait_def::{Vfs, VfsEntry, VfsMeta, WalkOptions};
 
 #[derive(Debug, Clone)]
 struct TarItemInfo {
@@ -25,6 +25,7 @@ struct TarItemInfo {
 /// A read-only virtual filesystem reader for `.tar` and `.tar.gz` archives.
 #[derive(Debug, Clone)]
 pub struct TarGzFs {
+    is_gzip_source: bool,
     entries: BTreeMap<VfsPath, TarItemInfo>,
     dir_children: BTreeMap<VfsPath, Vec<VfsEntry>>,
 }
@@ -88,7 +89,12 @@ impl TarGzFs {
             };
 
             // Skip pax header records and root
-            if path_str.starts_with("PaxHeader/") || path_str.starts_with("./PaxHeader/") {
+            if path_str.starts_with("PaxHeader/")
+                || path_str.starts_with("./PaxHeader/")
+                || path_str.contains("/PaxHeader/")
+                || path_str.starts_with("PaxHeaders.")
+                || path_str.contains("/PaxHeaders.")
+            {
                 continue;
             }
 
@@ -123,6 +129,8 @@ impl TarGzFs {
                 .ok()
                 .and_then(|secs| UNIX_EPOCH.checked_add(Duration::from_secs(secs)));
 
+            let readonly = entry.header().mode().ok().is_some_and(|m| (m & 0o222) == 0);
+
             let content = if is_file {
                 let mut data = Vec::with_capacity(len as usize);
                 entry
@@ -133,13 +141,23 @@ impl TarGzFs {
                 None
             };
 
+            let crc32 = content
+                .as_ref()
+                .map(|data| crc32fast::hash(data.as_slice()));
+
             let meta = if is_regular_dir {
                 VfsMeta::directory(modified)
             } else if is_symlink {
                 VfsMeta::symlink(modified)
             } else {
-                VfsMeta::file(len, modified, None)
+                let mut m = VfsMeta::file(len, modified, crc32);
+                m.readonly = readonly;
+                m
             };
+
+            if is_regular_dir {
+                known_dirs.insert(path.clone());
+            }
 
             // Ensure parent directories are registered
             let mut curr = path.parent();
@@ -173,9 +191,82 @@ impl TarGzFs {
         }
 
         Ok(Self {
+            is_gzip_source: is_gzip,
             entries,
             dir_children,
         })
+    }
+
+    /// Returns `true` if the archive source was gzip-compressed.
+    #[must_use]
+    pub const fn is_gzip(&self) -> bool {
+        self.is_gzip_source
+    }
+
+    /// Returns the number of regular file entries in the archive.
+    #[must_use]
+    pub fn file_count(&self) -> usize {
+        self.entries
+            .values()
+            .filter(|info| info.meta.is_file)
+            .count()
+    }
+
+    /// Returns the number of directory entries in the archive.
+    #[must_use]
+    pub fn dir_count(&self) -> usize {
+        self.entries
+            .values()
+            .filter(|info| info.meta.is_dir)
+            .count()
+    }
+
+    /// Returns the total byte size of regular files in the archive.
+    #[must_use]
+    pub fn total_bytes(&self) -> u64 {
+        self.entries
+            .values()
+            .filter(|info| info.meta.is_file)
+            .map(|info| info.meta.len)
+            .fold(0_u64, u64::saturating_add)
+    }
+
+    /// Returns `true` if the archive contains the given virtual path.
+    #[must_use]
+    pub fn contains(&self, path: &VfsPath) -> bool {
+        path.is_root() || self.entries.contains_key(path)
+    }
+
+    /// Case-insensitive lookup of a virtual path by raw string.
+    #[must_use]
+    pub fn find_case_insensitive(&self, query: &str) -> Option<VfsPath> {
+        let needle = query.to_lowercase();
+        self.entries
+            .keys()
+            .find(|p| p.as_str().to_lowercase() == needle)
+            .cloned()
+    }
+
+    /// Returns the number of distinct items (files and directories) in the archive.
+    #[must_use]
+    pub fn entries_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns the total uncompressed bytes of regular files in the archive.
+    #[must_use]
+    pub fn total_uncompressed_bytes(&self) -> u64 {
+        self.entries
+            .values()
+            .filter(|info| info.meta.is_file)
+            .map(|info| info.meta.len)
+            .fold(0_u64, u64::saturating_add)
+    }
+
+    /// Returns a list of all normalized virtual paths present in the archive.
+    #[must_use]
+    pub fn file_names(&self) -> Vec<VfsPath> {
+        self.entries.keys().cloned().collect()
     }
 }
 
@@ -219,7 +310,7 @@ impl Vfs for TarGzFs {
             .get(path)
             .ok_or_else(|| VfsError::NotFound(path.clone()))?;
 
-        if item.meta.is_dir {
+        if item.meta.is_dir || item.meta.is_symlink {
             return Err(VfsError::NotAFile(path.clone()));
         }
 
@@ -254,5 +345,125 @@ impl Vfs for TarGzFs {
 
     fn is_read_only(&self) -> bool {
         true
+    }
+}
+
+/// Packs explicit path-to-byte entries into a plain tar archive.
+///
+/// # Errors
+///
+/// Returns [`VfsError::Io`] if tar serialization fails.
+pub fn create_tar_archive(entries: &[(&VfsPath, &[u8])]) -> Result<Vec<u8>, VfsError> {
+    let mut builder = tar::Builder::new(Vec::new());
+
+    for (path, bytes) in entries {
+        if path.is_root() {
+            continue;
+        }
+        append_bytes_entry(&mut builder, path.as_str(), bytes)?;
+    }
+
+    builder.into_inner().map_err(VfsError::Io)
+}
+
+/// Packs a [`Vfs`] subtree into a plain tar archive by walking with `options`.
+///
+/// Directory entries are recorded explicitly; symlinks are skipped.
+///
+/// # Errors
+///
+/// Propagates VFS traversal and read errors, or tar serialization failures.
+pub fn create_tar_from_vfs(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    options: &WalkOptions,
+) -> Result<Vec<u8>, VfsError> {
+    let walked = vfs.walk(root, options)?;
+    let mut builder = tar::Builder::new(Vec::new());
+
+    for entry in &walked {
+        if entry.meta.is_symlink {
+            continue;
+        }
+        let rel = relative_archive_path(&entry.path, root)?;
+        if entry.meta.is_dir {
+            append_dir_entry(&mut builder, &rel)?;
+        } else if entry.meta.is_file {
+            let bytes = vfs.read_all(&entry.path, u64::MAX)?;
+            append_bytes_entry(&mut builder, &rel, &bytes)?;
+        }
+    }
+
+    builder.into_inner().map_err(VfsError::Io)
+}
+
+/// Packs explicit path-to-byte entries into a gzip-compressed tar archive.
+///
+/// # Errors
+///
+/// Returns [`VfsError::Io`] if tar serialization or compression fails.
+pub fn create_tar_gz_archive(entries: &[(&VfsPath, &[u8])]) -> Result<Vec<u8>, VfsError> {
+    let tar_bytes = create_tar_archive(entries)?;
+    gzip_compress(&tar_bytes)
+}
+
+/// Packs a [`Vfs`] subtree into a gzip-compressed tar archive.
+///
+/// # Errors
+///
+/// Propagates VFS traversal and read errors, or serialization failures.
+pub fn create_tar_gz_from_vfs(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    options: &WalkOptions,
+) -> Result<Vec<u8>, VfsError> {
+    let tar_bytes = create_tar_from_vfs(vfs, root, options)?;
+    gzip_compress(&tar_bytes)
+}
+
+/// Appends a regular file entry with the given raw bytes to the tar builder.
+fn append_bytes_entry(
+    builder: &mut tar::Builder<Vec<u8>>,
+    name: &str,
+    bytes: &[u8],
+) -> Result<(), VfsError> {
+    let mut header = tar::Header::new_gnu();
+    header.set_size(bytes.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, name, bytes)
+        .map_err(VfsError::Io)
+}
+
+/// Appends an explicit directory entry to the tar builder.
+fn append_dir_entry(builder: &mut tar::Builder<Vec<u8>>, name: &str) -> Result<(), VfsError> {
+    let mut header = tar::Header::new_gnu();
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_size(0);
+    header.set_mode(0o755);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, name, &[] as &[u8])
+        .map_err(VfsError::Io)
+}
+
+/// Gzip-compresses raw tar bytes.
+fn gzip_compress(tar_bytes: &[u8]) -> Result<Vec<u8>, VfsError> {
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(tar_bytes).map_err(VfsError::Io)?;
+    encoder.finish().map_err(VfsError::Io)
+}
+
+/// Resolves an archive-relative name for `path` under `root`.
+fn relative_archive_path(path: &VfsPath, root: &VfsPath) -> Result<String, VfsError> {
+    match path.strip_prefix(root) {
+        Some(rel) if !rel.is_root() => Ok(rel.as_str().to_string()),
+        _ => path
+            .file_name()
+            .map(ToString::to_string)
+            .ok_or_else(|| VfsError::InvalidPath(format!("cannot archive path: {path}"))),
     }
 }
