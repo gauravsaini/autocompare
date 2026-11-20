@@ -4876,7 +4876,7 @@ pub fn text_inline_960_total_w() -> f32 {
 }
 
 /// Narrow-720 dual-pane pair (px): 720 canvas par center connector (20)
-/// + 2 x [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 342/342
+/// plus 2 x [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 342/342
 /// ([`text_pane_pair_widths`] reuse, SPACE scale: LG+XS center + SM air).
 /// [`TEXT_STACK_BREAKPOINT_W`] (720) par abhi bhi SideBySide hai
 /// (`< 720` hi stacked), isliye do panes + 20px center ek row me.
@@ -4953,6 +4953,154 @@ pub fn text_overunder_pane_widths(avail: f32) -> (f32, f32) {
 /// unit-tested.
 pub fn text_overunder_960_pane_widths() -> (f32, f32) {
     text_overunder_pane_widths(960.0)
+}
+
+// ----------------------------------------------------------------------------
+// EXQUISITE VIEWFILL9: Tall 1200px dual-pane heights, file-bar rhythm lock,
+// and center gutter column geometry (Round-2 Parity).
+// ----------------------------------------------------------------------------
+
+/// Tall canvas height (px): standard 1200px canvas height budget. Pure.
+pub const TEXT_TALL_CANVAS_H: f32 = 1200.0;
+
+/// Header chrome height for text view (px): standard toolbar / header bar
+/// height ([`HEADER_H`] = 28.0, [`CHROME_HEADER_BAR_H`] parity). Pure; unit-tested.
+pub fn text_view_header_chrome_h() -> f32 {
+    HEADER_H
+}
+
+/// Total header and file-bar chrome height budget (px): header toolbar ([`HEADER_H`] = 28.0)
+/// plus thin file-bar / pane-status row ([`text_file_bar_height_px`] = 15.2) = 43.2px.
+/// Scroll canvas height budget is calculated by deducting this chrome reserve. Pure; unit-tested.
+pub fn text_chrome_height_budget() -> f32 {
+    text_view_header_chrome_h() + text_file_bar_height_px()
+}
+
+/// Scroll canvas height budget (px) for available canvas height: `avail_h` minus
+/// header/file-bar chrome ([`text_chrome_height_budget`] = 43.2). At 1200px tall canvas,
+/// budget is `1200.0 - 43.2 = 1156.8px`. Pins to [`viewmodel::TEXT_PANES_MIN_H`] on non-finite
+/// or compressed heights. Pure; unit-tested.
+pub fn text_tall_scroll_canvas_height(avail_h: f32) -> f32 {
+    if !avail_h.is_finite() || avail_h <= 0.0 {
+        return viewmodel::TEXT_PANES_MIN_H;
+    }
+    (avail_h - text_chrome_height_budget()).max(viewmodel::TEXT_PANES_MIN_H)
+}
+
+/// Scroll canvas height budget at 1200px tall canvas (px): 1200.0 - 43.2 = 1156.8px.
+/// Fixture `comparison/views-tall-1200.json` locks this. Pure; unit-tested.
+pub fn text_tall_1200_scroll_canvas_height_px() -> f32 {
+    text_tall_scroll_canvas_height(TEXT_TALL_CANVAS_H)
+}
+
+/// Dual-pane height at 1200px tall canvas (px): in side-by-side layout, dual panes
+/// equal full scroll canvas height (`1156.8px`). Pure; unit-tested.
+pub fn text_tall_1200_pane_height_px() -> f32 {
+    text_tall_1200_scroll_canvas_height_px()
+}
+
+/// Side-by-side dual-pane heights (px): both left and right panes receive full
+/// scroll canvas height budget equally. Pure; unit-tested.
+pub fn text_side_by_side_pane_heights(avail_h: f32) -> (f32, f32) {
+    let h = text_tall_scroll_canvas_height(avail_h);
+    (h, h)
+}
+
+/// Side-by-side dual-pane heights at 1200px tall canvas (px): (1156.8, 1156.8).
+/// Equal heights across both panes. Pure; unit-tested.
+pub fn text_tall_1200_side_by_side_pane_heights() -> (f32, f32) {
+    text_side_by_side_pane_heights(TEXT_TALL_CANVAS_H)
+}
+
+/// Over-under (stacked vertical) pane heights (px): scroll canvas height budget
+/// minus one [`SECTION_GAP`] air split equally between over and under panes.
+/// Equal heights across both panes. Non-finite or compressed inputs pin to
+/// [`viewmodel::TEXT_PANES_MIN_H`]. Pure; unit-tested.
+pub fn text_overunder_pane_heights(avail_h: f32) -> (f32, f32) {
+    let scroll_h = text_tall_scroll_canvas_height(avail_h);
+    let h = ((scroll_h - SECTION_GAP) / 2.0).max(viewmodel::TEXT_PANES_MIN_H);
+    (h, h)
+}
+
+/// Over-under pane heights at 1200px tall canvas (px): `(1156.8 - 8.0) / 2.0 = 574.4px`.
+/// Equal heights (574.4, 574.4). Pure; unit-tested.
+pub fn text_tall_1200_overunder_pane_heights() -> (f32, f32) {
+    text_overunder_pane_heights(TEXT_TALL_CANVAS_H)
+}
+
+/// File-bar height locked over tall canvas (px): file-bar rhythm stays strictly
+/// at 15.2px ([`text_file_bar_height_px`]) and does not stretch or drift with tall height.
+/// Pure; unit-tested.
+pub fn text_file_bar_height_for_canvas(canvas_h: f32) -> f32 {
+    let _ = canvas_h;
+    text_file_bar_height_px()
+}
+
+/// File-bar height at 1200px tall canvas (px): locked to 15.2px. Pure; unit-tested.
+pub fn text_tall_1200_file_bar_height_px() -> f32 {
+    text_file_bar_height_for_canvas(TEXT_TALL_CANVAS_H)
+}
+
+/// Center gutter column height over tall scroll canvas (px): runs the full height
+/// of the scroll canvas (`1156.8px`). Pure; unit-tested.
+pub fn text_tall_1200_center_gutter_height_px() -> f32 {
+    text_tall_1200_scroll_canvas_height_px()
+}
+
+/// Canvas vertical middle center y (px): `avail_h / 2.0`. At 1200px canvas,
+/// center is exactly `600.0px`. Pure; unit-tested.
+pub fn text_tall_canvas_center_y(avail_h: f32) -> f32 {
+    if !avail_h.is_finite() || avail_h <= 0.0 {
+        return 0.0;
+    }
+    avail_h / 2.0
+}
+
+/// Scroll canvas middle center y (px): midpoint of scroll canvas budget.
+/// At 1200px canvas (`1156.8px` scroll canvas), middle is `578.4px`. Pure; unit-tested.
+pub fn text_tall_scroll_canvas_center_y(avail_h: f32) -> f32 {
+    text_tall_scroll_canvas_height(avail_h) / 2.0
+}
+
+/// Center gutter hit band for available width (px): `column_x - slop .. column_x + gutter_w + slop`.
+/// At 720px: `348.0 .. 372.0` (middle 360.0).
+/// At 960px: `468.0 .. 492.0` (middle 480.0).
+/// Pure; unit-tested.
+pub fn text_center_hit_band_for_avail(avail_w: f32) -> (f32, f32) {
+    let slop = text_center_hit_slop_px();
+    let col_x = text_center_column_x_for_avail(avail_w);
+    (col_x - slop, col_x + text_center_gutter_width() + slop)
+}
+
+/// Center arrow horizontal center cx for available width (px): `column_x + gutter_w / 2.0`.
+/// Exactly matches `avail_w / 2.0` canvas middle across widths. Pure; unit-tested.
+pub fn text_center_arrow_cx_for_avail(avail_w: f32) -> f32 {
+    text_center_column_x_for_avail(avail_w) + text_center_gutter_width() / 2.0
+}
+
+/// Center arrow cx at 960px wide: `470.0 + 10.0 = 480.0` (canvas middle). Pure; unit-tested.
+pub fn text_center_arrow_cx_960() -> f32 {
+    text_center_arrow_cx_for_avail(960.0)
+}
+
+/// Segment tracking center y (px): calculates the vertical midpoint of a hunk/diff
+/// segment spanning `[row_start, row_end)` at given `row_h`.
+/// For a single-row hunk at index `i`, returns `i * row_h + row_h / 2.0`.
+/// Pure; unit-tested.
+pub fn text_tall_segment_arrow_cy(row_start: usize, row_end: usize, row_h: f32) -> f32 {
+    if !row_h.is_finite() || row_h <= 0.0 {
+        return 0.0;
+    }
+    let end = row_end.max(row_start.saturating_add(1));
+    let y0 = row_start as f32 * row_h;
+    let y1 = end as f32 * row_h;
+    (y0 + y1) / 2.0
+}
+
+/// Hunk head arrow center y for row index (px): vertically centers the marker
+/// inside that row beat: `row_idx * row_h + row_h / 2.0`. Pure; unit-tested.
+pub fn text_tall_hunk_arrow_cy(row_idx: usize, row_h: f32) -> f32 {
+    text_tall_segment_arrow_cy(row_idx, row_idx.saturating_add(1), row_h)
 }
 
 /// Text7 rows-plus-rhythm (exq-text7): generous outer air, even row tops,
@@ -8627,6 +8775,85 @@ mod tests {
         assert!((text8_linenum_width_px(1, 7.0) - 15.0).abs() < 0.001);
         assert!(text8_linenum_width_px(1, 7.0) < text_narrow_720_pane_pair().0);
         assert!(!text_center_column_x_for_avail(f32::NAN).is_nan());
+    }
+
+    #[test]
+    fn viewfill9_tall_1200_dual_panes_plus_gutter_column() {
+        // Mirrors checks/gui-exq-viewfill9/round-1/comparison/views-tall-1200.json
+        // and views-narrow-720.json:
+        // Round-2 parity: dual-pane heights at tall 1200, file-bar height lock,
+        // center gutter column over tall canvas with vertical centering and
+        // segment tracking. Geometry FIRST, typography SECOND, colors FROZEN.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-viewfill9/round-1/comparison/views-tall-1200.json"
+        );
+        let narrow_raw = include_str!(
+            "../../../checks/gui-exq-viewfill9/round-1/comparison/views-narrow-720.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"views-tall-1200\""));
+        assert!(fixture_raw.contains("\"avail_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"file_bar_h\": 15.2"));
+        assert!(fixture_raw.contains("\"scroll_canvas_h\": 1156.8"));
+        assert!(fixture_raw.contains("\"pane_h\": 1156.8"));
+        assert!(narrow_raw.contains("\"pane_left_720\": 342.0"));
+
+        // 1. Dual-pane heights at tall 1200:
+        assert_eq!(TEXT_TALL_CANVAS_H, 1200.0);
+        assert_eq!(text_view_header_chrome_h(), 28.0);
+        assert!((text_file_bar_height_px() - 15.2).abs() < 0.01);
+        assert!((text_chrome_height_budget() - 43.2).abs() < 0.01);
+        assert!((text_tall_1200_scroll_canvas_height_px() - 1156.8).abs() < 0.01);
+        assert_eq!(
+            text_tall_1200_pane_height_px(),
+            text_tall_1200_scroll_canvas_height_px()
+        );
+        // Side-by-side: dual panes equal height (1156.8, 1156.8).
+        let (left_h, right_h) = text_tall_1200_side_by_side_pane_heights();
+        assert_eq!(left_h, right_h);
+        assert!((left_h - 1156.8).abs() < 0.01);
+        // Over-under: stacked panes equal height (574.4, 574.4).
+        let (over_h, under_h) = text_tall_1200_overunder_pane_heights();
+        assert_eq!(over_h, under_h);
+        assert!((over_h - 574.4).abs() < 0.01);
+        assert!((over_h * 2.0 + SECTION_GAP - 1156.8).abs() < 0.01);
+
+        // 2. File-bar rhythm tall: locked to 15.2px over tall canvas.
+        assert!((text_tall_1200_file_bar_height_px() - 15.2).abs() < 0.01);
+        assert!((text_file_bar_height_for_canvas(1200.0) - 15.2).abs() < 0.01);
+        assert!((text_file_bar_height_for_canvas(2400.0) - 15.2).abs() < 0.01);
+        assert!((text_file_bar_height_for_canvas(0.0) - 15.2).abs() < 0.01);
+
+        // 3. Gutter column tall:
+        assert!((text_tall_1200_center_gutter_height_px() - 1156.8).abs() < 0.01);
+        assert_eq!(text_center_gutter_width(), 20.0);
+        // Middle arrow vertical centering:
+        assert_eq!(text_tall_canvas_center_y(1200.0), 600.0);
+        assert!((text_tall_scroll_canvas_center_y(1200.0) - 578.4).abs() < 0.01);
+        // Hit band slop:
+        let (lo720, hi720) = text_center_hit_band_for_avail(720.0);
+        assert!((lo720 - 348.0).abs() < 0.01);
+        assert!((hi720 - 372.0).abs() < 0.01);
+        let (lo960, hi960) = text_center_hit_band_for_avail(960.0);
+        assert!((lo960 - 468.0).abs() < 0.01);
+        assert!((hi960 - 492.0).abs() < 0.01);
+        assert!((text_center_arrow_cx_for_avail(720.0) - 360.0).abs() < 0.01);
+        assert!((text_center_arrow_cx_for_avail(960.0) - 480.0).abs() < 0.01);
+        assert!((text_center_arrow_cx_960() - 480.0).abs() < 0.01);
+        // Segment tracking:
+        let row_h = text_row_top_rhythm_px(); // 17.6
+        assert!((text_tall_hunk_arrow_cy(0, row_h) - 8.8).abs() < 0.01);
+        assert!((text_tall_hunk_arrow_cy(34, row_h) - 607.2).abs() < 0.01);
+        assert!((text_tall_segment_arrow_cy(10, 20, row_h) - 264.0).abs() < 0.01);
+        // Edge guards:
+        assert_eq!(
+            text_tall_scroll_canvas_height(f32::NAN),
+            viewmodel::TEXT_PANES_MIN_H
+        );
+        assert_eq!(
+            text_tall_scroll_canvas_height(-100.0),
+            viewmodel::TEXT_PANES_MIN_H
+        );
+        assert_eq!(text_tall_canvas_center_y(f32::NAN), 0.0);
     }
 
     #[test]

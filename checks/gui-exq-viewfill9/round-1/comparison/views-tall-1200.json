@@ -1,0 +1,47 @@
+{
+  "name": "views-tall-1200",
+  "intent": "Wave viewfill9 tall 1200: dual text-compare panes at 1200px tall canvas with thin file-bar chrome (15.2px locked) and center gutter column (20px width, 2px hit slop, middle arrow vertical centering and segment tracking).",
+  "inputs": {
+    "avail_h": 1200.0,
+    "avail_w": 720.0,
+    "avail_w_wide": 960.0,
+    "header_chrome_h": 28.0,
+    "file_bar_h": 15.2,
+    "row_height": 17.6,
+    "center_gutter_w": 20.0,
+    "hit_slop": 2.0
+  },
+  "assertions": {
+    "avail_h": 1200.0,
+    "header_chrome_h": 28.0,
+    "file_bar_h": 15.2,
+    "chrome_budget_h": 43.2,
+    "scroll_canvas_h": 1156.8,
+    "pane_h": 1156.8,
+    "dual_panes_equal_side_by_side": true,
+    "pane_h_left_720": 1156.8,
+    "pane_h_right_720": 1156.8,
+    "pane_w_720": 342.0,
+    "pane_w_960": 462.0,
+    "overunder_pane_h": 574.4,
+    "overunder_panes_equal": true,
+    "center_gutter_w": 20.0,
+    "center_gutter_h": 1156.8,
+    "column_x_720": 350.0,
+    "column_x_960": 470.0,
+    "arrow_cx_720": 360.0,
+    "arrow_cx_960": 480.0,
+    "canvas_middle_cy": 600.0,
+    "scroll_canvas_middle_cy": 578.4,
+    "hit_band_720": [
+      348.0,
+      372.0
+    ],
+    "hit_band_960": [
+      468.0,
+      492.0
+    ],
+    "file_bar_locked_tall": true,
+    "segment_tracking_middle_row_34_cy": 607.2
+  }
+}
