@@ -79,5 +79,6 @@
   "ORCH-BC": "BCompare pid 23316 running, outside-observe only, clean-room",
   "SWARM-REP-H": "verified+landed 3b5ee6f pushed (strict: 28 green, clippy 0, fmt clean, banned 0, allow 0)",
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
-  "SWARM-WAVEL": "observed checks/parity-l REPORT (hex/table/folder model slices, paint OPEN, not ours, no touch)"
+  "SWARM-WAVEL": "observed checks/parity-l REPORT (hex/table/folder model slices, paint OPEN, not ours, no touch)",
+  "SWARM-SESS": "verified+landed 317135d (62 green 25+10+17+10, clippy 0, fmt clean, expect only in cfg-test, allow 0)"
 }
