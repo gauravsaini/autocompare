@@ -286,3 +286,20 @@
 1. **Hex Grid & Offset at 960px**: Beyond Compare parity for hex compare: even byte grid, offset gutter from SPACE tokens, ASCII pane sync, row height locked to TypoRole Mono. Colors frozen at 33. Edge fixture comparison/hex-wide-960.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 939 → 939 passed, 0 failed; clippy clean; rustfmt clean on owned views_hex.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/views_hex.rs, checks/gui-exq-hex4/**, TIMELINE.md.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-home2 cards plus search
+
+1. **Home Cards & Search at 960px**: BC parity for home view: card grid gaps symmetric via SPACE tokens (`HOME2_CARD_GRID_GAP` = `SPACE_SM` = 8.0px), content margin `SPACE_MD` (12.0px) giving 936 avail, 3 cols x 306.67px cards, header height from `TypoRole::Heading` line-height (21.6px), button hit-slop symmetric via `SPACE_XS` (4.0px). Body/Small reuse, no new sizes. Colors frozen at 33. Edge fixture `comparison/home-wide-960.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 941 passed, 0 failed; clippy clean on owned `home.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home2/**`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-gutter6 narrow plus slop
+
+1. **Gutter Numbers & Overview at 720-960px**: BC parity for center gutter: line-number column digit scaling (1-digit 16.0, 3-digit 24.0, 7-digit cap 36.0, hidden 8.0), text-row pad vs Mono line-height (15.6 -> 19.6), overview same-plus-diff bands, arrow 16px box with 20px slop hit-target. Geometry via SPACE scale reuse, typo Mono 12 tabular reuse, no new sizes. Colors frozen at 33. Edge fixtures `comparison/edge-tall-same-diff.json` plus `comparison/gutter-narrow-720.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui 941 passed, 0 failed; clippy clean on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter6/**`, `TIMELINE.md`.
