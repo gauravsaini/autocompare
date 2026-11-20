@@ -1455,3 +1455,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Gates: same full verify as above (642 green), all clean.
 - REPORT: checks/gui-pathmeta-bu/REPORT.md (Hinglish-Roman).
 - Testsuite now 642 green (629 -> 642, +13). Next: PLAN Wave 2 BU-SES-APP (app.rs wiring, depends on MODEL API) -> Wave 3 BU-SES-PAINT.
+
+## 2026-11-20 — Waves BW-SES-APP + BX-SELFIX launched (2 parallel, disjoint OWNS)
+- BW-SES-APP (sess-app-bw): PLAN Wave 2 app bridge, OWNS app.rs + checks/gui-sessionapp-bw (MODEL dependency satisfied via 334dee5).
+- BX-SELFIX (sess-sel-bx): P0-2 selective highlight fixture visibility, OWNS views.rs + checks/gui-selfix-bx.
+- Next after BW lands: Wave 3 BU-SES-PAINT (views.rs) + localrun round-3.
