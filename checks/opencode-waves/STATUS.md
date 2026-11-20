@@ -1650,3 +1650,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `b940f34` feat(vfs): 10 files OWNS-clean, tests 18/18 green in isolated worktree, fmt clean, banned zero. PUSHED with known debt: 9 clippy `io_other_error` style warnings in new trait_def.rs code (D3 claimed zero, actual 9) — push carried it with the STATUS commit; fix-forward in D4, no revert (tests/fmt/banned/OWNS all green).
 - Worktree has half-finished follow-ups (tests want `ArchiveFs` enum, lib exports `Archive`) + unknown-author unstaged vfs edits; second writer suspected (BQ actor or post-commit D3). Nothing touched; safety backup step ordered first.
 - D4 (sess-vfs-d4): backup patch, reconcile rename-or-revert (smaller one), Error::other fix, full gates, commit NO PUSH. Push b940f34+D4 together after green.
+
+## 2026-11-20 — VFS-D4 died mid-edit, D5 clean-fix launched
+- D4 (sess-vfs-d4) died unexpectedly after backup + partial edits (no commit, no summary). Worktree vfs left broken: duplicate `ArchiveFs` E0252 + half rename (tests want ArchiveFs enum, lib has Archive).
+- Decision: drop the uncommitted ArchiveFs-enum rename (speculative, never gated); D5 resets vfs paths to green b940f34, applies ONLY the 9-site Error::other mechanical fix, full gates, commit NO PUSH.
+- Typo3 waiting on sibling compare breakage (transient, E/F loop will fix before their commits).
