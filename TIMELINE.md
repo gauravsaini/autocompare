@@ -734,3 +734,9 @@
 1. **Typography second**: TEXT_ROW_HEIGHT_COMPACT 18.0 -> 20.0 SPACE_LG+SPACE_XS reuse, mono 15.6 line-height 4.4px pad, MAX 16.9 3.1px pad zero clip, narrow700 wrap fixture.
 2. **Tests**: 1061 green (text30_wrap700_zero_clip new); exquisite harness RESULT: PASS 11059B; fmt clean; banned 0; colors 38 frozen.
 3. **Files changed**: crates/gui/src/viewmodel.rs, checks/gui-exq-text30/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-table30 live table geometry (agyx swarm, orchestrator recovery)
+
+1. **Table geometry**: 1200px canvas fit `needs_hscroll:false`, key-cols stable, sort markers aligned, tolerance sanitized, xlsx sheet selector 1/3 badge. Geometry first SPACE_* reuse, typo second 600 weight lock.
+2. **Tests**: 1061 green, exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen. Agyx did full work but timeout before commit (0-byte log, no DONE) — orchestrator verified OWNS and committed, mix still consistent for work but commit step inconsistent.
+3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table30/**, TIMELINE.md.
