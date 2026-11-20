@@ -2331,6 +2331,249 @@ mod exq_gutter10_tests {
 }
 
 // ----------------------------------------------------------------------------
+// GUTTER11 tall: 1200px canvas symmetric layout + tall scroll marker lock + viewport floor.
+// BC center ~20px gutter column with yellow markers only on changed rows over tall
+// scroll; tall-1200 canvas maintains exact symmetry around canvas center cx=600.0.
+// Geometry first: side marker column 20px (SPACE_LG + SPACE_XS) layout 12+578+20+578+12=1200;
+// center column 24px (SPACE_XL) layout 12+576+24+576+12=1200; both center at cx=600.0.
+// Marker tall lock: cx stays strictly locked at 600.0 across all rows over long scroll.
+// Viewport tall floor: min-h 4.0 floor maintained over tall scroll, bottom edge
+// never escapes track. Typography second: no new font sizes. Colors frozen: shape only.
+// WIRING (paint owner ke paas): tall canvas side layout `gutter_side_layout_1200()` se,
+// center layout `gutter_text_layout_1200()` se, side marker cx `gutter_side_arrow_cx_1200()`,
+// center marker cx `gutter_center_arrow_cx_1200()`, glyphs `gutter_side_glyph_1200()` /
+// `gutter_center_glyph_1200()`, marker scroll lock `gutter_marker_tall_lock_cx_1200()`,
+// and tall viewport floor `gutter_viewport_tall_floor_1200()`.
+// ----------------------------------------------------------------------------
+
+/// 1200px tall canvas symmetric side layout `(margin, left, center, right, margin)`
+/// px: 12 + 578 + 20 + 578 + 12 = 1200. Panes barabar, 20px side column beech
+/// me symmetric insets samet. Single source over [`gutter_text_layout`].
+/// Pure; unit-tested.
+pub fn gutter_side_layout_1200() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_SIDE_MARKER_COL_W,
+        1200.0,
+    )
+}
+
+/// 1200px tall canvas side-column x px: `margin + pane` from the symmetric
+/// side layout (12 + 578 = 590). Column is [`GUTTER_SIDE_MARKER_COL_W`] wide (20).
+/// Pure; unit-tested.
+pub fn gutter_side_column_x_1200() -> f32 {
+    let (margin, pane, _, _, _) = gutter_side_layout_1200();
+    margin + pane
+}
+
+/// 1200px tall canvas side-marker cx px: column center (590 + 20/2 = 600 =
+/// canvas middle), so the marker sits centered in the gutter. `None` only
+/// when the column math goes non-finite. Pure; unit-tested.
+pub fn gutter_side_arrow_cx_1200() -> Option<f32> {
+    let x = gutter_side_column_x_1200();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    if !x.is_finite() || !w.is_finite() {
+        return None;
+    }
+    let cx = x + w / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// 1200px tall canvas side glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (600) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_side_glyph_1200(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_side_arrow_cx_1200()?;
+    gutter_arrow_glyph_rect(cx, center_y)
+}
+
+/// 1200px tall canvas side hit band `(lo, hi)` px: side column + symmetric slop on
+/// both sides (590 - 2 .. 610 + 2 = 588..612), canvas center 600 ke around
+/// barabar. Pure; unit-tested.
+pub fn gutter_side_hit_band_1200() -> (f32, f32) {
+    let x = gutter_side_column_x_1200();
+    let w = GUTTER_SIDE_MARKER_COL_W;
+    let s = GUTTER_SIDE_HIT_SLOP;
+    (x - s, x + w + s)
+}
+
+/// 1200px tall canvas symmetric text layout `(margin, left, center, right, margin)`
+/// px: 12 + 576 + 24 + 576 + 12 = 1200. Panes barabar, 24px center column beech
+/// me symmetric insets samet. Single source over [`gutter_text_layout`].
+/// Pure; unit-tested.
+pub fn gutter_text_layout_1200() -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 1200.0)
+}
+
+/// 1200px tall canvas center-column x px: `margin + pane` from the symmetric
+/// text layout (12 + 576 = 588). Column is [`GUTTER_CENTER_W`] wide (24).
+/// Pure; unit-tested.
+pub fn gutter_center_column_x_1200() -> f32 {
+    let (margin, pane, _, _, _) = gutter_text_layout_1200();
+    margin + pane
+}
+
+/// 1200px tall canvas center-arrow cx px: column center (588 + 24/2 = 600 =
+/// canvas middle), so the glyph sits centered in the gutter. `None` only
+/// when the column math goes non-finite. Pure; unit-tested.
+pub fn gutter_center_arrow_cx_1200() -> Option<f32> {
+    gutter_arrow_center_x(gutter_center_column_x_1200())
+}
+
+/// 1200px tall canvas center glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (600) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_center_glyph_1200(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_center_arrow_cx_1200()?;
+    gutter_arrow_glyph_rect(cx, center_y)
+}
+
+/// 1200px tall canvas marker horizontal center lock over long scroll:
+/// regardless of row index during scroll, the marker center `cx` remains
+/// strictly locked at the canvas middle (600.0 px). Returns `Some(600.0)`
+/// for valid row indices (`row < total_rows`), `None` when `total_rows == 0`
+/// or `row >= total_rows`. Pure; unit-tested.
+pub fn gutter_marker_tall_lock_cx_1200(row: usize, total_rows: usize) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows {
+        return None;
+    }
+    gutter_side_arrow_cx_1200()
+}
+
+/// 1200px tall canvas center-marker horizontal center lock over long scroll:
+/// center column arrow cx locked at 600.0 across all valid row indices.
+/// Pure; unit-tested.
+pub fn gutter_center_marker_tall_lock_cx_1200(row: usize, total_rows: usize) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows {
+        return None;
+    }
+    gutter_center_arrow_cx_1200()
+}
+
+/// 1200px tall scroll viewport band `(y0, y1)` in logical pixels with min-h floor:
+/// wraps [`gutter_viewport_rect_padded`] over 1200.0px height, guaranteeing
+/// the visible window band never collapses below [`GUTTER_VIEWPORT_MIN_H`] (4.0px)
+/// and stays within `[GUTTER_MINIMAP_TRACK_PAD, 1200.0 - GUTTER_MINIMAP_TRACK_PAD]`.
+/// Pure; unit-tested.
+pub fn gutter_viewport_tall_floor_1200(
+    total_rows: usize,
+    top_row: usize,
+    visible_rows: usize,
+) -> Option<(f32, f32)> {
+    gutter_viewport_rect_padded(total_rows, 1200.0, top_row, visible_rows)
+}
+
+#[cfg(test)]
+mod exq_gutter11_tests {
+    use super::*;
+
+    #[test]
+    fn gutter11_tall_1200_center_column_and_marker_lock() {
+        // Mirrors checks/gui-exq-gutter11/round-1/comparison/gutter-tall-1200.json.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-gutter11/round-1/comparison/gutter-tall-1200.json"
+        );
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"center_arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"center_column_x_1200\": 588.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"marker_tall_lock_cx\": 600.0"));
+
+        // Tall side layout 1200 symmetric: 12 + 578 + 20 + 578 + 12 = 1200.
+        assert_eq!(gutter_side_layout_1200(), (12.0, 578.0, 20.0, 578.0, 12.0));
+        let (m0, left, center, right, m1) = gutter_side_layout_1200();
+        assert_eq!(m0, m1);
+        assert_eq!(left, right);
+        assert!((m0 + left + center + right + m1 - 1200.0).abs() < 0.001);
+        assert_eq!(center, GUTTER_SIDE_MARKER_COL_W);
+
+        // Column x 590, cx 600 canvas middle; glyph + hit symmetric about 600.
+        assert_eq!(gutter_side_column_x_1200(), 590.0);
+        assert_eq!(gutter_side_arrow_cx_1200(), Some(600.0));
+        assert_eq!(
+            gutter_side_marker_rect(600.0, 600.0),
+            Some((592.0, 592.0, 608.0, 608.0))
+        );
+        assert_eq!(
+            gutter_side_hit_rect(600.0, 600.0),
+            Some((590.0, 590.0, 610.0, 610.0))
+        );
+        assert_eq!(
+            gutter_side_glyph_1200(600.0),
+            Some((594.0, 594.0, 606.0, 606.0))
+        );
+        assert_eq!(gutter_side_glyph_1200(f32::NAN), None);
+        assert_eq!(gutter_side_hit_band_1200(), (588.0, 612.0));
+        let (lo, hi) = gutter_side_hit_band_1200();
+        assert!(((600.0 - lo) - (hi - 600.0)).abs() < 0.001);
+
+        // Center gutter 24px layout: 12 + 576 + 24 + 576 + 12 = 1200; cx also 600.
+        assert_eq!(gutter_text_layout_1200(), (12.0, 576.0, 24.0, 576.0, 12.0));
+        assert_eq!(gutter_center_column_x_1200(), 588.0);
+        assert_eq!(gutter_center_arrow_cx_1200(), Some(600.0));
+        assert_eq!(
+            gutter_center_glyph_1200(600.0),
+            Some((594.0, 594.0, 606.0, 606.0))
+        );
+        assert_eq!(gutter_center_glyph_1200(f32::NAN), None);
+
+        // Marker tall lock: cx stays 600 across long scroll rows 0..1200.
+        let total_rows = 1200usize;
+        for row in [0, 10, 100, 500, 600, 1100, 1199] {
+            assert_eq!(
+                gutter_marker_tall_lock_cx_1200(row, total_rows),
+                Some(600.0)
+            );
+            assert_eq!(
+                gutter_center_marker_tall_lock_cx_1200(row, total_rows),
+                Some(600.0)
+            );
+        }
+        assert_eq!(gutter_marker_tall_lock_cx_1200(1200, total_rows), None);
+        assert_eq!(gutter_marker_tall_lock_cx_1200(0, 0), None);
+        assert_eq!(
+            gutter_center_marker_tall_lock_cx_1200(1200, total_rows),
+            None
+        );
+        assert_eq!(gutter_center_marker_tall_lock_cx_1200(0, 0), None);
+
+        // Viewport tall floor over 1200px scroll:
+        // Mid-viewport (row 600, 1 visible):
+        let vp_mid = gutter_viewport_tall_floor_1200(1200, 600, 1);
+        assert!(vp_mid.is_some());
+        if let Some((y0, y1)) = vp_mid {
+            assert!((y1 - y0 - GUTTER_VIEWPORT_MIN_H).abs() < 0.01);
+            assert!(y0 >= GUTTER_MINIMAP_TRACK_PAD);
+            assert!(y1 <= 1200.0 - GUTTER_MINIMAP_TRACK_PAD);
+            assert!((y0 - 598.0).abs() < 2.5);
+        }
+
+        // Bottom-viewport (row 1199, 1 visible): floor >= 4.0, locked within [4.0, 1196.0].
+        assert_eq!(
+            gutter_viewport_tall_floor_1200(1200, 1199, 1),
+            Some((1192.0, 1196.0))
+        );
+
+        // Top-viewport (row 0, 1 visible):
+        assert_eq!(
+            gutter_viewport_tall_floor_1200(1200, 0, 1),
+            Some((4.0, 8.0))
+        );
+
+        // Full file visible:
+        assert_eq!(
+            gutter_viewport_tall_floor_1200(1200, 0, 1200),
+            Some((4.0, 1196.0))
+        );
+
+        // Invalid inputs:
+        assert_eq!(gutter_viewport_tall_floor_1200(0, 0, 1), None);
+        assert_eq!(gutter_viewport_tall_floor_1200(1200, 0, 0), None);
+        assert_eq!(gutter_viewport_tall_floor_1200(1200, 1200, 1), None);
+    }
+}
+
+// ----------------------------------------------------------------------------
 // TEXT5: separate number gutter + icon column + symmetric center divider.
 // BC text compare me line numbers alag column me, change icons alag column
 // me, aur beech me arrows wala divider dono panes se barabar gap par rehta
