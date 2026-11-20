@@ -122,5 +122,6 @@
   "WAVE-SESSIONS-H2": "s1 round-1 LANDED in c149590 (785 ins: session/options/lib + 3 test files + GATES + REPORT PASS + 6 fixtures; 5 suites green, fmt/clippy/banned/deadcode clean; committed via orchestrator sweep of staged files, agent staged per prompt)",
   "ORCH-SWEEP-NOTE": "orchestrator commits must use pathspec (git commit <paths>) not bare commit, else staged agent work gets swept; corrected going forward",
   "ORCH-LOCALRUN-3": "2026-11-20 21:25 AEDT local run PASS: cli help+text-diff ok, autocompare-gui --screenshot exit0 9765B magic-ok deterministic (isolated /tmp/target-orch-local, HEAD incl gui2 b0520b1)",
-  "ORCH-ACTIVE2": "s1 sessions round-1 done (agent doc-commit bc81138), s2 reports WIP, vfs3 early; next: land s2+vfs3 then sync/cli leaves"
+  "ORCH-ACTIVE2": "s1 sessions round-1 done (agent doc-commit bc81138), s2 reports WIP, vfs3 early; next: land s2+vfs3 then sync/cli leaves",
+  "WAVE-SESSIONS-H2-DONE": "s1 COMPLETE DONE:0 (69 passed 0 failed, clippy -D warnings 0, fmt 0, banned 0, REPORT PASS); all landed+verified; session closed"
 }
