@@ -434,3 +434,15 @@
 1. **Tree Cols & Select at 960px**: size column 86px and modified 128px from char metrics, grid origins steady across depths, size right-aligned, selected-row band full width.
 2. **Tests** (before → after): autocompare-gui 4/4 new tests pass, isolated exquisite harness RESULT: PASS; cargo fmt clean; banned non-test tokens 0; colors frozen at 33.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree8/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-table7 sort plus align
+
+1. **Table Sort & Align at 960px**: sort-indicator glyph 1-char reuse, right-slot rect anchored with SPACE_XS pad, header height stable Heading vs body, numeric right-alignment via grid origin.
+2. **Tests** (before → after): autocompare-gui 986 green; clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table7/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-hex7 offset plus gap
+
+1. **Hex Offset & Gap at 960px**: offset column 70px text / 78px gutter from char metrics for 8-digit addresses, ASCII pane gap from SPACE tokens, byte cell 30px box at 7px reference char.
+2. **Tests** (before → after): autocompare-gui new offset-fit test green, isolated harness RESULT: PASS; clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0; colors frozen at 33.
+3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex7/**`, `TIMELINE.md`.
