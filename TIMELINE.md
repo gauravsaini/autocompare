@@ -614,3 +614,9 @@
 1. **Egui Gutter Mirror**: paint_text_body mirrors the shot15 fixture look in the live egui path — 20px center gap rects, yellow hunk-head markers (ink reused from frozen CHANGED_FG via text_center_marker_fg), selection bands, floor fill below last row. Geometry from existing helpers only, typography untouched, colors frozen at 33 touches. Edge fixture comparison/paint-egui-mirror-1200.json.
 2. **Tests** (before -> after): autocompare-gui 1037 green (including paint16_egui_mirror_gap_plus_markers_plus_floor); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Live-window runtime verification pending as orchestrator follow-up.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-paint16/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-chrome17 app chrome geometry
+
+1. **App-Chrome Geometry**: toolbar height/padding/button rhythm, tabstrip tab widths + padding, file-bar height + Browse alignment, per-pane metadata line rhythm. Existing SPACE_*/margin consts reused, TypoRole sizes only, colors frozen at 33 touches. Edge fixture comparison/chrome-narrow-720.json + headless test chrome17_narrow720_no_overlap.
+2. **Tests** (before -> after): autocompare-gui 1038 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Pixel gate ABANDONED with reason (fixture renderer paints chrome rects hardcoded in screenshot.rs; no chrome helper feeds those pixels — same structural block as paint14; egui delta visible only in live app, live-window verification pending).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-chrome17/**, TIMELINE.md.
