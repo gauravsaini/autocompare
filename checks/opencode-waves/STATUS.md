@@ -1491,3 +1491,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Colors note: 3 added Color32 touches me 2 test-only (TRANSPARENT/WHITE palette lock) + 1 fn-signature param type — production me koi naya hue nahi.
 - Wave discipline: clean-tree baseline (654 green) pehle lock kiya, phir implement — BX wali contamination galti nahi dohrai.
 - P0-2 done. Next: localrun round-3 (poora gap re-verify: session tabs + selective highlight + pathmeta).
+
+## 2026-11-20 — Waves CB-CALLER + CC-DARKRC launched (2 parallel, collision-safe)
+- CB-CALLER (sess-caller-cb): App session caller wiring, OWNS app.rs + checks/gui-sescaller-cb.
+- CC-DARKRC (sess-dark-cc): Light-vs-dark root-cause, STRICT READ-ONLY (zero source change, no tests), OWNS checks/gui-darkroot-cc only. Evidence via `git show HEAD:` taaki sibling dirt se immune rahe.
+- Uske baad: localrun round-3 (poora gap re-verify).
