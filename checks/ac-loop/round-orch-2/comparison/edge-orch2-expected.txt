@@ -1,0 +1,1 @@
+expected: diff shows left-only vs right-only, 1 hunk
