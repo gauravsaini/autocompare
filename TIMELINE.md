@@ -758,3 +758,9 @@
 1. **Home sessions geometry**: session cards grid, search field 28px, workspace rows, 1200px no h-scroll + 8tabs edge. SPACE_* reuse, TypoRole reuse.
 2. **Tests**: 1063 green, exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Agyx did work but timeout before commit (0-byte log, no DONE) — orchestrator verified OWNS and committed, same pattern as table30.
 3. **Files changed**: crates/gui/src/home.rs, checks/gui-exq-home32/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-hex31 live hex geometry (opencode default)
+
+1. **Hex geometry**: offset gutter SPACE_* reuse, row TypoRole Mono, hex dump columns alignment, ascii pane gap, 1200px no h-scroll + narrow700 edge.
+2. **Tests**: 1065 green (+1 hex), exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Leaf committed correct OWNS, sessions edits left uncommitted and reverted, no contamination landed.
+3. **Files changed**: crates/gui/src/views_hex.rs, checks/gui-exq-hex31/**, TIMELINE.md.
