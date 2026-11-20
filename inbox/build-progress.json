@@ -185,5 +185,9 @@
   "WAVE-MERGETAKE": "landed+pushed da01905 REPORT PASS 238 diff + 787 gui green, clippy 0, fmt clean, banned clean, fixtures base/left/right + expected-take-* + after.png 10363B magic ok",
   "WAVE-LOCAL7": "landed+pushed 8395b55 REPORT PASS 5 PNGs magic 778 green 10/10 CLI TOP-10 (table/hex moved, text/folder/home stable)",
   "ORCH-GAP-HONEST": "2026-11-20 gap ack: BC 888K native toolbar+tabs+metadata+gutter vs ours 10K dark mono, geometry+typo far, colors frozen, exquisite waves prioritized",
-  "ORCH-MIX-STATUS": "agyx fixed gemini-3.8-flash-high SWARM-GUI-T active + opencode default-model multiplex, cap 3-4, exp backoff, no fixed 8s"
+  "ORCH-MIX-STATUS": "agyx fixed gemini-3.8-flash-high SWARM-GUI-T active + opencode default-model multiplex, cap 3-4, exp backoff, no fixed 8s",
+  "WAVE-HOME4": "running opencode sess-opencode-home4 OWNS home.rs+theme.rs + checks/gui-exq-home4 (card gaps theme typo, launched 23:50)",
+  "WAVE-HEXTABLE2-SWARM": "running agyx swarm hex2 OWNS views_hex.rs+views_table.rs + checks/gui-exq-hextable2 (pane heights cell gaps, /swarm 2-subtasks, launched 23:50)",
+  "WAVE-LOCAL8": "running opencode sess-opencode-local8 OWNS checks/early-feedback-8 (CLI+PNGs TOP-10 gaps, launched 23:50)",
+  "ORCH-PARALLEL": "4 instances: agyx SWARM-GUI-T text + agyx hex2 swarm + opencode home4 + opencode local8, mix balanced, cap4, exp backoff"
 }
