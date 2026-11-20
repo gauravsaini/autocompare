@@ -1623,3 +1623,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `2b0917d` feat(diff): grammar + unimportant-rules line diffing with BC5 display filters. OWNS crates/diff + checks/agyx-diff-c only.
 - Gates: diff tests 59+33+44+20+38 green, clippy 0 warnings, fmt clean, banned 0, colors 0. Pushed origin/main (post-verify, all green).
 - Still running: AGYX-A reports (6 files + checks/agyx-reports-a).
+
+## 2026-11-20 — AGYX-A REPORTS landed + pushed (swarm complete 3/3)
+- Commit `7a5d941` feat(reports): BC parity for HTML linked child reports + mono mode (5 src files + snapshot tests + 10 sample artifacts). OWNS crates/reports + checks/agyx-reports-a only.
+- Gates: reports tests 16 green, clippy 0 warnings, fmt clean, banned 0, colors 0. Pushed origin/main.
+- Swarm summary: A reports + B sessions + C diff, all landed pushed. Next: missing craft-anything scaffolding (capture/inbox/investigation.cany) + round-7 verify wave.
