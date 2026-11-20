@@ -3464,6 +3464,249 @@ pub fn table9_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table10 round-1: tall plus rows at 1200px tall
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare key columns stable widths with numeric right-alignment
+// over tall scroll; table9 PASS at narrow-720 (key widths char metrics,
+// grid origin right-align, header/body rhythm). Tall-1200 table-side loose:
+// row heights over tall canvas, key-column lock over long scroll, header
+// tall rhythm. Fix table-side only (app.rs views.rs views_hex.rs home.rs
+// tree.rs gutter.rs copy.rs theme.rs viewmodel.rs take.rs dist/** skills/**
+// NO-TOUCH). Geometry FIRST: tall canvas [`TABLE10_CANVAS_H`] (600 x 2 —
+// koi naya literal nahi), row height Mono line-height lock
+// (`table10_row_h` 15.6) over tall panes, key widths char metrics se
+// (`table_column_widths` reuse + `table_col_widths_px` outer, origin-se 696
+// avail par fit gate), key-column tall lock long scroll par
+// (`table10_key_box_h` — rows * row_h + gaps, `table_key_box_rects`
+// delegation), header/body heights TypoRole se (Heading 21.6 vs Mono 15.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Edge fixture
+// `checks/gui-exq-table10/comparison/table-tall-1200.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table10 narrow canvas width (px): [`TABLE_NARROW_CANVAS_W`] reuse (720) —
+/// isi par tall fixture fit lock hota hai. Pure.
+pub const TABLE10_CANVAS_W: f32 = TABLE_NARROW_CANVAS_W;
+
+/// Table10 tall canvas height (px): [`TABLE_CANVAS_H`] doubled (600 x 2 =
+/// 1200) — isi par tall rows lock hote hain, koi naya literal nahi. Pure.
+pub const TABLE10_CANVAS_H: f32 = TABLE_CANVAS_H * 2.0;
+
+/// Table10 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table9 precedent — tall par bhi stable). Pure; unit-tested.
+pub fn table10_header_h() -> f32 {
+    table9_header_h()
+}
+
+/// Table10 header stable contract: table9 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table10_header_h_stable() -> bool {
+    table9_header_h_stable()
+}
+
+/// Table10 body row height (px): Mono line-height lock (15.6) — tall canvas
+/// par bhi ruler/body desync nahi. Pure; unit-tested.
+pub fn table10_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table10 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table10_header_body_delta() -> f32 {
+    table10_header_h() - table10_row_h()
+}
+
+/// Table10 narrow-720 avail width (px): [`table9_avail_w`] reuse (696) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table10_avail_w() -> f32 {
+    table9_avail_w()
+}
+
+/// Table10 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table10_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table10 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table10_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table10 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table10_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table10 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table10_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table10 grid origin (px): [`table_cell_grid_origin`] reuse — tall scroll
+/// par bhi numeric right-align isi origin-se lock hota hai. Pure;
+/// unit-tested.
+pub fn table10_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table10 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table10_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table10 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table10_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table10_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table9_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: char widths se [`table_col_widths_px`]
+/// delegation (chars * char_w + pad), kharab `char_w` par khali vec. Pure;
+/// unit-tested.
+pub fn table10_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table9_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative. Range-bahar skip. Pure;
+/// unit-tested.
+pub fn table10_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table9_key_col_xs(keys, col_widths_px)
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table10_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table10_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table10_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table10_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table10_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table10_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table10 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table10_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table10 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table10_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table10 narrow-720 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table10_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table10 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table10_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table10 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table10_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table10 tall panes height (px): [`table_panes_height`] delegation tall
+/// canvas par (1200 -> 1200, floor 100 se upar). Pure; unit-tested.
+pub fn table10_tall_panes_h() -> f32 {
+    table_panes_height(TABLE10_CANVAS_H)
+}
+
+/// Table10 tall visible rows: [`table_wide_960_visible_rows`] reuse tall
+/// panes par (1200 / 15.6 -> 76). Kharab par 0. Pure; unit-tested.
+pub fn table10_tall_visible_rows() -> u64 {
+    table_wide_960_visible_rows(table10_tall_panes_h())
+}
+
+/// Table10 tall total rows (long scroll length): tall visible rows hi scroll
+/// window bharta hai. Pure; unit-tested.
+pub fn table10_tall_total_rows() -> usize {
+    table10_tall_visible_rows() as usize
+}
+
+/// Key-column tall box height (px) long scroll par: `total * row_h +
+/// (total - 1) * gap` — [`table_key_col_box_rect`] ka height hissa
+/// (paint box math wahi, yahan single source taaki tall lock kabhi drift na
+/// kare). Khali/kharab par 0 (paint honest fallback). Pure; unit-tested.
+pub fn table10_key_box_h(total_rows: usize) -> f32 {
+    if total_rows == 0 {
+        return 0.0;
+    }
+    let row_h = table10_row_h();
+    let gap = table10_grid_gap_y();
+    if !row_h.is_finite() || row_h <= 0.0 || !gap.is_finite() || gap < 0.0 {
+        return 0.0;
+    }
+    let rows_f = total_rows as f32;
+    if !rows_f.is_finite() || rows_f <= 0.0 {
+        return 0.0;
+    }
+    let gaps = (total_rows.saturating_sub(1)) as f32 * gap;
+    let h = rows_f * row_h + gaps;
+    if !h.is_finite() || h <= 0.0 { 0.0 } else { h }
+}
+
+/// Key vertical box rects tall scroll par: [`table_key_box_rects`]
+/// delegation — view key order me, range-bahar skip. Pure; unit-tested.
+pub fn table10_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    table_key_box_rects(view, grid, col_widths_px, total_rows)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5444,5 +5687,128 @@ mod tests {
         );
         assert_eq!(table9_sort_glyph_rect(cell, 0.0), None);
         assert_eq!(table9_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table10_round1_tall_plus_rows_1200() {
+        // Headless test proving edge fixture comparison/table-tall-1200.json:
+        // tall rows over 1200px canvas (Mono 15.6 lock, 76 visible),
+        // key-column tall lock over long scroll (box h 1485.6), header tall
+        // rhythm (Heading 21.6 vs Mono 15.6, sep 35.6, body 37.6).
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table10/comparison/table-tall-1200.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table10/round-1/comparison/table-tall-1200.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-tall-1200\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 720.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"tall_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"panes_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 76"));
+        assert!(fixture_raw.contains("\"total_rows\": 76"));
+
+        // 1. Tall canvas: narrow width reuse, height doubled (600 x 2).
+        assert_eq!(TABLE10_CANVAS_W, 720.0);
+        assert_eq!(TABLE10_CANVAS_W, TABLE_NARROW_CANVAS_W);
+        assert_eq!(TABLE10_CANVAS_H, 1200.0);
+        assert_eq!(TABLE10_CANVAS_H, TABLE_CANVAS_H * 2.0);
+        assert_eq!(TABLE10_CANVAS_H, TABLE_CANVAS_H + TABLE_CANVAS_H);
+        assert_eq!(table10_avail_w(), 696.0);
+        assert_eq!(table10_avail_w(), table9_avail_w());
+        assert_eq!(table10_grid_origin(), (12.0, 12.0));
+        assert_eq!(table10_col_spacing(), 8.0);
+        assert_eq!(table10_grid_gap_y(), 4.0);
+
+        // 2. Row heights over tall canvas: header/body TypoRole locks.
+        assert!((table10_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table10_header_h(), table9_header_h());
+        assert!(table10_header_h_stable());
+        assert!((table10_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table10_row_h(), table_cell_row_h());
+        assert_eq!(
+            table10_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table10_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table10_header_h() > table10_row_h());
+        assert!((table10_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table10_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table10_header_underline_w(), 1.0);
+        assert!(table10_header_weight_ok());
+
+        // 3. Tall panes + visible rows: 1200 / 15.6 -> 76.
+        assert_eq!(table10_tall_panes_h(), 1200.0);
+        assert_eq!(table10_tall_panes_h(), table_panes_height(1200.0));
+        assert_eq!(table10_tall_visible_rows(), 76);
+        assert_eq!(table10_tall_total_rows(), 76);
+        assert_eq!(
+            table10_tall_visible_rows(),
+            table_wide_960_visible_rows(1200.0)
+        );
+
+        // 4. Key-column widths stable + numeric align over tall scroll.
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(
+            table10_key_widths_chars(&header, &rows, &keys),
+            vec![(0, 3)]
+        );
+        let key_px = table10_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table10_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        let px = table10_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table10_grid_total_w(&px), 176.0);
+        assert_eq!(table10_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table10_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table10_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table10_column_grid_fit(table10_avail_w(), &px));
+        assert!(!table10_column_grid_fit(100.0, &px));
+        assert_eq!(table10_col_aligns(&header, &rows), vec![true, false, true]);
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table10_row_h(),
+        };
+        assert_eq!(table10_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table10_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table10_sort_marker(true, true), "▲");
+        assert_eq!(table10_header_label("ID", true, true), "ID▲");
+        assert!(table10_is_sorted_col(Some(0), 0));
+
+        // 5. Key-column tall lock: box h rows * row_h + gaps over 76 rows.
+        assert_eq!(table10_tall_total_rows(), 76);
+        let tall_h = table10_key_box_h(table10_tall_total_rows());
+        assert!((tall_h - 1485.6).abs() < 0.5);
+        assert!(tall_h > 0.0);
+        assert_eq!(table10_key_box_h(0), 0.0);
+        assert_eq!(table10_key_box_h(1), table10_row_h());
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let grid = table_cell_grid_default();
+        let boxes = table10_key_box_rects(&view, grid, &px, table10_tall_total_rows());
+        assert_eq!(boxes.len(), 1);
+        let first = boxes.first().copied();
+        assert!(first.is_some());
+        if let Some(box_rect) = first {
+            assert_eq!(box_rect.y, 12.0);
+            assert!((box_rect.h - tall_h).abs() < 0.5);
+            assert_eq!(box_rect.x, 12.0);
+            assert_eq!(box_rect.w, 40.0);
+        }
+        assert!(table10_key_box_rects(&view, grid, &px, 0).is_empty());
     }
 }
