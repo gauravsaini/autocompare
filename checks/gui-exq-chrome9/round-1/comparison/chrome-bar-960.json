@@ -1,0 +1,20 @@
+{
+  "name": "chrome-bar-960",
+  "viewport_px": 960,
+  "toolbar_button_h": 24.0,
+  "toolbar_button_w": 96.0,
+  "toolbar_item_gap": 4.0,
+  "toolbar_group_gap": 8.0,
+  "toolbar_side_pad": 12.0,
+  "toolbar_avail_w_at_960": 936.0,
+  "toolbar_width": 996.0,
+  "toolbar_visible_at_960": 9,
+  "toolbar_overflow_at_960": 1,
+  "filebar_h": 21.2,
+  "filebar_pad_y": 4.0,
+  "status_h": 21.2,
+  "status_pad_y": 4.0,
+  "status_pad_x": 12.0,
+  "status_segment_at_960": 320.0,
+  "description": "CHROME9 edge: 960px canonical wide window. Toolbar button size from SPACE scale in app.rs (SPACE_XL 24.0h, floored 96.0w, gaps SPACE_XS/SM, side SPACE_MD symmetric; 9 fit + 1 overflow), file-bar 21.2 from TypoRole chrome line-height (13.2 + 2x4 symmetric XS pads), status strip 21.2 with symmetric XS vertical plus MD horizontal pads and 3 equal 320 segments."
+}

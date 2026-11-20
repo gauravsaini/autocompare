@@ -469,3 +469,9 @@
 1. **Copy Arrows & Rhythm at 960px**: wide column fit from char metrics, arrow pitch 19.6 Mono+gap, action y dy 1.2 aligned, all space-token single-source delegates.
 2. **Tests** (before → after): autocompare-gui 993 green (4 new headless); clippy 0 warnings on owned `copy.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy9/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-chrome9 toolbar plus filebar
+
+1. **Toolbar & Filebar at 960px**: Toolbar button size from SPACE scale (SPACE_XL 24h, 96w floor, gaps SPACE_XS/SM, side SPACE_MD symmetric; 9 fit + 1 overflow at 960w), file-bar 21.2h from Small chrome line-height + symmetric XS pads, status strip 21.2h with symmetric XS vertical plus MD horizontal pads and 3 equal 320 segments.
+2. **Tests** (before → after): autocompare-gui 997 green (2 new headless tests); clippy 0 warnings on owned `app.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/app.rs`, `checks/gui-exq-chrome9/**`, `comparison/chrome-bar-960.json`, `TIMELINE.md`.

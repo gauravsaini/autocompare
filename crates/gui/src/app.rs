@@ -4574,7 +4574,7 @@ pub fn exq_chrome6_hierarchy_ok() -> bool {
             exq_chrome6_fields_equal(left, right) && (left - 274.0).abs() < 0.001
         }
         && exq_chrome6_info_line("Yesterday", "12 B", "Text: exact", "wrap:off")
-            == String::from("Yesterday | 12 B | Text: exact | wrap:off")
+            == "Yesterday | 12 B | Text: exact | wrap:off"
 }
 
 /// EXQ-CHROME7 toolbar uniform width (chrome-side, exquisite round-7).
@@ -4996,6 +4996,222 @@ pub fn exq_chrome8_hierarchy_ok() -> bool {
         && exq_chrome8_status_pad_x() == crate::theme::SPACE_MD
         && (exq_chrome8_status_segment_w(960.0) - 320.0).abs() < 0.001
         && exq_chrome8_status_segments_equal(960.0)
+}
+
+/// EXQ-CHROME9 toolbar plus filebar (chrome-side, exquisite round-9).
+/// BC text compare window: icon-plus-label toolbar buttons, file bars with path
+/// plus metadata line, bottom status strip. Chrome-side fix: toolbar button
+/// size from SPACE scale in app.rs, file-bar height from TypoRole chrome
+/// line-height, status strip padding symmetric at 960px wide.
+/// Single-source reuse; koi naya size/token/color nahi. Pure;
+/// headless-tested.
+pub fn exq_chrome9_viewport_w() -> f32 {
+    crate::theme::VIEWPORT_W as f32
+}
+
+/// EXQ-CHROME9 avail width px: viewport minus outer side chrome
+/// (2 * SPACE_MD). Non-finite par 0. Pure; headless-tested.
+pub fn exq_chrome9_avail_w(viewport: f32) -> f32 {
+    if !viewport.is_finite() {
+        return 0.0;
+    }
+    (viewport - 2.0 * crate::theme::SPACE_MD).max(0.0)
+}
+
+/// EXQ-CHROME9 toolbar proportional char advance px (Body 13 * 0.6 = 7.8).
+/// Pure; headless-tested.
+pub fn exq_chrome9_toolbar_char_w() -> f32 {
+    crate::theme::TypoRole::Body.size() * 0.6
+}
+
+/// EXQ-CHROME9 toolbar longest label chars ("Sessions"/"Context" = 8).
+/// Pure; headless-tested.
+pub fn exq_chrome9_toolbar_label_chars() -> usize {
+    8
+}
+
+/// EXQ-CHROME9 toolbar button content need px: longest label at char
+/// advance plus SPACE_SM side pads (8 * 7.8 + 2 * 8 = 78.4 -> ceil 79.0).
+/// Pure; headless-tested.
+pub fn exq_chrome9_toolbar_content_need_w() -> f32 {
+    (exq_chrome9_toolbar_label_chars() as f32 * exq_chrome9_toolbar_char_w()
+        + 2.0 * crate::theme::SPACE_SM)
+        .ceil()
+}
+
+/// EXQ-CHROME9 toolbar uniform button width px: content need floored at
+/// the frozen 96 compact floor (79 < 96, so 96; sab barabar, clip nahi).
+/// Pads SPACE_SM se, floor frozen; koi naya size nahi. Pure;
+/// headless-tested.
+pub fn exq_chrome9_toolbar_button_w() -> f32 {
+    exq_chrome9_toolbar_content_need_w().max(crate::home::HOME_TOOLBAR_BUTTON_W)
+}
+
+/// EXQ-CHROME9 toolbar uniform button height px: frozen 24 hit floor,
+/// jo SPACE_XL (24) parity hai — size SPACE scale se. Pure;
+/// headless-tested.
+pub fn exq_chrome9_toolbar_button_h() -> f32 {
+    crate::home::HOME_TOOLBAR_BUTTON_H
+}
+
+/// EXQ-CHROME9 toolbar item gap px via SPACE_XS (4.0). Pure; headless-tested.
+pub fn exq_chrome9_toolbar_item_gap() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME9 toolbar group gap px via SPACE_SM (8.0). Pure; headless-tested.
+pub fn exq_chrome9_toolbar_group_gap() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// EXQ-CHROME9 toolbar side pad px via SPACE_MD (12.0 per side, symmetric).
+/// Pure; headless-tested.
+pub fn exq_chrome9_toolbar_side_pad() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// EXQ-CHROME9 toolbar total width px: 10 uniform buttons + 9 item gaps
+/// (10 * 96 + 9 * 4 = 996). Pure; headless-tested.
+pub fn exq_chrome9_toolbar_w() -> f32 {
+    crate::home::TOPCHROME_TOOLBAR_ACTIONS.len() as f32 * exq_chrome9_toolbar_button_w()
+        + crate::home::TOPCHROME_TOOLBAR_ACTIONS
+            .len()
+            .saturating_sub(1) as f32
+            * exq_chrome9_toolbar_item_gap()
+}
+
+/// EXQ-CHROME9 equal-width gate: har toolbar label ka content need
+/// uniform width me fit (koi label bahar nahi, koi crush nahi). Pure;
+/// headless-tested.
+pub fn exq_chrome9_toolbar_buttons_equal() -> bool {
+    let button_w = exq_chrome9_toolbar_button_w();
+    for action in crate::home::TOPCHROME_TOOLBAR_ACTIONS {
+        let need = (action.chars().count() as f32 * exq_chrome9_toolbar_char_w()
+            + 2.0 * crate::theme::SPACE_SM)
+            .ceil();
+        if need > button_w {
+            return false;
+        }
+    }
+    true
+}
+
+/// EXQ-CHROME9 toolbar visible buttons count at `total_w`. Pure; headless-tested.
+pub fn exq_chrome9_toolbar_visible_count(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return crate::home::TOPCHROME_TOOLBAR_ACTIONS.len();
+    }
+    let avail = exq_chrome9_avail_w(total_w);
+    let mut used = 0.0f32;
+    let mut count = 0usize;
+    for _ in crate::home::TOPCHROME_TOOLBAR_ACTIONS {
+        let need = exq_chrome9_toolbar_button_w()
+            + if count == 0 {
+                0.0
+            } else {
+                exq_chrome9_toolbar_item_gap()
+            };
+        if used + need > avail {
+            break;
+        }
+        used += need;
+        count += 1;
+    }
+    count
+}
+
+/// EXQ-CHROME9 toolbar overflow buttons count at `total_w`. Pure; headless-tested.
+pub fn exq_chrome9_toolbar_overflow_count(total_w: f32) -> usize {
+    crate::home::TOPCHROME_TOOLBAR_ACTIONS
+        .len()
+        .saturating_sub(exq_chrome9_toolbar_visible_count(total_w))
+}
+
+/// EXQ-CHROME9 file-bar height px: Small chrome line-height
+/// (11 * 1.2 = 13.2) plus upar-neeche SPACE_XS pad (2 * 4) = 21.2.
+/// Path plus metadata line isi single chrome rhythm me rehti hai. Pure;
+/// headless-tested.
+pub fn exq_chrome9_filebar_h() -> f32 {
+    crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME9 file-bar role: Small chrome (11 weak proportional).
+/// Pure; headless-tested.
+pub fn exq_chrome9_filebar_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// EXQ-CHROME9 file-bar vertical pad px via SPACE_XS (4.0 top == bottom,
+/// symmetric). Pure; headless-tested.
+pub fn exq_chrome9_filebar_pad_y() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME9 status strip height px: Small chrome line-height
+/// (11 * 1.2 = 13.2) plus upar-neeche SPACE_XS pad (2 * 4) = 21.2.
+/// File-bar rhythm parity, symmetric pads. Pure; headless-tested.
+pub fn exq_chrome9_status_h() -> f32 {
+    crate::theme::TypoRole::Small.line_height_px() + 2.0 * exq_chrome9_status_pad_y()
+}
+
+/// EXQ-CHROME9 status vertical pad px via SPACE_XS (4.0 top == bottom).
+/// Pure; headless-tested.
+pub fn exq_chrome9_status_pad_y() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-CHROME9 status horizontal pad px via SPACE_MD (12.0 left == right).
+/// Pure; headless-tested.
+pub fn exq_chrome9_status_pad_x() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// EXQ-CHROME9 status segment width px: kul ka teesra hissa (3 equal
+/// segments). Non-finite par 0. Pure; headless-tested.
+pub fn exq_chrome9_status_segment_w(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return 0.0;
+    }
+    (total_w / crate::home::TOPCHROME_STATUS_SECTIONS as f32).max(0.0)
+}
+
+/// EXQ-CHROME9 status segments equal gate: teenon thirds 0.001 andar.
+/// Pure; headless-tested.
+pub fn exq_chrome9_status_segments_equal(total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    let seg = exq_chrome9_status_segment_w(total_w);
+    (seg * crate::home::TOPCHROME_STATUS_SECTIONS as f32 - total_w).abs() < 0.001
+}
+
+/// EXQ-CHROME9 hierarchy contract at 960: toolbar uniform 96x24 (pads
+/// SPACE_SM, gaps SPACE_XS/SM, side SPACE_MD symmetric), file-bar 21.2
+/// from Small chrome line-height, status 21.2 with symmetric XS vertical
+/// plus MD horizontal pads and 3 equal 320 segments. Pure;
+/// headless-tested.
+pub fn exq_chrome9_hierarchy_ok() -> bool {
+    (exq_chrome9_toolbar_button_w() - 96.0).abs() < 0.001
+        && (exq_chrome9_toolbar_button_h() - 24.0).abs() < 0.001
+        && exq_chrome9_toolbar_button_h() == crate::theme::SPACE_XL
+        && exq_chrome9_toolbar_item_gap() == crate::theme::SPACE_XS
+        && exq_chrome9_toolbar_group_gap() == crate::theme::SPACE_SM
+        && exq_chrome9_toolbar_side_pad() == crate::theme::SPACE_MD
+        && (exq_chrome9_toolbar_w() - 996.0).abs() < 0.001
+        && exq_chrome9_toolbar_buttons_equal()
+        && (exq_chrome9_avail_w(exq_chrome9_viewport_w()) - 936.0).abs() < 0.001
+        && (exq_chrome9_filebar_h() - 21.2).abs() < 0.001
+        && (exq_chrome9_filebar_h()
+            - (crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS))
+            .abs()
+            < 0.001
+        && exq_chrome9_filebar_pad_y() == crate::theme::SPACE_XS
+        && (exq_chrome9_status_h() - 21.2).abs() < 0.001
+        && (exq_chrome9_status_h() - exq_chrome9_filebar_h()).abs() < 0.001
+        && exq_chrome9_status_pad_y() == crate::theme::SPACE_XS
+        && exq_chrome9_status_pad_x() == crate::theme::SPACE_MD
+        && (exq_chrome9_status_segment_w(960.0) - 320.0).abs() < 0.001
+        && exq_chrome9_status_segments_equal(960.0)
 }
 
 /// Empty-rules label for the chrome status top row: BC per-pane reads
@@ -11599,5 +11815,71 @@ mod tests {
         assert_eq!(exq_chrome8_status_segment_w(f32::NAN), 0.0);
         assert!(exq_chrome8_status_segments_equal(960.0));
         assert!(exq_chrome8_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_chrome9_toolbar_plus_filebar_wide960() {
+        assert_eq!(exq_chrome9_viewport_w(), 960.0);
+        assert_eq!(exq_chrome9_avail_w(960.0), 936.0);
+        assert_eq!(exq_chrome9_avail_w(f32::NAN), 0.0);
+        assert!((exq_chrome9_toolbar_char_w() - 7.8).abs() < 0.001);
+        assert_eq!(exq_chrome9_toolbar_label_chars(), 8);
+        assert_eq!(exq_chrome9_toolbar_content_need_w(), 79.0);
+        assert_eq!(exq_chrome9_toolbar_button_w(), 96.0);
+        assert_eq!(exq_chrome9_toolbar_button_h(), 24.0);
+        assert_eq!(exq_chrome9_toolbar_button_h(), crate::theme::SPACE_XL);
+        assert_eq!(exq_chrome9_toolbar_item_gap(), crate::theme::SPACE_XS);
+        assert_eq!(exq_chrome9_toolbar_group_gap(), crate::theme::SPACE_SM);
+        assert_eq!(exq_chrome9_toolbar_side_pad(), crate::theme::SPACE_MD);
+        assert_eq!(exq_chrome9_toolbar_w(), 996.0);
+        assert!(exq_chrome9_toolbar_buttons_equal());
+        assert_eq!(exq_chrome9_toolbar_visible_count(960.0), 9);
+        assert_eq!(exq_chrome9_toolbar_overflow_count(960.0), 1);
+        assert!((exq_chrome9_filebar_h() - 21.2).abs() < 0.001);
+        assert_eq!(
+            exq_chrome9_filebar_h(),
+            crate::theme::TypoRole::Small.line_height_px() + 2.0 * crate::theme::SPACE_XS
+        );
+        assert_eq!(
+            exq_chrome9_filebar_role(),
+            crate::theme::TypoRole::chrome_status()
+        );
+        assert_eq!(exq_chrome9_filebar_pad_y(), crate::theme::SPACE_XS);
+        assert!((exq_chrome9_status_h() - 21.2).abs() < 0.001);
+        assert_eq!(exq_chrome9_status_h(), exq_chrome9_filebar_h());
+        assert_eq!(exq_chrome9_status_pad_y(), crate::theme::SPACE_XS);
+        assert_eq!(exq_chrome9_status_pad_x(), crate::theme::SPACE_MD);
+        assert_eq!(exq_chrome9_status_segment_w(960.0), 320.0);
+        assert_eq!(exq_chrome9_status_segment_w(f32::NAN), 0.0);
+        assert!(exq_chrome9_status_segments_equal(960.0));
+        assert!(exq_chrome9_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_chrome9_round1_chrome_bar_960_fixture() {
+        // Headless test proving edge fixture comparison/chrome-bar-960.json:
+        // Toolbar button size from SPACE scale in app.rs (SPACE_XL 24.0h,
+        // floored 96.0w, gaps SPACE_XS/SM, side SPACE_MD symmetric; 9 fit + 1 overflow),
+        // file-bar 21.2 from TypoRole chrome line-height (13.2 + 2x4 symmetric XS pads),
+        // status strip 21.2 with symmetric XS vertical plus MD horizontal pads and 3 equal 320 segments.
+        let raw =
+            include_str!("../../../checks/gui-exq-chrome9/round-1/comparison/chrome-bar-960.json");
+        assert!(raw.contains("\"viewport_px\": 960"));
+        assert!(raw.contains("\"toolbar_button_h\": 24.0"));
+        assert!(raw.contains("\"toolbar_button_w\": 96.0"));
+        assert!(raw.contains("\"toolbar_item_gap\": 4.0"));
+        assert!(raw.contains("\"toolbar_group_gap\": 8.0"));
+        assert!(raw.contains("\"toolbar_side_pad\": 12.0"));
+        assert!(raw.contains("\"toolbar_avail_w_at_960\": 936.0"));
+        assert!(raw.contains("\"toolbar_width\": 996.0"));
+        assert!(raw.contains("\"toolbar_visible_at_960\": 9"));
+        assert!(raw.contains("\"toolbar_overflow_at_960\": 1"));
+        assert!(raw.contains("\"filebar_h\": 21.2"));
+        assert!(raw.contains("\"filebar_pad_y\": 4.0"));
+        assert!(raw.contains("\"status_h\": 21.2"));
+        assert!(raw.contains("\"status_pad_y\": 4.0"));
+        assert!(raw.contains("\"status_pad_x\": 12.0"));
+        assert!(raw.contains("\"status_segment_at_960\": 320.0"));
+        assert!(exq_chrome9_hierarchy_ok());
     }
 }
