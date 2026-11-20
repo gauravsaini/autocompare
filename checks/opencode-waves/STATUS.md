@@ -1632,3 +1632,11 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Round-7 VERIFY launched (opencode localrun, read-only)
 - Sess sess-local-r7, OWNS checks/gui-localrun-r7 only, source ZERO touch. --open flag content-row live photo-proof + CP/CQ/CN/CO/CPlight live check (CR sec-8 input).
 - Note: parallel BQ wave active in repo (gui/views) — round-7 disjoint by design (no src edits, new checks dir only).
+
+## 2026-11-20 — Parallel feature waves D+E+F+G launched (3 agyx + 1 opencode) + round-7 verify running
+- D VFS (sess-vfs-d, opencode default model): OWNS crates/vfs archive_zip/tar/snapshot/trait_def/path + tests + checks/agyx-vfs-d. AGYX-D via agyx failed fast (empty conversation id x3, simplified retry bhi fail), isliye opencode fallback se launch kiya — ab running hai.
+- E SYNC (agyx-e-sync): OWNS crates/compare folder/sync/folder_merge/jobs + tests + checks/agyx-sync-e.
+- F MEDIA (agyx-f-media): OWNS crates/compare table/picture/media/binary + crates/diff table/image/audio/media_tags/hex + tests + checks/agyx-media-f.
+- G CLI (agyx-g-cli): OWNS crates/cli bcomp/outcome/runner/args/report adapters + test + checks/agyx-cli-g.
+- Disjoint OWNS (file-level, lib.rs/Cargo.toml/STATUS/PLAN/GUI forbidden for all four), commit locally NO PUSH, orchestrator verifies + pushes. Architecture plug-and-play: L0 pure diff, L1 Vfs/Sessions/Reports traits, L2 compare orchestration (FolderCompare/SyncPlanner/FolderMerge/JobRunner), L3 thin cli/gui — isliye parallel extension safe hai, koi tight coupling nahi.
+- Running total 5 parallel: round-7 verify (read-only) + D + E + F + G.
