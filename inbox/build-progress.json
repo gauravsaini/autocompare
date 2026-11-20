@@ -59,7 +59,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-RUN3": "landed 6d5fe4a pushed (CLI 10 cmds exit0, 960x600 gui.png 9765B valid, workspace tests ok, TOP-10 geo-typo gaps, PNG noise reverted)",
     "SWARM-SESS-H": "landed fbbd347 verified+pushed (47 green, clippy 0, fmt clean, banned 0 non-test)",
-    "SWARM-SESSREP": "sessions tests green 49 pass; reports E0432 + vfs E0004 still open, blocks cli/gui/compare validation; awaiting swarm fix",
+    "SWARM-SESSREP": "vfs E0004 fixed by swarm, vfs tests 27 green; reports E0432 only blocker left",
     "SWARM-VCMP-J": "dead no-source-change (only checks/agyx-vcmp-j evidence, unlanded); VFS/compare DWARF healthy via dependent tests",
     "SYNC-E": "landed 225750e verified+pushed (strict: 110 green, clippy 0)",
     "VFS-D": "D4 died mid-edit (duplicate ArchiveFs breakage), D5 clean-fix launched (reset to b940f34 + Error::other only)",
