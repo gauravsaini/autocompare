@@ -213,7 +213,7 @@
  },
  "WAVE-TEXT6": "landed+pushed f818530 825 green REPORT PASS baseline-lock honest (no paint edit, gap noted)",
  "WAVE-CHROME6": "landed+pushed c54d3c9 840 green REPORT PASS",
- "WAVE-GUTTER6": "WIP gutter.rs 337, live, clippy fix pending",
+ "WAVE-GUTTER6": "REPORT PASS 840 green 2026-11-21 01:05, nudged to commit OWNS gutter.rs",
  "WAVE-COPYTAKE6": "landed+pushed 905dd68 840 green REPORT PASS OWNS-clean fmt0 banned0",
  "LAND-TREE5-HOME5": "landed+pushed 5746066 cfc32e9 822 green, remeasured /tmp/land-verify8.png 10K vs BC 888K gap honest",
  "AGYX-FIX": "root cause: raw agy -p bypassed rotator, gemini-4-neon 404; agyx wrapper forces gemini-3.8-flash-high via localhost:51200, verified 200",
