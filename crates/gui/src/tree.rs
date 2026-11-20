@@ -11,7 +11,11 @@
 
 use std::collections::BTreeSet;
 
-use autocompare_compare::{SyncAction, SyncDirection, SyncOptions, SyncStep};
+use autocompare_compare::{
+    SyncAction, SyncLiveLog, SyncMode, SyncOptions, SyncPlan, SyncReport, SyncStep, gui_action_for,
+    gui_skip_reason_for, gui_sync_options, is_sync_conflict_reason, sync_conflict_next,
+    sync_conflict_prev,
+};
 
 use crate::viewmodel::FolderRow;
 
@@ -719,9 +723,13 @@ pub fn clear_compare_intent(staged: &mut Option<String>) {
     *staged = None;
 }
 
-/// Sync preview mode for the folder view.
+/// Sync preview mode for the folder view (BC parity subset).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SyncModeChoice {
+    /// Copy right-newer/right-only rows left (no deletes).
+    UpdateLeft,
+    /// Copy left-newer/left-only rows right (no deletes).
+    UpdateRight,
     /// Newer side wins both ways, no deletes.
     #[default]
     UpdateBoth,
@@ -733,26 +741,40 @@ impl SyncModeChoice {
     /// Label for the mode select control.
     pub const fn label(self) -> &'static str {
         match self {
+            Self::UpdateLeft => "Update Left",
+            Self::UpdateRight => "Update Right",
             Self::UpdateBoth => "Update Both",
             Self::Mirror => "Mirror",
         }
     }
+
+    /// All picker modes in display order.
+    pub const fn all() -> [Self; 4] {
+        [
+            Self::UpdateLeft,
+            Self::UpdateRight,
+            Self::UpdateBoth,
+            Self::Mirror,
+        ]
+    }
+
+    /// Engine mode behind this choice (thin wiring: options live in
+    /// `autocompare-compare` ToolSpec, never here).
+    pub const fn engine_mode(self) -> SyncMode {
+        match self {
+            Self::UpdateLeft => SyncMode::UpdateLeft,
+            Self::UpdateRight => SyncMode::UpdateRight,
+            Self::UpdateBoth => SyncMode::Both,
+            Self::Mirror => SyncMode::Mirror,
+        }
+    }
 }
 
-/// Maps the preview mode to engine sync options (same mapping as
-/// `SyncPlanner`: Both = NewerWins without prune, Mirror =
-/// LeftToRight with prune).
+/// Maps the preview mode to engine sync options via the compare
+/// ToolSpec (`gui_sync_options`): zero business logic here, the rules
+/// live next to the engine (`plan_file` / `plan_dir`).
 pub fn sync_options_for(mode: SyncModeChoice) -> SyncOptions {
-    match mode {
-        SyncModeChoice::UpdateBoth => SyncOptions {
-            direction: SyncDirection::NewerWins,
-            prune: false,
-        },
-        SyncModeChoice::Mirror => SyncOptions {
-            direction: SyncDirection::LeftToRight,
-            prune: true,
-        },
-    }
+    gui_sync_options(mode.engine_mode())
 }
 
 /// Dry-run sync preview over already-compared rows. Mirrors the
@@ -781,6 +803,17 @@ impl SyncPreview {
             self.skipped.len()
         )
     }
+
+    /// Engine plan view of this preview (same steps/skips, never
+    /// truncated): lets the session log through ToolSpec `SyncLiveLog`
+    /// with zero format logic here.
+    pub fn to_plan(&self) -> SyncPlan {
+        SyncPlan {
+            steps: self.steps.clone(),
+            skipped: self.skipped.clone(),
+            truncated: false,
+        }
+    }
 }
 
 /// Whether `rel` names something strictly inside `dir_rel`.
@@ -790,8 +823,13 @@ fn is_under(rel: &str, dir_rel: &str) -> bool {
     rel.starts_with(&prefix)
 }
 
-/// Builds the sync preview for one mode over folder rows.
+/// Builds the sync preview for one mode over folder rows. Thin
+/// wiring: every per-row verdict comes from the compare ToolSpec
+/// (`gui_action_for` / `gui_skip_reason_for`), same rules as engine
+/// `plan_sync` without filesystem access. Pruned-dir subtree
+/// suppression stays here (structural: children die with the dir).
 pub fn sync_preview(rows: &[FolderRow], mode: SyncModeChoice) -> SyncPreview {
+    let opts = sync_options_for(mode);
     let mut preview = SyncPreview::default();
     let mut doomed: Vec<String> = Vec::new();
     for row in rows {
@@ -805,73 +843,21 @@ pub fn sync_preview(rows: &[FolderRow], mode: SyncModeChoice) -> SyncPreview {
         if under_doomed {
             continue;
         }
-        if row.is_dir {
-            if mode == SyncModeChoice::Mirror && row.glyph == 'R' {
-                preview.steps.push(SyncStep {
-                    rel_path: row.rel_path.clone(),
-                    is_dir: true,
-                    action: SyncAction::DeleteRight,
-                });
+        if let Some(action) = gui_action_for(row.glyph, row.is_dir, &opts) {
+            preview.steps.push(SyncStep {
+                rel_path: row.rel_path.clone(),
+                is_dir: row.is_dir,
+                action,
+            });
+            if row.is_dir {
                 doomed.push(row.rel_path.clone());
             }
             continue;
         }
-        match row.glyph {
-            '=' => {}
-            '!' => {
-                preview.skipped.push((
-                    row.rel_path.clone(),
-                    "content differs; no side wins".to_string(),
-                ));
-            }
-            '>' => {
-                preview.steps.push(SyncStep {
-                    rel_path: row.rel_path.clone(),
-                    is_dir: false,
-                    action: SyncAction::CopyToRight,
-                });
-            }
-            '<' => {
-                if mode == SyncModeChoice::UpdateBoth {
-                    preview.steps.push(SyncStep {
-                        rel_path: row.rel_path.clone(),
-                        is_dir: false,
-                        action: SyncAction::CopyToLeft,
-                    });
-                } else {
-                    preview
-                        .skipped
-                        .push((row.rel_path.clone(), "destination is newer".to_string()));
-                }
-            }
-            'L' => {
-                preview.steps.push(SyncStep {
-                    rel_path: row.rel_path.clone(),
-                    is_dir: false,
-                    action: SyncAction::CopyToRight,
-                });
-            }
-            'R' => {
-                if mode == SyncModeChoice::UpdateBoth {
-                    preview.steps.push(SyncStep {
-                        rel_path: row.rel_path.clone(),
-                        is_dir: false,
-                        action: SyncAction::CopyToLeft,
-                    });
-                } else {
-                    preview.steps.push(SyncStep {
-                        rel_path: row.rel_path.clone(),
-                        is_dir: false,
-                        action: SyncAction::DeleteRight,
-                    });
-                }
-            }
-            _ => {
-                preview.skipped.push((
-                    row.rel_path.clone(),
-                    "unknown status; left alone".to_string(),
-                ));
-            }
+        if let Some(reason) = gui_skip_reason_for(row.glyph, row.is_dir, &opts) {
+            preview
+                .skipped
+                .push((row.rel_path.clone(), reason.to_string()));
         }
     }
     preview
@@ -1160,6 +1146,7 @@ pub fn folder_header_typo() -> FolderTypo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use autocompare_compare::SyncDirection;
 
     fn make_row(path: &str, is_dir: bool) -> FolderRow {
         FolderRow {
@@ -1409,14 +1396,156 @@ mod tests {
 
     #[test]
     fn sync_mode_labels_and_options_match_engine() {
+        assert_eq!(SyncModeChoice::UpdateLeft.label(), "Update Left");
+        assert_eq!(SyncModeChoice::UpdateRight.label(), "Update Right");
         assert_eq!(SyncModeChoice::UpdateBoth.label(), "Update Both");
         assert_eq!(SyncModeChoice::Mirror.label(), "Mirror");
+        assert_eq!(
+            SyncModeChoice::all(),
+            [
+                SyncModeChoice::UpdateLeft,
+                SyncModeChoice::UpdateRight,
+                SyncModeChoice::UpdateBoth,
+                SyncModeChoice::Mirror,
+            ]
+        );
+        assert_eq!(
+            SyncModeChoice::UpdateLeft.engine_mode(),
+            SyncMode::UpdateLeft
+        );
+        assert_eq!(
+            SyncModeChoice::UpdateRight.engine_mode(),
+            SyncMode::UpdateRight
+        );
+        assert_eq!(SyncModeChoice::UpdateBoth.engine_mode(), SyncMode::Both);
+        assert_eq!(SyncModeChoice::Mirror.engine_mode(), SyncMode::Mirror);
+        let left = sync_options_for(SyncModeChoice::UpdateLeft);
+        assert_eq!(left.direction, SyncDirection::RightToLeft);
+        assert!(!left.prune);
+        let right = sync_options_for(SyncModeChoice::UpdateRight);
+        assert_eq!(right.direction, SyncDirection::LeftToRight);
+        assert!(!right.prune);
         let both = sync_options_for(SyncModeChoice::UpdateBoth);
         assert_eq!(both.direction, SyncDirection::NewerWins);
         assert!(!both.prune);
         let mirror = sync_options_for(SyncModeChoice::Mirror);
         assert_eq!(mirror.direction, SyncDirection::LeftToRight);
         assert!(mirror.prune);
+    }
+
+    #[test]
+    fn sync_preview_four_modes_cover_update_left_right() {
+        let rows = vec![
+            make_glyph_row("same.txt", false, '='),
+            make_glyph_row("diff.txt", false, '!'),
+            make_glyph_row("nl.txt", false, '>'),
+            make_glyph_row("nr.txt", false, '<'),
+            make_glyph_row("lo.txt", false, 'L'),
+            make_glyph_row("ro.txt", false, 'R'),
+        ];
+        // UpdateRight: left-newer + left-only go right; right side stays.
+        let right = sync_preview(&rows, SyncModeChoice::UpdateRight);
+        assert_eq!(right.steps.len(), 2);
+        assert_eq!(right.skipped.len(), 3);
+        // UpdateLeft: right-newer + right-only go left; left side stays.
+        let left = sync_preview(&rows, SyncModeChoice::UpdateLeft);
+        assert_eq!(left.steps.len(), 2);
+        assert_eq!(left.skipped.len(), 3);
+        // Directions stay honest per mode.
+        assert_eq!(
+            sync_direction_for_row(
+                &make_glyph_row("nr.txt", false, '<'),
+                SyncModeChoice::UpdateLeft
+            ),
+            SyncRowDirection::CopyToLeft
+        );
+        assert_eq!(
+            sync_direction_for_row(
+                &make_glyph_row("nr.txt", false, '<'),
+                SyncModeChoice::UpdateRight
+            ),
+            SyncRowDirection::Manual
+        );
+        assert_eq!(
+            sync_direction_for_row(
+                &make_glyph_row("ro.txt", false, 'R'),
+                SyncModeChoice::UpdateLeft
+            ),
+            SyncRowDirection::CopyToLeft
+        );
+        assert_eq!(
+            sync_direction_for_row(
+                &make_glyph_row("lo.txt", false, 'L'),
+                SyncModeChoice::UpdateLeft
+            ),
+            SyncRowDirection::None
+        );
+        assert_eq!(
+            sync_direction_for_row(
+                &make_glyph_row("ro.txt", false, 'R'),
+                SyncModeChoice::UpdateRight
+            ),
+            SyncRowDirection::None
+        );
+    }
+
+    #[test]
+    fn sync_conflict_nav_walks_preview_conflicts() {
+        let rows = vec![
+            make_glyph_row("same.txt", false, '='),
+            make_glyph_row("diff.txt", false, '!'),
+            make_glyph_row("nl.txt", false, '>'),
+            make_glyph_row("nr.txt", false, '<'),
+        ];
+        let preview = sync_preview(&rows, SyncModeChoice::Mirror);
+        // Mirror: diff (content) + nr (newer dest) conflict, nl copies.
+        assert_eq!(sync_preview_conflict_count(&preview), 2);
+        let first = sync_preview_next_conflict(&preview, None);
+        let Some(first) = first else {
+            return;
+        };
+        assert_eq!(first.0, "diff.txt");
+        let second = sync_preview_next_conflict(&preview, Some(&first.0));
+        let Some(second) = second else {
+            return;
+        };
+        assert_eq!(second.0, "nr.txt");
+        assert!(sync_preview_next_conflict(&preview, Some(&second.0)).is_none());
+        let back = sync_preview_prev_conflict(&preview, Some(&second.0));
+        let Some(back) = back else {
+            return;
+        };
+        assert_eq!(back.0, "diff.txt");
+        let last = sync_preview_prev_conflict(&preview, None);
+        let Some(last) = last else {
+            return;
+        };
+        assert_eq!(last.0, "nr.txt");
+    }
+
+    #[test]
+    fn sync_live_log_lines_cover_plan_and_report() {
+        let rows = vec![
+            make_glyph_row("nl.txt", false, '>'),
+            make_glyph_row("diff.txt", false, '!'),
+        ];
+        let preview = sync_preview(&rows, SyncModeChoice::UpdateBoth);
+        let report = SyncReportView {
+            copied: 1,
+            deleted: 0,
+            failed: vec![("nl.txt".to_string(), "source vanished".to_string())],
+        };
+        let lines = sync_live_log_lines(&preview, &report);
+        assert!(lines.first().is_some_and(|line| line.contains("step(s)")));
+        assert!(lines.iter().any(|line| line.contains("copy L->R nl.txt")));
+        assert!(lines.iter().any(|line| line.contains("diff.txt")));
+        assert!(lines.iter().any(|line| line.contains("SyncReport:")));
+        assert!(lines.iter().any(|line| line.contains("failed nl.txt")));
+        assert_eq!(sync_log_visible_lines(200.0), 7);
+        assert_eq!(sync_log_visible_lines(10.0), 0);
+        assert_eq!(sync_log_visible_lines(f32::NAN), 0);
+        let typo = sync_log_typo();
+        assert!(typo.mono && !typo.strong && typo.size == FOLDER_SIDE_SIZE);
     }
 
     #[test]
@@ -2058,6 +2187,10 @@ pub struct FolderSessionState {
     pub sync_mode: SyncModeChoice,
     /// Explicit Apply consent for the current preview.
     pub consented: bool,
+    /// Conflict-nav cursor: currently focused conflict path.
+    pub sync_conflict: Option<String>,
+    /// Live sync log (plan lines + apply outcome, BC parity).
+    pub live_log: SyncLiveLog,
     /// Active drill-down directory scope.
     pub drill_down: FolderDrillDownScope,
 }
@@ -2157,11 +2290,14 @@ impl FolderSessionState {
         self.staged.take()
     }
 
-    /// Switches the preview mode. Consent never survives a mode
-    /// switch: every preview needs its own explicit Apply consent.
+    /// Switches the preview mode. Consent, conflict cursor and live
+    /// log never survive a mode switch: every preview needs its own
+    /// explicit Apply consent, fresh nav and fresh log.
     pub fn set_sync_mode(&mut self, mode: SyncModeChoice) {
         self.sync_mode = mode;
         self.consented = false;
+        self.sync_conflict = None;
+        self.live_log.clear();
     }
 
     /// Builds the dry-run preview for the current mode over folder rows.
@@ -2172,6 +2308,45 @@ impl FolderSessionState {
     /// Whether Apply may run now: consented and steps planned.
     pub fn can_apply_now(&self, preview: &SyncPreview) -> bool {
         can_apply(preview, self.consented)
+    }
+
+    /// Moves the conflict cursor to the next conflict (wrap nahi).
+    /// Returns the newly focused path, if any.
+    pub fn next_sync_conflict(&mut self, preview: &SyncPreview) -> Option<String> {
+        let found = sync_preview_next_conflict(preview, self.sync_conflict.as_deref())
+            .map(|item| item.0.clone());
+        self.sync_conflict = found.clone();
+        found
+    }
+
+    /// Moves the conflict cursor to the previous conflict (wrap nahi).
+    /// Returns the newly focused path, if any.
+    pub fn prev_sync_conflict(&mut self, preview: &SyncPreview) -> Option<String> {
+        let found = sync_preview_prev_conflict(preview, self.sync_conflict.as_deref())
+            .map(|item| item.0.clone());
+        self.sync_conflict = found.clone();
+        found
+    }
+
+    /// Clears the conflict cursor (new compare / filter change).
+    pub fn clear_sync_conflict(&mut self) {
+        self.sync_conflict = None;
+    }
+
+    /// Logs a dry-run preview into the live log (ToolSpec lines).
+    pub fn log_sync_preview(&mut self, preview: &SyncPreview) {
+        self.live_log.push_plan(&preview.to_plan());
+    }
+
+    /// Logs an apply outcome into the live log (ToolSpec lines).
+    pub fn log_sync_report(&mut self, report: &SyncReportView) {
+        self.live_log.push_report(&report.to_report());
+    }
+
+    /// Clears the live log (new compare / mode switch outside
+    /// `set_sync_mode` paths).
+    pub fn clear_live_log(&mut self) {
+        self.live_log.clear();
     }
 }
 
@@ -2336,6 +2511,66 @@ mod session_tests {
         assert_eq!(preview.steps.len(), 1);
         assert!(session.can_apply_now(&preview));
         assert!(preview.summary().contains("1 step(s)"));
+    }
+
+    #[test]
+    fn session_conflict_cursor_and_live_log() {
+        let rows = vec![
+            glyph_row("diff.txt", false, '!'),
+            glyph_row("nl.txt", false, '>'),
+            glyph_row("nr.txt", false, '<'),
+        ];
+        let mut session = FolderSessionState::default();
+        let preview = sync_preview(&rows, SyncModeChoice::Mirror);
+        // Cursor walks conflicts in plan order, then clears.
+        assert_eq!(session.sync_conflict, None);
+        assert_eq!(
+            session.next_sync_conflict(&preview),
+            Some("diff.txt".to_string())
+        );
+        assert_eq!(
+            session.next_sync_conflict(&preview),
+            Some("nr.txt".to_string())
+        );
+        assert_eq!(session.next_sync_conflict(&preview), None);
+        assert_eq!(
+            session.prev_sync_conflict(&preview),
+            Some("nr.txt".to_string())
+        );
+        session.clear_sync_conflict();
+        assert_eq!(session.sync_conflict, None);
+        // Live log records plan + report honestly.
+        session.log_sync_preview(&preview);
+        assert!(!session.live_log.is_empty());
+        assert!(
+            session
+                .live_log
+                .lines()
+                .iter()
+                .any(|line| line.contains("copy L->R nl.txt"))
+        );
+        session.log_sync_report(&SyncReportView {
+            copied: 1,
+            deleted: 0,
+            failed: Vec::new(),
+        });
+        assert!(
+            session
+                .live_log
+                .lines()
+                .iter()
+                .any(|line| line.contains("SyncReport:"))
+        );
+        session.clear_live_log();
+        assert!(session.live_log.is_empty());
+        // Mode switch resets cursor + log + consent together.
+        session.log_sync_preview(&preview);
+        session.next_sync_conflict(&preview);
+        session.consented = true;
+        session.set_sync_mode(SyncModeChoice::UpdateLeft);
+        assert!(!session.consented);
+        assert_eq!(session.sync_conflict, None);
+        assert!(session.live_log.is_empty());
     }
 }
 
@@ -3366,39 +3601,28 @@ impl SyncRowDirection {
     }
 }
 
-/// Ek row ka sync direction: wahi faisla jo `sync_preview` us row
-/// par leta hai. Dirs par sirf Mirror + right-only prune, baaki
-/// dirs `None`. Files: `=` none, `!`/unknown manual, `>` L->R,
-/// `<` mode par (UpdateBoth R->L, Mirror manual), `L` L->R,
-/// `R` mode par (UpdateBoth R->L, Mirror delete-right).
+/// Ek row ka sync direction: ToolSpec verdict ka paint roop.
+/// Planned action seedha direction banta hai; skipped rows me
+/// conflict (`differs`/`newer`) aur unknown manual hain, one-sided
+/// no-op skips (`only on the ... side`) `None`. Dirs par ToolSpec
+/// kabhi copy nahi deta (sirf Mirror + right-only prune).
 pub fn sync_direction_for_row(row: &FolderRow, mode: SyncModeChoice) -> SyncRowDirection {
-    if row.is_dir {
-        if mode == SyncModeChoice::Mirror && row.glyph == 'R' {
-            return SyncRowDirection::DeleteRight;
-        }
-        return SyncRowDirection::None;
+    let opts = sync_options_for(mode);
+    if let Some(action) = gui_action_for(row.glyph, row.is_dir, &opts) {
+        return match action {
+            SyncAction::CopyToRight => SyncRowDirection::CopyToRight,
+            SyncAction::CopyToLeft => SyncRowDirection::CopyToLeft,
+            SyncAction::DeleteRight => SyncRowDirection::DeleteRight,
+            // Unreachable via GUI modes (no left-prune mode exists).
+            SyncAction::DeleteLeft => SyncRowDirection::Manual,
+        };
     }
-    match row.glyph {
-        '=' => SyncRowDirection::None,
-        '!' => SyncRowDirection::Manual,
-        '>' => SyncRowDirection::CopyToRight,
-        '<' => {
-            if mode == SyncModeChoice::UpdateBoth {
-                SyncRowDirection::CopyToLeft
-            } else {
-                SyncRowDirection::Manual
-            }
-        }
-        'L' => SyncRowDirection::CopyToRight,
-        'R' => {
-            if mode == SyncModeChoice::UpdateBoth {
-                SyncRowDirection::CopyToLeft
-            } else {
-                SyncRowDirection::DeleteRight
-            }
-        }
-        _ => SyncRowDirection::Manual,
+    if let Some(reason) = gui_skip_reason_for(row.glyph, row.is_dir, &opts)
+        && (is_sync_conflict_reason(reason) || reason == "unknown status; left alone")
+    {
+        return SyncRowDirection::Manual;
     }
+    SyncRowDirection::None
 }
 
 /// Ek row ka badge text: `sync_direction_for_row` ka paint roop.
@@ -3589,6 +3813,150 @@ pub fn sync_badge_typo(direction: SyncRowDirection) -> FolderTypo {
 
 /// Dry-run summary line ki typography: mono caption-regular.
 pub fn sync_summary_typo() -> FolderTypo {
+    FolderTypo {
+        mono: true,
+        size: FOLDER_SIDE_SIZE,
+        strong: false,
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Sync conflict nav + live log (headless; paint wiring next wave).
+// BC parity: dry-run ke baad conflicting rows par Next/Prev jump aur
+// apply ke dauran live log. Dono ToolSpec se aate hain (compare crate):
+// conflict predicate + next/prev wahi, log lines `SyncLiveLog` se.
+// Ye section sirf preview-level thin wrappers deta hai taaki paint
+// `SyncPreview` par seedha kaam kare. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Preview ke conflict rows (ToolSpec predicate par): `(path, reason)`.
+/// Paint ka conflict badge/gutter isi se banta hai.
+pub fn sync_preview_conflicts(preview: &SyncPreview) -> Vec<&(String, String)> {
+    let mut out = Vec::new();
+    for skipped in &preview.skipped {
+        if is_sync_conflict_reason(&skipped.1) {
+            out.push(skipped);
+        }
+    }
+    out
+}
+
+/// Preview me kul conflicts.
+pub fn sync_preview_conflict_count(preview: &SyncPreview) -> usize {
+    sync_preview_conflicts(preview).len()
+}
+
+/// Preview me agla conflict `current` ke baad (wrap nahi: aakhri ke
+/// baad `None`). `None` matlab pehla conflict.
+pub fn sync_preview_next_conflict<'a>(
+    preview: &'a SyncPreview,
+    current: Option<&str>,
+) -> Option<&'a (String, String)> {
+    sync_conflict_next(&preview.skipped, current)
+}
+
+/// Preview me pichhla conflict `current` se pehle (wrap nahi: pehle
+/// se pehle `None`). `None` matlab aakhri conflict.
+pub fn sync_preview_prev_conflict<'a>(
+    preview: &'a SyncPreview,
+    current: Option<&str>,
+) -> Option<&'a (String, String)> {
+    sync_conflict_prev(&preview.skipped, current)
+}
+
+/// Preview + report se live-log lines (BC parity): plan summary, per
+/// step/skip, phir report summary + failures. Paint `lines()` ko
+/// scroll view me dikhata hai. Thin wrapper: lines ToolSpec
+/// `SyncLiveLog` banata hai, yahan koi format string nahi.
+pub fn sync_live_log_lines(preview: &SyncPreview, report: &SyncReportView) -> Vec<String> {
+    let mut log = SyncLiveLog::new();
+    for line in &preview_log_lines(preview) {
+        log.push(line);
+    }
+    for line in &report_log_lines(report) {
+        log.push(line);
+    }
+    log.lines().to_vec()
+}
+
+/// Preview ka log hissa: summary + steps + skips (plan order).
+fn preview_log_lines(preview: &SyncPreview) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(preview.summary());
+    for step in &preview.steps {
+        let verb = match step.action {
+            SyncAction::CopyToRight => "copy L->R",
+            SyncAction::CopyToLeft => "copy R->L",
+            SyncAction::DeleteRight => "delete R",
+            SyncAction::DeleteLeft => "delete L",
+        };
+        lines.push(format!("{verb} {}", step.rel_path));
+    }
+    for (rel, reason) in &preview.skipped {
+        lines.push(format!("skip {rel} -- {reason}"));
+    }
+    lines
+}
+
+/// Apply report ka headless view (GUI `SyncReport` mirror na banaye:
+/// compare report se paint-line banane ke liye chhota struct).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncReportView {
+    /// Safal copies.
+    pub copied: usize,
+    /// Safal deletes.
+    pub deleted: usize,
+    /// Asafal steps: (path, reason).
+    pub failed: Vec<(String, String)>,
+}
+
+impl SyncReportView {
+    /// Honest one-line summary (engine `SyncReport::summary` parity).
+    pub fn summary(&self) -> String {
+        format!(
+            "SyncReport: {} copied, {} deleted, {} failed",
+            self.copied,
+            self.deleted,
+            self.failed.len()
+        )
+    }
+
+    /// Engine report view of this summary: lets the session log
+    /// through ToolSpec `SyncLiveLog` with zero format logic here.
+    pub fn to_report(&self) -> SyncReport {
+        SyncReport {
+            copied: self.copied,
+            deleted: self.deleted,
+            failed: self.failed.clone(),
+        }
+    }
+}
+
+/// Report ka log hissa: summary + failures.
+fn report_log_lines(report: &SyncReportView) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(report.summary());
+    for (rel, reason) in &report.failed {
+        lines.push(format!("failed {rel} -- {reason}"));
+    }
+    lines
+}
+
+/// Live-log view geometry: kitni lines `avail_h` px me fit hongi
+/// (row height + tight gap par). Tang/non-finite budget par 0.
+pub fn sync_log_visible_lines(avail_h: f32) -> usize {
+    if !avail_h.is_finite() {
+        return 0;
+    }
+    let row = FOLDER_ROW_HEIGHT + crate::theme::GEO_TIGHT_GAP;
+    if avail_h < FOLDER_ROW_HEIGHT {
+        return 0;
+    }
+    (avail_h / row) as usize
+}
+
+/// Live-log line typography: mono caption-regular (summary line parity).
+pub fn sync_log_typo() -> FolderTypo {
     FolderTypo {
         mono: true,
         size: FOLDER_SIDE_SIZE,

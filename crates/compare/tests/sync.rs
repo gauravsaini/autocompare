@@ -853,3 +853,136 @@ fn sync_plan_conflict_navigation_and_reports() {
 
     cleanup(&base);
 }
+
+#[test]
+fn toolspec_gui_verdicts_match_engine_plans_on_orphan_newer_edge() {
+    use autocompare_compare::{
+        FolderStatus, SyncMode, gui_action_for, gui_skip_reason_for, gui_sync_modes,
+        gui_sync_options,
+    };
+
+    // Edge fixture: two flat folders with one orphan per side, one
+    // newer file per side, plus same + content-differ controls.
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    let t = fixed_time();
+    one(&left, "orphan-left.txt", "L\n");
+    one(&right, "orphan-right.txt", "R\n");
+    one(&left, "newer.txt", "aaa\n");
+    one(&right, "newer.txt", "bbb\n");
+    set_mtime(&left.join("newer.txt"), later());
+    set_mtime(&right.join("newer.txt"), t);
+    one(&left, "older.txt", "ccc\n");
+    one(&right, "older.txt", "ddd\n");
+    set_mtime(&left.join("older.txt"), t);
+    set_mtime(&right.join("older.txt"), later());
+    pair(&left, &right, "same.txt", "same\n", t);
+    one(&left, "differs.txt", "tiny");
+    one(&right, "differs.txt", "much longer content");
+    set_mtime(&left.join("differs.txt"), t);
+    set_mtime(&right.join("differs.txt"), t);
+
+    fn glyph(status: FolderStatus) -> char {
+        match status {
+            FolderStatus::Same => '=',
+            FolderStatus::Different => '!',
+            FolderStatus::NewerLeft => '>',
+            FolderStatus::NewerRight => '<',
+            FolderStatus::LeftOnly => 'L',
+            FolderStatus::RightOnly => 'R',
+        }
+    }
+
+    // Pin the classification the engine must produce for this fixture.
+    let want = [
+        ("orphan-left.txt", FolderStatus::LeftOnly),
+        ("orphan-right.txt", FolderStatus::RightOnly),
+        ("newer.txt", FolderStatus::NewerLeft),
+        ("older.txt", FolderStatus::NewerRight),
+        ("same.txt", FolderStatus::Same),
+        ("differs.txt", FolderStatus::Different),
+    ];
+
+    let modes = gui_sync_modes();
+    assert_eq!(
+        modes,
+        [
+            SyncMode::UpdateLeft,
+            SyncMode::UpdateRight,
+            SyncMode::Both,
+            SyncMode::Mirror
+        ]
+    );
+    for mode in modes {
+        let opts = gui_sync_options(mode);
+        let plan = plan_sync(&left, &right, &opts).unwrap();
+        for (rel, status) in want {
+            let g = glyph(status);
+            let tool_action = gui_action_for(g, false, &opts);
+            let tool_skip = gui_skip_reason_for(g, false, &opts);
+            let plan_action = step(&plan, rel).map(|s| s.action);
+            let plan_skip = skipped(&plan, rel);
+            assert_eq!(tool_action, plan_action, "action for {rel} in {mode:?}");
+            assert_eq!(tool_skip, plan_skip, "skip reason for {rel} in {mode:?}");
+        }
+    }
+    cleanup(&base);
+}
+
+#[test]
+fn toolspec_conflict_nav_and_live_log_cover_plan_and_report() {
+    use autocompare_compare::{
+        SyncLiveLog, is_sync_conflict_reason, sync_conflict_next, sync_conflict_prev,
+    };
+
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    mixed_tree(&left, &right);
+
+    let plan = plan_sync(&left, &right, &opts(SyncDirection::LeftToRight, false)).unwrap();
+    assert!(plan.has_conflicts());
+    assert!(is_sync_conflict_reason("content differs; no side wins"));
+    assert!(is_sync_conflict_reason("destination is newer"));
+    assert!(!is_sync_conflict_reason("only on the right side"));
+
+    // Headless conflict walk: first -> last -> end, then back.
+    let first = sync_conflict_next(&plan.skipped, None).unwrap();
+    let last = sync_conflict_prev(&plan.skipped, None).unwrap();
+    assert!(sync_conflict_next(&plan.skipped, Some(&last.0)).is_none());
+    assert_eq!(
+        sync_conflict_next(&plan.skipped, Some(&first.0)).unwrap().0,
+        last.0
+    );
+    assert_eq!(
+        sync_conflict_prev(&plan.skipped, Some(&last.0)).unwrap().0,
+        first.0
+    );
+
+    // Live log: plan summary + steps + skips, then report summary.
+    let mut log = SyncLiveLog::new();
+    assert!(log.is_empty());
+    log.push_plan(&plan);
+    assert!(!log.is_empty());
+    assert!(log.lines().first().is_some_and(|l| l.contains("SyncPlan:")));
+    assert!(log.lines().iter().any(|l| l.contains("copy L->R")));
+    assert!(log.last().is_some());
+
+    let report = apply_sync(
+        &left,
+        &right,
+        &plan.select_subset(&plan.steps.iter().map(|_| true).collect::<Vec<_>>()),
+    )
+    .unwrap();
+    let mut log2 = SyncLiveLog::new();
+    log2.push_report(&report);
+    assert!(
+        log2.lines()
+            .first()
+            .is_some_and(|l| l.contains("SyncReport:"))
+    );
+    log.clear();
+    assert!(log.is_empty());
+    assert_eq!(log.len(), 0);
+
+    cleanup(&base);
+}

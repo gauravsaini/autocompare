@@ -1044,6 +1044,247 @@ impl SyncMode {
     }
 }
 
+// ----------------------------------------------------------------------------
+// GUI ToolSpec registry (headless-first, single source of truth).
+// Thin GUI (`crates/gui/src/tree.rs`) wires existing tree fill + filter
+// state through these helpers and holds zero business logic: every
+// per-row decision, skip reason, conflict predicate and live-log line
+// is computed here, next to the engine rules it mirrors (`plan_file` /
+// `plan_dir`). Glyph mapping: `=` Same, `!` Different, `>` NewerLeft,
+// `<` NewerRight, `L` LeftOnly, `R` RightOnly; anything else is unknown.
+// ----------------------------------------------------------------------------
+
+/// GUI sync modes in picker order (BC parity subset): Update Left,
+/// Update Right, Update Both, Mirror Left to Right.
+pub fn gui_sync_modes() -> [SyncMode; 4] {
+    [
+        SyncMode::UpdateLeft,
+        SyncMode::UpdateRight,
+        SyncMode::Both,
+        SyncMode::Mirror,
+    ]
+}
+
+/// GUI mode to engine options (same mapping as `SyncPlanner::options`
+/// for these four modes; `SyncMode::Custom` never reaches the GUI).
+pub fn gui_sync_options(mode: SyncMode) -> SyncOptions {
+    match mode {
+        SyncMode::UpdateRight => SyncOptions {
+            direction: SyncDirection::LeftToRight,
+            prune: false,
+        },
+        SyncMode::UpdateLeft => SyncOptions {
+            direction: SyncDirection::RightToLeft,
+            prune: false,
+        },
+        SyncMode::Mirror | SyncMode::MirrorLeft => SyncOptions {
+            direction: SyncDirection::LeftToRight,
+            prune: true,
+        },
+        SyncMode::Both | SyncMode::TwoWay => SyncOptions {
+            direction: SyncDirection::NewerWins,
+            prune: false,
+        },
+        SyncMode::Custom => SyncOptions {
+            direction: SyncDirection::LeftToRight,
+            prune: false,
+        },
+    }
+}
+
+/// One per-row verdict: planned action plus skip reason (at most one is
+/// `Some`; `Same` and dir-noops yield `(None, None)`).
+fn gui_decision_for(
+    glyph: char,
+    is_dir: bool,
+    opts: &SyncOptions,
+) -> (Option<SyncAction>, Option<&'static str>) {
+    if is_dir {
+        if !opts.prune {
+            return (None, None);
+        }
+        match (glyph, opts.direction) {
+            ('L', SyncDirection::RightToLeft) => (Some(SyncAction::DeleteLeft), None),
+            ('R', SyncDirection::LeftToRight) => (Some(SyncAction::DeleteRight), None),
+            _ => (None, None),
+        }
+    } else {
+        match glyph {
+            '=' => (None, None),
+            '!' => (None, Some("content differs; no side wins")),
+            '>' => match opts.direction {
+                SyncDirection::RightToLeft => (None, Some("destination is newer")),
+                _ => (Some(SyncAction::CopyToRight), None),
+            },
+            '<' => match opts.direction {
+                SyncDirection::LeftToRight => (None, Some("destination is newer")),
+                _ => (Some(SyncAction::CopyToLeft), None),
+            },
+            'L' => match opts.direction {
+                SyncDirection::RightToLeft => {
+                    if opts.prune {
+                        (Some(SyncAction::DeleteLeft), None)
+                    } else {
+                        (None, Some("only on the left side"))
+                    }
+                }
+                _ => (Some(SyncAction::CopyToRight), None),
+            },
+            'R' => match opts.direction {
+                SyncDirection::LeftToRight => {
+                    if opts.prune {
+                        (Some(SyncAction::DeleteRight), None)
+                    } else {
+                        (None, Some("only on the right side"))
+                    }
+                }
+                _ => (Some(SyncAction::CopyToLeft), None),
+            },
+            _ => (None, Some("unknown status; left alone")),
+        }
+    }
+}
+
+/// Per-row planned action for a GUI glyph row (mirrors `plan_file` /
+/// `plan_dir` without filesystem access). `None` means no step.
+pub fn gui_action_for(glyph: char, is_dir: bool, opts: &SyncOptions) -> Option<SyncAction> {
+    gui_decision_for(glyph, is_dir, opts).0
+}
+
+/// Per-row skip reason for a GUI glyph row (`None` = not skipped:
+/// either a step or `Same`/dir-noop).
+pub fn gui_skip_reason_for(glyph: char, is_dir: bool, opts: &SyncOptions) -> Option<&'static str> {
+    gui_decision_for(glyph, is_dir, opts).1
+}
+
+/// Public conflict predicate (same rule as plan skips: content-newer-conflict).
+pub fn is_sync_conflict_reason(reason: &str) -> bool {
+    is_conflict_reason(reason)
+}
+
+/// Next conflict in a raw skipped list, relative to `current`.
+pub fn sync_conflict_next<'a>(
+    skipped: &'a [(String, String)],
+    current: Option<&str>,
+) -> Option<&'a (String, String)> {
+    let conflicts: Vec<&'a (String, String)> = skipped
+        .iter()
+        .filter(|(_, reason)| is_conflict_reason(reason))
+        .collect();
+    let Some(curr) = current else {
+        return conflicts.first().copied();
+    };
+    for (idx, item) in conflicts.iter().enumerate() {
+        if item.0.as_str() == curr {
+            return idx.checked_add(1).and_then(|n| conflicts.get(n).copied());
+        }
+    }
+    conflicts
+        .iter()
+        .find(|item| item.0.as_str() > curr)
+        .copied()
+}
+
+/// Previous conflict in a raw skipped list, relative to `current`.
+pub fn sync_conflict_prev<'a>(
+    skipped: &'a [(String, String)],
+    current: Option<&str>,
+) -> Option<&'a (String, String)> {
+    let conflicts: Vec<&'a (String, String)> = skipped
+        .iter()
+        .filter(|(_, reason)| is_conflict_reason(reason))
+        .collect();
+    let Some(curr) = current else {
+        return conflicts.last().copied();
+    };
+    for (idx, item) in conflicts.iter().enumerate() {
+        if item.0.as_str() == curr {
+            return idx.checked_sub(1).and_then(|n| conflicts.get(n).copied());
+        }
+    }
+    conflicts
+        .iter()
+        .rev()
+        .find(|item| item.0.as_str() < curr)
+        .copied()
+}
+
+/// Headless live log (BC parity): plan lines, per-step apply lines and
+/// the final report summary. The GUI holds one of these and renders
+/// `lines()`; no I/O here.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncLiveLog {
+    lines: Vec<String>,
+}
+
+impl SyncLiveLog {
+    /// Empty log.
+    pub fn new() -> Self {
+        Self { lines: Vec::new() }
+    }
+
+    /// Pushes one raw line.
+    pub fn push(&mut self, line: &str) {
+        self.lines.push(line.to_string());
+    }
+
+    /// Logs a whole dry-run plan: summary, then one line per step and
+    /// per skip (parents already sort before children in the plan).
+    pub fn push_plan(&mut self, plan: &SyncPlan) {
+        self.lines.push(plan.summary());
+        for step in &plan.steps {
+            self.push_step(step);
+        }
+        for (rel, reason) in &plan.skipped {
+            self.lines.push(format!("skip {rel} -- {reason}"));
+        }
+    }
+
+    /// Logs one applied step.
+    pub fn push_step(&mut self, step: &SyncStep) {
+        let verb = match step.action {
+            SyncAction::CopyToRight => "copy L->R",
+            SyncAction::CopyToLeft => "copy R->L",
+            SyncAction::DeleteRight => "delete R",
+            SyncAction::DeleteLeft => "delete L",
+        };
+        self.lines.push(format!("{verb} {}", step.rel_path));
+    }
+
+    /// Logs the apply outcome: summary plus one line per failure.
+    pub fn push_report(&mut self, report: &SyncReport) {
+        self.lines.push(report.summary());
+        for (rel, reason) in &report.failed {
+            self.lines.push(format!("failed {rel} -- {reason}"));
+        }
+    }
+
+    /// All logged lines, oldest first.
+    pub fn lines(&self) -> &[String] {
+        &self.lines
+    }
+
+    /// Number of logged lines.
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    /// Whether nothing is logged yet.
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty()
+    }
+
+    /// Most recent line, if any.
+    pub fn last(&self) -> Option<&str> {
+        self.lines.last().map(String::as_str)
+    }
+
+    /// Clears the log (new compare / mode switch).
+    pub fn clear(&mut self) {
+        self.lines.clear();
+    }
+}
+
 fn is_conflict_reason(reason: &str) -> bool {
     reason.contains("differs") || reason.contains("newer") || reason.contains("conflict")
 }

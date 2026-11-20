@@ -21,7 +21,10 @@ pub use folder::{FolderCompare, compare_folders_cancellable};
 pub use folder_merge::FolderMerge;
 pub use jobs::{JobHandle, JobProgress, JobRunner};
 pub use media::{AudioTolerance, compare_audio_files_with_tolerance};
-pub use sync::{SyncMode, SyncPlanner};
+pub use sync::{
+    SyncLiveLog, SyncMode, SyncPlanner, gui_action_for, gui_skip_reason_for, gui_sync_modes,
+    gui_sync_options, is_sync_conflict_reason, sync_conflict_next, sync_conflict_prev,
+};
 pub use table::{TableKeyFileComparison, TableKeyOptions};
 
 use std::fmt;
