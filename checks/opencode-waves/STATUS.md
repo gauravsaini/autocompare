@@ -1598,3 +1598,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Gates: 673 green (+2 opener tests), clippy 0 warnings (indexing-slicing deny fix included), fmt clean, banned 0, colors 0 new (frozen), fixtures byte-stable, PNGs valid, OWNS clean, STATUS untouched.
 - Unblocks: content-row live photo-proof (accent+hatch+status3zone+cursor strip) via round-7 verify wave.
 - Queue: CO-TBARCALL (app.rs call-site, CN ke baad — ab launch-ready) -> CP-LIGHTFLAG (screenshot+main) -> round-7 verify (CP+CQ+CN live).
+
+## 2026-11-20 — Waves CO-TBARCALL + CP-LIGHTFLAG launched (2 parallel, disjoint)
+- CO-TBARCALL (sess-co-tool): toolbar App call-site adopt (paint_session_toolbar wiring). OWNS app.rs + checks/gui-toolcall-co.
+- CP-LIGHTFLAG (sess-cp-light): --screenshot-mode light CLI flag + light fixture artifact. OWNS main.rs + screenshot.rs + checks/gui-lightflag-cp.
+- Disjoint OWNS (app.rs vs main.rs+screenshot.rs) isliye parallel safe. Dono ke baad round-7 verify (CP-geo+CQ-typo+CN-opener+CO+CP live).
