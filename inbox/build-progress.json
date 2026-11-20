@@ -88,7 +88,7 @@
     "WAVE-REPORTS-VFS": "dispatched 2026-11-20 agyx sess 78970 OWNS reports/vfs/bcomp/round-reports",
     "WAVE-MEDIA-TABLE": "dispatched 2026-11-20 agyx sess 37121 OWNS table/image/media/picture/round-media2",
     "WAVE-GUI-EXQ5": "dispatched 2026-11-20 agyx sess 51089 OWNS gui/round-exq5-2 geometry-first typo-second colors-frozen",
-    "WAVE-LOCALRUN-LR2": "dispatched 2026-11-20 opencode sess-opencode-lr2 sess 38001 OWNS local-run/dist/round-lr2 default-model",
+    "WAVE-LOCALRUN-LR2": "landed 0715e93 verified+pushed (REPORT PASS 10/10 CLI, 3 PNGs magic ok, edge-empty fixture, TOP10 gaps, OWNS-clean)",
     "WAVE-SYNC-EXEC": "dispatched 2026-11-20 opencode sess-opencode-sync2 sess 23165 OWNS sync/folder/round-sync2 default-model",
     "AGYX-REPORTS-78970": "failed rotator EADDRINUSE race (3 concurrent -p flaky), relaunched opencode rep2",
     "AGYX-MEDIA-37121": "failed rotator race, relaunched opencode med2",
