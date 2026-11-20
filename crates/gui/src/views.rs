@@ -363,6 +363,55 @@ pub fn path_browse_button_size() -> (f32, f32) {
     home_paint_cta_size()
 }
 
+/// Path meta role: caption (Small 11 weak proportional) reuse — BC meta
+/// row jaisa compact, mono nahi. Koi naya size nahi; pure; unit-tested.
+pub fn path_meta_role() -> TypoRole {
+    TypoRole::caption()
+}
+
+/// Compact meta line: timestamp | byte size | rules | flags. Khali parts
+/// girte hain (missing file par koi fake "0 B" nahi). Pure; unit-tested.
+pub fn format_path_meta(timestamp: &str, byte_size: &str, rules: &str, flags: &str) -> String {
+    let mut parts = Vec::new();
+    for part in [timestamp, byte_size, rules, flags] {
+        let trimmed = part.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed);
+        }
+    }
+    parts.join(" | ")
+}
+
+/// Compact path meta row: pehle metas left se, history dropdown beech me,
+/// aakhri meta right-end dock. Dropdown options sirf labels hain —
+/// selection kabhi nahi badalti (caller state untouched). Geometry sirf
+/// [`TIGHT_GAP`] spacing + row gap; typo sirf [`path_meta_role`].
+/// Koi naya size/color nahi. Caller (App) meta strings + history data deta
+/// hai; ye fn koi state mutate nahi karta.
+pub fn paint_path_meta_row(ui: &mut Ui, metas: &[String], history: &[String], current: &str) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        let (last, rest) = match metas.split_last() {
+            Some(pair) => pair,
+            None => return,
+        };
+        for meta in rest {
+            ui.label(path_meta_role().rich(meta.as_str()));
+        }
+        egui::ComboBox::from_id_salt("path_meta_history")
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                for item in history {
+                    ui.label(item.as_str());
+                }
+            });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(path_meta_role().rich(last.as_str()));
+        });
+    });
+    ui.add_space(TIGHT_GAP);
+}
+
 /// Paint-applied Home grid columns: 3 per row, so the 9 session cards
 /// tile into 3 full rows on the section rhythm. Pure; unit-tested.
 pub fn home_paint_grid_columns() -> usize {
@@ -7128,6 +7177,23 @@ mod tests {
     fn third_fields_share_equal_width() {
         assert_eq!(third_field_width(900.0), 225.0);
         assert_eq!(third_field_width(0.0), 55.0);
+    }
+
+    #[test]
+    fn path_meta_role_is_caption_reuse() {
+        assert_eq!(path_meta_role(), TypoRole::caption());
+        assert_eq!(path_meta_role(), crate::theme::TypoRole::Small);
+    }
+
+    #[test]
+    fn path_meta_line_joins_nonempty_parts() {
+        assert_eq!(
+            format_path_meta("modified @1s", "10 B", "Text: exact", "wrap:off"),
+            "modified @1s | 10 B | Text: exact | wrap:off"
+        );
+        assert_eq!(format_path_meta("", "10 B", "", ""), "10 B");
+        assert_eq!(format_path_meta("", "", "", ""), "");
+        assert_eq!(format_path_meta("  ", "10 B", " ", ""), "10 B");
     }
 
     #[test]

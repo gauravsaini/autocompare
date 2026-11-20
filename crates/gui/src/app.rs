@@ -179,6 +179,11 @@ pub struct App {
     picture: Paths,
     folder_merge: TriplePaths,
     audio: Paths,
+    /// Compare hone wale paths ka dropdown data (BU-PATHMETA App half):
+    /// non-empty trimmed paths, naya sabse upar, dedupe + cap
+    /// [`home::HOME_RECENT_MAX`] tak. Paint sirf labels dikhata hai,
+    /// selection kabhi nahi badalti. Per-run only.
+    pub path_history: Vec<String>,
     pub text_model: Option<viewmodel::TextRows>,
     pub folder_model: Option<(Vec<FolderRow>, String)>,
     pub hex_model: Option<Vec<String>>,
@@ -325,6 +330,7 @@ impl Default for App {
             picture: Paths::default(),
             folder_merge: TriplePaths::default(),
             audio: Paths::default(),
+            path_history: Vec::new(),
             text_model: None,
             folder_model: None,
             hex_model: None,
@@ -499,6 +505,128 @@ impl App {
     /// Returns current folder paths.
     pub fn folder_paths(&self) -> (String, String) {
         (self.folder.left.clone(), self.folder.right.clone())
+    }
+
+    /// Path history dropdown data: naya-sabse-pehle order me recent paths.
+    /// Paint ([`views::paint_path_meta_row`]) sirf labels dikhata hai,
+    /// selection kabhi nahi badalti. Pure; headless-tested.
+    pub fn path_history_items(&self) -> &[String] {
+        self.path_history.as_slice()
+    }
+
+    /// History me paths record karta hai: khali girte hain, same path
+    /// dedupe hokar upar aata hai, cap [`home::HOME_RECENT_MAX`] tak.
+    /// Pure state; headless-tested.
+    pub fn record_path_history(&mut self, paths: &[&str]) {
+        for path in paths {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            self.path_history.retain(|existing| existing != trimmed);
+            self.path_history.insert(0, trimmed.to_string());
+        }
+        self.path_history.truncate(home::HOME_RECENT_MAX);
+    }
+
+    /// File byte-size label: missing/khali/unreadable par khali (koi fake
+    /// "0 B" nahi). No panic.
+    pub fn path_byte_label(path: &str) -> String {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return String::new();
+        }
+        match std::fs::metadata(trimmed) {
+            Ok(meta) => format!("{} B", meta.len()),
+            Err(_) => String::new(),
+        }
+    }
+
+    /// File timestamp label: modified epoch secs, unknown par khali (koi
+    /// fake "just now" nahi). No panic.
+    pub fn path_time_label(path: &str) -> String {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return String::new();
+        }
+        match std::fs::metadata(trimmed) {
+            Ok(meta) => match meta.modified() {
+                Ok(modified) => match modified.duration_since(std::time::UNIX_EPOCH) {
+                    Ok(age) => format!("modified @{}s", age.as_secs()),
+                    Err(_) => String::new(),
+                },
+                Err(_) => String::new(),
+            },
+            Err(_) => String::new(),
+        }
+    }
+
+    /// Active tab ka rules label (BC meta row ka rules hissa, apne shabdon
+    /// me). Home par khali. Pure; headless-tested.
+    pub fn path_rules_label(&self) -> &'static str {
+        match self.tab {
+            Tab::Text => "Text: exact",
+            Tab::Folder => "Folder: name+size",
+            Tab::Hex => "Hex: aligned",
+            Tab::Merge => "Merge: 3-way",
+            Tab::Table => "Table: positional",
+            Tab::Sync => "Sync: plan",
+            Tab::Picture => "Picture: pixels",
+            Tab::FolderMerge => "FolderMerge: 3-way",
+            Tab::Audio => "Audio: fingerprint",
+            Tab::Home => "",
+        }
+    }
+
+    /// Active tab ke view toggles ka flags hissa. Home par khali. Pure;
+    /// headless-tested.
+    pub fn path_flags_label(&self) -> String {
+        match self.tab {
+            Tab::Home => String::new(),
+            _ => {
+                let wrap = if self.word_wrap { "on" } else { "off" };
+                let lines = if self.show_line_numbers { "on" } else { "off" };
+                format!("wrap:{wrap} lines:{lines}")
+            }
+        }
+    }
+
+    /// Ek path ka poora meta line: time | bytes | rules | flags. Khali
+    /// parts [`views::format_path_meta`] girata hai. Pure; headless-tested.
+    pub fn path_meta_for(&self, path: &str) -> String {
+        views::format_path_meta(
+            Self::path_time_label(path).as_str(),
+            Self::path_byte_label(path).as_str(),
+            self.path_rules_label(),
+            self.path_flags_label().as_str(),
+        )
+    }
+
+    /// Active session ke left/right meta lines. Triple tabs par left slot
+    /// me base + left dono hain (left field ka meta kabhi nahi chhupta).
+    /// Pure (fs read graceful); headless-tested.
+    pub fn active_path_meta(&self) -> (String, String) {
+        match self.tab {
+            Tab::Merge | Tab::FolderMerge => {
+                let (base, left, right) = self.triple_paths();
+                let base_meta = self.path_meta_for(base.as_str());
+                let left_meta = self.path_meta_for(left.as_str());
+                let joined = [base_meta, left_meta]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<String>>()
+                    .join(" || ");
+                (joined, self.path_meta_for(right.as_str()))
+            }
+            Tab::Home => (String::new(), String::new()),
+            _ => {
+                let (left, right) = self.paths();
+                (
+                    self.path_meta_for(left.as_str()),
+                    self.path_meta_for(right.as_str()),
+                )
+            }
+        }
     }
 
     /// Sets merge triple paths.
@@ -1011,6 +1139,13 @@ impl App {
             }
         };
         if self.rx.is_some() {
+            let (base, left, right) = self.triple_paths();
+            if base.is_empty() && left.is_empty() && right.is_empty() {
+                let (left_path, right_path) = self.paths();
+                self.record_path_history(&[left_path.as_str(), right_path.as_str()]);
+            } else {
+                self.record_path_history(&[base.as_str(), left.as_str(), right.as_str()]);
+            }
             self.status = format!("comparing: {}", self.session_identity());
         }
         started
@@ -4697,34 +4832,66 @@ impl eframe::App for App {
                     ui.add_space(views::SECTION_GAP);
                     ui.label(RichText::new("Start here: open Text or Folder above, type both paths, then Compare. Swap Sides flips inputs; Reload reruns the same compare.").weak());
                 }
-                Tab::Text => views::paint_paths(
-                    ui,
-                    "file",
-                    false,
-                    &mut self.text.left,
-                    &mut self.text.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
-                Tab::Folder => views::paint_paths(
-                    ui,
-                    "folder",
-                    true,
-                    &mut self.folder.left,
-                    &mut self.folder.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
-                Tab::Hex => views::paint_paths(
-                    ui,
-                    "file",
-                    false,
-                    &mut self.hex.left,
-                    &mut self.hex.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
+                Tab::Text => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.text.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "file",
+                        false,
+                        &mut self.text.left,
+                        &mut self.text.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
+                Tab::Folder => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.folder.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "folder",
+                        true,
+                        &mut self.folder.left,
+                        &mut self.folder.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
+                Tab::Hex => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.hex.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "file",
+                        false,
+                        &mut self.hex.left,
+                        &mut self.hex.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
                 Tab::Merge => show_split_content(ui, views::SPLIT_DEFAULT_FRACTION, |ui| {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.merge.base.clone();
                     views::paint_triple_paths(
                         ui,
                         "file",
@@ -4734,35 +4901,73 @@ impl eframe::App for App {
                         &mut self.merge.right,
                         &mut compare_clicked,
                     );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
                 }),
-                Tab::Table => views::paint_paths(
-                    ui,
-                    "table",
-                    false,
-                    &mut self.table.left,
-                    &mut self.table.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
-                Tab::Sync => views::paint_paths(
-                    ui,
-                    "folder",
-                    true,
-                    &mut self.sync.left,
-                    &mut self.sync.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
-                Tab::Picture => views::paint_paths(
-                    ui,
-                    "picture",
-                    false,
-                    &mut self.picture.left,
-                    &mut self.picture.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
+                Tab::Table => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.table.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "table",
+                        false,
+                        &mut self.table.left,
+                        &mut self.table.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
+                Tab::Sync => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.sync.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "folder",
+                        true,
+                        &mut self.sync.left,
+                        &mut self.sync.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
+                Tab::Picture => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.picture.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "picture",
+                        false,
+                        &mut self.picture.left,
+                        &mut self.picture.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
                 Tab::FolderMerge => show_split_content(ui, views::SPLIT_DEFAULT_FRACTION, |ui| {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.folder_merge.base.clone();
                     views::paint_triple_paths(
                         ui,
                         "folder",
@@ -4772,16 +4977,32 @@ impl eframe::App for App {
                         &mut self.folder_merge.right,
                         &mut compare_clicked,
                     );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
                 }),
-                Tab::Audio => views::paint_paths(
-                    ui,
-                    "audio",
-                    false,
-                    &mut self.audio.left,
-                    &mut self.audio.right,
-                    &mut compare_clicked,
-                    &mut self.split_fraction,
-                ),
+                Tab::Audio => {
+                    let (left_meta, right_meta) = self.active_path_meta();
+                    let current = self.audio.left.clone();
+                    views::paint_paths(
+                        ui,
+                        "audio",
+                        false,
+                        &mut self.audio.left,
+                        &mut self.audio.right,
+                        &mut compare_clicked,
+                        &mut self.split_fraction,
+                    );
+                    views::paint_path_meta_row(
+                        ui,
+                        &[left_meta, right_meta],
+                        self.path_history_items(),
+                        current.as_str(),
+                    );
+                }
             }
 
             let job_running = self.rx.is_some();
@@ -5616,6 +5837,65 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_history_records_dedupe_and_caps() {
+        let mut app = App::default();
+        assert!(app.path_history_items().is_empty());
+        app.record_path_history(&["  ", "b.txt", "a.txt"]);
+        assert_eq!(
+            app.path_history_items(),
+            &["a.txt".to_string(), "b.txt".to_string()]
+        );
+        app.record_path_history(&["b.txt"]);
+        assert_eq!(
+            app.path_history_items(),
+            &["b.txt".to_string(), "a.txt".to_string()]
+        );
+        for index in 0..20 {
+            app.record_path_history(&[format!("f{index}.txt").as_str()]);
+        }
+        assert_eq!(app.path_history_items().len(), home::HOME_RECENT_MAX);
+        assert!(
+            app.path_history_items()
+                .first()
+                .is_some_and(|first| first == "f19.txt")
+        );
+    }
+
+    #[test]
+    fn path_labels_are_honest_on_missing_files() {
+        assert_eq!(App::path_byte_label(""), String::new());
+        assert_eq!(App::path_time_label(""), String::new());
+        assert_eq!(
+            App::path_byte_label("definitely-missing-pathmeta-file.txt"),
+            String::new()
+        );
+        assert_eq!(
+            App::path_time_label("definitely-missing-pathmeta-file.txt"),
+            String::new()
+        );
+        assert!(!App::path_byte_label("src/app.rs").is_empty());
+        assert!(!App::path_time_label("src/app.rs").is_empty());
+    }
+
+    #[test]
+    fn path_meta_lines_carry_rules_and_flags() {
+        let mut app = App::default();
+        assert_eq!(app.path_rules_label(), "");
+        assert_eq!(app.path_flags_label(), String::new());
+        app.set_tab(Tab::Text);
+        assert_eq!(app.path_rules_label(), "Text: exact");
+        assert_eq!(app.path_flags_label(), "wrap:off lines:on");
+        let (left, right) = app.active_path_meta();
+        assert!(left.contains("Text: exact"));
+        assert!(right.contains("Text: exact"));
+        app.set_tab(Tab::Merge);
+        app.set_merge_paths("b", "l", "r");
+        let (merged_left, merged_right) = app.active_path_meta();
+        assert!(merged_left.contains(" || "));
+        assert!(merged_right.contains("Merge: 3-way"));
+    }
 
     #[test]
     fn split_fraction_defaults_centered_and_clamps() {
