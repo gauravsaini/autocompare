@@ -272,3 +272,10 @@
 1. **Table Rows & Cols at 960px**: Beyond Compare parity for table compare: row height locked to TypoRole Mono line-height, col spacing from SPACE tokens, header underline weight reuse, sort indicator alignment. Colors frozen at 33. Edge fixture comparison/table-narrow-720.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 936 → 938 passed, 0 failed; clippy clean; rustfmt clean on owned views_table.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table3/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-text7 rows plus rhythm
+
+1. **Text Rows & Rhythm at 960px**: Beyond Compare parity for text compare rows: line-height locked to TypoRole Mono, row top rhythm, center divider gaps from SPACE tokens, minimap marker band geometry, ruler grid gap 8.0. Colors frozen at 33. Edge fixture comparison/text-rows-960.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 938 → 939 passed, 0 failed; clippy clean; rustfmt clean on owned views.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-text7/**, TIMELINE.md.
