@@ -1588,3 +1588,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Timeline caveat CR ne khud darj kiya: binary 13:42:00 exec ka hai, CP (13:44:44) usme nahi ho sakta; CQ paint-neutral isliye live pixels unaffected. CP/CQ verify round-7 scope me.
 - Sec-8 EXQUISITE GAPS user feedback par: geometry 7 gaps (4-row chrome stack redundant, toolbar oversized, right-edge overflow, double status lines, table rows uneven density, khali-pan void, strip alignment) + typo 3 gaps (flat hierarchy, label-vs-input confuse, dim status contrast). Agle exquisite round ka input.
 - Cleanup: apna PID kill, probe PNGs delete, sibling untouched. BC observe-only, zero focus change.
+
+## 2026-11-20 — Wave CN-OPENER launched (serial, opener flag)
+- Sess sess-cn-opn, OWNS main.rs + app.rs + checks/gui-opener-cn. CLI `--open <left> <right> --tab text` preload — content-row live photo-proof unblock karega (input-gate ka hal).
+- CO-TBARCALL (app.rs call-site) + CP-LIGHTFLAG (screenshot+main) iske BAAD (OWNS collide, serial). Phir round-7 verify (CP+CQ+CN land ke baad).
