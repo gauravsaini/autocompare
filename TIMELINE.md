@@ -686,3 +686,9 @@
 1. **Calm Trailing Fill (screenshot.rs renderer)**: trailing fill region now ends at pane strips with zero bottom waste (content_end tracking, short content scrolls in full-height viewport). Shot15 gutter/markers, shot18 chrome, shot19 typo, toolbar21 glyphs, filebar24 bar, status20 strips intact. pxdiff vs baseline: 216832 of 576000 DIFFERENT, bbox (12,300)-(935,541) trailing fill band only.
 2. **Tests** (before -> after): autocompare-gui 1048 -> 1049 green (including hatch25_tall_no_banding + hatch-tall-1200.json edge fixture); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-hatch25/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-legend25 live bottom legend
+
+1. **Live Bottom Legend (views.rs egui overlay)**: per-pane status labels (cursor/format/counts, honest fallback) + thin 4-segment legend row mirroring status20 fixture geometry. Toolbar22 glyphs, gutter23 track/markers intact. Fixture pxdiff IDENTICAL (egui-only, before/after byte-identical 11213B) — ABANDONED with reason. Live-pixel gate PASS: per-pane label ink in both halves + 4/4 legend cells marker-distinct, crop round-1/live-crop.png.
+2. **Tests** (before -> after): autocompare-gui 1049 -> 1050 green (including legend25_narrow720_no_overlap + legend-narrow-720.json edge fixture); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-legend25/**, TIMELINE.md.
