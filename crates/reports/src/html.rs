@@ -336,6 +336,20 @@ impl<'a> HtmlColorBuilder<'a> {
         self
     }
 
+    /// Appends a child report anchor with status and diff stats.
+    pub fn with_child_anchor_detailed(
+        mut self,
+        title: impl Into<String>,
+        href: impl Into<String>,
+        status: Option<String>,
+        stats: Option<crate::DiffStats>,
+    ) -> Self {
+        self.inner = self
+            .inner
+            .with_child_anchor_detailed(title, href, status, stats);
+        self
+    }
+
     /// Adds multiple child report anchors.
     pub fn with_child_anchors(mut self, anchors: Vec<ChildReportAnchor>) -> Self {
         self.inner = self.inner.with_child_anchors(anchors);
@@ -422,6 +436,20 @@ impl<'a> HtmlMonoBuilder<'a> {
     /// Adds a child report anchor.
     pub fn with_child_anchor(mut self, title: impl Into<String>, href: impl Into<String>) -> Self {
         self.inner = self.inner.with_child_anchor(title, href);
+        self
+    }
+
+    /// Appends a child report anchor with status and diff stats.
+    pub fn with_child_anchor_detailed(
+        mut self,
+        title: impl Into<String>,
+        href: impl Into<String>,
+        status: Option<String>,
+        stats: Option<crate::DiffStats>,
+    ) -> Self {
+        self.inner = self
+            .inner
+            .with_child_anchor_detailed(title, href, status, stats);
         self
     }
 

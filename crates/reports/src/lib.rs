@@ -63,9 +63,13 @@ impl LineChange {
 /// A single formatted line within a diff hunk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HunkLine {
+    /// The classification of this diff line.
     pub change: LineChange,
+    /// The text content of the line.
     pub content: String,
+    /// 1-based line number in the original/left file, if applicable.
     pub old_line_no: Option<usize>,
+    /// 1-based line number in the modified/right file, if applicable.
     pub new_line_no: Option<usize>,
 }
 
@@ -114,10 +118,15 @@ impl HunkLine {
 /// A unified diff hunk covering an edited region with context lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hunk {
+    /// 1-based start line number in the original/left file.
     pub old_start: usize,
+    /// Number of lines in the original/left file covered by this hunk.
     pub old_lines: usize,
+    /// 1-based start line number in the modified/right file.
     pub new_start: usize,
+    /// Number of lines in the modified/right file covered by this hunk.
     pub new_lines: usize,
+    /// The ordered sequence of diff lines in this hunk.
     pub lines: Vec<HunkLine>,
 }
 
@@ -187,9 +196,13 @@ impl Hunk {
 /// Aggregate statistics for a diff report.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DiffStats {
+    /// Total count of inserted lines.
     pub additions: usize,
+    /// Total count of deleted lines.
     pub deletions: usize,
+    /// Total count of modified lines.
     pub modifications: usize,
+    /// Total count of unchanged context lines.
     pub unchanged: usize,
 }
 
@@ -239,9 +252,13 @@ impl DiffStats {
 /// Anchor descriptor linking to a child report (e.g. for folder or sub-component diffs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildReportAnchor {
+    /// Display title for the child report link.
     pub title: String,
+    /// Hyperlink reference (URI or relative filename) to the child report.
     pub href: String,
+    /// Optional status description (e.g., "Modified", "Left Only").
     pub status: Option<String>,
+    /// Optional summary statistics for the child report diff.
     pub stats: Option<DiffStats>,
 }
 
@@ -272,7 +289,9 @@ impl ChildReportAnchor {
 /// Anchor descriptor linking back to a parent or index report (for breadcrumb navigation in child reports).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParentReportAnchor {
+    /// Display title for the parent report link.
     pub title: String,
+    /// Hyperlink reference (URI or relative filename) back to the parent report.
     pub href: String,
 }
 
@@ -301,8 +320,11 @@ pub enum ReportFilter {
 /// Decoupled input for all report builders.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReportInput {
+    /// Title or header text of the report.
     pub title: String,
+    /// Sequence of diff hunks comprising the comparison.
     pub hunks: Vec<Hunk>,
+    /// Precomputed or aggregate statistics for the diff.
     pub stats: DiffStats,
 }
 
@@ -413,18 +435,26 @@ impl ReportInput {
 /// A bundle representing a master parent report and multiple linked child reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkedReportBundle {
+    /// Title of the top-level parent/index report.
     pub parent_title: String,
+    /// Target filename for the parent report (e.g. "index.html").
     pub parent_filename: String,
+    /// Diff input data for the parent report.
     pub parent_input: ReportInput,
+    /// Collection of child reports linked to this parent report.
     pub children: Vec<LinkedChildItem>,
 }
 
 /// A child report item within a linked report bundle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkedChildItem {
+    /// Title for the child report.
     pub title: String,
+    /// Output filename for the child report.
     pub filename: String,
+    /// Optional status string describing the child diff.
     pub status: Option<String>,
+    /// Diff input data for the child report.
     pub input: ReportInput,
 }
 

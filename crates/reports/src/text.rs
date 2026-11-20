@@ -34,9 +34,34 @@ impl<'a> TextReportBuilder<'a> {
         self
     }
 
+    /// Appends a child report anchor with status and diff stats.
+    pub fn with_child_anchor_detailed(
+        mut self,
+        title: impl Into<String>,
+        href: impl Into<String>,
+        status: Option<String>,
+        stats: Option<crate::DiffStats>,
+    ) -> Self {
+        let mut anchor = ChildReportAnchor::new(title, href);
+        if let Some(st) = status {
+            anchor = anchor.with_status(st);
+        }
+        if let Some(st) = stats {
+            anchor = anchor.with_stats(st);
+        }
+        self.child_anchors.push(anchor);
+        self
+    }
+
     /// Adds multiple child report anchors.
     pub fn with_child_anchors(mut self, anchors: Vec<ChildReportAnchor>) -> Self {
         self.child_anchors.extend(anchors);
+        self
+    }
+
+    /// Adds a child anchor to the current builder instance.
+    pub fn add_child_anchor(&mut self, anchor: ChildReportAnchor) -> &mut Self {
+        self.child_anchors.push(anchor);
         self
     }
 
