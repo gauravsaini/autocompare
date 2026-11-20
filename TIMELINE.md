@@ -746,3 +746,9 @@
 1. **Folder tree geometry**: indent step 8.0 SPACE_SM, row 23.6 mono 15.6 + SM, expander 16x16 centered, guides at centers, 1200px no h-scroll + 700px narrow edge.
 2. **Tests**: 1063 green (+1 tree31_deepnest), exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen.
 3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree31/**, TIMELINE.md.
+
+### Chore (2026-11-21) — chore(localrun): exq-localrun5 early feedback bundle (opencode default)
+
+1. **Early feedback**: CLI 10/10 PASS, 3 PNGs default 11059B / dark 11262B / light 11059B magic ok, dist tarball 5816822B + sha, REPORT RESULT: PASS, LTO release ok.
+2. **Tests**: owned scope no Rust files, fmt clean, banned 0.
+3. **Files changed**: checks/ac-loop/round-lr5/**, dist/VERSION + tarball + sha, TIMELINE.md.
