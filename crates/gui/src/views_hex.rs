@@ -3228,6 +3228,105 @@ pub fn hex_offset_plus_gap_sync_ok(char_w: f32) -> bool {
     hex_grid_plus_offset_sync_ok(char_w)
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex8 round-2: ruler alignment plus tall 1200px.
+// Gap BC hex half: ruler ticks + byte-cell rhythm at narrow widths loose,
+// and tall files (1200px canvas) lacked a dedicated visible-rows lock.
+// Geometry FIRST:
+// - Ruler tick alignment to byte columns from char metrics:
+//   `hex_ruler_col_x(col, char_w)` and `hex_grid_byte_col_x(col, char_w)`
+//   align for all cols 0..15 across character metrics/scales.
+//   `hex_ruler_col_align_ok` locks ruler tick step and byte cell rhythm
+//   so narrow/wide widths don't drift.
+// - Byte cell size from TypoRole Mono metrics:
+//   `hex_byte_cell_size_ok` locks text_w 14.0, box_w 30.0 at 7px char,
+//   and row_h 15.6px from TypoRole::Mono line height.
+// - Tall-file fixture lock at 1200px:
+//   `HEX_TALL_CANVAS_H` (1200.0), `HEX_TALL_PANES_H` (1070.0),
+//   and `hex_tall_1200_visible_rows()` (68 rows).
+// Typography SECOND: offset + grid + ruler + ASCII all Mono, labels Body.
+// Colors FROZEN: zero Color32/Visuals additions (count 33 preserved).
+// Zero banned constructs: no forbidden tokens in non-test code.
+// ----------------------------------------------------------------------------
+
+/// Canvas height for tall-file display (px): 1200.0. Pure.
+pub const HEX_TALL_CANVAS_H: f32 = 1200.0;
+
+/// Panes height for tall-file 1200px canvas (px): 1070.0 (`1200.0 - 130.0` chrome reserve). Pure.
+pub const HEX_TALL_PANES_H: f32 = 1070.0;
+
+/// Visible rows in tall 1200px canvas budget: `hex_visible_rows(1070.0, 15.6)` yields exactly 68 rows. Pure; unit-tested.
+pub fn hex_tall_1200_visible_rows() -> u64 {
+    hex_visible_rows(HEX_TALL_PANES_H, hex_grid_row_h())
+}
+
+/// Proves that ruler tick position matches byte column position exactly for all columns 0..15 at `char_w`.
+/// Also verifies the ruler tick step matches the byte col step.
+/// Bad or non-finite `char_w` returns false. Pure; unit-tested.
+pub fn hex_ruler_col_align_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let step = hex_ruler_tick_step_w(char_w);
+    let byte_step = hex_byte_col_step_w(char_w);
+    if !step.is_finite() || !byte_step.is_finite() || (step - byte_step).abs() > 0.001 {
+        return false;
+    }
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        let (Some(r_x), Some(g_x)) = (
+            hex_ruler_col_x(col, char_w),
+            hex_grid_byte_col_x(col, char_w),
+        ) else {
+            return false;
+        };
+        if (r_x - g_x).abs() > 0.001 {
+            return false;
+        }
+        col = col.saturating_add(1);
+    }
+    true
+}
+
+/// Locks byte cell size from TypoRole Mono metrics at `char_w`:
+/// text width is `2 * char_w` (14.0 at 7px), box width is `text + 2 * HEX_CELL_PAD_X` (30.0 at 7px),
+/// row height is locked to TypoRole::Mono line height (15.6px).
+/// Bad or non-finite `char_w` returns false. Pure; unit-tested.
+pub fn hex_byte_cell_size_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let text_w = hex_grid_byte_cell_text_w(char_w);
+    if !text_w.is_finite() || (text_w - 2.0 * char_w).abs() > 0.001 {
+        return false;
+    }
+    let box_w = hex_grid_byte_cell_box_w(char_w);
+    if !box_w.is_finite() || (box_w - (text_w + 2.0 * HEX_CELL_PAD_X)).abs() > 0.001 {
+        return false;
+    }
+    if hex_cell_text_role() != crate::theme::TypoRole::Mono {
+        return false;
+    }
+    let mono_lh = crate::theme::TypoRole::Mono.line_height_px();
+    (mono_lh - 15.6).abs() < 0.001 && (hex_grid_row_h() - mono_lh).abs() < 0.001
+}
+
+/// Sync check for hex8: ruler tick alignment, byte cell size, narrow/wide rhythm consistency,
+/// and tall canvas visible rows.
+/// Bad or non-finite `char_w` returns false. Pure; unit-tested.
+pub fn hex_ruler_rhythm_sync_ok(char_w: f32) -> bool {
+    if !hex_ruler_col_align_ok(char_w) {
+        return false;
+    }
+    if !hex_byte_cell_size_ok(char_w) {
+        return false;
+    }
+    if hex_tall_1200_visible_rows() != 68 {
+        return false;
+    }
+    hex_offset_plus_gap_sync_ok(char_w)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5109,7 +5208,7 @@ mod tests {
         assert_eq!(hex_ruler_col_x(7, char_w), Some(147.0));
         assert_eq!(hex_ruler_col_x(8, char_w), Some(175.0));
         assert_eq!(
-            hex_ruler_col_x(8, char_w).unwrap() - hex_ruler_col_x(7, char_w).unwrap(),
+            hex_ruler_col_x(8, char_w).unwrap_or(0.0) - hex_ruler_col_x(7, char_w).unwrap_or(0.0),
             28.0 // 4 chars (3 + 1 midline gap) * 7.0px = 28.0px
         );
         assert_eq!(hex_ruler_col_x(16, char_w), None);
@@ -5376,6 +5475,93 @@ mod tests {
         assert!(!hex_offset_plus_gap_sync_ok(0.0));
         assert!(!hex_offset_plus_gap_sync_ok(f32::NAN));
         // Typo second: offset + grid + ruler + ASCII all Mono.
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_cell_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex8_ruler_plus_tall_1200() {
+        // Headless test proving edge fixture comparison/hex-tall-1200.json:
+        // ruler tick alignment to byte columns from char metrics,
+        // byte cell size from TypoRole Mono metrics,
+        // tall-file fixture lock at 1200px.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-hex8/comparison/hex-tall-1200.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex8/round-1/comparison/hex-tall-1200.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-tall-1200\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"panes_h\": 1070.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 68"));
+        assert!(fixture_raw.contains("\"byte_cell_text_w\": 14.0"));
+        assert!(fixture_raw.contains("\"byte_cell_box_w\": 30.0"));
+        assert!(fixture_raw.contains("\"byte_col_step_px\": 21.0"));
+        assert!(fixture_raw.contains("\"offset_addr_chars\": 10"));
+        assert!(fixture_raw.contains("\"offset_hex_digits\": 8"));
+        assert!(fixture_raw.contains("\"offset_widest_label\": \"0xffffffff\""));
+        assert!(fixture_raw.contains("\"offset_gutter_text_w\": 70.0"));
+        assert!(fixture_raw.contains("\"offset_gutter_w\": 78.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_gutter_w\": 8.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_x\": 505.0"));
+
+        // 1. Ruler tick alignment to byte columns from char metrics
+        let char_w = 7.0;
+        for col in 0..16 {
+            let r_x = hex_ruler_col_x(col, char_w);
+            let g_x = hex_grid_byte_col_x(col, char_w);
+            assert_eq!(r_x, g_x);
+        }
+        assert_eq!(hex_ruler_col_x(0, char_w), Some(0.0));
+        assert_eq!(hex_ruler_col_x(7, char_w), Some(147.0));
+        assert_eq!(hex_ruler_col_x(8, char_w), Some(175.0));
+        assert_eq!(hex_ruler_col_x(15, char_w), Some(322.0));
+        assert_eq!(hex_grid_byte_col_x(15, char_w), Some(322.0));
+        assert_eq!(hex_ruler_col_x(16, char_w), None);
+        assert_eq!(hex_grid_byte_col_x(16, char_w), None);
+
+        // Alignment across multiple metrics/scales (narrow and wide)
+        for &scale in &[5.0, 6.0, 7.0, 8.0, 10.0, 12.0] {
+            assert!(hex_ruler_col_align_ok(scale));
+            assert_eq!(hex_ruler_tick_step_w(scale), hex_byte_col_step_w(scale));
+            for col in 0..16 {
+                assert_eq!(hex_ruler_col_x(col, scale), hex_grid_byte_col_x(col, scale));
+            }
+        }
+        assert!(!hex_ruler_col_align_ok(0.0));
+        assert!(!hex_ruler_col_align_ok(-5.0));
+        assert!(!hex_ruler_col_align_ok(f32::NAN));
+        assert!(!hex_ruler_col_align_ok(f32::INFINITY));
+
+        // 2. Byte cell size from TypoRole Mono metrics
+        assert_eq!(crate::theme::TypoRole::Mono.size(), 12.0);
+        assert!((crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.001);
+        assert_eq!(hex_grid_byte_cell_text_w(char_w), 14.0);
+        assert_eq!(hex_grid_byte_cell_box_w(char_w), 30.0);
+        assert!((hex_grid_row_h() - 15.6).abs() < 0.001);
+        assert!(hex_byte_cell_size_ok(char_w));
+        assert!(!hex_byte_cell_size_ok(0.0));
+        assert!(!hex_byte_cell_size_ok(f32::NAN));
+
+        // 3. Tall-file fixture lock at 1200px
+        assert_eq!(HEX_TALL_CANVAS_H, 1200.0);
+        assert_eq!(HEX_TALL_PANES_H, 1070.0);
+        assert_eq!(HEX_TALL_CANVAS_H - 130.0, HEX_TALL_PANES_H);
+        assert_eq!(hex_tall_1200_visible_rows(), 68);
+        assert_eq!(hex_visible_rows(HEX_TALL_PANES_H, hex_grid_row_h()), 68);
+        assert_eq!(hex_visible_rows(1070.0, 15.6), 68);
+
+        // 4. Rhythm sync check
+        assert!(hex_ruler_rhythm_sync_ok(char_w));
+        assert!(!hex_ruler_rhythm_sync_ok(0.0));
+        assert!(!hex_ruler_rhythm_sync_ok(f32::NAN));
+
+        // 5. Typo second: offset + grid + ruler + ASCII all Mono
         assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
