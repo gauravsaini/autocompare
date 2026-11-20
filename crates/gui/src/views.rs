@@ -3521,6 +3521,10 @@ fn paint_text_body(
                                             if text_center_hunk_head(&model.rows, orig) {
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                                                    // Centered: leading inset taaki do-arrow row
+                                                    // 48px column me centered rahe (headless
+                                                    // `text_center_marker_inset` = 6px/side).
+                                                    ui.add_space(text_center_marker_inset());
                                                     if ui
                                                         .small_button("→")
                                                         .on_hover_text("Copy Left to Right")
@@ -3775,6 +3779,9 @@ fn paint_text_body(
                                     if text_center_hunk_head(&model.rows, orig) {
                                         ui.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                                            // Centered: wrap-off head wahi 6px leading
+                                            // inset (wrap-on parity, ek rhythm).
+                                            ui.add_space(text_center_marker_inset());
                                             if ui
                                                 .small_button("→")
                                                 .on_hover_text("Copy Left to Right")
@@ -4597,6 +4604,62 @@ pub fn text_center_hunk_marker(kind: TextRowKind) -> bool {
 /// hue/token nahi). Pure; unit-tested.
 pub fn text_center_gutter_band_fill(selected: bool) -> bool {
     selected
+}
+
+/// Center-gutter marker content width px: do arrow boxes
+/// ([`crate::gutter::GUTTER_ARROW_BOX`] = 16 each) + ek [`TIGHT_GAP`]
+/// (4) beech me = 36. Ponytail reuse: koi naya literal nahi, sirf
+/// existing tokens ka jod. Paint isi par
+/// [`crate::gutter::center_row_marker_inset`] se leading inset nikalta
+/// hai taaki do-arrow row 48px column me centered rahe. Pure; unit-tested.
+pub fn text_center_marker_content_w() -> f32 {
+    2.0 * crate::gutter::GUTTER_ARROW_BOX + TIGHT_GAP
+}
+
+/// Center-gutter marker leading inset px: 48px column me 36px content
+/// = 6px per side, dono taraf barabar hawa taaki copy arrows centered
+/// dikhen (BC center-bar rhythm). Guards
+/// [`crate::gutter::center_row_marker_inset`] me hain. Pure; unit-tested.
+pub fn text_center_marker_inset() -> f32 {
+    crate::gutter::center_row_marker_inset(TEXT_CENTER_GUTTER_W, text_center_marker_content_w())
+}
+
+/// Wrap-continuation marker glyph: number-column ke right edge par lagta
+/// hai taaki lambi wrapped line ka continuation head se alag padhe (BC
+/// wrap-indicator precedent, apne shabdon me — koi asset copy nahi).
+/// Paint text me nahi, gutter prefix me hai isliye mono rhythm untouched.
+/// Pure token.
+pub const WRAP_CONTINUATION_MARKER: &str = "\u{21a9}";
+
+/// Wrap-continuation gutter with marker: number field right-aligned slot
+/// par [`WRAP_CONTINUATION_MARKER`], phir wahi trailing pad
+/// ([`GUTTER_NUMBER_TRAIL_PAD`]) jo [`wrap_continuation_gutter`] rakhta
+/// hai — column rhythm nahi toot-ta (same char count), marker code se
+/// chipakta nahi. Blank gutter se sirf ek slot alag hai. Pure; unit-tested.
+pub fn wrap_marker_gutter(gutter_chars: usize) -> String {
+    let trail = " ".repeat(GUTTER_NUMBER_TRAIL_PAD);
+    if gutter_chars == 0 {
+        return trail;
+    }
+    format!(
+        "{}{WRAP_CONTINUATION_MARKER}{trail}",
+        " ".repeat(gutter_chars.saturating_sub(1))
+    )
+}
+
+/// Wrap-marker column (0-based char offset): number field ka aakhri slot
+/// (`gutter_chars - 1`), marker wahi baithta hai. `0` par 0 (degenerate
+/// guard). Geometry review ke liye headless contract. Pure; unit-tested.
+pub fn wrap_marker_column(gutter_chars: usize) -> usize {
+    gutter_chars.saturating_sub(1)
+}
+
+/// Wide-960 pane pair px: 960 canvas par center connector (48) + 2 x
+/// [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 448/448
+/// ([`text_pane_pair_widths`] reuse). Fixture
+/// `comparison/text-wide-960.json` isi ko lock karti hai. Pure; unit-tested.
+pub fn text_wide_960_pane_pair() -> (f32, f32) {
+    text_pane_pair_widths(960.0)
 }
 
 /// Segmented pane status: selected row ke per-side line numbers —
@@ -7492,6 +7555,78 @@ mod tests {
         assert!(text_gutter_has_copy(TextRowKind::Deleted));
         assert!(text_gutter_has_copy(TextRowKind::Inserted));
         assert!(!text_gutter_has_copy(TextRowKind::Equal));
+    }
+
+    #[test]
+    fn text3_wide_960_center_wrap_trailing() {
+        // Mirrors checks/gui-exq-text3/comparison/text-wide-960.json:
+        // 960px canvas par centered hunk markers, wrap-marker alignment,
+        // even trailing blanks. Geometry FIRST (widths/insets), typography
+        // SECOND (mono rhythm untouched), colors frozen (koi hue nahi).
+        use viewmodel::TextRow;
+        // Centered markers: 36px content (16+16+4) in 48px column = 6/side.
+        assert_eq!(text_center_marker_content_w(), 36.0);
+        assert_eq!(
+            text_center_marker_content_w(),
+            2.0 * crate::gutter::GUTTER_ARROW_BOX + TIGHT_GAP
+        );
+        assert_eq!(text_center_marker_inset(), 6.0);
+        assert_eq!(
+            text_center_marker_inset(),
+            crate::gutter::center_row_marker_inset(48.0, 36.0)
+        );
+        assert!(
+            (text_center_marker_inset() * 2.0 + text_center_marker_content_w() - 48.0).abs() < 0.01
+        );
+        assert_eq!(crate::gutter::center_row_marker_inset(48.0, 36.0), 6.0);
+        assert_eq!(crate::gutter::center_row_marker_inset(f32::NAN, 36.0), 0.0);
+        assert_eq!(crate::gutter::center_row_marker_inset(48.0, 60.0), 0.0);
+        // Wide-960 panes: 448/448 pair fills 960 minus connector + gaps.
+        assert_eq!(text_wide_960_pane_pair(), (448.0, 448.0));
+        assert_eq!(text_wide_960_pane_pair(), text_pane_pair_widths(960.0));
+        // Wrap-marker alignment: same width as blank gutter, marker at
+        // number-field right edge, trail pad preserved.
+        assert_eq!(WRAP_CONTINUATION_MARKER, "\u{21a9}");
+        assert_eq!(wrap_marker_column(4), 3);
+        assert_eq!(wrap_marker_column(1), 0);
+        assert_eq!(wrap_marker_column(0), 0);
+        assert_eq!(wrap_marker_gutter(4), "   \u{21a9}  ".to_string());
+        assert_eq!(wrap_marker_gutter(1), "\u{21a9}  ".to_string());
+        assert_eq!(
+            wrap_marker_gutter(4).chars().count(),
+            wrap_continuation_gutter(4).chars().count()
+        );
+        assert!(wrap_marker_gutter(4).ends_with("  "));
+        // Trailing balance at 960 rhythm: 436px viewport @17.6 row = 25
+        // slots - 9 rows = 16 raw, balanced stays even (no orphan blank).
+        let row_h = row_height_for_line(TypoRole::Mono.line_height_px());
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows(436.0, row_h, 9), 16);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9), 16);
+        assert_eq!(text_trailing_blank_rows_balanced(436.0, row_h, 9) % 2, 0);
+        // Hunk heads per fixture: C,C,E,I -> true,false,false,true.
+        let rows = vec![
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Changed,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Equal,
+                ..Default::default()
+            },
+            TextRow {
+                kind: TextRowKind::Inserted,
+                ..Default::default()
+            },
+        ];
+        assert!(text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 1));
+        assert!(!text_center_hunk_head(&rows, 2));
+        assert!(text_center_hunk_head(&rows, 3));
     }
 
     #[test]

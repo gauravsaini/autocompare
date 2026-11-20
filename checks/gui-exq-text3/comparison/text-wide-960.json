@@ -1,0 +1,24 @@
+{
+  "name": "text-wide-960",
+  "intent": "960px canvas: centered hunk markers, wrap-marker alignment, even trailing blanks",
+  "width_px": 960,
+  "center_gutter_px": 48.0,
+  "marker_content_px": 36.0,
+  "marker_inset_px": 6.0,
+  "pane_pair_px": [448.0, 448.0],
+  "wrap_width": 80,
+  "gutter_chars": 4,
+  "blank_gutter": "      ",
+  "marker_gutter": "   \u21a9  ",
+  "marker_column": 3,
+  "rows": ["Changed", "Changed", "Equal", "Inserted"],
+  "expected_heads": [true, false, false, true],
+  "trailing_example": {
+    "panes_h": 436.0,
+    "row_h": 17.6,
+    "visible": 9,
+    "raw": 16,
+    "balanced": 16
+  },
+  "notes": "two-arrow row (16+16+4=36) centered in 48px column with 6px/side; wrap marker sits at number-field right edge with same width as blank gutter; trailing blanks stay even so filler never ends on a lone orphan row"
+}

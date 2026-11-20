@@ -1444,6 +1444,19 @@ pub fn gutter_arrow_center_x(col_x: f32) -> Option<f32> {
     if cx.is_finite() { Some(cx) } else { None }
 }
 
+/// Center-column marker leading inset px: leftover `(column - marker)`
+/// equally split per side so a marker strip sits centered (BC center-bar
+/// rhythm). Non-finite/non-positive ya marker >= column par 0 (paint kabhi
+/// NaN/negative inset na khaye). Geometry only; colors untouched.
+/// TEXT3 center-gutter (`views.rs`) isi se apne do-arrow row ko 48px me
+/// center karta hai. Pure; unit-tested.
+pub fn center_row_marker_inset(column_w: f32, marker_w: f32) -> f32 {
+    if !column_w.is_finite() || !marker_w.is_finite() || column_w <= 0.0 || marker_w <= 0.0 {
+        return 0.0;
+    }
+    ((column_w - marker_w) / 2.0).max(0.0)
+}
+
 /// Minimap inner track height px: `height - 2 * pad`. `None`:
 /// non-finite/non-positive height, ya track pad se dhaka (inner <= 0).
 /// Pure; unit-tested.
@@ -1571,6 +1584,19 @@ mod exq_guttercopy8_tests {
         assert_eq!(gutter_arrow_center_x(100.0), Some(112.0));
         assert_eq!(gutter_arrow_center_x(f32::NAN), None);
         assert_eq!(gutter_arrow_center_x(f32::INFINITY), None);
+    }
+
+    #[test]
+    fn text3_center_row_marker_inset_splits_leftover() {
+        // TEXT3 center-gutter (views.rs 48px column, 36px two-arrow row)
+        // ka headless contract: leftover barabar banta hai.
+        assert_eq!(center_row_marker_inset(48.0, 36.0), 6.0);
+        assert_eq!(center_row_marker_inset(24.0, 16.0), 4.0);
+        assert_eq!(center_row_marker_inset(48.0, 60.0), 0.0);
+        assert_eq!(center_row_marker_inset(f32::NAN, 36.0), 0.0);
+        assert_eq!(center_row_marker_inset(48.0, f32::NAN), 0.0);
+        assert_eq!(center_row_marker_inset(0.0, 36.0), 0.0);
+        assert_eq!(center_row_marker_inset(-8.0, 36.0), 0.0);
     }
 
     #[test]
