@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use autocompare_diff::{PcmAudio, decode_audio, diff_audio_with_tolerance};
+use autocompare_diff::{decode_audio, diff_audio_with_tolerance, PcmAudio};
 
 use crate::{AudioComparison, Error, Result};
 

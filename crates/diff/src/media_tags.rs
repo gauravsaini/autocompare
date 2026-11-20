@@ -172,7 +172,11 @@ pub fn read_aac_tags(bytes: &[u8]) -> Option<MediaTags> {
         found_any = true;
     }
 
-    if found_any { Some(tags) } else { None }
+    if found_any {
+        Some(tags)
+    } else {
+        None
+    }
 }
 
 /// Reads FLAC metadata blocks and extracts Vorbis comments.
@@ -304,7 +308,11 @@ pub fn read_mp3_tags(bytes: &[u8]) -> Option<MediaTags> {
         }
     }
 
-    if found_any { Some(tags) } else { None }
+    if found_any {
+        Some(tags)
+    } else {
+        None
+    }
 }
 
 fn parse_id3v2_frames(data: &[u8], version: u8, tags: &mut MediaTags) {
@@ -632,7 +640,11 @@ fn extract_mp4_disk_numbers(payload: &[u8]) -> (Option<u32>, Option<u32>) {
         }
         let raw: [u8; 2] = payload.get(start..end)?.try_into().ok()?;
         let val = u16::from_be_bytes(raw);
-        if val > 0 { Some(u32::from(val)) } else { None }
+        if val > 0 {
+            Some(u32::from(val))
+        } else {
+            None
+        }
     };
     (at(18, 20), at(20, 22))
 }
@@ -975,21 +987,18 @@ mod tests {
 
         let diff = diff_media_tags(&t1, &t2);
         assert!(!diff.identical);
-        assert!(
-            diff.matching
-                .iter()
-                .any(|(f, v)| f == "Title" && v == "Song A")
-        );
-        assert!(
-            diff.differing
-                .iter()
-                .any(|(f, l, r)| f == "Artist" && l == "Band X" && r == "Band Y")
-        );
-        assert!(
-            diff.right_only
-                .iter()
-                .any(|(f, v)| f == "Album" && v == "Album Z")
-        );
+        assert!(diff
+            .matching
+            .iter()
+            .any(|(f, v)| f == "Title" && v == "Song A"));
+        assert!(diff
+            .differing
+            .iter()
+            .any(|(f, l, r)| f == "Artist" && l == "Band X" && r == "Band Y"));
+        assert!(diff
+            .right_only
+            .iter()
+            .any(|(f, v)| f == "Album" && v == "Album Z"));
     }
 
     #[test]
@@ -1011,21 +1020,18 @@ mod tests {
         assert!(tags_opt.is_some());
         if let Some(tags) = tags_opt {
             assert_eq!(tags.format, MediaFormat::Aac);
-            assert!(
-                tags.extra_tags
-                    .iter()
-                    .any(|(k, v)| k == "Codec" && v == "MPEG-4 AAC")
-            );
-            assert!(
-                tags.extra_tags
-                    .iter()
-                    .any(|(k, v)| k == "Sample Rate" && v == "44100 Hz")
-            );
-            assert!(
-                tags.extra_tags
-                    .iter()
-                    .any(|(k, v)| k == "Channels" && v == "2")
-            );
+            assert!(tags
+                .extra_tags
+                .iter()
+                .any(|(k, v)| k == "Codec" && v == "MPEG-4 AAC"));
+            assert!(tags
+                .extra_tags
+                .iter()
+                .any(|(k, v)| k == "Sample Rate" && v == "44100 Hz"));
+            assert!(tags
+                .extra_tags
+                .iter()
+                .any(|(k, v)| k == "Channels" && v == "2"));
         }
     }
 
@@ -1162,16 +1168,14 @@ mod tests {
         };
         let diff = diff_media_tags(&left, &right);
         assert!(!diff.identical);
-        assert!(
-            diff.differing
-                .iter()
-                .any(|(f, l, r)| f == "Disc Total" && l == "3" && r == "4")
-        );
+        assert!(diff
+            .differing
+            .iter()
+            .any(|(f, l, r)| f == "Disc Total" && l == "3" && r == "4"));
         let same = diff_media_tags(&left, &left);
-        assert!(
-            same.matching
-                .iter()
-                .any(|(f, v)| f == "Disc Total" && v == "3")
-        );
+        assert!(same
+            .matching
+            .iter()
+            .any(|(f, v)| f == "Disc Total" && v == "3"));
     }
 }
