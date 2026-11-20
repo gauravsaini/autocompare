@@ -603,6 +603,201 @@ pub fn gutter_arrow_centers(segments: &[GutterSegment]) -> Vec<f32> {
     out
 }
 
+// ----------------------------------------------------------------------------
+// GUTTER6: line-number column + minimap overview (headless).
+// Twin-pane gutter me line numbers ek fixed tabular column me hote
+// hain (digit count ke saath chauda hota hai), aur right-edge
+// thumbnail overview me same/diff dono ke bands ek hi band-math se
+// bante hain taaki same aur diff segment heights match karen. Center
+// arrows ke tap-targets arrow box se bade hote hain (slop-expanded
+// hit rect). Geometry first: sab SPACE scale reuse, koi naya literal
+// nahi. Typography second: numbers existing content_grid (Mono 12
+// tabular) role me, koi naya size nahi. Colors frozen: sirf shape.
+// WIRING (paint owner ke paas): numbers column
+// `gutter_linenum_column_width(max_no, show)` chaudi; text rows
+// `gutter_text_row_height(line_h)` unche; overview
+// `gutter_overview_geometry(..)` se same+diff bands; arrow hit
+// `gutter_arrow_hit_contains(..)` se.
+// ----------------------------------------------------------------------------
+
+/// Line-number column per-extra-digit step: one XS step.
+///
+/// Column `GUTTER_RULER_WIDE` (16) se shuru hota hai aur har extra
+/// digit par 4px badhta hai (20/24/28/..), taaki 1-digit files patli
+/// aur 4-digit files chaudi column paen bina scale chhode.
+pub const GUTTER_LINENUM_PAD: f32 = crate::theme::SPACE_XS;
+
+/// Text-row vertical pad per side: merge-gap reuse (2px).
+///
+/// Text row height = measured line height + 2 * pad, taaki padding
+/// text rows se hamesha ek fixed beat par rahe (koi ad-hoc pad nahi).
+pub const GUTTER_TEXT_ROW_PAD: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Center-arrow hit-test slop per side: merge-gap reuse (2px).
+///
+/// 16px arrow box 20px tap-target banta hai bina paint hile; ruler
+/// slop ([`GUTTER_HIT_SLOP`]) se alag beat par, same scale par.
+pub const GUTTER_ARROW_HIT_SLOP: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Line-number column extra-digit cap: 5 steps (16 -> 36 max).
+///
+/// Bahut badi files par column poori pane na kha le; digits isse
+/// zyada hon to width cap par atki rehti hai (numbers clip nahi,
+/// column bas aur chaudi nahi hoti).
+pub const GUTTER_LINENUM_MAX_EXTRA: usize = 5;
+
+/// Line-number column ka decimal digit count: `max_line_no` me kitne
+/// digits hain (`0` par bhi 1, khali file me bhi ek column). Pure.
+pub fn gutter_linenum_digits(max_line_no: usize) -> usize {
+    let mut digits = 1usize;
+    let mut n = max_line_no;
+    while n >= 10 {
+        n /= 10;
+        digits = digits.saturating_add(1);
+    }
+    digits
+}
+
+/// Line-number column width px: numbers chhupe par ruler narrow track
+/// ([`GUTTER_RULER_NARROW`]), dikhen par [`GUTTER_RULER_WIDE`] + har
+/// extra digit par [`GUTTER_LINENUM_PAD`] ([`GUTTER_LINENUM_MAX_EXTRA`]
+/// cap). Sab 4-scale par (16/20/24/28/32/36). Pure; unit-tested.
+pub fn gutter_linenum_column_width(max_line_no: usize, show_line_numbers: bool) -> f32 {
+    if !show_line_numbers {
+        return GUTTER_RULER_NARROW;
+    }
+    let extra = gutter_linenum_digits(max_line_no)
+        .saturating_sub(1)
+        .min(GUTTER_LINENUM_MAX_EXTRA) as f32;
+    GUTTER_RULER_WIDE + extra * GUTTER_LINENUM_PAD
+}
+
+/// Line-number text role: grid content (fixed mono 12 tabular), wahi
+/// role jo gutter text padhta hai. Typography second, koi naya size
+/// nahi. Pure; unit-tested.
+pub const fn gutter_linenum_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::content_grid()
+}
+
+/// Line-number column tabular hai (digits seedh me rahen). Pure.
+pub const fn gutter_linenum_is_tabular() -> bool {
+    crate::theme::TypoRole::content_grid().is_tabular()
+}
+
+/// Text-row vertical pad px per side (single source). Pure.
+pub fn gutter_text_row_pad() -> f32 {
+    GUTTER_TEXT_ROW_PAD
+}
+
+/// Padding samet text-row height px: `line_height_px + 2 * pad`.
+///
+/// `None`: non-finite/non-positive line height ya overflow. Paint isi
+/// se row unchai banata hai taaki padding vs text rows ek beat par
+/// rahen. Pure; unit-tested.
+pub fn gutter_text_row_height(line_height_px: f32) -> Option<f32> {
+    if !line_height_px.is_finite() || line_height_px <= 0.0 {
+        return None;
+    }
+    let h = line_height_px + 2.0 * GUTTER_TEXT_ROW_PAD;
+    if h.is_finite() && h > 0.0 {
+        Some(h)
+    } else {
+        None
+    }
+}
+
+/// Thumbnail overview geometry: same+diff dono ke bands ek hi band-math
+/// se ([`gutter_geometry`] jaisi fraction mapping, [`GUTTER_SEGMENT_MIN_H`]
+/// floor, [`crate::theme::GUTTER_MERGE_GAP`] fusion), farq sirf itna ki
+/// Equal runs skip nahi hote — woh background bands (kind Equal) bante
+/// hain taaki paint same/diff heights ek scale par khinche. Kinds alag
+/// hone par merge nahi hota, isliye bands ruler ko gap-bina dhakte
+/// hain. Pure; unit-tested.
+pub fn gutter_overview_geometry(
+    total_rows: usize,
+    height: f32,
+    rows: &[TextRow],
+) -> GutterGeometry {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return GutterGeometry {
+            total_height: if height.is_finite() {
+                height.max(0.0)
+            } else {
+                0.0
+            },
+            segments: Vec::new(),
+        };
+    }
+    let mut segments: Vec<GutterSegment> = Vec::new();
+    let total_f = total_rows as f32;
+    let mut idx = 0usize;
+    while idx < rows.len() && idx < total_rows {
+        let kind = match rows.get(idx) {
+            Some(row) => row.kind,
+            None => break,
+        };
+        let mut end = idx.saturating_add(1);
+        while end < rows.len() && end < total_rows {
+            match rows.get(end) {
+                Some(next) if next.kind == kind => {
+                    end = end.saturating_add(1);
+                }
+                _ => break,
+            }
+        }
+        let y_start = (idx as f32 / total_f) * height;
+        let mut y_end = (end as f32 / total_f) * height;
+        if y_end < y_start + GUTTER_SEGMENT_MIN_H {
+            y_end = (y_start + GUTTER_SEGMENT_MIN_H).min(height);
+        }
+        if let Some(last) = segments.last_mut() {
+            let last_seg: &mut GutterSegment = last;
+            if last_seg.kind == kind && y_start <= last_seg.y_end + crate::theme::GUTTER_MERGE_GAP {
+                last_seg.y_end = last_seg.y_end.max(y_end);
+                idx = end;
+                continue;
+            }
+        }
+        segments.push(GutterSegment {
+            y_start,
+            y_end,
+            kind,
+        });
+        idx = end;
+    }
+    GutterGeometry {
+        total_height: height,
+        segments,
+    }
+}
+
+/// Center arrow ka slop-expanded hit rect `(x0, y0, x1, y1)` px:
+/// [`gutter_arrow_rect`] box har taraf [`GUTTER_ARROW_HIT_SLOP`] badha
+/// hua (16px box -> 20px target). Non-finite input par `None` taaki
+/// paint NaN kabhi layout me na daale. Pure; unit-tested.
+pub fn gutter_arrow_hit_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let (x0, y0, x1, y1) = gutter_arrow_rect(center_x, center_y)?;
+    let s = GUTTER_ARROW_HIT_SLOP;
+    let (lx0, ly0, lx1, ly1) = (x0 - s, y0 - s, x1 + s, y1 + s);
+    if lx0.is_finite() && ly0.is_finite() && lx1.is_finite() && ly1.is_finite() {
+        Some((lx0, ly0, lx1, ly1))
+    } else {
+        None
+    }
+}
+
+/// Arrow hit-test: point `(x, y)` slop-expanded hit rect ke andar hai
+/// ya nahi (edges inclusive). Non-finite par false. Pure; unit-tested.
+pub fn gutter_arrow_hit_contains(center_x: f32, center_y: f32, x: f32, y: f32) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    match gutter_arrow_hit_rect(center_x, center_y) {
+        Some((x0, y0, x1, y1)) => x >= x0 && x <= x1 && y >= y0 && y <= y1,
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1131,5 +1326,147 @@ mod exq_tree2_tests {
         ];
         assert_eq!(gutter_arrow_centers(&segs), vec![200.0, 350.0]);
         assert!(gutter_arrow_centers(&[]).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod exq_gutter6_tests {
+    use super::*;
+
+    fn diff_row(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn gutter6_numbers_column_scales_with_digits_on_scale() {
+        // Mirrors checks/gui-exq-gutter6/round-1/comparison/edge-tall-same-diff.json.
+        assert_eq!(GUTTER_LINENUM_PAD, crate::theme::SPACE_XS);
+        assert_eq!(GUTTER_LINENUM_PAD, 4.0);
+        assert_eq!(gutter_linenum_digits(0), 1);
+        assert_eq!(gutter_linenum_digits(9), 1);
+        assert_eq!(gutter_linenum_digits(99), 2);
+        assert_eq!(gutter_linenum_digits(1000), 4);
+        assert_eq!(gutter_linenum_column_width(9, false), 8.0);
+        assert_eq!(gutter_linenum_column_width(9, true), 16.0);
+        assert_eq!(gutter_linenum_column_width(99, true), 20.0);
+        assert_eq!(gutter_linenum_column_width(999, true), 24.0);
+        assert_eq!(gutter_linenum_column_width(9999, true), 28.0);
+        assert_eq!(gutter_linenum_column_width(99_999, true), 32.0);
+        // Cap: 7 digits bhi 36 par atke.
+        assert_eq!(gutter_linenum_column_width(9_999_999, true), 36.0);
+        assert!(gutter_linenum_column_width(999, true) > gutter_linenum_column_width(99, true));
+    }
+
+    #[test]
+    fn gutter6_linenum_typo_reuses_grid_mono_tabular() {
+        use crate::theme::{TYPO_MONO_SIZE, TypoRole};
+        assert_eq!(gutter_linenum_role(), TypoRole::content_grid());
+        assert_eq!(gutter_linenum_role(), TypoRole::Mono);
+        assert_eq!(gutter_linenum_role().size(), TYPO_MONO_SIZE);
+        assert_eq!(gutter_linenum_role().size(), 12.0);
+        assert!(gutter_linenum_is_tabular());
+        assert_eq!(
+            gutter_linenum_is_tabular(),
+            TypoRole::content_grid().is_tabular()
+        );
+    }
+
+    #[test]
+    fn gutter6_text_row_height_pads_line_height_symmetrically() {
+        assert_eq!(GUTTER_TEXT_ROW_PAD, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_TEXT_ROW_PAD, 2.0);
+        assert_eq!(gutter_text_row_pad(), 2.0);
+        // Mono 12 @1.30 = 15.6 line -> 19.6 row.
+        let h = gutter_text_row_height(15.6);
+        assert!(h.is_some_and(|v| (v - 19.6).abs() < 0.01));
+        assert_eq!(gutter_text_row_height(0.0), None);
+        assert_eq!(gutter_text_row_height(-4.0), None);
+        assert_eq!(gutter_text_row_height(f32::NAN), None);
+        assert_eq!(gutter_text_row_height(f32::INFINITY), None);
+    }
+
+    #[test]
+    fn gutter6_overview_covers_same_and_diff_with_shared_bands() {
+        // 6 rows over 600px: E D D E E I -> runs E(0..100) D(100..300)
+        // E(300..500) I(500..600); diff-only geometry se 2 segments,
+        // overview se 4 (same background samet), band-math identical.
+        let rows = vec![
+            diff_row(TextRowKind::Equal),
+            diff_row(TextRowKind::Deleted),
+            diff_row(TextRowKind::Deleted),
+            diff_row(TextRowKind::Equal),
+            diff_row(TextRowKind::Equal),
+            diff_row(TextRowKind::Inserted),
+        ];
+        let diff_only = gutter_geometry(6, 600.0, &rows);
+        assert_eq!(diff_only.segments.len(), 2);
+        let over = gutter_overview_geometry(6, 600.0, &rows);
+        assert_eq!(over.segments.len(), 4);
+        assert_eq!(over.total_height, 600.0);
+        let kinds: Vec<TextRowKind> = over.segments.iter().map(|s| s.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                TextRowKind::Equal,
+                TextRowKind::Deleted,
+                TextRowKind::Equal,
+                TextRowKind::Inserted
+            ]
+        );
+        // Diff bands dono paths par identical (same/diff heights match).
+        assert_eq!(over.segments.get(1), diff_only.segments.first());
+        assert_eq!(over.segments.get(3), diff_only.segments.get(1));
+        // Bands contiguous: koi gap nahi (ruler poora dhaka).
+        assert!(over.segments.first().is_some_and(|s| s.y_start == 0.0));
+        assert!(over.segments.get(3).is_some_and(|s| s.y_end == 600.0));
+        // Khali/kharab input par khali.
+        assert!(
+            gutter_overview_geometry(0, 600.0, &rows)
+                .segments
+                .is_empty()
+        );
+        assert!(gutter_overview_geometry(6, 0.0, &rows).segments.is_empty());
+        assert!(
+            gutter_overview_geometry(6, f32::NAN, &rows)
+                .segments
+                .is_empty()
+        );
+        let equals = vec![diff_row(TextRowKind::Equal), diff_row(TextRowKind::Equal)];
+        assert_eq!(
+            gutter_overview_geometry(2, 200.0, &equals).segments.len(),
+            1
+        );
+    }
+
+    #[test]
+    fn gutter6_arrow_hit_rect_expands_box_without_moving_paint() {
+        assert_eq!(GUTTER_ARROW_HIT_SLOP, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_ARROW_HIT_SLOP, 2.0);
+        // 16px box (4..20, 192..208) -> 20px hit (2..22, 190..210).
+        assert_eq!(
+            gutter_arrow_hit_rect(12.0, 200.0),
+            Some((2.0, 190.0, 22.0, 210.0))
+        );
+        // Box edge ke bahar 1px: box miss, hit lage.
+        assert!(
+            !gutter_arrow_rect(12.0, 200.0).is_some_and(|(x0, y0, x1, y1)| {
+                3.0 >= x0 && 3.0 <= x1 && 200.0 >= y0 && 200.0 <= y1
+            })
+        );
+        assert!(gutter_arrow_hit_contains(12.0, 200.0, 3.0, 200.0));
+        assert!(gutter_arrow_hit_contains(12.0, 200.0, 12.0, 200.0));
+        assert!(!gutter_arrow_hit_contains(12.0, 200.0, 1.0, 200.0));
+        assert!(!gutter_arrow_hit_contains(12.0, 200.0, 12.0, 211.0));
+        assert!(!gutter_arrow_hit_contains(12.0, 200.0, f32::NAN, 200.0));
+        assert_eq!(gutter_arrow_hit_rect(f32::NAN, 200.0), None);
+        assert!(!gutter_arrow_hit_contains(f32::NAN, 200.0, 12.0, 200.0));
     }
 }
