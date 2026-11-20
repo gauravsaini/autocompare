@@ -502,12 +502,10 @@ impl FakeRemoteFs {
     ///
     /// Returns [`VfsError::Io`] if lock acquisition fails.
     pub fn simulate_disconnect(&self) -> Result<(), VfsError> {
-        let mut storage = self.storage.write().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let mut storage = self
+            .storage
+            .write()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
         storage.state = RemoteConnectionState::Disconnected;
         Ok(())
     }
@@ -518,12 +516,10 @@ impl FakeRemoteFs {
     ///
     /// Returns [`VfsError::Io`] if lock acquisition fails.
     pub fn simulate_reconnect(&self) -> Result<(), VfsError> {
-        let mut storage = self.storage.write().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let mut storage = self
+            .storage
+            .write()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
         storage.state = RemoteConnectionState::Connected;
         Ok(())
     }
@@ -534,12 +530,10 @@ impl FakeRemoteFs {
     ///
     /// Returns [`VfsError::Io`] if disconnected or lock poisoned.
     pub fn create_dir_all(&self, path: &VfsPath) -> Result<(), VfsError> {
-        let mut storage = self.storage.write().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let mut storage = self
+            .storage
+            .write()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -558,12 +552,10 @@ impl FakeRemoteFs {
 
 impl Vfs for FakeRemoteFs {
     fn list_dir(&self, path: &VfsPath) -> Result<Vec<VfsEntry>, VfsError> {
-        let storage = self.storage.read().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let storage = self
+            .storage
+            .read()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
 
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
@@ -605,12 +597,10 @@ impl Vfs for FakeRemoteFs {
     }
 
     fn stat(&self, path: &VfsPath) -> Result<VfsMeta, VfsError> {
-        let storage = self.storage.read().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let storage = self
+            .storage
+            .read()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
 
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
@@ -635,12 +625,10 @@ impl Vfs for FakeRemoteFs {
         path: &VfsPath,
         max_bytes: u64,
     ) -> Result<Box<dyn Read + Send>, VfsError> {
-        let storage = self.storage.read().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let storage = self
+            .storage
+            .read()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
 
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
@@ -670,12 +658,10 @@ impl Vfs for FakeRemoteFs {
     }
 
     fn write_atomic(&self, path: &VfsPath, bytes: &[u8]) -> Result<(), VfsError> {
-        let mut storage = self.storage.write().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let mut storage = self
+            .storage
+            .write()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
 
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
@@ -704,12 +690,10 @@ impl Vfs for FakeRemoteFs {
     }
 
     fn delete(&self, path: &VfsPath) -> Result<(), VfsError> {
-        let mut storage = self.storage.write().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let mut storage = self
+            .storage
+            .write()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
 
         if storage.state != RemoteConnectionState::Connected {
             return Err(VfsError::Io(io::Error::new(
@@ -762,12 +746,10 @@ impl RemoteVfs for FakeRemoteFs {
     }
 
     fn ping(&self) -> Result<Duration, VfsError> {
-        let storage = self.storage.read().map_err(|_| {
-            VfsError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "remote storage lock poisoned",
-            ))
-        })?;
+        let storage = self
+            .storage
+            .read()
+            .map_err(|_| VfsError::Io(io::Error::other("remote storage lock poisoned")))?;
         if storage.state == RemoteConnectionState::Connected {
             Ok(Duration::from_millis(1))
         } else {

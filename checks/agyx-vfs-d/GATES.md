@@ -4,7 +4,29 @@ Track: AGYX-D VFS swarm node
 Scope: crates/vfs/src/{archive_zip.rs, archive_tar.rs, snapshot.rs, trait_def.rs, path.rs}, crates/vfs/tests/{zip_test.rs, tar_test.rs, snapshot_test.rs}, checks/agyx-vfs-d/** ONLY
 Goal: VFS parity — Zip/Tar/Gzip ArchiveFs polish + SnapshotFs .bcss roundtrip + WalkOptions + SFTP/WebDAV trait extension stub (headless only, no network in tests, in-memory fake impl)
 
-## GATES STATUS (sess-vfs-d3, rescue — COMMITTED, NO PUSH)
+## GATES STATUS (sess-vfs-d5, clean-fix — COMMITTED, NO PUSH)
+
+- [x] G1: tests green — PASS: `cargo test -p autocompare-vfs` → local 3 + snapshot 5 + tar 5 + zip 5 = 18 passed, 0 failed.
+  CHECK: cargo test -p autocompare-vfs
+  EXPECT: test result: ok. 0 failed.
+  ACTUAL: ok — 18 passed, 0 failed.
+
+- [x] G2: clippy zero — PASS: `cargo clippy -p autocompare-vfs --all-targets` exit 0, zero warnings (9x io_other_error → io::Error::other in trait_def.rs only).
+  CHECK: cargo clippy -p autocompare-vfs --all-targets
+  EXPECT: exit 0, zero warnings/errors.
+  ACTUAL: exit 0, 0 warnings, 0 errors.
+
+- [x] G3: rustfmt clean — PASS: `rustfmt --edition 2024 --check` on 8 owned files clean (trait_def.rs reformatted after shorten).
+  CHECK: rustfmt --edition 2024 --check <8 owned files>
+  EXPECT: exit 0.
+  ACTUAL: clean.
+
+- [x] G4: banned grep — PASS: ZERO-BANNED in crates/vfs/src (*unwrap(/expect(/panic!/todo!/unimplemented!/unreachable!/unsafe zero; only forbid(unsafe_code) header + safe accessors).
+  CHECK: grep -rn banned in 8 src files excl forbid
+  EXPECT: ZERO-BANNED
+  ACTUAL: zero.
+
+- [x] G5: OWNS proof — PASS: commit pathspec ONLY crates/vfs checks/agyx-vfs-d; no git add -A, no push; mid-run ArchiveFs-enum pollution in archive_tar.rs/zip_test.rs/snapshot_test.rs reverted to b940f34, only trait_def.rs 9-site fix kept.
 
 - [x] G1: tests green — PASS: `cargo test -p autocompare-vfs` → lib 3 + snapshot 5 + tar 5 + zip 5 = 18 passed, 0 failed.
   CHECK: cargo test -p autocompare-vfs
