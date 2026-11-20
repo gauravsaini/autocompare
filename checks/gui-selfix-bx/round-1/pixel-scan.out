@@ -1,0 +1,11 @@
+== checks/gui-selfix-bx/round-1/after.png size 9765 magic 89504e470d0a1a0a dims (960, 600) distinct 256
+  y 178 CHF run: (525, 759, 57)
+  y 184 CHF run: (525, 764, 110)
+  y 190 CHF run: (597, 641, 45)
+== checks/gui-selfix-bx/round-1/after-accent.png size 8734 magic 89504e470d0a1a0a dims (960, 600) distinct 256
+  y 178 CHF run: (525, 759, 57)
+  y 184 CHF run: (525, 764, 110)
+  y 190 CHF run: (597, 641, 45)
+y 154 L-CHF (61, 167, 40) R-CHF (525, 639, 53) bandL/230: 211
+y 160 L-CHF (61, 172, 44) R-CHF (525, 644, 53) bandL/230: 207
+y 166 L-CHF (79, 157, 37) R-CHF (543, 629, 45) bandL/230: 212

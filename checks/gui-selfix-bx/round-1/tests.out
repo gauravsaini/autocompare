@@ -1,0 +1,29 @@
+
+running 642 tests
+....................... 23/642
+app::tests::folder_double_click_stages_file_and_routes_to_text --- FAILED
+....................................................................................... 111/642
+....................................................................................... 198/642
+....................................................................................... 285/642
+....................................................................................... 372/642
+....................................................................................... 459/642
+....................................................................................... 546/642
+....................................................................................... 633/642
+.........
+failures:
+
+---- app::tests::folder_double_click_stages_file_and_routes_to_text stdout ----
+
+thread 'app::tests::folder_double_click_stages_file_and_routes_to_text' (1875584) panicked at crates/gui/src/app.rs:7413:9:
+assertion `left == right` failed
+  left: Folder
+ right: Text
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    app::tests::folder_double_click_stages_file_and_routes_to_text
+
+test result: FAILED. 641 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+error: test failed, to rerun pass `-p autocompare-gui --bin autocompare-gui`
