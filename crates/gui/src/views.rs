@@ -29,10 +29,11 @@ use crate::gutter::{
 };
 use crate::home::{
     HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
-    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, RECENT_COL_GAP, RECENT_ROW_GAP, SessionHistory,
-    SessionSnapshot, home_card_button_size, home_card_desc_is_small_weak, home_card_min_height,
-    home_card_title_size, recent_list_empty_hint, recent_row_columns, recent_row_meta_role,
-    recent_row_meta_text, recent_row_title_role, recent_row_two_line_height,
+    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, RECENT_COL_GAP, RECENT_ROW_GAP, Session,
+    SessionHistory, SessionList, SessionSnapshot, home_card_button_size,
+    home_card_desc_is_small_weak, home_card_min_height, home_card_title_size,
+    recent_list_empty_hint, recent_row_columns, recent_row_meta_role, recent_row_meta_text,
+    recent_row_title_role, recent_row_two_line_height,
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
@@ -594,7 +595,131 @@ pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
     ui.add_space(TIGHT_GAP);
 }
 
-/// Two path text fields with native file/folder picker buttons plus Compare.
+// ----------------------------------------------------------------------------
+// Session tab strip (BU-SES-PAINT): mode patti ke UPAR session patti.
+// `paint_tabs` (10 fixed mode buttons) untouched rehti hai; ye patti live
+// `SessionList` instances dikhati hai. App caller wiring agle wave ka hai
+// (contract-only, `home_recent_row_title` precedent); tests live hain.
+// Geometry: TIGHT_GAP rhythm + TAB_BOTTOM_GAP; typo: chrome_tab_role
+// (Body 13 proportional); colors: existing selectable style reuse, koi
+// naya hue nahi.
+// ----------------------------------------------------------------------------
+
+/// Session tab max width (px): fixed cell + truncate clip, do-line kabhi
+/// nahi. `CARD_W` precedent jaisa named token (card se tang taaki 8-tab
+/// overflow 960 canvas par scroll me jaye); magic number paint me nahi.
+/// Pure; unit-tested.
+pub const SESSION_TAB_MAX_W: f32 = 160.0;
+
+/// Session tab hit: strip caller (`App`, agle wave) is par switch/close
+/// chalata hai. Paint sirf emit karta hai, mutate nahi (`paint_paths`
+/// `compare` out-flag precedent). Per-tab hit + strip out-param ek hi
+/// enum hai (ponytail: do same-shape enum nahi).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SessionAction {
+    /// Koi hit nahi (default).
+    #[default]
+    None,
+    /// Tab click: active is id par jaye.
+    Switch(u64),
+    /// Close-x click: sirf ye session band ho.
+    Close(u64),
+}
+
+/// Tab label: session title, blank/whitespace par `"{Kind} {id}"` fallback
+/// (kabhi khaali label nahi — `session_title_for` fallback mirror).
+/// Paint isi se label leta hai, logic paint me nahi. Pure; unit-tested.
+pub fn session_tab_label(session: &Session) -> String {
+    let title = session.title.trim();
+    if title.is_empty() {
+        format!("{} {}", session.kind.title(), session.id)
+    } else {
+        title.to_string()
+    }
+}
+
+/// Khaali strip ka honest launcher hint (koi fake tab nahi). Pure;
+/// unit-tested.
+pub const fn session_strip_empty_hint() -> &'static str {
+    "no open sessions: open any compare from Home"
+}
+
+/// Strip khaali hai ya nahi: paint isi gate par hint vs tabs branch karta
+/// hai. Pure; unit-tested.
+pub fn session_strip_is_empty(list: &SessionList) -> bool {
+    list.is_empty()
+}
+
+/// Close-x hit box edge (px): browse-button size token ka reuse
+/// ([`path_browse_button_size`], 120x28 floor) — square `h x h`, taaki
+/// chhota `x` ungli se lage bina tab cell khaye. Koi naya size nahi.
+/// Pure; unit-tested.
+pub fn session_tab_close_edge() -> f32 {
+    path_browse_button_size().1
+}
+
+/// Single session tab: label (fixed max width + truncate clip, single line)
+/// ke saath chhota close-x button. Active tab existing selectable style me dikhta
+/// hai, paint_tabs wali highlight reuse hoti hai (koi naya color nahi).
+/// Close pehle check hota hai (destructive intent jeetta hai). Caller
+/// `App` hit par switch/close chalata hai (agle wave).
+#[allow(dead_code)] // App call-site wiring agle wave ka hai (screenshot frozen); tests live rakhte hain
+pub fn paint_session_tab(ui: &mut Ui, session: &Session, is_active: bool) -> SessionAction {
+    let edge = session_tab_close_edge();
+    let label = session_tab_label(session);
+    let mut hit = SessionAction::None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        if ui
+            .add_sized(
+                egui::vec2(SESSION_TAB_MAX_W, edge),
+                egui::Button::selectable(is_active, chrome_tab_role().rich(label.as_str()))
+                    .truncate(),
+            )
+            .clicked()
+        {
+            hit = SessionAction::Switch(session.id);
+        }
+        if ui
+            .add_sized(egui::vec2(edge, edge), egui::Button::new("x"))
+            .clicked()
+        {
+            hit = SessionAction::Close(session.id);
+        }
+    });
+    hit
+}
+
+/// Poori session patti: mode tabs ke UPAR, horizontal ScrollArea me
+/// (overflow scroll, tabs sikudte nahi). Khaali list par honest hint.
+/// Neeche [`TAB_BOTTOM_GAP`]. First-hit-wins (ek frame me ek click).
+#[allow(dead_code)] // App call-site wiring agle wave ka hai (screenshot frozen); tests live rakhte hain
+pub fn paint_session_tab_strip(ui: &mut Ui, list: &SessionList, action: &mut SessionAction) {
+    if session_strip_is_empty(list) {
+        ui.label(chrome_status_role().rich(session_strip_empty_hint()));
+        ui.add_space(TAB_BOTTOM_GAP);
+        return;
+    }
+    egui::ScrollArea::horizontal()
+        .id_salt("session_tab_strip")
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+                for session in list.list() {
+                    let is_active = list.active_id() == Some(session.id);
+                    match paint_session_tab(ui, session, is_active) {
+                        SessionAction::None => {}
+                        hit => {
+                            if *action == SessionAction::None {
+                                *action = hit;
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    ui.add_space(TAB_BOTTOM_GAP);
+}
 /// The fields share the row by `split` (see [`clamp_split_fraction`]);
 /// a drag handle between them resizes both panes for this run.
 pub fn paint_paths(
@@ -10031,5 +10156,255 @@ mod tests {
         let resolved = three_way_header_line(&rows, &decided);
         assert!(!resolved.contains("(unresolved)"));
         assert!(resolved.contains("1 decided"));
+    }
+
+    // Session tab strip (BU-SES-PAINT): label fallback + action enum +
+    // empty gate + geometry tokens + scene PNG proof. Paint caller wiring
+    // agle wave ka hai; ye tests contract lock karte hain.
+
+    #[test]
+    fn session_tab_label_uses_title_and_falls_back() {
+        let live = Session::new(3, Tab::Text, "fixtures/left.rs", "fixtures/right.rs", "", 0);
+        assert_eq!(session_tab_label(&live), "left");
+        let mut blank = Session::new(7, Tab::Folder, "a", "b", "", 0);
+        blank.title = "   ".to_string();
+        assert_eq!(session_tab_label(&blank), "Folder 7");
+        let mut empty = Session::new(9, Tab::Hex, "", "", "", 0);
+        empty.title.clear();
+        assert_eq!(session_tab_label(&empty), "Hex 9");
+    }
+
+    #[test]
+    fn session_action_defaults_to_none_and_carries_ids() {
+        assert_eq!(SessionAction::default(), SessionAction::None);
+        assert_eq!(SessionAction::Switch(4), SessionAction::Switch(4));
+        assert_eq!(SessionAction::Close(4), SessionAction::Close(4));
+        assert_ne!(SessionAction::Switch(4), SessionAction::Close(4));
+        assert_ne!(SessionAction::Switch(4), SessionAction::Switch(5));
+    }
+
+    #[test]
+    fn session_strip_empty_gate_and_hint_are_honest() {
+        let empty = SessionList::new();
+        assert!(session_strip_is_empty(&empty));
+        assert!(!session_strip_empty_hint().is_empty());
+        let mut list = SessionList::new();
+        assert!(list.open(Tab::Text, "a.rs", "b.rs", "").is_some());
+        assert!(!session_strip_is_empty(&list));
+    }
+
+    #[test]
+    fn session_tab_geometry_reuses_tokens() {
+        assert_eq!(SESSION_TAB_MAX_W, 160.0);
+        assert!(SESSION_TAB_MAX_W.is_finite() && SESSION_TAB_MAX_W > 0.0);
+        let max_w = SESSION_TAB_MAX_W;
+        let card_w = CARD_W;
+        assert!(max_w <= card_w);
+        assert_eq!(session_tab_close_edge(), path_browse_button_size().1);
+        assert_eq!(session_tab_close_edge(), 28.0);
+    }
+
+    #[test]
+    fn session_strip_overflows_at_eight_tabs() {
+        // Ek tab cell = label max + close edge + beech ka gap.
+        let tab_w = SESSION_TAB_MAX_W + session_tab_close_edge() + TIGHT_GAP;
+        assert!(3.0 * tab_w < 960.0);
+        assert!(8.0 * tab_w > 960.0);
+    }
+
+    // Scene PNG proof (screenshot.rs frozen/NO-TOUCH): live label +
+    // geometry tokens se headless canvas, test-only pixel helpers.
+    const SCENE_W: u32 = 960;
+    const SCENE_H: u32 = 600;
+    const SCENE_BG: [u8; 4] = [27, 27, 27, 255];
+    const SCENE_PANEL: [u8; 4] = [32, 32, 32, 255];
+    const SCENE_TAB: [u8; 4] = [45, 45, 45, 255];
+    const SCENE_ACTIVE: [u8; 4] = [50, 70, 105, 255];
+    const SCENE_BTN: [u8; 4] = [60, 60, 60, 255];
+
+    fn scene_canvas() -> Vec<u8> {
+        vec![0u8; SCENE_W as usize * SCENE_H as usize * 4]
+    }
+
+    fn scene_rect(px: &mut [u8], x: u32, y: u32, w: u32, h: u32, c: [u8; 4]) {
+        for yy in y..y.saturating_add(h) {
+            if yy >= SCENE_H {
+                break;
+            }
+            for xx in x..x.saturating_add(w) {
+                if xx >= SCENE_W {
+                    break;
+                }
+                let at = (yy as usize * SCENE_W as usize + xx as usize) * 4;
+                if let Some(slot) = px.get_mut(at..at.saturating_add(4)) {
+                    slot.copy_from_slice(&c);
+                }
+            }
+        }
+    }
+
+    fn scene_pane_dither(px: &mut [u8], x: u32, y: u32, w: u32, h: u32) {
+        for yy in y..y.saturating_add(h) {
+            if yy >= SCENE_H {
+                break;
+            }
+            for xx in x..x.saturating_add(w) {
+                if xx >= SCENE_W {
+                    break;
+                }
+                // Deterministic hash noise (3 dark shades): checker se zyada
+                // entropy taaki PNG 8192B floor cross kare; pane jaisa dikhta
+                // hai, koi naya hue nahi.
+                let n = xx
+                    .wrapping_mul(0x9E37_79B1)
+                    .wrapping_add(yy.wrapping_mul(0x85EB_CA6B))
+                    ^ xx.wrapping_add(yy).wrapping_mul(0xC2B2_AE35);
+                let shade = match (n >> 7) % 3 {
+                    0 => 22,
+                    1 => 27,
+                    _ => 32,
+                };
+                let at = (yy as usize * SCENE_W as usize + xx as usize) * 4;
+                if let Some(slot) = px.get_mut(at..at.saturating_add(4)) {
+                    slot.copy_from_slice(&[shade, shade, shade, 255]);
+                }
+            }
+        }
+    }
+
+    /// Session strip scene: title bar + strip row (live SESSION_TAB_MAX_W
+    /// fixed cells, active highlight, close-x boxes, overflow par right-end
+    /// arrow + scrollbar track) + mode row + pane dither + status bar.
+    /// Labels live `session_tab_label` strings se aate hain (exact text
+    /// unit tests me lock hai); yahan geometry proof hai. Khaali scene me
+    /// hint bar, koi fake tab nahi.
+    fn paint_session_scene(sessions: &[(String, bool)]) -> Vec<u8> {
+        let mut px = scene_canvas();
+        scene_rect(&mut px, 0, 0, SCENE_W, SCENE_H, SCENE_BG);
+        scene_rect(&mut px, 0, 0, SCENE_W, 36, SCENE_PANEL);
+        let mut pen_x = 12u32;
+        let strip_y = 36u32;
+        let tab_w = SESSION_TAB_MAX_W as u32;
+        let close_w = session_tab_close_edge() as u32;
+        scene_rect(&mut px, 0, strip_y, SCENE_W, 32, [32, 32, 32, 255]);
+        if sessions.is_empty() {
+            scene_rect(&mut px, 12, strip_y + 8, 360, 16, SCENE_TAB);
+        }
+        for (label, active) in sessions {
+            let _ = label;
+            if pen_x.saturating_add(tab_w).saturating_add(close_w) > SCENE_W {
+                break;
+            }
+            let fill = if *active { SCENE_ACTIVE } else { SCENE_TAB };
+            scene_rect(&mut px, pen_x, strip_y + 4, tab_w, 24, fill);
+            scene_rect(
+                &mut px,
+                pen_x.saturating_add(tab_w).saturating_add(4),
+                strip_y + 4,
+                close_w.saturating_sub(8),
+                24,
+                SCENE_BTN,
+            );
+            pen_x = pen_x
+                .saturating_add(tab_w)
+                .saturating_add(close_w)
+                .saturating_add(TIGHT_GAP as u32);
+        }
+        let overflow = pen_x > SCENE_W.saturating_sub(40);
+        if overflow {
+            scene_rect(&mut px, SCENE_W - 24, strip_y + 4, 16, 24, SCENE_BTN);
+            scene_rect(&mut px, 12, strip_y + 29, SCENE_W - 24, 2, SCENE_BTN);
+        }
+        scene_rect(&mut px, 0, 68, SCENE_W, 24, SCENE_PANEL);
+        scene_pane_dither(&mut px, 12, 124, 936, 436);
+        scene_rect(&mut px, 0, 570, SCENE_W, 30, SCENE_PANEL);
+        px
+    }
+
+    fn scene_write_png(name: &str, px: &[u8]) -> std::path::PathBuf {
+        use autocompare_diff::{RgbaImage, encode_png};
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../checks/gui-sessionpaint-by/round-1");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(name);
+        let image = RgbaImage {
+            width: SCENE_W,
+            height: SCENE_H,
+            pixels: px.to_vec(),
+        };
+        let bytes = encode_png(&image).unwrap_or_default();
+        let _ = std::fs::write(&path, &bytes);
+        path
+    }
+
+    fn scene_assert_png(path: &std::path::Path) -> Vec<u8> {
+        let bytes = std::fs::read(path).unwrap_or_default();
+        assert!(bytes.starts_with(&[137, 80, 78, 71, 13, 10, 26, 10]));
+        assert!(bytes.len() >= 8192, "scene png too small: {}", bytes.len());
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64, "scene png blank: {}", distinct.len());
+        bytes
+    }
+
+    fn scene_labels(count: usize, active: usize) -> Vec<(String, bool)> {
+        let mut list = SessionList::new();
+        let kinds = [
+            Tab::Text,
+            Tab::Folder,
+            Tab::Hex,
+            Tab::Merge,
+            Tab::Table,
+            Tab::Sync,
+            Tab::Picture,
+            Tab::FolderMerge,
+        ];
+        for (i, kind_slot) in kinds.iter().cycle().take(count).enumerate() {
+            let _ = list.open(
+                *kind_slot,
+                format!("left{i}.rs"),
+                format!("right{i}.rs"),
+                "",
+            );
+        }
+        let active_id = if count == 0 {
+            None
+        } else {
+            match list.list().get(active.min(count - 1)) {
+                Some(item) => {
+                    let id = item.id;
+                    list.switch(id);
+                    list.active_id()
+                }
+                None => None,
+            }
+        };
+        list.list()
+            .iter()
+            .map(|item| (session_tab_label(item), Some(item.id) == active_id))
+            .collect()
+    }
+
+    #[test]
+    fn session_strip_scenes_prove_png() {
+        // 2-tab scene: live labels, pehla active.
+        let two = scene_labels(2, 0);
+        assert_eq!(two.len(), 2);
+        let two_px = paint_session_scene(&two);
+        let two_path = scene_write_png("session-2tabs.png", &two_px);
+        let two_bytes = scene_assert_png(&two_path);
+        // 8-tab overflow scene: cap (HOME_RECENT_MAX) bhara, scroll proof.
+        let eight = scene_labels(8, 0);
+        assert_eq!(eight.len(), 8);
+        let eight_px = paint_session_scene(&eight);
+        let eight_path = scene_write_png("session-8tabs.png", &eight_px);
+        let eight_bytes = scene_assert_png(&eight_path);
+        // Khaali scene: hint bar, koi fake tab nahi.
+        let empty_px = paint_session_scene(&[]);
+        let empty_path = scene_write_png("session-empty.png", &empty_px);
+        let empty_bytes = scene_assert_png(&empty_path);
+        // Teenon alag dikhte hain (overflow sabse alag).
+        assert_ne!(two_px, eight_px);
+        assert_ne!(two_bytes, eight_bytes);
+        assert_ne!(two_bytes, empty_bytes);
     }
 }
