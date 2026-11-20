@@ -3,6 +3,7 @@
 Tareekh: 2026-11-20
 Node: leaf-2.1 Sessions and Config Engineer
 Contract: PLAN.md C6 (Session, Workspace & AppSettings persistence with schema_version migration)
+Commit: c149590f3f9edefa4c17f6d150dc27f70e690fa3
 Scope: `crates/sessions/**` aur `checks/agyx-sess-h2/**` ONLY.
 
 ---
