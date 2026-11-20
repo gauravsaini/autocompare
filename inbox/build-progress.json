@@ -25,7 +25,7 @@
     "MEDIA-F-diff": "landed 3e3352b verified+pushed (strict: 203 green, fmt+clippy 0)",
     "MEDIA-F-compare": "landed fbcbc88 verified+pushed (strict: 110 green, clippy 0)",
     "SWARM-SESS-H": "landed fbbd347 verified+pushed (47 green, clippy 0, fmt clean, banned 0 non-test)",
-    "SWARM-REP-H": "rescued pid 59224 after UPSTREAM_ERROR (WIP preserved, OWNS reports)",
+    "SWARM-REP-H": "running pid 59224 (OWNS reports, rounds 1-6, round-1 PASS, WIP healthy 16 green)",
     "SWARM-GUI-T": "rescued pid 59576 (WIP round-1 PASS preserved, OWNS views/copy/take/gutter)",
     "SWARM-GUI-F": "rescued pid 59577 (WIP round-1 PASS + 2 PNGs preserved, OWNS tree/home)",
     "SWARM-DIFF-I": "running pid 54344 (OWNS diff text/merge/grammar/word, checks/agyx-diff-i)",
@@ -36,12 +36,12 @@
     "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)",
     "RUN-M-early2": "landed 635d9d9 pushed (10 cmds PASS, 3 PNGs valid, TOP-10 gaps)",
     "CRAFT-METHOD": "verified /tmp/craft-anything-probe (Study>Build>Check, clean-room engine, pure Rust)",
-    "SWARM-REP-H2": "running pid 80130 (OWNS reports, WIP extend, checks/agyx-rep-h)",
-    "SWARM-GUI-T2": "running pid 80189 (OWNS views/copy/take/gutter G1-G6, checks/gui-text-h)",
-    "SWARM-GUI-F2": "running pid 80231 (OWNS tree/home WIP preserve, checks/gui-folder-h)",
-    "SWARM-EXQ-M2": "running pid 80292 (OWNS app/theme/viewmodel/hex/table/screenshot G1-G10 shell, checks/gui-exq-m)",
+    "SWARM-GUI-T2": "running pid 80189 (OWNS views/copy/take/gutter, round-1 PASS, copy.rs +42 WIP)",
+    "SWARM-GUI-F2": "running pid 80231 (OWNS tree/home, round-1 FAIL->fixing, tree.rs +521 home +321 WIP, 2 PNGs)",
+    "SWARM-EXQ-M2": "running pid 80292 (OWNS app/theme/viewmodel/hex/table/screenshot, warming up)",
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "running opencode default-model binary early-2 (OWNS dist+checks/binary-early-2, no source)",
-    "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)"
+    "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
+    "ORCH-HEALTH": "2026-11-20 reports WIP 16 green banned 0 (read-only, no steal), REP-H2 duplicate killed (OWNS collision)"
   }
 }
