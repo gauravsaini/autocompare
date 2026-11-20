@@ -517,3 +517,9 @@
 1. **Table Narrow-720 Keys & Widths**: key-column widths from char metrics at 720px (avail 690-ish budget), numeric right-alignment via grid origin, header/body heights from TypoRole rhythm, and edge fixture `comparison/table-keys-720.json`.
 2. **Tests** (before → after): autocompare-gui 1011 green (including `exq_table9` narrow keys tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table9/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-home6 narrow plus cards
+
+1. **Home Narrow-720 Cards & CTA**: card min widths from space scale at 720px, CTA width from card inner width, toolbar button 24px symmetric hits, card grid wrap at narrow width, and edge fixture `comparison/home-narrow-720.json`.
+2. **Tests** (before → after): autocompare-gui 1011 green (including `exq_home6` narrow cards tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home6/**`, `TIMELINE.md`.
