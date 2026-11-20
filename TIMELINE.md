@@ -180,3 +180,12 @@
 1. **Folder Table Grid & Indent**: Beyond Compare parity for folder tree table: 3-column Grid (Name, Size, Modified) with `SECTION_GAP` (8.0px = `SPACE_SM`) col gap, row height derived from `TypoRole::Mono` line-height (15.6px + 2.0px padding = 17.6px, density-aware), indent per depth (40px depth 0 to 100px depth 5) while Size and Modified columns align at fixed column boundaries across all depths, and orphan rows dimmed (`"-"` dashes with `TypoRole::Small` / `is_weak() == true`) without color modifications. Edge fixture `comparison/folder-deep-nest.json` added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 888 → 893 passed, 0 failed; clippy clean on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-foldertable10/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-merge2 panes plus actions
+
+1. **Merge 3-Way Panes & Take/Copy Actions**: Beyond Compare parity for 3-way merge panes with 2x `SECTION_GAP` (8.0px = `SPACE_SM`) dividers, `MERGE_PANE_MIN_W` (130.0px) floor with horizontal scroll trigger at <406px (`MERGE_TOTAL_MIN_W`), single-source row height from `TypoRole::Mono.line_height_px()` (15.6px), and `SPACE_XS` (4.0px) hit-slop expansion for take and copy button hit targets (24px to 32px effective hit box). Edge fixture `comparison/merge-3way-narrow.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 896 → 903 passed, 0 failed; clippy clean; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: `crates/gui/src/{copy,take}.rs`, `checks/gui-exq-merge2/**`, `TIMELINE.md`.

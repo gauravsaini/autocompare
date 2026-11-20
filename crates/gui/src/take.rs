@@ -601,6 +601,126 @@ pub fn take_minimap_marks(rows: &[usize], total_rows: usize, height: f32) -> Vec
     out
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-MERGE2: 3-way merge pane widths, row height, and take button hit-slop (headless).
+// BC parity: Left / Base (Center) / Right 3-way split with SECTION_GAP dividers,
+// minimum pane floor so narrow views scroll instead of crushing panes,
+// TypoRole::Mono line-height row rhythm, and SPACE_XS hit-slop expansion for touch/mouse.
+// Geometry first, typography second, colors frozen.
+// ----------------------------------------------------------------------------
+
+/// Merge pane minimum width px: 130.0 floor so narrow windows scroll instead of crushing panes.
+pub const MERGE_PANE_MIN_W: f32 = 130.0;
+
+/// Merge pane divider gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const MERGE_SECTION_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+
+/// Merge 3-way panes minimum total width px: 3 * 130 + 2 * 8 = 406.0.
+pub const MERGE_TOTAL_MIN_W: f32 = MERGE_PANE_MIN_W * 3.0 + MERGE_SECTION_GAP * 2.0;
+
+/// Take button hit-slop per side px: one XS step ([`crate::theme::SPACE_XS`] = 4.0).
+pub const TAKE_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+
+/// 3-way pane widths for merge view: (left, base/center, right).
+/// Deducts 2x [`MERGE_SECTION_GAP`] from `avail_w`, splits into equal thirds,
+/// and clamps each pane to at least [`MERGE_PANE_MIN_W`].
+/// Any leftover after left and base is allocated to the right pane so total fills row.
+/// Pure; headless-tested.
+pub fn merge_three_pane_widths(avail_w: f32) -> (f32, f32, f32) {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return (MERGE_PANE_MIN_W, MERGE_PANE_MIN_W, MERGE_PANE_MIN_W);
+    }
+    let total = (avail_w - 2.0 * MERGE_SECTION_GAP).max(3.0 * MERGE_PANE_MIN_W);
+    let third = total / 3.0;
+    let left = third.max(MERGE_PANE_MIN_W);
+    let base = third.max(MERGE_PANE_MIN_W);
+    let right = (total - left - base).max(MERGE_PANE_MIN_W);
+    (left, base, right)
+}
+
+/// Alias for 3-way pane widths in merge view.
+pub fn three_pane_widths(avail_w: f32) -> (f32, f32, f32) {
+    merge_three_pane_widths(avail_w)
+}
+
+/// Whether 3-way merge panes require horizontal scroll at `avail_w`.
+/// True when `avail_w < MERGE_TOTAL_MIN_W` (406px).
+/// Non-finite values return false. Pure; headless-tested.
+pub fn merge_three_pane_needs_hscroll(avail_w: f32) -> bool {
+    if !avail_w.is_finite() {
+        return false;
+    }
+    avail_w < MERGE_TOTAL_MIN_W
+}
+
+/// Merge row height px: single source from TypoRole Mono line-height (15.6px).
+/// Pure; headless-tested.
+pub const fn merge_row_height() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// Alias for take row height px.
+pub const fn take_row_height() -> f32 {
+    merge_row_height()
+}
+
+/// Take button hit-slop size px (single source: `TAKE_BUTTON_HIT_SLOP`).
+pub const fn take_button_hit_slop() -> f32 {
+    TAKE_BUTTON_HIT_SLOP
+}
+
+/// Take button visual rect ko expand karta hai har taraf `TAKE_BUTTON_HIT_SLOP` (4px).
+/// Input visual `(x0, y0, x1, y1)` -> `(x0 - slop, y0 - slop, x1 + slop, y1 + slop)`.
+/// Non-finite ya invalid rects (`x0 > x1` ya `y0 > y1`) par `None`. Pure; headless-tested.
+pub fn take_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    let s = TAKE_BUTTON_HIT_SLOP;
+    Some((x0 - s, y0 - s, x1 + s, y1 + s))
+}
+
+/// Take button hit test: `(px, py)` point expanded hit rect ke andar hai ya nahi.
+/// Non-finite point ya invalid rect par false. Pure; headless-tested.
+pub fn take_button_hit_contains(x0: f32, y0: f32, x1: f32, y1: f32, px: f32, py: f32) -> bool {
+    if !px.is_finite() || !py.is_finite() {
+        return false;
+    }
+    match take_button_hit_rect(x0, y0, x1, y1) {
+        Some((hx0, hy0, hx1, hy1)) => px >= hx0 && px <= hx1 && py >= hy0 && py <= hy1,
+        None => false,
+    }
+}
+
+/// Take button hit height with slop px: `TAKE_BUTTON_H + 2 * TAKE_BUTTON_HIT_SLOP` (24 + 8 = 32).
+pub fn take_button_hit_height_with_slop() -> f32 {
+    TAKE_BUTTON_H + 2.0 * TAKE_BUTTON_HIT_SLOP
+}
+
+/// Take button hit rect for a given `TakeChoice` at position `(x, y)` (top-left).
+pub fn take_choice_button_hit_rect(
+    x: f32,
+    y: f32,
+    choice: TakeChoice,
+) -> Option<(f32, f32, f32, f32)> {
+    let w = take_choice_button_width(choice);
+    let h = TAKE_BUTTON_H;
+    take_button_hit_rect(x, y, x + w, y + h)
+}
+
+/// Take button hit rect for a given `TakeSide` at position `(x, y)` (top-left).
+pub fn take_side_button_hit_rect(x: f32, y: f32, side: TakeSide) -> Option<(f32, f32, f32, f32)> {
+    let w = take_side_button_width(side);
+    let h = TAKE_BUTTON_H;
+    take_button_hit_rect(x, y, x + w, y + h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -874,5 +994,172 @@ mod exq_guttercopy8_tests {
         assert_eq!(take_minimap_marks(&[1, 99], 4, 400.0), vec![(100.0, 200.0)]);
         assert!(take_minimap_marks(&[], 4, 400.0).is_empty());
         assert!(take_minimap_marks(&[0], 0, 400.0).is_empty());
+    }
+}
+
+#[cfg(test)]
+pub mod exq_merge2_tests {
+    use super::*;
+
+    #[test]
+    pub fn merge2_three_pane_widths() {
+        assert_eq!(MERGE_PANE_MIN_W, 130.0);
+        assert_eq!(MERGE_SECTION_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(MERGE_SECTION_GAP, 8.0);
+        assert_eq!(MERGE_TOTAL_MIN_W, 406.0);
+        assert_eq!(
+            MERGE_TOTAL_MIN_W,
+            MERGE_PANE_MIN_W * 3.0 + MERGE_SECTION_GAP * 2.0
+        );
+
+        // Wide 960px: equal thirds minus two section gaps (944 / 3 = 314.66666...)
+        let (left, base, right) = merge_three_pane_widths(960.0);
+        assert!((left - 314.666656).abs() < 0.01);
+        assert!((base - 314.666656).abs() < 0.01);
+        assert!((left + base + right + 2.0 * MERGE_SECTION_GAP - 960.0).abs() < 0.01);
+        assert!(!merge_three_pane_needs_hscroll(960.0));
+
+        // Narrow 360px: each pane clamped to 130px floor, needs hscroll
+        let (n_left, n_base, n_right) = merge_three_pane_widths(360.0);
+        assert_eq!(n_left, MERGE_PANE_MIN_W);
+        assert_eq!(n_base, MERGE_PANE_MIN_W);
+        assert_eq!(n_right, MERGE_PANE_MIN_W);
+        assert!(merge_three_pane_needs_hscroll(360.0));
+
+        // Boundary tests around 406.0
+        assert!(!merge_three_pane_needs_hscroll(406.0));
+        assert!(merge_three_pane_needs_hscroll(405.9));
+
+        // Degenerate / non-finite inputs
+        assert_eq!(
+            merge_three_pane_widths(0.0),
+            (MERGE_PANE_MIN_W, MERGE_PANE_MIN_W, MERGE_PANE_MIN_W)
+        );
+        assert_eq!(
+            merge_three_pane_widths(-50.0),
+            (MERGE_PANE_MIN_W, MERGE_PANE_MIN_W, MERGE_PANE_MIN_W)
+        );
+        assert_eq!(
+            merge_three_pane_widths(f32::NAN),
+            (MERGE_PANE_MIN_W, MERGE_PANE_MIN_W, MERGE_PANE_MIN_W)
+        );
+        assert!(!merge_three_pane_needs_hscroll(f32::NAN));
+        assert!(!merge_three_pane_needs_hscroll(f32::INFINITY));
+
+        // three_pane_widths alias consistency
+        assert_eq!(three_pane_widths(960.0), merge_three_pane_widths(960.0));
+    }
+
+    #[test]
+    pub fn merge2_row_height() {
+        assert_eq!(
+            merge_row_height(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((merge_row_height() - 15.6).abs() < 0.01);
+        assert_eq!(take_row_height(), merge_row_height());
+    }
+
+    #[test]
+    pub fn merge2_hit_slop() {
+        assert_eq!(TAKE_BUTTON_HIT_SLOP, crate::theme::SPACE_XS);
+        assert_eq!(TAKE_BUTTON_HIT_SLOP, 4.0);
+        assert_eq!(take_button_hit_slop(), 4.0);
+        assert_eq!(take_button_hit_height_with_slop(), 32.0);
+
+        // Hit rect expansion: (10, 20, 90, 44) -> (6, 16, 94, 48)
+        let visual = (10.0, 20.0, 90.0, 44.0);
+        let hit = take_button_hit_rect(visual.0, visual.1, visual.2, visual.3);
+        assert_eq!(hit, Some((6.0, 16.0, 94.0, 48.0)));
+
+        // Points inside visual
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 50.0, 30.0));
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 10.0, 20.0));
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 90.0, 44.0));
+
+        // Points in slop region (outside visual, inside hit)
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 8.0, 18.0));
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 92.0, 46.0));
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 6.0, 16.0));
+        assert!(take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 94.0, 48.0));
+
+        // Points outside slop
+        assert!(!take_button_hit_contains(10.0, 20.0, 90.0, 44.0, 5.0, 16.0));
+        assert!(!take_button_hit_contains(
+            10.0, 20.0, 90.0, 44.0, 95.0, 48.0
+        ));
+        assert!(!take_button_hit_contains(
+            10.0, 20.0, 90.0, 44.0, 50.0, 15.0
+        ));
+        assert!(!take_button_hit_contains(
+            10.0, 20.0, 90.0, 44.0, 50.0, 49.0
+        ));
+
+        // Choice and side helpers
+        let choice_hit = take_choice_button_hit_rect(0.0, 0.0, TakeChoice::Right);
+        assert!(choice_hit.is_some());
+        if let Some((cx0, cy0, cx1, cy1)) = choice_hit {
+            assert_eq!(cx0, -4.0);
+            assert_eq!(cy0, -4.0);
+            assert_eq!(cx1, 86.0 + 4.0);
+            assert_eq!(cy1, 24.0 + 4.0);
+        }
+
+        let side_hit = take_side_button_hit_rect(0.0, 0.0, TakeSide::Center);
+        assert!(side_hit.is_some());
+        if let Some((sx0, sy0, sx1, sy1)) = side_hit {
+            assert_eq!(sx0, -4.0);
+            assert_eq!(sy0, -4.0);
+            assert_eq!(sx1, 93.0 + 4.0);
+            assert_eq!(sy1, 24.0 + 4.0);
+        }
+
+        // Invalid rects & non-finite checks
+        assert_eq!(take_button_hit_rect(10.0, 20.0, 5.0, 44.0), None);
+        assert_eq!(take_button_hit_rect(10.0, 20.0, 90.0, 15.0), None);
+        assert_eq!(take_button_hit_rect(f32::NAN, 20.0, 90.0, 44.0), None);
+        assert!(!take_button_hit_contains(
+            10.0,
+            20.0,
+            90.0,
+            44.0,
+            f32::NAN,
+            30.0
+        ));
+    }
+
+    #[test]
+    pub fn merge2_narrow_fixture() {
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-merge2/comparison/merge-3way-narrow.json");
+        assert!(fixture_raw.contains("\"name\":\"merge-3way-narrow\""));
+        assert!(fixture_raw.contains("\"avail_w\":360.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\":true"));
+        assert!(fixture_raw.contains("\"pane_min_w\":130.0"));
+        assert!(fixture_raw.contains("\"section_gap\":8.0"));
+        assert!(fixture_raw.contains("\"total_min_w\":406.0"));
+        assert!(fixture_raw.contains("\"row_height\":15.6"));
+        assert!(fixture_raw.contains("\"take_button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"wide_avail_w\":960.0"));
+        assert!(fixture_raw.contains("\"wide_needs_hscroll\":false"));
+
+        // Match headless calculations against fixture numbers
+        assert_eq!(MERGE_PANE_MIN_W, 130.0);
+        assert_eq!(MERGE_SECTION_GAP, 8.0);
+        assert_eq!(MERGE_TOTAL_MIN_W, 406.0);
+        assert!((merge_row_height() - 15.6).abs() < 0.01);
+        assert_eq!(TAKE_BUTTON_HIT_SLOP, 4.0);
+
+        // Narrow 360.0 from fixture
+        assert!(merge_three_pane_needs_hscroll(360.0));
+        let (l360, b360, r360) = merge_three_pane_widths(360.0);
+        assert_eq!(l360, 130.0);
+        assert_eq!(b360, 130.0);
+        assert_eq!(r360, 130.0);
+
+        // Wide 960.0 from fixture
+        assert!(!merge_three_pane_needs_hscroll(960.0));
+        let (lw, _, _) = merge_three_pane_widths(960.0);
+        assert!((lw - 314.666656).abs() < 0.001);
     }
 }
