@@ -30,7 +30,7 @@
     "SWARM-GUI-F": "rescued pid 59577 (WIP round-1 PASS + 2 PNGs preserved, OWNS tree/home)",
     "SWARM-DIFF-I": "running pid 54344 (OWNS diff text/merge/grammar/word, checks/agyx-diff-i)",
     "SWARM-VCMP-J": "running pid 54345 (OWNS vfs+compare folder/sync/merge/jobs, checks/agyx-vcmp-j)",
-    "SWARM-CLI-K": "running pid 54346 (OWNS cli, checks/agyx-cli-k)",
+    "SWARM-CLI-K": "landed edc5e4c UNPUSHED strict-verify: tests 27 green, banned 0, fmt FAIL (2 import-order), clippy blocked by pre-existing diff dead_code (DIFF-I owns); owner exited, fmt-fix opencode agent dispatched /tmp/sess-cli-fmt.log, push on hold till fix lands",
     "SWARM-EXQ-L": "landed e83b918 verified+pushed (682 green, clippy 0, fmt clean, banned 0, colors 0 code)",
     "SWARM-RUN-M": "running opencode default-model run-only (OWNS checks/early-feedback-2, no code edits)",
     "ORCH-LOCALRUN": "done 2026-11-20 (cli --help 10 cmds PASS, gui screenshot 960x600 PNG valid, /tmp/orch-gui-smoke.png)",
@@ -42,10 +42,10 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 WIP +1846/-69 19 files (NEW text_diff +63 DIFF-I active, views +169 GUI-T2; tree +558 home +329 still biggest); 7 CPUs advancing, no-touch",
+    "ORCH-HEALTH": "2026-11-20 WIP +2440/-93 19 files (reports snapshot +493 REP-H active, text_diff+merge GUI WIP steady); 6 CPUs advancing, no-touch",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
-    "ORCH-POLL-BACKOFF": "level 1 (no landing 4+ polls: poll interval 2x, ledger only on landing/new-round/WIP-delta>100, no noisy commits)"
+    "ORCH-POLL-BACKOFF": "level 1 holding (ledger commit on WIP-delta>100 met: +589 since last)"
   }
 }
