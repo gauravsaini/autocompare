@@ -42,6 +42,6 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "running opencode default-model binary early-2 (OWNS dist+checks/binary-early-2, no source)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 reports WIP 16 green banned 0 (read-only, no steal), REP-H2 duplicate killed (OWNS collision)"
+    "ORCH-HEALTH": "2026-11-20 gui WIP 690 green 1 red: tree::folderfilter_tests::drill_down_scoped_folder_tree_filtering (tree.rs:4164 left 0 right 3) \u2014 GUI-F2 OWNS, agent live, orchestrator no-touch"
   }
 }
