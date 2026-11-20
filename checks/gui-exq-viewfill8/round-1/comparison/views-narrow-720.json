@@ -1,0 +1,22 @@
+{
+  "assertions": {
+    "arrow_cx_720": 360.0,
+    "center_gutter_w": 20.0,
+    "column_x_720": 350.0,
+    "file_bar_h": 15.2,
+    "hit_band_720": [
+      348.0,
+      372.0
+    ],
+    "linenum_col_1digit": 16.0,
+    "pane_left_720": 342.0,
+    "pane_right_720": 342.0,
+    "total_w_720": 720.0
+  },
+  "description": "Wave viewfill8 narrow 720: side-by-side dual panes 342/342 with 20px center gutter (SPACE LG+XS) plus 8px air per side = 720 total; file-bar 15.2px thin chrome (Small 13.2 + ROW_PAD 2.0, not 28px toolbar); center column x 350 (342 + 8 gap), arrow cx 360 canvas middle, hit band 348..372 symmetric; 1-digit linenum col 16px fits in 342 left pane (char metrics order).",
+  "inputs": {
+    "avail_w": 720.0,
+    "layout": "SideBySide",
+    "row_height": 17.6
+  }
+}

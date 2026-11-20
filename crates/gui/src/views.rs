@@ -4875,6 +4875,68 @@ pub fn text_inline_960_total_w() -> f32 {
     left + right + text_center_gutter_width() + 2.0 * SECTION_GAP
 }
 
+/// Narrow-720 dual-pane pair (px): 720 canvas par center connector (20)
+/// + 2 x [`SECTION_GAP`] air ghata kar bacha aadha-aadha = 342/342
+/// ([`text_pane_pair_widths`] reuse, SPACE scale: LG+XS center + SM air).
+/// [`TEXT_STACK_BREAKPOINT_W`] (720) par abhi bhi SideBySide hai
+/// (`< 720` hi stacked), isliye do panes + 20px center ek row me.
+/// Fixture `comparison/views-narrow-720.json` isi ko lock karti hai.
+/// Pure; unit-tested.
+pub fn text_narrow_720_pane_pair() -> (f32, f32) {
+    text_pane_pair_widths(TEXT_STACK_BREAKPOINT_W)
+}
+
+/// Narrow-720 row alignment total (px): 342 + 342 + 20 + 2 * 8 = 720,
+/// so left/right rows start and end on the same beat at 720px wide.
+/// [`text_inline_960_total_w`] precedent, sirf avail 720. Pure; unit-tested.
+pub fn text_narrow_720_total_w() -> f32 {
+    let (left, right) = text_narrow_720_pane_pair();
+    left + right + text_center_gutter_width() + 2.0 * SECTION_GAP
+}
+
+/// File-bar height (px): thin chrome bar from [`TypoRole`] chrome rhythm
+/// ([`chrome_status_role`] == Small 11 @ 1.2 = 13.2) plus one [`ROW_PAD`]
+/// (15.2) — BC per-pane file bar + metadata row, not the 28px [`HEADER_H`]
+/// toolbar. [`text_pane_status_height_px`] parity (ponytail reuse, koi
+/// naya size nahi). Paint file-bar row isi par hai. Pure; unit-tested.
+pub fn text_file_bar_height_px() -> f32 {
+    text_pane_status_height_px()
+}
+
+/// Center gutter column x (px) for `avail`: left pane width plus one
+/// [`SECTION_GAP`] air — gutter column wahi khulti hai jahan left pane
+/// khatm hota hai. Non-finite ya non-positive `avail` par
+/// [`MIN_HALF`] + gap floor (paint kabhi NaN na khaye). Pure; unit-tested.
+pub fn text_center_column_x_for_avail(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return MIN_HALF + text_center_divider_gap_px();
+    }
+    text_pane_pair_widths(avail).0 + text_center_divider_gap_px()
+}
+
+/// Center gutter column x at 720px wide: 342 + 8 = 350. Char metrics se
+/// pehle gutter text isi column ke andar rehta hai (1-digit linenum
+/// 16px < 342 left pane; `gutter_linenum_text_x` right edge 26px < 350).
+/// Fixture `comparison/views-narrow-720.json` locks this. Pure; unit-tested.
+pub fn text_center_column_x_720() -> f32 {
+    text_center_column_x_for_avail(TEXT_STACK_BREAKPOINT_W)
+}
+
+/// Center arrow cx at 720px wide: column x + gutter/2 = 350 + 10 = 360,
+/// canvas middle. Marker 16px box isi par centered
+/// ([`text_center_marker_inset`] = 2/side). Pure; unit-tested.
+pub fn text_center_arrow_cx_720() -> f32 {
+    text_center_column_x_720() + text_center_gutter_width() / 2.0
+}
+
+/// Center gutter hit band at 720px wide: 350..370 column slop samet
+/// 348..372, canvas middle 360 ke around symmetric. Pure; unit-tested.
+pub fn text_center_hit_band_720() -> (f32, f32) {
+    let slop = text_center_hit_slop_px();
+    let lo = text_center_column_x_720();
+    (lo - slop, lo + text_center_gutter_width() + slop)
+}
+
 /// Over-under (stacked vertical) pane widths (px): narrow layout me dono
 /// panes full-width stack hote hain — ek hi [`text_stacked_pane_width`]
 /// budget dono ko milta hai isliye pair hamesha equal rehta hai. Non-finite
@@ -8515,6 +8577,56 @@ mod tests {
         assert!(selective_row_is_plain(TextRowKind::Equal));
         assert!(!selective_row_is_plain(TextRowKind::Deleted));
         assert!(!selective_row_is_plain(TextRowKind::Inserted));
+    }
+
+    #[test]
+    fn viewfill8_narrow_720_dual_panes_plus_filebar() {
+        // Mirrors checks/gui-exq-viewfill8/round-1/comparison/views-narrow-720.json:
+        // narrow-720 dual-pane widths from space scale (two panes + 20px
+        // center), file-bar height from TypoRole chrome rhythm, center
+        // gutter column x from char metrics. Geometry FIRST, typography
+        // SECOND (chrome/Mono locks), colors frozen.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-viewfill8/round-1/comparison/views-narrow-720.json"
+        );
+        assert!(fixture_raw.contains("\"pane_left_720\": 342.0"));
+        assert!(fixture_raw.contains("\"pane_right_720\": 342.0"));
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"column_x_720\": 350.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_720\": 360.0"));
+        assert!(fixture_raw.contains("\"file_bar_h\": 15.2"));
+        // Dual-pane widths from SPACE scale at 720: 342/342 + 20 + 2*8 = 720.
+        assert_eq!(
+            TEXT_CENTER_GUTTER_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(text_narrow_720_pane_pair(), (342.0, 342.0));
+        assert_eq!(text_narrow_720_pane_pair(), text_pane_pair_widths(720.0));
+        assert!((text_narrow_720_total_w() - 720.0).abs() < 0.001);
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        // File-bar height from TypoRole chrome rhythm (thin, not 28px toolbar).
+        assert_eq!(chrome_status_role(), TypoRole::Small);
+        assert!((text_file_bar_height_px() - 15.2).abs() < 0.01);
+        assert_eq!(text_file_bar_height_px(), text_pane_status_height_px());
+        assert!(text_file_bar_height_px() < HEADER_H);
+        // Center gutter column x: 342 + 8 = 350, cx 360, hit 348..372 symmetric.
+        assert_eq!(text_center_column_x_720(), 350.0);
+        assert_eq!(
+            text_center_column_x_720(),
+            text_center_column_x_for_avail(720.0)
+        );
+        assert!((text_center_arrow_cx_720() - 360.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_720(), (348.0, 372.0));
+        let (lo, hi) = text_center_hit_band_720();
+        assert!(((360.0 - lo) - (hi - 360.0)).abs() < 0.001);
+        // Char metrics: 1-digit linenum col 16px fits in 342 left pane,
+        // gutter text right edge (26px) stays left of column 350.
+        assert_eq!(text_gutter_number_width(9, true), 16.0);
+        assert!(text_gutter_number_width(9, true) < text_narrow_720_pane_pair().0);
+        assert!((text8_linenum_width_px(1, 7.0) - 15.0).abs() < 0.001);
+        assert!(text8_linenum_width_px(1, 7.0) < text_narrow_720_pane_pair().0);
+        assert!(!text_center_column_x_for_avail(f32::NAN).is_nan());
     }
 
     #[test]
