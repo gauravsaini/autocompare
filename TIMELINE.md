@@ -374,3 +374,9 @@
 1. **Gutter Markers & Tall File at 1200px**: change markers with symmetric hit-slop in center gutter, tall-file fixture lock, marker placement from space scale.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter7/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-text9 rows plus highlight
+
+1. **Text Rows & Highlight at 960px**: uniform Mono row heights with over/under fixtures, full-width changed-row highlight, edge-rows uniformity lock.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text9/**`, `TIMELINE.md`.
