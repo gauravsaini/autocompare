@@ -70,6 +70,6 @@
     "EXQ3B-fix": "landed 5870ea7 pushed (strict: 712 green any-CWD, fmt clean, clippy -D warnings clean, banned 0, dead_code 0, clippy-allow 0 non-test; FindState::next->advance, HOME_SHOWS_PATH_PICKER const-assert removed)",
     "LOCALRUN-orch2": "landed (cli 10 cmds, gui 960x600 PASS, text smoke exit1)",
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
-    "LOOP-orch1": "round-orch-1 RESULT FAIL honest: gui PASS, cli FAIL blocked by sessrep E0432; rerun on fix"
+    "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace"
   }
 }
