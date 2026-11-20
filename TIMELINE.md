@@ -668,3 +668,9 @@
 1. **Visible Live Gutter (two half-fixes)**: (a) DARK_TRACK 32->48 in theme.rs (delta vs 27 pane bg goes 5->21/255, no new hue; shared track_for also lifts hex-minimap + merge-overview tracks), (b) both live hunk-head marker sites in paint_text_body switch Button::small().frame(false) to allocate_exact_size + painter().text in CHANGED_FG (255,235,160) with same hover + click behavior. First-ever LIVE-PIXEL GATE: PASS (unselected track median brightness 48.0, 100 yellow marker pixels, crop live-crop.png).
 2. **Tests** (before -> after): autocompare-gui 1046 green (including gutter23_live_track_contrast); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; fixture pxdiff ABANDONED honestly (egui-only paint, byte-identical before/after); colors frozen at 33.
 3. **Files changed**: crates/gui/src/views.rs, crates/gui/src/theme.rs, checks/gui-exq-gutter23/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-filebar24 fixture file-bar
+
+1. **Fixture File-Bar (extends status20 upward)**: screenshot.rs file-bar now paints per-pane rows tracking true pane widths — path field (ellipsis-clipped) + Browse refit inside each bar + metadata segment (timestamp | bytes | format word, "-" fallback). Wide bars (12,76,448,36)/(488,76,448,36), narrow-720 (12,76,340,36)/(356,76,340,36). Shot15 gutter/markers, shot18 chrome, shot19 typo, toolbar21 glyphs, status20 strips intact. pxdiff vs baseline: 12958 of 576000 DIFFERENT, bbox (12,76)-(952,111) file-bar band only.
+2. **Tests** (before -> after): autocompare-gui 1047 green (including filebar24_narrow720_no_overlap); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS; colors frozen at 33.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-filebar24/**, TIMELINE.md.
