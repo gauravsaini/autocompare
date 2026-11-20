@@ -1,0 +1,36 @@
+{
+  "name": "text-inline-960",
+  "intent": "Text-side round-6 at 960px wide: intra-line span pads symmetric via SPACE_XS (4.0 / 2.0), span underline weight via TYPO tokens (1.0 / 2.0), filler row height locked to Mono line-height (15.6), left/right row alignment at 960px wide (448/448 pair), spans clamp to char boundaries without mid-word truncation.",
+  "canvas_w": 960.0,
+  "canvas_h": 600.0,
+  "panes_h": 436.0,
+  "center_gutter_px": 48.0,
+  "pane_pair_px": [
+    448.0,
+    448.0
+  ],
+  "row_alignment_total_w": 960.0,
+  "intra_pad_px": 4.0,
+  "intra_side_pad_px": 2.0,
+  "span_underline_w": 1.0,
+  "accent_span_underline_w": 2.0,
+  "filler_row_height": 15.6,
+  "mono_line_height": 15.6,
+  "row_height": 17.6,
+  "hatch_step": 4.0,
+  "sample_row": {
+    "left": "    let content = read_to_string(path)?;",
+    "right": "    let content = std::fs::read_to_string(path)?;",
+    "accent_b": [
+      [18, 27]
+    ],
+    "clamped_span": [18, 27],
+    "word": "std::fs::"
+  },
+  "assertions": {
+    "intra_gaps_symmetric": true,
+    "filler_locked_to_mono": true,
+    "row_alignment_at_960": true,
+    "spans_clamped_char_word": true
+  }
+}

@@ -38,7 +38,8 @@ use crate::home::{
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
     ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE,
-    TYPO_WRAP_PANE_CHARS, TypoRole, blue_for, dim_for, green_for, red_for, track_for,
+    TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole, blue_for, dim_for,
+    green_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -4005,6 +4006,20 @@ pub const INTRA_SPAN_UNDERLINE_W: f32 = 1.0;
 /// size change. Pure token; unit-tested.
 pub const ACCENT_SPAN_UNDERLINE_W: f32 = 2.0 * INTRA_SPAN_UNDERLINE_W;
 
+/// Span underline width for a TypoRole weight step: regular and below
+/// paint the 1px find line ([`INTRA_SPAN_UNDERLINE_W`]), semibold and
+/// above paint the heavier 2px accent line
+/// ([`ACCENT_SPAN_UNDERLINE_W`]). No new size — the two existing widths
+/// reused via [`TYPO_WEIGHT_REGULAR`]/[`TYPO_WEIGHT_SEMIBOLD`]. Pure;
+/// unit-tested.
+pub fn span_underline_for_weight(weight: u16) -> f32 {
+    if weight >= TYPO_WEIGHT_SEMIBOLD {
+        ACCENT_SPAN_UNDERLINE_W
+    } else {
+        INTRA_SPAN_UNDERLINE_W
+    }
+}
+
 /// Intra-line span breathing pad (px): one XS step
 /// ([`crate::theme::SPACE_XS`] reuse, 4.0). Changed-word blocks keep this
 /// total air split equally on both sides (2 + 2) so the heavier 2px
@@ -4069,6 +4084,33 @@ pub fn changed_row_word_spans(row: &TextRow) -> WordSpanPair<'_> {
     }
 }
 
+/// One intra-line span clamped to char boundaries: `[start, end)`
+/// clipped to the char-count limit (`line_len` capped by `pane`),
+/// empties dropped. Indices are already char offsets (model
+/// `inline_diff` contract), so the clamp never splits a UTF-8 char and
+/// never re-splits a refined word span mid-range — a span fully inside
+/// the limit survives whole. Returns `None` when nothing survives.
+/// Pure; unit-tested.
+pub fn clamp_intra_span(
+    line_len: usize,
+    pane: usize,
+    start: usize,
+    end: usize,
+) -> Option<(usize, usize)> {
+    if end <= start {
+        return None;
+    }
+    let limit = line_len.min(pane);
+    if limit == 0 || start >= limit {
+        return None;
+    }
+    let end = end.min(limit);
+    if end <= start {
+        return None;
+    }
+    Some((start, end))
+}
+
 /// Normalized intra-line spans: sort + clamp + merge, taaki paint
 /// rects chipke hue aayen (koi overlap/gap/overflow nahi).
 /// `line_len` line ke chars hain, `pane` paint width hai — limit dono
@@ -4123,7 +4165,7 @@ pub fn span_text_format(font_id: FontId, fg: Color32, bg: Color32, accented: boo
     let mut fmt = TextFormat::simple(font_id, color);
     fmt.background = background;
     if accented {
-        fmt.underline = Stroke::new(INTRA_SPAN_UNDERLINE_W, color);
+        fmt.underline = Stroke::new(span_underline_for_weight(TYPO_WEIGHT_REGULAR), color);
     }
     fmt
 }
@@ -4266,7 +4308,7 @@ pub fn find_hit_format(font_id: FontId, fg: Color32, bg: Color32, is_current: bo
     } else {
         let mut fmt = TextFormat::simple(font_id, fg);
         fmt.background = bg;
-        fmt.underline = Stroke::new(INTRA_SPAN_UNDERLINE_W, fg);
+        fmt.underline = Stroke::new(span_underline_for_weight(TYPO_WEIGHT_REGULAR), fg);
         fmt
     }
 }
@@ -4573,7 +4615,7 @@ pub fn selective_span_format(
     if accented {
         let mut fmt = TextFormat::simple(font_id, CHANGED_FG);
         fmt.background = CHANGED_BG;
-        fmt.underline = Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG);
+        fmt.underline = Stroke::new(span_underline_for_weight(TYPO_WEIGHT_SEMIBOLD), CHANGED_FG);
         fmt
     } else {
         span_text_format(font_id, fg, bg, false)
@@ -4621,6 +4663,15 @@ pub fn filler_pad_width(pane: usize, line_len: usize) -> usize {
 /// nahi. Pure; unit-tested. Live paint [`paint_filler_hatch`] reuse karta hai.
 pub fn filler_hatch_step() -> f32 {
     TIGHT_GAP
+}
+
+/// Filler row height (px): locked to the Mono line-height px
+/// ([`TypoRole::Mono`] = 12.0 @ 1.30 = 15.6) — filler rows carry hatch,
+/// not text, so no [`ROW_PAD`]. Left/right filler rows share this beat,
+/// keeping both panes aligned row-for-row at any width. Pure;
+/// unit-tested.
+pub fn filler_row_height() -> f32 {
+    TypoRole::Mono.line_height_px()
 }
 
 /// Hatch stripes across a filler of `width` px: step-spaced ticks.
@@ -4738,6 +4789,16 @@ pub fn wrap_marker_column(gutter_chars: usize) -> usize {
 /// `comparison/text-wide-960.json` isi ko lock karti hai. Pure; unit-tested.
 pub fn text_wide_960_pane_pair() -> (f32, f32) {
     text_pane_pair_widths(960.0)
+}
+
+/// Inline-960 row alignment total (px): pane pair plus center connector
+/// plus one [`SECTION_GAP`] air per side — 448 + 448 + 48 + 2 * 8 = 960,
+/// so left/right rows start and end on the same beat at 960px wide.
+/// Fixture `comparison/text-inline-960.json` locks this. Pure;
+/// unit-tested.
+pub fn text_inline_960_total_w() -> f32 {
+    let (left, right) = text_pane_pair_widths(960.0);
+    left + right + text_center_gutter_width() + 2.0 * SECTION_GAP
 }
 
 /// Segmented pane status: selected row ke per-side line numbers —
@@ -7774,6 +7835,65 @@ mod tests {
         assert!(!text_center_hunk_head(&rows, 1));
         assert!(!text_center_hunk_head(&rows, 2));
         assert!(text_center_hunk_head(&rows, 3));
+    }
+
+    #[test]
+    fn text6_inline_960_spans_plus_filler() {
+        // Mirrors checks/gui-exq-text6/round-1/comparison/text-inline-960.json:
+        // intra-line span pads symmetric via SPACE_XS, span underline
+        // weight via TYPO tokens, filler row height locked to Mono
+        // line-height, left/right row alignment at 960px wide, spans
+        // clamped to char boundaries without mid-word truncation.
+        // Geometry FIRST, typography SECOND, colors frozen.
+        // Intra-line span pads: one XS step total, half per side.
+        assert_eq!(intra_span_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(intra_span_pad_px(), 4.0);
+        assert_eq!(intra_span_side_pad_px(), 2.0);
+        assert!(intra_span_gaps_symmetric());
+        assert_eq!(intra_segment_leading_gap(true), 0.0);
+        assert_eq!(intra_segment_leading_gap(false), 2.0);
+        // Span underline weight via TYPO tokens: regular 1px, semibold 2px.
+        assert_eq!(INTRA_SPAN_UNDERLINE_W, 1.0);
+        assert_eq!(ACCENT_SPAN_UNDERLINE_W, 2.0);
+        assert_eq!(
+            span_underline_for_weight(crate::theme::TYPO_WEIGHT_REGULAR),
+            1.0
+        );
+        assert_eq!(
+            span_underline_for_weight(crate::theme::TYPO_WEIGHT_SEMIBOLD),
+            2.0
+        );
+        // Filler row height locked to Mono line-height (15.6), no ROW_PAD.
+        assert!((filler_row_height() - TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert!((filler_row_height() - 15.6).abs() < 0.01);
+        assert!((row_height_for_line(TypoRole::Mono.line_height_px()) - 17.6).abs() < 0.01);
+        // Left/right row alignment at 960px wide: 448 + 448 + 48 + 16.
+        assert_eq!(text_pane_pair_widths(960.0), (448.0, 448.0));
+        assert!((text_inline_960_total_w() - 960.0).abs() < 0.001);
+        // Fixture sample: refined span (18, 27) == "std::fs::" survives
+        // char-boundary clamp whole, never truncated mid-word.
+        let left = "    let content = read_to_string(path)?;";
+        let right = "    let content = std::fs::read_to_string(path)?;";
+        let line_len = right.chars().count();
+        assert_eq!(
+            normalize_intra_spans(&[(18, 27)], line_len, 80),
+            vec![(18, 27)]
+        );
+        assert_eq!(clamp_intra_span(line_len, 80, 18, 27), Some((18, 27)));
+        let word: String = right.chars().skip(18).take(9).collect();
+        assert_eq!(word, "std::fs::");
+        assert_eq!(clamp_intra_span(line_len, 80, 27, 18), None);
+        assert_eq!(clamp_intra_span(0, 80, 0, 1), None);
+        // Char boundaries: multibyte chars never split by the clamp.
+        let multi = "aé中b";
+        assert_eq!(multi.chars().count(), 4);
+        assert_eq!(clamp_intra_span(4, 10, 0, 10), Some((0, 4)));
+        assert_eq!(clamp_intra_span(4, 2, 0, 10), Some((0, 2)));
+        assert_eq!(clamp_intra_span(4, 10, 4, 10), None);
+        // Pane segments keep the refined span as one accented block.
+        let segs = pane_segments(right, &[(18, 27)], 80);
+        assert!(segs.iter().any(|(t, a)| *a && t == "std::fs::"));
+        assert_eq!(right.chars().count() - left.chars().count(), 9);
     }
 
     #[test]
