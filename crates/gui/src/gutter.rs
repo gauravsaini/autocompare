@@ -425,6 +425,49 @@ pub fn gutter_ruler_hit_test(y: f32, height: f32, total_rows: usize) -> Option<u
     Some(row.min(total_rows.saturating_sub(1)))
 }
 
+// ----------------------------------------------------------------------------
+// Viewport marker geometry (headless; paint adoption `views.rs` owner ke paas).
+// Ruler par visible scroll window ka band: top_row..top+visible map hota
+// hai [0,height] me. Min-height floor taaki chhota window bhi dikhe.
+// ----------------------------------------------------------------------------
+
+/// Viewport marker min height px: one XS step (ruler segment floor parity).
+pub const GUTTER_VIEWPORT_MIN_H: f32 = crate::theme::SPACE_XS;
+
+/// Visible scroll window ka ruler band `(y0, y1)`: `top_row` se
+/// `top_row + visible_rows` tak `[0.0, total]` clamp karke map.
+/// Band min-height floor rakhta hai (neeche se katkar, height ke andar).
+/// `None`: khali totals, non-positive/non-finite height, ya window khaali.
+/// Pure; unit-tested.
+pub fn gutter_viewport_rect(
+    total_rows: usize,
+    height: f32,
+    top_row: usize,
+    visible_rows: usize,
+) -> Option<(f32, f32)> {
+    if total_rows == 0 || visible_rows == 0 {
+        return None;
+    }
+    if !height.is_finite() || height <= 0.0 {
+        return None;
+    }
+    let total_f = total_rows as f32;
+    let top = top_row.min(total_rows) as f32;
+    let bottom = top_row.saturating_add(visible_rows).min(total_rows) as f32;
+    if bottom <= top {
+        return None;
+    }
+    let y0 = (top / total_f) * height;
+    let mut y1 = (bottom / total_f) * height;
+    if y1 < y0 + GUTTER_VIEWPORT_MIN_H {
+        y1 = (y0 + GUTTER_VIEWPORT_MIN_H).min(height);
+    }
+    if !y0.is_finite() || !y1.is_finite() || y0 < 0.0 || y1 > height || y0 >= y1 {
+        return None;
+    }
+    Some((y0, y1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -830,5 +873,31 @@ mod tests {
         assert_eq!(gutter_ruler_hit_test(150.0, 100.0, 10), Some(9));
         assert_eq!(gutter_ruler_hit_test(-5.0, 100.0, 10), None);
         assert_eq!(gutter_ruler_hit_test(10.0, 0.0, 10), None);
+    }
+
+    #[test]
+    fn viewport_rect_maps_visible_window_to_ruler_band() {
+        // 4 rows over 400px: rows 1..3 own y 100..300.
+        assert_eq!(gutter_viewport_rect(4, 400.0, 1, 2), Some((100.0, 300.0)));
+        // Full file maps the whole ruler.
+        assert_eq!(gutter_viewport_rect(4, 400.0, 0, 4), Some((0.0, 400.0)));
+        // Over-long window clamps to the file end.
+        assert_eq!(gutter_viewport_rect(4, 400.0, 2, 100), Some((200.0, 400.0)));
+    }
+
+    #[test]
+    fn viewport_rect_floors_tiny_windows_and_rejects_bad_input() {
+        // 1000 rows over 400px: one row owns 0.4px, floor lifts to 4px.
+        assert_eq!(
+            gutter_viewport_rect(1000, 400.0, 500, 1),
+            Some((200.0, 204.0))
+        );
+        assert_eq!(gutter_viewport_rect(0, 400.0, 0, 10), None);
+        assert_eq!(gutter_viewport_rect(4, 400.0, 0, 0), None);
+        assert_eq!(gutter_viewport_rect(4, 0.0, 0, 2), None);
+        assert_eq!(gutter_viewport_rect(4, f32::NAN, 0, 2), None);
+        assert_eq!(gutter_viewport_rect(4, 400.0, 99, 2), None);
+        assert_eq!(GUTTER_VIEWPORT_MIN_H, 4.0);
+        assert_eq!(GUTTER_VIEWPORT_MIN_H, crate::theme::SPACE_XS);
     }
 }

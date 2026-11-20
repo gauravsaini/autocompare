@@ -200,6 +200,43 @@ pub fn is_conflict_marker(line: &str) -> bool {
         || line.starts_with(">>>>>>>")
 }
 
+// ----------------------------------------------------------------------------
+// Take affordance geometry + conflict block height (headless).
+// Geometry first: per-choice button widths + block heights; typography
+// second: Mono line-height se block stack. Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Take button height px: 24 hit floor (row rhythm parity).
+pub const TAKE_BUTTON_H: f32 = crate::theme::SPACE_XL;
+/// Take button side pad px: do taraf section rhythm.
+pub const TAKE_BUTTON_PAD_X: f32 = crate::theme::SPACE_SM;
+/// Take label advance px/char: body 13 estimate (CTA precedent parity).
+pub const TAKE_LABEL_ADVANCE_PX: f32 = 7.0;
+
+/// Take button label (paint parity): hamesha "Take {Left|Right|Base|Both}".
+pub fn take_choice_label(choice: TakeChoice) -> &'static str {
+    match choice {
+        TakeChoice::Left => "Take Left",
+        TakeChoice::Right => "Take Right",
+        TakeChoice::Base => "Take Base",
+        TakeChoice::Both => "Take Both",
+    }
+}
+
+/// Ek Take button ki width px: label chars x advance + do taraf pad.
+/// Sabse lamba "Take Right" (10 chars) = 86. Pure; headless-tested.
+pub fn take_choice_button_width(choice: TakeChoice) -> f32 {
+    take_choice_label(choice).chars().count() as f32 * TAKE_LABEL_ADVANCE_PX
+        + TAKE_BUTTON_PAD_X * 2.0
+}
+
+/// Conflict block ki height px: `line_count` Mono lines ka stack
+/// (`TypoRole::Mono.line_height_px` = 15.6). Khali block par 0.
+/// Pure; headless-tested.
+pub fn take_conflict_block_height_px(line_count: usize) -> f32 {
+    line_count as f32 * crate::theme::TypoRole::Mono.line_height_px()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +320,34 @@ mod tests {
         assert!(is_conflict_marker("======="));
         assert!(is_conflict_marker(">>>>>>> right"));
         assert!(!is_conflict_marker("normal line"));
+    }
+
+    #[test]
+    fn take_buttons_share_hit_height_and_fit_labels() {
+        assert_eq!(TAKE_BUTTON_H, 24.0);
+        assert_eq!(take_choice_button_width(TakeChoice::Right), 86.0);
+        assert_eq!(take_choice_button_width(TakeChoice::Left), 79.0);
+        assert_eq!(take_choice_button_width(TakeChoice::Base), 79.0);
+        assert_eq!(take_choice_button_width(TakeChoice::Both), 79.0);
+        // Sab buttons ek baseline: sabse chauda Right sabko cover karta hai.
+        for choice in [
+            TakeChoice::Left,
+            TakeChoice::Right,
+            TakeChoice::Base,
+            TakeChoice::Both,
+        ] {
+            assert!(
+                take_choice_button_width(choice) <= take_choice_button_width(TakeChoice::Right)
+            );
+            assert!(take_choice_label(choice).chars().count() >= 9);
+        }
+    }
+
+    #[test]
+    fn take_conflict_block_height_stacks_mono_lines() {
+        assert_eq!(take_conflict_block_height_px(0), 0.0);
+        let one = take_conflict_block_height_px(1);
+        assert!((one - 15.6).abs() < 0.01);
+        assert!((take_conflict_block_height_px(4) - one * 4.0).abs() < 0.01);
     }
 }

@@ -116,6 +116,39 @@ pub fn folder_row_x_offset(depth: usize) -> f32 {
     tree_indent_for_depth(depth) + folder_expander_width()
 }
 
+// ----------------------------------------------------------------------------
+// Expand/collapse hit geometry (headless; paint owner ke paas).
+// Expander cell fixed 16px (`FOLDER_EXPANDER_W`); hit poori row height
+// (24px) par taaki chevron chhota tap target na bane.
+// ----------------------------------------------------------------------------
+
+/// Expander hit height px: poori row (`FOLDER_ROW_HEIGHT` parity).
+pub const FOLDER_EXPANDER_HIT_H: f32 = FOLDER_ROW_HEIGHT;
+
+/// Expander hit rect `(x0, y0, x1, y1)` px: indent se expander cell tak,
+/// `row_top` se poori row height tak. Pure; unit-tested.
+pub fn folder_expander_hit_rect(depth: usize, row_top: f32) -> (f32, f32, f32, f32) {
+    let x0 = tree_indent_for_depth(depth);
+    let x1 = x0 + folder_expander_width();
+    (x0, row_top, x1, row_top + FOLDER_EXPANDER_HIT_H)
+}
+
+/// Expander hit test: `x` cell ke andar hai ya nahi. Non-finite `x`
+/// kabhi hit nahi. Pure; unit-tested.
+pub fn folder_expander_contains_x(depth: usize, x: f32) -> bool {
+    if !x.is_finite() {
+        return false;
+    }
+    let x0 = tree_indent_for_depth(depth);
+    x >= x0 && x <= x0 + folder_expander_width()
+}
+
+/// `visible_count` rows wale ped ki kul height px: rows x row height.
+/// Khali ped par 0 (paint khali list chhupata hai). Pure; unit-tested.
+pub fn folder_tree_content_height(visible_count: usize) -> f32 {
+    visible_count as f32 * FOLDER_ROW_HEIGHT
+}
+
 /// Toggles one directory in the expanded set.
 pub fn toggle_expanded(expanded_dirs: &mut BTreeSet<String>, dir: &str) {
     if expanded_dirs.contains(dir) {
@@ -1417,6 +1450,20 @@ mod tests {
         assert_eq!(folder_row_x_offset(0), 16.0);
         assert_eq!(folder_row_x_offset(1), 28.0);
         assert_eq!(folder_row_x_offset(2), 40.0);
+    }
+
+    #[test]
+    fn expander_hit_rect_covers_full_row_height() {
+        assert_eq!(folder_expander_hit_rect(0, 0.0), (0.0, 0.0, 16.0, 24.0));
+        assert_eq!(folder_expander_hit_rect(1, 24.0), (12.0, 24.0, 28.0, 48.0));
+        assert_eq!(FOLDER_EXPANDER_HIT_H, FOLDER_ROW_HEIGHT);
+        assert!(folder_expander_contains_x(0, 8.0));
+        assert!(!folder_expander_contains_x(0, 17.0));
+        assert!(!folder_expander_contains_x(1, 11.9));
+        assert!(folder_expander_contains_x(1, 12.0));
+        assert!(!folder_expander_contains_x(0, f32::NAN));
+        assert_eq!(folder_tree_content_height(0), 0.0);
+        assert_eq!(folder_tree_content_height(3), 72.0);
     }
 
     #[test]

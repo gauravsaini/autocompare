@@ -136,6 +136,46 @@ pub fn can_copy_row(model: &TextRows, row_idx: usize) -> bool {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Copy affordance geometry + status (headless; paint owner ke paas).
+// Geometry first: 24px square hit floor (toolbar precedent
+// `home::HOME_TOOLBAR_BUTTON_H` parity, SPACE_XL single-source).
+// Typography second: status line Small weak precedent reuse.
+// Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Copy arrow hit floor px: 24 square (koi chhota tap target nahi).
+pub const COPY_HIT_MIN: f32 = crate::theme::SPACE_XL;
+
+/// Copy arrow hit size px (single source). Pure; headless-tested.
+pub fn copy_hit_size() -> f32 {
+    COPY_HIT_MIN
+}
+
+/// Copy status line: kitni rows kis direction me gayin. Zero par honest
+/// "nothing to copy", kabhi jhootha count nahi. Pure; headless-tested.
+pub fn copy_status_text(copied: usize, dir: CopyDirection) -> String {
+    if copied == 0 {
+        return String::from("nothing to copy");
+    }
+    let arrow = match dir {
+        CopyDirection::LeftToRight => "left\u{2192}right",
+        CopyDirection::RightToLeft => "right\u{2192}left",
+    };
+    if copied == 1 {
+        format!("copied 1 row {arrow}")
+    } else {
+        format!("copied {copied} rows {arrow}")
+    }
+}
+
+/// Copy ke baad focus: `idx` ke baad wala next difference (copy ki hui
+/// row Equal ho gayi, isliye wahi `idx` dobara nahi). Koi diff na bache
+/// to `None` (paint selection wahi rakhta hai). Pure; headless-tested.
+pub fn copy_focus_after(model: &TextRows, idx: usize) -> Option<usize> {
+    crate::viewmodel::next_diff_idx(&model.rows, Some(idx))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,5 +309,39 @@ mod tests {
         assert!(can_copy_row(&model, 2)); // Changed
         assert!(!can_copy_row(&model, 3)); // Equal
         assert!(!can_copy_row(&model, 999)); // OOB
+    }
+
+    #[test]
+    fn copy_hit_floor_matches_toolbar_rhythm() {
+        assert_eq!(copy_hit_size(), 24.0);
+        assert_eq!(COPY_HIT_MIN, crate::theme::SPACE_XL);
+        assert_eq!(COPY_HIT_MIN, crate::home::HOME_TOOLBAR_BUTTON_H);
+    }
+
+    #[test]
+    fn copy_status_text_counts_honestly_per_direction() {
+        assert_eq!(
+            copy_status_text(0, CopyDirection::LeftToRight),
+            "nothing to copy"
+        );
+        assert_eq!(
+            copy_status_text(1, CopyDirection::LeftToRight),
+            "copied 1 row left\u{2192}right"
+        );
+        assert_eq!(
+            copy_status_text(2, CopyDirection::RightToLeft),
+            "copied 2 rows right\u{2192}left"
+        );
+    }
+
+    #[test]
+    fn copy_focus_after_moves_past_copied_row() {
+        let mut model = section_model();
+        // Diffs at 1, 2: copy row 1, focus should land on 2.
+        copy_line(&mut model, 1, CopyDirection::LeftToRight).unwrap_or_default();
+        assert_eq!(copy_focus_after(&model, 1), Some(2));
+        // Last diff copied: no next diff.
+        copy_line(&mut model, 2, CopyDirection::LeftToRight).unwrap_or_default();
+        assert_eq!(copy_focus_after(&model, 2), None);
     }
 }

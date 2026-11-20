@@ -809,6 +809,53 @@ pub fn track_for(dark: bool) -> Color32 {
     if dark { DARK_TRACK } else { LIGHT_TRACK }
 }
 
+// ----------------------------------------------------------------------------
+// Dark/Light contrast typography (second): geometry/typo levers only.
+// Hues FROZEN — farak sirf weight + size floor se, taaki dim/gutter text
+// dono modes me AA par rahe bina ek bhi `Color32` chhue.
+// ----------------------------------------------------------------------------
+
+/// Dim secondary text role: Small semibold (11 weak + 600 tabular).
+/// Weak tone frozen hai; weight (400->600) contrast carry karta hai —
+/// dono palettes ke dim AA par hain, ye role wahi weight pakdta hai.
+pub const fn contrast_dim_text_role() -> TypoRole {
+    TypoRole::Small
+}
+
+/// Dim text min size px floor: Small token (11.0) — isse chhota dim text
+/// kabhi paint na ho. Pure; unit-tested.
+pub const fn contrast_dim_min_size() -> f32 {
+    TYPO_SMALL_SIZE
+}
+
+/// Dim text numeric weight floor: semibold 600 — regular 400 dim text
+/// halke background par dubla padta; weight gap color ke bina antar
+/// pakdta hai. Pure; unit-tested.
+pub const fn contrast_dim_min_weight() -> u16 {
+    TYPO_WEIGHT_SEMIBOLD
+}
+
+/// Gutter/line-number text role: Mono tabular (12 regular) — dono modes
+/// me 1px columns tabular rehte hain, mode switch par shimmer nahi.
+/// Pure; unit-tested.
+pub const fn contrast_gutter_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Dim-text contrast contract: role small + weak + tabular, weight
+/// semibold floor par, size floor par, aur dono mode palettes AA.
+/// Koi hue move nahi — sirf type carry karta hai. Pure; unit-tested.
+pub fn contrast_dim_text_ok() -> bool {
+    let role = contrast_dim_text_role();
+    role.is_small()
+        && role.is_weak()
+        && role.is_tabular()
+        && role.weight_value() >= contrast_dim_min_weight()
+        && role.size() >= contrast_dim_min_size()
+        && theme_mode_contrast_ok(true)
+        && theme_mode_contrast_ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1605,5 +1652,16 @@ mod tests {
         assert!(TypoRole::HomeTitle.size() > TypoRole::Body.size());
         assert!(TypoRole::Body.size() > TypoRole::Mono.size());
         assert!(TypoRole::Mono.size() > TypoRole::Small.size());
+    }
+
+    #[test]
+    fn contrast_dim_text_carries_weight_not_hue() {
+        assert_eq!(contrast_dim_text_role(), TypoRole::Small);
+        assert_eq!(contrast_dim_min_size(), 11.0);
+        assert_eq!(contrast_dim_min_size(), TYPO_SMALL_SIZE);
+        assert_eq!(contrast_dim_min_weight(), 600);
+        assert_eq!(contrast_dim_min_weight(), TYPO_WEIGHT_SEMIBOLD);
+        assert_eq!(contrast_gutter_text_role(), TypoRole::Mono);
+        assert!(contrast_dim_text_ok());
     }
 }

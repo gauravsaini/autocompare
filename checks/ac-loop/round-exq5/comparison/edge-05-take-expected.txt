@@ -1,0 +1,4 @@
+edge fixture 5: three-way Take geometry + typography probe (geometry: Take buttons share 24px hit floor, widest "Take Right" 86px covers all four choices, conflict block height stacks Mono 15.6px lines, gutter bands honest at 960 and 720; typo: Mono 12 conflict rows, Small 11 weak status line)
+left: checks/ac-loop/round-exq5/comparison/edge-05-take-left.txt
+right: checks/ac-loop/round-exq5/comparison/edge-05-take-right.txt
+expected: Take Left/Right/Base/Both buttons fully visible at 960x600 and 720 fallback with zero clipped text; long conflict lines wrap at 80 chars (wrap-on) or ellipsis-clip (720 fallback) with char-boundary cuts only; merge gutter shows one fused band per conflict hunk; Take Both stacks both long lines without overlap

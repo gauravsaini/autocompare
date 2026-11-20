@@ -1,0 +1,10 @@
+<<<<<<< left: session-restore-take-geometry
+base line one: shared header text that stays identical on both sides
+left-only long token line: leftvalue123456789 with a very long trailing tail token abcdefghijklmnopqrstuvwxyz0123456789 that must wrap without clipping at 960 and 720 widths
+||||||| base: session-restore-take-geometry
+base line one: shared header text that stays identical on both sides
+base value line: basevalue000 with a moderately long tail token qwertyuiopasdfghjklzxcvbnm0987654321 for gutter band parity
+=======
+right-only long token line: rightvalue987654321 with a very long trailing tail token ABCDEFGHIJKLMNOPQRSTUVWXYZ9876543210 that must wrap without clipping at 960 and 720 widths
+>>>>>>> right: session-restore-take-geometry
+same footer line: identical on left right and base

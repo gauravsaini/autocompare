@@ -1422,6 +1422,61 @@ pub fn session_tree_hierarchy_ok() -> bool {
         && meta.is_chrome()
 }
 
+// ----------------------------------------------------------------------------
+// Tab strip geometry-first contract (widths, heights, gaps, alignment):
+// Home launcher se compare tabs tak ka top chrome. Sab rhythm tokens se
+// derive, koi magic number nahi, colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Tab strip height px: standard hit row (`CHROME_HEADER_BAR_H` = 28 parity).
+pub const HOME_TAB_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Tab label side pad px: do taraf section rhythm (`GEO_SECTION_GAP` = 8).
+pub const HOME_TAB_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Tab beech gap px: tight rhythm (`GEO_TIGHT_GAP` = 4).
+pub const HOME_TAB_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Tab label advance px/char: body 13 proportional estimate
+/// (CTA precedent `HOME_CARD_CTA_ADVANCE_PX` parity).
+pub const HOME_TAB_ADVANCE_PX: f32 = HOME_CARD_CTA_ADVANCE_PX;
+
+/// Ek tab ki width px: label chars x advance + do taraf pad.
+/// Khali label par sirf pad (clip ka jhooth nahi). Pure; headless-tested.
+pub fn home_tab_width(title: &str) -> f32 {
+    title.chars().count() as f32 * HOME_TAB_ADVANCE_PX + HOME_TAB_PAD_X * 2.0
+}
+
+/// Tab strip ki kul width px: sab tabs + beech gaps. Khali par 0.
+/// Non-finite risk nahi (sab const positive). Pure; headless-tested.
+pub fn home_tab_bar_width(titles: &[&str]) -> f32 {
+    let mut total = 0.0f32;
+    let mut first = true;
+    for title in titles {
+        if !first {
+            total += HOME_TAB_GAP;
+        }
+        first = false;
+        total += home_tab_width(title);
+    }
+    total
+}
+
+/// Selected tab ka numeric weight: medium 500 (ek kadam upar) taaki
+/// active tab bina rang badle padha jaye; unselected regular 400.
+/// Koi naya size nahi — `TypoRole` precedent reuse. Pure; headless-tested.
+pub fn home_tab_weight_value(selected: bool) -> u16 {
+    if selected {
+        crate::theme::TYPO_WEIGHT_MEDIUM
+    } else {
+        crate::theme::TYPO_WEIGHT_REGULAR
+    }
+}
+
+/// Tab strip typography: dono states body-proportional (13), farak sirf
+/// weight se (selected medium, baaki regular). Colors untouched.
+pub fn home_tab_hierarchy_ok() -> bool {
+    home_tab_weight_value(true) > home_tab_weight_value(false)
+        && crate::theme::TypoRole::HomeButton.size() == crate::theme::TYPO_BODY_SIZE
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2159,5 +2214,26 @@ mod tests {
         assert_eq!(super::session_tree_item_size(), 13.0);
         assert_eq!(super::session_tree_meta_size(), 11.0);
         assert!(super::session_tree_hierarchy_ok());
+    }
+
+    #[test]
+    fn hometabs_strip_geometry_tiles_without_clip() {
+        // "FolderMerge" (11 chars): 11*7 + 16 = 93.
+        assert_eq!(super::home_tab_width("FolderMerge"), 93.0);
+        assert_eq!(super::home_tab_width(""), 16.0);
+        assert_eq!(super::HOME_TAB_BAR_H, 28.0);
+        assert_eq!(super::HOME_TAB_GAP, 4.0);
+        // Do tabs + ek gap: 93 + 4 + width("Text").
+        let two = super::home_tab_bar_width(&["FolderMerge", "Text"]);
+        assert_eq!(two, 93.0 + 4.0 + super::home_tab_width("Text"));
+        assert_eq!(super::home_tab_width("Text"), 44.0);
+        assert_eq!(super::home_tab_bar_width(&[]), 0.0);
+    }
+
+    #[test]
+    fn hometabs_selected_weight_beats_unselected_without_new_size() {
+        assert_eq!(super::home_tab_weight_value(true), 500);
+        assert_eq!(super::home_tab_weight_value(false), 400);
+        assert!(super::home_tab_hierarchy_ok());
     }
 }
