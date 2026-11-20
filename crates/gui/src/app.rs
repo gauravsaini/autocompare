@@ -4872,6 +4872,22 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+        // CK-DARKBUG: eframe 0.37 me `set_visuals` sirf active theme slot likhta
+        // hai; preference default `System` hai isliye Light-Mode OS par
+        // creation-time dark apply light slot me kabhi nahi lagta (live light +
+        // badge desync). Har frame flag se preference + visuals dono re-assert
+        // (existing Visuals reuse, naya palette zero) — toggle-corruption bhi
+        // isi se repair hota hai.
+        ui.ctx().set_theme(if self.dark_mode {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        });
+        ui.ctx().set_visuals(if self.dark_mode {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        });
         ui.ctx()
             .send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
         // Font zoom keys (Wave R zoom model): Cmd/Ctrl + +/-/0 over
