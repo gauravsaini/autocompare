@@ -2253,6 +2253,103 @@ pub fn table_wide_960_visible_rows(panes_h: f32) -> u64 {
     (panes_h / row_h).floor().max(0.0) as u64
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table3 round-1: even row rhythm, char-metric outer
+// widths, aligned sort indicators at narrow-720 (headless; paint wiring
+// stays with the orchestrator).
+// Gap BC table compare: even row rhythm, column widths from char metrics,
+// sort indicators aligned; ours uneven gaps. Fix table-side only
+// (app.rs/home.rs/views.rs/views_hex.rs/gutter.rs/tree.rs/theme.rs/
+// viewmodel.rs/copy.rs/take.rs NO-TOUCH). Geometry FIRST: row height Mono
+// line-height lock (`table_cell_row_h` reuse, 15.6), col spacing SPACE
+// tokens (`table_col_spacing`/`table_grid_gap_y` reuse, 8/4), outer widths
+// `table_col_widths_px` char metrics reuse, narrow-720 avail origin-se
+// (696), sort markers fixed 1-char aligned (indicator column). Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Narrow-720 edge fixture
+// `checks/gui-exq-table3/comparison/table-narrow-720.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table3 narrow canvas width (px): [`crate::theme::VIEWPORT_MIN_W`] reuse
+/// (720) — isi par narrow fixture fit lock hota hai. Pure.
+pub const TABLE_NARROW_CANVAS_W: f32 = crate::theme::VIEWPORT_MIN_W as f32;
+
+/// Table3 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — even row rhythm, ruler/body desync nahi. Pure; unit-tested.
+pub fn table3_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table3 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source. Pure; unit-tested.
+pub fn table3_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table3 row symmetric pad (px): [`table_row_sym_pad`] reuse (SPACE_XS
+/// 4.0) — row ke upar/neeche ek jaisa clearance. Pure; unit-tested.
+pub fn table3_row_sym_pad() -> f32 {
+    table_row_sym_pad()
+}
+
+/// Table3 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table3_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table3 header weight contract: table2 lock reuse (strong/600).
+/// Pure; unit-tested.
+pub fn table3_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Sort indicator marker: fixed 1-char taaki indicator column align rahe —
+/// sorted-asc `▲`, sorted-desc `▼`, unsorted blank ` ` (key-bar
+/// `key_column_marker` precedent: har toggle ke start me ek char).
+/// Pure; unit-tested.
+pub fn table3_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    if !sorted {
+        " "
+    } else if ascending {
+        "▲"
+    } else {
+        "▼"
+    }
+}
+
+/// Kya `col` sort column hai (`Some(col)` match). Pure; unit-tested.
+pub fn table3_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    sort_col == Some(col)
+}
+
+/// Header cell ka sort-aware label: letter + 1-char marker
+/// (`table_column_letter` + `table3_sort_marker`) — markers har header me
+/// ek hi slot lete hain, isliye sort indicators aligned rehte hain.
+/// Pure; unit-tested.
+pub fn table3_sort_label(col: usize, sort_col: Option<usize>, ascending: bool) -> String {
+    let sorted = table3_is_sorted_col(sort_col, col);
+    let marker = table3_sort_marker(sorted, ascending);
+    format!("{}{marker}", table_column_letter(col))
+}
+
+/// Table3 narrow-720 grid avail width (px): narrow canvas minus dono origin
+/// margins (`720 - 2 * 12` = 696) — isi me outer widths fit hote hain.
+/// Pure; unit-tested.
+pub fn table3_narrow_avail_w() -> f32 {
+    TABLE_NARROW_CANVAS_W - TABLE_CELL_GRID_ORIGIN_X * 2.0
+}
+
+/// Char metrics se outer widths narrow-720 budget par:
+/// [`table_col_widths_px`] delegation (koi naya math nahi). Pure;
+/// unit-tested.
+pub fn table3_narrow_outer_widths(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3575,5 +3672,88 @@ mod tests {
         assert_eq!(table_wide_960_visible_rows(table_panes_height(600.0)), 38);
         assert_eq!(table_wide_960_visible_rows(0.0), 0);
         assert_eq!(table_wide_960_visible_rows(f32::NAN), 0);
+    }
+
+    #[test]
+    fn table_exq_table3_round1_even_rows_char_widths_sort_narrow_720() {
+        // Headless test proving edge fixture comparison/table-narrow-720.json:
+        // even row rhythm (Mono 15.6), col spacing SPACE tokens (8/4),
+        // outer widths char metrics se, header underline/weight reuse,
+        // sort indicators fixed 1-char aligned, narrow-720 fit.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table3/comparison/table-narrow-720.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table3/round-1/comparison/table-narrow-720.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\":\"table-narrow-720\""));
+        assert!(fixture_raw.contains("\"canvas_w\":960.0"));
+        assert!(fixture_raw.contains("\"narrow_w\":720.0"));
+        assert!(fixture_raw.contains("\"row_height\":15.6"));
+        assert!(fixture_raw.contains("\"row_sym_pad\":4.0"));
+        assert!(fixture_raw.contains("\"col_spacing\":8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\":1.0"));
+        assert!(fixture_raw.contains("\"header_weight\":600"));
+        assert!(fixture_raw.contains("\"visible_rows\":38"));
+
+        // 1. Row height Mono line-height lock (even rhythm).
+        assert!((table3_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table3_row_h(), table_cell_row_h());
+        assert_eq!(
+            table3_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(table3_row_h(), table_wide_row_h());
+
+        // 2. Col spacing SPACE tokens se, row gap symmetric.
+        assert_eq!(table3_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table3_col_spacing(), 8.0);
+        assert_eq!(table3_col_spacing(), table_col_spacing());
+        assert_eq!(table3_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table3_row_sym_pad(), 4.0);
+        assert_eq!(table3_row_sym_pad(), table_row_sym_pad());
+        assert_eq!(table_grid_gap_y(), table3_row_sym_pad());
+
+        // 3. Header underline/weight reuse at 960px wide.
+        assert_eq!(TABLE_CANVAS_W, 960.0);
+        assert_eq!(table3_header_underline_w(), 1.0);
+        assert_eq!(
+            table3_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(table3_header_underline_w(), table_header_underline_w());
+        assert!(table3_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 4. Sort indicators fixed 1-char aligned.
+        assert_eq!(table3_sort_marker(false, true).chars().count(), 1);
+        assert_eq!(table3_sort_marker(true, true).chars().count(), 1);
+        assert_eq!(table3_sort_marker(true, false).chars().count(), 1);
+        assert_eq!(table3_sort_marker(false, true), " ");
+        assert_eq!(table3_sort_marker(true, true), "▲");
+        assert_eq!(table3_sort_marker(true, false), "▼");
+        assert!(table3_is_sorted_col(Some(1), 1));
+        assert!(!table3_is_sorted_col(Some(1), 0));
+        assert!(!table3_is_sorted_col(None, 0));
+        assert_eq!(table3_sort_label(0, Some(0), true), "A▲");
+        assert_eq!(table3_sort_label(1, Some(0), true), "B ");
+        assert_eq!(table3_sort_label(1, Some(1), false), "B▼");
+
+        // 5. Narrow-720 char-metric widths fit: 3 cols [3,5,4] @8px
+        // -> outer [40,56,48], total 160, avail 696 me fit.
+        assert_eq!(TABLE_NARROW_CANVAS_W, 720.0);
+        assert_eq!(TABLE_NARROW_CANVAS_W, crate::theme::VIEWPORT_MIN_W as f32);
+        assert_eq!(table3_narrow_avail_w(), 696.0);
+        let header = vec!["ID".to_string(), "Price".to_string(), "Note".to_string()];
+        let rows = vec![vec!["1".to_string(), "9.99".to_string(), "ok".to_string()]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 4]);
+        let px = table3_narrow_outer_widths(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 48.0]);
+        assert_eq!(table_grid_total_w(&px), 160.0);
+        assert!(table_column_grid_fit(table3_narrow_avail_w(), &px));
+        assert!(table_column_grid_fit(720.0, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        assert!(table3_narrow_outer_widths(&widths, 0.0).is_empty());
     }
 }
