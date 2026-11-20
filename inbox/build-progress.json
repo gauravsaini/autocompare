@@ -100,7 +100,9 @@
     "ORCH-NOISE2": "reverted agyx-rep-h/reports-a HTML (12) + sessionpaint PNG (2), live OWNS WIP preserved (bcomp/image/table/gui* + 3 round dirs)",
     "ORCH-MIX5": "2026-11-20 21:39 AEDT mix live: op-sync3 + op-guiexq6 sess-opencode-guiexq6 + agyx-cli + agyx-binmix, staggered 20s, rotator healthy no EADDRINUSE, backoff exp 60s doubling to 600s max",
     "ORCH-POLL-EXP": "poll fixed 8s dropped, exp backoff 60->120->240->480->600 max, reset on activity, event-driven + harness check loop",
-    "ORCH-AGYX-CONSISTENCY": "agyx fix verified 2026-11-20 21:39: 2 parallel agyx-cli+binmix concurrent, rotator START/END 200, no timeout, consistent so far, keep using with cap 3-4 staggered"
+    "ORCH-AGYX-CONSISTENCY": "mix6 verdict so far: agyx 2-parallel consistent (uxkey pid 36207 + vcs2 pid 36329 both running, no EADDRINUSE, no silent-dead); keep mix, drop to opencode-only only if regresses",
+    "ORCH-DIFF-DEPS": "landed 7c14aa5 pushed (zip 2.2 deflate + flate2 for xlsx, ponytail reuse vfs dep, cargo check green)",
+    "ORCH-MIX6": "live 2026-11-20 22:00 AEDT: op-table1 (diff/table deflate) + op-guiexq7 (hex/gutter exquisite) + agyx-uxkey (settings/keymap+theme) + agyx-clivcs2 (cli runner/args/session_cmd); disjoint OWNS, isolated targets, stagger 20s agyx"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
