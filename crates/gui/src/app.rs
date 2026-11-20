@@ -1552,6 +1552,26 @@ impl App {
         };
     }
 
+    /// eframe Storage key jisme `dark_mode` per-run se aage persist hota hai.
+    pub(crate) const DARK_MODE_STORAGE_KEY: &'static str = "dark_mode";
+
+    /// Persisted dark_mode flag padhta hai (main.rs load path).
+    /// `SessionSnapshot::new` trim precedent: aas-paas whitespace ignore hota hai;
+    /// unknown/khali/missing par declared intent dark (true) — jhootha light kabhi nahi
+    /// (`SessionSnapshot::age_secs` unknown→None precedent jaisa graceful default).
+    pub(crate) fn dark_mode_from_storage(raw: Option<&str>) -> bool {
+        !matches!(raw.map(str::trim), Some("0" | "false" | "light"))
+    }
+
+    /// Persisted dark_mode flag likhta hai (`App::save` se).
+    pub(crate) fn dark_mode_to_storage(dark: bool) -> String {
+        if dark {
+            String::from("1")
+        } else {
+            String::from("0")
+        }
+    }
+
     /// Current font zoom step (clamped to `crate::theme::ZOOM_LEVELS`).
     pub fn zoom_level(&self) -> i8 {
         crate::theme::clamp_zoom_level(self.zoom_level)
@@ -4844,6 +4864,13 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string(
+            Self::DARK_MODE_STORAGE_KEY,
+            Self::dark_mode_to_storage(self.dark_mode),
+        );
+    }
+
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         ui.ctx()
             .send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
@@ -7184,6 +7211,61 @@ mod tests {
         app.set_syntax_highlight(false);
         assert!(!app.syntax_highlight);
         assert!(app.status.contains("syntax highlighting off"));
+    }
+
+    #[test]
+    fn dark_mode_storage_parse_trims_and_defaults_dark() {
+        assert!(App::dark_mode_from_storage(None));
+        assert!(App::dark_mode_from_storage(Some("")));
+        assert!(App::dark_mode_from_storage(Some("  ")));
+        assert!(App::dark_mode_from_storage(Some("1")));
+        assert!(App::dark_mode_from_storage(Some(" true ")));
+        assert!(App::dark_mode_from_storage(Some("dark")));
+        assert!(App::dark_mode_from_storage(Some("bogus-value")));
+        assert!(!App::dark_mode_from_storage(Some("0")));
+        assert!(!App::dark_mode_from_storage(Some(" false ")));
+        assert!(!App::dark_mode_from_storage(Some("light")));
+    }
+
+    #[test]
+    fn dark_mode_storage_roundtrip_through_save() {
+        use eframe::App as _;
+        use std::collections::HashMap;
+
+        struct FakeStorage {
+            map: HashMap<String, String>,
+        }
+
+        impl eframe::Storage for FakeStorage {
+            fn get_string(&self, key: &str) -> Option<String> {
+                self.map.get(key).cloned()
+            }
+
+            fn set_string(&mut self, key: &str, value: String) {
+                self.map.insert(key.to_string(), value);
+            }
+
+            fn remove_string(&mut self, key: &str) {
+                self.map.remove(key);
+            }
+
+            fn flush(&mut self) {}
+        }
+
+        let mut app = App::default();
+        assert!(app.dark_mode);
+        let mut storage = FakeStorage {
+            map: HashMap::new(),
+        };
+        app.save(&mut storage);
+        assert_eq!(
+            storage.map.get(App::DARK_MODE_STORAGE_KEY),
+            Some(&String::from("1"))
+        );
+        app.dark_mode = false;
+        app.save(&mut storage);
+        let stored = storage.map.get(App::DARK_MODE_STORAGE_KEY).cloned();
+        assert!(!App::dark_mode_from_storage(stored.as_deref()));
     }
 
     #[test]

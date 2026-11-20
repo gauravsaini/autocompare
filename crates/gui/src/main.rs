@@ -50,8 +50,20 @@ fn main() {
         "autocompare",
         options,
         Box::new(|cc| {
-            cc.egui_ctx.set_visuals(eframe::egui::Visuals::dark());
-            Ok(Box::new(app::App::default()))
+            let mut app = app::App::default();
+            if let Some(storage) = cc.storage {
+                app.dark_mode = app::App::dark_mode_from_storage(
+                    storage
+                        .get_string(app::App::DARK_MODE_STORAGE_KEY)
+                        .as_deref(),
+                );
+            }
+            cc.egui_ctx.set_visuals(if app.dark_mode {
+                eframe::egui::Visuals::dark()
+            } else {
+                eframe::egui::Visuals::light()
+            });
+            Ok(Box::new(app))
         }),
     ) {
         eprintln!("autocompare-gui: {err}");

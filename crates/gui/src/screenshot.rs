@@ -36,6 +36,81 @@ const CHANGED_BG: [u8; 4] = [122, 102, 20, 255];
 const CHANGED_FG: [u8; 4] = [255, 235, 160, 255];
 const ACCENT_TAB: [u8; 4] = [50, 70, 105, 255];
 
+/// Fixture render mode: headless proof ka dark/light switch (option C full).
+/// Default dark taaki existing fixtures byte-stable rahen — dark palette
+/// consts (`BG_DARK`/`BG_PANEL`/`FG_TEXT`/`FG_DIM`) bilkul unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FixtureMode {
+    /// Existing frozen-dark render (byte-stable).
+    #[default]
+    Dark,
+    /// Light render; hues sirf `eframe::egui::Visuals::light()` se
+    /// (existing Visuals reuse, naya palette zero).
+    Light,
+}
+
+/// Mode-aware chaar base hues (geometry same, sirf ye chaar badalte hain).
+#[derive(Debug, Clone, Copy)]
+struct FixturePalette {
+    bg: [u8; 4],
+    panel: [u8; 4],
+    text: [u8; 4],
+    dim: [u8; 4],
+}
+
+impl FixturePalette {
+    fn of(mode: FixtureMode) -> Self {
+        match mode {
+            FixtureMode::Dark => Self {
+                bg: BG_DARK,
+                panel: BG_PANEL,
+                text: FG_TEXT,
+                dim: FG_DIM,
+            },
+            FixtureMode::Light => {
+                let visuals = eframe::egui::Visuals::light();
+                Self {
+                    bg: visuals.window_fill.to_array(),
+                    panel: visuals.panel_fill.to_array(),
+                    text: visuals.widgets.noninteractive.fg_stroke.color.to_array(),
+                    dim: visuals.widgets.noninteractive.bg_stroke.color.to_array(),
+                }
+            }
+        }
+    }
+}
+
+use std::cell::Cell;
+
+thread_local! {
+    /// Active fixture mode; default dark (byte-stability structural guarantee).
+    /// Sirf `render_fixture_png_with_mode` guard ke andar badalta hai.
+    static FIXTURE_MODE: Cell<FixtureMode> = const { Cell::new(FixtureMode::Dark) };
+}
+
+/// Current mode ka palette (route fns + shared helpers yahi padhte hain).
+fn fixture_palette() -> FixturePalette {
+    FIXTURE_MODE.with(|mode| FixturePalette::of(mode.get()))
+}
+
+/// Mode guard: set karke purana mode drop par wapas (nested-safe).
+struct FixtureModeGuard {
+    prev: FixtureMode,
+}
+
+impl FixtureModeGuard {
+    fn set(mode: FixtureMode) -> Self {
+        let prev = FIXTURE_MODE.with(|slot| slot.replace(mode));
+        Self { prev }
+    }
+}
+
+impl Drop for FixtureModeGuard {
+    fn drop(&mut self) {
+        FIXTURE_MODE.with(|slot| slot.set(self.prev));
+    }
+}
+
 /// Shared headless geometry (geometry first, colors frozen).
 /// Har fixture isi canvas/padding/row height par tikti hai.
 pub const SNAP_W: u32 = 960;
@@ -72,6 +147,8 @@ pub const MERGE_X2: u32 = 638;
 
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
+/// Default mode dark hai taaki existing fixtures byte-stable rahen;
+/// light ke liye [`render_fixture_png_with_mode`] use karo.
 /// File name ke tukde se tab chunta hai (lowercase match):
 /// `accent` -> text accent scene, `allsame` -> folder identical
 /// (AllSame) scene, `hex` -> hex, `table` + `find` -> table key/find scene, `table` -> table,
@@ -81,6 +158,19 @@ pub const MERGE_X2: u32 = 638;
 /// `wrap` -> wrap-on + find-active text scene, warna text.
 /// Har route same 960x600 canvas par tikta hai, colors frozen.
 pub fn render_fixture_png(out_path: &Path) -> Result<(), String> {
+    render_fixture_png_with_mode(out_path, FixtureMode::Dark)
+}
+
+/// Mode-aware dispatcher: `Dark` existing frozen-dark render se
+/// byte-identical hai; `Light` me chaar base hues (`bg`/`panel`/`text`/`dim`)
+/// `eframe::egui::Visuals::light()` se aate hain, geometry same.
+pub fn render_fixture_png_with_mode(out_path: &Path, mode: FixtureMode) -> Result<(), String> {
+    let _guard = FixtureModeGuard::set(mode);
+    render_fixture_png_routed(out_path)
+}
+
+/// Mode guard ke andar route dispatch (shared, testable core).
+fn render_fixture_png_routed(out_path: &Path) -> Result<(), String> {
     let lower = match out_path.file_name().and_then(|name| name.to_str()) {
         Some(name) => name.to_lowercase(),
         None => String::new(),
@@ -146,10 +236,20 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
 
     let mut pixels = vec![0u8; byte_count];
     // Fill background
-    fill_rect(&mut pixels, dims, (0, 0, width, height), BG_DARK);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, 0, width, height),
+        fixture_palette().bg,
+    );
 
     // Title bar
-    fill_rect(&mut pixels, dims, (0, 0, width, 36), BG_PANEL);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, 0, width, 36),
+        fixture_palette().panel,
+    );
     // Window controls
     fill_rect(&mut pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
     fill_rect(&mut pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
@@ -160,33 +260,68 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         80,
         14,
         "fixtures/left.rs <--> fixtures/right.rs - Text",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     // Tab bar
     fill_rect(&mut pixels, dims, (0, 36, width, 32), [32, 32, 32, 255]);
-    draw_string(&mut pixels, dims, 16, 46, "Home", FG_DIM);
+    draw_string(&mut pixels, dims, 16, 46, "Home", fixture_palette().dim);
     fill_rect(&mut pixels, dims, (64, 40, 60, 24), ACCENT_TAB);
-    draw_string(&mut pixels, dims, 76, 46, "Text", FG_TEXT);
-    draw_string(&mut pixels, dims, 138, 46, "Folder", FG_DIM);
-    draw_string(&mut pixels, dims, 200, 46, "Hex", FG_DIM);
-    draw_string(&mut pixels, dims, 244, 46, "Merge", FG_DIM);
-    draw_string(&mut pixels, dims, 300, 46, "Table", FG_DIM);
-    draw_string(&mut pixels, dims, 356, 46, "Sync", FG_DIM);
-    draw_string(&mut pixels, dims, 404, 46, "Picture", FG_DIM);
-    draw_string(&mut pixels, dims, 474, 46, "FolderMerge", FG_DIM);
-    draw_string(&mut pixels, dims, 574, 46, "Audio", FG_DIM);
+    draw_string(&mut pixels, dims, 76, 46, "Text", fixture_palette().text);
+    draw_string(&mut pixels, dims, 138, 46, "Folder", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 200, 46, "Hex", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 244, 46, "Merge", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 300, 46, "Table", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 356, 46, "Sync", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 404, 46, "Picture", fixture_palette().dim);
+    draw_string(
+        &mut pixels,
+        dims,
+        474,
+        46,
+        "FolderMerge",
+        fixture_palette().dim,
+    );
+    draw_string(&mut pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
     // Path row
     fill_rect(&mut pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(&mut pixels, dims, 20, 82, "fixtures/left.rs", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        82,
+        "fixtures/left.rs",
+        fixture_palette().text,
+    );
     fill_rect(&mut pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(&mut pixels, dims, 412, 82, "Browse...", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        412,
+        82,
+        "Browse...",
+        fixture_palette().text,
+    );
 
     fill_rect(&mut pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(&mut pixels, dims, 498, 82, "fixtures/right.rs", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        498,
+        82,
+        "fixtures/right.rs",
+        fixture_palette().text,
+    );
     fill_rect(&mut pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(&mut pixels, dims, 890, 82, "Browse...", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        890,
+        82,
+        "Browse...",
+        fixture_palette().text,
+    );
 
     // Session toolbar: Swap Sides + Reload, session identity below tabs.
     draw_string(
@@ -195,7 +330,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         104,
         "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     // Main diff pane borders
@@ -299,10 +434,25 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         }
 
         let (left_bg, left_fg, right_bg, right_fg) = match row.kind {
-            TextRowKind::Equal => (BG_DARK, FG_TEXT, BG_DARK, FG_TEXT),
+            TextRowKind::Equal => (
+                fixture_palette().bg,
+                fixture_palette().text,
+                fixture_palette().bg,
+                fixture_palette().text,
+            ),
             TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
-            TextRowKind::Deleted => (DELETED_BG, DELETED_FG, BG_DARK, FG_DIM),
-            TextRowKind::Inserted => (BG_DARK, FG_DIM, INSERTED_BG, INSERTED_FG),
+            TextRowKind::Deleted => (
+                DELETED_BG,
+                DELETED_FG,
+                fixture_palette().bg,
+                fixture_palette().dim,
+            ),
+            TextRowKind::Inserted => (
+                fixture_palette().bg,
+                fixture_palette().dim,
+                INSERTED_BG,
+                INSERTED_FG,
+            ),
         };
 
         // Left pane row
@@ -314,7 +464,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 16,
                 y.saturating_add(6),
                 &format!("{no:>2} "),
-                FG_DIM,
+                fixture_palette().dim,
             );
         }
         draw_string(
@@ -353,7 +503,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 480,
                 y.saturating_add(6),
                 &format!("{no:>2} "),
-                FG_DIM,
+                fixture_palette().dim,
             );
         }
         draw_string(
@@ -389,7 +539,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         let seg_y = pane_top.saturating_add(seg.y_start as u32);
         let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
         let seg_color = match seg.kind {
-            TextRowKind::Equal => BG_PANEL,
+            TextRowKind::Equal => fixture_palette().panel,
             TextRowKind::Changed => CHANGED_BG,
             TextRowKind::Deleted => DELETED_BG,
             TextRowKind::Inserted => INSERTED_BG,
@@ -410,7 +560,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         578,
         "7 rows: 4 equal, 1 changed, 1 deleted, 1 inserted | text compare done: 7 row(s)",
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     let image = RgbaImage {
@@ -521,10 +671,25 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
             break;
         }
         let (left_bg, left_fg, right_bg, right_fg) = match row.kind {
-            TextRowKind::Equal => (BG_DARK, FG_TEXT, BG_DARK, FG_TEXT),
+            TextRowKind::Equal => (
+                fixture_palette().bg,
+                fixture_palette().text,
+                fixture_palette().bg,
+                fixture_palette().text,
+            ),
             TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
-            TextRowKind::Deleted => (DELETED_BG, DELETED_FG, BG_DARK, FG_DIM),
-            TextRowKind::Inserted => (BG_DARK, FG_DIM, INSERTED_BG, INSERTED_FG),
+            TextRowKind::Deleted => (
+                DELETED_BG,
+                DELETED_FG,
+                fixture_palette().bg,
+                fixture_palette().dim,
+            ),
+            TextRowKind::Inserted => (
+                fixture_palette().bg,
+                fixture_palette().dim,
+                INSERTED_BG,
+                INSERTED_FG,
+            ),
         };
         fill_rect(
             &mut pixels,
@@ -539,7 +704,7 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
                 TEXT_LEFT_X.saturating_add(4),
                 y.saturating_add(6),
                 &format!("{no:>2} "),
-                FG_DIM,
+                fixture_palette().dim,
             );
         }
         draw_string(
@@ -581,7 +746,7 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
                 TEXT_RIGHT_X.saturating_add(4),
                 y.saturating_add(6),
                 &format!("{no:>2} "),
-                FG_DIM,
+                fixture_palette().dim,
             );
         }
         draw_string(
@@ -617,7 +782,7 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
         let seg_y = pane_top.saturating_add(seg.y_start as u32);
         let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
         let seg_color = match seg.kind {
-            TextRowKind::Equal => BG_PANEL,
+            TextRowKind::Equal => fixture_palette().panel,
             TextRowKind::Changed => CHANGED_BG,
             TextRowKind::Deleted => DELETED_BG,
             TextRowKind::Inserted => INSERTED_BG,
@@ -671,10 +836,20 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
     };
 
     let mut pixels = vec![0u8; byte_count];
-    fill_rect(&mut pixels, dims, (0, 0, width, height), BG_DARK);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, 0, width, height),
+        fixture_palette().bg,
+    );
 
     // Title bar
-    fill_rect(&mut pixels, dims, (0, 0, width, 36), BG_PANEL);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, 0, width, 36),
+        fixture_palette().panel,
+    );
     fill_rect(&mut pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
     fill_rect(&mut pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
     fill_rect(&mut pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
@@ -684,32 +859,67 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         80,
         14,
         "fixtures/left-dir <--> fixtures/right-dir - Folder",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     // Tab bar with Folder highlighted
     fill_rect(&mut pixels, dims, (0, 36, width, 32), [32, 32, 32, 255]);
-    draw_string(&mut pixels, dims, 16, 46, "Home", FG_DIM);
-    draw_string(&mut pixels, dims, 64, 46, "Text", FG_DIM);
+    draw_string(&mut pixels, dims, 16, 46, "Home", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 64, 46, "Text", fixture_palette().dim);
     fill_rect(&mut pixels, dims, (118, 40, 66, 24), ACCENT_TAB);
-    draw_string(&mut pixels, dims, 130, 46, "Folder", FG_TEXT);
-    draw_string(&mut pixels, dims, 200, 46, "Hex", FG_DIM);
-    draw_string(&mut pixels, dims, 244, 46, "Merge", FG_DIM);
-    draw_string(&mut pixels, dims, 300, 46, "Table", FG_DIM);
-    draw_string(&mut pixels, dims, 356, 46, "Sync", FG_DIM);
-    draw_string(&mut pixels, dims, 404, 46, "Picture", FG_DIM);
-    draw_string(&mut pixels, dims, 474, 46, "FolderMerge", FG_DIM);
-    draw_string(&mut pixels, dims, 574, 46, "Audio", FG_DIM);
+    draw_string(&mut pixels, dims, 130, 46, "Folder", fixture_palette().text);
+    draw_string(&mut pixels, dims, 200, 46, "Hex", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 244, 46, "Merge", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 300, 46, "Table", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 356, 46, "Sync", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 404, 46, "Picture", fixture_palette().dim);
+    draw_string(
+        &mut pixels,
+        dims,
+        474,
+        46,
+        "FolderMerge",
+        fixture_palette().dim,
+    );
+    draw_string(&mut pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
     // Path row
     fill_rect(&mut pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(&mut pixels, dims, 20, 82, "fixtures/left-dir", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        82,
+        "fixtures/left-dir",
+        fixture_palette().text,
+    );
     fill_rect(&mut pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(&mut pixels, dims, 412, 82, "Browse...", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        412,
+        82,
+        "Browse...",
+        fixture_palette().text,
+    );
     fill_rect(&mut pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(&mut pixels, dims, 498, 82, "fixtures/right-dir", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        498,
+        82,
+        "fixtures/right-dir",
+        fixture_palette().text,
+    );
     fill_rect(&mut pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(&mut pixels, dims, 890, 82, "Browse...", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        890,
+        82,
+        "Browse...",
+        fixture_palette().text,
+    );
 
     // Session toolbar
     draw_string(
@@ -718,7 +928,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         104,
         "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     // Fixture rows: headless truth, same glyphs the engine paints.
@@ -780,10 +990,17 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         122,
         "[ ] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten",
-        FG_TEXT,
+        fixture_palette().text,
     );
     // Honest counts line.
-    draw_string(&mut pixels, dims, 16, 138, &counts.summary(), FG_DIM);
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        138,
+        &counts.summary(),
+        fixture_palette().dim,
+    );
 
     // Tree panel.
     let pane_top = 158u32;
@@ -802,16 +1019,23 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
             break;
         }
         let (bg, fg) = match node.row.glyph {
-            '=' => (BG_DARK, FG_TEXT),
+            '=' => (fixture_palette().bg, fixture_palette().text),
             '!' | 'L' => (DELETED_BG, DELETED_FG),
             '>' | '<' => (CHANGED_BG, CHANGED_FG),
             'R' => (INSERTED_BG, INSERTED_FG),
-            _ => (BG_DARK, FG_DIM),
+            _ => (fixture_palette().bg, fixture_palette().dim),
         };
         fill_rect(&mut pixels, dims, (12, y, 936, row_h), bg);
         if node.row.is_dir {
             let icon = if node.is_expanded { "v" } else { ">" };
-            draw_string(&mut pixels, dims, 18, y.saturating_add(6), icon, FG_DIM);
+            draw_string(
+                &mut pixels,
+                dims,
+                18,
+                y.saturating_add(6),
+                icon,
+                fixture_palette().dim,
+            );
         }
         let indent = (node.depth as u32).saturating_mul(4u32);
         let gx = 34u32.saturating_add(indent.saturating_mul(7));
@@ -847,7 +1071,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(6),
         "Sync preview (dry-run)",
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -859,7 +1083,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
             SyncModeChoice::UpdateBoth.label(),
             SyncModeChoice::Mirror.label()
         ),
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -867,7 +1091,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(38),
         &preview.summary(),
-        FG_DIM,
+        fixture_palette().dim,
     );
     draw_string(
         &mut pixels,
@@ -875,7 +1099,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(54),
         consent_hint,
-        FG_DIM,
+        fixture_palette().dim,
     );
     fill_rect(
         &mut pixels,
@@ -889,7 +1113,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         32,
         panel_y.saturating_add(78),
         "Apply sync plan",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     // Status bar.
@@ -900,7 +1124,7 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         578,
         "folder: 4 entries, 0 pruned | staged src/a.txt for text compare",
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     let image = RgbaImage {
@@ -981,7 +1205,7 @@ pub fn render_hex_fixture_png(out_path: &Path) -> Result<(), String> {
         let (bg, fg) = if *changed {
             (CHANGED_BG, CHANGED_FG)
         } else {
-            (BG_DARK, FG_TEXT)
+            (fixture_palette().bg, fixture_palette().text)
         };
         fill_rect(&mut pixels, dims, (TEXT_LEFT_X, y, TEXT_PANE_W, ROW_H), bg);
         fill_rect(&mut pixels, dims, (TEXT_RIGHT_X, y, TEXT_PANE_W, ROW_H), bg);
@@ -1056,7 +1280,7 @@ pub fn render_table_fixture_png(out_path: &Path) -> Result<(), String> {
         &mut pixels,
         dims,
         (pane_x, pane_top, pane_w, ROW_H),
-        BG_PANEL,
+        fixture_palette().panel,
     );
     draw_string(
         &mut pixels,
@@ -1064,7 +1288,7 @@ pub fn render_table_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         pane_top.saturating_add(6),
         "id | name | left | right | status",
-        FG_TEXT,
+        fixture_palette().text,
     );
     let rows = [
         ("1 | anna | 10 | 10 | = |", false),
@@ -1092,7 +1316,7 @@ pub fn render_table_fixture_png(out_path: &Path) -> Result<(), String> {
         let (bg, fg) = if *changed {
             (CHANGED_BG, CHANGED_FG)
         } else {
-            (BG_DARK, FG_TEXT)
+            (fixture_palette().bg, fixture_palette().text)
         };
         fill_rect(&mut pixels, dims, (pane_x, y, pane_w, ROW_H), bg);
         draw_string(&mut pixels, dims, 20, y.saturating_add(6), line, fg);
@@ -1174,7 +1398,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
         MERGE_X0.saturating_add(8),
         pane_top.saturating_sub(18),
         "[Base] [Left] [Right]",
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     let rows = [
@@ -1195,19 +1419,19 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             1 => CHANGED_BG,
             2 => DELETED_BG,
             3 => INSERTED_BG,
-            _ => BG_DARK,
+            _ => fixture_palette().bg,
         };
         let center_fg = match *mark {
             1 => CHANGED_FG,
             2 => DELETED_FG,
             3 => INSERTED_FG,
-            _ => FG_TEXT,
+            _ => fixture_palette().text,
         };
         fill_rect(
             &mut pixels,
             dims,
             (MERGE_X0, y, MERGE_PANE_W, ROW_H),
-            BG_DARK,
+            fixture_palette().bg,
         );
         fill_rect(
             &mut pixels,
@@ -1219,7 +1443,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             &mut pixels,
             dims,
             (MERGE_X2, y, MERGE_PANE_W, ROW_H),
-            BG_DARK,
+            fixture_palette().bg,
         );
         draw_string(
             &mut pixels,
@@ -1227,7 +1451,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             MERGE_X0.saturating_add(8),
             y.saturating_add(6),
             base,
-            FG_TEXT,
+            fixture_palette().text,
         );
         draw_string(
             &mut pixels,
@@ -1243,7 +1467,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             MERGE_X2.saturating_add(8),
             y.saturating_add(6),
             right,
-            FG_TEXT,
+            fixture_palette().text,
         );
     }
 
@@ -1294,7 +1518,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
         pen_x,
         strip_y.saturating_add(6),
         "Take:",
-        FG_DIM,
+        fixture_palette().dim,
     )
     .saturating_add(8);
     for label in ["Take Left", "Take Right", "Take Base", "Take Both"] {
@@ -1311,7 +1535,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             pen_x.saturating_add(8),
             strip_y.saturating_add(6),
             label,
-            FG_TEXT,
+            fixture_palette().text,
         );
         pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
         if pen_x.saturating_add(60) > MERGE_X2.saturating_add(MERGE_PANE_W) {
@@ -1324,7 +1548,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
         MERGE_X0.saturating_add(8),
         strip_y.saturating_add(ROW_H).saturating_add(6),
         &take_title,
-        FG_DIM,
+        fixture_palette().dim,
     );
     draw_string(
         &mut pixels,
@@ -1335,7 +1559,7 @@ pub fn render_merge_fixture_png(out_path: &Path) -> Result<(), String> {
             .saturating_add(12)
             .saturating_add(6),
         &take_decision,
-        FG_TEXT,
+        fixture_palette().text,
     );
     let _ = summary;
 
@@ -1455,7 +1679,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
         MERGE_X0.saturating_add(8),
         pane_top.saturating_sub(18),
         "[Base] [Left] [Right]",
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     // Card title + teen sides (changed band: sides alag hain).
@@ -1465,7 +1689,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
         MERGE_X0.saturating_add(8),
         pane_top.saturating_add(6),
         &title,
-        FG_TEXT,
+        fixture_palette().text,
     );
     let side_y = pane_top.saturating_add(ROW_H);
     for (x, lines) in [(MERGE_X0, &left), (MERGE_X1, &base), (MERGE_X2, &right)] {
@@ -1508,7 +1732,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
         pen_x,
         strip_y.saturating_add(6),
         "Take:",
-        FG_DIM,
+        fixture_palette().dim,
     )
     .saturating_add(8);
     for label in ["Take Left", "Take Right", "Take Base", "Take Both"] {
@@ -1525,7 +1749,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
             pen_x.saturating_add(8),
             strip_y.saturating_add(6),
             label,
-            FG_TEXT,
+            fixture_palette().text,
         );
         pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
         if pen_x.saturating_add(60) > MERGE_X2.saturating_add(MERGE_PANE_W) {
@@ -1539,7 +1763,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
         MERGE_X0.saturating_add(8),
         strip_y.saturating_add(ROW_H).saturating_add(6),
         &decision,
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -1550,7 +1774,7 @@ pub fn render_merge_take_fixture_png(out_path: &Path) -> Result<(), String> {
             .saturating_add(12)
             .saturating_add(6),
         &resolved_line,
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     paint_status(
@@ -1656,7 +1880,7 @@ pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         pane_top.saturating_add(6),
         &header,
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     let mut row_y = pane_top.saturating_add(ROW_H);
@@ -1672,7 +1896,7 @@ pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
         let (bg, fg) = if conflict {
             (CHANGED_BG, CHANGED_FG)
         } else {
-            (BG_DARK, FG_TEXT)
+            (fixture_palette().bg, fixture_palette().text)
         };
         fill_rect(
             &mut pixels,
@@ -1694,7 +1918,11 @@ pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
             &line,
             fg,
         );
-        let decision_fg = if decided.is_some() { FG_TEXT } else { FG_DIM };
+        let decision_fg = if decided.is_some() {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        };
         draw_string(
             &mut pixels,
             dims,
@@ -1725,7 +1953,7 @@ pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
                 20,
                 row_y.saturating_add(6),
                 "Take:",
-                FG_DIM,
+                fixture_palette().dim,
             )
             .saturating_add(8);
             for side in [
@@ -1747,7 +1975,7 @@ pub fn render_three_way_fixture_png(out_path: &Path) -> Result<(), String> {
                     pen_x.saturating_add(8),
                     row_y.saturating_add(6),
                     label,
-                    FG_TEXT,
+                    fixture_palette().text,
                 );
                 pen_x = pen_x.saturating_add(btn_w).saturating_add(8);
                 if pen_x.saturating_add(60) > SNAP_W.saturating_sub(OUTER_PAD) {
@@ -1853,7 +2081,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         pane_top.saturating_add(6),
         &list.summary(),
-        FG_TEXT,
+        fixture_palette().text,
     );
     let mut row_y = pane_top.saturating_add(ROW_H);
     for row in &list.rows {
@@ -1869,7 +2097,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
                 SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
                 ROW_H,
             ),
-            BG_DARK,
+            fixture_palette().bg,
         );
         let mark = if row.checked { "[x]" } else { "[ ]" };
         let mut pen = draw_string(
@@ -1878,7 +2106,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             mark,
-            FG_TEXT,
+            fixture_palette().text,
         )
         .saturating_add(8);
         pen = draw_string(
@@ -1887,7 +2115,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             pen,
             row_y.saturating_add(6),
             &row.glyph().to_string(),
-            FG_TEXT,
+            fixture_palette().text,
         )
         .saturating_add(8);
         pen = draw_string(
@@ -1896,7 +2124,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             pen,
             row_y.saturating_add(6),
             &row.display_line(),
-            FG_TEXT,
+            fixture_palette().text,
         )
         .saturating_add(8);
         draw_string(
@@ -1905,7 +2133,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             pen,
             row_y.saturating_add(6),
             row.action_label(),
-            FG_DIM,
+            fixture_palette().dim,
         );
         let _ = pen;
         row_y = row_y.saturating_add(ROW_H);
@@ -1920,7 +2148,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             &crate::views::sync_skip_text(path, reason),
-            FG_DIM,
+            fixture_palette().dim,
         );
         row_y = row_y.saturating_add(ROW_H);
     }
@@ -1932,7 +2160,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         row_y.saturating_add(6),
         "Apply copies checked left->right only, never deletes.",
-        FG_DIM,
+        fixture_palette().dim,
     );
     row_y = row_y.saturating_add(ROW_H);
     if row_y.saturating_add(ROW_H) <= pane_bottom {
@@ -1942,7 +2170,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             "[x] Dry-run (no writes)",
-            FG_TEXT,
+            fixture_palette().text,
         );
         row_y = row_y.saturating_add(ROW_H);
     }
@@ -1953,7 +2181,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             "[x] I understand Apply copies files left->right",
-            FG_TEXT,
+            fixture_palette().text,
         );
         row_y = row_y.saturating_add(ROW_H);
     }
@@ -1964,7 +2192,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             &dry_line,
-            FG_DIM,
+            fixture_palette().dim,
         );
         row_y = row_y.saturating_add(ROW_H);
     }
@@ -1975,7 +2203,7 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             20,
             row_y.saturating_add(6),
             &count_line,
-            FG_DIM,
+            fixture_palette().dim,
         );
         row_y = row_y.saturating_add(ROW_H);
     }
@@ -1994,7 +2222,11 @@ pub fn render_sync_fixture_png(out_path: &Path) -> Result<(), String> {
             32,
             row_y.saturating_add(6),
             label,
-            if apply_open { FG_TEXT } else { FG_DIM },
+            if apply_open {
+                fixture_palette().text
+            } else {
+                fixture_palette().dim
+            },
         );
     }
 
@@ -2035,11 +2267,23 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
     let mut pixels = vec![0u8; byte_count];
     // Launcher chrome: title + tabs only. Path picker contract me kabhi
     // nahi dikhta, swap/reload toolbar launcher ka kaam nahi.
-    fill_rect(&mut pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (0, 0, width, TITLE_H),
+        fixture_palette().panel,
+    );
     fill_rect(&mut pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
     fill_rect(&mut pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
     fill_rect(&mut pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
-    draw_string(&mut pixels, dims, 80, 14, "Home - autocompare", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        80,
+        14,
+        "Home - autocompare",
+        fixture_palette().text,
+    );
     fill_rect(
         &mut pixels,
         dims,
@@ -2047,18 +2291,32 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
         [32, 32, 32, 255],
     );
     fill_rect(&mut pixels, dims, (8, 40, 52, 24), ACCENT_TAB);
-    draw_string(&mut pixels, dims, 16, 46, "Home", FG_TEXT);
-    draw_string(&mut pixels, dims, 76, 46, "Text", FG_DIM);
-    draw_string(&mut pixels, dims, 130, 46, "Folder", FG_DIM);
-    draw_string(&mut pixels, dims, 200, 46, "Hex", FG_DIM);
-    draw_string(&mut pixels, dims, 244, 46, "Merge", FG_DIM);
-    draw_string(&mut pixels, dims, 300, 46, "Table", FG_DIM);
-    draw_string(&mut pixels, dims, 356, 46, "Sync", FG_DIM);
-    draw_string(&mut pixels, dims, 404, 46, "Picture", FG_DIM);
-    draw_string(&mut pixels, dims, 474, 46, "FolderMerge", FG_DIM);
-    draw_string(&mut pixels, dims, 574, 46, "Audio", FG_DIM);
+    draw_string(&mut pixels, dims, 16, 46, "Home", fixture_palette().text);
+    draw_string(&mut pixels, dims, 76, 46, "Text", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 130, 46, "Folder", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 200, 46, "Hex", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 244, 46, "Merge", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 300, 46, "Table", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 356, 46, "Sync", fixture_palette().dim);
+    draw_string(&mut pixels, dims, 404, 46, "Picture", fixture_palette().dim);
+    draw_string(
+        &mut pixels,
+        dims,
+        474,
+        46,
+        "FolderMerge",
+        fixture_palette().dim,
+    );
+    draw_string(&mut pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
-    draw_string(&mut pixels, dims, 20, 74, "Comparison Sessions", FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        20,
+        74,
+        "Comparison Sessions",
+        fixture_palette().text,
+    );
 
     // Cards: live model, row-major 3-col grid, contract gap.
     let model = home_model();
@@ -2083,7 +2341,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
             x.saturating_add(12),
             y.saturating_add(12),
             item.title,
-            FG_TEXT,
+            fixture_palette().text,
         );
         let (desc_top, desc_bottom) =
             wrap_desc_two_lines(item.description, HOME_CARD_W.saturating_sub(24));
@@ -2093,7 +2351,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
             x.saturating_add(12),
             y.saturating_add(30),
             &desc_top,
-            FG_DIM,
+            fixture_palette().dim,
         );
         if !desc_bottom.is_empty() {
             draw_string(
@@ -2102,7 +2360,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
                 x.saturating_add(12),
                 y.saturating_add(40),
                 &desc_bottom,
-                FG_DIM,
+                fixture_palette().dim,
             );
         }
         let cta_y = y.saturating_add(64);
@@ -2118,7 +2376,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
             x.saturating_add(24),
             cta_y.saturating_add(10),
             &format!("Open {}", item.title),
-            FG_TEXT,
+            fixture_palette().text,
         );
     }
 
@@ -2145,7 +2403,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         list_top.saturating_add(6),
         "Recent sessions",
-        FG_TEXT,
+        fixture_palette().text,
     );
     let (title_w, kind_w, age_w) =
         recent_row_columns(SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)) as f32);
@@ -2180,7 +2438,7 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
                 SNAP_W.saturating_sub(OUTER_PAD.saturating_mul(2)),
                 ROW_H,
             ),
-            BG_DARK,
+            fixture_palette().bg,
         );
         draw_string(
             &mut pixels,
@@ -2188,10 +2446,24 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
             content_x,
             y.saturating_add(6),
             title,
-            FG_TEXT,
+            fixture_palette().text,
         );
-        draw_string(&mut pixels, dims, kind_x, y.saturating_add(6), kind, FG_DIM);
-        draw_string(&mut pixels, dims, age_x, y.saturating_add(6), age, FG_DIM);
+        draw_string(
+            &mut pixels,
+            dims,
+            kind_x,
+            y.saturating_add(6),
+            kind,
+            fixture_palette().dim,
+        );
+        draw_string(
+            &mut pixels,
+            dims,
+            age_x,
+            y.saturating_add(6),
+            age,
+            fixture_palette().dim,
+        );
     }
 
     paint_status(
@@ -2239,10 +2511,24 @@ pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
 
     // Find bar: needle + honest hit line (headless truth: 2 side hits).
     fill_rect(&mut pixels, dims, (12, 124, 936, 24), [28, 28, 28, 255]);
-    draw_string(&mut pixels, dims, 20, 130, "find", FG_TEXT);
+    draw_string(&mut pixels, dims, 20, 130, "find", fixture_palette().text);
     fill_rect(&mut pixels, dims, (64, 127, 180, 18), [45, 45, 45, 255]);
-    draw_string(&mut pixels, dims, 70, 130, "read_to_string", FG_TEXT);
-    draw_string(&mut pixels, dims, 260, 130, "2 hits, current row 3", FG_DIM);
+    draw_string(
+        &mut pixels,
+        dims,
+        70,
+        130,
+        "read_to_string",
+        fixture_palette().text,
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        260,
+        130,
+        "2 hits, current row 3",
+        fixture_palette().dim,
+    );
 
     let long_line = "    // wrap proof: keep the legacy reader enabled until rollout ends, then call read_to_string(old);";
     let rows = vec![
@@ -2343,10 +2629,25 @@ pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
         let left_chunks = crate::views::wrap_chunks(&row.left, wrap_width);
         let right_chunks = crate::views::wrap_chunks(&row.right, wrap_width);
         let (base_bg_left, base_fg_left, base_bg_right, base_fg_right) = match row.kind {
-            TextRowKind::Equal => (BG_DARK, FG_TEXT, BG_DARK, FG_TEXT),
+            TextRowKind::Equal => (
+                fixture_palette().bg,
+                fixture_palette().text,
+                fixture_palette().bg,
+                fixture_palette().text,
+            ),
             TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
-            TextRowKind::Deleted => (DELETED_BG, DELETED_FG, BG_DARK, FG_DIM),
-            TextRowKind::Inserted => (BG_DARK, FG_DIM, INSERTED_BG, INSERTED_FG),
+            TextRowKind::Deleted => (
+                DELETED_BG,
+                DELETED_FG,
+                fixture_palette().bg,
+                fixture_palette().dim,
+            ),
+            TextRowKind::Inserted => (
+                fixture_palette().bg,
+                fixture_palette().dim,
+                INSERTED_BG,
+                INSERTED_FG,
+            ),
         };
         let mut sub = 0usize;
         while sub < count {
@@ -2377,7 +2678,7 @@ pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
                         16,
                         y.saturating_add(6),
                         &format!("{no:>2} "),
-                        FG_DIM,
+                        fixture_palette().dim,
                     );
                 }
                 if let Some(no) = row.right_no {
@@ -2387,7 +2688,7 @@ pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
                         480,
                         y.saturating_add(6),
                         &format!("{no:>2} "),
-                        FG_DIM,
+                        fixture_palette().dim,
                     );
                 }
             }
@@ -2417,7 +2718,7 @@ pub fn render_wrap_fixture_png(out_path: &Path) -> Result<(), String> {
         let seg_y = pane_top.saturating_add(seg.y_start as u32);
         let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
         let seg_color = match seg.kind {
-            TextRowKind::Equal => BG_PANEL,
+            TextRowKind::Equal => fixture_palette().panel,
             TextRowKind::Changed => CHANGED_BG,
             TextRowKind::Deleted => DELETED_BG,
             TextRowKind::Inserted => INSERTED_BG,
@@ -2504,9 +2805,9 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
 
     // Zoom-step row: Fit highlighted + preset ladder.
     fill_rect(&mut pixels, dims, (12, 124, 936, 24), [28, 28, 28, 255]);
-    draw_string(&mut pixels, dims, 20, 130, "steps:", FG_DIM);
+    draw_string(&mut pixels, dims, 20, 130, "steps:", fixture_palette().dim);
     fill_rect(&mut pixels, dims, (76, 127, 40, 18), ACCENT_TAB);
-    draw_string(&mut pixels, dims, 86, 130, "Fit", FG_TEXT);
+    draw_string(&mut pixels, dims, 86, 130, "Fit", fixture_palette().text);
     let mut step_x = 124u32;
     for step in PICTURE_ZOOM_STEPS {
         let label = format!("{step}%");
@@ -2520,7 +2821,11 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
             step_x.saturating_add(8),
             130,
             &label,
-            if selected { FG_TEXT } else { FG_DIM },
+            if selected {
+                fixture_palette().text
+            } else {
+                fixture_palette().dim
+            },
         );
         step_x = step_x.saturating_add(60);
     }
@@ -2531,13 +2836,13 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
         step_x.saturating_add(8),
         130,
         &zoom_label(fit),
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     // Summary strip: live CLI-worded lines, one per 12px rhythm row.
     let mut sum_y = 152u32;
     for line in &summary {
-        draw_string(&mut pixels, dims, 20, sum_y, line, FG_DIM);
+        draw_string(&mut pixels, dims, 20, sum_y, line, fixture_palette().dim);
         sum_y = sum_y.saturating_add(12);
         if sum_y.saturating_add(7) > viewport_top {
             break;
@@ -2578,7 +2883,7 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
             frame_w.saturating_sub(half_w),
             half_h,
         ),
-        BG_DARK,
+        fixture_palette().bg,
     );
     fill_rect(
         &mut pixels,
@@ -2603,7 +2908,12 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
         DELETED_BG,
     );
     // 1px frame border (frozen dim).
-    fill_rect(&mut pixels, dims, (frame_x, frame_y, frame_w, 1), FG_DIM);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (frame_x, frame_y, frame_w, 1),
+        fixture_palette().dim,
+    );
     fill_rect(
         &mut pixels,
         dims,
@@ -2613,9 +2923,14 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
             frame_w,
             1,
         ),
-        FG_DIM,
+        fixture_palette().dim,
     );
-    fill_rect(&mut pixels, dims, (frame_x, frame_y, 1, frame_h), FG_DIM);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (frame_x, frame_y, 1, frame_h),
+        fixture_palette().dim,
+    );
     fill_rect(
         &mut pixels,
         dims,
@@ -2625,7 +2940,7 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
             1,
             frame_h,
         ),
-        FG_DIM,
+        fixture_palette().dim,
     );
     draw_string(
         &mut pixels,
@@ -2633,7 +2948,7 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
         frame_x.saturating_add(8),
         frame_y.saturating_add(8),
         "800x600 @50% (400x300)",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     paint_status(
@@ -2733,7 +3048,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         122,
         "[x] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten",
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -2741,7 +3056,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         16,
         138,
         &format!("{} | {shown} shown (filter)", counts.summary()),
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     let pane_top = 158u32;
@@ -2758,7 +3073,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         pane_top.saturating_add(120),
         hint,
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     // Sync preview stays visible under the filter (filter prunes display,
@@ -2778,7 +3093,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(6),
         "Sync preview (dry-run)",
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -2790,7 +3105,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
             crate::tree::SyncModeChoice::UpdateBoth.label(),
             crate::tree::SyncModeChoice::Mirror.label()
         ),
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -2798,7 +3113,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(38),
         &preview.summary(),
-        FG_DIM,
+        fixture_palette().dim,
     );
     draw_string(
         &mut pixels,
@@ -2806,7 +3121,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         panel_y.saturating_add(54),
         consent,
-        FG_DIM,
+        fixture_palette().dim,
     );
     fill_rect(
         &mut pixels,
@@ -2820,7 +3135,7 @@ pub fn render_folder_empty_fixture_png(out_path: &Path) -> Result<(), String> {
         32,
         panel_y.saturating_add(78),
         "Apply sync plan",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     paint_status(
@@ -2927,7 +3242,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         16,
         122,
         "[ ] Hide orphans  [ ] Left newer only  [ ] Right newer only  [ ] Flatten  (Status: Different)",
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -2935,7 +3250,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         16,
         138,
         &format!("{} | {shown} shown (allsame)", counts.summary()),
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     let pane_top = 158u32;
@@ -2952,7 +3267,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         20,
         pane_top.saturating_add(120),
         hint,
-        FG_DIM,
+        fixture_palette().dim,
     );
     // Filter laga hai to live `paint_folder` Clear button deta hai
     // (khali view + active display); headless me wahi affordance.
@@ -2969,7 +3284,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
             32,
             pane_top.saturating_add(146),
             "Clear filters",
-            FG_TEXT,
+            fixture_palette().text,
         );
     }
 
@@ -2990,7 +3305,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         20,
         panel_y.saturating_add(6),
         "Sync preview (dry-run)",
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -3002,7 +3317,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
             SyncModeChoice::UpdateBoth.label(),
             SyncModeChoice::Mirror.label()
         ),
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -3010,7 +3325,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         20,
         panel_y.saturating_add(38),
         &preview.summary(),
-        FG_DIM,
+        fixture_palette().dim,
     );
     draw_string(
         &mut pixels,
@@ -3018,7 +3333,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         20,
         panel_y.saturating_add(54),
         consent,
-        FG_DIM,
+        fixture_palette().dim,
     );
     fill_rect(
         &mut pixels,
@@ -3032,7 +3347,7 @@ pub fn render_folder_allsame_fixture_png(out_path: &Path) -> Result<(), String> 
         32,
         panel_y.saturating_add(78),
         "Apply sync plan",
-        FG_TEXT,
+        fixture_palette().text,
     );
 
     paint_status(
@@ -3085,7 +3400,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
     let badge = table_key_badge_label(&view);
     let key_h = TABLE_KEY_BAR_H as u32;
     fill_rect(&mut pixels, dims, (12, 124, 936, key_h), [28, 28, 28, 255]);
-    draw_string(&mut pixels, dims, 20, 130, "Key:", FG_DIM);
+    draw_string(&mut pixels, dims, 20, 130, "Key:", fixture_palette().dim);
     let header = ["id", "name", "left", "right", "status"];
     let mut key_line = String::new();
     for (col, name) in header.iter().enumerate() {
@@ -3101,9 +3416,23 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         key_line.push(' ');
         key_line.push_str(name);
     }
-    draw_string(&mut pixels, dims, 60, 130, &key_line, FG_TEXT);
+    draw_string(
+        &mut pixels,
+        dims,
+        60,
+        130,
+        &key_line,
+        fixture_palette().text,
+    );
     let badge_x = 948u32.saturating_sub(text_width(&badge));
-    draw_string(&mut pixels, dims, badge_x, 130, &badge, FG_DIM);
+    draw_string(
+        &mut pixels,
+        dims,
+        badge_x,
+        130,
+        &badge,
+        fixture_palette().dim,
+    );
 
     // Find bar from live tokens: 28px bar, 120px needle, 1px underline.
     let find_h = TABLE_FIND_BAR_H as u32;
@@ -3120,7 +3449,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         find_y.saturating_add(6),
         "find",
-        FG_TEXT,
+        fixture_palette().text,
     );
     let needle_w = TABLE_FIND_NEEDLE_W as u32;
     fill_rect(
@@ -3136,7 +3465,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         70,
         find_y.saturating_add(6),
         needle,
-        FG_TEXT,
+        fixture_palette().text,
     );
     draw_string(
         &mut pixels,
@@ -3144,7 +3473,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         200,
         find_y.saturating_add(6),
         "1 hit, current",
-        FG_DIM,
+        fixture_palette().dim,
     );
 
     // Grid: header + rows, needle hit underlined at padded-span offsets.
@@ -3167,7 +3496,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         &mut pixels,
         dims,
         (pane_x, grid_top, pane_w, ROW_H),
-        BG_PANEL,
+        fixture_palette().panel,
     );
     draw_string(
         &mut pixels,
@@ -3175,7 +3504,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         20,
         grid_top.saturating_add(6),
         "id | name | left | right | status",
-        FG_TEXT,
+        fixture_palette().text,
     );
     let rows = [
         ("1 | anna | 10 | 10 | = |", false),
@@ -3195,7 +3524,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
         let (bg, fg) = if *changed {
             (CHANGED_BG, CHANGED_FG)
         } else {
-            (BG_DARK, FG_TEXT)
+            (fixture_palette().bg, fixture_palette().text)
         };
         fill_rect(&mut pixels, dims, (pane_x, y, pane_w, ROW_H), bg);
         draw_string(&mut pixels, dims, 20, y.saturating_add(6), line, fg);
@@ -3222,7 +3551,7 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
                 &mut pixels,
                 dims,
                 (ux, hit_y.saturating_add(14), uw, 1),
-                FG_TEXT,
+                fixture_palette().text,
             );
         }
     }
@@ -3249,11 +3578,16 @@ pub fn render_table_find_fixture_png(out_path: &Path) -> Result<(), String> {
 /// `active`: 0 home, 1 text, 2 folder, 3 hex, 4 merge, 5 table, 6 sync, 7 picture.
 fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     let width = dims.0;
-    fill_rect(pixels, dims, (0, 0, width, TITLE_H), BG_PANEL);
+    fill_rect(
+        pixels,
+        dims,
+        (0, 0, width, TITLE_H),
+        fixture_palette().panel,
+    );
     fill_rect(pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
     fill_rect(pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
     fill_rect(pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
-    draw_string(pixels, dims, 80, 14, title, FG_TEXT);
+    draw_string(pixels, dims, 80, 14, title, fixture_palette().text);
 
     fill_rect(pixels, dims, (0, TITLE_H, width, TAB_H), [32, 32, 32, 255]);
     // Highlight box per active tab.
@@ -3275,7 +3609,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         16,
         46,
         "Home",
-        if active == 0 { FG_TEXT } else { FG_DIM },
+        if active == 0 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3283,7 +3621,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         76,
         46,
         "Text",
-        if active == 1 { FG_TEXT } else { FG_DIM },
+        if active == 1 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3291,7 +3633,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         130,
         46,
         "Folder",
-        if active == 2 { FG_TEXT } else { FG_DIM },
+        if active == 2 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3299,7 +3645,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         200,
         46,
         "Hex",
-        if active == 3 { FG_TEXT } else { FG_DIM },
+        if active == 3 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3307,7 +3657,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         244,
         46,
         "Merge",
-        if active == 4 { FG_TEXT } else { FG_DIM },
+        if active == 4 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3315,7 +3669,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         300,
         46,
         "Table",
-        if active == 5 { FG_TEXT } else { FG_DIM },
+        if active == 5 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3323,7 +3681,11 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         356,
         46,
         "Sync",
-        if active == 6 { FG_TEXT } else { FG_DIM },
+        if active == 6 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
     draw_string(
         pixels,
@@ -3331,20 +3693,38 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         404,
         46,
         "Picture",
-        if active == 7 { FG_TEXT } else { FG_DIM },
+        if active == 7 {
+            fixture_palette().text
+        } else {
+            fixture_palette().dim
+        },
     );
-    draw_string(pixels, dims, 474, 46, "FolderMerge", FG_DIM);
-    draw_string(pixels, dims, 574, 46, "Audio", FG_DIM);
+    draw_string(pixels, dims, 474, 46, "FolderMerge", fixture_palette().dim);
+    draw_string(pixels, dims, 574, 46, "Audio", fixture_palette().dim);
 
     // Path row (same geometry for all tabs).
     fill_rect(pixels, dims, (12, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(pixels, dims, 20, 82, "fixtures/left", FG_TEXT);
+    draw_string(
+        pixels,
+        dims,
+        20,
+        82,
+        "fixtures/left",
+        fixture_palette().text,
+    );
     fill_rect(pixels, dims, (400, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(pixels, dims, 412, 82, "Browse...", FG_TEXT);
+    draw_string(pixels, dims, 412, 82, "Browse...", fixture_palette().text);
     fill_rect(pixels, dims, (490, 76, 380, 24), [45, 45, 45, 255]);
-    draw_string(pixels, dims, 498, 82, "fixtures/right", FG_TEXT);
+    draw_string(
+        pixels,
+        dims,
+        498,
+        82,
+        "fixtures/right",
+        fixture_palette().text,
+    );
     fill_rect(pixels, dims, (878, 76, 75, 24), [60, 60, 60, 255]);
-    draw_string(pixels, dims, 890, 82, "Browse...", FG_TEXT);
+    draw_string(pixels, dims, 890, 82, "Browse...", fixture_palette().text);
 
     draw_string(
         pixels,
@@ -3352,7 +3732,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
         16,
         104,
         "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
-        FG_TEXT,
+        fixture_palette().text,
     );
 }
 
@@ -3360,7 +3740,7 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
 fn paint_status(pixels: &mut [u8], dims: (u32, u32), line: &str) {
     let width = dims.0;
     fill_rect(pixels, dims, (0, 570, width, STATUS_H), [32, 32, 32, 255]);
-    draw_string(pixels, dims, 16, 578, line, FG_DIM);
+    draw_string(pixels, dims, 16, 578, line, fixture_palette().dim);
 }
 
 fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), color: [u8; 4]) {
@@ -3712,6 +4092,45 @@ mod tests {
     }
 
     #[test]
+    fn fixture_default_mode_is_dark() {
+        assert_eq!(FixtureMode::default(), FixtureMode::Dark);
+    }
+
+    #[test]
+    fn fixture_default_path_is_byte_stable_dark() {
+        let dir = std::env::temp_dir();
+        let default_out = dir.join("vis-darkfull-default.png");
+        let dark_out = dir.join("vis-darkfull-dark.png");
+        assert!(render_fixture_png(&default_out).is_ok());
+        assert!(render_fixture_png_with_mode(&dark_out, FixtureMode::Dark).is_ok());
+        let default_bytes = std::fs::read(&default_out).unwrap_or_default();
+        let dark_bytes = std::fs::read(&dark_out).unwrap_or_default();
+        assert!(!default_bytes.is_empty());
+        assert_eq!(default_bytes, dark_bytes);
+    }
+
+    #[test]
+    fn fixture_mode_param_switches_hues() {
+        let dir = std::env::temp_dir();
+        let dark_out = dir.join("vis-darkfull-mode-dark.png");
+        let light_out = dir.join("vis-darkfull-mode-light.png");
+        assert!(render_fixture_png_with_mode(&dark_out, FixtureMode::Dark).is_ok());
+        assert!(render_fixture_png_with_mode(&light_out, FixtureMode::Light).is_ok());
+        let dark_bytes = std::fs::read(&dark_out).unwrap_or_default();
+        let light_bytes = std::fs::read(&light_out).unwrap_or_default();
+        assert!(png_magic_ok(&dark_bytes));
+        assert!(png_magic_ok(&light_bytes));
+        assert!(dark_bytes.len() >= 8192);
+        assert!(light_bytes.len() >= 8192);
+        assert_ne!(dark_bytes, light_bytes);
+        // Guard wapas dark karta hai: default path mode-proof ke baad bhi stable.
+        let after_out = dir.join("vis-darkfull-mode-after.png");
+        assert!(render_fixture_png(&after_out).is_ok());
+        let after_bytes = std::fs::read(&after_out).unwrap_or_default();
+        assert_eq!(after_bytes, dark_bytes);
+    }
+
+    #[test]
     fn narrow_glyphs_use_tighter_advance() {
         for ch in *b" ',.:;!Iijl|`" {
             assert_eq!(glyph_advance(ch), 4);
@@ -3776,10 +4195,10 @@ mod tests {
         let dims = (20u32, 10u32);
         let total = 20usize.saturating_mul(10).saturating_mul(4);
         let mut pixels = vec![0u8; total];
-        let pen = draw_string(&mut pixels, dims, 2, 1, "Hi.", FG_TEXT);
+        let pen = draw_string(&mut pixels, dims, 2, 1, "Hi.", fixture_palette().text);
         assert_eq!(pen, 2u32.saturating_add(text_width("Hi.")));
         // Pen near the right edge clips glyph pixels but still advances.
-        let edge = draw_string(&mut pixels, dims, 19, 1, "Hi.", FG_TEXT);
+        let edge = draw_string(&mut pixels, dims, 19, 1, "Hi.", fixture_palette().text);
         assert_eq!(edge, 19u32.saturating_add(text_width("Hi.")));
         assert_eq!(pixels.len(), total);
     }
