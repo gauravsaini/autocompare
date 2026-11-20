@@ -468,6 +468,70 @@ pub fn gutter_viewport_rect(
     Some((y0, y1))
 }
 
+// ----------------------------------------------------------------------------
+// Virtualized range geometry (headless; O(ranges), no per-row vec).
+// Tall inputs virtualize: callers pass half-open `[start, end)` model-row
+// spans with one kind (hunk/diff spans) instead of materializing one
+// entry per row, so a 1M-row file maps from a handful of ranges.
+// Floors, merge gaps and the ruler hit contract match
+// [`gutter_geometry`] exactly; `ranges` in row order give identical
+// segments. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Computes thumbnail gutter bars directly from diff row ranges.
+///
+/// Each `(start, end, kind)` names a half-open span of model rows sharing
+/// one [`TextRowKind`]. Spans clamp to `total_rows`; empty or fully
+/// out-of-range spans contribute nothing. Band math (fraction mapping,
+/// [`GUTTER_SEGMENT_MIN_H`] floor, [`crate::theme::GUTTER_MERGE_GAP`]
+/// fusion) mirrors [`gutter_geometry`] so virtualized paint and the
+/// row-wise path never disagree. Pure; unit-tested.
+pub fn gutter_geometry_from_ranges(
+    total_rows: usize,
+    height: f32,
+    ranges: &[(usize, usize, TextRowKind)],
+) -> GutterGeometry {
+    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
+        return GutterGeometry {
+            total_height: height.max(0.0),
+            segments: Vec::new(),
+        };
+    }
+    let mut segments: Vec<GutterSegment> = Vec::new();
+    let total_f = total_rows as f32;
+    for (start, end, kind) in ranges {
+        if *start >= *end || *start >= total_rows {
+            continue;
+        }
+        let stop = (*end).min(total_rows);
+        if stop <= *start {
+            continue;
+        }
+        let y_start = (*start as f32 / total_f) * height;
+        let mut y_end = (stop as f32 / total_f) * height;
+        if y_end < y_start + GUTTER_SEGMENT_MIN_H {
+            y_end = (y_start + GUTTER_SEGMENT_MIN_H).min(height);
+        }
+        if let Some(last) = segments.last_mut() {
+            let last_seg: &mut GutterSegment = last;
+            if last_seg.kind == *kind && y_start <= last_seg.y_end + crate::theme::GUTTER_MERGE_GAP
+            {
+                last_seg.y_end = last_seg.y_end.max(y_end);
+                continue;
+            }
+        }
+        segments.push(GutterSegment {
+            y_start,
+            y_end,
+            kind: *kind,
+        });
+    }
+    GutterGeometry {
+        total_height: height,
+        segments,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -899,5 +963,55 @@ mod tests {
         assert_eq!(gutter_viewport_rect(4, 400.0, 99, 2), None);
         assert_eq!(GUTTER_VIEWPORT_MIN_H, 4.0);
         assert_eq!(GUTTER_VIEWPORT_MIN_H, crate::theme::SPACE_XS);
+    }
+
+    #[test]
+    fn ranges_match_row_wise_geometry_and_virtualize_tall_files() {
+        // Same 4-row scene as `difference_rows_map_to_coordinates_and_merge`.
+        let rows = vec![
+            make_test_row(TextRowKind::Equal),
+            make_test_row(TextRowKind::Deleted),
+            make_test_row(TextRowKind::Deleted),
+            make_test_row(TextRowKind::Inserted),
+        ];
+        let row_wise = gutter_geometry(4, 400.0, &rows);
+        let ranged = gutter_geometry_from_ranges(
+            4,
+            400.0,
+            &[(1, 3, TextRowKind::Deleted), (3, 4, TextRowKind::Inserted)],
+        );
+        assert_eq!(ranged, row_wise);
+        // Tall file virtualizes: one range, no 1M-row vec, same 4px floor.
+        let tall = gutter_geometry_from_ranges(
+            1_000_000,
+            400.0,
+            &[(500_000, 500_001, TextRowKind::Deleted)],
+        );
+        assert_eq!(tall.segments.len(), 1);
+        let Some(seg) = tall.segments.first() else {
+            return;
+        };
+        assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        // Empty/out-of-range spans contribute nothing; bad input is empty.
+        assert!(
+            gutter_geometry_from_ranges(4, 400.0, &[(2, 2, TextRowKind::Deleted)])
+                .segments
+                .is_empty()
+        );
+        assert!(
+            gutter_geometry_from_ranges(4, 400.0, &[(9, 12, TextRowKind::Deleted)])
+                .segments
+                .is_empty()
+        );
+        assert!(
+            gutter_geometry_from_ranges(0, 400.0, &[(0, 1, TextRowKind::Deleted)])
+                .segments
+                .is_empty()
+        );
+        assert!(
+            gutter_geometry_from_ranges(4, 0.0, &[(0, 1, TextRowKind::Deleted)])
+                .segments
+                .is_empty()
+        );
     }
 }

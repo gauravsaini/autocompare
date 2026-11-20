@@ -1865,6 +1865,197 @@ pub fn paint_hex_goto_bar(ui: &mut egui::Ui, goto_text: &mut String, badge: &str
     go
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave 7 (headless; paint wiring stays with the
+// orchestrator).
+// Geometry FIRST: hex+ASCII sync panes share one visible-row window,
+// 64-bit goto anchors to the grid ruler, the gutter virtualizes from
+// hunk row-ranges (O(hunks), no per-row vec), grid rows keep a fixed
+// char budget so nothing clips, and the 960x600 canvas plus a narrow
+// stacked mode cover wide and wrapped windows. Typography SECOND:
+// sync panes and the ruler read the shared Mono role (family/weight/
+// line-height/letter-spacing carry hierarchy), section labels stay Body.
+// Koi naya size/token/color nahi — widths reuse gutter/minimap/SPACE
+// tokens, sizes reuse TypoRole. No egui paint, no I/O; colors frozen.
+// ----------------------------------------------------------------------------
+
+/// Hex canvas reference width (px): the 960px budget the gutter docs
+/// lock (`12 + 460 + 4 + 460 + 16 + 8`). Grid + chrome never exceed it
+/// side-by-side; narrower windows stack instead of clipping.
+pub const HEX_CANVAS_W: f32 = 960.0;
+
+/// Hex canvas reference height (px): rows + find/goto bars + status fit
+/// without scrolling the chrome at this height on the reference window.
+pub const HEX_CANVAS_H: f32 = 600.0;
+
+/// Narrow stacking breakpoint (px): below this the hex+ASCII panes stack
+/// (ASCII under hex, shared scroll) instead of crushing side-by-side.
+/// Reuses the documented 720px paint fallback precedent (views.rs
+/// merge-apply row), koi naya magic rhythm nahi.
+pub const HEX_STACK_BREAKPOINT_W: f32 = 720.0;
+
+/// Hex pane arrangement for the available width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HexLayoutMode {
+    /// Hex + ASCII panes side-by-side, one shared row window.
+    #[default]
+    SideBySide,
+    /// ASCII wraps under hex, same shared row window (narrow windows).
+    Stacked,
+}
+
+/// Pane arrangement for `avail_w`: finite widths at or above
+/// [`HEX_STACK_BREAKPOINT_W`] stay side-by-side; narrower, zero, or
+/// non-finite widths stack so panes scroll instead of clipping.
+/// Pure; unit-tested.
+pub fn hex_layout_mode(avail_w: f32) -> HexLayoutMode {
+    if avail_w.is_finite() && avail_w >= HEX_STACK_BREAKPOINT_W {
+        HexLayoutMode::SideBySide
+    } else {
+        HexLayoutMode::Stacked
+    }
+}
+
+/// Chrome reserve beside the hex grid (px): gutter bar + minimap strip +
+/// two [`crate::theme::SPACE_SM`] gaps. Paint subtracts this from `avail`
+/// so the grid never slides under the ruler at 960px. Pure; unit-tested.
+pub fn hex_chrome_reserve_w(show_line_numbers: bool) -> f32 {
+    hex_gutter_bar_width(show_line_numbers)
+        + hex_minimap_strip_width()
+        + 2.0 * crate::theme::SPACE_SM
+}
+
+/// Grid width left for hex+ASCII cells (px): `avail` minus
+/// [`hex_chrome_reserve_w`], floored at 0 so narrow windows scroll
+/// instead of feeding negative widths into layout. Pure; unit-tested.
+pub fn hex_grid_avail_w(avail_w: f32, show_line_numbers: bool) -> f32 {
+    if !avail_w.is_finite() {
+        return 0.0;
+    }
+    (avail_w - hex_chrome_reserve_w(show_line_numbers)).max(0.0)
+}
+
+/// Fixed grid-row text budget (chars): 10 ruler + 2 pad + 49 hex cells
+/// (16 x 3 incl. the midline gap) + 1 pad + 16 ASCII + 2 pipes = 80.
+/// Covered, uncovered, insertion and tail rows all render exactly this
+/// many chars (`format_hex_grid_row_with_bytes` shape parity), so paint
+/// sizes Grid columns once and no content variance ever clips.
+/// Pure; unit-tested.
+pub const HEX_GRID_ROW_CHARS: usize = 80;
+
+/// Shared visible-row window for the hex + ASCII sync panes:
+/// `[top, end)` clamped to `total_rows`, `end` at most one page past
+/// `top`. Both panes iterate [`hex_sync_row_starts`] from this one
+/// window, so hex digits and ASCII can never desync. Mirrors
+/// [`HexPager::visible_range`] for in-range states; out-of-range tops
+/// clamp to `total_rows` instead of overrunning. Pure; unit-tested.
+pub fn hex_sync_visible_range(top_row: u64, visible_rows: u64, total_rows: u64) -> (u64, u64) {
+    let per = visible_rows.max(1);
+    let top = top_row.min(total_rows);
+    let end = top_row.saturating_add(per).min(total_rows);
+    (top, end.max(top))
+}
+
+/// Row-start offsets both sync panes paint: 16-aligned ruler labels
+/// from the shared [`hex_sync_visible_range`] window. Empty window or
+/// empty input yields an empty vec (paint shows the honest empty state).
+/// Pure; unit-tested.
+pub fn hex_sync_row_starts(top_row: u64, visible_rows: u64, total_len: u64) -> Vec<u64> {
+    let total_rows = hex_row_count(total_len);
+    if total_rows == 0 {
+        return Vec::new();
+    }
+    let (start, end) = hex_sync_visible_range(top_row, visible_rows, total_rows);
+    let mut out = Vec::new();
+    let mut row = start;
+    while row < end {
+        out.push(hex_row_start(row));
+        row = row.saturating_add(1);
+    }
+    out
+}
+
+/// 64-bit goto anchor: grid `(row, col)` for an absolute byte offset.
+/// [`hex_offset_to_row_col`] reuse — the goto bar lands on the same grid
+/// the ruler labels, so typed offsets and clicks share one alignment.
+/// Pure; unit-tested.
+pub fn hex_goto_anchor(offset: u64) -> (u64, u64) {
+    hex_offset_to_row_col(offset)
+}
+
+/// Ruler row-start the goto bar scrolls to for `offset`: anchor row x 16.
+/// Saturating so `u64::MAX` still names the last grid row, never wraps.
+/// Pure; unit-tested.
+pub fn hex_goto_row_start(offset: u64) -> u64 {
+    hex_goto_anchor(offset)
+        .0
+        .saturating_mul(HEX_BYTES_PER_ROW as u64)
+}
+
+/// Hunk row-ranges (half-open `[first, end)`, 16-byte rows) clamped to
+/// `total_rows`: the virtualized gutter input. Empty runs contribute
+/// nothing; past-the-end hunks clip instead of overrunning. Pure;
+/// unit-tested.
+pub fn hex_hunk_row_ranges(hunks: &[HexHunkView], total_rows: usize) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let total_u64 = total_rows as u64;
+    for hunk in hunks {
+        let run = (hunk.left_len).max(hunk.right_len);
+        if run == 0 {
+            continue;
+        }
+        let first = hunk.offset.saturating_div(HEX_BYTES_PER_ROW as u64);
+        if first >= total_u64 {
+            continue;
+        }
+        let last = hunk
+            .offset
+            .saturating_add(run as u64)
+            .saturating_sub(1)
+            .saturating_div(HEX_BYTES_PER_ROW as u64)
+            .min(total_u64.saturating_sub(1));
+        let start = first.min(usize::MAX as u64) as usize;
+        let stop = last.saturating_add(1).min(usize::MAX as u64) as usize;
+        if stop > start {
+            out.push((start, stop));
+        }
+    }
+    out
+}
+
+/// Virtualized hex gutter geometry: hunk row-ranges straight into
+/// [`crate::gutter::gutter_geometry_from_ranges`] — O(hunks), no per-row
+/// vec, identical bands to [`hex_gutter_geometry`]. Kind is always
+/// `Changed` (paired-diff marker, text `Changed` precedent). Pure;
+/// unit-tested.
+pub fn hex_gutter_geometry_fast(
+    total_rows: usize,
+    height: f32,
+    hunks: &[HexHunkView],
+) -> crate::gutter::GutterGeometry {
+    let ranges = hex_hunk_row_ranges(hunks, total_rows);
+    let mut tagged: Vec<(usize, usize, crate::viewmodel::TextRowKind)> = Vec::new();
+    for (start, end) in ranges {
+        tagged.push((start, end, crate::viewmodel::TextRowKind::Changed));
+    }
+    crate::gutter::gutter_geometry_from_ranges(total_rows, height, &tagged)
+}
+
+/// Sync-pane text role: Mono grid content (12 regular monospace,
+/// tabular) — hex digits and ASCII paint in the same family as the
+/// ruler so the three cells read as one row. Koi naya token nahi.
+/// Pure; unit-tested.
+pub const fn hex_sync_pane_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Ruler text role: Mono grid content — offset labels match the cells
+/// they head (BC hierarchy: ruler text matches diff-body mono).
+/// Pure; unit-tested.
+pub const fn hex_ruler_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3064,5 +3255,206 @@ mod tests {
         assert_eq!(buf, vec![1, 9, 3]);
         assert!(!edit_byte_at(&mut buf, 9, 0));
         assert_eq!(buf, vec![1, 9, 3]);
+    }
+
+    #[test]
+    fn hex_wave7_canvas_layout_modes_and_chrome_budget() {
+        // Reference canvas + breakpoint: narrow stacks, wide splits.
+        assert_eq!(HEX_CANVAS_W, 960.0);
+        assert_eq!(HEX_CANVAS_H, 600.0);
+        assert_eq!(HEX_STACK_BREAKPOINT_W, 720.0);
+        assert_eq!(hex_layout_mode(960.0), HexLayoutMode::SideBySide);
+        assert_eq!(hex_layout_mode(720.0), HexLayoutMode::SideBySide);
+        assert_eq!(hex_layout_mode(719.0), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(320.0), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(0.0), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(f32::NAN), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(f32::INFINITY), HexLayoutMode::Stacked);
+        // Chrome reserve reuses gutter + minimap + SPACE_SM gaps, no drift.
+        assert_eq!(
+            hex_chrome_reserve_w(true),
+            12.0 + 24.0 + 2.0 * crate::theme::SPACE_SM
+        );
+        assert_eq!(
+            hex_chrome_reserve_w(false),
+            6.0 + 24.0 + 2.0 * crate::theme::SPACE_SM
+        );
+        // 960 canvas leaves a positive grid; narrow floors at 0, no clip.
+        assert!(hex_grid_avail_w(960.0, true) > 0.0);
+        assert_eq!(
+            hex_grid_avail_w(960.0, true),
+            960.0 - hex_chrome_reserve_w(true)
+        );
+        assert_eq!(hex_grid_avail_w(10.0, true), 0.0);
+        assert_eq!(hex_grid_avail_w(f32::NAN, true), 0.0);
+    }
+
+    #[test]
+    fn hex_wave7_sync_panes_share_one_row_window() {
+        // 64 bytes = 4 rows: full window lists all 16-aligned starts.
+        assert_eq!(hex_sync_visible_range(0, 4, 4), (0, 4));
+        assert_eq!(hex_sync_row_starts(0, 4, 64), vec![0, 16, 32, 48]);
+        // Partial window: hex and ASCII iterate the same starts.
+        assert_eq!(hex_sync_visible_range(1, 2, 4), (1, 3));
+        assert_eq!(hex_sync_row_starts(1, 2, 64), vec![16, 32]);
+        // Pager parity: in-range states match HexPager exactly.
+        let mut pager = HexPager::new(4, 2);
+        pager.bring_into_view(3);
+        assert_eq!(
+            hex_sync_visible_range(pager.top, 2, 4),
+            pager.visible_range()
+        );
+        // Out-of-range top clamps; empty input is empty, never panics.
+        assert_eq!(hex_sync_visible_range(99, 4, 4), (4, 4));
+        assert!(hex_sync_row_starts(99, 4, 64).is_empty());
+        assert!(hex_sync_row_starts(0, 4, 0).is_empty());
+        assert_eq!(hex_sync_visible_range(0, 0, 4), (0, 1));
+    }
+
+    #[test]
+    fn hex_wave7_goto_anchors_to_grid_and_clamps_u64() {
+        // Goto anchor is the grid (row, col): ruler and bar agree.
+        assert_eq!(hex_goto_anchor(0), (0, 0));
+        assert_eq!(hex_goto_anchor(17), (1, 1));
+        assert_eq!(hex_goto_anchor(17), hex_offset_to_row_col(17));
+        assert_eq!(hex_goto_row_start(17), 16);
+        assert_eq!(hex_goto_row_start(17), hex_row_start(1));
+        // 64-bit top: saturates on the last grid row, never wraps.
+        let (max_row, max_col) = hex_goto_anchor(u64::MAX);
+        assert_eq!((max_row, max_col), hex_offset_to_row_col(u64::MAX));
+        assert_eq!(max_col, 15);
+        assert_eq!(hex_goto_row_start(u64::MAX), max_row * 16);
+        assert_eq!(hex_goto_row_start(u64::MAX), u64::MAX - 15);
+    }
+
+    #[test]
+    fn hex_wave7_gutter_fast_matches_row_wise_bands() {
+        // 64 bytes = 4 rows; byte 20 (row 1) and byte 50 (row 3) differ.
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        if let Some(slot) = right.get_mut(50) {
+            *slot = 7;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        let total = hex_gutter_total_rows(64);
+        assert_eq!(total, 4);
+        let slow = hex_gutter_geometry(total, 400.0, &view.hunks);
+        let fast = hex_gutter_geometry_fast(total, 400.0, &view.hunks);
+        assert_eq!(fast, slow);
+        assert_eq!(fast.segments.len(), 2);
+        // Contiguous run fuses: 32 differing bytes = one band, both paths.
+        let l2 = vec![0u8; 32];
+        let r2 = vec![1u8; 32];
+        let v2 = HexCompareView::build_from_slices(&l2, &r2, HexCompareMode::None, 8);
+        let t2 = hex_gutter_total_rows(32);
+        assert_eq!(
+            hex_gutter_geometry_fast(t2, 200.0, &v2.hunks),
+            hex_gutter_geometry(t2, 200.0, &v2.hunks)
+        );
+        // Ranges clamp honestly: past-the-end hunk clips, empty is empty.
+        assert_eq!(
+            hex_hunk_row_ranges(
+                &[HexHunkView {
+                    offset: 10_000,
+                    left_len: 1,
+                    right_len: 1,
+                }],
+                4
+            ),
+            Vec::new()
+        );
+        assert!(
+            hex_gutter_geometry_fast(0, 400.0, &view.hunks)
+                .segments
+                .is_empty()
+        );
+        assert!(
+            hex_gutter_geometry_fast(total, 400.0, &[])
+                .segments
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn hex_wave7_grid_rows_keep_fixed_char_budget() {
+        // Zero clipped text: every row renders exactly 80 chars.
+        let left: Vec<u8> = (0..16).collect();
+        let right: Vec<u8> = (0..16).collect();
+        let hunks = vec![HexHunkView {
+            offset: 0,
+            left_len: 16,
+            right_len: 16,
+        }];
+        assert_eq!(HEX_GRID_ROW_CHARS, 80);
+        for row in [0u64, 16, 32, 10_000] {
+            let text = format_hex_grid_row_with_bytes(row, &left, &right, &hunks);
+            assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
+        }
+        // Uncovered and insertion rows hold the same width (blanks, no `?`).
+        let (.., e_hex, e_ascii) = format_hex_grid_cells_with_bytes(32, &left, &right, &hunks);
+        assert_eq!(e_hex.chars().count(), 49);
+        assert_eq!(e_ascii.chars().count(), 16);
+    }
+
+    #[test]
+    fn hex_wave7_edge_fixture_tail_insertion_parity() {
+        // Mirrors checks/gui-exq7/comparison/hex-sync-tail.json: 48 bytes,
+        // diff at 20, tail insertion at 47; 3 grid rows.
+        let left: Vec<u8> = (0..48).collect();
+        let mut right: Vec<u8> = (0..48).collect();
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        right.push(0xFF);
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        // Right side is 49 bytes: honest row count covers the tail band.
+        assert_eq!(hex_gutter_total_rows(49), 4);
+        assert_eq!(hex_sync_row_starts(0, 8, 49), vec![0, 16, 32, 48]);
+        assert!(!view.hunks.is_empty());
+        // Goto lands on the tail row; gutter fast path agrees with slow.
+        let (tail_row, _) = hex_goto_anchor(47);
+        assert_eq!(tail_row, 2);
+        assert_eq!(hex_goto_row_start(47), 32);
+        let total = hex_gutter_total_rows(49);
+        assert_eq!(
+            hex_gutter_geometry_fast(total, 300.0, &view.hunks),
+            hex_gutter_geometry(total, 300.0, &view.hunks)
+        );
+        assert_eq!(
+            hex_gutter_geometry(total, 300.0, &view.hunks)
+                .segments
+                .len(),
+            2
+        );
+        // Fixed-width rows: tail included.
+        let text = format_hex_grid_row_with_bytes(32, &left, &right, &view.hunks);
+        assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
+    }
+
+    #[test]
+    fn hex_wave7_sync_typo_reuses_mono_hierarchy() {
+        use crate::theme::{TYPO_LINE_HEIGHT_MONO, TYPO_MONO_SIZE, TYPO_WEIGHT_REGULAR, TypoRole};
+        for role in [hex_sync_pane_text_role(), hex_ruler_text_role()] {
+            assert_eq!(role, TypoRole::Mono);
+            assert!(role.is_mono());
+            assert!(!role.is_chrome());
+            assert!(role.is_tabular());
+            assert_eq!(role.size(), TYPO_MONO_SIZE);
+            assert_eq!(role.family(), "monospace");
+            assert_eq!(role.weight_value(), TYPO_WEIGHT_REGULAR);
+            assert_eq!(role.line_height(), TYPO_LINE_HEIGHT_MONO);
+            assert_eq!(
+                role.line_height_px(),
+                TYPO_MONO_SIZE * TYPO_LINE_HEIGHT_MONO
+            );
+            assert_eq!(role.letter_spacing_em(), 0.0);
+            // Hierarchy: grid/ruler content sits below the Body section
+            // label (label 13 > content 12 > Small hint 11).
+            assert!(role.rank() > TypoRole::Body.rank());
+            assert!(TypoRole::Small.rank() > role.rank());
+        }
     }
 }
