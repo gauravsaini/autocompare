@@ -526,6 +526,223 @@ pub fn picture_heatmap_with_options(
     }
 }
 
+/// Viewport, integer zoom, offset and blend helpers on an already
+/// decoded image. All total: short pixel buffers yield `None` (or a
+/// differing count), never a panic; allocation failure degrades to an
+/// empty image or `None`.
+impl RgbaImage {
+    /// New image with content shifted by `(dx, dy)` (pan/offset-nudge).
+    ///
+    /// Same dimensions; pixels pushed outside are dropped and vacated
+    /// slots become transparent black. A short pixel buffer reads as
+    /// transparent wherever the bytes are missing.
+    pub fn nudge(&self, dx: i32, dy: i32) -> RgbaImage {
+        let byte_len = u64::from(self.width)
+            .saturating_mul(u64::from(self.height))
+            .saturating_mul(4);
+        let byte_len = usize::try_from(byte_len).unwrap_or(usize::MAX);
+        let mut pixels: Vec<u8> = Vec::new();
+        if pixels.try_reserve_exact(byte_len).is_err() {
+            return RgbaImage {
+                width: 0,
+                height: 0,
+                pixels,
+            };
+        }
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let sx = i64::from(x).saturating_sub(i64::from(dx));
+                let sy = i64::from(y).saturating_sub(i64::from(dy));
+                let px =
+                    if sx >= 0 && sy >= 0 && sx <= i64::from(u32::MAX) && sy <= i64::from(u32::MAX)
+                    {
+                        let (ux, uy) = (sx as u32, sy as u32);
+                        pixel(self, ux, uy).unwrap_or([0, 0, 0, 0])
+                    } else {
+                        [0, 0, 0, 0]
+                    };
+                pixels.extend_from_slice(&px);
+            }
+        }
+        RgbaImage {
+            width: self.width,
+            height: self.height,
+            pixels,
+        }
+    }
+
+    /// Cropped view of the rectangle at `(x, y)` with size `w` by `h`
+    /// (pan window). `None` when the rectangle leaves the image, has
+    /// zero area, or the pixel buffer is short.
+    pub fn viewport(&self, x: u32, y: u32, w: u32, h: u32) -> Option<RgbaImage> {
+        if w == 0 || h == 0 {
+            return None;
+        }
+        if x.checked_add(w).is_none_or(|end| end > self.width) {
+            return None;
+        }
+        if y.checked_add(h).is_none_or(|end| end > self.height) {
+            return None;
+        }
+        let byte_len = u64::from(w).saturating_mul(u64::from(h)).saturating_mul(4);
+        let byte_len = usize::try_from(byte_len).ok()?;
+        let mut pixels: Vec<u8> = Vec::new();
+        pixels.try_reserve_exact(byte_len).ok()?;
+        for row in 0..h {
+            for col in 0..w {
+                let px = pixel(self, x.saturating_add(col), y.saturating_add(row))?;
+                pixels.extend_from_slice(&px);
+            }
+        }
+        Some(RgbaImage {
+            width: w,
+            height: h,
+            pixels,
+        })
+    }
+
+    /// Integer nearest-neighbour zoom by `factor` (each source pixel
+    /// becomes a `factor` by `factor` block). `None` for factor 0,
+    /// overflowing dimensions, hostile sizes, or a short buffer.
+    pub fn scaled(&self, factor: u32) -> Option<RgbaImage> {
+        if factor == 0 {
+            return None;
+        }
+        let width = self.width.checked_mul(factor)?;
+        let height = self.height.checked_mul(factor)?;
+        let byte_len = u64::from(width)
+            .checked_mul(u64::from(height))?
+            .checked_mul(4)?;
+        if byte_len > MAX_PIXEL_BYTES as u64 {
+            return None;
+        }
+        let byte_len = usize::try_from(byte_len).ok()?;
+        let mut pixels: Vec<u8> = Vec::new();
+        pixels.try_reserve_exact(byte_len).ok()?;
+        for y in 0..height {
+            for x in 0..width {
+                let px = pixel(self, x.checked_div(factor)?, y.checked_div(factor)?)?;
+                pixels.extend_from_slice(&px);
+            }
+        }
+        Some(RgbaImage {
+            width,
+            height,
+            pixels,
+        })
+    }
+
+    /// Per-channel absolute difference over the overlap (difference
+    /// blend): each output pixel is `|a - b|` per channel, opaque.
+    /// `None` when the overlap is empty or a buffer is short.
+    pub fn difference_blend(&self, other: &RgbaImage) -> Option<RgbaImage> {
+        let width = self.width.min(other.width);
+        let height = self.height.min(other.height);
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let byte_len = u64::from(width)
+            .saturating_mul(u64::from(height))
+            .saturating_mul(4);
+        let byte_len = usize::try_from(byte_len).ok()?;
+        let mut pixels: Vec<u8> = Vec::new();
+        pixels.try_reserve_exact(byte_len).ok()?;
+        for y in 0..height {
+            for x in 0..width {
+                let pa = pixel(self, x, y)?;
+                let pb = pixel(other, x, y)?;
+                let out = [
+                    pa.first()
+                        .copied()
+                        .unwrap_or(0)
+                        .abs_diff(pb.first().copied().unwrap_or(0)),
+                    pa.get(1)
+                        .copied()
+                        .unwrap_or(0)
+                        .abs_diff(pb.get(1).copied().unwrap_or(0)),
+                    pa.get(2)
+                        .copied()
+                        .unwrap_or(0)
+                        .abs_diff(pb.get(2).copied().unwrap_or(0)),
+                    255,
+                ];
+                pixels.extend_from_slice(&out);
+            }
+        }
+        Some(RgbaImage {
+            width,
+            height,
+            pixels,
+        })
+    }
+
+    /// Compares `other`'s frame against this image shifted by
+    /// `(dx, dy)` with per-channel `tolerance` (range 0).
+    ///
+    /// Only in-frame pairs count: `total` is the number of compared
+    /// pixels, so a nudge that lines the pictures up reports 0
+    /// differing where the plain overlap diff reports many.
+    /// `identical` additionally requires zero offset and equal
+    /// dimensions.
+    pub fn diff_with_offset(
+        &self,
+        other: &RgbaImage,
+        dx: i32,
+        dy: i32,
+        tolerance: u8,
+    ) -> PictureDiff {
+        let opts = PictureOptions {
+            tolerance,
+            channel_range: 0,
+        };
+        let mut total: u64 = 0;
+        let mut differing: u64 = 0;
+        let mut bbox: Option<(u32, u32, u32, u32)> = None;
+        for y in 0..other.height {
+            for x in 0..other.width {
+                let sx = i64::from(x).saturating_sub(i64::from(dx));
+                let sy = i64::from(y).saturating_sub(i64::from(dy));
+                let in_frame =
+                    sx >= 0 && sy >= 0 && sx <= i64::from(u32::MAX) && sy <= i64::from(u32::MAX);
+                if !in_frame {
+                    continue;
+                }
+                total = total.saturating_add(1);
+                let same = match (pixel(self, sx as u32, sy as u32), pixel(other, x, y)) {
+                    (Some(pa), Some(pb)) => pixel_matches(pa, pb, &opts),
+                    _ => false,
+                };
+                if !same {
+                    differing = differing.saturating_add(1);
+                    bbox = Some(match bbox {
+                        None => (x, y, x, y),
+                        Some((min_x, min_y, max_x, max_y)) => {
+                            (min_x.min(x), min_y.min(y), max_x.max(x), max_y.max(y))
+                        }
+                    });
+                }
+            }
+        }
+        let identical = dx == 0
+            && dy == 0
+            && self.width == other.width
+            && self.height == other.height
+            && differing == 0;
+        PictureDiff {
+            width_l: self.width,
+            height_l: self.height,
+            width_r: other.width,
+            height_r: other.height,
+            overlap_w: self.width.min(other.width),
+            overlap_h: self.height.min(other.height),
+            differing,
+            total,
+            bbox,
+            identical,
+        }
+    }
+}
+
 /// The RGBA bytes at `(x, y)`, or `None` when the pixel buffer is
 /// shorter than the declared dimensions imply.
 fn pixel(img: &RgbaImage, x: u32, y: u32) -> Option<[u8; 4]> {
@@ -666,5 +883,121 @@ mod tests {
         assert!(decode_image(b"").is_none());
         assert!(decode_image(b"BM\x00\x01").is_none());
         assert!(decode_image(b"P6\n1 1\n255\n\xff").is_none());
+    }
+
+    fn rgb_image(pixels: &[[u8; 4]]) -> RgbaImage {
+        let mut flat = Vec::new();
+        for px in pixels {
+            flat.extend_from_slice(px);
+        }
+        RgbaImage {
+            width: 2,
+            height: 1,
+            pixels: flat,
+        }
+    }
+
+    #[test]
+    fn test_nudge_shifts_and_vacates() {
+        let a = rgb_image(&[[10, 0, 0, 255], [20, 0, 0, 255]]);
+        let right = a.nudge(1, 0);
+        assert_eq!(
+            right.pixels,
+            vec![0, 0, 0, 0, 10, 0, 0, 255],
+            "shift right drops G, vacates with transparent"
+        );
+        let left = a.nudge(-1, 0);
+        assert_eq!(left.pixels, vec![20, 0, 0, 255, 0, 0, 0, 0]);
+        let same = a.nudge(0, 0);
+        assert_eq!(same.pixels, a.pixels);
+    }
+
+    #[test]
+    fn test_viewport_crop_and_reject() {
+        let img = RgbaImage {
+            width: 2,
+            height: 2,
+            pixels: vec![
+                1, 0, 0, 255, 2, 0, 0, 255, //
+                3, 0, 0, 255, 4, 0, 0, 255,
+            ],
+        };
+        if let Some(crop) = img.viewport(1, 0, 1, 2) {
+            assert_eq!(crop.width, 1);
+            assert_eq!(crop.height, 2);
+            assert_eq!(crop.pixels, vec![2, 0, 0, 255, 4, 0, 0, 255]);
+        } else {
+            assert_eq!(img.width, 0, "in-bounds crop must succeed");
+        }
+        assert!(
+            img.viewport(1, 0, 2, 2).is_none(),
+            "leaving the frame is None"
+        );
+        assert!(img.viewport(0, 0, 0, 1).is_none(), "zero area is None");
+    }
+
+    #[test]
+    fn test_scaled_integer_zoom() {
+        let one = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![9, 8, 7, 255],
+        };
+        if let Some(big) = one.scaled(2) {
+            assert_eq!((big.width, big.height), (2, 2));
+            assert_eq!(big.pixels.len(), 16);
+            assert!(
+                big.pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|px| *px == [9, 8, 7, 255])
+            );
+        } else {
+            assert_eq!(one.width, 0, "x2 zoom of 1x1 must succeed");
+        }
+        assert!(one.scaled(0).is_none(), "factor 0 is None");
+    }
+
+    #[test]
+    fn test_difference_blend_overlap() {
+        let a = rgb_image(&[[10, 0, 0, 255], [20, 0, 0, 255]]);
+        let same = rgb_image(&[[10, 0, 0, 255], [20, 0, 0, 255]]);
+        if let Some(zero) = a.difference_blend(&same) {
+            assert_eq!(zero.pixels, vec![0, 0, 0, 255, 0, 0, 0, 255]);
+        } else {
+            assert_eq!(a.width, 0, "identical blend must succeed");
+        }
+        let one = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![0, 0, 0, 255],
+        };
+        // Overlap is the 1x1 minimum; surplus pixels are ignored.
+        if let Some(min) = a.difference_blend(&one) {
+            assert_eq!((min.width, min.height), (1, 1));
+            assert_eq!(min.pixels, vec![10, 0, 0, 255]);
+        } else {
+            assert_eq!(a.width, 0, "overlap blend must succeed");
+        }
+    }
+
+    #[test]
+    fn test_diff_with_offset_aligns_nudge() {
+        let a = rgb_image(&[[10, 0, 0, 255], [20, 0, 0, 255]]);
+        let b = a.nudge(1, 0);
+        assert_eq!(diff_pictures(&a, &b).differing, 2);
+        let aligned = a.diff_with_offset(&b, 1, 0, 0);
+        assert_eq!(aligned.differing, 0);
+        assert_eq!(aligned.total, 1, "only the in-frame pair counts");
+        assert!(!aligned.identical, "offset compare is never identical");
+        let exact = a.diff_with_offset(&a, 0, 0, 0);
+        assert_eq!(exact.differing, 0);
+        assert_eq!(exact.total, 2);
+        assert!(exact.identical);
+        // Tolerance still applies under offset.
+        let c = rgb_image(&[[12, 0, 0, 255], [20, 0, 0, 255]]);
+        assert_eq!(a.diff_with_offset(&c, 0, 0, 0).differing, 1);
+        assert_eq!(a.diff_with_offset(&c, 0, 0, 5).differing, 0);
     }
 }

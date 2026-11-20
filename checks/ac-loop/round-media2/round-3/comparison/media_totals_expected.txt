@@ -1,0 +1,14 @@
+# media_totals_expected — FLAC/MP3/MP4-AAC totals parity (hand parsers, PCM kept)
+note: `lofty` not adopted — Cargo.toml is outside OWNS (no new deps).
+codecs unchanged: WAV hand parser + MP3 symphonia PCM path kept as-is.
+fixtures (byte layouts identical to the unit tests):
+  tags_flac_disc.flac — Vorbis TITLE=Song 9, TRACKNUMBER=3/12, DISCNUMBER=2/3
+  tags_tpos.mp3       — ID3v2.3 TPOS "2/3"
+  tags_disk.m4a       — moov>udta>meta>ilst: trkn 5/9, disk 2/3, (c)nam "Song M"
+expect:
+  flac: track=3 track_total=12 disc=2 disc_total=3
+  mp3:  disc=2 disc_total=3
+  m4a:  track=5 track_total=9 disc=2 disc_total=3 title="Song M" format=Mp4
+  diff_media_tags: "Disc Total" in differing when 3 vs 4, in matching when equal
+mirrored by unit tests: media_tags::tests::{test_vorbis_slash_track_and_disc_totals,
+  test_id3_tpos_disc_total, test_mp4_disk_and_track_totals, test_diff_covers_disc_total}

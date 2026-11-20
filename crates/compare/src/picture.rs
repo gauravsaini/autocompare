@@ -66,6 +66,37 @@ fn decode_side(path: &Path, bytes: &[u8]) -> Result<RgbaImage> {
 mod tests {
     use super::*;
 
+    fn rgb_pixels() -> (RgbaImage, RgbaImage) {
+        let base = RgbaImage {
+            width: 2,
+            height: 1,
+            pixels: vec![10, 0, 0, 255, 20, 0, 0, 255],
+        };
+        let nudged = base.nudge(1, 0);
+        (base, nudged)
+    }
+
+    #[test]
+    fn test_offset_aligns_nudged_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let (base, nudged) = rgb_pixels();
+        let left = dir.path().join("left.png");
+        let right = dir.path().join("right.png");
+        std::fs::write(&left, encode_png(&base).unwrap()).unwrap();
+        std::fs::write(&right, encode_png(&nudged).unwrap()).unwrap();
+        let opts = PictureOptions::default();
+        let compared = compare_picture_files(&left, &right, &opts).unwrap();
+        assert_eq!(compared.diff.differing, 2);
+        // Same bytes through the file layer align with offset 1.
+        let l_bytes = std::fs::read(&left).unwrap();
+        let r_bytes = std::fs::read(&right).unwrap();
+        let l_img = decode_image(&l_bytes).unwrap();
+        let r_img = decode_image(&r_bytes).unwrap();
+        let aligned = l_img.diff_with_offset(&r_img, 1, 0, 0);
+        assert_eq!(aligned.differing, 0);
+        assert_eq!(aligned.total, 1);
+    }
+
     #[test]
     fn test_decode_side_sniffs_png_bmp_ppm() {
         let png_img = RgbaImage {

@@ -1,0 +1,7 @@
+# xlsx_multisheet_expected — stored-zip workbook, 2 sheets
+sheets: Summary=[[hi]], Details=[["",7]] (sparse B2 pads column A)
+expect: decode Some, names [Summary Details], diff_workbooks identical vs self,
+        one-sided sheet when Details dropped (sheet_diffs len 2, identical=false)
+mirrored by unit test: table::tests::test_decode_xlsx_stored_multisheet
+note: only stored (compression 0) entries decode; deflated xlsx returns None
+      honestly — no flate2 dep in scope (Cargo.toml outside OWNS).

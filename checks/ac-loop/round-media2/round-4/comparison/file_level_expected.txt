@@ -1,0 +1,13 @@
+# file_level_expected — compare-layer wiring through temp files
+picture (uses round-2 pixels; files built at test runtime via encode_png):
+  compare_picture_files(left.png, right.png) differing = 2 (exact overlap)
+  decode + diff_with_offset(1,0,0): differing = 0, total = 1
+  mirrored by: compare::picture file test test_offset_aligns_nudged_files
+audio PCM kept (fixtures mono 16-bit 8000 Hz, 4 frames):
+  pcm_same_a.wav == pcm_same_b.wav [0,1000,-1000,8000]
+  pcm_drift_1lsb.wav [0,1001,-1000,8000] (1 LSB = 1/32768)
+expect:
+  compare_audio_files(same_a, same_b).identical = true
+  compare_audio_files(same_a, drift).identical = false
+  with AudioTolerance 0.001: identical = true
+  mirrored by: compare::media file test test_pcm_wav_kept_identical_through_files

@@ -1,0 +1,11 @@
+# picture_offset_expected — pan/offset-nudge + blend + zoom
+fixtures (2x1 RGBA, filter-0 PNG, decode-verified with zlib):
+  pic_base_2x1.png   = [[10,0,0,255],[20,0,0,255]]
+  pic_nudged_2x1.png = base.nudge(1,0) = [[0,0,0,0],[10,0,0,255]]
+expect:
+  diff_pictures(base, nudged).differing = 2
+  base.diff_with_offset(nudged, 1, 0, 0).differing = 0, total = 1
+  base.viewport(1,0,1,1) = [[10..]] pixel; scaled(2) = 2x2 block
+  difference_blend(base, base) = transparent-black opaque (zeros, a=255)
+mirrored by unit tests: image::tests::{test_nudge, test_viewport,
+  test_scaled, test_difference_blend, test_diff_with_offset_aligns_nudge}

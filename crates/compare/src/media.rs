@@ -70,6 +70,54 @@ pub fn compare_audio_files_with_tolerance(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::compare_audio_files;
+
+    fn mono_wav(rate: u32, samples: &[i16]) -> Vec<u8> {
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        let data_len = samples.len().saturating_mul(2) as u32;
+        wav.extend_from_slice(&(data_len.saturating_add(36)).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&rate.to_le_bytes());
+        wav.extend_from_slice(&rate.saturating_mul(2).to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&data_len.to_le_bytes());
+        for sample in samples {
+            wav.extend_from_slice(&sample.to_le_bytes());
+        }
+        wav
+    }
+
+    #[test]
+    fn test_pcm_wav_kept_identical_through_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let samples = [0i16, 1000, -1000, 8000];
+        let left = dir.path().join("left.wav");
+        let right = dir.path().join("right.wav");
+        std::fs::write(&left, mono_wav(8000, &samples)).unwrap();
+        std::fs::write(&right, mono_wav(8000, &samples)).unwrap();
+        let same = compare_audio_files(&left, &right).unwrap();
+        assert!(same.diff.identical);
+        assert!(!same.diff.config_mismatch);
+        // One LSB differs strictly but survives a small tolerance.
+        let mut changed = samples;
+        changed[1] = changed[1].saturating_add(1);
+        let drifted = dir.path().join("drifted.wav");
+        std::fs::write(&drifted, mono_wav(8000, &changed)).unwrap();
+        let strict = compare_audio_files(&left, &drifted).unwrap();
+        assert!(!strict.diff.identical);
+        let tol = AudioTolerance {
+            amplitude_tolerance: 0.001,
+        };
+        let relaxed = compare_audio_files_with_tolerance(&left, &drifted, &tol).unwrap();
+        assert!(relaxed.diff.identical);
+    }
 
     #[test]
     fn test_zero_tolerance_matches_exact_diff() {

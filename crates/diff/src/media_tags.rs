@@ -34,6 +34,8 @@ pub struct MediaTags {
     pub track_total: Option<u32>,
     /// Disc number.
     pub disc: Option<u32>,
+    /// Total discs in the release set.
+    pub disc_total: Option<u32>,
     /// Genre description.
     pub genre: Option<String>,
     /// User or release comment.
@@ -565,6 +567,19 @@ fn parse_mp4_ilst(data: &[u8], tags: &mut MediaTags) {
                     if let Some(track_num) = extract_mp4_track_number(atom_payload) {
                         tags.track = Some(track_num);
                     }
+                    if let Some(total) = extract_mp4_track_total(atom_payload) {
+                        tags.track_total = Some(total);
+                    }
+                }
+                b"disk" => {
+                    let atom_payload = data.get(pos + 8..end).unwrap_or(&[]);
+                    let (disc, total) = extract_mp4_disk_numbers(atom_payload);
+                    if let Some(disc) = disc {
+                        tags.disc = Some(disc);
+                    }
+                    if let Some(total) = total {
+                        tags.disc_total = Some(total);
+                    }
                 }
                 other => {
                     let k = String::from_utf8_lossy(other).to_string();
@@ -589,10 +604,37 @@ fn extract_mp4_data_string(payload: &[u8]) -> Option<String> {
 
 fn extract_mp4_track_number(payload: &[u8]) -> Option<u32> {
     if payload.len() >= 20 && payload.get(4..8) == Some(b"data") {
-        let trk = u16::from_be_bytes(payload.get(18..20)?.try_into().ok()?);
-        return Some(u32::from(trk));
+        let raw: [u8; 2] = payload.get(18..20)?.try_into().ok()?;
+        return Some(u32::from(u16::from_be_bytes(raw)));
     }
     None
+}
+
+fn extract_mp4_track_total(payload: &[u8]) -> Option<u32> {
+    if payload.len() >= 22 && payload.get(4..8) == Some(b"data") {
+        let raw: [u8; 2] = payload.get(20..22)?.try_into().ok()?;
+        let total = u16::from_be_bytes(raw);
+        if total > 0 {
+            return Some(u32::from(total));
+        }
+    }
+    None
+}
+
+/// Reads the Apple `disk` atom value: disc number and disc total as
+/// big-endian `u16` at the same offsets as `trkn`. Zero means
+/// unknown and maps to `None`; a short or misshaped payload maps to
+/// `(None, None)`.
+fn extract_mp4_disk_numbers(payload: &[u8]) -> (Option<u32>, Option<u32>) {
+    let at = |start: usize, end: usize| -> Option<u32> {
+        if payload.len() < 22 || payload.get(4..8) != Some(b"data") {
+            return None;
+        }
+        let raw: [u8; 2] = payload.get(start..end)?.try_into().ok()?;
+        let val = u16::from_be_bytes(raw);
+        if val > 0 { Some(u32::from(val)) } else { None }
+    };
+    (at(18, 20), at(20, 22))
 }
 
 fn apply_tag_key_value(tags: &mut MediaTags, key: &str, val: &str) {
@@ -606,7 +648,14 @@ fn apply_tag_key_value(tags: &mut MediaTags, key: &str, val: &str) {
         "ALBUMARTIST" | "ALBUM ARTIST" => tags.album_artist = Some(val.to_string()),
         "DATE" | "YEAR" => tags.year = Some(val.to_string()),
         "TRACKNUMBER" | "TRACK" => {
-            if let Ok(n) = val.parse::<u32>() {
+            if let Some((num, total)) = val.split_once('/') {
+                if let Ok(n) = num.trim().parse::<u32>() {
+                    tags.track = Some(n);
+                }
+                if let Ok(t) = total.trim().parse::<u32>() {
+                    tags.track_total = Some(t);
+                }
+            } else if let Ok(n) = val.parse::<u32>() {
                 tags.track = Some(n);
             }
         }
@@ -616,8 +665,20 @@ fn apply_tag_key_value(tags: &mut MediaTags, key: &str, val: &str) {
             }
         }
         "DISCNUMBER" => {
-            if let Ok(n) = val.parse::<u32>() {
+            if let Some((num, total)) = val.split_once('/') {
+                if let Ok(n) = num.trim().parse::<u32>() {
+                    tags.disc = Some(n);
+                }
+                if let Ok(t) = total.trim().parse::<u32>() {
+                    tags.disc_total = Some(t);
+                }
+            } else if let Ok(n) = val.parse::<u32>() {
                 tags.disc = Some(n);
+            }
+        }
+        "DISCTOTAL" | "TOTALDISCS" => {
+            if let Ok(n) = val.parse::<u32>() {
+                tags.disc_total = Some(n);
             }
         }
         "GENRE" => tags.genre = Some(val.to_string()),
@@ -648,9 +709,12 @@ fn apply_id3_frame(tags: &mut MediaTags, frame_id: &str, text: &str) {
             }
         }
         "TPOS" | "TPA" => {
-            if let Some((d, _)) = text.split_once('/') {
+            if let Some((d, t)) = text.split_once('/') {
                 if let Ok(disc) = d.trim().parse::<u32>() {
                     tags.disc = Some(disc);
+                }
+                if let Ok(total) = t.trim().parse::<u32>() {
+                    tags.disc_total = Some(total);
                 }
             } else if let Ok(disc) = text.trim().parse::<u32>() {
                 tags.disc = Some(disc);
@@ -765,6 +829,16 @@ pub fn diff_media_tags(left: &MediaTags, right: &MediaTags) -> MediaTagsDiff {
         (Some(l), Some(r)) => differing.push(("Disc".to_string(), l.to_string(), r.to_string())),
         (Some(l), None) => left_only.push(("Disc".to_string(), l.to_string())),
         (None, Some(r)) => right_only.push(("Disc".to_string(), r.to_string())),
+        (None, None) => {}
+    }
+
+    match (left.disc_total, right.disc_total) {
+        (Some(l), Some(r)) if l == r => matching.push(("Disc Total".to_string(), l.to_string())),
+        (Some(l), Some(r)) => {
+            differing.push(("Disc Total".to_string(), l.to_string(), r.to_string()))
+        }
+        (Some(l), None) => left_only.push(("Disc Total".to_string(), l.to_string())),
+        (None, Some(r)) => right_only.push(("Disc Total".to_string(), r.to_string())),
         (None, None) => {}
     }
 
@@ -953,5 +1027,151 @@ mod tests {
                     .any(|(k, v)| k == "Channels" && v == "2")
             );
         }
+    }
+
+    fn vorbis_block(comments: &[&[u8]]) -> Vec<u8> {
+        let mut block = Vec::new();
+        let vendor = b"test vendor";
+        block.extend_from_slice(&(vendor.len() as u32).to_le_bytes());
+        block.extend_from_slice(vendor);
+        block.extend_from_slice(&(comments.len() as u32).to_le_bytes());
+        for comment in comments {
+            block.extend_from_slice(&(comment.len() as u32).to_le_bytes());
+            block.extend_from_slice(comment);
+        }
+        block
+    }
+
+    fn flac_with_comment_block(block: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"fLaC");
+        bytes.push(0x84);
+        let len = block.len();
+        bytes.push(((len >> 16) & 0xFF) as u8);
+        bytes.push(((len >> 8) & 0xFF) as u8);
+        bytes.push((len & 0xFF) as u8);
+        bytes.extend_from_slice(block);
+        bytes
+    }
+
+    #[test]
+    fn test_vorbis_slash_track_and_disc_totals() {
+        let block = vorbis_block(&[b"TITLE=Song 9", b"TRACKNUMBER=3/12", b"DISCNUMBER=2/3"]);
+        let tags = read_flac_tags(&flac_with_comment_block(&block));
+        if let Some(tags) = tags {
+            assert_eq!(tags.title.as_deref(), Some("Song 9"));
+            assert_eq!(tags.track, Some(3));
+            assert_eq!(tags.track_total, Some(12));
+            assert_eq!(tags.disc, Some(2));
+            assert_eq!(tags.disc_total, Some(3));
+        } else {
+            assert_eq!(block.len(), 0, "vorbis slash comments must parse");
+        }
+    }
+
+    #[test]
+    fn test_id3_tpos_disc_total() {
+        // Minimal ID3v2.3 tag with one TPOS "2/3" frame.
+        let mut tag = Vec::new();
+        tag.extend_from_slice(b"ID3");
+        tag.extend_from_slice(&[3u8, 0u8, 0u8]);
+        let frame_body = [0u8, b'2', b'/', b'3'];
+        let frame_len = 4 + 4 + 2 + frame_body.len();
+        let total = frame_len as u8;
+        tag.extend_from_slice(&[0u8, 0u8, 0u8, total]);
+        tag.extend_from_slice(b"TPOS");
+        tag.extend_from_slice(&(frame_body.len() as u32).to_be_bytes());
+        tag.extend_from_slice(&[0u8, 0u8]);
+        tag.extend_from_slice(&frame_body);
+        let tags = read_mp3_tags(&tag);
+        if let Some(tags) = tags {
+            assert_eq!(tags.disc, Some(2));
+            assert_eq!(tags.disc_total, Some(3));
+        } else {
+            assert_eq!(tag.len(), 0, "TPOS frame must parse");
+        }
+    }
+
+    fn mp4_atom(kind: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut atom = Vec::new();
+        let size = payload.len().saturating_add(8) as u32;
+        atom.extend_from_slice(&size.to_be_bytes());
+        atom.extend_from_slice(kind);
+        atom.extend_from_slice(payload);
+        atom
+    }
+
+    fn mp4_data_atom(value: &[u8]) -> Vec<u8> {
+        let mut inner = Vec::new();
+        inner.extend_from_slice(&[0u8; 8]);
+        inner.extend_from_slice(value);
+        let mut atom = Vec::new();
+        let size = inner.len().saturating_add(8) as u32;
+        atom.extend_from_slice(&size.to_be_bytes());
+        atom.extend_from_slice(b"data");
+        atom.extend_from_slice(&inner);
+        atom
+    }
+
+    #[test]
+    fn test_mp4_disk_and_track_totals() {
+        // Apple number pairs: reserved(2), number(2), total(2), reserved(2).
+        let trkn_value = [0u8, 0u8, 0u8, 5u8, 0u8, 9u8, 0u8, 0u8];
+        let disk_value = [0u8, 0u8, 0u8, 2u8, 0u8, 3u8, 0u8, 0u8];
+        let mut ilst_payload = Vec::new();
+        ilst_payload.extend_from_slice(&mp4_atom(b"trkn", &mp4_data_atom(&trkn_value)));
+        ilst_payload.extend_from_slice(&mp4_atom(b"disk", &mp4_data_atom(&disk_value)));
+        ilst_payload.extend_from_slice(&mp4_atom(b"\xa9nam", &mp4_data_atom(b"Song M")));
+        let ilst = mp4_atom(b"ilst", &ilst_payload);
+        let mut meta_payload = vec![0u8, 0u8, 0u8, 0u8];
+        meta_payload.extend_from_slice(&ilst);
+        let meta = mp4_atom(b"meta", &meta_payload);
+        let udta = mp4_atom(b"udta", &meta);
+        let moov = mp4_atom(b"moov", &udta);
+        let tags = read_mp4_tags(&moov);
+        if let Some(tags) = tags {
+            assert_eq!(tags.track, Some(5));
+            assert_eq!(tags.track_total, Some(9));
+            assert_eq!(tags.disc, Some(2));
+            assert_eq!(tags.disc_total, Some(3));
+            assert_eq!(tags.title.as_deref(), Some("Song M"));
+            assert_eq!(tags.format, MediaFormat::Mp4);
+        } else {
+            assert_eq!(moov.len(), 0, "mp4 disk/trkn atoms must parse");
+        }
+        // The generic sniffer reaches the same tags through the fallback chain.
+        if let Some(sniffed) = read_media_tags(&moov) {
+            assert_eq!(sniffed.format, MediaFormat::Mp4);
+            assert_eq!(sniffed.disc_total, Some(3));
+        } else {
+            assert_eq!(moov.len(), 0, "sniffer must reach mp4 tags");
+        }
+    }
+
+    #[test]
+    fn test_diff_covers_disc_total() {
+        let left = MediaTags {
+            disc: Some(2),
+            disc_total: Some(3),
+            ..Default::default()
+        };
+        let right = MediaTags {
+            disc: Some(2),
+            disc_total: Some(4),
+            ..Default::default()
+        };
+        let diff = diff_media_tags(&left, &right);
+        assert!(!diff.identical);
+        assert!(
+            diff.differing
+                .iter()
+                .any(|(f, l, r)| f == "Disc Total" && l == "3" && r == "4")
+        );
+        let same = diff_media_tags(&left, &left);
+        assert!(
+            same.matching
+                .iter()
+                .any(|(f, v)| f == "Disc Total" && v == "3")
+        );
     }
 }

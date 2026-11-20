@@ -30,6 +30,46 @@ impl Table {
         sort_table_rows(&mut cloned, columns, ascending);
         cloned
     }
+
+    /// Index of the first header cell exactly equal to `name`.
+    ///
+    /// Exact match only; an empty `name` never matches. Lets callers
+    /// map columns by header across files whose column order differs
+    /// before aligning rows (e.g. with [`diff_table_by_key`]).
+    pub fn column_index(&self, name: &str) -> Option<usize> {
+        if name.is_empty() {
+            return None;
+        }
+        self.header.iter().position(|h| h == name)
+    }
+
+    /// New table keeping only `cols`, in the given order.
+    ///
+    /// Column mapping / reorder / select in one total helper: each
+    /// output column copies one source column, so two files with
+    /// different layouts map to one canonical order before the row
+    /// diff. Out-of-range columns become `""`. The header maps the
+    /// same way when present, and stays empty otherwise. Rows keep
+    /// their mapped width even when uneven.
+    pub fn select_columns(&self, cols: &[usize]) -> Self {
+        let header = if self.header.is_empty() {
+            Vec::new()
+        } else {
+            cols.iter()
+                .map(|&c| self.header.get(c).cloned().unwrap_or_default())
+                .collect()
+        };
+        let rows = self
+            .rows
+            .iter()
+            .map(|row| {
+                cols.iter()
+                    .map(|&c| row.get(c).cloned().unwrap_or_default())
+                    .collect()
+            })
+            .collect();
+        Self { header, rows }
+    }
 }
 
 /// A named table representing one sheet of a multi-sheet spreadsheet.
@@ -1262,5 +1302,148 @@ mod tests {
         </sheets></workbook>"#;
         let names = parse_workbook_sheet_names(xml);
         assert_eq!(names, vec!["Summary & KPIs", "Details"]);
+    }
+
+    #[test]
+    fn test_column_index_lookup() {
+        let table = Table {
+            header: vec!["id".into(), "name".into(), "price".into()],
+            rows: Vec::new(),
+        };
+        assert_eq!(table.column_index("name"), Some(1));
+        assert_eq!(table.column_index("missing"), None);
+        assert_eq!(table.column_index(""), None);
+        let no_header = Table {
+            header: Vec::new(),
+            rows: Vec::new(),
+        };
+        assert_eq!(no_header.column_index("id"), None);
+    }
+
+    #[test]
+    fn test_select_columns_mapping_and_gaps() {
+        let table = Table {
+            header: vec!["price".into(), "id".into(), "name".into()],
+            rows: vec![vec!["9.99".into(), "1".into(), "a".into()]],
+        };
+        // Map (price,id,name) onto canonical (id,name,price).
+        let mapped = table.select_columns(&[1, 2, 0]);
+        assert_eq!(mapped.header, vec!["id", "name", "price"]);
+        assert_eq!(mapped.rows, vec![vec!["1", "a", "9.99"]]);
+        // Out-of-range columns become "".
+        let gapped = table.select_columns(&[0, 9]);
+        assert_eq!(gapped.header, vec!["price".to_string(), String::new()]);
+        assert_eq!(gapped.rows, vec![vec!["9.99".to_string(), String::new()]]);
+        // Empty header stays empty while rows still map.
+        let headless = Table {
+            header: Vec::new(),
+            rows: vec![vec!["x".into(), "y".into()]],
+        };
+        let picked = headless.select_columns(&[1, 0]);
+        assert!(picked.header.is_empty());
+        assert_eq!(picked.rows, vec![vec!["y", "x"]]);
+    }
+
+    #[test]
+    fn test_mapped_sorted_key_diff_end_to_end() {
+        // Same content, different layouts and row order; id 2 drifts
+        // outside the numeric tolerance.
+        let left = parse_delimited("id,name,price\n2,b,5.00\n1,a,9.99\n", ',', true);
+        let right = parse_delimited("price,id,name\n10.04,1,a\n5.50,2,b\n", ',', true);
+        assert_eq!(left.column_index("id"), Some(0));
+        assert_eq!(left.column_index("name"), Some(1));
+        assert_eq!(left.column_index("price"), Some(2));
+        assert_eq!(right.column_index("price"), Some(0));
+        assert_eq!(right.column_index("id"), Some(1));
+        assert_eq!(right.column_index("name"), Some(2));
+        let (Some(l0), Some(l1), Some(l2), Some(r0), Some(r1), Some(r2)) = (
+            left.column_index("id"),
+            left.column_index("name"),
+            left.column_index("price"),
+            right.column_index("id"),
+            right.column_index("name"),
+            right.column_index("price"),
+        ) else {
+            return;
+        };
+        let left_mapped = left.select_columns(&[l0, l1, l2]);
+        let right_mapped = right.select_columns(&[r0, r1, r2]);
+        // Sort-before-align on the key column, then key diff.
+        let left_sorted = left_mapped.sorted(&[0], true);
+        let right_sorted = right_mapped.sorted(&[0], true);
+        let opts = TableCompareOptions {
+            key_columns: vec![0],
+            numeric_tolerance: Some(0.1),
+            ..TableCompareOptions::default()
+        };
+        let diff = diff_table_by_key_with_options(&left_sorted, &right_sorted, &opts);
+        assert_eq!(diff.matching_rows, 1);
+        assert_eq!(diff.modified_rows, 1);
+        assert_eq!(diff.left_only_rows, 0);
+        assert_eq!(diff.right_only_rows, 0);
+    }
+
+    #[test]
+    fn test_decode_xlsx_stored_multisheet() {
+        fn entry(out: &mut Vec<u8>, name: &str, data: &[u8]) {
+            out.extend_from_slice(b"PK\x03\x04");
+            out.extend_from_slice(&[0u8; 4]);
+            out.extend_from_slice(&[0u8, 0u8]);
+            out.extend_from_slice(&[0u8; 8]);
+            let len = data.len() as u32;
+            out.extend_from_slice(&len.to_le_bytes());
+            out.extend_from_slice(&len.to_le_bytes());
+            out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            out.extend_from_slice(&[0u8, 0u8]);
+            out.extend_from_slice(name.as_bytes());
+            out.extend_from_slice(data);
+        }
+        let mut bytes = Vec::new();
+        entry(
+            &mut bytes,
+            "xl/workbook.xml",
+            b"<workbook><sheets><sheet name=\"Summary\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Details\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>",
+        );
+        entry(
+            &mut bytes,
+            "xl/worksheets/sheet1.xml",
+            b"<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><v>hi</v></c></row></sheetData></worksheet>",
+        );
+        entry(
+            &mut bytes,
+            "xl/worksheets/sheet2.xml",
+            b"<worksheet><sheetData><row r=\"1\"><c r=\"B2\"><v>7</v></c></row></sheetData></worksheet>",
+        );
+        let wb = decode_xlsx(&bytes);
+        assert!(wb.is_some(), "stored multi-sheet xlsx must decode");
+        let Some(wb) = wb else {
+            return;
+        };
+        assert_eq!(wb.sheets.len(), 2);
+        let pair = wb.sheets.first().zip(wb.sheets.get(1));
+        assert!(pair.is_some(), "two sheets must decode");
+        let Some((first, second)) = pair else {
+            return;
+        };
+        assert_eq!(first.name, "Summary");
+        assert_eq!(second.name, "Details");
+        assert_eq!(first.table.rows, vec![vec!["hi".to_string()]]);
+        // Sparse B2 pads column A with "".
+        assert_eq!(
+            second.table.rows,
+            vec![vec![String::new(), "7".to_string()]]
+        );
+        // Same bytes compare identical; a missing sheet is one-sided.
+        let same = decode_xlsx(&bytes);
+        assert!(same.is_some(), "re-decode must succeed");
+        let Some(same) = same else {
+            return;
+        };
+        assert!(diff_workbooks(&wb, &same).identical);
+        let mut fewer = same.clone();
+        fewer.sheets.pop();
+        let delta = diff_workbooks(&wb, &fewer);
+        assert!(!delta.identical);
+        assert_eq!(delta.sheet_diffs.len(), 2);
     }
 }

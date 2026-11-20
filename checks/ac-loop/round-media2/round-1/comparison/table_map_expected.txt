@@ -1,0 +1,11 @@
+# table_map_expected — column mapping + sort-before-align + numeric tolerance
+left:  table_map_left.csv  layout (id,name,price), rows shuffled
+right: table_map_right.csv layout (price,id,name), rows shuffled
+steps:
+  1. column_index("id"/"name"/"price") per side -> select_columns to canonical (id,name,price)
+  2. sorted(&[0], ascending) on both sides (sort-before-align on key col 0)
+  3. diff_table_by_key_with_options key=[0] numeric_tolerance=0.1
+expect: matching_rows=1 (9.99 vs 10.04 within 0.1)
+        modified_rows=1 (5.00 vs 5.50 outside 0.1)
+        left_only_rows=0 right_only_rows=0
+mirrored by unit test: table::tests::test_mapped_sorted_key_diff_end_to_end
