@@ -1628,3 +1628,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `7a5d941` feat(reports): BC parity for HTML linked child reports + mono mode (5 src files + snapshot tests + 10 sample artifacts). OWNS crates/reports + checks/agyx-reports-a only.
 - Gates: reports tests 16 green, clippy 0 warnings, fmt clean, banned 0, colors 0. Pushed origin/main.
 - Swarm summary: A reports + B sessions + C diff, all landed pushed. Next: missing craft-anything scaffolding (capture/inbox/investigation.cany) + round-7 verify wave.
+
+## 2026-11-20 — Round-7 VERIFY launched (opencode localrun, read-only)
+- Sess sess-local-r7, OWNS checks/gui-localrun-r7 only, source ZERO touch. --open flag content-row live photo-proof + CP/CQ/CN/CO/CPlight live check (CR sec-8 input).
+- Note: parallel BQ wave active in repo (gui/views) — round-7 disjoint by design (no src edits, new checks dir only).
