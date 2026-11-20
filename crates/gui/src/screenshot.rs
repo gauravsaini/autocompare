@@ -726,6 +726,9 @@ pub fn overview_row_at_y(y: u32, total_rows: usize, pane_top: u32, pane_h: u32) 
 /// live padded geometry inside the track inset; diff hues frozen, same
 /// bands reuse the panel tone. Single source for the wide (960) and narrow
 /// (720) text routes; accent/wrap/hex routes keep their own paint.
+/// exq-gutter36 polish: band edges round (not truncate) so paint aligns
+/// with [`overview_row_y`] (which rounds the same live mapping) — max
+/// 1px drift gone, edge bands stay inside the padded track.
 pub fn paint_overview_strip(
     pixels: &mut [u8],
     dims: (u32, u32),
@@ -737,8 +740,8 @@ pub fn paint_overview_strip(
 ) {
     let geom = gutter_overview_geometry_padded(rows.len(), pane_h as f32, rows);
     for seg in geom.segments {
-        let seg_y = pane_top.saturating_add(seg.y_start as u32);
-        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
+        let seg_y = pane_top.saturating_add(seg.y_start.round() as u32);
+        let seg_h = ((seg.y_end - seg.y_start).round() as u32).max(GUTTER_SEGMENT_MIN_H as u32);
         let seg_color = match seg.kind {
             TextRowKind::Equal => fixture_palette().panel,
             TextRowKind::Changed => CHANGED_BG,
@@ -6972,6 +6975,102 @@ mod tests {
         }
         if let Some(last) = geom.segments.last() {
             assert!(last.y_end <= 4.0 + 378.0 + 0.5);
+        }
+    }
+
+    #[test]
+    fn gutter36_overview_alignment() {
+        // Polish: band paint rounds the same live mapping `overview_row_y`
+        // uses, so segment tops sit within 1px of the row marker.
+        // 7-row fixture, 386px pane (174..560): inner 378, pad 4.
+        let pane_top = 174u32;
+        let pane_h = 386u32;
+        let kinds = [
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+            TextRowKind::Changed,
+            TextRowKind::Deleted,
+            TextRowKind::Inserted,
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+        ];
+        let rows: Vec<TextRow> = kinds
+            .iter()
+            .map(|kind| TextRow {
+                kind: *kind,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            })
+            .collect();
+        let geom = crate::gutter::gutter_overview_geometry_padded(7, 386.0, &rows);
+        assert!(!geom.segments.is_empty());
+        if let Some(first) = geom.segments.first() {
+            let painted = pane_top.saturating_add(first.y_start.round() as u32);
+            let row0 = overview_row_y(0, 7, pane_top, pane_h);
+            assert!(row0.is_some());
+            if let Some(y0) = row0 {
+                assert!((painted as f32 - y0 as f32).abs() <= 1.0);
+            }
+            assert!((first.y_start - 4.0).abs() < 0.5);
+        }
+        if let Some(last) = geom.segments.last() {
+            assert!(last.y_end <= 4.0 + 378.0 + 0.5);
+        }
+        // Round-trip intact after polish.
+        for row in 0..7usize {
+            let y = overview_row_y(row, 7, pane_top, pane_h);
+            assert!(y.is_some());
+            if let Some(y) = y {
+                assert_eq!(overview_row_at_y(y, 7, pane_top, pane_h), Some(row));
+            }
+        }
+    }
+
+    #[test]
+    fn gutter36_narrow_intact() {
+        // 720px narrow: dual-pane columns + ruler + right margin intact,
+        // overview still inside the padded track via the shared strip.
+        assert_eq!(crate::theme::VIEWPORT_MIN_W, 720);
+        assert_eq!(crate::viewmodel::dual_pane_widths(720, 0.50), (340, 340));
+        assert_eq!(
+            crate::viewmodel::dual_pane_x_positions(720, 0.50),
+            (12, 356, 696)
+        );
+        assert_eq!(696u32.saturating_add(GUTTER_W).saturating_add(8), 720);
+        let pane_h = 436u32;
+        let first = overview_row_y(0, 15, 124, pane_h);
+        let last = overview_row_y(14, 15, 124, pane_h);
+        assert!(first.is_some() && last.is_some());
+        if let (Some(f), Some(l)) = (first, last) {
+            assert!(f >= 124 + crate::gutter::GUTTER_MINIMAP_TRACK_PAD as u32);
+            assert!(l < 124 + pane_h);
+            assert!(f < l);
+        }
+    }
+
+    #[test]
+    fn gutter36_overview_edge_fixture() {
+        // Mirrors checks/gui-exq-gutter36/round-1/comparison/gutter36-overview-polish.json.
+        let raw = include_str!(
+            "../../../checks/gui-exq-gutter36/round-1/comparison/gutter36-overview-polish.json"
+        );
+        assert!(raw.contains("\"name\":\"gutter36-overview-polish\""));
+        assert!(raw.contains("\"track_pad\":4.0"));
+        assert!(raw.contains("\"narrow_gutter_x_720\":696"));
+        assert!(raw.contains("\"rounding\":\"round\""));
+        assert_eq!(crate::gutter::GUTTER_MINIMAP_TRACK_PAD, 4.0);
+        let inner = crate::gutter::gutter_minimap_inner_height(386.0);
+        assert_eq!(inner, Some(378.0));
+        // First band top rounds to the pad, matching `overview_row_y`.
+        let y0 = crate::gutter::gutter_padded_y_for_row(0, 7, 386.0);
+        assert!(y0.is_some());
+        if let Some(y) = y0 {
+            assert!((y - 4.0).abs() < 0.01);
+            assert_eq!(y.round() as u32, 4);
         }
     }
 }
