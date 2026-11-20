@@ -134,7 +134,8 @@
   "ORCH-FIX-SNAPSHOT": "snapshot_tests.rs 7 sites gated behind AUTOCOMPARE_SNAPSHOT=1; default cargo test side-effect free (verified clean), opt-in regenerates (verified); kills recurring rep-h/reports-a noise at root",
   "WAVE-REPORTS-H2R2": "s2 round-2 LANDED 11e3486 (122 ins OWNS-clean, fixture+snapshot tests, REPORT PASS, 3 suites green, fmt/clippy/banned clean)",
   "WAVE-CLI-AGYX": "agyx-cli landed+pushed 33912bc (REPORT PASS, 55 green cli, clippy 0, OWNS fmt clean, banned allow 0, PNG noise reverted)",
-  "ORCH-MIX5": "2026-11-20 21:49 AEDT mix complete: sync3+cli+guiexq6+binmix all landed pushed, agyx 2-parallel consistent",
+  "ORCH-MIX5": "2026-11-20 21:54 AEDT mix5 fully complete: sync3+cli+guiexq6+binmix+refresh all pushed, agyx 2-parallel consistent, tree clean",
   "WAVE-GUI-EXQ6": "landed+pushed bbe2a1c (REPORT PASS, 728 green gui-lib, clippy 0, fmt clean, banned 0, PNG noise reverted)",
-  "WAVE-BIN-MIX": "landed+pushed e1dbe32 (REPORT PASS 6/6, tarballs fresh, png 960x600 magic-ok, OWNS dist+checks clean)"
+  "WAVE-BIN-MIX": "landed+pushed e1dbe32 (REPORT PASS 6/6, tarballs fresh, png 960x600 magic-ok, OWNS dist+checks clean)",
+  "WAVE-BIN-MIX-R": "landed+pushed 5d480a3 (dist refresh VERSION 4063976, sha256 -c 4/4 OK, REPORT PASS preserved)"
 }
