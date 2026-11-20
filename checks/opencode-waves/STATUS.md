@@ -1460,3 +1460,15 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - BW-SES-APP (sess-app-bw): PLAN Wave 2 app bridge, OWNS app.rs + checks/gui-sessionapp-bw (MODEL dependency satisfied via 334dee5).
 - BX-SELFIX (sess-sel-bx): P0-2 selective highlight fixture visibility, OWNS views.rs + checks/gui-selfix-bx.
 - Next after BW lands: Wave 3 BU-SES-PAINT (views.rs) + localrun round-3.
+
+## 2026-11-20 — Wave BW-SES-APP landed + pushed (P0-1 Wave 2 app bridge)
+- Commit `c950d03` feat(gui): bridge App sessions as source of truth with tab compat (OWNS app.rs + checks/gui-sessionapp-bw).
+- Gates: 648 green (642 -> +6), clippy zero, fmt clean, banned zero, colors zero new, PNG valid, fixtures byte-same, STATUS untouched.
+- REPORT: checks/gui-sessionapp-bw/REPORT.md (Hinglish-Roman).
+- Next: Wave 3 BU-SES-PAINT (views.rs session tab strip).
+
+## 2026-11-20 — Wave BX-SELFIX landed docs-only, marked INCOMPLETE
+- Commit `f82cdaf` (OWNS-clean, checks/gui-selfix-bx only): zero production change, no RESULT:PASS (pixel-diff 0, suite red at run time).
+- Key finding (orchestrator-verified): uska "1 pre-existing fail" (folder_double_click...) sibling contamination tha — clean tree par full suite 648 green (0 failed). Isliye uska failure diagnosis galat tha.
+- Asli root cause uske REPORT me: selective highlight paint contract-only dead code hai (views.rs:3633/3640 allow(dead_code)) — visible karne ke liye paint wiring chahiye (bigger change, nayi wave).
+- Next: BX2 relaunch (OWNS views.rs) clean tree par, paint-wiring scope ke saath.
