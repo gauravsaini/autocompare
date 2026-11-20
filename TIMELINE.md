@@ -153,3 +153,21 @@
 1. **GUI Geometry & Typography Wave-4**: Verified responsive layout with zero clipped text, 960x600 canvas + 720px narrow fallback proof PNG (12,992 bytes, distinct 256), `TypoRole` single-sourcing across views, frozen colors, and new edge-04 fixture.
 2. **Tests** (before → after): autocompare-gui 714 → 726 passed, 0 failed; clippy zero warnings (`-D warnings`); rustfmt clean; zero unsafe; zero unwrap/expect/panic/todo in non-test code; ac-loop round-exq4 RESULT: PASS.
 3. **Files changed**: `crates/gui/src/{screenshot,views}.rs`, `checks/ac-loop/round-exq4/**`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-typo10 roles plus rhythm
+
+1. **TypoRole Rhythm & Density**: Swarm parallel audit of TypoRole rhythm & line-heights in `theme.rs` (Small 13.2 < Mono 15.6 < Body 18.2 < Heading 21.6), viewmodel density & row-height tokens in `viewmodel.rs` (Compact 18/20, Comfortable 24, Spacious 28; zero clipping at 960x600 and 720px fallback), and folder-tree indent/alignment in `tree.rs` (12px indent step, 16px expander, 20/24/28px density heights). Edge fixture `empty-vs-nonempty.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 872 → 886 passed, 0 failed; clippy clean on owned files; rustfmt clean; banned patterns 0.
+3. **Files changed**: `crates/gui/src/{theme,viewmodel,tree}.rs`, `checks/gui-exq-theme10/**`, `TIMELINE.md`.
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-hextable10 cells plus grid
+
+1. **Hex & Table Geometry & Typo**: Clean-room Beyond Compare parity for hex byte-grid cells with midline gap at col 8, gutter alignment, stacked layout on narrow screens (<720px), and table column Grid with SECTION_GAP (8.0px) col gap, cell padding (8.0px), and header weight via TypoRole (strong, 600 weight, no new sizes). Edge fixture `comparison/hex-narrow.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 886 passed, 0 failed; clippy -D warnings clean; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_hex.rs`, `crates/gui/src/views_table.rs`, `checks/gui-exq-hextable10/**`, `TIMELINE.md`.
+
+

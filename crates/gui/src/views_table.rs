@@ -2017,6 +2017,99 @@ pub fn table_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
     total > 0.0 && total.is_finite() && total <= avail_w
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite geometry wave hextable10: column Grid with SECTION_GAP col gap,
+// cell padding, and header weight via TypoRole.
+// Gap BC data/table half: BC table view aligns columns using an explicit Grid
+// layout with standard section column gaps (8.0px = SECTION_GAP = SPACE_SM)
+// and tight row gaps (4.0px = TIGHT_GAP = SPACE_XS). Each cell has internal
+// horizontal padding (8.0px = TABLE_CELL_PAD_X = SPACE_SM) so text never touches
+// borders or adjacent cells. Column headers are visually emphasized using
+// semibold/strong weight (TypoRole::Heading / .strong() parity) without any
+// point size drift (table_header_text_role stays Mono, 12pt).
+// Geometry FIRST:
+// - Column x-offsets in Grid: col 0 starts at 0, col k starts at sum(widths[0..k]) + k * col_gap.
+// - Grid col gap: TABLE_GRID_COL_GAP == GEO_SECTION_GAP (8.0px).
+// - Cell padding: TABLE_CELL_PAD_X == SPACE_SM (8.0px).
+// Typography SECOND:
+// - Header text role: TypoRole::Mono (12.0pt), weight "strong" (value 600).
+// - Zero new point sizes or font families.
+// Colors FROZEN: zero Color32/Visuals modifications.
+// ----------------------------------------------------------------------------
+
+/// Column header font weight name: `"strong"`. Paint uses `.strong()` on
+/// [`table_header_text_role`] to achieve visual weight distinction without
+/// changing font sizes. Pure; unit-tested.
+pub const fn table_header_weight_name() -> &'static str {
+    "strong"
+}
+
+/// Column header font weight numeric value: 600 (matches [`crate::theme::TYPO_WEIGHT_SEMIBOLD`]
+/// and [`crate::theme::TypoRole::Heading::weight_value`]). Pure; unit-tested.
+pub const fn table_header_weight_value() -> u16 {
+    crate::theme::TYPO_WEIGHT_SEMIBOLD
+}
+
+/// Verifies that table Grid column gap strictly equals the theme's [`crate::theme::GEO_SECTION_GAP`]
+/// (8.0px = `SPACE_SM`). Pure; unit-tested.
+pub const fn table_grid_has_section_gap() -> bool {
+    TABLE_GRID_COL_GAP == crate::theme::GEO_SECTION_GAP
+}
+
+/// Verifies that table cell padding strictly equals the theme's [`crate::theme::SPACE_SM`]
+/// (8.0px). Pure; unit-tested.
+pub const fn table_cell_has_space_padding() -> bool {
+    TABLE_CELL_PAD_X == crate::theme::SPACE_SM
+}
+
+/// Exact x-offset of a table column in the Grid given outer column widths and column gap.
+/// Column 0 starts at 0.0. Column `k` starts at `sum(widths[0..k]) + k * col_gap`.
+/// Out of bounds or non-finite inputs return `None`. Pure; unit-tested.
+pub fn table_column_grid_col_x(col_idx: usize, col_widths_px: &[f32], col_gap: f32) -> Option<f32> {
+    if col_idx >= col_widths_px.len() || !col_gap.is_finite() || col_gap < 0.0 {
+        return None;
+    }
+    let mut x = 0.0;
+    let mut i = 0;
+    while i < col_idx {
+        let &w = col_widths_px.get(i)?;
+        if !w.is_finite() || w < 0.0 {
+            return None;
+        }
+        x += w + col_gap;
+        i = i.saturating_add(1);
+    }
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Exact rectangle of a header cell in the table header Grid: x computed via
+/// [`table_column_grid_col_x`], width from `col_widths_px`, height `header_h`.
+/// Pure; unit-tested.
+pub fn table_column_grid_header_cell_rect(
+    col_idx: usize,
+    col_widths_px: &[f32],
+    header_h: f32,
+    col_gap: f32,
+) -> Option<TableCellRect> {
+    if !header_h.is_finite() || header_h <= 0.0 {
+        return None;
+    }
+    let x = table_column_grid_col_x(col_idx, col_widths_px, col_gap)?;
+    let &w = col_widths_px.get(col_idx)?;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: 0.0,
+        w,
+        h: header_h,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3162,5 +3255,47 @@ mod tests {
         assert_eq!(table_section_label_text_role(), TypoRole::Body);
         assert_eq!(table_header_text_role(), TypoRole::Mono);
         assert_eq!(table_cell_text_role(), TypoRole::Mono);
+    }
+
+    #[test]
+    fn table_exq_hextable10_column_grid_and_cell_padding() {
+        // Grid col gap == SECTION_GAP == 8.0, row gap == TIGHT_GAP == 4.0
+        assert!(table_grid_has_section_gap());
+        assert_eq!(TABLE_GRID_COL_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::GEO_TIGHT_GAP);
+
+        // Cell padding == SPACE_SM == 8.0
+        assert!(table_cell_has_space_padding());
+        assert_eq!(table_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // Header weight via TypoRole (no new sizes)
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_header_weight_name(), "strong");
+        assert_eq!(table_header_weight_value(), 600);
+        assert_eq!(
+            table_header_weight_value(),
+            crate::theme::TYPO_WEIGHT_SEMIBOLD
+        );
+
+        // Column grid layout x-offsets:
+        // col 0: 0.0, col 1: 40.0 + 8.0 = 48.0, col 2: 48.0 + 80.0 + 8.0 = 136.0
+        let widths = [40.0, 80.0, 120.0];
+        let col_gap = TABLE_GRID_COL_GAP;
+        assert_eq!(table_column_grid_col_x(0, &widths, col_gap), Some(0.0));
+        assert_eq!(table_column_grid_col_x(1, &widths, col_gap), Some(48.0));
+        assert_eq!(table_column_grid_col_x(2, &widths, col_gap), Some(136.0));
+        assert_eq!(table_column_grid_col_x(3, &widths, col_gap), None);
+
+        // Header cell rect
+        let h_rect = table_column_grid_header_cell_rect(1, &widths, 20.0, col_gap);
+        assert_eq!(
+            h_rect,
+            Some(TableCellRect {
+                x: 48.0,
+                y: 0.0,
+                w: 80.0,
+                h: 20.0,
+            })
+        );
     }
 }

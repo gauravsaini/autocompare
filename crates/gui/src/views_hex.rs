@@ -2404,6 +2404,120 @@ pub fn paint_hex_panes_plus_ruler(
     paint_hex_sync_panes(ui, row_starts, left, right, hunks);
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hextable10: byte-grid cells + gutter alignment.
+// Gap BC hex half: BC hex compare view has exact column alignment between the
+// overview gutter / minimap strip, the offset ruler (10 chars), the 16 byte
+// cells (with a midline gap between byte 7 and 8), and the ASCII pane.
+// In narrow windows (<720px breakpoint), layout stacks into 2 visual lines
+// per grid row (hex line + ASCII line) while keeping the gutter alignment intact.
+// Geometry FIRST:
+// - Byte cells: 16 columns (0..15). At char_w, byte cells 0..7 start at col*3*char_w;
+//   byte cells 8..15 start at (col*3 + 1)*char_w due to the 1-char midline gap.
+//   Cell text width = 2*char_w; outer box width = hex_cell_outer_w(2*char_w)
+//   reusing HEX_CELL_PAD_X (SPACE_SM, 8.0px).
+// - ASCII cells: chars 0..15 inside |...| start at (1 + col)*char_w.
+// - Gutter alignment: hex grid origin x starts immediately after chrome reserve
+//   (hex_chrome_reserve_w = 52.0px without line numbers, 12 gutter + 24 minimap + 2x8 gaps).
+//   Grid row y positions align with gutter markers: row * hex_grid_row_h() (15.6px).
+// - Stacked mode: 2 visual rows per grid row (hex_stacked_visual_rows); row height
+//   hex_grid_row_h() reused.
+// Typography SECOND:
+// - All byte-grid cells use TypoRole::Mono (hex_cell_text_role reuse).
+// - No new point sizes or typography tokens.
+// Colors FROZEN: zero Color32/Visuals modifications.
+// ----------------------------------------------------------------------------
+
+/// Byte column x-offset within the hex bytes pane: 16 bytes per row (col 0..15).
+/// Columns 0..7 are spaced 3 chars apart (`XX `). At column 8, a 1-character
+/// midline gap separates the two 8-byte nibble groups (`XX  XX`), so columns
+/// 8..15 start at `(col * 3 + 1) * char_w`. Out of range or non-finite `char_w`
+/// returns `None`. Pure; unit-tested.
+pub fn hex_grid_byte_col_x(col: usize, char_w: f32) -> Option<f32> {
+    if col >= HEX_BYTES_PER_ROW || !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let char_offset = if col < HEX_BYTES_PER_ROW / 2 {
+        col.saturating_mul(3)
+    } else {
+        col.saturating_mul(3).saturating_add(1)
+    };
+    let x = (char_offset as f32) * char_w;
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Text width of an individual 2-digit hex byte cell (px): `2.0 * char_w`.
+/// Non-finite or negative `char_w` returns 0.0. Pure; unit-tested.
+pub fn hex_grid_byte_cell_text_w(char_w: f32) -> f32 {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return 0.0;
+    }
+    2.0 * char_w
+}
+
+/// Outer box width of an individual hex byte cell (px): text width plus two
+/// padding sides ([`hex_cell_pad_x`]). Reuses [`hex_cell_outer_w`]. Pure; unit-tested.
+pub fn hex_grid_byte_cell_box_w(char_w: f32) -> f32 {
+    hex_cell_outer_w(hex_grid_byte_cell_text_w(char_w))
+}
+
+/// ASCII character x-offset within the ASCII pane (`|0123456789ABCDEF|`).
+/// Column 0..15 sits after the opening pipe delimiter at `(1 + col) * char_w`.
+/// Out of range or non-finite `char_w` returns `None`. Pure; unit-tested.
+pub fn hex_grid_ascii_col_x(col: usize, char_w: f32) -> Option<f32> {
+    if col >= HEX_BYTES_PER_ROW || !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let char_offset = col.saturating_add(1);
+    let x = (char_offset as f32) * char_w;
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Grid horizontal origin x (px): begins immediately adjacent to the gutter and
+/// overview minimap chrome reserve ([`hex_chrome_reserve_w`]). Pure; unit-tested.
+pub fn hex_grid_origin_x(show_line_numbers: bool) -> f32 {
+    hex_chrome_reserve_w(show_line_numbers)
+}
+
+/// Grid row y-offset (px) for a given grid row index: `row * hex_grid_row_h()`.
+/// Vertical rhythm single source from [`hex_grid_row_h`] (15.6px). Pure; unit-tested.
+pub fn hex_grid_row_y(row: usize) -> f32 {
+    (row as f32) * hex_grid_row_h()
+}
+
+/// Stacked layout visual row count: each logical grid row produces 2 visual lines
+/// (hex line, then ASCII line). Pure; unit-tested.
+pub fn hex_stacked_visual_rows(grid_rows: usize) -> usize {
+    grid_rows.saturating_mul(2)
+}
+
+/// Stacked layout visual row y-offset (px): `(grid_row * 2 + is_ascii) * row_h`.
+/// Pure; unit-tested.
+pub fn hex_stacked_row_y(grid_row: usize, is_ascii_line: bool) -> f32 {
+    let visual_idx = grid_row
+        .saturating_mul(2)
+        .saturating_add(if is_ascii_line { 1 } else { 0 });
+    (visual_idx as f32) * hex_grid_row_h()
+}
+
+/// Checks whether stacked lines fit within available width at a given `char_w`.
+/// Hex line is 61 chars (`10 addr + 2 pad + 49 hex`), ASCII line is 30 chars.
+/// Must fit inside `hex_grid_avail_w(avail_w, false)`. Pure; unit-tested.
+pub fn hex_stacked_panes_fit(avail_w: f32, char_w: f32) -> bool {
+    if !avail_w.is_finite() || !char_w.is_finite() || avail_w <= 0.0 || char_w <= 0.0 {
+        return false;
+    }
+    let avail = hex_grid_avail_w(avail_w, false);
+    let needed = 61.0 * char_w;
+    needed <= avail
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4097,5 +4211,67 @@ mod tests {
         // Tail row real bytes ke saath poori 80-char budget me.
         let text = format_hex_grid_row_with_bytes(48, &left, &right, &view.hunks);
         assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
+    }
+
+    #[test]
+    fn hex_exq_hextable10_edge_narrow_gutter_cells() {
+        // Mirrors checks/gui-exq-hextable10/round-1/comparison/hex-narrow.json:
+        // 640px narrow window stacks (Stacked mode), 32 bytes (2 rows, row 1 diff).
+        let narrow_w = 640.0;
+        let wide_w = 960.0;
+        let char_w = 7.0;
+
+        assert_eq!(hex_layout_mode(narrow_w), HexLayoutMode::Stacked);
+        assert_eq!(hex_layout_mode(wide_w), HexLayoutMode::SideBySide);
+
+        // Chrome reserve and grid avail
+        assert_eq!(hex_chrome_reserve_w(false), 52.0);
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        let avail = hex_grid_avail_w(narrow_w, false);
+        assert_eq!(avail, 588.0);
+        assert!(hex_stacked_panes_fit(narrow_w, char_w));
+
+        // 32 bytes -> 2 rows, stacked visual rows -> 4
+        assert_eq!(hex_row_count(32), 2);
+        assert_eq!(hex_stacked_visual_rows(2), 4);
+        assert_eq!(hex_stacked_row_y(0, false), 0.0);
+        assert!((hex_stacked_row_y(0, true) - 15.6).abs() < 0.001);
+        assert!((hex_stacked_row_y(1, false) - 31.2).abs() < 0.001);
+        assert!((hex_stacked_row_y(1, true) - 46.8).abs() < 0.001);
+
+        // Byte cell positioning at 7px char:
+        // col 0: 0 * 3 * 7 = 0.0
+        assert_eq!(hex_grid_byte_col_x(0, char_w), Some(0.0));
+        // col 7: 7 * 3 * 7 = 147.0
+        assert_eq!(hex_grid_byte_col_x(7, char_w), Some(147.0));
+        // col 8: (8 * 3 + 1) * 7 = 175.0 (midline gap of 7px)
+        assert_eq!(hex_grid_byte_col_x(8, char_w), Some(175.0));
+        assert_eq!(
+            hex_grid_byte_col_x(8, char_w).unwrap_or(0.0)
+                - hex_grid_byte_col_x(7, char_w).unwrap_or(0.0),
+            28.0 // 4 chars (3 + 1 midline) * 7px = 28px
+        );
+        assert_eq!(hex_grid_byte_col_x(16, char_w), None);
+
+        // ASCII cell positioning at 7px char:
+        // col 0 sits after pipe at 1 * 7 = 7.0
+        assert_eq!(hex_grid_ascii_col_x(0, char_w), Some(7.0));
+        assert_eq!(hex_grid_ascii_col_x(15, char_w), Some(112.0));
+        assert_eq!(hex_grid_ascii_col_x(16, char_w), None);
+
+        // Cell sizes and padding
+        assert_eq!(hex_cell_pad_x(), crate::theme::SPACE_SM);
+        assert_eq!(hex_grid_byte_cell_text_w(char_w), 14.0);
+        assert_eq!(hex_grid_byte_cell_box_w(char_w), 30.0); // 14 + 2 * 8
+
+        // Gutter marker on row 1
+        let left: Vec<u8> = (0..32).collect();
+        let mut right = left.clone();
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 0xAA;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, 2), vec![1]);
+        assert!((hex_grid_row_y(1) - 15.6).abs() < 0.001);
     }
 }
