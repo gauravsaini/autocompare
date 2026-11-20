@@ -216,8 +216,11 @@ pub fn gutter_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> 
     if !y.is_finite() || y < 0.0 || y >= height {
         return None;
     }
-    let row = ((y / height) * total_rows as f32).floor() as usize;
-    if row < total_rows { Some(row) } else { None }
+    let frac = y / height;
+    if !frac.is_finite() || frac < 0.0 || frac >= 1.0 {
+        return None;
+    }
+    gutter_row_from_frac(frac, total_rows)
 }
 
 /// Hit-tests a gutter-local y against already-computed `segments`.
@@ -450,8 +453,7 @@ pub fn gutter_ruler_hit_test(y: f32, height: f32, total_rows: usize) -> Option<u
         return None;
     }
     let frac = (y / height).clamp(0.0, 1.0);
-    let row = (frac * total_rows as f32).floor() as usize;
-    Some(row.min(total_rows.saturating_sub(1)))
+    gutter_row_from_frac(frac, total_rows)
 }
 
 // ----------------------------------------------------------------------------
@@ -1955,8 +1957,7 @@ pub fn gutter_padded_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<
     if !frac.is_finite() {
         return None;
     }
-    let row = (frac * total_rows as f32).floor() as usize;
-    Some(row.min(total_rows.saturating_sub(1)))
+    gutter_row_from_frac(frac.clamp(0.0, 1.0), total_rows)
 }
 
 /// Padded minimap me model row ka band-top y (px).
@@ -2447,5 +2448,264 @@ mod exq_gutter6_narrow_tests {
         assert_eq!(gutter_text_gutter_width(9, true), 32.0);
         assert_eq!(gutter_text_gutter_width(120, true), 40.0);
         assert!(gutter_text_gutter_width(120, true) < left);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// GUTTER7 round 2: single-source jump mapping + hairline viewport border +
+// diff-ordered bands + symmetric 720 narrow slop (headless).
+// BC minimap bands diff order me padhe jate hain (pehle Deleted, phir
+// Inserted — readout diff order se match), click-to-jump tall heights par
+// bhi wahi single frac->row helper se map hota hai, aur viewport rect ka
+// border hairline hota hai taaki ruler bands dhaken nahi. Geometry first:
+// sab SPACE/GUTTER/underline scale reuse, koi naya literal nahi.
+// Typography second: kuch nahi (koi text yahan nahi). Colors frozen: sirf
+// shape (33 touches untouched).
+// WIRING (paint owner ke paas): clicks `gutter_row_at_y` /
+// `gutter_padded_row_at_y` / `gutter_jump_target` se (sab
+// `gutter_row_from_frac` single source), viewport rect stroke
+// `gutter_viewport_border_w()` se, band readout
+// `gutter_overview_diff_kinds(..)` diff order me.
+// ----------------------------------------------------------------------------
+
+/// Viewport rect border width px: hairline underline reuse (1.0).
+///
+/// Ruler viewport band ka stroke hairline rehta hai taaki chhoti window
+/// ka band bhi ruler bands ko dhake nahi. Paint stroke isi se aaye;
+/// geometry bands ([`gutter_viewport_rect`]) untouched rehte hain.
+pub const GUTTER_VIEWPORT_BORDER_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+
+/// Viewport rect border width px (single source). Pure.
+pub fn gutter_viewport_border_w() -> f32 {
+    GUTTER_VIEWPORT_BORDER_W
+}
+
+/// Single-source frac->row: `floor(frac * total)` clamped to last row.
+///
+/// `gutter_row_at_y`, [`gutter_ruler_hit_test`] aur
+/// [`gutter_padded_row_at_y`] sab yahi se map hote hain taaki tall heights
+/// par click-to-jump ek hi math se gire. `None`: khali total ya
+/// non-finite/negative frac. `frac >= 1` aakhri row par clamp hota hai
+/// (callers `[0, height)` guard khud rakhte hain). Pure; unit-tested.
+pub fn gutter_row_from_frac(frac: f32, total_rows: usize) -> Option<usize> {
+    if total_rows == 0 {
+        return None;
+    }
+    if !frac.is_finite() || frac < 0.0 {
+        return None;
+    }
+    let clamped = frac.clamp(0.0, 1.0);
+    let row = (clamped * total_rows as f32).floor() as usize;
+    Some(row.min(total_rows.saturating_sub(1)))
+}
+
+/// Diff band kinds row order me (merged runs, Equal skip).
+///
+/// [`gutter_geometry`] segments ke kinds ka row-order twin: lagatar same
+/// kind ek band, Equal runs skip. Minimap readout isi order se match
+/// hota hai. Pure; unit-tested.
+pub fn gutter_diff_band_kinds(rows: &[TextRow]) -> Vec<TextRowKind> {
+    let mut out: Vec<TextRowKind> = Vec::new();
+    let mut idx = 0usize;
+    while idx < rows.len() {
+        let kind = match rows.get(idx) {
+            Some(row) => row.kind,
+            None => break,
+        };
+        if kind == TextRowKind::Equal {
+            idx = idx.saturating_add(1);
+            continue;
+        }
+        if out.last().is_none_or(|last| *last != kind) {
+            out.push(kind);
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Overview segments me diff kinds segment order me (Equal background skip).
+///
+/// Minimap readout contract: yeh [`gutter_diff_band_kinds`] ke barabar
+/// hona chahiye — bands diff order me, same/diff heights ek scale par.
+/// Pure; unit-tested.
+pub fn gutter_overview_diff_kinds(geom: &GutterGeometry) -> Vec<TextRowKind> {
+    let mut out: Vec<TextRowKind> = Vec::new();
+    for seg in &geom.segments {
+        if seg.kind != TextRowKind::Equal && out.last().is_none_or(|last| *last != seg.kind) {
+            out.push(seg.kind);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod exq_gutter7_tests {
+    use super::*;
+
+    fn trow(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        }
+    }
+
+    fn tall_1200_rows() -> Vec<TextRow> {
+        let mut rows = Vec::new();
+        let mut i = 0usize;
+        while i < 1200 {
+            rows.push(trow(TextRowKind::Equal));
+            i = i.saturating_add(1);
+        }
+        if let Some(row) = rows.get_mut(600) {
+            row.kind = TextRowKind::Deleted;
+        }
+        if let Some(row) = rows.get_mut(1199) {
+            row.kind = TextRowKind::Inserted;
+        }
+        rows
+    }
+
+    #[test]
+    fn gutter7_single_source_frac_maps_all_entry_points() {
+        // Mirrors checks/gui-exq-gutter7/round-1/comparison/gutter-tall-1200.json.
+        assert_eq!(gutter_row_from_frac(0.0, 1200), Some(0));
+        assert_eq!(gutter_row_from_frac(0.5, 1200), Some(600));
+        assert_eq!(gutter_row_from_frac(1.0, 1200), Some(1199));
+        assert_eq!(gutter_row_from_frac(-0.1, 1200), None);
+        assert_eq!(gutter_row_from_frac(f32::NAN, 1200), None);
+        assert_eq!(gutter_row_from_frac(0.5, 0), None);
+        // Tall: 1200 rows @400px, y 200 -> frac 0.5 -> row 600 (diff).
+        assert_eq!(gutter_row_at_y(200.0, 1200, 400.0), Some(600));
+        assert_eq!(gutter_ruler_hit_test(200.0, 400.0, 1200), Some(600));
+        // Ruler clamps tall overshoot to last row; row_at_y rejects it.
+        assert_eq!(gutter_ruler_hit_test(500.0, 400.0, 1200), Some(1199));
+        assert_eq!(gutter_row_at_y(400.0, 1200, 400.0), None);
+        // Same frac, same row: entry points disagree nahi karte.
+        assert_eq!(
+            gutter_row_at_y(200.0, 1200, 400.0),
+            gutter_ruler_hit_test(200.0, 400.0, 1200)
+        );
+    }
+
+    #[test]
+    fn gutter7_jump_mapping_hits_diffs_at_tall_heights() {
+        // Mirrors checks/gui-exq-gutter7/round-1/comparison/gutter-tall-1200.json.
+        let rows = tall_1200_rows();
+        // Diff par click wahi rehta hai.
+        assert_eq!(gutter_jump_target(&rows, 1200, 400.0, 200.0), Some(600));
+        // Equal head par click aage diff par girta hai (row 0 -> 600).
+        assert_eq!(gutter_jump_target(&rows, 1200, 400.0, 0.0), Some(600));
+        // Aakhri band par click aakhri diff par girta hai.
+        assert_eq!(gutter_jump_target(&rows, 1200, 400.0, 399.9), Some(1199));
+        // Ruler hit-test single source se round-trip karta hai.
+        if let Some(y) = gutter_y_for_row(600, 1200, 400.0) {
+            assert_eq!(gutter_row_at_y(y + 0.1, 1200, 400.0), Some(600));
+        } else {
+            panic!("marker y must exist");
+        }
+    }
+
+    #[test]
+    fn gutter7_viewport_border_is_hairline_and_bands_stay_inside() {
+        // Mirrors checks/gui-exq-gutter7/round-1/comparison/gutter-tall-1200.json.
+        assert_eq!(
+            GUTTER_VIEWPORT_BORDER_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(GUTTER_VIEWPORT_BORDER_W, 1.0);
+        assert_eq!(gutter_viewport_border_w(), 1.0);
+        // Tall viewport band track ke andar, border hairline (bands dhake nahi).
+        assert_eq!(
+            gutter_viewport_rect(1200, 400.0, 600, 12),
+            Some((200.0, 204.0))
+        );
+        assert_eq!(
+            gutter_viewport_rect_padded(1200, 400.0, 600, 12),
+            Some((200.0, 204.0))
+        );
+        if let Some((y0, y1)) = gutter_viewport_rect(1200, 400.0, 600, 12) {
+            assert!((y1 - y0 - GUTTER_VIEWPORT_MIN_H).abs() < 0.01);
+            assert!(y0 >= 0.0 && y1 <= 400.0);
+        } else {
+            panic!("viewport band must exist");
+        }
+    }
+
+    #[test]
+    fn gutter7_bands_match_diff_order_and_slop_symmetric_at_720() {
+        // Mirrors checks/gui-exq-gutter7/round-1/comparison/gutter-tall-1200.json
+        // plus 720 narrow layout parity.
+        let rows = tall_1200_rows();
+        let diff_only = gutter_geometry(1200, 400.0, &rows);
+        let over = gutter_overview_geometry(1200, 400.0, &rows);
+        let over_padded = gutter_overview_geometry_padded(1200, 400.0, &rows);
+        // Diff bands row order me: Deleted phir Inserted.
+        assert_eq!(
+            gutter_diff_band_kinds(&rows),
+            vec![TextRowKind::Deleted, TextRowKind::Inserted]
+        );
+        // Overview readout diff order se match karta hai (donon tracks).
+        assert_eq!(
+            gutter_overview_diff_kinds(&over),
+            gutter_diff_band_kinds(&rows)
+        );
+        assert_eq!(
+            gutter_overview_diff_kinds(&over_padded),
+            gutter_diff_band_kinds(&rows)
+        );
+        assert_eq!(
+            gutter_overview_diff_kinds(&over),
+            diff_only
+                .segments
+                .iter()
+                .map(|s| s.kind)
+                .collect::<Vec<_>>()
+        );
+        // 720 narrow symmetric + slop dono taraf barabar.
+        assert_eq!(gutter_text_layout_720(), (12.0, 336.0, 24.0, 336.0, 12.0));
+        let seg = GutterSegment {
+            y_start: 200.0,
+            y_end: 204.0,
+            kind: TextRowKind::Deleted,
+        };
+        assert_eq!(
+            gutter_slop_band(&seg, GUTTER_HIT_SLOP),
+            Some((198.0, 206.0))
+        );
+        let Some((lo, hi)) = gutter_slop_band(&seg, GUTTER_HIT_SLOP) else {
+            return;
+        };
+        assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
+        assert!(gutter_text_gutter_width(120, true) < 336.0);
+    }
+
+    #[test]
+    fn gutter7_tall_marker_symmetric_around_row_center() {
+        // Mirrors checks/gui-exq-gutter7/round-1/comparison/gutter-tall-1200.json:
+        // changed-row marker band symmetric around its row center on the
+        // tall fixture (no tall drift), slop symmetric on the real band.
+        let rows = tall_1200_rows();
+        let geom = gutter_geometry(1200, 400.0, &rows);
+        let Some(seg) = geom.segments.first() else {
+            return;
+        };
+        let Some(cy) = gutter_row_center_y(600, 1200, 400.0) else {
+            return;
+        };
+        let Some((y0, y1)) = gutter_selection_marker_band(600, 1200, 400.0) else {
+            return;
+        };
+        assert!(((cy - y0) - (y1 - cy)).abs() < 0.001);
+        assert!((y1 - y0 - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        let Some((lo, hi)) = gutter_slop_band(seg, GUTTER_HIT_SLOP) else {
+            return;
+        };
+        assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
     }
 }
