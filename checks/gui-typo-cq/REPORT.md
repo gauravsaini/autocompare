@@ -76,6 +76,15 @@ intent hai). Line-height paint me hamesha measured mono row height se aati hai
   paint call-site change nahi hua.
 - STATUS.md untouched (koi diff nahi).
 
+## Process note (koi live process nahi chhoda)
+
+- Mere dono harness runs (`--screenshot` mode) exit 0 ke saath khud
+  terminate hue (`round-1/screenshot.out` + fresh `after.png` proof hai).
+- Post-commit `ps` me ek `target/debug/autocompare-gui` process dikha
+  (elapsed sirf ~22s, koi `--screenshot` flag nahi = interactive live app,
+  mere aakhri harness run ke BAAD start hua) — ye parallel CR-LOCALRUN wave
+  ka live app hai, mera nahi. Sibling process ko haath nahi lagaya (unkill).
+
 ## Lines changed
 
 - `crates/gui/src/theme.rs`: +47/-1 (1 const alias + ramp doc touch + 1 test).
