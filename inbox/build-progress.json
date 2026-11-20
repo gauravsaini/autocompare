@@ -186,11 +186,11 @@
   "WAVE-LOCAL7": "landed+pushed 8395b55 REPORT PASS 5 PNGs magic 778 green 10/10 CLI TOP-10 (table/hex moved, text/folder/home stable)",
   "ORCH-GAP-HONEST": "2026-11-20 gap ack: BC 888K native toolbar+tabs+metadata+gutter vs ours 10K dark mono, geometry+typo far, colors frozen, exquisite waves prioritized",
   "ORCH-MIX-STATUS": "mix partial: agyx SWARM-GUI-T alive + 3 opencode (home4 local8 hextable2), agyx /swarm TTY-blocked headless, cap4 exp-backoff",
-  "WAVE-HOME4": "home4 idle succeeded nmsg21, nudge2 delivery failed, re-nudge queued",
+  "WAVE-HOME4": "home4 idle succeeded nmsg30, needs fmt plus harness plus commit",
   "WAVE-HEXTABLE2-SWARM": "dead agyx /swarm needs TTY bubbletea no-dev-tty in headless, fallback opencode sess-opencode-hextable2 OWNS views_hex+views_table running 23:52",
   "WAVE-LOCAL8": "landed+pushed 207298f REPORT PASS 10/10 CLI 3 PNGs 10363/10153/14991B TOP-10 gaps, compile-break flagged views_hex 3586",
   "ORCH-PARALLEL": "4 instances: agyx SWARM-GUI-T text + agyx hex2 swarm + opencode home4 + opencode local8, mix balanced, cap4, exp backoff",
-  "WAVE-HEXTABLE2": "hex2 COMPILE BREAK views_hex.rs:3586 TABLE_CELL_PAD_X unresolved, fix nudged via session",
+  "WAVE-HEXTABLE2": "hex2 793 green exquisite PASS, fmt/banned clean, commit pending nmsg36 running",
   "ORCH-DISK2": "2026-11-20 /tmp 100pct 117Mi blocked launches 0B logs, python rmtree freed 14Gi, warm target-orch-verify preserved",
   "ORCH-LAUNCH-FIX": "nohup file-attach relaunch ok, tmux blocked, setsid missing, agyx /swarm TTY blocked fallback opencode"
 }
