@@ -1503,3 +1503,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## 2026-11-20 — Wave CA-LOCALRUN3 launched (full gap re-verify round-3)
 - Sess sess-local-ca, READ-ONLY (zero source change), OWNS checks/gui-localrun-ca. Live-vs-fixture gap DELTA (bu2 -> ca) + bachi gaps follow-up.
+
+## 2026-11-20 — Wave CA-LOCALRUN3 landed + pushed (round-3 full gap re-verify)
+- Commit `2e73748` docs(gui): bu2 vs ca DELTA (OWNS checks/gui-localrun-ca only, source ZERO touch).
+- P0-1 session chain landed + live empty-state proof; P0-2 wired; P1-1 wired; P2-dark docs locked. Fixtures 4/4 byte-MATCH (frozen renderer, no-regression). 659 green.
+- Backlog: P1-2/P1-3/P1-4 paint-adoption, P2-1 toolbar, mode-tab adopt + T7 rename, dark fix A/B/C.
+
+## 2026-11-20 — Waves CD-P12 + CE-DARKFIX launched (2 parallel, disjoint)
+- CD-P12 (sess-status-cd): P1-2 status 3-zone paint, OWNS views.rs + checks/gui-status-cd.
+- CE-DARKFIX (sess-dark-ce): option A startup visuals, OWNS main.rs + checks/gui-darkfix-ce.
+- Queue: P1-3 cursor strip, P1-4 CTA width (views serial, CD ke baad), mode-tab adopt + T7 rename (app.js serial, CE ke baad).
