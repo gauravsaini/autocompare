@@ -193,7 +193,7 @@
   "WAVE-HEXTABLE2": "landed+pushed 7005bca REPORT PASS 793 green clippy0 fmt clean banned0 2 edge fixtures",
   "ORCH-DISK2": "2026-11-20 /tmp 100pct 117Mi blocked launches 0B logs, python rmtree freed 14Gi, warm target-orch-verify preserved",
   "ORCH-LAUNCH-FIX": "nohup file-attach relaunch ok, tmux blocked, setsid missing, agyx /swarm TTY blocked fallback opencode",
-  "WAVE-TREE4": "running sess-opencode-tree4 nmsg5 reads phase",
+  "WAVE-TREE4": "tree4 edits 259 lines WIP nmsg17 running, banned clean",
   "ORCH-GAP": "2026-11-21 00:05 screenshot still 10K vs BC 888K, TOP-10 gaps from local8 REPORT drive waves",
   "WAVE-TEXT-SWARM": "agyx SWARM-GUI-T ac-loop REPORT PASS cli+gui, no commit no WIP, idle"
 }
