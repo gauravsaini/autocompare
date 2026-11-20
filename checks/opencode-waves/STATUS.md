@@ -1472,3 +1472,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Key finding (orchestrator-verified): uska "1 pre-existing fail" (folder_double_click...) sibling contamination tha — clean tree par full suite 648 green (0 failed). Isliye uska failure diagnosis galat tha.
 - Asli root cause uske REPORT me: selective highlight paint contract-only dead code hai (views.rs:3633/3640 allow(dead_code)) — visible karne ke liye paint wiring chahiye (bigger change, nayi wave).
 - Next: BX2 relaunch (OWNS views.rs) clean tree par, paint-wiring scope ke saath.
+
+## 2026-11-20 — Wave BY-SES-PAINT launched (P0-1 Wave 3 session tab strip)
+- Sess sess-paint-by, OWNS views.rs + checks/gui-sessionpaint-by (MODEL+APP dependencies satisfied).
+- BX2 (selective highlight paint wiring) Wave 3 ke baad launch hogi (dono views.rs — serial).
