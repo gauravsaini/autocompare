@@ -1,0 +1,15 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+pub fn process_data(path: &Path) -> Result<usize, Error> {
+    let content = std::fs::read_to_string(path)?;
+    validate_safe_path(path)?;
+    let buffer_size = 4096;
+    let mut buffer = Vec::with_capacity(buffer_size);
+    if content.is_empty() {
+        return Ok(0);
+    }
+    let digest = compute_checksum_v2(&content);
+    Ok(content.len())
+}
+// End of safe processing module

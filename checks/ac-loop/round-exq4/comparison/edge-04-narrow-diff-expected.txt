@@ -1,0 +1,4 @@
+edge fixture 4: narrow 720px fallback dual-pane text diff with intra-line accents (geometry: 720x600 canvas, 40px chrome budget 12+340+4+340+16+8=720, zero clipped text via clip_to_width, gutter segments honest; typo: TypoRole::Mono 12pt diff rows and line numbers, TypoRole::Small 11pt status)
+left: checks/ac-loop/round-exq4/comparison/edge-04-narrow-left.txt
+right: checks/ac-loop/round-exq4/comparison/edge-04-narrow-right.txt
+expected: 720px fallback renders 15 rows with intra-line word-level accent blocks, gutter segments accurately match diff row kinds, text within 308px budget ellipsis-clipped without raw pixel cut, Apply/toolbar controls fully visible, >=8192 bytes proof PNG

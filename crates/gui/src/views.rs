@@ -6068,9 +6068,7 @@ pub fn paint_picture_compare(
                 ui.vertical(|ui| {
                     ui.set_width(left_w);
                     ui.label(TypoRole::Small.rich("left"));
-                    ui.label(
-                        RichText::new(format!("{}x{}", model.width_l, model.height_l)).monospace(),
-                    );
+                    ui.label(TypoRole::Mono.rich(format!("{}x{}", model.width_l, model.height_l)));
                     ui.add_space(TIGHT_GAP);
                     ui.label(TypoRole::Small.rich(format!(
                         "overlap {}x{} ({} px)",
@@ -6081,9 +6079,7 @@ pub fn paint_picture_compare(
                 ui.vertical(|ui| {
                     ui.set_width(right_w);
                     ui.label(TypoRole::Small.rich("right"));
-                    ui.label(
-                        RichText::new(format!("{}x{}", model.width_r, model.height_r)).monospace(),
-                    );
+                    ui.label(TypoRole::Mono.rich(format!("{}x{}", model.width_r, model.height_r)));
                     ui.add_space(TIGHT_GAP);
                     ui.label(TypoRole::Small.rich(if model.identical {
                         "verdict: identical".to_string()
@@ -6334,13 +6330,9 @@ pub fn paint_sync_checklist(ui: &mut Ui, list: &mut SyncChecklist) {
             let hover = sync_row_text(row.checked, &row.display_line());
             ui.horizontal(|ui| {
                 ui.checkbox(&mut row.checked, "").on_hover_text(hover);
-                ui.label(
-                    RichText::new(row.glyph().to_string())
-                        .monospace()
-                        .color(color),
-                );
-                ui.label(RichText::new(row.display_line()).monospace());
-                ui.label(RichText::new(row.action_label()).small().weak());
+                ui.label(TypoRole::Mono.rich(row.glyph().to_string()).color(color));
+                ui.label(TypoRole::Mono.rich(row.display_line()));
+                ui.label(TypoRole::Small.rich(row.action_label()));
             });
         }
     }
@@ -6348,22 +6340,18 @@ pub fn paint_sync_checklist(ui: &mut Ui, list: &mut SyncChecklist) {
         ui.add_space(TIGHT_GAP);
         for (path, reason) in &list.skipped {
             ui.label(
-                RichText::new(sync_skip_text(path, reason))
-                    .monospace()
-                    .small()
+                TypoRole::Mono
+                    .rich(sync_skip_text(path, reason))
+                    .size(crate::theme::TYPO_SMALL_SIZE)
                     .color(dim_for(dark)),
             );
         }
     }
-    ui.label(
-        RichText::new(format!(
-            "{} of {} step(s) selected",
-            list.checked_count(),
-            list.rows.len()
-        ))
-        .small()
-        .weak(),
-    );
+    ui.label(chrome_status_role().rich(format!(
+        "{} of {} step(s) selected",
+        list.checked_count(),
+        list.rows.len()
+    )));
 }
 
 /// Glyph color of one folder-merge row: conflicts red, clean merges
@@ -6395,49 +6383,37 @@ pub fn paint_folder_merge_checklist(ui: &mut Ui, list: &mut FolderMergeChecklist
             let color = folder_merge_row_color(row.action, dark);
             ui.horizontal(|ui| {
                 ui.checkbox(&mut row.checked, "");
-                ui.label(
-                    RichText::new(row.glyph().to_string())
-                        .monospace()
-                        .color(color),
-                );
-                ui.label(RichText::new(row.display_line()).monospace());
+                ui.label(TypoRole::Mono.rich(row.glyph().to_string()).color(color));
+                ui.label(TypoRole::Mono.rich(row.display_line()));
                 if row.is_conflict() {
                     ui.label(
-                        RichText::new("needs a decision")
-                            .small()
+                        TypoRole::Small
+                            .rich("needs a decision")
                             .color(red_for(dark)),
                     );
                 } else {
-                    ui.label(RichText::new(row.action_label()).small().weak());
+                    ui.label(TypoRole::Small.rich(row.action_label()));
                 }
             });
         }
     }
     if !list.conflicts.is_empty() {
         ui.add_space(TIGHT_GAP);
-        ui.label(
-            RichText::new(format!("{} conflict(s):", list.conflicts.len()))
-                .small()
-                .weak(),
-        );
+        ui.label(chrome_status_role().rich(format!("{} conflict(s):", list.conflicts.len())));
         for path in &list.conflicts {
             ui.label(
-                RichText::new(format!("! {path} (conflict)"))
-                    .monospace()
-                    .small()
+                TypoRole::Mono
+                    .rich(format!("! {path} (conflict)"))
+                    .size(crate::theme::TYPO_SMALL_SIZE)
                     .color(red_for(dark)),
             );
         }
     }
-    ui.label(
-        RichText::new(format!(
-            "{} of {} step(s) selected",
-            list.checked_count(),
-            list.rows.len()
-        ))
-        .small()
-        .weak(),
-    );
+    ui.label(chrome_status_role().rich(format!(
+        "{} of {} step(s) selected",
+        list.checked_count(),
+        list.rows.len()
+    )));
 }
 
 // ----------------------------------------------------------------------------
@@ -6559,18 +6535,18 @@ pub fn paint_three_way_tree(
             } else {
                 dim_for(dark)
             };
-            ui.label(RichText::new(marks).monospace().color(mark_color));
-            ui.label(RichText::new(three_way_row_line(row)).monospace());
+            ui.label(TypoRole::Mono.rich(marks).color(mark_color));
+            ui.label(TypoRole::Mono.rich(three_way_row_line(row)));
             let text = three_way_row_decision_text(conflict, decided);
             if conflict && decided.is_none() {
-                ui.label(RichText::new(text).small().color(red_for(dark)));
+                ui.label(TypoRole::Small.rich(text).color(red_for(dark)));
             } else {
-                ui.label(RichText::new(text).small().weak());
+                ui.label(TypoRole::Small.rich(text));
             }
         });
         if conflict {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Take:").small().weak());
+                ui.label(TypoRole::Small.rich("Take:"));
                 if ui
                     .small_button(crate::tree::ThreeWaySide::Left.label())
                     .clicked()
@@ -6643,8 +6619,8 @@ pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
         ui.horizontal(|ui| {
             ui.checkbox(&mut row.checked, "");
             ui.label(
-                RichText::new(audio_row_text(row.kind, &row.label, &row.detail))
-                    .monospace()
+                TypoRole::Mono
+                    .rich(audio_row_text(row.kind, &row.label, &row.detail))
                     .color(color),
             );
         });
@@ -8519,6 +8495,22 @@ mod tests {
         let summary = format!("{:?}", sync_summary_rich("3 to copy"));
         assert!(summary.contains("12.0"));
         assert!(summary.contains("weak: true"));
+    }
+
+    #[test]
+    fn audio_and_threeway_rich_route_through_typorole() {
+        let audio = format!(
+            "{:?}",
+            TypoRole::Mono.rich(audio_row_text(
+                AudioCheckKind::Verdict,
+                "Verdict",
+                "identical"
+            ))
+        );
+        assert!(audio.contains("12.0"));
+        assert!(audio.contains("Monospace"));
+        let take_label = format!("{:?}", TypoRole::Small.rich("Take:"));
+        assert!(take_label.contains("11.0"));
     }
 
     #[test]

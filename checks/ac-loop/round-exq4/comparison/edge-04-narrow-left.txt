@@ -1,0 +1,15 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+pub fn process_data(path: &Path) -> Result<usize, Error> {
+    let content = read_to_string(path)?;
+    let legacy_flag = true;
+    let buffer_size = 1024;
+    let mut buffer = Vec::with_capacity(buffer_size);
+    if legacy_flag {
+        eprintln!("fallback mode enabled: legacy processing with extended buffer allocated");
+    }
+    let digest = compute_checksum(&content);
+    Ok(content.len())
+}
+// End of safe processing module

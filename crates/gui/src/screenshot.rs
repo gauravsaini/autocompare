@@ -707,23 +707,41 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             kind: TextRowKind::Equal,
             left_no: Some(1),
             right_no: Some(1),
-            left: "use std::path::Path;".to_string(),
-            right: "use std::path::Path;".to_string(),
+            left: "use std::path::{Path, PathBuf};".to_string(),
+            right: "use std::path::{Path, PathBuf};".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(2),
+            right_no: Some(2),
+            left: "use std::sync::Arc;".to_string(),
+            right: "use std::sync::Arc;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: "pub fn process_data(path: &Path) -> Result<usize, Error> {".to_string(),
+            right: "pub fn process_data(path: &Path) -> Result<usize, Error> {".to_string(),
             accent_a: Vec::new(),
             accent_b: Vec::new(),
         },
         TextRow {
             kind: TextRowKind::Changed,
-            left_no: Some(2),
-            right_no: Some(2),
+            left_no: Some(4),
+            right_no: Some(4),
             left: "    let content = read_to_string(path)?;".to_string(),
             right: "    let content = std::fs::read_to_string(path)?;".to_string(),
             accent_a: Vec::new(),
-            accent_b: Vec::new(),
+            accent_b: vec![(18, 27)],
         },
         TextRow {
             kind: TextRowKind::Deleted,
-            left_no: Some(3),
+            left_no: Some(5),
             right_no: None,
             left: "    let legacy_flag = true;".to_string(),
             right: String::new(),
@@ -733,18 +751,90 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
         TextRow {
             kind: TextRowKind::Inserted,
             left_no: None,
-            right_no: Some(3),
+            right_no: Some(5),
             left: String::new(),
             right: "    validate_safe_path(path)?;".to_string(),
             accent_a: Vec::new(),
             accent_b: Vec::new(),
         },
         TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(6),
+            right_no: Some(6),
+            left: "    let buffer_size = 1024;".to_string(),
+            right: "    let buffer_size = 4096;".to_string(),
+            accent_a: vec![(22, 26)],
+            accent_b: vec![(22, 26)],
+        },
+        TextRow {
             kind: TextRowKind::Equal,
-            left_no: Some(4),
-            right_no: Some(4),
+            left_no: Some(7),
+            right_no: Some(7),
+            left: "    let mut buffer = Vec::with_capacity(buffer_size);".to_string(),
+            right: "    let mut buffer = Vec::with_capacity(buffer_size);".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(8),
+            right_no: Some(8),
+            left: "    if legacy_flag {".to_string(),
+            right: "    if content.is_empty() {".to_string(),
+            accent_a: vec![(7, 18)],
+            accent_b: vec![(7, 25)],
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(9),
+            right_no: Some(9),
+            left: "        eprintln!(\"fallback mode enabled\");".to_string(),
+            right: "        return Ok(0);".to_string(),
+            accent_a: vec![(8, 41)],
+            accent_b: vec![(8, 21)],
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(10),
+            right_no: Some(10),
+            left: "    }".to_string(),
+            right: "    }".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(11),
+            right_no: Some(11),
+            left: "    let digest = compute_checksum(&content);".to_string(),
+            right: "    let digest = compute_checksum_v2(&content);".to_string(),
+            accent_a: vec![(17, 33)],
+            accent_b: vec![(17, 36)],
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(12),
+            right_no: Some(12),
             left: "    Ok(content.len())".to_string(),
             right: "    Ok(content.len())".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(13),
+            right_no: Some(13),
+            left: "}".to_string(),
+            right: "}".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(14),
+            right_no: Some(14),
+            left: "// End of safe processing module".to_string(),
+            right: "// End of safe processing module".to_string(),
             accent_a: Vec::new(),
             accent_b: Vec::new(),
         },
@@ -798,6 +888,38 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &left_shown,
             left_fg,
         );
+        // Word-level accent blocks: changed row ke `accent_a` spans
+        for (start, end) in row.accent_a.iter() {
+            let prefix: String = row.left.chars().take(*start).collect();
+            let span: String = row
+                .left
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = left_x
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            let pane_right_bound = left_x.saturating_add(left_w);
+            if ax < pane_right_bound {
+                let clamped_aw = aw.min(pane_right_bound.saturating_sub(ax));
+                fill_rect(&mut pixels, dims, (ax, y, clamped_aw, row_h), left_fg);
+                let clipped_span = crate::viewmodel::clip_to_width(&span, clamped_aw, text_width);
+                draw_string(
+                    &mut pixels,
+                    dims,
+                    ax,
+                    y.saturating_add(6),
+                    &clipped_span,
+                    left_bg,
+                );
+            }
+        }
+
         fill_rect(&mut pixels, dims, (right_x, y, right_w, row_h), right_bg);
         if let Some(no) = row.right_no {
             draw_string(
@@ -817,6 +939,37 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &right_shown,
             right_fg,
         );
+        // Word-level accent blocks: changed row ke `accent_b` spans
+        for (start, end) in row.accent_b.iter() {
+            let prefix: String = row.right.chars().take(*start).collect();
+            let span: String = row
+                .right
+                .chars()
+                .skip(*start)
+                .take(end.saturating_sub(*start))
+                .collect();
+            if span.is_empty() {
+                continue;
+            }
+            let ax = right_x
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
+            let aw = text_width(&span).max(4);
+            let pane_right_bound = right_x.saturating_add(right_w);
+            if ax < pane_right_bound {
+                let clamped_aw = aw.min(pane_right_bound.saturating_sub(ax));
+                fill_rect(&mut pixels, dims, (ax, y, clamped_aw, row_h), right_fg);
+                let clipped_span = crate::viewmodel::clip_to_width(&span, clamped_aw, text_width);
+                draw_string(
+                    &mut pixels,
+                    dims,
+                    ax,
+                    y.saturating_add(6),
+                    &clipped_span,
+                    right_bg,
+                );
+            }
+        }
     }
 
     let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
@@ -840,7 +993,7 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
     paint_status(
         &mut pixels,
         dims,
-        "720 fallback: 5 rows, bands + gutter honest, text ellipsis-clipped",
+        "720 fallback: 15 rows, bands + gutter honest, text ellipsis-clipped",
     );
     let image = RgbaImage {
         width,
@@ -4570,6 +4723,19 @@ mod tests {
         let bytes = std::fs::read(&out).unwrap_or_default();
         assert!(!bytes.is_empty());
         assert!(png_magic_ok(&bytes));
+        assert!(bytes.len() >= 8192);
+        let distinct: std::collections::BTreeSet<u8> = bytes.iter().copied().collect();
+        assert!(distinct.len() > 64);
+        if let (Some(w_slice), Some(h_slice)) = (bytes.get(16..20), bytes.get(20..24)) {
+            let mut w_arr = [0u8; 4];
+            let mut h_arr = [0u8; 4];
+            w_arr.copy_from_slice(w_slice);
+            h_arr.copy_from_slice(h_slice);
+            assert_eq!(
+                (u32::from_be_bytes(w_arr), u32::from_be_bytes(h_arr)),
+                (720, 600)
+            );
+        }
     }
 
     #[test]
