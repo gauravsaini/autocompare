@@ -1529,6 +1529,7 @@ pub fn paint_hex(
     }
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev hunk").clicked() {
             view.select_prev_hunk();
             if let Some(idx) = view.selected {
@@ -2060,6 +2061,7 @@ pub fn paint_merge_three_pane(ui: &mut Ui, lines: &[String]) {
             });
             ui.add_space(TIGHT_GAP);
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = TIGHT_GAP;
                 ui.label(TypoRole::Small.rich("Take:"));
                 if ui.small_button("Take Left").clicked() {
                     staged = Some(viewmodel::TakeChoice::Left);
@@ -2102,6 +2104,7 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
         let hunks = viewmodel::merge_conflict_hunks(&model.lines);
         let mut apply_all_choice: Option<viewmodel::TakeChoice> = None;
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
             if ui.button("Take Left (all)").clicked() {
                 apply_all_choice = Some(viewmodel::TakeChoice::Left);
             }
@@ -2366,6 +2369,7 @@ pub fn paint_table(
     }
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev page").clicked() {
             pager.prev_page();
         }
@@ -4889,6 +4893,7 @@ pub fn paint_folder(
     }
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev page").clicked() {
             pager.prev_page();
         }
@@ -5252,6 +5257,7 @@ pub fn paint_folder_sync(
     }
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev page").clicked() {
             pager.prev_page();
         }
@@ -5544,6 +5550,7 @@ pub fn paint_folder_dual(
     }
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(ui.available_width(), HEADER_H));
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         if ui.small_button("◀ Prev page").clicked() {
             state.pager.prev_page();
         }
@@ -5625,7 +5632,7 @@ pub fn paint_folder_dual(
                             let [name, size, time] = dual_grid_row_left(&node.row);
                             egui::Grid::new(("folder_dual_left_cells", i))
                                 .num_columns(3)
-                                .spacing([SECTION_GAP, 0.0])
+                                .spacing([SECTION_GAP, TIGHT_GAP])
                                 .show(ui, |ui| {
                                     if ui
                                         .selectable_label(
@@ -5673,7 +5680,7 @@ pub fn paint_folder_dual(
                             let [name, size, time] = dual_grid_row_right(&node.row);
                             egui::Grid::new(("folder_dual_right_cells", i))
                                 .num_columns(3)
-                                .spacing([SECTION_GAP, 0.0])
+                                .spacing([SECTION_GAP, TIGHT_GAP])
                                 .show(ui, |ui| {
                                     if ui
                                         .selectable_label(
@@ -5704,6 +5711,7 @@ pub fn paint_folder_dual(
     if let Some((action, path)) = pending {
         ui.add_space(TIGHT_GAP);
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = TIGHT_GAP;
             ui.label(TypoRole::Small.rich(dual_pending_text(action, &path)));
             if ui.small_button("Clear").clicked() {
                 state.clear_action();
@@ -5868,8 +5876,8 @@ pub fn picture_display_size(natural_w: f32, natural_h: f32, view: &PictureViewSt
 /// The model-driven picture view: mode radio (side-by-side columns
 /// with per-side dimensions vs one overlay frame with a mix slider),
 /// zoom slider, pan nudge buttons, the heatmap at the zoomed size,
-/// then the CLI-worded summary lines. Spacing reuses the tree/gutter
-/// tokens ([`TREE_INDENT`], [`SECTION_GAP`], [`TIGHT_GAP`]); colors
+/// then the CLI-worded summary lines. Spacing reuses the gutter
+/// tokens ([`SECTION_GAP`], [`TIGHT_GAP`]); colors
 /// stay the frozen diff palette (no new hues).
 pub fn paint_picture_compare(
     ui: &mut Ui,
@@ -5881,6 +5889,7 @@ pub fn paint_picture_compare(
     ui.label(chrome_status_role().rich(picture_status_line(model)));
     ui.add_space(TIGHT_GAP);
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(TypoRole::Small.rich("Layout:"));
         let mut mode = view.mode;
         for candidate in PictureMode::all() {
@@ -5903,7 +5912,7 @@ pub fn paint_picture_compare(
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_l, model.height_l)).monospace(),
                     );
-                    ui.add_space(tree_indent(1));
+                    ui.add_space(TIGHT_GAP);
                     ui.label(TypoRole::Small.rich(format!(
                         "overlap {}x{} ({} px)",
                         model.overlap_w, model.overlap_h, model.total
@@ -5916,7 +5925,7 @@ pub fn paint_picture_compare(
                     ui.label(
                         RichText::new(format!("{}x{}", model.width_r, model.height_r)).monospace(),
                     );
-                    ui.add_space(tree_indent(1));
+                    ui.add_space(TIGHT_GAP);
                     ui.label(TypoRole::Small.rich(if model.identical {
                         "verdict: identical".to_string()
                     } else {
@@ -5956,6 +5965,7 @@ pub fn paint_picture_compare(
         view.set_zoom_pct(viewmodel::picture_zoom_reset());
     }
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(RichText::new(zoom_label(view.zoom_pct)).small().weak());
         if ui.small_button("+").on_hover_text("zoom in (+)").clicked() {
             view.set_zoom_pct(viewmodel::picture_zoom_in(view.zoom_pct));
@@ -5989,6 +5999,7 @@ pub fn paint_picture_compare(
     // disabled instead of guessing. Geometry helpers above, no new
     // token/typography/color here.
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(RichText::new("steps:").small().weak());
         let fit = heatmap.map(|handle| {
             let natural = handle.size_vec2();
@@ -6016,6 +6027,7 @@ pub fn paint_picture_compare(
         }
     });
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
         ui.label(
             RichText::new(pan_label(view.pan_x, view.pan_y))
                 .small()
