@@ -1,0 +1,4 @@
+~ a.txt (destination is newer)
+~ same.txt (destination is newer)
+0 step(s) planned, 2 skipped
+dry run: nothing changed (pass --apply to run)

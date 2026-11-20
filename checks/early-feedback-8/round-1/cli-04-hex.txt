@@ -1,0 +1,4 @@
+left:  4 bytes
+right: 4 bytes
+first difference at offset 0x00000003
+0x00000003   44                      D        |  45                      E       

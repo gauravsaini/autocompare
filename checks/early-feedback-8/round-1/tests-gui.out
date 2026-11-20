@@ -1,0 +1,21 @@
+error[E0425]: cannot find value `TABLE_CELL_PAD_X` in this scope
+    --> crates/gui/src/views_hex.rs:3586:38
+     |
+1915 | pub const HEX_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
+     | ------------------------------------------------------- similarly named constant `HEX_CELL_PAD_X` defined here
+...
+3586 |         assert_eq!(hex_cell_pad_x(), TABLE_CELL_PAD_X);
+     |                                      ^^^^^^^^^^^^^^^^
+     |
+help: a constant with a similar name exists
+     |
+3586 -         assert_eq!(hex_cell_pad_x(), TABLE_CELL_PAD_X);
+3586 +         assert_eq!(hex_cell_pad_x(), HEX_CELL_PAD_X);
+     |
+help: consider importing this constant
+     |
+2130 +     use crate::views_table::TABLE_CELL_PAD_X;
+     |
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `autocompare-gui` (lib test) due to 1 previous error

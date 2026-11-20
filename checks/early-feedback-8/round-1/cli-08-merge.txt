@@ -1,0 +1,6 @@
+<<<<<<< left
+base
+=======
+right change
+>>>>>>> right
+autocompare: the merge has conflicts

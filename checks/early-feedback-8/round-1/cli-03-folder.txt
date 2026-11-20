@@ -1,0 +1,3 @@
+<         33         33  2026-11-20 12:52 2026-11-20 12:52  a.txt
+<          5          5  2026-11-20 12:52 2026-11-20 12:52  same.txt
+2 entries: 0 same, 0 different, 0 newer left, 2 newer right, 0 left-only, 0 right-only
