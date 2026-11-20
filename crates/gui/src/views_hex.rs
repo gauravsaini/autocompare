@@ -2918,6 +2918,141 @@ pub fn hex_grid_plus_offset_sync_ok(char_w: f32) -> bool {
     hex_byte_pane_x(false, char_w).is_some() && hex_ascii_pane_x(false, char_w).is_some()
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex6 round-1: nibble plus ascii at 960px.
+// Gap BC hex half: hex grid spacing drifts on wide files — the nibble
+// group gap floated off its single source, the ASCII pane x drifted off
+// the grid origin, and ruler ticks had no char-metric step at 960px wide.
+// Geometry FIRST:
+// - Nibble gap via SPACE-token rhythm: `hex_nibble_gap_space_rhythm_ok`
+//   locks the 1-char midline gap (`hex_nibble_group_gap_w` ->
+//   `hex_midline_gap_w`) alongside the SPACE-token spacings (tick spacing
+//   `SPACE_SM`, sym pad `SPACE_XS`, ascii gutter `SPACE_SM`) so the gap
+//   never drifts from the surrounding chrome at 960px wide.
+// - ASCII pane x from grid origin helper: `hex_ascii_pane_x` already sums
+//   `hex_grid_origin_x` + offset gutter box + gutter gap + hex outer +
+//   ascii gutter; `hex_ascii_pane_from_origin_ok` proves the decomposition
+//   pixel-for-pixel so the pane never drifts from the byte grid.
+// - Ruler tick step from char metrics: `hex_ruler_tick_step_w` is the even
+//   3-char step (`hex_byte_col_step_w` single source), and
+//   `hex_wide_960_ruler_tick_step` locks it to 21.0px at the 7px reference
+//   char on the 960px canvas; `hex_ruler_tick_abs_x` shares the byte-pane
+//   origin so ticks sit above byte cells.
+// Typography SECOND: grid + ruler + offset + ASCII all Mono, labels Body
+// — koi naya size/token nahi. Colors FROZEN: koi Color32/Visuals nahi.
+// No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Ruler tick step (px): one even byte-col step (3 chars x `char_w`).
+/// Single source over [`hex_byte_col_step_w`] so ruler ticks advance on
+/// the same char-metric step as byte cells; post-gap columns add the
+/// shared one-char nibble gap via [`hex_ruler_col_x`]. Bad `char_w`
+/// yields 0.0 (paint honest fallback). Pure; unit-tested.
+pub fn hex_ruler_tick_step_w(char_w: f32) -> f32 {
+    hex_byte_col_step_w(char_w)
+}
+
+/// Ruler tick step at the 960px reference canvas (px): 21.0 at the 7px
+/// reference char (`3 x 7`). Locks the wide-file tick rhythm so 960px
+/// ruler columns never drift from byte cells. Pure; unit-tested.
+pub fn hex_wide_960_ruler_tick_step() -> f32 {
+    hex_ruler_tick_step_w(7.0)
+}
+
+/// Nibble-gap symmetry check at `char_w`: the col7->col8 jump is exactly
+/// one even step plus one midline char, every ruler col matches its byte
+/// col, and both halves step evenly. Bad `char_w` returns false. Pure;
+/// unit-tested.
+pub fn hex_nibble_gap_symmetry_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let step = hex_ruler_tick_step_w(char_w);
+    if !step.is_finite() || step <= 0.0 {
+        return false;
+    }
+    let gap = hex_nibble_group_gap_w(char_w);
+    if !gap.is_finite() || (gap - char_w).abs() > 0.001 {
+        return false;
+    }
+    let (Some(x7), Some(x8)) = (
+        hex_grid_byte_col_x(7, char_w),
+        hex_grid_byte_col_x(8, char_w),
+    ) else {
+        return false;
+    };
+    if ((x8 - x7) - (step + gap)).abs() > 0.001 {
+        return false;
+    }
+    let mut col: usize = 0;
+    while col < HEX_BYTES_PER_ROW {
+        let (Some(bx), Some(rx)) = (
+            hex_grid_byte_col_x(col, char_w),
+            hex_ruler_col_x(col, char_w),
+        ) else {
+            return false;
+        };
+        if (bx - rx).abs() > 0.001 {
+            return false;
+        }
+        col = col.saturating_add(1);
+    }
+    true
+}
+
+/// ASCII pane x decomposition check at `char_w`: `hex_ascii_pane_x` equals
+/// grid origin + offset gutter box + gutter gap + hex outer + ascii
+/// gutter, pixel-for-pixel. Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_ascii_pane_from_origin_ok(show_line_numbers: bool, char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let Some(want) = hex_ascii_pane_x(show_line_numbers, char_w) else {
+        return false;
+    };
+    let Some((hex_outer, _)) = hex_pane_outer_widths(char_w) else {
+        return false;
+    };
+    let Some(byte_x) = hex_byte_pane_x(show_line_numbers, char_w) else {
+        return false;
+    };
+    let recomposed = byte_x + hex_outer + hex_ascii_gutter_w();
+    if !recomposed.is_finite() {
+        return false;
+    }
+    (want - recomposed).abs() < 0.001
+        && (byte_x
+            - (hex_grid_origin_x(show_line_numbers)
+                + hex_offset_gutter_w(char_w)
+                + hex_offset_gutter_gap()))
+        .abs()
+            < 0.001
+}
+
+/// Nibble gap plus SPACE-token rhythm check at `char_w`: the 1-char gap
+/// (`hex_nibble_group_gap_w` -> `hex_midline_gap_w`) holds exactly one
+/// `char_w` while the surrounding spacings stay on SPACE tokens (tick
+/// spacing `SPACE_SM`, sym pad `SPACE_XS`, ascii gutter `SPACE_SM`,
+/// grid gaps `GEO_SECTION_GAP`/`GEO_TIGHT_GAP`). Bad `char_w` returns
+/// false. Pure; unit-tested.
+pub fn hex_nibble_gap_space_rhythm_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let gap = hex_nibble_group_gap_w(char_w);
+    if !gap.is_finite() || (gap - char_w).abs() > 0.001 {
+        return false;
+    }
+    if hex_midline_gap_w(char_w) != gap {
+        return false;
+    }
+    hex_ruler_tick_spacing() == crate::theme::SPACE_SM
+        && hex_ruler_tick_sym_pad() == crate::theme::SPACE_XS
+        && hex_ascii_gutter_w() == crate::theme::SPACE_SM
+        && hex_ruler_grid_gap_x() == crate::theme::GEO_SECTION_GAP
+        && hex_ruler_grid_gap_y() == crate::theme::GEO_TIGHT_GAP
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4922,6 +5057,68 @@ mod tests {
         assert!(hex_grid_plus_offset_sync_ok(char_w));
         assert!(!hex_grid_plus_offset_sync_ok(0.0));
         assert!(!hex_grid_plus_offset_sync_ok(f32::NAN));
+        // Typo second: grid + ruler + offset all Mono.
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex6_nibble_plus_ascii_wide_960() {
+        // Headless test proving edge fixture comparison/hex-wide-960.json:
+        // nibble gap via SPACE-token rhythm (1-char midline gap beside
+        // SPACE_SM/SPACe_XS spacings), ASCII pane x from grid origin
+        // helper, ruler tick step from char metrics at 960px wide.
+        let fixture_raw = include_str!("../../../checks/gui-exq-hex6/comparison/hex-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex6/round-1/comparison/hex-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"nibble_group_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"midline_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"ruler_tick_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"ruler_tick_step_px\": 21.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_x\": 505.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 30"));
+        // 1. Nibble gap via SPACE-token rhythm + symmetry.
+        let char_w = 7.0;
+        assert_eq!(HEX_MIDLINE_GAP_CHARS, 1);
+        assert_eq!(hex_midline_gap_w(char_w), 7.0);
+        assert_eq!(hex_nibble_group_gap_w(char_w), hex_midline_gap_w(char_w));
+        assert!(hex_nibble_gap_space_rhythm_ok(char_w));
+        assert!(!hex_nibble_gap_space_rhythm_ok(0.0));
+        assert!(!hex_nibble_gap_space_rhythm_ok(f32::NAN));
+        assert!(hex_nibble_gap_symmetry_ok(char_w));
+        assert!(!hex_nibble_gap_symmetry_ok(0.0));
+        assert!(!hex_nibble_gap_symmetry_ok(f32::NAN));
+        assert_eq!(hex_grid_byte_col_x(7, char_w), Some(147.0));
+        assert_eq!(hex_grid_byte_col_x(8, char_w), Some(175.0));
+        assert_eq!(
+            hex_grid_byte_col_x(8, char_w).unwrap_or(0.0)
+                - hex_grid_byte_col_x(7, char_w).unwrap_or(0.0),
+            28.0
+        );
+        // 2. ASCII pane x from grid origin helper.
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        assert_eq!(hex_byte_pane_x(false, char_w), Some(138.0));
+        assert_eq!(hex_ascii_pane_x(false, char_w), Some(505.0));
+        assert!(hex_ascii_pane_from_origin_ok(false, char_w));
+        assert!(!hex_ascii_pane_from_origin_ok(false, 0.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 0, char_w), Some(138.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 7, char_w), Some(285.0));
+        assert_eq!(hex_ruler_tick_abs_x(false, 8, char_w), Some(313.0));
+        // 3. Ruler tick step from char metrics at 960px wide.
+        assert_eq!(hex_ruler_tick_step_w(char_w), 21.0);
+        assert_eq!(hex_ruler_tick_step_w(char_w), hex_byte_col_step_w(char_w));
+        assert_eq!(hex_ruler_tick_step_w(0.0), 0.0);
+        assert_eq!(hex_wide_960_ruler_tick_step(), 21.0);
+        assert_eq!(hex_layout_mode(HEX_CANVAS_W), HexLayoutMode::SideBySide);
+        assert!((hex_wide_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert_eq!(hex_wide_960_visible_rows(), 30);
+        assert!(hex_grid_plus_offset_sync_ok(char_w));
         // Typo second: grid + ruler + offset all Mono.
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
