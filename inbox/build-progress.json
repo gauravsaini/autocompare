@@ -83,7 +83,13 @@
     "ORCH-PARITY-FIX": "2026-11-20 parity agent exited after 215888b, orchestrator added test-mod allows (7 files, 42 ins), verified isolated target, pushed e2af276..553611a",
     "EXQ4-SOURCE": "landed+pushed 05e667e (6 files, TypoRole single-source + 720px proof PNG 12992B, 726 green clean-tree, clippy 0, fmt clean, banned-non-test 0)",
     "ORCH-CLEAN": "2026-11-20 clean tree at caefe02, 0 dirty, origin/main in sync; agyx parity+exq4 terminal, opencode stale",
-    "EXQ4-CHECKS": "landed+pushed caefe02 (6 files checks/docs, REPORT PASS G5-G8, no source)"
+    "EXQ4-CHECKS": "landed+pushed caefe02 (6 files checks/docs, REPORT PASS G5-G8, no source)",
+    "ORCH-ROUND2": "landed fd7f8f9 round-orch-2 PASS (CLI+GUI, edge fixtures)",
+    "WAVE-REPORTS-VFS": "dispatched 2026-11-20 agyx sess 78970 OWNS reports/vfs/bcomp/round-reports",
+    "WAVE-MEDIA-TABLE": "dispatched 2026-11-20 agyx sess 37121 OWNS table/image/media/picture/round-media2",
+    "WAVE-GUI-EXQ5": "dispatched 2026-11-20 agyx sess 51089 OWNS gui/round-exq5-2 geometry-first typo-second colors-frozen",
+    "WAVE-LOCALRUN-LR2": "dispatched 2026-11-20 opencode sess-opencode-lr2 sess 38001 OWNS local-run/dist/round-lr2 default-model",
+    "WAVE-SYNC-EXEC": "dispatched 2026-11-20 opencode sess-opencode-sync2 sess 23165 OWNS sync/folder/round-sync2 default-model"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
