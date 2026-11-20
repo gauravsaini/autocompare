@@ -3417,6 +3417,233 @@ pub fn home7_contract_ok() -> bool {
         && home_card_hierarchy_ok()
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME32 round-1 exquisite: live home sessions geometry.
+// BC pattern, outside observation only:
+// 1200px wide canvas par session cards grid 3 cols me stable rehta hai (1176 avail,
+// 24px GEO_CARD_GAP, 376px flexed cards) with zero horizontal scrolling.
+// Margins aur gaps OUTER_MARGIN (12px) aur SECTION_GAP (8px) se strictly derive
+// hote hain. Search field ki unchai standard 28px header row par locked hai,
+// jo base SPACE tokens (SPACE_XL + SPACE_XS = 24 + 4 = 28) se derive hoti hai.
+// Workspace sidebar rows consistent 24px row height aur 12px tree indent step
+// par aligned hain, aur cards grid ke sath same top margin share karte hain.
+// 8-tabs strip (422px) aur cards layout dono 1200px par bina horizontal scroll ke fit hote hain.
+// Geometry first: sab tokens theme SPACE/GEO constants se derive, zero magic numbers.
+// Typography second: existing TypoRole hierarchy reuse. Colors frozen: zero color edits.
+// Edge fixture: `checks/gui-exq-home32/comparison/home32-8tabs-1200.json`.
+// ----------------------------------------------------------------------------
+
+/// Home32 canvas reference width px (1200.0).
+pub const HOME32_CANVAS_W: f32 = 1200.0;
+/// Home32 content horizontal outer margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME32_CONTENT_MARGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home32 content vertical outer margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME32_CONTENT_MARGIN_Y: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home32 section gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME32_SECTION_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home32 card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME32_CARD_PAD: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home32 card min width px: SPACE scale (10 * [`crate::theme::SPACE_XL`] = 240.0).
+pub const HOME32_CARD_MIN_W: f32 = crate::theme::SPACE_XL * 10.0;
+/// Home32 card grid generous gap px: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24.0).
+pub const HOME32_CARD_GRID_GAP: f32 = crate::theme::GEO_CARD_GAP;
+/// Home32 CTA min width px: card inner width at min card width (240 − 2*8 = 224.0).
+pub const HOME32_CARD_CTA_MIN_W: f32 = HOME32_CARD_MIN_W - HOME32_CARD_PAD * 2.0;
+
+/// Home32 search field height px: standard 28px hit row reusing base SPACE tokens
+/// ([`crate::theme::SPACE_XL`] + [`crate::theme::SPACE_XS`] = 24.0 + 4.0 = 28.0,
+/// [`crate::theme::CHROME_HEADER_BAR_H`] parity).
+pub const HOME32_SEARCH_H: f32 = crate::theme::SPACE_XL + crate::theme::SPACE_XS;
+/// Home32 search field side pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME32_SEARCH_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home32 search field icon slot width px: panel gutter rhythm ([`crate::theme::SPACE_LG`] = 16.0).
+pub const HOME32_SEARCH_ICON_W: f32 = crate::theme::SPACE_LG;
+
+/// Home32 workspace sidebar width px: card min width parity (240.0).
+pub const HOME32_WORKSPACE_WIDTH: f32 = HOME_CARD_MIN_W;
+/// Home32 workspace row height px: compact hit row ([`crate::theme::SPACE_XL`] = 24.0, [`SESSION_TREE_ROW_H`]).
+pub const HOME32_WORKSPACE_ROW_H: f32 = crate::theme::SPACE_XL;
+/// Home32 workspace indent step px: tree rhythm ([`crate::theme::GEO_TREE_INDENT_STEP`] = 12.0).
+pub const HOME32_WORKSPACE_INDENT_STEP: f32 = crate::theme::GEO_TREE_INDENT_STEP;
+/// Home32 workspace row horizontal padding px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME32_WORKSPACE_PAD_X: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home32 workspace row vertical padding px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4.0).
+pub const HOME32_WORKSPACE_PAD_Y: f32 = crate::theme::GEO_TIGHT_GAP;
+
+/// Home32 content available width px: canvas minus do taraf outer margin.
+/// Tang viewport par 0.0, non-finite par wahi. Pure; headless-tested.
+pub fn home32_content_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME32_CONTENT_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Home32 card grid columns at total width:
+/// 1200 par 3 cols (768 <= 1176), 720 par 2 cols, tang par 1 col.
+/// Non-finite par canonical [`HOME_GRID_COLUMNS`]. Pure; headless-tested.
+pub fn home32_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = home32_content_avail_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME32_CARD_MIN_W + cols as f32 * HOME32_CARD_GRID_GAP <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Home32 card grid rows for item count at total width. Pure; headless-tested.
+pub fn home32_grid_rows(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home32_grid_columns(total_w).max(1))
+}
+
+/// Home32 flexed card width px for available width at generous gap:
+/// (avail − (cols − 1) * gap) / cols, floor at [`HOME32_CARD_MIN_W`].
+/// 1200 par (1176 avail): (1176 − 48) / 3 = 376.0.
+/// Pure; headless-tested.
+pub fn home32_grid_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME32_CARD_MIN_W;
+    }
+    let three_floor = 3.0 * HOME32_CARD_MIN_W + 2.0 * HOME32_CARD_GRID_GAP;
+    let two_floor = 2.0 * HOME32_CARD_MIN_W + HOME32_CARD_GRID_GAP;
+    let cols = if avail >= three_floor {
+        3.0
+    } else if avail >= two_floor {
+        2.0
+    } else {
+        1.0
+    };
+    let gaps = (cols - 1.0) * HOME32_CARD_GRID_GAP;
+    ((avail - gaps) / cols).max(HOME32_CARD_MIN_W)
+}
+
+/// Home32 card inner width px: card width minus do taraf pad.
+/// Non-finite par [`HOME32_CARD_CTA_MIN_W`]. Pure; headless-tested.
+pub fn home32_card_inner_width(card_w: f32) -> f32 {
+    if !card_w.is_finite() {
+        return HOME32_CARD_CTA_MIN_W;
+    }
+    (card_w - HOME32_CARD_PAD * 2.0).max(0.0)
+}
+
+/// Home32 card CTA width px: card inner width se lock. Pure; headless-tested.
+pub fn home32_card_cta_width(card_w: f32) -> f32 {
+    home32_card_inner_width(card_w)
+}
+
+/// Home32 grid content height px: rows * card min + beech gaps.
+/// 1200 par 9 cards (3 rows): 3 * 99.6 + 2 * 24 = 346.8.
+/// Pure; headless-tested.
+pub fn home32_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    let rows = home32_grid_rows(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME32_CARD_GRID_GAP
+}
+
+/// Home32 search field height px: 28px single source ([`HOME32_SEARCH_H`]).
+/// Pure; headless-tested.
+pub fn home32_search_height() -> f32 {
+    HOME32_SEARCH_H
+}
+
+/// Home32 search field inner text width px: field width minus padding, icon, and tight gap.
+/// Pure; headless-tested.
+pub fn home32_search_text_inner_width(field_w: f32) -> f32 {
+    if !field_w.is_finite() {
+        return 0.0;
+    }
+    (field_w - HOME32_SEARCH_PAD_X * 2.0 - HOME32_SEARCH_ICON_W - crate::theme::GEO_TIGHT_GAP)
+        .max(0.0)
+}
+
+/// Home32 workspace row horizontal text offset for hierarchy depth.
+/// Pure; headless-tested.
+pub fn home32_workspace_row_x(depth: usize) -> f32 {
+    HOME32_WORKSPACE_PAD_X + depth as f32 * HOME32_WORKSPACE_INDENT_STEP
+}
+
+/// Home32 workspace row bounding box rect `(x0, y0, x1, y1)`:
+/// starts from content margin origin, rows advance by 24px height.
+/// Non-finite par None. Pure; headless-tested.
+pub fn home32_workspace_row_rect(index: usize, avail_w: f32) -> Option<(f32, f32, f32, f32)> {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return None;
+    }
+    let x0 = HOME32_CONTENT_MARGIN_X;
+    let y0 = HOME32_CONTENT_MARGIN_Y + index as f32 * HOME32_WORKSPACE_ROW_H;
+    let x1 = x0 + avail_w.min(HOME32_WORKSPACE_WIDTH);
+    let y1 = y0 + HOME32_WORKSPACE_ROW_H;
+    Some((x0, y0, x1, y1))
+}
+
+/// Home32 workspace layout combined width: sidebar width (240) + card grid gap (24)
+/// + 3-column min cards (3 * 240 + 2 * 24 = 768) = 1032.0.
+pub fn home32_workspace_layout_width() -> f32 {
+    HOME32_WORKSPACE_WIDTH
+        + HOME32_CARD_GRID_GAP
+        + (3.0 * HOME32_CARD_MIN_W + 2.0 * HOME32_CARD_GRID_GAP)
+}
+
+/// Home32 cards grid needs horizontal scroll check:
+/// 3-column minimum width requires 768.0px. At 1200 canvas (avail 1176.0), returns `false`.
+/// Pure; headless-tested.
+pub fn home32_grid_needs_hscroll(total_w: f32) -> bool {
+    let min_3col = 3.0 * HOME32_CARD_MIN_W + 2.0 * HOME32_CARD_GRID_GAP;
+    home32_content_avail_width(total_w) < min_3col
+}
+
+/// Home32 tab strip needs horizontal scroll check:
+/// delegates to [`home_tab_bar_needs_scroll`]. At 1200 canvas, 8 tabs (422px) return `false`.
+/// Pure; headless-tested.
+pub fn home32_tab_strip_needs_hscroll(titles: &[&str], total_w: f32) -> bool {
+    home_tab_bar_needs_scroll(titles, total_w)
+}
+
+/// Home32 combined workspace and cards layout needs horizontal scroll check:
+/// at 1200 canvas (avail 1176.0), combined 1032.0px fits, returning `false`.
+/// Pure; headless-tested.
+pub fn home32_workspace_layout_needs_hscroll(total_w: f32) -> bool {
+    home32_content_avail_width(total_w) < home32_workspace_layout_width()
+}
+
+/// Home32 contract verification helper:
+/// proves geometry derived strictly from SPACE/GEO tokens, search height 28px
+/// from SPACE_* (SPACE_XL + SPACE_XS == CHROME_HEADER_BAR_H), workspace rows alignment,
+/// and zero horizontal scroll at 1200px canvas.
+/// Pure; headless-tested.
+pub fn home32_contract_ok() -> bool {
+    HOME32_CARD_MIN_W == crate::theme::SPACE_XL * 10.0
+        && HOME32_CARD_MIN_W == HOME_CARD_MIN_W
+        && HOME32_CARD_PAD == crate::theme::GEO_SECTION_GAP
+        && HOME32_SECTION_GAP == crate::theme::GEO_SECTION_GAP
+        && HOME32_CONTENT_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME32_CONTENT_MARGIN_Y == crate::theme::GEO_OUTER_MARGIN
+        && HOME32_CARD_GRID_GAP == crate::theme::GEO_CARD_GAP
+        && HOME32_SEARCH_H == 28.0
+        && HOME32_SEARCH_H == crate::theme::SPACE_XL + crate::theme::SPACE_XS
+        && HOME32_SEARCH_H == crate::theme::CHROME_HEADER_BAR_H
+        && HOME32_SEARCH_PAD_X == crate::theme::GEO_SECTION_GAP
+        && HOME32_SEARCH_ICON_W == crate::theme::SPACE_LG
+        && HOME32_WORKSPACE_WIDTH == HOME_CARD_MIN_W
+        && HOME32_WORKSPACE_ROW_H == crate::theme::SPACE_XL
+        && HOME32_WORKSPACE_ROW_H == SESSION_TREE_ROW_H
+        && HOME32_WORKSPACE_INDENT_STEP == crate::theme::GEO_TREE_INDENT_STEP
+        && HOME32_WORKSPACE_PAD_X == crate::theme::GEO_SECTION_GAP
+        && HOME32_WORKSPACE_PAD_Y == crate::theme::GEO_TIGHT_GAP
+        && HOME32_CARD_CTA_MIN_W == 224.0
+        && HOME32_CARD_CTA_MIN_W == HOME_CARD_CTA_W
+        && !home32_grid_needs_hscroll(HOME32_CANVAS_W)
+        && !home32_workspace_layout_needs_hscroll(HOME32_CANVAS_W)
+        && home_card_hierarchy_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5395,5 +5622,157 @@ mod tests {
         assert_eq!(super::home7_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
 
         assert!(super::home7_contract_ok());
+    }
+
+    #[test]
+    fn home_exq_home32_round1_sessions_8tabs_1200() {
+        use crate::theme::{
+            CHROME_HEADER_BAR_H, GEO_CARD_GAP, GEO_OUTER_MARGIN, GEO_SECTION_GAP,
+            GEO_TREE_INDENT_STEP, SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS,
+        };
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home32/comparison/home32-8tabs-1200.json");
+        assert!(fixture_raw.contains("\"canvas_w\":1200.0"));
+        assert!(fixture_raw.contains("\"card_min_w\":240.0"));
+        assert!(fixture_raw.contains("\"card_pad\":8.0"));
+        assert!(fixture_raw.contains("\"content_margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"content_margin_y\":12.0"));
+        assert!(fixture_raw.contains("\"section_gap\":8.0"));
+        assert!(fixture_raw.contains("\"card_grid_gap\":24.0"));
+        assert!(fixture_raw.contains("\"content_avail_w_at_1200\":1176.0"));
+        assert!(fixture_raw.contains("\"grid_cols_at_1200\":3"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_1200\":376.0"));
+        assert!(fixture_raw.contains("\"grid_inner_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"card_cta_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"search_h\":28.0"));
+        assert!(fixture_raw.contains("\"search_pad_x\":8.0"));
+        assert!(fixture_raw.contains("\"workspace_width\":240.0"));
+        assert!(fixture_raw.contains("\"workspace_row_h\":24.0"));
+        assert!(fixture_raw.contains("\"workspace_indent_step\":12.0"));
+        assert!(fixture_raw.contains("\"workspace_pad_x\":8.0"));
+        assert!(fixture_raw.contains("\"combined_layout_w\":1032.0"));
+        assert!(fixture_raw.contains("\"tab_strip_w_8tabs\":422.0"));
+        assert!(fixture_raw.contains("\"grid_needs_hscroll_1200\":false"));
+        assert!(fixture_raw.contains("\"tabs_needs_hscroll_1200\":false"));
+        assert!(fixture_raw.contains("\"workspace_layout_needs_hscroll_1200\":false"));
+
+        // 1. Session cards grid geometry reusing OUTER_MARGIN and SECTION_GAP
+        assert_eq!(super::HOME32_CANVAS_W, 1200.0);
+        assert_eq!(super::HOME32_CONTENT_MARGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(super::HOME32_CONTENT_MARGIN_X, SPACE_MD);
+        assert_eq!(super::HOME32_CONTENT_MARGIN_X, 12.0);
+        assert_eq!(super::HOME32_CONTENT_MARGIN_Y, GEO_OUTER_MARGIN);
+        assert_eq!(super::HOME32_CONTENT_MARGIN_Y, 12.0);
+        assert_eq!(super::HOME32_SECTION_GAP, GEO_SECTION_GAP);
+        assert_eq!(super::HOME32_SECTION_GAP, SPACE_SM);
+        assert_eq!(super::HOME32_SECTION_GAP, 8.0);
+        assert_eq!(super::HOME32_CARD_PAD, GEO_SECTION_GAP);
+        assert_eq!(super::HOME32_CARD_PAD, 8.0);
+        assert_eq!(super::HOME32_CARD_MIN_W, SPACE_XL * 10.0);
+        assert_eq!(super::HOME32_CARD_MIN_W, 240.0);
+        assert_eq!(super::HOME32_CARD_MIN_W, super::HOME_CARD_MIN_W);
+        assert_eq!(super::HOME32_CARD_GRID_GAP, GEO_CARD_GAP);
+        assert_eq!(super::HOME32_CARD_GRID_GAP, SPACE_XL);
+        assert_eq!(super::HOME32_CARD_GRID_GAP, 24.0);
+        assert_eq!(super::HOME32_CARD_CTA_MIN_W, 224.0);
+        assert_eq!(super::HOME32_CARD_CTA_MIN_W, super::HOME_CARD_CTA_W);
+
+        assert_eq!(super::home32_content_avail_width(1200.0), 1176.0);
+        assert_eq!(super::home32_content_avail_width(960.0), 936.0);
+        assert_eq!(super::home32_content_avail_width(720.0), 696.0);
+        assert_eq!(super::home32_content_avail_width(20.0), 0.0);
+        assert!(super::home32_content_avail_width(f32::NAN).is_nan());
+
+        assert_eq!(super::home32_grid_columns(1200.0), 3);
+        assert_eq!(super::home32_grid_columns(960.0), 3);
+        assert_eq!(super::home32_grid_columns(720.0), 2);
+        assert_eq!(super::home32_grid_columns(500.0), 1);
+        assert_eq!(
+            super::home32_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+
+        assert_eq!(super::home32_grid_rows(9, 1200.0), 3);
+        assert_eq!(super::home32_grid_rows(9, 720.0), 5);
+        assert_eq!(super::home32_grid_rows(0, 1200.0), 0);
+
+        assert_eq!(super::home32_grid_card_width(1176.0), 376.0);
+        assert_eq!(super::home32_grid_card_width(936.0), 296.0);
+        assert_eq!(super::home32_grid_card_width(696.0), 336.0);
+        assert_eq!(super::home32_grid_card_width(f32::NAN), 240.0);
+        assert_eq!(super::home32_grid_card_width(0.0), 240.0);
+
+        assert_eq!(super::home32_card_inner_width(376.0), 360.0);
+        assert_eq!(super::home32_card_inner_width(240.0), 224.0);
+        assert_eq!(super::home32_card_inner_width(10.0), 0.0);
+        assert_eq!(super::home32_card_inner_width(f32::NAN), 224.0);
+
+        assert_eq!(super::home32_card_cta_width(376.0), 360.0);
+        assert_eq!(super::home32_card_cta_width(240.0), 224.0);
+
+        let grid_h = super::home32_grid_content_height(9, 1200.0);
+        assert!((grid_h - 346.8).abs() < 0.05);
+        assert_eq!(super::home32_grid_content_height(0, 1200.0), 0.0);
+
+        // 2. Search field height 28px reusing SPACE_*
+        assert_eq!(super::HOME32_SEARCH_H, 28.0);
+        assert_eq!(super::HOME32_SEARCH_H, SPACE_XL + SPACE_XS);
+        assert_eq!(super::HOME32_SEARCH_H, CHROME_HEADER_BAR_H);
+        assert_eq!(super::home32_search_height(), 28.0);
+        assert_eq!(super::HOME32_SEARCH_PAD_X, GEO_SECTION_GAP);
+        assert_eq!(super::HOME32_SEARCH_PAD_X, SPACE_SM);
+        assert_eq!(super::HOME32_SEARCH_PAD_X, 8.0);
+        assert_eq!(super::HOME32_SEARCH_ICON_W, SPACE_LG);
+        assert_eq!(super::HOME32_SEARCH_ICON_W, 16.0);
+        assert_eq!(super::home32_search_text_inner_width(240.0), 204.0);
+        assert_eq!(super::home32_search_text_inner_width(20.0), 0.0);
+        assert_eq!(super::home32_search_text_inner_width(f32::NAN), 0.0);
+
+        // 3. Workspace rows alignment
+        assert_eq!(super::HOME32_WORKSPACE_WIDTH, 240.0);
+        assert_eq!(super::HOME32_WORKSPACE_WIDTH, super::HOME_CARD_MIN_W);
+        assert_eq!(super::HOME32_WORKSPACE_ROW_H, 24.0);
+        assert_eq!(super::HOME32_WORKSPACE_ROW_H, SPACE_XL);
+        assert_eq!(super::HOME32_WORKSPACE_ROW_H, super::SESSION_TREE_ROW_H);
+        assert_eq!(super::HOME32_WORKSPACE_INDENT_STEP, GEO_TREE_INDENT_STEP);
+        assert_eq!(super::HOME32_WORKSPACE_INDENT_STEP, SPACE_MD);
+        assert_eq!(super::HOME32_WORKSPACE_INDENT_STEP, 12.0);
+        assert_eq!(super::HOME32_WORKSPACE_PAD_X, GEO_SECTION_GAP);
+        assert_eq!(super::HOME32_WORKSPACE_PAD_X, 8.0);
+        assert_eq!(super::HOME32_WORKSPACE_PAD_Y, crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(super::HOME32_WORKSPACE_PAD_Y, 4.0);
+
+        assert_eq!(super::home32_workspace_row_x(0), 8.0);
+        assert_eq!(super::home32_workspace_row_x(1), 20.0);
+        assert_eq!(super::home32_workspace_row_x(2), 32.0);
+
+        let row0 = super::home32_workspace_row_rect(0, 240.0);
+        assert_eq!(row0, Some((12.0, 12.0, 252.0, 36.0)));
+        let row1 = super::home32_workspace_row_rect(1, 240.0);
+        assert_eq!(row1, Some((12.0, 36.0, 252.0, 60.0)));
+        assert_eq!(super::home32_workspace_row_rect(0, f32::NAN), None);
+        assert_eq!(super::home32_workspace_row_rect(0, 0.0), None);
+
+        assert_eq!(super::home32_workspace_layout_width(), 1032.0);
+
+        // 4. 1200px no horizontal scroll (grid, 8-tab strip, combined layout)
+        let eight_tabs = [
+            "Home", "Text", "Folder", "Hex", "Merge", "Table", "Sync", "Picture",
+        ];
+        let tab_w = super::home_tab_bar_width(&eight_tabs);
+        assert_eq!(tab_w, 422.0);
+        assert!(!super::home32_tab_strip_needs_hscroll(&eight_tabs, 1200.0));
+        assert!(!super::home32_tab_strip_needs_hscroll(&eight_tabs, 960.0));
+        assert!(super::home32_tab_strip_needs_hscroll(&eight_tabs, 300.0));
+
+        assert!(!super::home32_grid_needs_hscroll(1200.0));
+        assert!(!super::home32_grid_needs_hscroll(960.0));
+        assert!(super::home32_grid_needs_hscroll(720.0));
+
+        assert!(!super::home32_workspace_layout_needs_hscroll(1200.0));
+        assert!(super::home32_workspace_layout_needs_hscroll(960.0));
+
+        assert!(super::home32_contract_ok());
     }
 }
