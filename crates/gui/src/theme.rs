@@ -117,7 +117,8 @@ pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 // header Heading 18 strong-large (app title, section headers) >
 // card-title HomeTitle 14 (card titles) > tab Body 13 medium-step
 // (tab bar, card buttons) > grid Mono 12 fixed (folder grid, hex/table
-// cells, paths, gutter — via content_grid()) > hint Small 11 (status
+// cells, paths — via content_grid(); gutter text — via gutter_text())
+// > hint Small 11 (status
 // lines, counts, hints, captions — via caption()). Only the alias names
 // are new; every size reuses an existing TYPO_* token so the
 // geometry/typography waves never drift. Colors untouched (weak tone
@@ -391,6 +392,17 @@ impl TypoRole {
     /// folder columns reference; caption-regular is Small exactly.
     pub const fn caption() -> Self {
         Self::Small
+    }
+
+    /// Gutter-text role: Mono (12 regular monospace, tabular). Line numbers
+    /// and gutter-adjacent rows read in the same family as pane rows
+    /// (BC hierarchy: gutter text matches diff-body mono, never chrome).
+    /// Value-stable alias over [`TypoRole::content_grid`]; the local
+    /// `gutter::gutter_text_role` helper keeps working unchanged and
+    /// delegates here in a later wave (`gutter.rs` is out of scope now).
+    /// Paint adoption is a later wave; no size/color/geometry moves here.
+    pub const fn gutter_text() -> Self {
+        Self::Mono
     }
 
     /// Line-height source: always the measured monospace row height.
@@ -1314,6 +1326,40 @@ mod tests {
             assert!(TYPO_SMALL_SIZE < TYPO_MONO_SIZE);
             assert!(TYPO_MONO_SIZE < TYPO_BODY_SIZE);
         }
+    }
+
+    #[test]
+    fn gutter_text_alias_matches_grid_mono() {
+        // Central gutter pole: same value as the grid alias, fixed mono 12.
+        assert_eq!(TypoRole::gutter_text(), TypoRole::Mono);
+        assert_eq!(TypoRole::gutter_text(), TypoRole::content_grid());
+        assert_eq!(TypoRole::gutter_text().size(), TYPO_MONO_SIZE);
+        assert_eq!(TypoRole::gutter_text().size(), 12.0);
+        assert!(TypoRole::gutter_text().is_mono());
+        assert!(!TypoRole::gutter_text().is_chrome());
+        assert!(TypoRole::gutter_text().is_tabular());
+        assert_eq!(TypoRole::gutter_text().weight(), "regular-mono");
+        assert_eq!(TypoRole::gutter_text().family(), "monospace");
+        assert_eq!(TypoRole::gutter_text().line_height(), TYPO_LINE_HEIGHT_MONO);
+        assert_eq!(
+            TypoRole::gutter_text().font_id(),
+            egui::FontId::monospace(12.0)
+        );
+        // Single-source delegation through spec().
+        assert_eq!(
+            TypoRole::gutter_text().spec().size,
+            TypoRole::Mono.spec().size
+        );
+        assert_eq!(
+            TypoRole::gutter_text().spec().font_id,
+            TypoRole::Mono.font_id()
+        );
+        // BC ladder holds with the gutter pole: hint 11 < gutter/grid 12.
+        assert!(TypoRole::caption().size() < TypoRole::gutter_text().size());
+        assert_eq!(
+            TypoRole::gutter_text().size(),
+            TypoRole::content_grid().size()
+        );
     }
 
     #[test]
