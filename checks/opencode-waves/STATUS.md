@@ -1565,3 +1565,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## 2026-11-20 — Wave CM-LOCALRUN5 launched (round-5 INTERACTIVE, tab-switch allowed)
 - Sess sess-local-cm, READ-ONLY (zero source change), OWNS checks/gui-localrun-cm. Pehli interactive wave: Text-tab live captures + multi-session strip + toolbar pixel-verify + DELTA cj -> cm.
+
+## 2026-11-20 — Exquisite-UI waves CP-GEO + CQ-TYPO + CR-LOCALRUN6 launched (3 parallel, disjoint)
+- CP-GEO (sess-cp-geo): geometry-first exquisite (width/height/margins/padding/alignment/positioning vs BC live observe-only). OWNS views.rs + checks/gui-geo-cp. Colors+typo FROZEN.
+- CQ-TYPO (sess-typo-cq): typography system (family/weight/line-height/letter-spacing). OWNS theme.rs + checks/gui-typo-cq. Geometry+colors FROZEN.
+- CR-LOCALRUN6 (sess-cr-local): READ-ONLY baseline early-feedback (cm->cr DELTA + EXQUISITE GAPS sec-8, CP/CQ ka input). OWNS checks/gui-localrun-cr only, source ZERO touch.
+- Queue (user exquisite priority ke baad): CN-OPENER (CLI --open flag, main+app) -> CO-TBARCALL (app.rs call-site) -> CP-LIGHTFLAG (--screenshot-mode light) -> round-7 verify (CP+CQ land ke baad).
