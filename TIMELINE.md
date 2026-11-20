@@ -529,3 +529,9 @@
 1. **Copy Tall-1200 Arrows & Pitch**: stacked per-hunk arrow pitch locked over tall 1200px canvas (Mono row + tight gap), copy button hit band centered tall, action text baseline steady over long scroll, and edge fixture `comparison/copy-tall-1200.json`.
 2. **Tests** (before → after): autocompare-gui 1015 green (including `exq_copy11` tall pitch tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy11/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-home7 tall plus rows
+
+1. **Home Tall-1200 Card Rows & CTA Lock**: card grid 3 cols stable at 1200px tall canvas (1176 avail, EXQ 24 gap, 376px flexed cards), CTA locked to card inner width (min 224, 360 at 1200, single-line over long scroll), toolbar 24px hit rhythm symmetric slop (96x24 + 4px -> 104x32), and edge fixture `comparison/home-tall-1200.json`.
+2. **Tests** (before → after): autocompare-gui 1017 green (including `home7_*` tall rows tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home7/**`, `TIMELINE.md`.
