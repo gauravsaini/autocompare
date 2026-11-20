@@ -115,5 +115,6 @@
   "ORCH-FMT-FIX2": "ab568e2 cargo-fmt edition-2024 (plain rustfmt was wrong edition, import order + collapse fixed, 18 suites green)",
   "WAVE-GUI-EXQ5B": "landed b0520b1 (30 files OWNS-clean, REPORT PASS, PNG magic ok, cargo-fmt clean, banned 0) pushed",
   "ORCH-NOISE3": "reverted agyx-rep-h/reports-a/sessionpaint noise x2, agents WIP preserved (reports/sessions/text3)",
-  "WAVE-TEXT3": "landed 6736b59 (181 ins OWNS-clean, REPORT PASS, cargo-fmt clean, clippy 0, banned test-only, 18 suites green) pushed"
+  "WAVE-TEXT3": "landed 6736b59 (181 ins OWNS-clean, REPORT PASS, cargo-fmt clean, clippy 0, banned test-only, 18 suites green) pushed",
+  "ORCH-MIX-VFS": "2026-11-20 21:19 AEDT opencode vfs3 sess-opencode-vfs3 launched (crates/vfs + round-vfs3), active: s1+s2+vfs3"
 }
