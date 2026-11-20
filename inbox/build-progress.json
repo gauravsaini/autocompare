@@ -42,7 +42,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 media writing AudioTotality etc, 13 suites green no FAIL; WATCH: allow(dead_code) spotted in WIP, must be wired-or-dropped at verify, no masking",
+    "ORCH-HEALTH": "2026-11-20 media still building (no commit); debt recorded, no hot-edit during active wave",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
@@ -54,6 +54,7 @@
     "ORCH-PNG-NOISE": "sessionpaint 2 PNGs rewrite repeatedly (external screenshot hook); left dirty, revert at landing time",
     "ORCH-WAVE-MEDIA": "dispatched opencode default-model (OWNS diff hex/table/image/audio/tags + compare media/picture/table/binary + round-m1, /tmp/sess-wave-media.log)",
     "ORCH-WAVE-REL": "landed+pushed ab69c6d (evidence-only: 14 gates 13 pass + 1 gap-doc, wasm env gap + 6 more gaps in v0.6.0 draft, scope perfect)",
-    "ORCH-ENV-GAP": "wasm32-unknown-unknown target not installed (blocks xtask wasm gate; rel wave documenting)"
+    "ORCH-ENV-GAP": "wasm32-unknown-unknown target not installed (blocks xtask wasm gate; rel wave documenting)",
+    "ORCH-DEBT": "cleanup wave queued: remove #![allow(dead_code)] in diff merge.rs/grammar.rs (carried in 9366fa0), verify clippy still 0 or wire dead helpers; DO NOT run while media wave active (crate-wide clippy coupling)"
   }
 }
