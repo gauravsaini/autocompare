@@ -169,5 +169,6 @@
  "WAVE-LOCALRUN5B": "landed+pushed 5daacbc REPORT PASS 10/10 CLI 3 PNGs TOP-10 gaps",
  "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)",
  "WAVE-EXQ-TEXT2C": "landed+pushed 1e5f7ea REPORT PASS 747 green side-by-side+mono typo",
- "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only"
+ "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only",
+ "WAVE-EXQ-PAINT1": "running opencode sess-opencode-exqpaint1 OWNS views.rs (paint adoption: fill viewport, blank-fill, gutter markers, segmented status; launched 22:59)"
 }
