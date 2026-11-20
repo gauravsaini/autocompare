@@ -20,14 +20,14 @@ pub use options::{
     PictureCompareOptions, SyncCompareOptions, TableCompareOptions, TextCompareOptions,
 };
 pub use session::{
-    CURRENT_SESSION_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, migrate,
-    migrate_session_config,
+    migrate, migrate_session_config, SessionConfig, SessionDocument, SessionTab,
+    CURRENT_SESSION_SCHEMA_VERSION,
 };
 pub use settings::{
-    AppSettings, CURRENT_SETTINGS_SCHEMA_VERSION, GrammarPreset, default_grammar_presets,
-    migrate_settings,
+    default_grammar_presets, migrate_settings, AppSettings, GrammarPreset,
+    CURRENT_SETTINGS_SCHEMA_VERSION,
 };
 pub use workspace::{
-    CURRENT_WORKSPACE_SCHEMA_VERSION, WindowLayout, WorkspaceConfig, WorkspaceDocument,
-    migrate_workspace, migrate_workspace_config,
+    migrate_workspace, migrate_workspace_config, WindowLayout, WorkspaceConfig, WorkspaceDocument,
+    CURRENT_WORKSPACE_SCHEMA_VERSION,
 };

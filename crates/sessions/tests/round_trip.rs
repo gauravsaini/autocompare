@@ -7,9 +7,9 @@
 
 use autocompare_sessions::settings::GrammarPreset;
 use autocompare_sessions::{
-    AppSettings, CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
-    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionConfig, SessionDocument, SessionTab, WindowLayout,
-    WorkspaceConfig, WorkspaceDocument,
+    AppSettings, SessionConfig, SessionDocument, SessionTab, WindowLayout, WorkspaceConfig,
+    WorkspaceDocument, CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
+    CURRENT_WORKSPACE_SCHEMA_VERSION,
 };
 use std::collections::HashMap;
 

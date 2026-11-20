@@ -6,8 +6,8 @@
 )]
 
 use autocompare_sessions::{
-    AppSettings, SessionConfig, SessionDocument, SessionError, WorkspaceConfig, WorkspaceDocument,
     migrate, migrate_session_config, migrate_settings, migrate_workspace, migrate_workspace_config,
+    AppSettings, SessionConfig, SessionDocument, SessionError, WorkspaceConfig, WorkspaceDocument,
 };
 
 #[test]
