@@ -1778,8 +1778,7 @@ impl FindState {
     }
 
     /// Advances with wrap; `None` when there are no matches.
-    #[allow(clippy::should_implement_trait)] // FindState is not an Iterator; `next` mirrors the paint find-bar label.
-    pub fn next(&mut self) -> Option<usize> {
+    pub fn advance(&mut self) -> Option<usize> {
         if self.matches.is_empty() {
             return None;
         }
@@ -3189,10 +3188,10 @@ mod tests {
         assert_eq!(state.match_count(), 2);
         assert_eq!(state.current_row(), Some(1));
         assert_eq!(state.position(), Some(1));
-        assert_eq!(state.next(), Some(2));
+        assert_eq!(state.advance(), Some(2));
         assert_eq!(state.position(), Some(2));
         // Wrap forward to the first hit.
-        assert_eq!(state.next(), Some(1));
+        assert_eq!(state.advance(), Some(1));
         // Wrap backward from the first hit to the last.
         assert_eq!(state.prev(), Some(2));
         assert_eq!(state.prev(), Some(1));
@@ -3206,7 +3205,7 @@ mod tests {
         assert_eq!(state.match_count(), 0);
         assert_eq!(state.current_row(), None);
         assert_eq!(state.position(), None);
-        assert_eq!(state.next(), None);
+        assert_eq!(state.advance(), None);
         assert_eq!(state.prev(), None);
         // Re-query replaces old matches instead of accumulating.
         state.set_query(&rows, "alpha");
@@ -3228,15 +3227,15 @@ mod tests {
         let mut state = FindState::default();
         state.set_query(&rows, "gamma");
         assert_eq!(state.count_label(), "1/2");
-        state.next();
+        state.advance();
         assert_eq!(state.count_label(), "2/2");
         // Wrap forward to the first hit.
-        state.next();
+        state.advance();
         assert_eq!(state.count_label(), "1/2");
         // Empty query reports 0/0 and no navigation.
         state.set_query(&rows, "absent");
         assert_eq!(state.count_label(), "0/0");
-        assert_eq!(state.next(), None);
+        assert_eq!(state.advance(), None);
         assert_eq!(state.count_label(), "0/0");
     }
 
@@ -3279,7 +3278,7 @@ mod tests {
         assert_eq!(state.match_rows(), &[1, 2]);
         assert_eq!(state.count_label(), "1/2");
         // Same flag dobara: cursor untouched rehta hai.
-        state.next();
+        state.advance();
         assert_eq!(state.count_label(), "2/2");
         state.set_ignore_case(&rows, true);
         assert_eq!(state.count_label(), "2/2");
@@ -3294,7 +3293,7 @@ mod tests {
         let rows = find_rows();
         let mut state = FindState::default();
         state.set_query(&rows, "gamma");
-        state.next();
+        state.advance();
         assert_eq!(state.count_label(), "2/2");
         // Same row count: no recompute, cursor untouched.
         assert!(!state.refresh_if_stale(&rows));

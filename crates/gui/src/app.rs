@@ -6341,8 +6341,12 @@ mod tests {
             App::path_time_label("definitely-missing-pathmeta-file.txt"),
             String::new()
         );
-        assert!(!App::path_byte_label("src/app.rs").is_empty());
-        assert!(!App::path_time_label("src/app.rs").is_empty());
+        assert!(
+            !App::path_byte_label(concat!(env!("CARGO_MANIFEST_DIR"), "/src/app.rs")).is_empty()
+        );
+        assert!(
+            !App::path_time_label(concat!(env!("CARGO_MANIFEST_DIR"), "/src/app.rs")).is_empty()
+        );
     }
 
     #[test]

@@ -29,11 +29,11 @@ use crate::gutter::{
 };
 use crate::home::{
     HOME_CARD_BUTTON_MIN_H, HOME_CARD_BUTTON_MIN_W, HOME_GRID_COLUMNS, HOME_GRID_GAP,
-    HOME_SECTION_GAP, HOME_SHOWS_PATH_PICKER, HOME_TOOLBAR_BUTTON_H, HOME_TOOLBAR_BUTTON_W,
-    RECENT_COL_GAP, RECENT_ROW_GAP, Session, SessionHistory, SessionList, SessionSnapshot,
-    home_card_button_size, home_card_cta_width, home_card_desc_is_small_weak, home_card_min_height,
-    home_card_title_size, recent_list_empty_hint, recent_row_columns, recent_row_meta_role,
-    recent_row_meta_text, recent_row_title_role, recent_row_two_line_height,
+    HOME_SECTION_GAP, HOME_TOOLBAR_BUTTON_H, HOME_TOOLBAR_BUTTON_W, RECENT_COL_GAP, RECENT_ROW_GAP,
+    Session, SessionHistory, SessionList, SessionSnapshot, home_card_button_size,
+    home_card_cta_width, home_card_desc_is_small_weak, home_card_min_height, home_card_title_size,
+    recent_list_empty_hint, recent_row_columns, recent_row_meta_role, recent_row_meta_text,
+    recent_row_title_role, recent_row_two_line_height,
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
@@ -617,15 +617,9 @@ pub fn paint_header(ui: &mut Ui, dark_mode: &mut bool) {
 /// desc small-weak-11 hierarchy ([`home_title_paint_size`] /
 /// [`home_desc_paint_is_small_weak`]), button body scale — same sizes and
 /// weights, koi naya size nahi. Home shows no path picker
-/// ([`HOME_SHOWS_PATH_PICKER`]): Compare tabs own their pickers; the
+/// (`HOME_SHOWS_PATH_PICKER` = false): Compare tabs own their pickers; the
 /// section starts on the grid rhythm directly.
 pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
-    // Launcher par path picker nahi: Compare tabs apne picker khud rakhte
-    // hain (App Home branch me `paint_paths` nahi chalata).
-    #[allow(clippy::assertions_on_constants)]
-    {
-        debug_assert!(!HOME_SHOWS_PATH_PICKER);
-    }
     let model = viewmodel::home_model();
     ui.label(chrome_section_role().rich("Comparison Sessions"));
     ui.label(RichText::new("Select a session type or use the tabs above:").weak());
@@ -6702,7 +6696,7 @@ pub fn advance_text_find(
     next_clicked: bool,
 ) -> Option<usize> {
     if next_clicked {
-        find.next()
+        find.advance()
     } else if prev_clicked {
         find.prev()
     } else {
