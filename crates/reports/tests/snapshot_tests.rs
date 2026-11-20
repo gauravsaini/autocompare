@@ -473,10 +473,14 @@ fn test_empty_input_never_panics() {
 
 #[test]
 fn test_generate_sample_artifacts_for_evidence() {
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-reports-a"));
+    // Snapshot artifacts are opt-in (AUTOCOMPARE_SNAPSHOT=1) so routine
+    // `cargo test` runs stay side-effect free and keep checks/ clean.
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-reports-a"))
+    });
 
     let Some(dir) = out_dir else {
         return;
@@ -625,10 +629,12 @@ fn test_edge_crlf_and_whitespace_preservation() {
     assert!(ctx_patch.contains("+ \tlet msg = \"hello new\"; \r\n"));
 
     // Snapshot artifact generation for round-1 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-1/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-1/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_crlf.html"), &html_color);
@@ -681,10 +687,12 @@ fn test_edge_pure_insertions_and_pure_deletions_sbs() {
     assert!(sbs_ins.contains("diff-line sbs-row line-insert"));
 
     // Snapshot artifact generation for round-2 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-2/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-2/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_pure_deletions_sbs.html"), &sbs_del);
@@ -744,10 +752,12 @@ fn test_edge_unicode_cjk_emoji_rtl_rendering() {
     assert!(patch.contains("+你好，新世界！ 🚀 — こんにちは新世界 🎉"));
 
     // Snapshot artifact generation for round-3 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-3/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-3/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_unicode.html"), &html);
@@ -842,10 +852,12 @@ fn test_edge_context_filter_boundaries() {
     assert!(!txt_ctx1.contains("line 6: isolated context gap"));
 
     // Snapshot artifact generation for round-4 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-4/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-4/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_context_filtered.html"), &html_ctx1);
@@ -890,10 +902,12 @@ fn test_edge_patch_builder_timestamps() {
     assert!(default_unified.starts_with("--- a/old/main.rs\n+++ b/new/main.rs\n"));
 
     // Snapshot artifact generation for round-5 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-5/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-5/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_unified_ts.patch"), &unified_ts);
@@ -1027,10 +1041,12 @@ fn test_edge_multiformat_bundles_parity() {
     }
 
     // Snapshot artifact generation for round-6 evidence
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("checks/agyx-rep-h/round-6/comparison"));
+    let out_dir = std::env::var("AUTOCOMPARE_SNAPSHOT").ok().and_then(|_| {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("checks/agyx-rep-h/round-6/comparison"))
+    });
     if let Some(dir) = out_dir {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join("snapshot_bundle_parent.html"), &parent_html);
