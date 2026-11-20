@@ -2602,6 +2602,203 @@ pub fn table5_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table6 round-2: header plus rhythm at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: header row keeps its own height distinct from body
+// rows with stable separator insets; ours header/body rhythm uneven (header
+// ad-hoc, body ad-hoc, rule kabhi header se chipka kabhi body se). Fix
+// table-side only (app.rs/views.rs/home.rs/views_hex.rs/gutter.rs/tree.rs/
+// theme.rs/viewmodel.rs/take.rs/copy.rs NO-TOUCH). Geometry FIRST: header row
+// height strong-role line-height lock ([`table6_header_h`] = Heading 21.6,
+// table4 chrome precedent — body se taller, distinct rhythm), body rows Mono
+// line-height lock ([`table6_row_h`] 15.6), header/body separator half-gap
+// par ([`table6_header_sep_y`] — upar/neeche dono taraf gap/2, symmetric),
+// vertical column separators gap/2 par ([`table6_separator_xs`] — table5
+// delegation, symmetric), 960px avail origin-se (936) par fit gate. Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table6/comparison/table-header-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table6 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE6_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table6 header row height (px): strong-role line-height lock
+/// (`TypoRole::Heading.line_height_px()` = 18.0 @ 1.2 = 21.6, table4 chrome
+/// precedent) — body rows (Mono 15.6) se distinct, header rhythm stable.
+/// Koi ad-hoc literal nahi. Pure.
+pub const TABLE6_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Table6 header row height single-source (px). Pure; unit-tested.
+pub fn table6_header_h() -> f32 {
+    TABLE6_HEADER_H
+}
+
+/// Table6 header contract: Heading line-height ke barabar aur body row se
+/// taller (distinct rhythm — header/body kabhi ek jaise nahi). Pure;
+/// unit-tested.
+pub fn table6_header_h_ok() -> bool {
+    (table6_header_h() - crate::theme::TypoRole::Heading.line_height_px()).abs() < 0.001
+        && table6_header_h() > table6_row_h()
+}
+
+/// Table6 body row height (px): Mono line-height lock (15.6) — stable body
+/// rhythm, ruler/body desync nahi. Pure; unit-tested.
+pub fn table6_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table6 header/body delta (px): header minus body (> 0 — header hamesha
+/// distinct, BC parity). Pure; unit-tested.
+pub fn table6_header_body_delta() -> f32 {
+    table6_header_h() - table6_row_h()
+}
+
+/// Table6 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table6_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table6 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table6_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table6 row gap single source (px): [`TABLE_GRID_ROW_GAP`] — header/body
+/// separator insets isi ke aadhe hain (symmetric). Pure; unit-tested.
+pub fn table6_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table6 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table6_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table6 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table6_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table6 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation — char metrics plus SPACE_SM pad (koi naya math nahi).
+/// Pure; unit-tested.
+pub fn table6_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table6 grid kul px chaudai: [`table_grid_total_w`] reuse taaki col-gap
+/// math kabhi drift na kare. Pure; unit-tested.
+pub fn table6_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table6 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table6_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table6 vertical column separators (px): [`table5_separator_xs`]
+/// delegation — har andaruni gap ke beech me ek line (dono taraf gap/2,
+/// symmetric). Pure; unit-tested.
+pub fn table6_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Kya vertical separators symmetric hain: har separator right-edge se
+/// gap/2 aur agli col se gap/2 (table5 geometry ka contract check).
+/// Kharab widths par false (paint honest fallback dikhata hai). Pure;
+/// unit-tested.
+pub fn table6_separators_symmetric(col_widths_px: &[f32]) -> bool {
+    let gap = table6_col_spacing();
+    if !gap.is_finite() || gap < 0.0 || col_widths_px.is_empty() {
+        return false;
+    }
+    let seps = table6_separator_xs(col_widths_px);
+    if seps.len() != col_widths_px.len().saturating_sub(1) {
+        return false;
+    }
+    let xs = table5_col_xs(col_widths_px);
+    if xs.len() != col_widths_px.len() {
+        return false;
+    }
+    let mut k = 0usize;
+    while k < seps.len() {
+        let sep = match seps.get(k) {
+            Some(v) if v.is_finite() => *v,
+            _ => return false,
+        };
+        let right = match xs.get(k).zip(col_widths_px.get(k)) {
+            Some((x, w)) if x.is_finite() && w.is_finite() => *x + *w,
+            _ => return false,
+        };
+        let next_left = match xs.get(k.saturating_add(1)) {
+            Some(v) if v.is_finite() => *v,
+            _ => return false,
+        };
+        if ((sep - right) - gap / 2.0).abs() >= 0.001 {
+            return false;
+        }
+        if ((next_left - sep) - gap / 2.0).abs() >= 0.001 {
+            return false;
+        }
+        k = k.saturating_add(1);
+    }
+    true
+}
+
+/// Table6 header/body separator y (px): header bottom se half row-gap neeche
+/// (`origin_y + header_h + gap / 2`) — header rule body se chipakti nahi,
+/// dono taraf gap/2 inset (symmetric). Pure; unit-tested.
+pub fn table6_header_sep_y() -> f32 {
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    origin_y + table6_header_h() + table6_grid_gap_y() / 2.0
+}
+
+/// Table6 pehli body row ka y (px): header + poora row gap
+/// (`origin_y + header_h + gap`). Pure; unit-tested.
+pub fn table6_body_first_y() -> f32 {
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    origin_y + table6_header_h() + table6_grid_gap_y()
+}
+
+/// Kya header/body separator insets symmetric hain: header-bottom se sep
+/// gap/2 aur sep se body-first gap/2 (dono barabar — rule beech me stable).
+/// Pure; unit-tested.
+pub fn table6_header_sep_insets_symmetric() -> bool {
+    let gap = table6_grid_gap_y();
+    if !gap.is_finite() || gap <= 0.0 {
+        return false;
+    }
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    if !origin_y.is_finite() {
+        return false;
+    }
+    let header_bottom = origin_y + table6_header_h();
+    let sep = table6_header_sep_y();
+    let body_first = table6_body_first_y();
+    if !header_bottom.is_finite() || !sep.is_finite() || !body_first.is_finite() {
+        return false;
+    }
+    ((sep - header_bottom) - gap / 2.0).abs() < 0.001
+        && ((body_first - sep) - gap / 2.0).abs() < 0.001
+}
+
+/// Table6 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table6_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4180,5 +4377,82 @@ mod tests {
             table5_visible_rows(600.0),
             table_wide_960_visible_rows(600.0)
         );
+    }
+
+    #[test]
+    fn table_exq_table6_round2_header_plus_rhythm_wide_960() {
+        // Headless test proving edge fixture comparison/table-header-960.json:
+        // header height strong-role line-height (Heading 21.6) distinct from
+        // body Mono lock (15.6), header/body separator insets symmetric
+        // (half-gap both sides) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table6/comparison/table-header-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table6/round-1/comparison/table-header-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-header-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"row_body_delta\": 6.0"));
+        assert!(fixture_raw.contains("\"header_sep_y\": 35.6"));
+        assert!(fixture_raw.contains("\"body_first_y\": 37.6"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header strong line-height lock, body Mono lock, distinct rhythm.
+        assert!((table6_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(
+            table6_header_h(),
+            crate::theme::TypoRole::Heading.line_height_px()
+        );
+        assert_eq!(TABLE6_HEADER_H, table6_header_h());
+        assert!(table6_header_h_ok());
+        assert!((table6_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table6_row_h(), table_cell_row_h());
+        assert_eq!(
+            table6_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table6_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table6_header_body_delta() > 0.0);
+        assert!(table6_header_h() > table6_row_h());
+
+        // 2. Header/body separator insets symmetric (half-gap both sides).
+        assert_eq!(TABLE6_CANVAS_W, 960.0);
+        assert_eq!(TABLE6_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table6_avail_w(), 936.0);
+        assert_eq!(table6_avail_w(), table_wide_avail_w());
+        assert_eq!(table6_grid_gap_y(), TABLE_GRID_ROW_GAP);
+        assert_eq!(table6_grid_gap_y(), 4.0);
+        assert!((table6_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table6_body_first_y() - 37.6).abs() < 0.001);
+        assert!(table6_header_sep_insets_symmetric());
+
+        // 3. Col widths char metrics se + vertical separators symmetric.
+        assert_eq!(table6_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table6_col_spacing(), 8.0);
+        assert_eq!(table6_header_underline_w(), 1.0);
+        assert!(table6_header_weight_ok());
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table6_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table6_grid_total_w(&px), 176.0);
+        assert!(table6_column_grid_fit(table6_avail_w(), &px));
+        assert!(!table6_column_grid_fit(100.0, &px));
+        assert!(table6_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table6_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table6_separators_symmetric(&px));
+        assert!(!table6_separators_symmetric(&[]));
+        assert_eq!(table6_visible_rows(600.0), 38);
     }
 }
