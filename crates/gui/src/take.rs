@@ -780,6 +780,137 @@ pub fn merge_three_panes_fill_exact(avail_w: f32) -> bool {
     ((left + base + right + 2.0 * merge_divider_gap()) - avail_w).abs() < 0.01
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-TAKE7: tall take-side markers over 1200px canvas (headless).
+// BC parity: take markers aligned with hunk rows over tall scroll, take
+// hit locked over long scroll, marker rhythm tall. Geometry first
+// (Mono row-height + canvas clamp + hit-slop reuse, 1200 fixture canvas
+// only new const), typography second (Mono single source), colors frozen.
+// WIRING (paint): marker rows `take_marker_rows(rows)` se bands; take
+// button `take_tall_side_hit_rect(row, x, side)` se hit-locked rect;
+// scroll me `take_marker_visible_y` / `take_tall_hit_locked_y`.
+// ----------------------------------------------------------------------------
+
+/// Tall take canvas height px: 1200 fixture (edge over 600 canonical).
+pub const TAKE_TALL_CANVAS_H: f32 = 1200.0;
+
+/// Tall take canvas height px (single source: [`TAKE_TALL_CANVAS_H`]).
+/// Pure; headless-tested.
+pub fn take_tall_canvas_h() -> f32 {
+    TAKE_TALL_CANVAS_H
+}
+
+/// Marker row top y px: `row * merge_row_height()` — hunk row se aligned.
+/// Pure; headless-tested.
+pub fn take_marker_row_y(row: usize) -> f32 {
+    row as f32 * merge_row_height()
+}
+
+/// Marker row band `(y0, y1)` px over tall canvas: row-aligned top + one
+/// row height, neeche se canvas par clamp. `None`: OOB row (`y0 >= canvas`)
+/// ya non-finite. Pure; headless-tested.
+pub fn take_marker_row_range(row: usize) -> Option<(f32, f32)> {
+    let y0 = take_marker_row_y(row);
+    if !y0.is_finite() || y0 < 0.0 || y0 >= TAKE_TALL_CANVAS_H {
+        return None;
+    }
+    let y1 = (y0 + merge_row_height()).min(TAKE_TALL_CANVAS_H);
+    if y1.is_finite() && y1 > y0 {
+        Some((y0, y1))
+    } else {
+        None
+    }
+}
+
+/// Marker row bands input order me; OOB rows skip. Khali input par khali vec.
+/// Pure; headless-tested.
+pub fn take_marker_rows(rows: &[usize]) -> Vec<(f32, f32)> {
+    let mut out = Vec::new();
+    for row in rows {
+        if let Some(band) = take_marker_row_range(*row) {
+            out.push(band);
+        }
+    }
+    out
+}
+
+/// Marker rhythm step px: single source row height (tall par bhi wahi beat).
+/// Pure; headless-tested.
+pub fn take_marker_rhythm_step() -> f32 {
+    merge_row_height()
+}
+
+/// True jab `y` marker rhythm par hai: `y / step` near-integer (+-0.01).
+/// Non-finite ya negative par false. Pure; headless-tested.
+pub fn take_marker_on_rhythm(y: f32) -> bool {
+    if !y.is_finite() || y < 0.0 {
+        return false;
+    }
+    let step = take_marker_rhythm_step();
+    if !step.is_finite() || step <= 0.0 {
+        return false;
+    }
+    let q = y / step;
+    if !q.is_finite() {
+        return false;
+    }
+    (q - q.round()).abs() < 0.01
+}
+
+/// Tall take-side button hit rect for `row` at gutter-x `x`: button marker
+/// row par centered (`top = marker_y - vpad`, button row se 4.2 taller)
+/// phir hit-slop expand via [`take_side_button_hit_rect`]. OOB row ya
+/// non-finite `x` par `None`. Pure; headless-tested.
+pub fn take_tall_side_hit_rect(row: usize, x: f32, side: TakeSide) -> Option<(f32, f32, f32, f32)> {
+    let marker_y = take_marker_row_y(row);
+    if !marker_y.is_finite() || marker_y < 0.0 || marker_y >= TAKE_TALL_CANVAS_H {
+        return None;
+    }
+    if !x.is_finite() {
+        return None;
+    }
+    let top = marker_y - take_button_vpad();
+    take_side_button_hit_rect(x, top, side)
+}
+
+/// Scroll-aware marker visible y px: `marker_y - scroll_y`, viewport
+/// `[0, viewport_h)` ke andar tabhi `Some`. OOB marker ya bad input par
+/// `None`. Pure; headless-tested.
+pub fn take_marker_visible_y(row: usize, scroll_y: f32, viewport_h: f32) -> Option<f32> {
+    if !scroll_y.is_finite() || !viewport_h.is_finite() || viewport_h <= 0.0 {
+        return None;
+    }
+    let marker_y = take_marker_row_y(row);
+    if !marker_y.is_finite() || marker_y < 0.0 || marker_y >= TAKE_TALL_CANVAS_H {
+        return None;
+    }
+    let vis = marker_y - scroll_y;
+    if vis.is_finite() && vis >= 0.0 && vis < viewport_h {
+        Some(vis)
+    } else {
+        None
+    }
+}
+
+/// Tall hit lock top y px: take button top viewport me clamp taaki lambe
+/// scroll par bhi hit rahe — `[0, viewport_h - hit_h]` me lock, hit height
+/// [`take_button_hit_height_with_slop`] (32). OOB/invisible marker ya bad
+/// input par `None`. Pure; headless-tested.
+pub fn take_tall_hit_locked_y(row: usize, scroll_y: f32, viewport_h: f32) -> Option<f32> {
+    let vis = take_marker_visible_y(row, scroll_y, viewport_h)?;
+    let hit_h = take_button_hit_height_with_slop();
+    let max_top = viewport_h - hit_h;
+    if !max_top.is_finite() {
+        return None;
+    }
+    let top = vis - take_button_vpad();
+    if max_top <= 0.0 {
+        Some(0.0)
+    } else {
+        Some(top.max(0.0).min(max_top))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1273,5 +1404,103 @@ mod exq_merge3_tests {
         assert!((b - 314.666656).abs() < 0.01);
         assert!((r - 314.666656).abs() < 0.01);
         assert!(merge_three_panes_fill_exact(960.0));
+    }
+}
+
+#[cfg(test)]
+mod exq_take7_tests {
+    use super::*;
+
+    #[test]
+    fn take7_tall_marker_rows_aligned_with_hunk_rows() {
+        assert_eq!(take_tall_canvas_h(), TAKE_TALL_CANVAS_H);
+        assert_eq!(TAKE_TALL_CANVAS_H, 1200.0);
+        assert_eq!(take_marker_row_y(0), 0.0);
+        assert!((take_marker_row_y(10) - 156.0).abs() < 0.05);
+        assert!((take_marker_row_y(76) - 1185.6).abs() < 0.5);
+        // Band = one row stack, tall end canvas par clamp.
+        let band0 = take_marker_row_range(0).unwrap_or_default();
+        assert!((band0.0 - 0.0).abs() < 0.01);
+        assert!((band0.1 - merge_row_height()).abs() < 0.01);
+        let band76 = take_marker_row_range(76).unwrap_or_default();
+        assert!((band76.0 - 1185.6).abs() < 0.5);
+        assert!((band76.1 - 1200.0).abs() < 0.01);
+        // Canvas ke bahar row par None.
+        assert_eq!(take_marker_row_range(77), None);
+        assert_eq!(take_marker_row_range(usize::MAX), None);
+        // Order kept, OOB skip.
+        let bands = take_marker_rows(&[0, 10, 77, 76]);
+        assert_eq!(bands.len(), 3);
+        let first = bands.first().copied().unwrap_or_default();
+        assert!((first.0 - 0.0).abs() < 0.01);
+        assert!(take_marker_rows(&[]).is_empty());
+    }
+
+    #[test]
+    fn take7_tall_hit_lock_over_long_scroll() {
+        // Scroll 600 / viewport 600 par row 0 upar nikalta hai, row 39 dikhta hai.
+        assert_eq!(take_marker_visible_y(0, 600.0, 600.0), None);
+        let vis39 = take_marker_visible_y(39, 600.0, 600.0).unwrap_or(-1.0);
+        assert!((vis39 - 8.4).abs() < 0.5);
+        // Row 39 ka button lock bina clamp (4.2 < 568).
+        let lock39 = take_tall_hit_locked_y(39, 600.0, 600.0).unwrap_or(-1.0);
+        assert!((lock39 - 4.2).abs() < 0.5);
+        // Row 76 neeche: raw top 581.4 viewport-hit 568 par lock.
+        let vis76 = take_marker_visible_y(76, 600.0, 600.0).unwrap_or(-1.0);
+        assert!((vis76 - 585.6).abs() < 0.5);
+        let lock76 = take_tall_hit_locked_y(76, 600.0, 600.0).unwrap_or(-1.0);
+        assert!(
+            (lock76 - (600.0 - take_button_hit_height_with_slop())).abs() < 0.5,
+            "hit lock clamps to viewport bottom"
+        );
+        // Invisible marker ya bad input par None.
+        assert_eq!(take_tall_hit_locked_y(0, 600.0, 600.0), None);
+        assert_eq!(take_tall_hit_locked_y(39, 600.0, 0.0), None);
+        assert_eq!(take_tall_hit_locked_y(39, f32::NAN, 600.0), None);
+        assert_eq!(take_marker_visible_y(39, 600.0, f32::INFINITY), None);
+    }
+
+    #[test]
+    fn take7_tall_side_hit_and_marker_rhythm() {
+        assert!((take_marker_rhythm_step() - 15.6).abs() < 0.01);
+        assert_eq!(take_marker_rhythm_step(), merge_row_height());
+        // Har tall marker band rhythm par baithta hai.
+        for row in [0usize, 10, 39, 76] {
+            assert!(
+                take_marker_on_rhythm(take_marker_row_y(row)),
+                "row {row} off rhythm"
+            );
+        }
+        assert!(take_marker_on_rhythm(0.0));
+        assert!(!take_marker_on_rhythm(7.0));
+        assert!(!take_marker_on_rhythm(-1.0));
+        assert!(!take_marker_on_rhythm(f32::NAN));
+        // Center button hit rect row 10 par: x slop -4..97, top 156-4.2-4.
+        let hit = take_tall_side_hit_rect(10, 0.0, TakeSide::Center).unwrap_or_default();
+        assert!((hit.0 - -4.0).abs() < 0.01);
+        assert!((hit.2 - 97.0).abs() < 0.01);
+        assert!((hit.1 - (156.0 - take_button_vpad() - TAKE_BUTTON_HIT_SLOP)).abs() < 0.5);
+        assert!((hit.3 - hit.1 - take_button_hit_height_with_slop()).abs() < 0.01);
+        // OOB / non-finite par None.
+        assert_eq!(take_tall_side_hit_rect(77, 0.0, TakeSide::Left), None);
+        assert_eq!(take_tall_side_hit_rect(10, f32::NAN, TakeSide::Right), None);
+    }
+
+    #[test]
+    fn take7_tall_fixture() {
+        let raw = include_str!("../../../checks/gui-exq-take7/comparison/take-tall-1200.json");
+        assert!(raw.contains("\"name\":\"take-tall-1200\""));
+        assert!(raw.contains("\"canvas_h\":1200.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"rhythm_step\":15.6"));
+        assert!(raw.contains("\"take_button_h\":24.0"));
+        assert!(raw.contains("\"take_hit_h_slop\":32.0"));
+        assert!(raw.contains("\"scroll_y\":600.0"));
+        assert!(raw.contains("\"viewport_h\":600.0"));
+        // Fixture numbers headless recompute se match.
+        assert!((take_tall_canvas_h() - 1200.0).abs() < 0.01);
+        assert!((take_marker_row_y(76) - 1185.6).abs() < 0.5);
+        let lock76 = take_tall_hit_locked_y(76, 600.0, 600.0).unwrap_or(-1.0);
+        assert!((lock76 - 568.0).abs() < 0.5);
     }
 }
