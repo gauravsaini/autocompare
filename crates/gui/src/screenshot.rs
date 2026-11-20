@@ -157,6 +157,55 @@ pub fn text_fixture_center_layout() -> (u32, u32, u32, u32, u32, u32) {
     let right_x = center_x.saturating_add(center_w).saturating_add(PANE_GAP);
     (left_x, left_w, center_x, center_w, right_x, right_w)
 }
+/// Fixture text-row rhythm mirror (exq-shot19): live typo17 metrics in
+/// fixture pixels. Row height rounds the live line-height rhythm
+/// ([`crate::views::text_typo17_row_height`] = 17.6) to whole pixels so
+/// rows keep breathing room instead of gluing; the line-number column
+/// pairs the live char-metric width with the live inner pad; baselines
+/// center the 7px fixture glyph in the row so every row sits on one
+/// beat. Reuses live helpers, no new hues. Colors frozen.
+fn fixture_text_row_h() -> u32 {
+    crate::views::text_typo17_row_height().round() as u32
+}
+
+/// Fixture line-number column width (px) for `max_line_no` rows: live
+/// char-metric column ([`crate::views::text_linenum_column_width_from_metrics`]
+/// over [`crate::gutter::gutter_linenum_digits`]) rounded to whole pixels.
+/// Pure.
+fn fixture_text_linenum_col_w(max_line_no: usize) -> u32 {
+    let digits = crate::gutter::gutter_linenum_digits(max_line_no);
+    crate::views::text_linenum_column_width_from_metrics(
+        digits,
+        crate::views::text_char_metric_width(),
+    )
+    .round() as u32
+}
+
+/// Fixture row inner pad (px): live [`crate::views::text_row_inner_pad_px`]
+/// ([`crate::theme::SPACE_XS`] = 4.0) rounded — left inset of the number
+/// column plus air between column and code. Pure.
+fn fixture_text_inner_pad() -> u32 {
+    crate::views::text_row_inner_pad_px().round() as u32
+}
+
+/// Fixture text left offset inside a pane (px): metric column plus one
+/// inner pad of air, so code starts clear of the numbers. Pure.
+fn fixture_text_x_off(max_line_no: usize) -> u32 {
+    fixture_text_linenum_col_w(max_line_no).saturating_add(fixture_text_inner_pad())
+}
+
+/// Fixture glyph cell height (px): [`draw_glyph`] paints rows 0..7.
+/// Single source so the baseline math below tracks the pen. Pure.
+const FIXTURE_GLYPH_H: u32 = 7;
+
+/// Fixture stable baseline offset (px) inside `row_h`: centers the 7px
+/// glyph block so every row sits on one beat — same centering idea as
+/// live [`crate::views::text_row_baseline_offset_px`], restated in
+/// fixture pixels. Pure.
+fn fixture_text_baseline_dy(row_h: u32) -> u32 {
+    row_h.saturating_sub(FIXTURE_GLYPH_H).saturating_div(2)
+}
+
 /// Overview-ruler track: live contract `gutter::GUTTER_RULER_WIDE` (16,
 /// line numbers on) — old 14px inter-chrome gap ruler me sama gaya.
 /// Budget: 12 + 460 + 4 + 460 + 16 + 8 = 960; right pane 936 par khatam,
@@ -697,7 +746,14 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         },
     ];
 
-    let row_h = 24u32;
+    // Fixture typo17 mirror (shot19): row height from the live
+    // line-height rhythm, number column + left inset from live char
+    // metrics, one stable baseline for every row. Center/gutter/chrome
+    // below stay untouched.
+    let row_h = fixture_text_row_h();
+    let num_x_off = fixture_text_inner_pad();
+    let text_x_off = fixture_text_x_off(rows.len());
+    let base_dy = fixture_text_baseline_dy(row_h);
     for (i, row) in rows.iter().enumerate() {
         let y = pane_top.saturating_add((i as u32).saturating_mul(row_h));
         if y.saturating_add(row_h) > pane_bottom {
@@ -732,8 +788,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             draw_string(
                 &mut pixels,
                 dims,
-                left_x.saturating_add(4),
-                y.saturating_add(6),
+                left_x.saturating_add(num_x_off),
+                y.saturating_add(base_dy),
                 &format!("{no:>2} "),
                 fixture_palette().dim,
             );
@@ -741,8 +797,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         draw_string(
             &mut pixels,
             dims,
-            left_x.saturating_add(32),
-            y.saturating_add(6),
+            left_x.saturating_add(text_x_off),
+            y.saturating_add(base_dy),
             &row.left,
             left_fg,
         );
@@ -760,11 +816,18 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 continue;
             }
             let ax = left_x
-                .saturating_add(32)
+                .saturating_add(text_x_off)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
             fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
-            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, left_bg);
+            draw_string(
+                &mut pixels,
+                dims,
+                ax,
+                y.saturating_add(base_dy),
+                &span,
+                left_bg,
+            );
         }
 
         // Right pane row
@@ -773,8 +836,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             draw_string(
                 &mut pixels,
                 dims,
-                right_x.saturating_add(4),
-                y.saturating_add(6),
+                right_x.saturating_add(num_x_off),
+                y.saturating_add(base_dy),
                 &format!("{no:>2} "),
                 fixture_palette().dim,
             );
@@ -782,8 +845,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         draw_string(
             &mut pixels,
             dims,
-            right_x.saturating_add(32),
-            y.saturating_add(6),
+            right_x.saturating_add(text_x_off),
+            y.saturating_add(base_dy),
             &row.right,
             right_fg,
         );
@@ -799,11 +862,18 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 continue;
             }
             let ax = right_x
-                .saturating_add(32)
+                .saturating_add(text_x_off)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
             fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
-            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, right_bg);
+            draw_string(
+                &mut pixels,
+                dims,
+                ax,
+                y.saturating_add(base_dy),
+                &span,
+                right_bg,
+            );
         }
         // Center-gap marker: yellow `=>` on changed-row hunk heads only;
         // equal + continuation rows stay blank click-to-select (BC parity).
@@ -814,7 +884,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 &mut pixels,
                 dims,
                 mx,
-                y.saturating_add(6),
+                y.saturating_add(base_dy),
                 TEXT_CENTER_MARK,
                 CHANGED_FG,
             );
@@ -5354,6 +5424,77 @@ mod tests {
         assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
         assert_eq!(TEXT_CENTER_MARK, "=>");
         assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
+    }
+
+    #[test]
+    fn shot19_typotall_numbers_aligned() {
+        // Mirrors checks/gui-exq-shot19/round-1/comparison/shot-typo-tall-1200.json:
+        // tall 1200px scroll canvas — fixture row rhythm from live typo17
+        // metrics: numbers stay aligned in a fixed column, baselines stable,
+        // generous row height from line-height rhythm. Geometry FIRST,
+        // typography SECOND, colors FROZEN.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-shot19/round-1/comparison/shot-typo-tall-1200.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"shot-typo-tall-1200\""));
+        assert!(fixture_raw.contains("\"fixture_linenum_col_w_1200\": 37"));
+        assert!(fixture_raw.contains("\"fixture_row_h_from_line_height\": 18"));
+        assert!(fixture_raw.contains("\"scroll_visible_rows_1200\": 66"));
+
+        use crate::views::{
+            text_char_metric_width, text_linenum_column_width_from_metrics,
+            text_row_baseline_offset_px, text_row_inner_pad_px, text_typo17_row_height,
+        };
+        // 1. Live metrics the fixture mirrors (parallel wave owns views.rs).
+        assert!((text_char_metric_width() - 7.2).abs() < 0.001);
+        assert_eq!(text_row_inner_pad_px(), 4.0);
+        assert!((text_typo17_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(text_row_baseline_offset_px(), 1.0);
+        assert_eq!(crate::gutter::gutter_linenum_digits(1200), 4);
+
+        // 2. Fixture rhythm derived from those metrics (whole pixels).
+        assert_eq!(fixture_text_row_h(), 18);
+        assert_eq!(fixture_text_inner_pad(), 4);
+        assert!((text_linenum_column_width_from_metrics(4, 7.2) - 36.8).abs() < 0.01);
+        assert_eq!(fixture_text_linenum_col_w(7), 15);
+        assert_eq!(fixture_text_linenum_col_w(1200), 37);
+        assert_eq!(fixture_text_x_off(7), 19);
+        assert_eq!(fixture_text_baseline_dy(18), 5);
+        assert_eq!(FIXTURE_GLYPH_H, 7);
+        // Breathing room, no glued rows: glyph 7 < row 18, baseline centered.
+        assert!(fixture_text_row_h() > FIXTURE_GLYPH_H);
+        assert_eq!(
+            fixture_text_baseline_dy(fixture_text_row_h()),
+            fixture_text_row_h()
+                .saturating_sub(FIXTURE_GLYPH_H)
+                .saturating_div(2)
+        );
+
+        // 3. Tall-1200 scroll: fixed column + fixed offsets every row, tops
+        // strictly monotonic, widest number fits the column.
+        let row_h = fixture_text_row_h();
+        let visible = 1200u32.saturating_div(row_h);
+        assert_eq!(visible, 66);
+        let mut prev_top = 0u32;
+        for i in 0..visible {
+            let top = i.saturating_mul(row_h);
+            if i > 0 {
+                assert!(top > prev_top);
+                assert_eq!(top.saturating_sub(prev_top), row_h);
+            }
+            prev_top = top;
+            // Same insets every row: alignment stable by construction.
+            assert_eq!(fixture_text_inner_pad(), 4);
+            assert_eq!(fixture_text_x_off(1200), 41);
+        }
+        // Widest 1200-row number fits the 1200-row column.
+        assert!(text_width("1200") <= fixture_text_linenum_col_w(1200));
+
+        // 4. Shot15 + shot18 intact: center layout, markers, pane top.
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
+        assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
     }
 
     #[test]

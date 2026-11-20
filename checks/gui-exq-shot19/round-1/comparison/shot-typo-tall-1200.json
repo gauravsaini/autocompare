@@ -1,0 +1,27 @@
+{
+  "name": "shot-typo-tall-1200",
+  "intent": "Shot19 tall-1200 fixture proof: fixture text-row rhythm (row_h 18 from live 17.6 line-height rhythm, linenum column from char metrics, stable centered baselines) holds over a 1200-row scroll — numbers stay aligned in a fixed column, row tops strictly monotonic, generous breathing room (no glued rows). Geometry first, typography second, colors frozen.",
+  "inputs": {
+    "canvas_h": 1200.0,
+    "total_rows": 1200,
+    "digits": 4,
+    "char_w": 7.2,
+    "live_row_h": 17.6,
+    "fixture_row_h": 18,
+    "inner_pad": 4.0,
+    "glyph_h": 7,
+    "baseline_dy": 5
+  },
+  "assertions": {
+    "digits_for_1200": 4,
+    "fixture_linenum_col_w_1200": 37,
+    "fixture_row_h_from_line_height": 18,
+    "fixture_baseline_dy": 5,
+    "fixture_text_x_off_7_rows": 19,
+    "scroll_visible_rows_1200": 66,
+    "row_tops_strictly_monotonic": true,
+    "linenum_alignment_stable_across_scroll": true,
+    "center_layout_intact": [12, 448, 464, 20, 488, 448],
+    "pane_top_intact": 174
+  }
+}
