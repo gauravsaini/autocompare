@@ -907,9 +907,9 @@ pub const TABLE_CELL_GRID_ID: &str = "table_cell_grid";
 /// Cell grid ka header Grid id.
 pub const TABLE_CELL_HEADER_GRID_ID: &str = "table_cell_header_grid";
 /// Grid column gap: `SECTION_GAP` mirror (same value, koi naya rhythm nahi).
-pub const TABLE_GRID_COL_GAP: f32 = 8.0;
+pub const TABLE_GRID_COL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
 /// Grid row gap: `TIGHT_GAP` mirror (same value, koi naya rhythm nahi).
-pub const TABLE_GRID_ROW_GAP: f32 = 4.0;
+pub const TABLE_GRID_ROW_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
 /// Glyph placeholder: `CONTENT_LEAD` mirror (same two spaces, koi naya text
 /// nahi) — header grid precedent jaisa neutral first column.
 pub const TABLE_CELL_GLYPH_PAD: &str = "  ";
@@ -2110,6 +2110,66 @@ pub fn table_column_grid_header_cell_rect(
     })
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave gui10-table: cell grid origin alignment, SPACE col gap,
+// Mono line-height row height, TYPO header weight (headless; paint wiring
+// stays with the orchestrator).
+// Gap after-table.png: table panes cramped vs BC — grid origin 0,0 se
+// chipka tha (outer margin reuse nahi), row height ad-hoc 18.0 tha (Mono
+// line-height 15.6 reuse nahi). Fix table-side only (app.rs/home.rs/views.rs
+// NO-TOUCH). Geometry FIRST: grid origin `GEO_OUTER_MARGIN` (12.0) dono
+// axes par (pane chrome precedent — content margin se start, cramped
+// nahi), col gap `GEO_SECTION_GAP` (SPACE_SM 8.0), row gap `GEO_TIGHT_GAP`
+// (SPACE_XS 4.0), row height Mono line-height (15.6) — koi naya literal
+// nahi. Typography SECOND: header Mono role + `.strong()` composition,
+// weight value `TYPO_WEIGHT_SEMIBOLD` (600) reuse — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Narrow-720 edge fixture
+// `checks/gui-exq-table/comparison/table-narrow-720.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Cell grid origin x (px): `GEO_OUTER_MARGIN` reuse (12.0) — grid pane
+/// margin se start hota hai, 0,0 cramped origin nahi. Pure.
+pub const TABLE_CELL_GRID_ORIGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Cell grid origin y (px): `GEO_OUTER_MARGIN` reuse (12.0). Pure.
+pub const TABLE_CELL_GRID_ORIGIN_Y: f32 = crate::theme::GEO_OUTER_MARGIN;
+
+/// Cell grid origin (px): dono axes `GEO_OUTER_MARGIN` — BC parity pane
+/// lead. Pure; unit-tested.
+pub fn table_cell_grid_origin() -> (f32, f32) {
+    (TABLE_CELL_GRID_ORIGIN_X, TABLE_CELL_GRID_ORIGIN_Y)
+}
+
+/// Ek data row ki unchai (px): `TypoRole::Mono.line_height_px()` reuse
+/// (12.0 @ 1.30 = 15.6, views.rs TEXT_ROW_H precedent) — ad-hoc 18.0
+/// nahi. Pure; unit-tested.
+pub fn table_cell_row_h() -> f32 {
+    table_cell_text_role().line_height_px()
+}
+
+/// Default cell grid rhythm: origin + Mono row height + SPACE gaps — ek
+/// call me BC-aligned grid (paint `TableCellGrid` isi se banata hai).
+/// Pure; unit-tested.
+pub fn table_cell_grid_default() -> TableCellGrid {
+    let (origin_x, origin_y) = table_cell_grid_origin();
+    TableCellGrid {
+        origin_x,
+        origin_y,
+        row_h: table_cell_row_h(),
+        col_gap: TABLE_GRID_COL_GAP,
+        row_gap: TABLE_GRID_ROW_GAP,
+    }
+}
+
+/// Header weight contract: name `strong` + value `TYPO_WEIGHT_SEMIBOLD`
+/// (600) — Mono role regular-400 par strong composition se header ek
+/// step upar, koi naya size/token nahi. Pure; unit-tested.
+pub fn table_header_weight_ok() -> bool {
+    table_header_weight_name() == "strong"
+        && table_header_weight_value() == crate::theme::TYPO_WEIGHT_SEMIBOLD
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3297,5 +3357,52 @@ mod tests {
                 h: 20.0,
             })
         );
+    }
+
+    #[test]
+    fn table_exq_gui10_origin_gaps_rowh_weight_narrow_720() {
+        use crate::theme::{GEO_OUTER_MARGIN, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        // Origin alignment: grid outer margin se start (cramped 0,0 nahi).
+        assert_eq!(TABLE_CELL_GRID_ORIGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(TABLE_CELL_GRID_ORIGIN_Y, GEO_OUTER_MARGIN);
+        assert_eq!(table_cell_grid_origin(), (12.0, 12.0));
+        // Column gap via SPACE tokens (koi naya literal nahi).
+        assert_eq!(TABLE_GRID_COL_GAP, GEO_SECTION_GAP);
+        assert_eq!(TABLE_GRID_ROW_GAP, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_GRID_COL_GAP, crate::theme::SPACE_SM);
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::SPACE_XS);
+        // Row height Mono line-height se (ad-hoc 18.0 nahi).
+        assert_eq!(table_cell_row_h(), TypoRole::Mono.line_height_px());
+        assert!((table_cell_row_h() - 15.6).abs() < 0.001);
+        // Header weight via TYPO tokens.
+        assert!(table_header_weight_ok());
+        // Default grid ek hi rhythm me (origin + rowh + gaps).
+        let grid = table_cell_grid_default();
+        assert_eq!((grid.origin_x, grid.origin_y), (12.0, 12.0));
+        assert_eq!(grid.row_h, table_cell_row_h());
+        assert!((grid.row_h - 15.6).abs() < 0.001);
+        assert_eq!(grid.col_gap, GEO_SECTION_GAP);
+        assert_eq!(grid.row_gap, GEO_TIGHT_GAP);
+        // Narrow-720 edge fixture judvaan: 3 cols [3,5,4] chars @8px
+        // -> outer [40,56,48], total 160 + origin offset honest fit.
+        let widths = table_column_widths(
+            &["ID".to_string(), "Price".to_string(), "Note".to_string()],
+            &[vec!["1".to_string(), "9.99".to_string(), "ok".to_string()]],
+        );
+        assert_eq!(widths, vec![3, 5, 4]);
+        let px = table_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![40.0, 56.0, 48.0]);
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 40.0 + 8.0 + 56.0 + 8.0 + 48.0);
+        assert!(table_column_grid_fit(720.0, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        // Origin-aligned first cell box default grid par.
+        let first = table_cell_rect(grid, 0, 0, &px);
+        let expected_h = table_cell_row_h();
+        assert_eq!(
+            first.map(|r| (r.x, r.y, r.w)),
+            Some((12.0, 12.0, 40.0))
+        );
+        assert!((first.map(|r| r.h).unwrap_or(0.0) - expected_h).abs() < 0.001);
     }
 }
