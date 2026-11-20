@@ -518,7 +518,7 @@ pub fn toolbar_reload_label() -> String {
 // App row (app.rs toolbar, NO-TOUCH is wave me) agle wave me is painter par
 // jayegi; tab tak ye fn `toolbar_*` contract ka live call-site hai
 // (labels/role/glyphs se `dead_code` hata, tests live). Geometry:
-// [`session_toolbar_button_size`] floor (120x28, min_size) + [`TIGHT_GAP`]
+// [`session_toolbar_button_size`] floor (96x24, min_size) + [`TIGHT_GAP`]
 // rhythm (App `toolbar_item_gap` mirror, same value); typo:
 // [`toolbar_button_role`] chrome (Body 13 proportional). Colors: existing
 // button style reuse, koi naya hue nahi.
@@ -545,6 +545,121 @@ pub enum ToolbarAction {
 /// ungli se lagen). `enabled` false par dono grey (App `toolbar_active`
 /// mirror: Home par off).
 pub fn paint_session_toolbar(ui: &mut Ui, enabled: bool) -> ToolbarAction {
+    paint_toolbar_action_buttons(ui, enabled)
+}
+
+// ----------------------------------------------------------------------------
+// Session action bar (two-row: actions + jump cluster). Row 1 =
+// session actions (Swap/Reload, [`paint_toolbar_action_buttons`] reuse —
+// `paint_session_toolbar` live call-site ab isi par hai, shape same).
+// Row 2 = jump cluster: Prev/Next arrows + N/M badge + 1:1 cursor readout
+// right-dock (text nav-row precedent: full-width `avail x row_h`,
+// [`TIGHT_GAP`] rhythm, badge/cursor Small weak). Caller (`App`, agle
+// wave) nav state model se banata hai ([`diff_nav_position`] +
+// [`diff_nav_total`] + `viewmodel::cursor_label`); paint sirf emit karta
+// hai, mutate nahi. Geometry/typo callee tokens me (24 floor, chrome
+// roles); koi naya size/color nahi.
+// ----------------------------------------------------------------------------
+
+/// Jump-cluster hit: Prev vs Next. Caller is par selection move + scroll
+/// chalata hai ([`ToolbarAction`] precedent — paint emit, caller mutate).
+/// Pure shape; unit-tested.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ActionBarNav {
+    /// Koi hit nahi (default).
+    #[default]
+    None,
+    /// Prev click: pichhla difference.
+    Prev,
+    /// Next click: agla difference.
+    Next,
+}
+
+/// Jump-cluster caller state: N/M badge position + kul diffs + 1:1 cursor
+/// readout string (caller `viewmodel::cursor_label` se, khali par readout
+/// chhupta hai — koi fake "3:1" nahi). Pure shape; unit-tested.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ActionBarNavState {
+    /// Selected diff ki 1-based position; bina selection `None` ("0/N").
+    pub position: Option<usize>,
+    /// Kul diffs.
+    pub total: usize,
+    /// 1:1 cursor readout (`cursor_label`, jaise "3:1"); khali par hidden.
+    pub cursor: String,
+}
+
+/// Two-row bar ka combined hit: row 1 action + row 2 nav (first-hit-wins
+/// per row, dono rows ek frame me lag sakte hain — alag fields, koi
+/// clash nahi). Pure shape; unit-tested.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ActionBarHits {
+    /// Row 1: Swap/Reload hit.
+    pub action: ToolbarAction,
+    /// Row 2: Prev/Next hit.
+    pub nav: ActionBarNav,
+}
+
+/// Jump-cluster Prev label: text nav-row precedent ("◀ Prev") — wahi
+/// glyph, koi naya asset nahi. Pure; unit-tested.
+pub fn action_nav_prev_label() -> &'static str {
+    "◀ Prev"
+}
+
+/// Jump-cluster Next label: text nav-row precedent ("Next ▶") — wahi
+/// glyph, koi naya asset nahi. Pure; unit-tested.
+pub fn action_nav_next_label() -> &'static str {
+    "Next ▶"
+}
+
+/// Two-row stack gap (px): row 1 aur row 2 ke beech [`TIGHT_GAP`] — wahi
+/// rhythm jo har row ke andar hai. Koi naya token nahi; pure; unit-tested.
+pub fn action_bar_row_gap() -> f32 {
+    TIGHT_GAP
+}
+
+/// Action-bar row height (px): uniform 24 floor
+/// ([`session_toolbar_button_size`] height) — dono rows ek beat par.
+/// Pure; unit-tested.
+pub fn action_bar_row_height() -> f32 {
+    session_toolbar_button_size().1
+}
+
+/// Action-bar min content width (px): do uniform buttons + ek gap
+/// (`2 * tool_w + icon_gap` = 196) — row 1 aur row 2 dono isi floor par,
+/// isliye ek hi number dono rows cover karta hai (badge/cursor dock
+/// right-end par grow karte hain, floor nahi badhate). Pure; unit-tested.
+pub fn action_bar_min_width() -> f32 {
+    let (tool_w, _) = session_toolbar_button_size();
+    2.0 * tool_w + toolbar_icon_gap()
+}
+
+/// Tang window par bar h-scroll mangta hai ya nahi: `avail` floor
+/// ([`action_bar_min_width`]) se tang par haan, warna nahi. Non-finite
+/// ya non-positive `avail` par false (paint kabhi NaN branch na le —
+/// [`text_layout_for_width`] precedent). Pure; unit-tested.
+pub fn action_bar_needs_hscroll(avail: f32) -> bool {
+    if !avail.is_finite() || avail <= 0.0 {
+        return false;
+    }
+    avail < action_bar_min_width()
+}
+
+/// 1:1 cursor readout text: khali/whitespace par `None` (strip skip, koi
+/// fake readout nahi), warna trimmed string. Pure; unit-tested.
+pub fn action_bar_cursor_text(cursor: &str) -> Option<String> {
+    let trimmed = cursor.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Session action buttons (row 1): Swap + Reload ek hi `horizontal` me.
+/// [`paint_session_toolbar`] live call-site aur [`paint_session_action_bar`]
+/// row 1 dono isi par hain (ek shape, do caller — dup nahi). Geometry/typo
+/// toolbar contract (96x24 floor, chrome role); colors existing style.
+pub fn paint_toolbar_action_buttons(ui: &mut Ui, enabled: bool) -> ToolbarAction {
     let (tool_w, tool_h) = session_toolbar_button_size();
     let mut hit = ToolbarAction::None;
     ui.horizontal(|ui| {
@@ -571,6 +686,70 @@ pub fn paint_session_toolbar(ui: &mut Ui, enabled: bool) -> ToolbarAction {
         }
     });
     hit
+}
+
+/// Jump cluster (row 2): Prev/Next arrows + N/M badge
+/// ([`diff_nav_count_label`]: `Some` par "p/N", bina selection "0/N") +
+/// 1:1 cursor readout right-dock (khali par hidden). Geometry: full-width
+/// row (`avail x row_h`), [`TIGHT_GAP`] rhythm, right-end dock + [`BADGE_PAD`]
+/// (status-bar precedent); typo: buttons chrome role, badge/cursor
+/// [`status_side_role`] (Small 11 weak). `enabled` false par arrows grey.
+pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavState) -> ActionBarNav {
+    let (tool_w, tool_h) = session_toolbar_button_size();
+    let mut hit = ActionBarNav::None;
+    let avail = ui.available_width();
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail, action_bar_row_height()));
+        ui.spacing_mut().item_spacing.x = toolbar_icon_gap();
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(toolbar_button_role().rich(action_nav_prev_label()))
+                    .min_size(egui::vec2(tool_w, tool_h)),
+            )
+            .on_hover_text("Previous difference")
+            .clicked()
+        {
+            hit = ActionBarNav::Prev;
+        }
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(toolbar_button_role().rich(action_nav_next_label()))
+                    .min_size(egui::vec2(tool_w, tool_h)),
+            )
+            .on_hover_text("Next difference")
+            .clicked()
+        {
+            hit = ActionBarNav::Next;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(BADGE_PAD);
+            ui.label(
+                status_side_role().rich(diff_nav_count_label(state.position, state.total).as_str()),
+            );
+            if let Some(cursor) = action_bar_cursor_text(&state.cursor) {
+                ui.label(status_side_role().rich(cursor.as_str()));
+            }
+        });
+    });
+    hit
+}
+
+/// Two-row session action bar: row 1 actions + [`action_bar_row_gap`] +
+/// row 2 jump cluster. Caller (`App`, agle wave) `nav` model se banata hai
+/// aur hits par swap/run/nav chalata hai. Aaj koi live call-site nahi
+/// (contract-only, `paint_session_toolbar` live rehta hai); geometry/typo
+/// callee tokens me, koi naya size/color nahi.
+pub fn paint_session_action_bar(
+    ui: &mut Ui,
+    enabled: bool,
+    nav: &ActionBarNavState,
+) -> ActionBarHits {
+    let action = paint_toolbar_action_buttons(ui, enabled);
+    ui.add_space(action_bar_row_gap());
+    let nav = paint_action_nav_row(ui, enabled, nav);
+    ActionBarHits { action, nav }
 }
 
 /// Path-row Browse/Compare button size: 120x28 floor reuse ([`HOME_CARD_BUTTON_MIN_W`]
@@ -7475,6 +7654,69 @@ mod tests {
         // dono hits alag.
         assert_eq!(ToolbarAction::default(), ToolbarAction::None);
         assert_ne!(ToolbarAction::Swap, ToolbarAction::Reload);
+    }
+
+    #[test]
+    fn action_nav_labels_carry_jump_glyphs() {
+        // Text nav-row precedent glyphs (koi naya asset nahi), dono non-empty.
+        assert!(action_nav_prev_label().starts_with("◀"));
+        assert!(action_nav_next_label().ends_with("▶"));
+        assert!(!action_nav_prev_label().is_empty());
+        assert!(!action_nav_next_label().is_empty());
+    }
+
+    #[test]
+    fn action_bar_geometry_reuses_toolbar_floor() {
+        // Dono rows ek beat par: 24 floor + TIGHT_GAP stack; min width do
+        // uniform buttons + ek gap (2*96+4 = 196). Koi naya token nahi.
+        let (tool_w, tool_h) = session_toolbar_button_size();
+        assert_eq!(tool_w, 96.0);
+        assert_eq!(action_bar_row_height(), tool_h);
+        assert_eq!(action_bar_row_height(), 24.0);
+        assert_eq!(action_bar_row_gap(), TIGHT_GAP);
+        assert_eq!(action_bar_min_width(), 2.0 * tool_w + toolbar_icon_gap());
+        assert_eq!(action_bar_min_width(), 196.0);
+    }
+
+    #[test]
+    fn action_bar_hscroll_only_when_avail_below_floor() {
+        // Edge fixture actionbar-narrow-180: 180 < 196 par scroll, 700 par
+        // nahi; kharab avail par kabhi NaN-branch nahi.
+        assert!(action_bar_needs_hscroll(180.0));
+        assert!(!action_bar_needs_hscroll(196.0));
+        assert!(!action_bar_needs_hscroll(700.0));
+        assert!(!action_bar_needs_hscroll(f32::NAN));
+        assert!(!action_bar_needs_hscroll(0.0));
+    }
+
+    #[test]
+    fn action_bar_badge_and_cursor_stay_honest() {
+        // Bina selection koi fake position nahi ("0/N"); cursor blank par
+        // hidden, warna trimmed readout (jaise viewmodel "3:1").
+        let blank = ActionBarNavState {
+            position: None,
+            total: 3,
+            cursor: String::new(),
+        };
+        assert_eq!(diff_nav_count_label(blank.position, blank.total), "0/3");
+        assert_eq!(action_bar_cursor_text(&blank.cursor), None);
+        assert_eq!(action_bar_cursor_text("   "), None);
+        let mid = ActionBarNavState {
+            position: Some(2),
+            total: 3,
+            cursor: "  3:1  ".to_string(),
+        };
+        assert_eq!(diff_nav_count_label(mid.position, mid.total), "2/3");
+        assert_eq!(action_bar_cursor_text(&mid.cursor), Some("3:1".to_string()));
+    }
+
+    #[test]
+    fn action_bar_hits_default_to_none_with_split_rows() {
+        // Row 1 (action) aur row 2 (nav) alag fields — ek frame me dono lag
+        // sakte hain, default dono None; Prev/Next alag hits.
+        assert_eq!(ActionBarHits::default().action, ToolbarAction::None);
+        assert_eq!(ActionBarHits::default().nav, ActionBarNav::None);
+        assert_ne!(ActionBarNav::Prev, ActionBarNav::Next);
     }
 
     #[test]
