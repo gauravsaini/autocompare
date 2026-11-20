@@ -1437,3 +1437,7 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 - BU-LOCALRUN2 landed (round-2 delta, pushed)
 - f210011 verify ok: OWNS checks/gui-localrun-bu2 only, zero rs, STATUS untouched, 6/6 PNG PASS, REPORT with round-1 vs round-2 byte delta + gap DELTA table, tests 629. Pushed (no concurrent landing, log checked pre-push).
 - Fixtures reflowed (glyph t 4->5px), P0-2 selective highlight fixture me abhi nahi — diff follow-up me. Baaki in-flight: BU-PLAN, BU-PATHMETA.
+
+## 2026-11-20 - BU-PLAN landed (session tabs arch plan, pushed)
+- 0883000 verify ok: OWNS checks/gui-sessionplan-bu only (PLAN.md 228 lines), zero crates, STATUS untouched, Hinglish-Roman, BC own-words, 3 disjoint follow-up waves (model home.rs / app bridge / paint views.rs) with GATES. Pushed (log checked pre-push, no concurrency).
+- Baaki in-flight: BU-PATHMETA. Next: PLAN ke Wave 1 (session model) launch.
