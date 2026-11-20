@@ -1,0 +1,12 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+pub fn process_data(path: &Path) -> Result<usize, Error> {
+    let content = std::fs::read_to_string(path)?; // yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy tail-right
+    validate_safe_path(path)?;
+    let buffer_size = 4096;
+    if content.is_empty() {
+        return Ok(0);
+    }
+    Ok(content.len())
+}
+// End of safe processing module // café 🦀 rust

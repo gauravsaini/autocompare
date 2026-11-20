@@ -1215,6 +1215,42 @@ pub fn dual_pane_widths(avail_w: u32, fraction: f32) -> (u32, u32) {
     (left.min(free), free.saturating_sub(left.min(free)))
 }
 
+/// Dual-pane x positions for `avail_w` at `fraction`: `(left_x,
+/// right_x, gutter_x)` on the shared headless budget (`OUTER_PAD` 12
+/// lead, `PANE_GAP` 4 between panes, 16px overview gutter, 8px right
+/// margin = [`crate::theme::DUAL_PANE_CHROME_W`] 40). Widths come from
+/// [`dual_pane_widths`]; at 960 the triple is (12, 476, 936), at the
+/// 720 fallback (12, 356, 696). Chrome wider than `avail_w` yields the
+/// stacked origin (12, 12, 12) so paint never underflows. Pure;
+/// unit-tested. Single source for the screenshot narrow route and the
+/// live dual-pane painters.
+pub fn dual_pane_x_positions(avail_w: u32, fraction: f32) -> (u32, u32, u32) {
+    const OUTER_PAD: u32 = 12;
+    const PANE_GAP: u32 = 4;
+    let (left_w, right_w) = dual_pane_widths(avail_w, fraction);
+    if left_w == 0 && right_w == 0 {
+        return (OUTER_PAD, OUTER_PAD, OUTER_PAD);
+    }
+    let left_x = OUTER_PAD;
+    let right_x = left_x.saturating_add(left_w).saturating_add(PANE_GAP);
+    let gutter_x = right_x.saturating_add(right_w);
+    (left_x, right_x, gutter_x)
+}
+
+/// Virtualized row window for `show_rows` callers: clamps `(top,
+/// top+per_page)` into `[0, total]`. Empty or zero-page input yields
+/// `(0, 0)`; overshoot pins to `total`. Mirrors
+/// [`crate::tree::RowPager::visible_range`] for the text/table/hex
+/// painters that slice without a pager. Pure; unit-tested.
+pub fn virtual_row_window(total_rows: usize, top: usize, rows_per_page: usize) -> (usize, usize) {
+    if total_rows == 0 || rows_per_page == 0 {
+        return (0, 0);
+    }
+    let start = top.min(total_rows);
+    let end = start.saturating_add(rows_per_page).min(total_rows);
+    (start, end)
+}
+
 /// Ellipsis clip to `max_chars` characters: fits return as-is, longer
 /// text keeps `max_chars - 3` chars plus `"..."`. Char-boundary safe
 /// (unicode width never splits). Tiny budgets (`<= 3`) keep the first
@@ -3689,6 +3725,28 @@ mod tests {
         assert_eq!(dual_pane_widths(960, f32::NAN), (460, 460));
         assert_eq!(dual_pane_widths(30, 0.50), (0, 0));
         assert_eq!(dual_pane_widths(0, 0.50), (0, 0));
+    }
+
+    #[test]
+    fn dual_pane_positions_align_with_widths() {
+        assert_eq!(dual_pane_x_positions(960, 0.50), (12, 476, 936));
+        assert_eq!(dual_pane_x_positions(720, 0.50), (12, 356, 696));
+        let (left_x, right_x, gutter_x) = dual_pane_x_positions(960, 0.25);
+        let (left_w, right_w) = dual_pane_widths(960, 0.25);
+        assert_eq!(right_x, left_x.saturating_add(left_w).saturating_add(4));
+        assert_eq!(gutter_x, right_x.saturating_add(right_w));
+        assert_eq!(dual_pane_x_positions(30, 0.50), (12, 12, 12));
+        assert_eq!(dual_pane_x_positions(0, 0.50), (12, 12, 12));
+    }
+
+    #[test]
+    fn virtual_row_window_clamps_for_show_rows() {
+        assert_eq!(virtual_row_window(100, 0, 20), (0, 20));
+        assert_eq!(virtual_row_window(100, 90, 20), (90, 100));
+        assert_eq!(virtual_row_window(100, 200, 20), (100, 100));
+        assert_eq!(virtual_row_window(0, 0, 20), (0, 0));
+        assert_eq!(virtual_row_window(100, 0, 0), (0, 0));
+        assert_eq!(virtual_row_window(15, 10, 20), (10, 15));
     }
 
     #[test]

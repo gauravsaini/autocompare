@@ -676,9 +676,13 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
     );
 
     let (left_w, right_w) = crate::viewmodel::dual_pane_widths(width, 0.50);
-    let left_x = OUTER_PAD;
-    let right_x = left_x.saturating_add(left_w).saturating_add(PANE_GAP);
-    let gutter_x = right_x.saturating_add(right_w);
+    let (left_x, right_x, gutter_x) = crate::viewmodel::dual_pane_x_positions(width, 0.50);
+    debug_assert_eq!(left_x, OUTER_PAD);
+    debug_assert_eq!(
+        right_x,
+        left_x.saturating_add(left_w).saturating_add(PANE_GAP)
+    );
+    debug_assert_eq!(gutter_x, right_x.saturating_add(right_w));
     let text_budget = left_w.saturating_sub(32);
     let pane_top = 124u32;
     let pane_bottom = 560u32;

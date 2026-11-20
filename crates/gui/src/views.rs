@@ -5114,8 +5114,8 @@ pub fn paint_folder(
                         ui.set_row_height(row_height);
                         // Glyph column: frozen palette, mode-following dim/blue/red/green.
                         ui.label(
-                            RichText::new(node.row.glyph.to_string())
-                                .monospace()
+                            TypoRole::Mono
+                                .rich(node.row.glyph.to_string())
                                 .color(glyph_color(&node.row, dark)),
                         );
                         // Path column (flex): depth indent + expand/collapse
@@ -5134,9 +5134,9 @@ pub fn paint_folder(
                                     toggle_dir = Some(node.row.rel_path.clone());
                                 }
                             } else if node.row.is_dir {
-                                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                                ui.label(TypoRole::Mono.rich(CONTENT_LEAD));
                             }
-                            ui.label(RichText::new(path_text).monospace());
+                            ui.label(TypoRole::Mono.rich(path_text));
                         });
                         let mut idx = 1usize;
                         while idx < cells.len() {
@@ -5144,7 +5144,7 @@ pub fn paint_folder(
                             if let Some(text) = cells.get(idx) {
                                 cell = text.clone();
                             }
-                            ui.label(RichText::new(cell).monospace());
+                            ui.label(TypoRole::Mono.rich(cell));
                             idx = idx.saturating_add(1);
                         }
                         ui.end_row();
@@ -5447,16 +5447,14 @@ pub fn paint_folder_sync(
         .spacing([SECTION_GAP, TIGHT_GAP])
         .show(ui, |ui| {
             for cell in &headers {
-                ui.label(RichText::new(cell.as_str()).monospace().weak());
+                ui.label(TypoRole::Small.rich(cell.as_str()));
             }
             ui.end_row();
         });
     ui.label(
-        RichText::new(indented_content(&format_table_header_rule(
+        TypoRole::Small.rich(indented_content(&format_table_header_rule(
             headers.join(" ").len(),
-        )))
-        .monospace()
-        .weak(),
+        ))),
     );
     let row_height = row_height_for_line(text_row_height(ui));
     let dark = ui.visuals().dark_mode;
@@ -5484,8 +5482,8 @@ pub fn paint_folder_sync(
                         // mode-following dim/blue/red/green; badge mono
                         // caption (delete strong).
                         ui.label(
-                            RichText::new(node.row.glyph.to_string())
-                                .monospace()
+                            TypoRole::Mono
+                                .rich(node.row.glyph.to_string())
                                 .color(glyph_color(&node.row, dark)),
                         );
                         let direction = crate::tree::sync_direction_for_row(&node.row, picked);
@@ -5511,10 +5509,10 @@ pub fn paint_folder_sync(
                                     toggle_dir = Some(node.row.rel_path.clone());
                                 }
                             } else if node.row.is_dir {
-                                ui.label(RichText::new(CONTENT_LEAD).monospace());
+                                ui.label(TypoRole::Mono.rich(CONTENT_LEAD));
                             }
                             if ui
-                                .selectable_label(selected, RichText::new(path_text).monospace())
+                                .selectable_label(selected, TypoRole::Mono.rich(path_text))
                                 .clicked()
                             {
                                 toggle_select.push(node.row.rel_path.clone());
@@ -5526,7 +5524,7 @@ pub fn paint_folder_sync(
                             if let Some(text) = cells.get(idx) {
                                 cell = text.clone();
                             }
-                            ui.label(RichText::new(cell).monospace());
+                            ui.label(TypoRole::Mono.rich(cell));
                             idx = idx.saturating_add(1);
                         }
                         ui.end_row();
@@ -5785,8 +5783,8 @@ pub fn paint_folder_dual(
                                 ui.add_space(tree_indent(node.depth));
                             }
                             ui.label(
-                                RichText::new(node.row.glyph.to_string())
-                                    .monospace()
+                                TypoRole::Mono
+                                    .rich(node.row.glyph.to_string())
                                     .color(glyph_color(&node.row, dark)),
                             );
                             let [name, size, time] = dual_grid_row_left(&node.row);
@@ -5833,8 +5831,8 @@ pub fn paint_folder_dual(
                                 ui.add_space(tree_indent(node.depth));
                             }
                             ui.label(
-                                RichText::new(node.row.glyph.to_string())
-                                    .monospace()
+                                TypoRole::Mono
+                                    .rich(node.row.glyph.to_string())
                                     .color(glyph_color(&node.row, dark)),
                             );
                             let [name, size, time] = dual_grid_row_right(&node.row);
@@ -6121,7 +6119,7 @@ pub fn paint_picture_compare(
     }
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(RichText::new(zoom_label(view.zoom_pct)).small().weak());
+        ui.label(TypoRole::Small.rich(zoom_label(view.zoom_pct)));
         if ui.small_button("+").on_hover_text("zoom in (+)").clicked() {
             view.set_zoom_pct(viewmodel::picture_zoom_in(view.zoom_pct));
         }
@@ -6155,7 +6153,7 @@ pub fn paint_picture_compare(
     // token/typography/color here.
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(RichText::new("steps:").small().weak());
+        ui.label(TypoRole::Small.rich("steps:"));
         let fit = heatmap.map(|handle| {
             let natural = handle.size_vec2();
             picture_fit_zoom_pct(
@@ -6183,11 +6181,7 @@ pub fn paint_picture_compare(
     });
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(
-            RichText::new(pan_label(view.pan_x, view.pan_y))
-                .small()
-                .weak(),
-        );
+        ui.label(TypoRole::Small.rich(pan_label(view.pan_x, view.pan_y)));
         if ui.small_button("◀").clicked() {
             view.nudge_pan(-crate::app::PICTURE_PAN_STEP, 0);
         }
@@ -6657,7 +6651,7 @@ pub fn paint_text_find_bar(
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(RichText::new("Find:").small().weak());
+        ui.label(TypoRole::Small.rich("Find:"));
         ui.add(
             egui::TextEdit::singleline(needle)
                 .desired_width(FIND_NEEDLE_W)
@@ -6672,7 +6666,7 @@ pub fn paint_text_find_bar(
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(BADGE_PAD);
-            ui.label(RichText::new(badge).small().weak());
+            ui.label(TypoRole::Small.rich(badge));
         });
     });
     (prev, next)
@@ -6720,7 +6714,7 @@ pub fn paint_text_find_state_bar(
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, FIND_BAR_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(RichText::new("Find:").small().weak());
+        ui.label(TypoRole::Small.rich("Find:"));
         let edit = ui.add(
             egui::TextEdit::singleline(&mut needle)
                 .desired_width(FIND_NEEDLE_W)
@@ -6741,7 +6735,7 @@ pub fn paint_text_find_state_bar(
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(BADGE_PAD);
-            ui.label(RichText::new(find.count_label()).small().weak());
+            ui.label(TypoRole::Small.rich(find.count_label()));
         });
     });
     (prev, next)

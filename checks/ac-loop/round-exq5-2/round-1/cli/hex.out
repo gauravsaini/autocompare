@@ -1,0 +1,5 @@
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      

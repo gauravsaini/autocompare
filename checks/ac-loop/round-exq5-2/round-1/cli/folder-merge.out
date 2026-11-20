@@ -1,0 +1,4 @@
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
