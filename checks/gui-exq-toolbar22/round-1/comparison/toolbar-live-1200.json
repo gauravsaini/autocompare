@@ -1,0 +1,36 @@
+{
+  "name": "toolbar-live-1200",
+  "intent": "Toolbar22 live tall/scroll: at 1200px avail the two-row action band stays 24+8+24=56 with no h-scroll; every toolbar button keeps a fixed 12px glyph slot left of its label (fixture shown%4 rhythm: solid / twin bars / side bars / stepped wedge) painted AFTER the Button via painter rect_filled in dim ink so Button styling never overrides it; the Prev/Next nav controls carry the < / > chevron triples (2x2 cells, 6x10 span) with 8px cluster air. Labels, roles, rects, min-sizes and gaps unchanged. Geometry first, typography second, colors frozen.",
+  "canvas_w": 1200,
+  "canvas_h": 900,
+  "inputs": {
+    "avail_w": 1200.0,
+    "buttons": ["Swap", "Reload", "Prev", "Next", "FindPrev", "FindNext"],
+    "button_min": [96.0, 24.0],
+    "tall_rows": 1200,
+    "scroll_windows": [[0, 60], [470, 530], [980, 1040]]
+  },
+  "assertions": {
+    "band_h": 56.0,
+    "button_face": "egui Button fill (dark ~60)",
+    "chevron_cells": [2, 2],
+    "chevron_span": [6, 10],
+    "find_next_variant": 5,
+    "find_prev_variant": 4,
+    "glyph_h": 12.0,
+    "glyph_ink": "dim_for(dark) via painter.rect_filled AFTER Button (no Button override)",
+    "glyph_lead": 4.0,
+    "glyph_slot": [104.0, 56.0, 12.0, 12.0],
+    "glyph_w": 12.0,
+    "min_pair_width": 200.0,
+    "nav_gap": 8.0,
+    "nav_next_variant": 5,
+    "nav_prev_variant": 4,
+    "needs_hscroll_1200": false,
+    "reload_variant": 1,
+    "row_gap": 8.0,
+    "row_h": 24.0,
+    "side_air_1200": 500.0,
+    "swap_variant": 0
+  }
+}

@@ -523,6 +523,99 @@ pub fn toolbar_reload_label() -> String {
     format!("{TOOLBAR_RELOAD_GLYPH} Reload / Recompare")
 }
 
+/// Toolbar glyph slot width (px): fixed 12px left of the label (fixture
+/// `icon_box` = 12 parity). Pure; unit-tested.
+pub const TOOLBAR_GLYPH_W: f32 = 12.0;
+
+/// Toolbar glyph slot height (px): 12px square slot, vertically centered
+/// in the 24px button (fixture `(24 - 12) / 2 = 6` lead parity). Pure;
+/// unit-tested.
+pub const TOOLBAR_GLYPH_H: f32 = 12.0;
+
+/// Toolbar glyph slot width accessor (paint slot isi se banta hai).
+/// Pure; unit-tested.
+pub fn toolbar_glyph_width() -> f32 {
+    TOOLBAR_GLYPH_W
+}
+
+/// Toolbar glyph slot lead (px): slot starts [`TIGHT_GAP`] (4) inside the
+/// button's left edge (fixture `icon_x_off` = 4 parity). Koi naya size
+/// nahi; pure; unit-tested.
+pub fn toolbar_glyph_lead() -> f32 {
+    TIGHT_GAP
+}
+
+/// Toolbar glyph variant: fixture `shown % 4` rhythm — solid block / twin
+/// bars / side bars / stepped wedge rotate per button index; 4/5 are the
+/// Prev `<` / Next `>` chevron triples. Pure; unit-tested.
+pub fn toolbar_glyph_variant(index: usize) -> usize {
+    index % 4
+}
+
+/// Toolbar glyph mark rects (px, slot-local 12x12 origin): the same
+/// geometric marks the fixture paints (`fill_rect` only, dim hue reuse):
+/// 0 solid block, 1 twin horizontal bars, 2 side bars, 3 stepped wedge,
+/// 4 Prev `<` chevron triple, 5 Next `>` chevron triple. Chevron cells
+/// are 2x2 bars on a 6x10 rhythm centered in the slot (fixture
+/// `chevron_cells` / `chevron_span` parity). Pure; unit-tested.
+pub fn toolbar_glyph_rects(variant: usize) -> Vec<(f32, f32, f32, f32)> {
+    match variant {
+        1 => vec![(0.0, 0.0, 12.0, 3.0), (0.0, 9.0, 12.0, 3.0)],
+        2 => vec![(0.0, 0.0, 3.0, 12.0), (9.0, 0.0, 3.0, 12.0)],
+        3 => vec![
+            (0.0, 0.0, 12.0, 4.0),
+            (2.0, 4.0, 8.0, 4.0),
+            (4.0, 8.0, 4.0, 4.0),
+        ],
+        4 => vec![
+            (8.0, 1.0, 2.0, 2.0),
+            (6.0, 3.0, 2.0, 2.0),
+            (4.0, 5.0, 2.0, 2.0),
+            (6.0, 7.0, 2.0, 2.0),
+            (8.0, 9.0, 2.0, 2.0),
+        ],
+        5 => vec![
+            (2.0, 1.0, 2.0, 2.0),
+            (4.0, 3.0, 2.0, 2.0),
+            (6.0, 5.0, 2.0, 2.0),
+            (4.0, 7.0, 2.0, 2.0),
+            (2.0, 9.0, 2.0, 2.0),
+        ],
+        _ => vec![(0.0, 0.0, 12.0, 12.0)],
+    }
+}
+
+/// Toolbar glyph slot rect inside a button rect: 12px box starting
+/// [`toolbar_glyph_lead`] inside the left edge, vertically centered.
+/// Pure (egui math only, no context); unit-tested.
+pub fn toolbar_glyph_slot(button: egui::Rect) -> egui::Rect {
+    egui::Rect::from_min_size(
+        egui::pos2(
+            button.left() + toolbar_glyph_lead(),
+            button.center().y - TOOLBAR_GLYPH_H / 2.0,
+        ),
+        egui::vec2(TOOLBAR_GLYPH_W, TOOLBAR_GLYPH_H),
+    )
+}
+
+/// Toolbar glyph overlay: paints [`toolbar_glyph_rects`] via
+/// `painter.rect_filled` in `dim_for` ink AFTER the button response is
+/// created, so Button styling never overrides the ink (gutter23 marker
+/// precedent: frameless allocate+paint / paint-after). Caller passes the
+/// button [`Response`](egui::Response) rect; geometry callee tokens me,
+/// colors existing palette reuse, koi naya hue nahi.
+fn paint_toolbar_glyph(ui: &mut Ui, button_rect: egui::Rect, variant: usize) {
+    let slot = toolbar_glyph_slot(button_rect);
+    let ink = dim_for(ui.visuals().dark_mode);
+    for (dx, dy, w, h) in toolbar_glyph_rects(variant) {
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(slot.min + egui::vec2(dx, dy), egui::vec2(w, h)),
+            0.0,
+            ink,
+        );
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Session toolbar wiring (CL-TOOLWIRE): icon-led Swap/Reload paint call-site.
 // App row (app.rs toolbar, NO-TOUCH is wave me) agle wave me is painter par
@@ -742,24 +835,22 @@ pub fn paint_toolbar_action_buttons(ui: &mut Ui, enabled: bool) -> ToolbarAction
     let mut hit = ToolbarAction::None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = toolbar_cluster_gap();
-        if ui
-            .add_enabled(
-                enabled,
-                egui::Button::new(toolbar_button_role().rich(toolbar_swap_label()))
-                    .min_size(egui::vec2(tool_w, tool_h)),
-            )
-            .clicked()
-        {
+        let swap = ui.add_enabled(
+            enabled,
+            egui::Button::new(toolbar_button_role().rich(toolbar_swap_label()))
+                .min_size(egui::vec2(tool_w, tool_h)),
+        );
+        paint_toolbar_glyph(ui, swap.rect, toolbar_glyph_variant(0));
+        if swap.clicked() {
             hit = ToolbarAction::Swap;
         }
-        if ui
-            .add_enabled(
-                enabled,
-                egui::Button::new(toolbar_button_role().rich(toolbar_reload_label()))
-                    .min_size(egui::vec2(tool_w, tool_h)),
-            )
-            .clicked()
-        {
+        let reload = ui.add_enabled(
+            enabled,
+            egui::Button::new(toolbar_button_role().rich(toolbar_reload_label()))
+                .min_size(egui::vec2(tool_w, tool_h)),
+        );
+        paint_toolbar_glyph(ui, reload.rect, toolbar_glyph_variant(1));
+        if reload.clicked() {
             hit = ToolbarAction::Reload;
         }
     });
@@ -780,26 +871,26 @@ pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavStat
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, action_bar_row_height()));
         ui.spacing_mut().item_spacing.x = toolbar_cluster_gap();
-        if ui
+        let prev = ui
             .add_enabled(
                 enabled,
                 egui::Button::new(toolbar_button_role().rich(action_nav_prev_label()))
                     .min_size(egui::vec2(tool_w, tool_h)),
             )
-            .on_hover_text("Previous difference")
-            .clicked()
-        {
+            .on_hover_text("Previous difference");
+        paint_toolbar_glyph(ui, prev.rect, 4);
+        if prev.clicked() {
             hit = ActionBarNav::Prev;
         }
-        if ui
+        let next = ui
             .add_enabled(
                 enabled,
                 egui::Button::new(toolbar_button_role().rich(action_nav_next_label()))
                     .min_size(egui::vec2(tool_w, tool_h)),
             )
-            .on_hover_text("Next difference")
-            .clicked()
-        {
+            .on_hover_text("Next difference");
+        paint_toolbar_glyph(ui, next.rect, 5);
+        if next.clicked() {
             hit = ActionBarNav::Next;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -8504,10 +8595,14 @@ pub fn paint_text_find_state_bar(
         if ui.checkbox(&mut ignore_case, "Ignore case").changed() {
             find.set_ignore_case(rows, ignore_case);
         }
-        if ui.small_button("◀ Prev").clicked() {
+        let find_prev = ui.small_button("◀ Prev");
+        paint_toolbar_glyph(ui, find_prev.rect, 4);
+        if find_prev.clicked() {
             prev = true;
         }
-        if ui.small_button("Next ▶").clicked() {
+        let find_next = ui.small_button("Next ▶");
+        paint_toolbar_glyph(ui, find_next.rect, 5);
+        if find_next.clicked() {
             next = true;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -10305,6 +10400,70 @@ mod tests {
         assert!(action_nav_next_label().ends_with("▶"));
         assert!(!action_nav_prev_label().is_empty());
         assert!(!action_nav_next_label().is_empty());
+    }
+
+    #[test]
+    fn toolbar22_live_glyph_slots() {
+        // Mirrors checks/gui-exq-toolbar22/round-1/comparison/toolbar-live-1200.json:
+        // tall/scroll — toolbar band 24+8+24=56 stable, har button par fixed
+        // 12px glyph slot left-of-label (fixture shown%4 rhythm), chevron
+        // triples nav row me, koi overlap nahi. Sab existing tokens reuse.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-toolbar22/round-1/comparison/toolbar-live-1200.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"toolbar-live-1200\""));
+        assert!(fixture_raw.contains("\"glyph_w\": 12.0"));
+        assert!(fixture_raw.contains("\"band_h\": 56.0"));
+        // 1. Slot geometry: fixed 12px box, 4px lead, vertically centered.
+        assert_eq!(TOOLBAR_GLYPH_W, 12.0);
+        assert_eq!(TOOLBAR_GLYPH_H, 12.0);
+        assert_eq!(toolbar_glyph_width(), 12.0);
+        assert_eq!(toolbar_glyph_lead(), TIGHT_GAP);
+        assert_eq!(toolbar_glyph_lead(), 4.0);
+        let button = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(96.0, 24.0));
+        let slot = toolbar_glyph_slot(button);
+        assert_eq!(slot.min.x, 104.0);
+        assert_eq!(slot.min.y, 56.0);
+        assert_eq!(slot.width(), 12.0);
+        assert_eq!(slot.height(), 12.0);
+        // 2. Variant rhythm: fixture shown%4 (0 solid, 1 twin, 2 sides, 3 wedge).
+        assert_eq!(toolbar_glyph_variant(0), 0);
+        assert_eq!(toolbar_glyph_variant(1), 1);
+        assert_eq!(toolbar_glyph_variant(5), 1);
+        assert_eq!(toolbar_glyph_rects(0), vec![(0.0, 0.0, 12.0, 12.0)]);
+        assert_eq!(
+            toolbar_glyph_rects(1),
+            vec![(0.0, 0.0, 12.0, 3.0), (0.0, 9.0, 12.0, 3.0)]
+        );
+        assert_eq!(
+            toolbar_glyph_rects(2),
+            vec![(0.0, 0.0, 3.0, 12.0), (9.0, 0.0, 3.0, 12.0)]
+        );
+        assert_eq!(toolbar_glyph_rects(3).len(), 3);
+        // 3. Chevrons: 5 cells of 2x2, 6x10 span centered in the 12px slot.
+        for variant in [4, 5] {
+            let bars = toolbar_glyph_rects(variant);
+            assert_eq!(bars.len(), 5);
+            let mut min_x = f32::INFINITY;
+            let mut max_x = f32::NEG_INFINITY;
+            let mut min_y = f32::INFINITY;
+            let mut max_y = f32::NEG_INFINITY;
+            for (dx, dy, w, h) in &bars {
+                assert_eq!((*w, *h), (2.0, 2.0));
+                min_x = min_x.min(*dx);
+                max_x = max_x.max(dx + w);
+                min_y = min_y.min(*dy);
+                max_y = max_y.max(dy + h);
+            }
+            assert_eq!((max_x - min_x, max_y - min_y), (6.0, 10.0));
+        }
+        // 4. Tall/scroll: 1200 par band stable, no h-scroll, pair floor intact.
+        assert_eq!(action_bar_row_height(), 24.0);
+        assert_eq!(action_bar_row_gap(), 8.0);
+        assert!(!action_bar_needs_hscroll(1200.0));
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(toolbar_button_row_side_air(1200.0), 500.0);
+        assert_eq!(action_nav_arrow_gap(), 8.0);
     }
 
     #[test]
