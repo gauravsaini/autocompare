@@ -4178,6 +4178,17 @@ pub fn toolbar_group_gap() -> f32 {
     views::SECTION_GAP
 }
 
+/// Empty-rules label for the chrome status top row: BC per-pane reads
+/// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
+/// honest default, warna caller ka rules label. Pure; headless-tested.
+pub fn chrome_default_text_label(rules: &str) -> &str {
+    if rules.trim().is_empty() {
+        "Default text"
+    } else {
+        rules
+    }
+}
+
 /// Session strip caller geometry (TABSAPP exquisite, App half).
 /// Hit-targets reuse [`views::SESSION_TAB_MAX_W`] + close edge/gap
 /// helpers, strip gap reuses [`views::SECTION_GAP`]; koi naya token,
@@ -4248,6 +4259,100 @@ impl App {
     /// reuse, koi naya size nahi. Pure; headless-tested.
     pub fn session_strip_tab_role() -> crate::theme::TypoRole {
         views::chrome_tab_role()
+    }
+
+    /// Two-row action-bar nav state (CHROME6 caller half): N/M badge
+    /// [`views::diff_nav_position`]/[`views::diff_nav_total`] se, 1:1
+    /// readout `viewmodel::cursor_label` se. Bina model par 0 diffs +
+    /// honest "-" cursor (koi fake "1:1" nahi). Pure; headless-tested.
+    pub fn chrome_nav_state(&self) -> views::ActionBarNavState {
+        match self.text_model.as_ref() {
+            Some(model) => views::ActionBarNavState {
+                position: views::diff_nav_position(&model.rows, model.selected),
+                total: views::diff_nav_total(&model.rows),
+                cursor: viewmodel::cursor_label(viewmodel::cursor_pos_for(model.selected)),
+            },
+            None => views::ActionBarNavState {
+                position: None,
+                total: 0,
+                cursor: viewmodel::cursor_label(None),
+            },
+        }
+    }
+
+    /// Two-tier statusbar top row (CHROME6 caller half): per-pane
+    /// "cursor | rules" (khali rules par "Default text"). Pure;
+    /// headless-tested.
+    pub fn chrome_status_top(&self) -> String {
+        let cursor = match self.text_model.as_ref() {
+            Some(model) => viewmodel::cursor_label(viewmodel::cursor_pos_for(model.selected)),
+            None => viewmodel::cursor_label(None),
+        };
+        format!(
+            "{cursor} | {}",
+            chrome_default_text_label(self.path_rules_label())
+        )
+    }
+
+    /// Diff-step selection (CHROME6 nav wiring): agla/pichhla diff row
+    /// select karta hai, wrap ke saath. Bina model/rows/diffs par false
+    /// + honest status; hit par true. Koi panic nahi.
+    pub fn move_diff_selection(&mut self, forward: bool) -> bool {
+        let total = match self.text_model.as_ref() {
+            Some(model) => model.rows.len(),
+            None => {
+                self.status = String::from("diff: no differences");
+                return false;
+            }
+        };
+        if total == 0 {
+            self.status = String::from("diff: no differences");
+            return false;
+        }
+        let current = self.text_model.as_ref().and_then(|model| model.selected);
+        let mut idx = match current {
+            Some(selected) => {
+                if forward {
+                    (selected.saturating_add(1)) % total.max(1)
+                } else if selected == 0 {
+                    total.saturating_sub(1)
+                } else {
+                    selected.saturating_sub(1)
+                }
+            }
+            None => {
+                if forward {
+                    0
+                } else {
+                    total.saturating_sub(1)
+                }
+            }
+        };
+        let mut steps = 0usize;
+        while steps < total {
+            let is_diff = self
+                .text_model
+                .as_ref()
+                .and_then(|model| model.rows.get(idx))
+                .is_some_and(viewmodel::is_diff_row);
+            if is_diff {
+                if let Some(model) = self.text_model.as_mut() {
+                    model.selected = Some(idx);
+                }
+                self.status = format!("diff: row {}", idx.saturating_add(1));
+                return true;
+            }
+            if forward {
+                idx = (idx.saturating_add(1)) % total.max(1);
+            } else if idx == 0 {
+                idx = total.saturating_sub(1);
+            } else {
+                idx = idx.saturating_sub(1);
+            }
+            steps = steps.saturating_add(1);
+        }
+        self.status = String::from("diff: no differences");
+        false
     }
 }
 
@@ -5342,26 +5447,46 @@ impl eframe::App for App {
             // strip pills wahi identity rakhte hain) taaki content se pehle
             // 4 nav rows 3 rahen: strip / mode tabs / toolbar.
 
-            // Single aligned toolbar row: actions (views call-site) + view toggles.
+            // Two-row chrome (BC top-bar air): row 1 session action bar
+            // (Swap/Reload + Prev/Next jump cluster + N/M badge + 1:1
+            // readout andar hi), row 2 view toggles. Gaps toolbar tokens
+            // reuse; koi naya color/size nahi.
             let toolbar_active = self.tab != Tab::Home;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = toolbar_item_gap();
-                // Icon-led Swap/Reload row: views::paint_session_toolbar live
-                // call-site (glyph + chrome role + 120x28 floor andar hi);
-                // hit par caller swap/run chalata hai.
-                match views::paint_session_toolbar(ui, toolbar_active) {
-                    views::ToolbarAction::Swap => {
-                        // Swap, then re-run so both sides refresh like
-                        // Beyond Compare does; empty sides report validation.
-                        if self.swap_sides() {
-                            self.run_active_tab();
-                        }
-                    }
-                    views::ToolbarAction::Reload => {
+            let nav = self.chrome_nav_state();
+            let hits = views::paint_session_action_bar(ui, toolbar_active, &nav);
+            match hits.action {
+                views::ToolbarAction::Swap => {
+                    // Swap, then re-run so both sides refresh like
+                    // Beyond Compare does; empty sides report validation.
+                    if self.swap_sides() {
                         self.run_active_tab();
                     }
-                    views::ToolbarAction::None => {}
                 }
+                views::ToolbarAction::Reload => {
+                    self.run_active_tab();
+                }
+                views::ToolbarAction::None => {}
+            }
+            match hits.nav {
+                views::ActionBarNav::Prev => {
+                    if self.text_find_needle.trim().is_empty() {
+                        self.move_diff_selection(false);
+                    } else {
+                        self.text_find_prev_row();
+                    }
+                }
+                views::ActionBarNav::Next => {
+                    if self.text_find_needle.trim().is_empty() {
+                        self.move_diff_selection(true);
+                    } else {
+                        self.text_find_next_row();
+                    }
+                }
+                views::ActionBarNav::None => {}
+            }
+            ui.add_space(views::action_bar_row_gap());
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = toolbar_item_gap();
                 ui.add_space(toolbar_group_gap());
                 ui.separator();
                 ui.add_space(toolbar_group_gap());
@@ -6368,7 +6493,16 @@ impl eframe::App for App {
             ui.add_space(views::SECTION_GAP);
             ui.separator();
             ui.add_space(views::FOOTER_GAP);
-            ui.label(RichText::new(self.status_line()).small().weak());
+            // Two-tier statusbar (BC bottom air): top row per-pane
+            // "cursor | rules/Default text" (Small side role), bottom row
+            // honest counts + status (chrome status role). Gaps existing
+            // tokens; typo existing roles; koi naya color/size nahi.
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = toolbar_group_gap();
+                ui.label(views::status_side_role().rich(self.chrome_status_top()));
+            });
+            ui.add_space(views::action_bar_row_gap());
+            ui.label(views::chrome_status_role().rich(self.status_line()));
         });
     }
 }
@@ -9393,6 +9527,29 @@ mod tests {
         assert!(toolbar_item_gap().is_finite() && toolbar_item_gap() > 0.0);
         assert!(toolbar_group_gap().is_finite() && toolbar_group_gap() > 0.0);
         assert!(toolbar_group_gap() > toolbar_item_gap());
+    }
+
+    #[test]
+    fn chrome_default_label_falls_back_without_new_sizes() {
+        assert_eq!(chrome_default_text_label(""), "Default text");
+        assert_eq!(chrome_default_text_label("   "), "Default text");
+        assert_eq!(chrome_default_text_label("Text: exact"), "Text: exact");
+    }
+
+    #[test]
+    fn chrome_nav_state_empty_model_is_honest() {
+        let app = App::default();
+        let nav = app.chrome_nav_state();
+        assert_eq!((nav.position, nav.total), (None, 0));
+        assert_eq!(nav.cursor, String::from("-"));
+        assert!(app.chrome_status_top().contains("Default text"));
+    }
+
+    #[test]
+    fn chrome_diff_step_needs_model() {
+        let mut app = App::default();
+        assert!(!app.move_diff_selection(true));
+        assert!(app.status.contains("no differences"));
     }
 
     #[test]
