@@ -1,0 +1,32 @@
+{
+ "description": "Wave model9 edge: empty-vs-loaded cursor honesty plus tail-insertion pane-top follow. Empty model (0 rows) me selection None, badge 0/0, top 0, cursor -, verdict no selection \u2014 koi fake row nahi. Loaded 5-row model (diffs 1,2,4) me initial first-diff (1), tail diff (4) par badge 3/3, per_page 2 top 0 se pane top 3 (window (3,5)) \u2014 selection pane top chalata hai. Roles Body 13 head > Mono 12 preview, koi naya size nahi.",
+ "inputs": {
+  "total_rows": 5,
+  "diff_at": [
+   1,
+   2,
+   4
+  ],
+  "per_page": 2,
+  "top": 0,
+  "selected_tail": 4
+ },
+ "assertions": {
+  "empty_sanitize_none": true,
+  "empty_initial_none": true,
+  "empty_badge": "0/0",
+  "empty_pane_top": 0,
+  "empty_cursor": "-",
+  "empty_verdict": "no selection",
+  "loaded_initial": 1,
+  "loaded_total_diffs": 3,
+  "loaded_tail_badge": "3/3",
+  "loaded_tail_pane_top": 3,
+  "loaded_tail_window": [
+   3,
+   5
+  ],
+  "cursor_head_role": "Body",
+  "cursor_preview_role": "Mono"
+ }
+}

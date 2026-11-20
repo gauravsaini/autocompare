@@ -797,6 +797,122 @@ pub const fn status_side_text_role() -> crate::theme::TypoRole {
 }
 
 // ----------------------------------------------------------------------------
+// Cursor plus selection (MODEL9 headless; paint wiring next wave)
+// ----------------------------------------------------------------------------
+//
+// Gap: BC ka shared row cursor (`1:1`, bina selection `-`) dono panes ke
+// pane tops + status verdicts chalata hai; ours me selection clamp
+// (`paint_text_body` inline), diff-nav badge (`views::diff_nav_*`) aur
+// pane-top follow alag-alag call-sites par bikhre hain. Ye section
+// single-source headless model hai: sanitize + initial (honest
+// empty-vs-loaded), pane top jo selection ka peecha karta hai, aur
+// diff-nav badge jo status verdicts khilata hai. Paint (`views.rs`
+// text/status/action-bar) agle wave me isko adopt karega; yahan koi
+// egui code nahi, koi naya size/color/token nahi (roles existing
+// TypoRole reuse, badge `find_count_label` shape reuse).
+
+/// Stale/OOB selection ko honest `None` me badalta hai: empty model ya
+/// out-of-range index par koi fake cursor nahi. Paint aaj yehi gate
+/// inline lagata hai (`model.rows.get(sel).is_none()`); ye headless
+/// single source hai. Pure; unit-tested.
+pub fn sanitize_selection(total_rows: usize, selected: Option<usize>) -> Option<usize> {
+    match selected {
+        Some(idx) if idx < total_rows => Some(idx),
+        _ => None,
+    }
+}
+
+/// Loaded model ki honest initial selection: pehla difference,
+/// equal-only ya empty par `None` (koi fake "row 1" nahi).
+/// `build_text_rows` ka `selected: None` isi se khulta hai jab paint
+/// pehli diff par khada hona chahe. Pure; unit-tested.
+pub fn initial_selection_for(rows: &[TextRow]) -> Option<usize> {
+    diff_indices(rows).first().copied()
+}
+
+/// Pane top jo selection ka peecha karta hai: selected window
+/// `[top, top + rows_per_page)` ke andar ho to `top` untouched rehta hai
+/// (clamped), neeche ho to window ki aakhri row banta hai, upar ho to
+/// pehli. Bina selection top sirf clamp hota hai. Empty/zero-page par 0,
+/// taaki khali model ka top kabhi jhootha na ho. [`virtual_row_window`]
+/// contract reuse. Pure; unit-tested.
+pub fn pane_top_for_selection(
+    top: usize,
+    rows_per_page: usize,
+    selected: Option<usize>,
+    total_rows: usize,
+) -> usize {
+    if total_rows == 0 || rows_per_page == 0 {
+        return 0;
+    }
+    let top = top.min(total_rows);
+    let Some(sel) = sanitize_selection(total_rows, selected) else {
+        return top;
+    };
+    if sel < top {
+        return sel;
+    }
+    if sel >= top.saturating_add(rows_per_page) {
+        return sel
+            .saturating_add(1)
+            .saturating_sub(rows_per_page)
+            .min(total_rows);
+    }
+    top
+}
+
+/// Kul difference rows (model order `is_diff_row` count). Khali ya
+/// equal-only par 0. `views::diff_nav_total` ka headless judvaan — paint
+/// agle wave me isko adopt karega. Pure; unit-tested.
+pub fn diff_nav_total_for(rows: &[TextRow]) -> usize {
+    diff_indices(rows).len()
+}
+
+/// Selected row ki diffs me 1-based position: selected diff ho to
+/// `Some(pos)`, nahi to `None` (bina selection/equal/OOB par koi fake
+/// count nahi — pehle sanitize, phir gate). Pure; unit-tested.
+pub fn diff_nav_position_for(rows: &[TextRow], selected: Option<usize>) -> Option<usize> {
+    let sel = sanitize_selection(rows.len(), selected)?;
+    if !rows.get(sel).is_some_and(is_diff_row) {
+        return None;
+    }
+    let mut pos = 0usize;
+    let mut idx = 0usize;
+    while idx <= sel && idx < rows.len() {
+        if rows.get(idx).is_some_and(is_diff_row) {
+            pos = pos.saturating_add(1);
+        }
+        idx = idx.saturating_add(1);
+    }
+    if pos == 0 { None } else { Some(pos) }
+}
+
+/// N/M diff-nav badge: "2/5", no hit par "0/0" (`find_count_label` shape
+/// reuse — find/tablefind badge precedent). Status right zone aur
+/// action-bar isi se khate hain taaki nav math ek jagah rahe. Pure;
+/// unit-tested.
+pub fn diff_nav_badge_for(rows: &[TextRow], selected: Option<usize>) -> String {
+    find_count_label(
+        diff_nav_position_for(rows, selected),
+        diff_nav_total_for(rows),
+    )
+}
+
+/// Cursor strip head line (`cursor | L3/R5 kind`) role: Body (status
+/// verdict precedent reuse — focused verdict jaisi). Paint
+/// `chrome_status_role` composition; koi naya size nahi. Pure;
+/// unit-tested.
+pub const fn cursor_strip_head_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Cursor strip preview lines role: Mono (pane body precedent reuse —
+/// preview wahi 12px diff text hai, chrome nahi). Pure; unit-tested.
+pub const fn cursor_strip_preview_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+// ----------------------------------------------------------------------------
 // Text view prefs (paint-side hook, headless)
 // ----------------------------------------------------------------------------
 
@@ -4272,6 +4388,68 @@ mod tests {
         // sides tabular intent rakhte hain (counts stable).
         assert!(status_verdict_text_role().size() > status_side_text_role().size());
         assert!(status_side_text_role().is_tabular());
+    }
+
+    #[test]
+    fn model9_empty_model_is_honest() {
+        let rows: Vec<TextRow> = Vec::new();
+        assert_eq!(sanitize_selection(0, None), None);
+        assert_eq!(sanitize_selection(0, Some(0)), None);
+        assert_eq!(initial_selection_for(&rows), None);
+        assert_eq!(diff_nav_total_for(&rows), 0);
+        assert_eq!(diff_nav_position_for(&rows, None), None);
+        assert_eq!(diff_nav_position_for(&rows, Some(0)), None);
+        assert_eq!(diff_nav_badge_for(&rows, None), "0/0");
+        assert_eq!(diff_nav_badge_for(&rows, Some(3)), "0/0");
+        assert_eq!(pane_top_for_selection(0, 20, None, 0), 0);
+        assert_eq!(pane_top_for_selection(5, 20, Some(3), 0), 0);
+        assert_eq!(pane_top_for_selection(0, 0, Some(0), 5), 0);
+        assert_eq!(cursor_label(cursor_pos_for(None)), "-");
+        assert_eq!(focused_kind_label(&rows, None), "no selection");
+        assert_eq!(focused_line_preview_for(&rows, None), None);
+    }
+
+    #[test]
+    fn model9_loaded_selection_drives_pane_top_and_badge() {
+        let rows = nav_rows();
+        // OOB sanitize hota hai, andar wala untouched rehta hai.
+        assert_eq!(sanitize_selection(rows.len(), Some(99)), None);
+        assert_eq!(sanitize_selection(rows.len(), Some(4)), Some(4));
+        assert_eq!(sanitize_selection(rows.len(), None), None);
+        // Pehli diff se khulta hai; equal-only/empty par None.
+        assert_eq!(initial_selection_for(&rows), Some(1));
+        let flat = vec![TextRow::default()];
+        assert_eq!(initial_selection_for(&flat), None);
+        // Badge: equal par fake pos nahi, tail diff par "2/3".
+        assert_eq!(diff_nav_total_for(&rows), 3);
+        assert_eq!(diff_nav_position_for(&rows, Some(0)), None);
+        assert_eq!(diff_nav_position_for(&rows, Some(1)), Some(1));
+        assert_eq!(diff_nav_position_for(&rows, Some(4)), Some(3));
+        assert_eq!(diff_nav_position_for(&rows, Some(99)), None);
+        assert_eq!(diff_nav_badge_for(&rows, None), "0/3");
+        assert_eq!(diff_nav_badge_for(&rows, Some(1)), "1/3");
+        assert_eq!(diff_nav_badge_for(&rows, Some(4)), "3/3");
+        // Pane top: per_page 2, top 0, tail selected -> top 3 (window (3,5)).
+        assert_eq!(pane_top_for_selection(0, 2, Some(4), 5), 3);
+        // Visible rehta hai to untouched; upar jump par pehli row.
+        assert_eq!(pane_top_for_selection(3, 2, Some(4), 5), 3);
+        assert_eq!(pane_top_for_selection(3, 2, Some(3), 5), 3);
+        assert_eq!(pane_top_for_selection(0, 2, Some(0), 5), 0);
+        assert_eq!(pane_top_for_selection(3, 2, Some(1), 5), 1);
+        assert_eq!(pane_top_for_selection(9, 2, None, 5), 5);
+    }
+
+    #[test]
+    fn model9_cursor_roles_reuse_existing_sizes() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_MONO_SIZE};
+        assert_eq!(cursor_strip_head_role(), crate::theme::TypoRole::Body);
+        assert_eq!(cursor_strip_head_role().size(), TYPO_BODY_SIZE);
+        assert_eq!(cursor_strip_preview_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(cursor_strip_preview_role().size(), TYPO_MONO_SIZE);
+        // Hierarchy: head (Body 13) preview (Mono 12) se ek step upar;
+        // preview tabular rehta hai (diff text stable).
+        assert!(cursor_strip_head_role().size() > cursor_strip_preview_role().size());
+        assert!(cursor_strip_preview_role().is_tabular());
     }
 
     #[test]
