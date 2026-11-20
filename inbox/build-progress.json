@@ -60,6 +60,7 @@
  "ORCH-VERIFY-DIFF": "2026-11-20 22:24 AEDT diff 237 green (96+33+44+20+4+40) isolated /tmp/target-orch-verify, baseline healthy",
  "ORCH-VERIFY-EVIREP": "2026-11-20 22:32 AEDT evidence 8 + reports 31 green isolated",
  "ORCH-VERIFY-VFS": "2026-11-20 22:28 AEDT vfs 48 green isolated",
+ "ORCH-VERIFY6": "2026-11-21 01:29 local run PASS /tmp/land-verify6.png 10K vs BC 888K gap persists honestly, 858 green, next geometry+typo waves",
  "POLL-STRATEGY": "exponential backoff 10s/20s/40s/80s, no fixed 8s, via opencode session export",
  "SWARM-BIN3": "verified+landed a2f7c52 (sha OK, 960x600 PNG, 6/6 PASS, no source edits, isolated /tmp/orch3-src build)",
  "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
