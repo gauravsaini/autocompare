@@ -1603,3 +1603,13 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CO-TBARCALL (sess-co-tool): toolbar App call-site adopt (paint_session_toolbar wiring). OWNS app.rs + checks/gui-toolcall-co.
 - CP-LIGHTFLAG (sess-cp-light): --screenshot-mode light CLI flag + light fixture artifact. OWNS main.rs + screenshot.rs + checks/gui-lightflag-cp.
 - Disjoint OWNS (app.rs vs main.rs+screenshot.rs) isliye parallel safe. Dono ke baad round-7 verify (CP-geo+CQ-typo+CN-opener+CO+CP live).
+
+## 2026-11-20 — Waves CO-TBARCALL + CP-LIGHTFLAG landed + pushed (parallel GUI)
+- Commits `880b3af` (CO: paint_session_toolbar call-site, app.rs) + `1224e2b` (CP-LIGHT: --screenshot-mode light, main.rs+screenshot.rs). Disjoint OWNS, no collision.
+- Gates: 674 green (+1 light-dispatch test), clippy 0 warnings, fmt clean, banned 0, colors 0 new (frozen), PNGs valid 960x600, tree clean. Pushed origin/main.
+
+## 2026-11-20 — AGYX swarm launched (3 parallel, non-GUI extension tracks)
+- AGYX-A REPORTS: crates/reports (HTML linked-child + mono parity). OWNS crates/reports + checks/agyx-reports-a.
+- AGYX-B SESSIONS: crates/sessions (WorkspaceConfig roundtrip + migration). OWNS crates/sessions + checks/agyx-sessions-b.
+- AGYX-C DIFF: crates/diff (one algorithm gap, pure fn). OWNS crates/diff + checks/agyx-diff-c.
+- Architecture note: L0 diff/evidence leaf, L1 vfs/sessions/reports, L2 compare, L3 cli/gui thin — plug-and-play confirmed, GUI-owned files forbidden for swarm. Agents commit locally NO PUSH, orchestrator verifies + pushes.
