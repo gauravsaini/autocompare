@@ -293,6 +293,9 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
     let mut clicked: Option<usize> = None;
     ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
+        // Even rhythm: ek hi gap source (`item_spacing.x`) har toggle ke
+        // beech — per-column `add_space` double gap banata tha (16px vs
+        // Grid `TABLE_GRID_COL_GAP` 8px), isliye hata diya.
         ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
         ui.label(table_section_label_text_role().rich("Key:").strong());
         for (col, name) in header.iter().enumerate() {
@@ -311,7 +314,6 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
             if suggested && !selected {
                 ui.label(TypoRole::Small.rich("(suggested)"));
             }
-            ui.add_space(TABLE_KEY_COL_GAP);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(TABLE_KEY_BADGE_PAD);
@@ -609,7 +611,10 @@ pub fn table_find_badge_label(position: Option<usize>, total: usize) -> String {
 fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
     let mut prev = false;
     let mut next = false;
-    ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
+    // Dense action-row rhythm: hunk-nav row precedent (`TIGHT_GAP` 4px) —
+    // Find buttons compact rehte hain, toggle gaps (`TABLE_KEY_COL_GAP`)
+    // se alag taaki action vs toggle rhythm confuse na ho.
+    ui.spacing_mut().item_spacing.x = crate::theme::GEO_TIGHT_GAP;
     ui.label(table_section_label_text_role().rich("Find:").strong());
     ui.add(
         egui::TextEdit::singleline(needle)
@@ -1515,6 +1520,8 @@ pub fn paint_table_sheet_bar(
     let mut clicked: Option<usize> = None;
     ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_SHEET_BAR_H));
+        // Even rhythm: key bar jaisa ek hi gap source — per-sheet
+        // `add_space` double gap banata tha, isliye hata diya.
         ui.spacing_mut().item_spacing.x = TABLE_SHEET_COL_GAP;
         ui.label(table_sheet_label_text_role().rich("Sheet:").strong());
         for (idx, name) in sheets.iter().enumerate() {
@@ -1529,7 +1536,6 @@ pub fn paint_table_sheet_bar(
             if ui.selectable_label(is_selected, rich).clicked() {
                 clicked = Some(idx);
             }
-            ui.add_space(TABLE_SHEET_COL_GAP);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(TABLE_SHEET_BADGE_PAD);
@@ -3134,5 +3140,27 @@ mod tests {
         assert!(!table_column_grid_fit(10.0, &px));
         assert!(!table_column_grid_fit(f32::NAN, &px));
         assert!(!table_column_grid_fit(1000.0, &[]));
+    }
+
+    #[test]
+    fn tabledens8_bar_rhythm_stays_even_and_tight() {
+        use crate::theme::{GEO_TIGHT_GAP, SPACE_SM, SPACE_XS};
+        // Even: key/sheet toggle gaps Grid col gap ke barabar — paint ab
+        // ek hi `item_spacing` source use karta hai (double `add_space`
+        // hata), isliye rhythm Grid se kabhi alag nahi hota.
+        assert_eq!(TABLE_KEY_COL_GAP, TABLE_GRID_COL_GAP);
+        assert_eq!(TABLE_KEY_COL_GAP, SPACE_SM);
+        assert_eq!(TABLE_SHEET_COL_GAP, TABLE_KEY_COL_GAP);
+        // Tight: Find action rows dense gap par (hunk-nav `TIGHT_GAP`
+        // precedent) — toggle gaps se alag taaki action vs toggle rhythm
+        // confuse na ho.
+        assert_eq!(GEO_TIGHT_GAP, SPACE_XS);
+        assert_eq!(GEO_TIGHT_GAP, 4.0);
+        assert_eq!(GEO_TIGHT_GAP, TABLE_GRID_ROW_GAP);
+        // Typo parity: section labels Body, values Mono, badge Small —
+        // koi naya size nahi.
+        assert_eq!(table_section_label_text_role(), TypoRole::Body);
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_cell_text_role(), TypoRole::Mono);
     }
 }

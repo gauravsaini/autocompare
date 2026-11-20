@@ -886,6 +886,9 @@ pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -
     let avail = ui.available_width();
     ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), HEX_FIND_BAR_H));
+        // Dense action-row rhythm: hunk-nav row precedent (`GEO_TIGHT_GAP`
+        // 4px) — needle/buttons/badge compact, ek hi gap source.
+        ui.spacing_mut().item_spacing.x = crate::theme::GEO_TIGHT_GAP;
         ui.label(hex_find_label_text_role().rich("Find:").strong());
         ui.add(
             egui::TextEdit::singleline(needle)
@@ -1100,10 +1103,14 @@ pub fn hex_gutter_geometry(
     hex_gutter_geometry_fast(total_rows, height, hunks)
 }
 
-/// Hex gutter bar width: text precedent ka seedha reuse (12.0/6.0).
+/// Hex gutter bar width: hamesha wide (12.0). Text pane line numbers
+/// chhupa sakta hai (narrow 6.0), par hex grid ka offset ruler hamesha
+/// paint hota hai — marker strip ruler se patli ho to markers weak/click
+/// mushkil hote hain, isliye flag se narrow nahi hota. Single source
+/// `gutter_bar_width(true)` taaki text wide-bar se drift na ho.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-pub fn hex_gutter_bar_width(show_line_numbers: bool) -> f32 {
-    crate::gutter::gutter_bar_width(show_line_numbers)
+pub fn hex_gutter_bar_width(_show_line_numbers: bool) -> f32 {
+    crate::gutter::gutter_bar_width(true)
 }
 
 /// Font size se scaled gutter width: text precedent ka seedha reuse.
@@ -1813,6 +1820,8 @@ pub fn paint_hex_goto_bar(ui: &mut egui::Ui, goto_text: &mut String, badge: &str
     let avail = ui.available_width();
     ui.horizontal_wrapped(|ui| {
         ui.set_min_size(egui::vec2(avail.max(0.0), HEX_GOTO_BAR_H));
+        // Dense action-row rhythm: find-bar jaisa ek hi tight gap source.
+        ui.spacing_mut().item_spacing.x = crate::theme::GEO_TIGHT_GAP;
         ui.label(hex_goto_label_text_role().rich("Goto:").strong());
         ui.add(
             egui::TextEdit::singleline(goto_text)
@@ -2791,9 +2800,9 @@ mod tests {
         };
         use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE};
         assert_eq!(hex_gutter_bar_width(true), gutter_bar_width(true));
-        assert_eq!(hex_gutter_bar_width(false), gutter_bar_width(false));
+        assert_eq!(hex_gutter_bar_width(false), gutter_bar_width(true));
         assert_eq!(hex_gutter_bar_width(true), 12.0);
-        assert_eq!(hex_gutter_bar_width(false), 6.0);
+        assert_eq!(hex_gutter_bar_width(false), 12.0);
         assert_eq!(
             hex_gutter_bar_width_for_font(TYPO_MONO_SIZE, true),
             gutter_bar_width_for_font(TYPO_MONO_SIZE, true)
@@ -3424,13 +3433,14 @@ mod tests {
         assert_eq!(hex_layout_mode(f32::NAN), HexLayoutMode::Stacked);
         assert_eq!(hex_layout_mode(f32::INFINITY), HexLayoutMode::Stacked);
         // Chrome reserve reuses gutter + minimap + SPACE_SM gaps, no drift.
+        // Hex bar hamesha wide (ruler hamesha visible): false par bhi 12.
         assert_eq!(
             hex_chrome_reserve_w(true),
             12.0 + 24.0 + 2.0 * crate::theme::SPACE_SM
         );
         assert_eq!(
             hex_chrome_reserve_w(false),
-            6.0 + 24.0 + 2.0 * crate::theme::SPACE_SM
+            12.0 + 24.0 + 2.0 * crate::theme::SPACE_SM
         );
         // 960 canvas leaves a positive grid; narrow floors at 0, no clip.
         assert!(hex_grid_avail_w(960.0, true) > 0.0);
@@ -3788,5 +3798,45 @@ mod tests {
         // Goto bar min width: 120 field + 4 pad + 2x8 gaps = 140.
         assert_eq!(hex_goto_bar_min_w(), 140.0);
         assert_eq!(HEX_GOTO_FIELD_W, HEX_FIND_NEEDLE_W);
+    }
+
+    #[test]
+    fn hexdense8_narrow_stacked_gutter_markers_stay_visible() {
+        // Mirrors checks/gui-exq-hexdense8/round-1/comparison/
+        // hexdense8-narrow-gutter.json: 600px narrow window, 64 bytes,
+        // diffs at 20 (row 1) and 50 (row 3), line numbers off.
+        // Geometry first: panes stack, wide gutter bar se chrome reserve
+        // 52px, markers + jump targets wahi rehte hain. Typography second:
+        // roles wahi Mono/Body (koi naya size nahi).
+        assert_eq!(hex_layout_mode(600.0), HexLayoutMode::Stacked);
+        // Ruler hamesha visible: flag off par bhi wide bar (12px).
+        assert_eq!(hex_gutter_bar_width(false), 12.0);
+        assert_eq!(hex_chrome_reserve_w(false), 52.0);
+        assert_eq!(hex_grid_avail_w(600.0, false), 548.0);
+        // Dense panes fit: outers (359 + 128) + 8 gutter = 495 <= 548.
+        assert!(hex_panes_fit(hex_grid_avail_w(600.0, false), 7.0));
+        let left = vec![0u8; 64];
+        let mut right = vec![0u8; 64];
+        if let Some(slot) = right.get_mut(20) {
+            *slot = 9;
+        }
+        if let Some(slot) = right.get_mut(50) {
+            *slot = 7;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(view.hunks.len() >= 2);
+        let total = hex_gutter_total_rows(64);
+        assert_eq!(total, 4);
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, total), vec![1, 3]);
+        // Gutter click row 1 (y=100, 75px rows) par covering hunk 0.
+        assert_eq!(
+            hex_gutter_jump_target(&view.hunks, total, 300.0, 100.0),
+            Some(0)
+        );
+        // Typo parity: cell/pane/ruler Mono, labels Body — koi naya token nahi.
+        assert_eq!(hex_cell_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_sync_pane_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_pane_label_text_role(), crate::theme::TypoRole::Body);
     }
 }
