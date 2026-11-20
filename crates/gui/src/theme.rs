@@ -798,32 +798,56 @@ pub const LIGHT_PALETTE: Palette = Palette {
 
 /// Paint-side palette selector (mirrors `ui.visuals().dark_mode`).
 pub const fn palette(dark: bool) -> Palette {
-    if dark { DARK_PALETTE } else { LIGHT_PALETTE }
+    if dark {
+        DARK_PALETTE
+    } else {
+        LIGHT_PALETTE
+    }
 }
 
 /// Dim paint token for the active mode.
 pub fn dim_for(dark: bool) -> Color32 {
-    if dark { DARK_DIM } else { LIGHT_DIM }
+    if dark {
+        DARK_DIM
+    } else {
+        LIGHT_DIM
+    }
 }
 
 /// Red marker paint token for the active mode.
 pub fn red_for(dark: bool) -> Color32 {
-    if dark { DARK_RED } else { LIGHT_RED }
+    if dark {
+        DARK_RED
+    } else {
+        LIGHT_RED
+    }
 }
 
 /// Green marker paint token for the active mode.
 pub fn green_for(dark: bool) -> Color32 {
-    if dark { DARK_GREEN } else { LIGHT_GREEN }
+    if dark {
+        DARK_GREEN
+    } else {
+        LIGHT_GREEN
+    }
 }
 
 /// Newer-side blue paint token for the active mode.
 pub fn blue_for(dark: bool) -> Color32 {
-    if dark { DARK_BLUE } else { LIGHT_BLUE }
+    if dark {
+        DARK_BLUE
+    } else {
+        LIGHT_BLUE
+    }
 }
 
 /// Gutter track paint token for the active mode.
 pub fn track_for(dark: bool) -> Color32 {
-    if dark { DARK_TRACK } else { LIGHT_TRACK }
+    if dark {
+        DARK_TRACK
+    } else {
+        LIGHT_TRACK
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1282,6 +1306,35 @@ pub fn keymap_has_core_mac_bindings(preset: KeymapPreset) -> bool {
     let has_reset =
         keymap_resolve(preset, egui::Key::Num0, &cmd_modifiers) == Some(KeyAction::ResetZoom);
     has_find && has_info && has_reset
+}
+
+// ----------------------------------------------------------------------------
+// HOME4 exquisite type steps (second): family/weight/line-height/tracking.
+// Sab TypoRole reuse, koi naya size nahi, colors untouched. Paint adoption
+// baad ki wave me; ye headless intent hai.
+// ----------------------------------------------------------------------------
+
+/// HOME4 card type steps ok: Title 14 > Button 13 > Desc 11, weights
+/// 500 > 400, title tracking 0.02 baaki 0, sab chrome proportional,
+/// line-height px order title > button > desc. Pure; headless-tested.
+pub fn typo_home4_steps_ok() -> bool {
+    let title = TypoRole::HomeTitle;
+    let button = TypoRole::HomeButton;
+    let desc = TypoRole::HomeDesc;
+    title.size() > button.size()
+        && button.size() > desc.size()
+        && title.weight_value() > desc.weight_value()
+        && title.letter_spacing_em() > 0.0
+        && button.letter_spacing_em() == 0.0
+        && desc.letter_spacing_em() == 0.0
+        && title.is_chrome()
+        && button.is_chrome()
+        && desc.is_chrome()
+        && title.family() == "proportional"
+        && button.family() == "proportional"
+        && desc.family() == "proportional"
+        && title.line_height_px() > button.line_height_px()
+        && button.line_height_px() > desc.line_height_px()
 }
 
 #[cfg(test)]
@@ -2222,5 +2275,23 @@ mod tests {
         assert_eq!(TypoRole::HomeTitle.letter_spacing_em(), 0.02);
         assert_eq!(TypoRole::HomeButton.letter_spacing_em(), 0.0);
         assert_eq!(TypoRole::HomeDesc.letter_spacing_em(), 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn typo_home4_steps_carry_hierarchy_without_new_sizes() {
+        // HOME4: family/weight/line-height/tracking steps, TypoRole reuse only.
+        assert!(typo_home4_steps_ok());
+        assert_eq!(TypoRole::HomeTitle.size(), TYPO_HOME_TITLE_SIZE);
+        assert_eq!(TypoRole::HomeButton.size(), TYPO_BODY_SIZE);
+        assert_eq!(TypoRole::HomeDesc.size(), TYPO_SMALL_SIZE);
+        assert_eq!(TypoRole::HomeTitle.weight_value(), TYPO_WEIGHT_MEDIUM);
+        assert_eq!(TypoRole::HomeDesc.weight_value(), TYPO_WEIGHT_REGULAR);
+        assert!(TypoRole::HomeTitle.line_height_px() > TypoRole::HomeButton.line_height_px());
+        assert!(TypoRole::HomeButton.line_height_px() > TypoRole::HomeDesc.line_height_px());
+        assert_eq!(TypoRole::HomeTitle.family(), "proportional");
+        assert_eq!(TypoRole::HomeButton.family(), "proportional");
+        assert_eq!(TypoRole::HomeDesc.family(), "proportional");
+        assert!(typo_exq_home_scale_ok());
     }
 }

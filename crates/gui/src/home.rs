@@ -75,7 +75,8 @@ pub fn home_model() -> HomeModel {
             },
             HomeItem {
                 title: "Text Merge",
-                description: "Three-way text reconciliation with conflict markers and Take resolution",
+                description:
+                    "Three-way text reconciliation with conflict markers and Take resolution",
                 tab: Tab::Merge,
             },
             HomeItem {
@@ -1844,6 +1845,107 @@ pub fn session_tree_needs_scroll(visible_count: usize, avail_h: f32) -> bool {
     session_tree_content_height(visible_count) > avail_h
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME4 exquisite (first): card gaps + grid height + tab-strip scroll
+// + content margins + alignment. Geometry first; typography second theme me.
+// Paint adoption paint-owner wave ka; ye headless contract + proof hai.
+// Colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Card column gap px HOME4: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24).
+/// Paint-lock [`HOME_GRID_GAP`] (8) untouched; ye generous step hai.
+pub const HOME_GRID_COL_GAP_HOME4: f32 = crate::theme::GEO_CARD_GAP;
+/// Card row gap px HOME4: square rhythm — col gap barabar, grid aligned.
+pub const HOME_GRID_ROW_GAP_HOME4: f32 = crate::theme::GEO_CARD_GAP;
+
+/// Card gaps square + step ok: 24 == 24, section gap (8) ka 3x, EXQ parity.
+/// Pure; headless-tested.
+pub fn home_grid_gap_home4_ok() -> bool {
+    HOME_GRID_COL_GAP_HOME4 == HOME_GRID_ROW_GAP_HOME4
+        && HOME_GRID_COL_GAP_HOME4 == crate::theme::GEO_CARD_GAP
+        && HOME_GRID_COL_GAP_HOME4 == HOME_GRID_GAP_EXQ
+        && (HOME_GRID_COL_GAP_HOME4 - HOME_GRID_GAP * 3.0).abs() < 0.001
+}
+
+/// Grid content height px HOME4: EXQ columns (tang par wrap) x card min +
+/// row gaps. Khali par 0. Pure; headless-tested.
+pub fn home_grid_content_height_home4(item_count: usize, total_w: f32) -> f32 {
+    let rows = home_grid_rows_for_width_exq(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME_GRID_ROW_GAP_HOME4
+}
+
+/// Grid ko scroll chahiye HOME4: content viewport se bahar. Non-finite par false.
+/// Pure; headless-tested.
+pub fn home_grid_needs_scroll_home4(item_count: usize, total_w: f32, viewport_h: f32) -> bool {
+    if !viewport_h.is_finite() {
+        return false;
+    }
+    home_grid_content_height_home4(item_count, total_w) > viewport_h
+}
+
+/// Content side margin px HOME4: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12).
+pub const HOME_CONTENT_MARGIN_X_HOME4: f32 = crate::theme::GEO_OUTER_MARGIN;
+
+/// Content width px HOME4: total minus do taraf margin, tang par 0.
+/// Non-finite passthrough taaki paint NaN na khaye. Pure; headless-tested.
+pub fn home_content_width_home4(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME_CONTENT_MARGIN_X_HOME4 * 2.0).max(0.0)
+}
+
+/// Grid origin x px HOME4: content me grid center (alignment), tang par 0.
+/// Non-finite par 0 (koi phantom offset nahi). Pure; headless-tested.
+pub fn home_grid_origin_x_home4(content_w: f32, grid_w: f32) -> f32 {
+    if !content_w.is_finite() || !grid_w.is_finite() {
+        return 0.0;
+    }
+    ((content_w - grid_w) * 0.5).max(0.0)
+}
+
+/// Card x px HOME4: `col` ka left edge (card + col gap rhythm). Pure; headless-tested.
+pub fn home_card_x_for_col_home4(col: usize, card_w: f32) -> f32 {
+    col as f32 * (card_w + HOME_GRID_COL_GAP_HOME4)
+}
+
+/// Selected tab ka left offset px HOME4: usse pehle tabs + gaps. OOB par kul width.
+/// Pure; headless-tested.
+pub fn home_tab_bar_selected_left(titles: &[&str], selected: usize) -> f32 {
+    if selected >= titles.len() {
+        return home_tab_bar_width(titles);
+    }
+    let mut left = 0.0f32;
+    for (idx, title) in titles.iter().enumerate() {
+        if idx == selected {
+            break;
+        }
+        left += home_tab_width(title) + HOME_TAB_GAP;
+    }
+    left
+}
+
+/// Selected tab visible rakhne wala scroll offset HOME4: left ko viewport me clamp.
+/// Non-finite viewport par 0. Pure; headless-tested.
+pub fn home_tab_bar_selected_scroll_offset(
+    titles: &[&str],
+    selected: usize,
+    viewport_w: f32,
+) -> f32 {
+    if !viewport_w.is_finite() {
+        return 0.0;
+    }
+    let content_w = home_tab_bar_width(titles);
+    home_tab_bar_scroll_clamp(
+        home_tab_bar_selected_left(titles, selected),
+        content_w,
+        viewport_w,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1889,7 +1991,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn home_card_roles_carry_pane_hierarchy() {
-        use crate::theme::{TYPO_LINE_HEIGHT_SOURCE, TypoRole};
+        use crate::theme::{TypoRole, TYPO_LINE_HEIGHT_SOURCE};
         assert_eq!(home_card_title_role(), TypoRole::HomeTitle);
         assert_eq!(home_card_desc_role(), TypoRole::HomeDesc);
         assert_eq!(home_card_button_role(), TypoRole::HomeButton);
@@ -1969,8 +2071,8 @@ mod tests {
     #[test]
     fn home_card_typo_second_layer_reuses_roles() {
         use crate::theme::{
-            TYPO_LINE_HEIGHT_BODY, TYPO_LINE_HEIGHT_CHROME, TYPO_TRACKING_HEADING_EM,
-            TYPO_WEIGHT_MEDIUM, TYPO_WEIGHT_REGULAR, TypoRole,
+            TypoRole, TYPO_LINE_HEIGHT_BODY, TYPO_LINE_HEIGHT_CHROME, TYPO_TRACKING_HEADING_EM,
+            TYPO_WEIGHT_MEDIUM, TYPO_WEIGHT_REGULAR,
         };
         assert_eq!(
             super::home_card_title_line_height_px(),
@@ -1994,7 +2096,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn home_card_typo_matches_paint_contract() {
-        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        use crate::theme::{TypoRole, TYPO_BODY_SIZE, TYPO_SMALL_SIZE};
         // Title strong 14 = the single `.size(14.0)` in paint_home.
         assert_eq!(home_card_title_size(), 14.0);
         assert_eq!(HOME_CARD_TITLE_SIZE, 14.0);
@@ -2248,7 +2350,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn homegeo_card_hit_target_beats_cramped_button() {
-        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP, TypoRole};
+        use crate::theme::{TypoRole, CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP};
         // G-C1: card/pad/gap/hit-row consts theme tokens se single-source
         // (values wahi: pad/grid/section 8, inner/path-gap 4, hit-row 28).
         assert_eq!(super::HOME_CARD_PAD, GEO_SECTION_GAP);
@@ -2558,7 +2660,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn session_tree_geometry_and_typography_contract() {
-        use crate::theme::{GEO_TREE_INDENT_STEP, TypoRole};
+        use crate::theme::{TypoRole, GEO_TREE_INDENT_STEP};
         assert_eq!(super::SESSION_TREE_WIDTH, 240.0);
         assert_eq!(super::session_tree_width(), 240.0);
         assert_eq!(super::SESSION_TREE_ROW_H, 24.0);
@@ -2849,5 +2951,84 @@ mod tests {
         // Typography second: visible steps + non-zero tracker, koi naya size nahi.
         assert!(super::home_card_type_scale_exq_ok());
         assert!(crate::theme::typo_exq_home_scale_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home4_card_gaps_grid_height_tabscroll_margins_align_narrow_edge() {
+        // Edge fixture: `checks/gui-exq-home4/comparison/home4-narrow-wrap.json`.
+        // Geometry first: square 24 gaps, centered grid, selected-tab scroll.
+        use crate::theme::{GEO_CARD_GAP, GEO_OUTER_MARGIN};
+        assert_eq!(super::HOME_GRID_COL_GAP_HOME4, 24.0);
+        assert_eq!(super::HOME_GRID_ROW_GAP_HOME4, 24.0);
+        assert_eq!(super::HOME_GRID_COL_GAP_HOME4, GEO_CARD_GAP);
+        assert!(super::home_grid_gap_home4_ok());
+        assert_eq!(super::HOME_CONTENT_MARGIN_X_HOME4, 12.0);
+        assert_eq!(super::HOME_CONTENT_MARGIN_X_HOME4, GEO_OUTER_MARGIN);
+        // Content widths: 960 -> 936, 600 -> 576, tang 20 -> 0, NaN passthrough.
+        assert!((super::home_content_width_home4(960.0) - 936.0).abs() < 0.001);
+        assert!((super::home_content_width_home4(600.0) - 576.0).abs() < 0.001);
+        assert_eq!(super::home_content_width_home4(20.0), 0.0);
+        assert!(super::home_content_width_home4(f32::NAN).is_nan());
+        // Narrow wrap (<720): 960 -> 3 cols, 600 -> 2 cols x 5 rows, 500 -> 1 col x 9 rows.
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 960.0), 3);
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 600.0), 5);
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 500.0), 9);
+        let wide = super::home_grid_content_height_home4(9, 960.0);
+        assert!((wide - 346.8).abs() < 0.01);
+        let narrow = super::home_grid_content_height_home4(9, 600.0);
+        assert!((narrow - 594.0).abs() < 0.01);
+        assert!(narrow > wide);
+        assert_eq!(super::home_grid_content_height_home4(0, 960.0), 0.0);
+        // Scroll: bhara grid viewport se bahar, khali/kacha viewport par jhooth nahi.
+        assert!(!super::home_grid_needs_scroll_home4(9, 960.0, 600.0));
+        assert!(super::home_grid_needs_scroll_home4(9, 600.0, 300.0));
+        assert!(!super::home_grid_needs_scroll_home4(9, 600.0, f32::NAN));
+        // Alignment: 936 content par grid 936 -> origin 0; 576 par grid 504 -> 36 center.
+        assert_eq!(super::home_grid_origin_x_home4(936.0, 936.0), 0.0);
+        assert!((super::home_grid_origin_x_home4(576.0, 504.0) - 36.0).abs() < 0.001);
+        assert_eq!(super::home_grid_origin_x_home4(100.0, 504.0), 0.0);
+        assert_eq!(super::home_grid_origin_x_home4(f32::NAN, 504.0), 0.0);
+        // Card x rhythm: 240 card + 24 gap = 264 steps.
+        assert_eq!(super::home_card_x_for_col_home4(0, 240.0), 0.0);
+        assert!((super::home_card_x_for_col_home4(1, 240.0) - 264.0).abs() < 0.001);
+        assert!((super::home_card_x_for_col_home4(2, 240.0) - 528.0).abs() < 0.001);
+        // Tab-strip scroll: 10 tabs kul 574; 960 avail 936 fit, 300 avail 276 scroll.
+        let tabs = [
+            "Home",
+            "Text",
+            "Folder",
+            "Hex",
+            "Merge",
+            "Table",
+            "Sync",
+            "Picture",
+            "FolderMerge",
+            "Audio",
+        ];
+        let content = super::home_tab_bar_width(&tabs);
+        assert!((content - 574.0).abs() < 0.001);
+        assert!(!super::home_tab_bar_needs_scroll(&tabs, 960.0));
+        assert!(super::home_tab_bar_needs_scroll(&tabs, 300.0));
+        // Selected last (Audio): left 523, viewport 276 -> offset max 298 me clamp.
+        assert!((super::home_tab_bar_selected_left(&tabs, 9) - 523.0).abs() < 0.001);
+        assert_eq!(super::home_tab_bar_selected_left(&tabs, 99), content);
+        let viewport = super::home_tab_bar_avail_width(300.0);
+        assert!((viewport - 276.0).abs() < 0.001);
+        assert_eq!(
+            super::home_tab_bar_selected_scroll_offset(&tabs, 9, viewport),
+            298.0
+        );
+        assert_eq!(
+            super::home_tab_bar_selected_scroll_offset(&tabs, 0, viewport),
+            0.0
+        );
+        assert_eq!(
+            super::home_tab_bar_selected_scroll_offset(&tabs, 9, f32::NAN),
+            0.0
+        );
+        // Typography second: theme steps reuse, koi naya size nahi.
+        assert!(crate::theme::typo_home4_steps_ok());
+        assert!(super::home_card_type_scale_exq_ok());
     }
 }
