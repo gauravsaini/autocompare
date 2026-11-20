@@ -42,7 +42,7 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 cmp 21/21 green now on hostile-input tests; gui documenting drill-down indent geometry; commits pending",
+    "ORCH-HEALTH": "2026-11-20 gui rendering w1 screenshots (/tmp/w1-*.png fresh), cmp round-c1 evidence growing; commits pending, backoff polling",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
