@@ -5780,3 +5780,526 @@ mod exq_tree5_tests {
         );
     }
 }
+
+// ----------------------------------------------------------------------------
+// FOLDERTABLE10: Folder table column Grid + depth indent + TypoRole row height (headless).
+// BC parity gap: folder drill-down rows were previously painted as full-width
+// harsh bands, without separate Size/Date columns, with minimal depth indent,
+// and without dimmed orphan rows.
+// BC folder compare pattern:
+// 1. Column Grid with 3 columns: Name, Size, Modified.
+// 2. Column gap: SECTION_GAP (8.0px = crate::theme::GEO_SECTION_GAP = SPACE_SM).
+// 3. Row height: derived from TypoRole line-height (TypoRole::Mono.line_height_px() = 15.6px + vertical padding = 17.6px, or density-aware).
+// 4. Name column is indented per depth (folder_table_name_indent_px(depth)),
+//    while Size and Modified columns align at FIXED column origins across all depths.
+// 5. Orphan rows are dimmed on their missing side without editing colors (colors frozen).
+// ----------------------------------------------------------------------------
+
+/// Folder table column in standard 3-column view: Name, Size, Modified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderTableCol {
+    /// Relative filename or directory name (indented by depth, flex width).
+    Name,
+    /// Size in bytes (fixed width, right-aligned, "-" if absent or dir).
+    Size,
+    /// Last modified timestamp (fixed width, left-aligned, "-" if absent).
+    Modified,
+}
+
+/// Standard 3-column table definition: Name, Size, Modified.
+pub const FOLDER_TABLE_COLS: [FolderTableCol; 3] = [
+    FolderTableCol::Name,
+    FolderTableCol::Size,
+    FolderTableCol::Modified,
+];
+
+/// Folder table column Grid gap (px): SECTION_GAP parity (8.0px = crate::theme::GEO_SECTION_GAP = SPACE_SM).
+pub const FOLDERTABLE_COL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+
+/// Folder table cell horizontal padding (px): SPACE_SM parity (8.0px = crate::theme::SPACE_SM).
+pub const FOLDERTABLE_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
+
+/// Folder table row vertical padding (px): symmetric 1.0px top + bottom.
+pub const FOLDERTABLE_ROW_PAD_Y: f32 = 1.0;
+
+/// Column header labels in paint order: "Name", "Size", "Modified".
+pub const FOLDERTABLE_HEADERS: [&str; 3] = ["Name", "Size", "Modified"];
+
+/// Primary TypoRole for folder table content: Mono (12.0pt, tabular, content role).
+pub const FOLDERTABLE_ROW_ROLE: crate::theme::TypoRole = crate::theme::TypoRole::Mono;
+
+/// Column header font weight name: `"strong"`.
+pub const fn folder_table_header_weight_name() -> &'static str {
+    "strong"
+}
+
+/// Column header font weight numeric value: 600 (`TYPO_WEIGHT_SEMIBOLD`).
+pub const fn folder_table_header_weight_value() -> u16 {
+    crate::theme::TYPO_WEIGHT_SEMIBOLD
+}
+
+/// Returns the column header string for a given table column.
+pub const fn folder_table_col_header(col: FolderTableCol) -> &'static str {
+    match col {
+        FolderTableCol::Name => "Name",
+        FolderTableCol::Size => "Size",
+        FolderTableCol::Modified => "Modified",
+    }
+}
+
+/// Returns the 3 table column headers in order.
+pub fn folder_table_headers() -> [&'static str; 3] {
+    FOLDERTABLE_HEADERS
+}
+
+/// Verifies that the table column grid uses SECTION_GAP.
+pub const fn folder_table_grid_has_section_gap() -> bool {
+    FOLDERTABLE_COL_GAP == crate::theme::GEO_SECTION_GAP
+}
+
+/// Verifies that table cell padding strictly equals SPACE_SM (8.0px).
+pub const fn folder_table_cell_has_space_padding() -> bool {
+    FOLDERTABLE_CELL_PAD_X == crate::theme::SPACE_SM
+}
+
+/// Returns horizontal alignment for each folder table column:
+/// Name: Left, Size: Right (numeric digits align), Modified: Left.
+pub const fn folder_table_col_align(col: FolderTableCol) -> FolderCellAlign {
+    match col {
+        FolderTableCol::Name => FolderCellAlign::Left,
+        FolderTableCol::Size => FolderCellAlign::Right,
+        FolderTableCol::Modified => FolderCellAlign::Left,
+    }
+}
+
+/// Content line height in px derived directly from TypoRole: 12.0 * 1.30 = 15.6px.
+pub fn folder_table_line_height_px() -> f32 {
+    FOLDERTABLE_ROW_ROLE.line_height_px()
+}
+
+/// Computes row height from line height with symmetric vertical padding (+ 2.0px).
+/// Pure, non-finite guard.
+pub fn folder_table_row_height_for_line(line_h: f32) -> f32 {
+    if !line_h.is_finite() || line_h <= 0.0 {
+        return FOLDER_ROW_HEIGHT;
+    }
+    line_h + 2.0 * FOLDERTABLE_ROW_PAD_Y
+}
+
+/// Base folder table row height (px) derived directly from TypoRole line-height:
+/// 15.6 + 2.0 = 17.6px. Reuses [`folder_table_row_height_for_line`].
+pub fn folder_table_row_height() -> f32 {
+    folder_table_row_height_for_line(folder_table_line_height_px())
+}
+
+/// Density-aware folder table row height (px).
+pub fn folder_table_density_row_height(density: crate::viewmodel::FolderDensity) -> f32 {
+    folder_row_height_for_density(density)
+}
+
+/// Minimum width (px) for a table column.
+pub fn folder_table_col_min_px(col: FolderTableCol) -> f32 {
+    let chars: f32 = match col {
+        FolderTableCol::Name => FOLDER_PATH_MIN_CHARS as f32,
+        FolderTableCol::Size => FOLDER_SIZE_CHARS as f32,
+        FolderTableCol::Modified => FOLDER_TIME_CHARS as f32,
+    };
+    chars * FOLDER_MONO_ADVANCE + FOLDERTABLE_CELL_PAD_X * 2.0
+}
+
+/// Total width of the fixed trailing columns (Size + gap + Modified):
+/// 86.0 + 8.0 + 128.0 = 222.0px.
+pub fn folder_table_fixed_cols_w() -> f32 {
+    folder_table_col_min_px(FolderTableCol::Size)
+        + FOLDERTABLE_COL_GAP
+        + folder_table_col_min_px(FolderTableCol::Modified)
+}
+
+/// Available width for the Name column given pane available width `avail_w`.
+/// Budget = avail_w - fixed_cols_w - FOLDERTABLE_COL_GAP.
+/// Clamped to at least min_px(Name) = 184.0px.
+pub fn folder_table_name_avail_w(avail_w: f32) -> f32 {
+    let floor = folder_table_col_min_px(FolderTableCol::Name);
+    if !avail_w.is_finite() {
+        return floor;
+    }
+    let rem = avail_w - folder_table_fixed_cols_w() - FOLDERTABLE_COL_GAP;
+    if rem < floor { floor } else { rem }
+}
+
+/// Exact column x-origins in a 3-column table Grid `(name_x, size_x, mod_x)`.
+/// Name starts at origin (0.0).
+/// Size starts at `name_w + FOLDERTABLE_COL_GAP`.
+/// Modified starts at `size_x + size_w + FOLDERTABLE_COL_GAP`.
+/// Note: Size and Modified columns align at FIXED x across all depths!
+pub fn folder_table_column_xs(avail_w: f32) -> (f32, f32, f32) {
+    let name_w = folder_table_name_avail_w(avail_w);
+    let size_w = folder_table_col_min_px(FolderTableCol::Size);
+    let name_x = 0.0;
+    let size_x = name_w + FOLDERTABLE_COL_GAP;
+    let mod_x = size_x + size_w + FOLDERTABLE_COL_GAP;
+    (name_x, size_x, mod_x)
+}
+
+/// Name column content horizontal offset (px) for a given tree depth:
+/// depth * tree_indent_step() + expander cell + status mark + gap.
+/// Matches [`folder_row_path_x_separated(depth)`].
+pub fn folder_table_name_indent_px(depth: usize) -> f32 {
+    folder_row_path_x_separated(depth)
+}
+
+/// Whether the Name column content fits without truncation at a given depth and character count.
+pub fn folder_table_name_needs_truncate(avail_w: f32, depth: usize, name_chars: usize) -> bool {
+    if name_chars == 0 || !avail_w.is_finite() {
+        return false;
+    }
+    let name_col_w = folder_table_name_avail_w(avail_w);
+    let indent = folder_table_name_indent_px(depth);
+    let text_w = name_chars as f32 * FOLDER_MONO_ADVANCE;
+    indent + text_w > name_col_w
+}
+
+/// Side indicator for folder compare: Left pane or Right pane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderSide {
+    Left,
+    Right,
+}
+
+/// Returns whether a folder row is an orphan (exists on only one side).
+/// Glyph 'L' means exists on Left only; glyph 'R' means exists on Right only.
+pub fn folder_row_is_orphan(row: &FolderRow) -> bool {
+    row.glyph == 'L' || row.glyph == 'R'
+}
+
+/// Returns whether a row is missing on the specified side.
+/// If Left: glyph 'R' means missing on Left.
+/// If Right: glyph 'L' means missing on Right.
+pub fn folder_row_is_missing_on_side(row: &FolderRow, side: FolderSide) -> bool {
+    match side {
+        FolderSide::Left => row.glyph == 'R',
+        FolderSide::Right => row.glyph == 'L',
+    }
+}
+
+/// Returns whether a cell or row is dimmed for an orphan entry.
+/// Missing sides are dimmed (rendered as weak/dimmed placeholder dashes "-").
+pub fn folder_table_cell_is_dimmed(row: &FolderRow, side: FolderSide) -> bool {
+    folder_row_is_missing_on_side(row, side)
+}
+
+/// Returns the formatted cell text for a row on a given side and table column.
+/// Name returns filename (with trailing "/" for dirs).
+/// Size returns byte count or "-" if dir or missing.
+/// Modified returns timestamp or "-" if missing.
+pub fn folder_table_cell_text(row: &FolderRow, side: FolderSide, col: FolderTableCol) -> String {
+    match col {
+        FolderTableCol::Name => {
+            let mark = if row.is_dir { "/" } else { "" };
+            format!("{}{}", row.rel_path, mark)
+        }
+        FolderTableCol::Size => match side {
+            FolderSide::Left => row.left_size.clone().unwrap_or_else(|| "-".to_string()),
+            FolderSide::Right => row.right_size.clone().unwrap_or_else(|| "-".to_string()),
+        },
+        FolderTableCol::Modified => match side {
+            FolderSide::Left => row.left_time.clone().unwrap_or_else(|| "-".to_string()),
+            FolderSide::Right => row.right_time.clone().unwrap_or_else(|| "-".to_string()),
+        },
+    }
+}
+
+/// Returns the 3 cell strings `[Name, Size, Modified]` for a given row and side.
+pub fn folder_table_row_cells(row: &FolderRow, side: FolderSide) -> [String; 3] {
+    [
+        folder_table_cell_text(row, side, FolderTableCol::Name),
+        folder_table_cell_text(row, side, FolderTableCol::Size),
+        folder_table_cell_text(row, side, FolderTableCol::Modified),
+    ]
+}
+
+/// TypoRole for a folder table cell:
+/// Missing sides and dim orphans use TypoRole::Small (rank 4, is_weak() == true).
+/// Present content uses TypoRole::Mono (rank 3, tabular content).
+pub fn folder_table_cell_typo_role(row: &FolderRow, side: FolderSide) -> crate::theme::TypoRole {
+    if folder_row_is_missing_on_side(row, side) {
+        crate::theme::TypoRole::Small
+    } else {
+        crate::theme::TypoRole::Mono
+    }
+}
+
+#[cfg(test)]
+mod exq_foldertable10_tests {
+    use super::*;
+
+    fn make_test_row(
+        path: &str,
+        is_dir: bool,
+        glyph: char,
+        lsize: Option<&str>,
+        rsize: Option<&str>,
+        ltime: Option<&str>,
+        rtime: Option<&str>,
+    ) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir,
+            glyph,
+            left_size: lsize.map(|s| s.to_string()),
+            right_size: rsize.map(|s| s.to_string()),
+            left_time: ltime.map(|s| s.to_string()),
+            right_time: rtime.map(|s| s.to_string()),
+            changed: glyph != '=',
+        }
+    }
+
+    #[test]
+    fn folder_table_grid_has_section_gap_and_headers() {
+        assert!(folder_table_grid_has_section_gap());
+        assert_eq!(FOLDERTABLE_COL_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(FOLDERTABLE_COL_GAP, 8.0);
+        assert!(folder_table_cell_has_space_padding());
+        assert_eq!(FOLDERTABLE_CELL_PAD_X, 8.0);
+        assert_eq!(folder_table_headers(), ["Name", "Size", "Modified"]);
+        assert_eq!(folder_table_col_header(FolderTableCol::Name), "Name");
+        assert_eq!(folder_table_col_header(FolderTableCol::Size), "Size");
+        assert_eq!(
+            folder_table_col_header(FolderTableCol::Modified),
+            "Modified"
+        );
+        assert_eq!(
+            folder_table_col_align(FolderTableCol::Name),
+            FolderCellAlign::Left
+        );
+        assert_eq!(
+            folder_table_col_align(FolderTableCol::Size),
+            FolderCellAlign::Right
+        );
+        assert_eq!(
+            folder_table_col_align(FolderTableCol::Modified),
+            FolderCellAlign::Left
+        );
+        assert_eq!(folder_table_header_weight_name(), "strong");
+        assert_eq!(folder_table_header_weight_value(), 600);
+    }
+
+    #[test]
+    fn folder_table_row_height_derived_from_typo_mono() {
+        assert_eq!(
+            folder_table_line_height_px(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((folder_table_line_height_px() - 15.6).abs() < 0.01);
+        assert!((folder_table_row_height() - 17.6).abs() < 0.001);
+        assert!((folder_table_row_height_for_line(15.6) - 17.6).abs() < 0.001);
+        assert_eq!(
+            folder_table_row_height_for_line(f32::NAN),
+            FOLDER_ROW_HEIGHT
+        );
+        assert_eq!(folder_table_row_height_for_line(0.0), FOLDER_ROW_HEIGHT);
+        assert_eq!(
+            folder_table_density_row_height(crate::viewmodel::FolderDensity::Compact),
+            crate::viewmodel::FOLDER_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            folder_table_density_row_height(crate::viewmodel::FolderDensity::Comfortable),
+            FOLDER_ROW_HEIGHT
+        );
+        assert_eq!(
+            folder_table_density_row_height(crate::viewmodel::FolderDensity::Spacious),
+            crate::viewmodel::FOLDER_ROW_HEIGHT_SPACIOUS
+        );
+    }
+
+    #[test]
+    fn folder_table_column_xs_and_fixed_trailing_alignment() {
+        assert_eq!(folder_table_col_min_px(FolderTableCol::Size), 86.0);
+        assert_eq!(folder_table_col_min_px(FolderTableCol::Modified), 128.0);
+        assert_eq!(folder_table_col_min_px(FolderTableCol::Name), 184.0);
+        assert_eq!(folder_table_fixed_cols_w(), 222.0);
+
+        let (name_x, size_x, mod_x) = folder_table_column_xs(960.0);
+        assert_eq!(name_x, 0.0);
+        assert_eq!(size_x, 738.0);
+        assert_eq!(mod_x, 832.0);
+        assert_eq!(
+            mod_x + folder_table_col_min_px(FolderTableCol::Modified),
+            960.0
+        );
+
+        // Verify that size_x and mod_x are independent of tree depth:
+        let indent0 = folder_table_name_indent_px(0);
+        let indent1 = folder_table_name_indent_px(1);
+        let indent5 = folder_table_name_indent_px(5);
+        assert_eq!(indent0, 40.0);
+        assert_eq!(indent1, 52.0);
+        assert_eq!(indent5, 100.0);
+        assert!(indent5 > indent0);
+
+        // Truncate checks
+        assert!(!folder_table_name_needs_truncate(960.0, 0, 10));
+        assert!(folder_table_name_needs_truncate(960.0, 5, 120));
+        assert!(!folder_table_name_needs_truncate(960.0, 0, 0));
+        assert!(!folder_table_name_needs_truncate(f32::NAN, 0, 50));
+    }
+
+    #[test]
+    fn folder_table_orphan_rows_dimmed_without_color_edits() {
+        let orphan_l = make_test_row(
+            "orphan-l.txt",
+            false,
+            'L',
+            Some("1024"),
+            None,
+            Some("2026-02-15 08:30"),
+            None,
+        );
+        let orphan_r = make_test_row(
+            "orphan-r.txt",
+            false,
+            'R',
+            None,
+            Some("8192"),
+            None,
+            Some("2026-02-20 16:45"),
+        );
+        let normal = make_test_row(
+            "same.txt",
+            false,
+            '=',
+            Some("512"),
+            Some("512"),
+            Some("2026-01-01 12:00"),
+            Some("2026-01-01 12:00"),
+        );
+
+        assert!(folder_row_is_orphan(&orphan_l));
+        assert!(folder_row_is_orphan(&orphan_r));
+        assert!(!folder_row_is_orphan(&normal));
+
+        // Missing sides
+        assert!(!folder_row_is_missing_on_side(&orphan_l, FolderSide::Left));
+        assert!(folder_row_is_missing_on_side(&orphan_l, FolderSide::Right));
+        assert!(folder_row_is_missing_on_side(&orphan_r, FolderSide::Left));
+        assert!(!folder_row_is_missing_on_side(&orphan_r, FolderSide::Right));
+        assert!(!folder_row_is_missing_on_side(&normal, FolderSide::Left));
+        assert!(!folder_row_is_missing_on_side(&normal, FolderSide::Right));
+
+        // Dimmed checks (missing side is dimmed)
+        assert!(!folder_table_cell_is_dimmed(&orphan_l, FolderSide::Left));
+        assert!(folder_table_cell_is_dimmed(&orphan_l, FolderSide::Right));
+        assert!(folder_table_cell_is_dimmed(&orphan_r, FolderSide::Left));
+        assert!(!folder_table_cell_is_dimmed(&orphan_r, FolderSide::Right));
+
+        // TypoRole: missing side uses Small (which has is_weak() == true), present uses Mono
+        assert_eq!(
+            folder_table_cell_typo_role(&orphan_l, FolderSide::Left),
+            crate::theme::TypoRole::Mono
+        );
+        assert_eq!(
+            folder_table_cell_typo_role(&orphan_l, FolderSide::Right),
+            crate::theme::TypoRole::Small
+        );
+        assert!(folder_table_cell_typo_role(&orphan_l, FolderSide::Right).is_weak());
+        assert!(!folder_table_cell_typo_role(&orphan_l, FolderSide::Left).is_weak());
+
+        // Text cells
+        let r_cells = folder_table_row_cells(&orphan_l, FolderSide::Right);
+        assert_eq!(r_cells, ["orphan-l.txt", "-", "-"]);
+        let l_cells = folder_table_row_cells(&orphan_l, FolderSide::Left);
+        assert_eq!(l_cells, ["orphan-l.txt", "1024", "2026-02-15 08:30"]);
+    }
+
+    #[test]
+    fn exq_foldertable10_edge_deep_nest_and_dimmed_orphans() {
+        let chain = [
+            ("root", true, '='),
+            ("root/sub1", true, '='),
+            ("root/sub1/sub2", true, '='),
+            ("root/sub1/sub2/sub3", true, '='),
+            ("root/sub1/sub2/sub3/sub4", true, '='),
+            ("root/sub1/sub2/sub3/sub4/deep-file.txt", false, '>'),
+        ];
+
+        for (depth, (path, is_dir, glyph)) in chain.iter().enumerate() {
+            let row = make_test_row(
+                path,
+                *is_dir,
+                *glyph,
+                Some("4096"),
+                Some("2048"),
+                Some("2026-03-01 12:00"),
+                Some("2026-03-01 10:00"),
+            );
+            assert_eq!(
+                folder_table_name_indent_px(depth),
+                depth as f32 * tree_indent_step() + 40.0
+            );
+            let cells_left = folder_table_row_cells(&row, FolderSide::Left);
+            let cells_right = folder_table_row_cells(&row, FolderSide::Right);
+            if *is_dir {
+                assert!(cells_left[0].ends_with('/'));
+            }
+            assert_eq!(cells_left[1], "4096");
+            assert_eq!(cells_right[1], "2048");
+        }
+
+        // Deepest depth 5 indent
+        assert_eq!(folder_table_name_indent_px(5), 100.0);
+
+        // Columns layout at 960px:
+        let (name_x, size_x, mod_x) = folder_table_column_xs(960.0);
+        assert_eq!(name_x, 0.0);
+        assert_eq!(size_x, 738.0);
+        assert_eq!(mod_x, 832.0);
+
+        // Orphan rows dimmed on missing sides:
+        let orphan_l = make_test_row(
+            "orphan-left.txt",
+            false,
+            'L',
+            Some("1024"),
+            None,
+            Some("2026-02-15 08:30"),
+            None,
+        );
+        let orphan_r = make_test_row(
+            "orphan-right.txt",
+            false,
+            'R',
+            None,
+            Some("8192"),
+            None,
+            Some("2026-02-20 16:45"),
+        );
+
+        assert_eq!(
+            folder_table_cell_text(&orphan_l, FolderSide::Right, FolderTableCol::Size),
+            "-"
+        );
+        assert_eq!(
+            folder_table_cell_text(&orphan_l, FolderSide::Right, FolderTableCol::Modified),
+            "-"
+        );
+        assert!(folder_table_cell_is_dimmed(&orphan_l, FolderSide::Right));
+        assert_eq!(
+            folder_table_cell_typo_role(&orphan_l, FolderSide::Right),
+            crate::theme::TypoRole::Small
+        );
+
+        assert_eq!(
+            folder_table_cell_text(&orphan_r, FolderSide::Left, FolderTableCol::Size),
+            "-"
+        );
+        assert_eq!(
+            folder_table_cell_text(&orphan_r, FolderSide::Left, FolderTableCol::Modified),
+            "-"
+        );
+        assert!(folder_table_cell_is_dimmed(&orphan_r, FolderSide::Left));
+        assert_eq!(
+            folder_table_cell_typo_role(&orphan_r, FolderSide::Left),
+            crate::theme::TypoRole::Small
+        );
+    }
+}

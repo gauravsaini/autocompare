@@ -1,0 +1,38 @@
+{
+  "note": "exq-foldertable10 edge fixture: deep 5-level nesting with Name/Size/Modified column Grid, SECTION_GAP col gap, TypoRole line-height row height, indent per depth with alignment, orphan rows dimmed.",
+  "geometry": {
+    "col_gap_px": 8.0,
+    "cell_pad_x_px": 8.0,
+    "row_pad_y_px": 1.0,
+    "line_height_px": 15.6,
+    "row_height_px": 17.6,
+    "indent_step_px": 12.0,
+    "fixed_cols_w_px": 222.0,
+    "avail_w_960": {
+      "name_w_px": 722.0,
+      "size_x_px": 730.0,
+      "mod_x_px": 824.0
+    }
+  },
+  "columns": [
+    { "name": "Name", "align": "Left", "min_px": 184.0 },
+    { "name": "Size", "align": "Right", "min_px": 86.0 },
+    { "name": "Modified", "align": "Left", "min_px": 128.0 }
+  ],
+  "rows": [
+    { "depth": 0, "rel_path": "root", "is_dir": true, "glyph": "=", "left_size": null, "right_size": null, "left_time": null, "right_time": null },
+    { "depth": 1, "rel_path": "root/sub1", "is_dir": true, "glyph": "=", "left_size": null, "right_size": null, "left_time": null, "right_time": null },
+    { "depth": 2, "rel_path": "root/sub1/sub2", "is_dir": true, "glyph": "=", "left_size": null, "right_size": null, "left_time": null, "right_time": null },
+    { "depth": 3, "rel_path": "root/sub1/sub2/sub3", "is_dir": true, "glyph": "=", "left_size": null, "right_size": null, "left_time": null, "right_time": null },
+    { "depth": 4, "rel_path": "root/sub1/sub2/sub3/sub4", "is_dir": true, "glyph": "=", "left_size": null, "right_size": null, "left_time": null, "right_time": null },
+    { "depth": 5, "rel_path": "root/sub1/sub2/sub3/sub4/deep-file.txt", "is_dir": false, "glyph": ">", "left_size": "4096", "right_size": "2048", "left_time": "2026-03-01 12:00", "right_time": "2026-03-01 10:00" },
+    { "depth": 0, "rel_path": "orphan-left.txt", "is_dir": false, "glyph": "L", "left_size": "1024", "right_size": null, "left_time": "2026-02-15 08:30", "right_time": null },
+    { "depth": 0, "rel_path": "orphan-right.txt", "is_dir": false, "glyph": "R", "left_size": null, "right_size": "8192", "left_time": null, "right_time": "2026-02-20 16:45" }
+  ],
+  "expected": {
+    "depth_indents_px": [40.0, 52.0, 64.0, 76.0, 88.0, 100.0],
+    "size_and_mod_aligned_across_all_depths": true,
+    "orphan_left": { "left_dimmed": false, "right_dimmed": true, "right_size": "-", "right_time": "-" },
+    "orphan_right": { "left_dimmed": true, "right_dimmed": false, "left_size": "-", "left_time": "-" }
+  }
+}

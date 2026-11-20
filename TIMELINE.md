@@ -171,3 +171,12 @@
 3. **Files changed**: `crates/gui/src/views_hex.rs`, `crates/gui/src/views_table.rs`, `checks/gui-exq-hextable10/**`, `TIMELINE.md`.
 
 
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-foldertable10 columns plus indent
+
+1. **Folder Table Grid & Indent**: Beyond Compare parity for folder tree table: 3-column Grid (Name, Size, Modified) with `SECTION_GAP` (8.0px = `SPACE_SM`) col gap, row height derived from `TypoRole::Mono` line-height (15.6px + 2.0px padding = 17.6px, density-aware), indent per depth (40px depth 0 to 100px depth 5) while Size and Modified columns align at fixed column boundaries across all depths, and orphan rows dimmed (`"-"` dashes with `TypoRole::Small` / `is_weak() == true`) without color modifications. Edge fixture `comparison/folder-deep-nest.json` added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 888 → 893 passed, 0 failed; clippy clean on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-foldertable10/**`, `TIMELINE.md`.
