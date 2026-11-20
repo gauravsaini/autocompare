@@ -921,8 +921,7 @@ mod exq_merge3_tests {
 
     #[test]
     fn merge3_wide_fixture() {
-        let raw =
-            include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
+        let raw = include_str!("../../../checks/gui-exq-merge3/comparison/merge-wide-960.json");
         assert!(raw.contains("\"name\":\"merge-wide-960\""));
         assert!(raw.contains("\"copy_button_sym_pad\":4.0"));
         assert!(raw.contains("\"copy_button_padded_size\":32.0"));
