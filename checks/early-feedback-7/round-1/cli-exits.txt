@@ -1,0 +1,12 @@
+# CLI exits local7 round-1 (2026-11-20, HEAD b534c3d)
+
+[1] text t_left vs t_right (want 1) -> exit 1
+[2] text t_same vs t_same (want 0) -> exit 0
+[3] folder left right (want 1) -> exit 1
+[4] hex h_left h_right (want 1) -> exit 1
+[5] merge base left right (want 1) -> exit 1
+[6] table tab_left tab_right (want 1) -> exit 1
+[7] sync left right (want 1) -> exit 1
+[8] picture pic_left pic_right (want 1) -> exit 1
+[9] folder-merge base left right (want 1) -> exit 1
+[10] audio a_left a_right (want 1) -> exit 1
