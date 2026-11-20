@@ -89,14 +89,15 @@
     "WAVE-MEDIA-TABLE": "dispatched 2026-11-20 agyx sess 37121 OWNS table/image/media/picture/round-media2",
     "WAVE-GUI-EXQ5": "dispatched 2026-11-20 agyx sess 51089 OWNS gui/round-exq5-2 geometry-first typo-second colors-frozen",
     "WAVE-LOCALRUN-LR2": "landed 0715e93 verified+pushed (REPORT PASS 10/10 CLI, 3 PNGs magic ok, edge-empty fixture, TOP10 gaps, OWNS-clean)",
-    "WAVE-SYNC-EXEC": "dispatched 2026-11-20 opencode sess-opencode-sync2 sess 23165 OWNS sync/folder/round-sync2 default-model",
+    "WAVE-SYNC-EXEC": "landed 219555f pending-push (REPORT PASS, 15u+86i green, fmt+clippy TBD push, OWNS-clean)",
     "AGYX-REPORTS-78970": "failed rotator EADDRINUSE race (3 concurrent -p flaky), relaunched opencode rep2",
     "AGYX-MEDIA-37121": "failed rotator race, relaunched opencode med2",
     "AGYX-GUI-51089": "failed rotator race, relaunched opencode gui2",
     "WAVE-REPORTS-VFS2": "dispatched 2026-11-20 opencode sess-opencode-rep2 sess 64356 OWNS reports/vfs/bcomp",
     "WAVE-MEDIA-TABLE2": "dispatched 2026-11-20 opencode sess-opencode-med2 sess 5642 OWNS table/image/media",
     "WAVE-GUI-EXQ5B": "dispatched 2026-11-20 opencode sess-opencode-gui2 sess 75061 OWNS gui exquisite geo+typo",
-    "ORCH-AGYX-LESSON2": "agyx -p concurrent x3 triggers rotator EADDRINUSE + 10s timeout; single-stream only, use opencode for parallel (serve multiplexes)"
+    "ORCH-AGYX-LESSON2": "agyx -p concurrent x3 triggers rotator EADDRINUSE + 10s timeout; single-stream only, use opencode for parallel (serve multiplexes)",
+    "ORCH-NOISE2": "reverted agyx-rep-h/reports-a HTML (12) + sessionpaint PNG (2), live OWNS WIP preserved (bcomp/image/table/gui* + 3 round dirs)"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
