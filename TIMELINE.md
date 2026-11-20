@@ -710,3 +710,15 @@
 1. **Early feedback bundle**: CLI 10 cmds PASS, 3 PNGs default 11098B / dark 11200B / light 11098B magic ok, dist tarball 5.5M + sha refreshed (VERSION 0.5.0 3d33e80), tail-insertion edge fixture, GAPS-TOP10. Release LTO link ok (13Gi free).
 2. **Tests**: REPORT RESULT: PASS; owned scope fmt clean; banned 0; no crates touch.
 3. **Files changed**: checks/ac-loop/round-lr4/**, dist/VERSION + tarball + sha, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-chrome27b live toolbar geometry
+
+1. **Toolbar geometry 12px -> 16px**: TOOLBAR_GLYPH_W/H 16, slot lead (24-16)/2=4 centered, glyph rects rescaled 16x16 origin, band 24+8+24=56 stable, 1200px no h-scroll + narrow700 edge. pxdiff IDENTICAL (screenshot path glyph nahi paint karta, headless proved).
+2. **Tests**: chrome27_toolbar16_band1200 + toolbar22_live_glyph_slots green; exquisite harness RESULT: PASS; views.rs fmt clean; banned 0; colors 38 frozen.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-chrome27/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter28 live overview strip (agyx swarm)
+
+1. **Overview minimap fix**: screenshot.rs unclosed delimiter fix + gutter_padded_y_for_row + gutter_overview_geometry_padded reuse, center gutter + right overview strip live mapping, 720px narrow intact. Agyx swarm single-task trial PASS — mix consistent, opencode default + agyx swarm parallel ok.
+2. **Tests**: exquisite harness RESULT: PASS (11059B magic ok); headless gutter mapping green; fmt clean; banned 0; colors 38 frozen.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-gutter28/**, TIMELINE.md.
