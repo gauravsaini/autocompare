@@ -1476,3 +1476,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 ## 2026-11-20 — Wave BY-SES-PAINT launched (P0-1 Wave 3 session tab strip)
 - Sess sess-paint-by, OWNS views.rs + checks/gui-sessionpaint-by (MODEL+APP dependencies satisfied).
 - BX2 (selective highlight paint wiring) Wave 3 ke baad launch hogi (dono views.rs — serial).
+
+## 2026-11-20 — Wave BY-SES-PAINT landed + pushed (P0-1 Wave 3 session tab strip)
+- Commit `ff6895e` feat(gui): paint session tab strip with label fallback and overflow scroll (OWNS views.rs + checks/gui-sessionpaint-by).
+- Gates: 654 green (648 -> +6), clippy zero, fmt clean, banned zero, colors zero new, 4 PNGs magic+size+distinct ok, STATUS untouched.
+- P0-1 session tabs PLAN complete (MODEL 334dee5 -> APP c950d03 -> PAINT ff6895e). Follow-up: App caller wiring (strip call + action match + T5/T6 bridge) agle wave ka hai.
