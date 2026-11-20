@@ -602,3 +602,9 @@
 1. **Paint Center-Gutter Adoption**: paint_text_body now renders the visible ~20px center gutter gap adopted from gutter geometry helpers, draws yellow changed-row markers via marker helpers, and fills floor below last row. Geometry from existing helpers only, no new widths. Edge fixture `comparison/paint-center-1200.json`.
 2. **Tests** (before → after): autocompare-gui 1035 green (including `paint13_*` gutter adoption tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-paint13/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-shot15 fixture gutter pixels
+
+1. **Fixture Gutter Pixels (first visual proof)**: fixture renderer now draws the ~20px center gutter gap with yellow '=>' markers on changed-row hunk heads in the default text fixture. pxdiff vs baseline: 10012 of 576000 pixels differ, bbox (460,148)-(837,559), VERDICT DIFFERENT (was IDENTICAL 0px before; also fixed the harness to screenshot the just-built binary). Edge fixture `comparison/shot-center-1200.json`.
+2. **Tests** (before → after): autocompare-gui 1036 green (including `shot15_*` gutter pixel tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS + pxdiff visual gate pasted in GATES.md.
+3. **Files changed**: `crates/gui/src/screenshot.rs`, `checks/gui-exq-shot15/**`, `TIMELINE.md`.
