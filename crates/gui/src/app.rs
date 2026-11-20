@@ -5591,11 +5591,15 @@ impl eframe::App for App {
             // gate [`chrome_mode_tabs_need_hscroll`] se; gaps/typo callee
             // tokens me, koi naya color/size nahi.
             let mut picked_tab = self.tab;
-            egui::ScrollArea::horizontal()
-                .id_salt("chrome_mode_tabs")
-                .show(ui, |ui| {
-                    views::paint_tabs(ui, &mut picked_tab);
-                });
+            if chrome_mode_tabs_need_hscroll(ui.available_width()) {
+                egui::ScrollArea::horizontal()
+                    .id_salt("chrome_mode_tabs")
+                    .show(ui, |ui| {
+                        views::paint_tabs(ui, &mut picked_tab);
+                    });
+            } else {
+                views::paint_tabs(ui, &mut picked_tab);
+            }
             if picked_tab != self.tab {
                 self.set_tab(picked_tab);
             }
@@ -6677,23 +6681,22 @@ impl eframe::App for App {
             let insert = self.status_insert_label();
             let load = self.status_load_label();
             let counts = self.status_line();
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = toolbar_group_gap();
-                ui.label(views::status_side_role().rich(unimportant.as_str()));
-                ui.separator();
-                ui.label(views::status_verdict_role().rich(verdict.as_str()));
-                ui.separator();
-                ui.label(views::status_side_role().rich(insert));
-                ui.separator();
-                ui.label(views::status_side_role().rich(load.as_str()));
-                ui.separator();
-                let rest = ui.available_width().max(0.0);
-                ui.add_sized(
-                    egui::vec2(rest, views::HEADER_H),
-                    egui::Label::new(views::chrome_status_role().rich(counts.as_str()))
-                        .truncate(),
-                );
-            });
+            egui::ScrollArea::horizontal()
+                .id_salt("chrome_status_bottom")
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = toolbar_group_gap();
+                        ui.label(views::status_side_role().rich(unimportant.as_str()));
+                        ui.separator();
+                        ui.label(views::status_verdict_role().rich(verdict.as_str()));
+                        ui.separator();
+                        ui.label(views::status_side_role().rich(insert));
+                        ui.separator();
+                        ui.label(views::status_side_role().rich(load.as_str()));
+                        ui.separator();
+                        ui.label(views::chrome_status_role().rich(counts.as_str()));
+                    });
+                });
         });
     }
 }
@@ -9756,6 +9759,28 @@ mod tests {
         assert_eq!((nav.position, nav.total), (None, 0));
         assert_eq!(nav.cursor, String::from("-"));
         assert!(app.chrome_status_top().contains("Default text"));
+    }
+
+    #[test]
+    fn chrome10_narrow_700_gates_match_fixture() {
+        assert!(chrome_mode_tabs_need_hscroll(700.0));
+        assert!(!chrome_mode_tabs_need_hscroll(960.0));
+        assert!(layout_is_narrow(700.0));
+        assert!(!layout_is_narrow(960.0));
+        assert!(chrome_toolbar_needs_hscroll(180.0));
+        assert!(!chrome_toolbar_needs_hscroll(700.0));
+        assert_eq!(views::OUTER_MARGIN, 12);
+    }
+
+    #[test]
+    fn chrome10_status_bottom_segments_stay_honest() {
+        let app = App::default();
+        assert!(!app.status_unimportant_label().is_empty());
+        assert!(!app.status_verdict_label().is_empty());
+        assert!(!app.status_insert_label().is_empty());
+        assert!(!app.status_load_label().is_empty());
+        assert!(!app.status_line().is_empty());
+        assert!(app.window_title().contains("autocompare"));
     }
 
     #[test]
