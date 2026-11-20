@@ -1655,6 +1655,19 @@ pub fn text_minimap_row_center_y(row: usize, total_rows: usize, height: f32) -> 
     gutter_row_center_y(row, total_rows, height)
 }
 
+/// Selection-marker band `(y0, y1)` px (ruler-local): single source
+/// [`crate::gutter::gutter_selection_marker_band`] — marker row band
+/// center par min-segment uncha, kabhi do rows par straddle nahi karta.
+/// Paint `rect.min.y` offset jodkar marker banata hai taaki jump ke baad
+/// indicator clicked band par synced dikhe. Pure (no egui); unit-tested.
+pub fn text_minimap_marker_band(
+    row: usize,
+    total_rows: usize,
+    height: f32,
+) -> Option<(f32, f32)> {
+    crate::gutter::gutter_selection_marker_band(row, total_rows, height)
+}
+
 /// Overview-ruler slop: segment hit-test har taraf itne px badhta hai
 /// ([`GUTTER_HIT_SLOP`]) taaki 4px bands alag-alag pointer-clickable
 /// rahen bina paint hile. Paint sirf hit me lagata hai. Pure;
@@ -3589,7 +3602,7 @@ fn paint_text_body(
                         // (BC hatched blank precedent, wrap-off parity).
                         let total_visual = wrap_total_visual(&wrap_counts);
                         let trailing_visual =
-                            text_trailing_blank_rows(panes_h, row_height, total_visual);
+                            text_trailing_blank_rows_balanced(panes_h, row_height, total_visual);
                         let mut t = 0usize;
                         while t < trailing_visual {
                             ui.set_row_height(wrap_reserved_height(1, row_height));
@@ -3635,7 +3648,8 @@ fn paint_text_body(
                 // `total` = content + trailing; trailing rows paint both
                 // sides blank + hatch + blank center gutter, scroll target
                 // sirf real rows par. Typo Mono rhythm unchanged.
-                let trailing = text_trailing_blank_rows(panes_h, row_height, visible.len());
+                let trailing =
+                    text_trailing_blank_rows_balanced(panes_h, row_height, visible.len());
                 let total = visible.len().saturating_add(trailing);
                 let blank_row = TextRow::default();
                 egui::ScrollArea::both()
@@ -3862,17 +3876,16 @@ fn paint_text_body(
             };
             ui.painter().rect_filled(seg_rect, 0.0, color);
         }
-        // Selection/viewport marker: selected row ke band center par theme
-        // text tone me ek pad-height tick (GEO token `ROW_PAD`, koi naya
-        // color nahi) — inverse mapping ([`text_minimap_row_center_y`]) se
-        // taaki jump ke baad indicator clicked band par synced dikhe.
+        // Selection/viewport marker: selected row ke band center par
+        // min-segment uncha tick ([`text_minimap_marker_band`]) theme text
+        // tone me — segment rhythm se aligned, kabhi do rows par straddle
+        // nahi; jump ke baad indicator clicked band par synced dikhta hai.
         if let Some(sel) = model.selected
-            && let Some(cy) = text_minimap_row_center_y(sel, model.rows.len(), avail_h)
+            && let Some((dy0, dy1)) = text_minimap_marker_band(sel, model.rows.len(), avail_h)
         {
-            let y0 = (rect.min.y + cy - ROW_PAD / 2.0).max(rect.min.y);
             let marker = egui::Rect::from_min_max(
-                egui::pos2(rect.min.x, y0),
-                egui::pos2(rect.max.x, (y0 + ROW_PAD).min(rect.max.y)),
+                egui::pos2(rect.min.x, (rect.min.y + dy0).max(rect.min.y)),
+                egui::pos2(rect.max.x, (rect.min.y + dy1).min(rect.max.y)),
             );
             ui.painter()
                 .rect_filled(marker, 0.0, ui.visuals().text_color());
@@ -3943,6 +3956,12 @@ pub struct TextPaneLayout<'a> {
 /// span emphasis sirf inversion + is underline se aata hai, naya
 /// size/weight nahi. Pure token; unit-tested.
 pub const INTRA_SPAN_UNDERLINE_W: f32 = 1.0;
+
+/// Changed-word accent underline width (px): double the 1px find line
+/// ([`INTRA_SPAN_UNDERLINE_W`]) so the changed span reads heavier than a
+/// find hit by line weight alone — same frozen hue, no new token, no
+/// size change. Pure token; unit-tested.
+pub const ACCENT_SPAN_UNDERLINE_W: f32 = 2.0 * INTRA_SPAN_UNDERLINE_W;
 
 /// (text, background) for one pane segment: plain passes the row
 /// strip pair through, accented inverts it so the span paints as a
@@ -4456,7 +4475,9 @@ pub fn selective_side_palette(
 }
 
 /// Selective accent format: plain passes through, accented paints the
-/// frozen changed band plus the 1px underline. Same mono `FontId`
+/// frozen changed band plus the heavier accent underline
+/// ([`ACCENT_SPAN_UNDERLINE_W`], double the find line — emphasis by line
+/// weight, same hue, no new color). Same mono `FontId`
 /// (line-height untouched). Pure; unit-tested.
 pub fn selective_span_format(
     font_id: FontId,
@@ -4467,7 +4488,7 @@ pub fn selective_span_format(
     if accented {
         let mut fmt = TextFormat::simple(font_id, CHANGED_FG);
         fmt.background = CHANGED_BG;
-        fmt.underline = Stroke::new(INTRA_SPAN_UNDERLINE_W, CHANGED_FG);
+        fmt.underline = Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG);
         fmt
     } else {
         span_text_format(font_id, fg, bg, false)
@@ -4544,6 +4565,19 @@ pub fn text_trailing_blank_rows(panes_h: f32, row_h: f32, visible_len: usize) ->
     }
     let slots = (panes_h / row_h).ceil().clamp(0.0, 100_000.0) as usize;
     slots.saturating_sub(visible_len)
+}
+
+/// Balanced trailing blanks: [`text_trailing_blank_rows`] rounded up to an
+/// even count so filler never ends on a lone orphan row — tang 720px
+/// window par dono halves visually paired rahen. Zero stays zero
+/// (full/overflow par koi extra row nahi). Pure; unit-tested.
+pub fn text_trailing_blank_rows_balanced(
+    panes_h: f32,
+    row_h: f32,
+    visible_len: usize,
+) -> usize {
+    let n = text_trailing_blank_rows(panes_h, row_h, visible_len);
+    if n == 0 { 0 } else { n + (n % 2) }
 }
 
 /// Center-gutter per-hunk marker: diff kinds par marker, Equal par nahi.
@@ -8051,7 +8085,7 @@ mod tests {
         for section in job.sections.iter().skip(1) {
             if section.format.underline != Stroke::NONE {
                 saw_accent = true;
-                assert_eq!(section.format.underline.width, INTRA_SPAN_UNDERLINE_W);
+                assert_eq!(section.format.underline.width, ACCENT_SPAN_UNDERLINE_W);
             } else {
                 saw_plain = true;
             }
@@ -8288,7 +8322,8 @@ mod tests {
         // Same mono size — line-height untouched.
         assert_eq!(plain.font_id.size, 12.0);
         assert_eq!(accented.font_id.size, 12.0);
-        // Plain passthrough, accented frozen changed band + 1px underline.
+        // Plain passthrough, accented frozen changed band + heavier accent
+        // underline (line weight emphasis, same hue — no new color).
         assert_eq!(plain.background, Color32::BLACK);
         assert_eq!(plain.underline, Stroke::NONE);
         assert_eq!(accented.font_id.size, plain.font_id.size);
@@ -8296,9 +8331,10 @@ mod tests {
             (accented.color, accented.background),
             (CHANGED_FG, CHANGED_BG)
         );
+        assert_eq!(ACCENT_SPAN_UNDERLINE_W, 2.0 * INTRA_SPAN_UNDERLINE_W);
         assert_eq!(
             accented.underline,
-            Stroke::new(INTRA_SPAN_UNDERLINE_W, CHANGED_FG)
+            Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG)
         );
     }
 
@@ -8435,6 +8471,41 @@ mod tests {
         // Typo reuse: status roles stay Small/Body (Mono 12 rows untouched).
         assert_eq!(status_side_role(), TypoRole::Small);
         assert_eq!(status_verdict_role(), TypoRole::Body);
+    }
+
+    #[test]
+    fn text2_narrow720_inline_weight_marker_orphan_balance() {
+        // Mirrors checks/gui-exq-text2/comparison/text-narrow-720.json.
+        // Narrow breakpoint: 719 stacks, 720+ stays side-by-side.
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(960.0), TextLayout::SideBySide);
+        // Inline emphasis by line weight (no new color): accent 2px on the
+        // frozen hue, find hits keep the 1px line, plain keeps no line.
+        let font = FontId::monospace(12.0);
+        let accented = selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true);
+        assert_eq!(
+            accented.underline,
+            Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG)
+        );
+        assert!(accented.underline.width > INTRA_SPAN_UNDERLINE_W);
+        let other = find_hit_format(font.clone(), Color32::WHITE, Color32::BLACK, false);
+        assert_eq!(other.underline.width, INTRA_SPAN_UNDERLINE_W);
+        // Marker aligns to one min band on the row center, never two rows.
+        assert_eq!(text_minimap_marker_band(1, 4, 400.0), Some((148.0, 152.0)));
+        if let Some((y0, y1)) = text_minimap_marker_band(0, 1000, 400.0) {
+            assert!((y1 - y0 - crate::gutter::GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        } else {
+            panic!("marker band must exist");
+        }
+        assert_eq!(text_minimap_marker_band(4, 4, 400.0), None);
+        // Orphan blank balance at narrow: 7 visible rows in a 300px budget
+        // at 17.6px rhythm leave 11 raw blanks, balanced up to 12 (paired,
+        // no lone orphan); full content stays zero.
+        assert_eq!(text_trailing_blank_rows(300.0, 17.6, 7), 11);
+        assert_eq!(text_trailing_blank_rows_balanced(300.0, 17.6, 7), 12);
+        assert_eq!(text_trailing_blank_rows_balanced(300.0, 17.6, 18), 0);
+        assert_eq!(text_trailing_blank_rows_balanced(f32::NAN, 17.6, 7), 0);
     }
 
     #[test]

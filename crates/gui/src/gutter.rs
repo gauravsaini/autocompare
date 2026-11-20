@@ -345,6 +345,35 @@ pub fn gutter_row_center_y(row: usize, total_rows: usize, height: f32) -> Option
     }
 }
 
+/// Selection-marker band `(y0, y1)` px: the row band center
+/// ([`gutter_row_center_y`]) grown to one [`GUTTER_SEGMENT_MIN_H`] so the
+/// tick exactly covers a min band and never straddles two rows.
+/// Clamped to `[0.0, height]`. `None` for empty totals, non-positive or
+/// non-finite heights, or out-of-range rows. Pure; unit-tested.
+pub fn gutter_selection_marker_band(
+    row: usize,
+    total_rows: usize,
+    height: f32,
+) -> Option<(f32, f32)> {
+    let cy = gutter_row_center_y(row, total_rows, height)?;
+    let half = GUTTER_SEGMENT_MIN_H / 2.0;
+    let mut y0 = cy - half;
+    let mut y1 = cy + half;
+    if y0 < 0.0 {
+        y0 = 0.0;
+        y1 = GUTTER_SEGMENT_MIN_H.min(height);
+    }
+    if y1 > height {
+        y1 = height;
+        y0 = (height - GUTTER_SEGMENT_MIN_H).max(0.0);
+    }
+    if y0.is_finite() && y1.is_finite() && y0 < y1 {
+        Some((y0, y1))
+    } else {
+        None
+    }
+}
+
 /// Computes thumbnail gutter bar geometry for three-way merge lines containing conflict markers.
 ///
 /// Scans lines for `<<<<<<<` to `>>>>>>>` spans and maps each conflict region to a
@@ -1166,6 +1195,30 @@ mod tests {
             }
             row = row.saturating_add(1);
         }
+    }
+
+    #[test]
+    fn selection_marker_band_covers_one_min_band() {
+        // 4 rows over 400px: row 1 center 150, band 148..152.
+        assert_eq!(gutter_selection_marker_band(1, 4, 400.0), Some((148.0, 152.0)));
+        // Band height is exactly one min segment, never two rows.
+        if let Some((y0, y1)) = gutter_selection_marker_band(2, 4, 400.0) {
+            assert!((y1 - y0 - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+            assert_eq!(gutter_row_center_y(2, 4, 400.0), Some((y0 + y1) / 2.0));
+        } else {
+            panic!("band must exist");
+        }
+        // Edge rows clamp inside the track instead of spilling out.
+        assert_eq!(gutter_selection_marker_band(0, 1000, 400.0), Some((0.0, 4.0)));
+        assert_eq!(
+            gutter_selection_marker_band(999, 1000, 400.0),
+            Some((396.0, 400.0))
+        );
+        // Bad input maps nothing, same contract as center-y.
+        assert_eq!(gutter_selection_marker_band(4, 4, 400.0), None);
+        assert_eq!(gutter_selection_marker_band(0, 0, 400.0), None);
+        assert_eq!(gutter_selection_marker_band(1, 4, 0.0), None);
+        assert_eq!(gutter_selection_marker_band(1, 4, f32::NAN), None);
     }
 
     #[test]
