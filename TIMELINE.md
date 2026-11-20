@@ -105,3 +105,11 @@
 1. **Shell**: session toolbar (Swap Sides + auto-recompare, Reload/Recompare), window/tab session identity (`left <--> right - Text`), view toggles (Word Wrap / Line Numbers / Syntax Highlighting) persisted in `App` state and applied to text panes via `view_text_for_paint()` clone-hook, copy-back + selection/filter propagation so sibling TEXT agent's nav/filter keep working, honest per-tab counts + action status bar, empty-result guidance on every tab.
 2. **Tests** (before → after): gui crate 90 → 92 passed, 0 failed; `cargo clippy -p autocompare-gui --all-targets -- -D warnings` exit 0; `rustfmt --check` clean on owned files.
 3. **Files changed**: `crates/gui/src/app.rs`, `crates/gui/src/main.rs`, `crates/gui/src/screenshot.rs`, `checks/gui-shell/{before,after}.png`, `checks/gui-shell/REPORT.md`.
+
+## UPDATED ON : 2026-11-20
+
+### Feature (2026-11-20) — Exquisite GUI geometry and typography round-exq3
+
+1. **GUI Geometry & Typography**: Validated responsive layout (960x600 default + 720px fallback) with zero clipped text, monospace typography consistency, headless-first viewmodel logic, and frozen colors. Verified via ac-loop round-exq3 harness with new edge fixtures under comparison/.
+2. **Tests** (before → after): autocompare-gui 703 → 714 passed, 0 failed; clippy 0 warnings; cargo fmt clean; zero allow(dead_code); screenshot after.png valid.
+3. **Files changed**: `crates/gui/src/*`, `checks/ac-loop/round-exq3/*`, `TIMELINE.md`.
