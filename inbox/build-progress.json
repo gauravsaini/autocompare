@@ -128,5 +128,6 @@
   "WAVE-REPORTS-H2-DONE": "s2 COMPLETE DONE:0; round-1 landed+verified+pushed; session closed",
   "WAVE-VFS3": "vfs3 round-1 LANDED 0f5d088 (466 ins OWNS-clean, REPORT PASS, 8 suites green, fmt/clippy/banned clean)",
   "ORCH-MIX-SYNC-CLI": "2026-11-20 21:28 AEDT next leaves live: opencode sync3 (compare sync/jobs + render_sync + round-sync3) + agyx cli (tmux agyxcli, bcomp/report-adapters + agyx-cli-h2); vfs3 session wrapping",
-  "ORCH-FIX-SNAPSHOT": "snapshot_tests.rs 7 sites gated behind AUTOCOMPARE_SNAPSHOT=1; default cargo test side-effect free (verified clean), opt-in regenerates (verified); kills recurring rep-h/reports-a noise at root"
+  "ORCH-FIX-SNAPSHOT": "snapshot_tests.rs 7 sites gated behind AUTOCOMPARE_SNAPSHOT=1; default cargo test side-effect free (verified clean), opt-in regenerates (verified); kills recurring rep-h/reports-a noise at root",
+  "WAVE-REPORTS-H2R2": "s2 round-2 LANDED 11e3486 (122 ins OWNS-clean, fixture+snapshot tests, REPORT PASS, 3 suites green, fmt/clippy/banned clean)"
 }
