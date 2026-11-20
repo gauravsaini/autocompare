@@ -53,7 +53,7 @@
   "WAVE-REPORTS-H2R2": "s2 round-2 LANDED 11e3486 (122 ins OWNS-clean, fixture+snapshot tests, REPORT PASS, 3 suites green, fmt/clippy/banned clean)",
   "WAVE-SESSIONS-H2": "s1 round-1 LANDED in c149590 (785 ins: session/options/lib + 3 test files + GATES + REPORT PASS + 6 fixtures; 5 suites green, fmt/clippy/banned/deadcode clean; committed via orchestrator sweep of staged files, agent staged per prompt)",
   "WAVE-SESSIONS-H2-DONE": "s1 COMPLETE DONE:0 (69 passed 0 failed, clippy -D warnings 0, fmt 0, banned 0, REPORT PASS); all landed+verified; session closed",
-  "WAVE-TEXT3": "landed 6736b59 (181 ins OWNS-clean, REPORT PASS, cargo-fmt clean, clippy 0, banned test-only, 18 suites green) pushed",
+  "WAVE-TEXT3": "running opencode sess-opencode-text3 OWNS views.rs + checks/gui-exq-text3 (center gutter + header metadata + pane status, geo-first typo-second, launched 23:11)",
   "WAVE-UXKEY2": "landed+pushed 9f8625e REPORT PASS 743+31 green keymap+AA",
   "WAVE-VFS3": "vfs3 round-1 LANDED 0f5d088 (466 ins OWNS-clean, REPORT PASS, 8 suites green, fmt/clippy/banned clean)",
   "schema_version": 1,
@@ -170,5 +170,10 @@
   "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)",
   "WAVE-EXQ-TEXT2C": "landed+pushed 1e5f7ea REPORT PASS 747 green side-by-side+mono typo",
   "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only",
-  "WAVE-EXQ-PAINT1": "landed+pushed 79c28a5 REPORT PASS 748 green fill-viewport blank-alignment segmented-status (paint1)"
+  "WAVE-EXQ-PAINT1": "landed+pushed 79c28a5 REPORT PASS 748 green fill-viewport blank-alignment segmented-status + ledger 680cf2e",
+  "WAVE-FOLDER2": "running opencode sess-opencode-folder2 OWNS tree.rs+home.rs + checks/gui-exq-folder2 (dual-pane fill + filter geometry, launched 23:11)",
+  "WAVE-HEXTABLE": "running opencode sess-opencode-hextable OWNS views_hex.rs+views_table.rs+gutter.rs + checks/gui-exq-hextable (pane heights + gutter markers + cell padding, launched 23:11)",
+  "WAVE-LOCAL6": "running opencode sess-opencode-local6 OWNS checks/early-feedback-6 only read-only (local run + screenshots + TOP-10 gaps, launched 23:11)",
+  "AGYX-REPROBE": "agyx still fail 2026-11-20 23:11 probe model gemini-4-neon not available in catalog -> opencode default-model only, mix when fixed",
+  "POLL-STRATEGY": "exponential backoff 10s/20s/40s/80s, no fixed 8s, via opencode session export"
 }
