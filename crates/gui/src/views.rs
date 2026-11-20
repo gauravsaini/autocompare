@@ -9522,6 +9522,101 @@ mod tests {
     }
 
     #[test]
+    fn gutter20_tall_gutter_stable() {
+        // Mirrors checks/gui-exq-gutter20/round-1/comparison/gutter-tall-1200.json:
+        // 1200-row model par live center gutter + hunk-head arrows har
+        // scroll window me stable rehte hain — gutter 20px, column 590,
+        // cx 600, heads [2, 500, 1000] offset se na badlen. Geometry
+        // existing helpers se, marker ink frozen CHANGED_FG reuse.
+        use viewmodel::TextRow;
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-gutter20/round-1/comparison/gutter-tall-1200.json"
+        );
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"marker_inset\": 2.0"));
+        assert!(fixture_raw.contains("\"tall_heads_1200rows\": ["));
+        // Tall model: Equal sea me 3 hunks (Changed pair @2, Deleted @500,
+        // Inserted pair @1000) — continuation rows blank rehti hain.
+        let mut rows = Vec::new();
+        let mut idx = 0usize;
+        while idx < 1200 {
+            let kind = if idx == 2 || idx == 3 {
+                TextRowKind::Changed
+            } else if idx == 500 {
+                TextRowKind::Deleted
+            } else if idx == 1000 || idx == 1001 {
+                TextRowKind::Inserted
+            } else {
+                TextRowKind::Equal
+            };
+            rows.push(TextRow {
+                kind,
+                ..TextRow::default()
+            });
+            idx = idx.saturating_add(1);
+        }
+        assert_eq!(rows.len(), 1200);
+        // Full-model heads: scroll offset se independent, hunk heads only.
+        let mut heads = Vec::new();
+        let mut i = 0usize;
+        while i < rows.len() {
+            if text_center_hunk_head(&rows, i) {
+                heads.push(i);
+            }
+            i = i.saturating_add(1);
+        }
+        assert_eq!(heads, vec![2, 500, 1000]);
+        // Scroll-window stability: har window apne global heads wapas de,
+        // Equal window khaali rahe (paint `orig` indices par kaam karta hai).
+        let window_heads = |lo: usize, hi: usize| {
+            let mut found = Vec::new();
+            let mut j = lo;
+            while j < hi && j < rows.len() {
+                if text_center_hunk_head(&rows, j) {
+                    found.push(j);
+                }
+                j = j.saturating_add(1);
+            }
+            found
+        };
+        assert_eq!(window_heads(0, 60), vec![2]);
+        assert_eq!(window_heads(470, 530), vec![500]);
+        assert_eq!(window_heads(980, 1040), vec![1000]);
+        assert_eq!(window_heads(60, 470), Vec::<usize>::new());
+        // Gutter geometry tall canvas par bhi wahi: 20px, column 590, cx 600.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(
+            text_center_gutter_width(),
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_column_x_for_avail(1200.0), 590.0);
+        assert!((text_center_arrow_cx_for_avail(1200.0) - 600.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_for_avail(1200.0), (588.0, 612.0));
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(text_center_marker_inset(), 2.0);
+        // Arrows changed rows par hi: Equal kabhi label/head nahi.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert!(!text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 3));
+        assert!(!text_center_hunk_head(&rows, 1001));
+        // Marker ink frozen, selection band selection par hi.
+        assert_eq!(text_center_marker_fg(), CHANGED_FG);
+        assert_eq!(text_center_marker_fg(), crate::theme::CHANGED_FG);
+        assert!(text_center_gutter_band_fill(true));
+        assert!(!text_center_gutter_band_fill(false));
+        // Tall floor: chhote model par lambi canvas balanced blanks se bhare.
+        let row_h = text_row_top_rhythm_px();
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9), 60);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9) % 2, 0);
+    }
+
+    #[test]
     fn text_layout_breakpoint_reuses_viewport_min_and_guards() {
         // Mirrors checks/gui-exq-text2/comparison/*.json canvases.
         assert_eq!(TEXT_STACK_BREAKPOINT_W, 720.0);
