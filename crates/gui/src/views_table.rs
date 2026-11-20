@@ -2799,6 +2799,265 @@ pub fn table6_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table7 round-1: sort indicator plus numeric align
+// at 960px wide (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: headers show sort-indicator arrows with stable
+// header height, numeric columns right-align; ours headers lack indicators
+// and everything left-aligns. Fix table-side only (app.rs/views.rs/home.rs/
+// views_hex.rs/gutter.rs/tree.rs/theme.rs/viewmodel.rs/take.rs/copy.rs
+// NO-TOUCH). Geometry FIRST: header height chrome line-height lock
+// ([`table7_header_h`] = Heading 21.6, table6 precedent — marker slot se
+// nahi badhta), sort glyph fixed 1-char right slot me SPACE_XS pad ke
+// saath ([`table7_sort_glyph_rect`] — sorted/unsorted same rect, stable),
+// numeric text-x pad math se ([`table7_cell_text_x`] — left pad, right
+// outer-minus-pad-minus-text), grid origin origin-se (936 avail) par fit
+// gate. Typography SECOND: header underline
+// `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0), header weight
+// `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi. Colors
+// FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure;
+// unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table7/comparison/table-sort-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table7 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE7_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table7 sort glyph slot pad (px): [`crate::theme::SPACE_XS`] reuse (4.0)
+/// — glyph header cell ke right end se ek tight-gap andar (symmetric pad
+/// precedent, koi naya rhythm nahi). Pure.
+pub const TABLE7_SORT_SLOT_PAD: f32 = crate::theme::SPACE_XS;
+
+/// Table7 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table6 precedent) — sort marker aaye ya na aaye, height stable.
+/// Pure; unit-tested.
+pub fn table7_header_h() -> f32 {
+    table6_header_h()
+}
+
+/// Table7 header height stable contract: table6 lock ke barabar aur body
+/// row se taller (marker slot height nahi badhata). Pure; unit-tested.
+pub fn table7_header_h_stable() -> bool {
+    (table7_header_h() - TABLE6_HEADER_H).abs() < 0.001 && table7_header_h() > table7_row_h()
+}
+
+/// Table7 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table7_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table7 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936).
+/// Pure; unit-tested.
+pub fn table7_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table7 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table7_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table7 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse. Pure;
+/// unit-tested.
+pub fn table7_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table7 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table7_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table7 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table7_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table7 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 960px budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table7_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Sort indicator marker: fixed 1-char taaki header height stable rahe —
+/// sorted-asc `▲`, sorted-desc `▼`, unsorted blank ` ` (table3 precedent
+/// reuse, koi naya glyph nahi). Pure; unit-tested.
+pub fn table7_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table3_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai (`Some(col)` match, table3 reuse). Pure;
+/// unit-tested.
+pub fn table7_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table3_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label: name + fixed 1-char marker — markers
+/// har header me ek hi slot lete hain, isliye indicators aligned rehte
+/// hain aur header height stable rehti hai. Pure; unit-tested.
+pub fn table7_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    let mut out = String::from(name);
+    out.push_str(table7_sort_marker(sorted, ascending));
+    out
+}
+
+/// Kya cell numeric hai: trim ke baad non-empty aur finite f64 parse ho.
+/// Khali/`-`/NaN/inf numeric nahi (missing-dash precedent: ragged `-`
+/// kabhi right-align nahi hota). Pure; unit-tested.
+pub fn table7_is_numeric_cell(cell: &str) -> bool {
+    let trimmed = cell.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    match trimmed.parse::<f64>() {
+        Ok(v) => v.is_finite(),
+        Err(_) => false,
+    }
+}
+
+/// Kya column numeric hai (right-align): kam se kam ek cell ho aur har
+/// cell numeric ho. Khali column ya text/missing (`-`) par false (left).
+/// Pure; unit-tested.
+pub fn table7_is_numeric_col(cells: &[String]) -> bool {
+    if cells.is_empty() {
+        return false;
+    }
+    for cell in cells.iter() {
+        if !table7_is_numeric_cell(cell) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki
+/// `false` (left). `rows` se per-col cells jodta hai (ragged missing skip
+/// nahi — missing `-` col ko left rakhta hai). Range-bahar par false nahi,
+/// header len ka vec (har col ka faisla). Pure; unit-tested.
+pub fn table7_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    let mut out = Vec::new();
+    for (col, _) in header.iter().enumerate() {
+        let mut cells: Vec<String> = Vec::new();
+        for row in rows.iter() {
+            if let Some(cell) = row.get(col) {
+                cells.push(cell.clone());
+            } else {
+                cells.push(String::from("-"));
+            }
+        }
+        out.push(table7_is_numeric_col(&cells));
+    }
+    out
+}
+
+/// Cell text ka x (px) outer box me: left par `outer.x + pad`, right
+/// (numeric) par `outer.x + outer.w - pad - text_w` — grid origin-se.
+/// `TABLE_CELL_PAD_X` (SPACE_SM 8.0) reuse, koi naya pad nahi. Kharab
+/// input ya overflow (text box se bahar) par `None`. Pure; unit-tested.
+pub fn table7_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    if !outer.x.is_finite() || !outer.w.is_finite() || !outer.w.is_finite() {
+        return None;
+    }
+    if !text_w.is_finite() || text_w < 0.0 {
+        return None;
+    }
+    if outer.w <= 0.0 || outer.h <= 0.0 {
+        return None;
+    }
+    if !TABLE_CELL_PAD_X.is_finite() || TABLE_CELL_PAD_X < 0.0 {
+        return None;
+    }
+    let x = if right {
+        outer.x + outer.w - TABLE_CELL_PAD_X - text_w
+    } else {
+        outer.x + TABLE_CELL_PAD_X
+    };
+    if !x.is_finite() {
+        return None;
+    }
+    let min_x = outer.x + TABLE_CELL_PAD_X;
+    if x < outer.x - 0.001 || x + text_w > outer.x + outer.w - TABLE_CELL_PAD_X + 0.001 {
+        let _ = min_x;
+        return None;
+    }
+    Some(x)
+}
+
+/// Sort glyph ka rect header cell me: 1-char chauda (`char_w`), header
+/// height poori, right end se `TABLE7_SORT_SLOT_PAD` andar — sorted ho ya
+/// unsorted, rect same (stable placement, SPACE token se). Kharab
+/// `char_w`/cell par `None`. Pure; unit-tested.
+pub fn table7_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.w.is_finite() || !cell.y.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= 0.0 || cell.h <= 0.0 {
+        return None;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    if !TABLE7_SORT_SLOT_PAD.is_finite() || TABLE7_SORT_SLOT_PAD < 0.0 {
+        return None;
+    }
+    let w = char_w;
+    let x = cell.x + cell.w - TABLE7_SORT_SLOT_PAD - w;
+    if !x.is_finite() || x < cell.x {
+        return None;
+    }
+    if x + w > cell.x + cell.w + 0.001 {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: cell.y,
+        w,
+        h: cell.h,
+    })
+}
+
+/// Table7 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table7_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table7 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table7_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table7 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table7_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table7 sab columns ki x-positions: [`table5_col_xs`] delegation (grid
+/// origin-se, numeric align isi par). Pure; unit-tested.
+pub fn table7_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table7 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table7_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table7 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse.
+/// Pure; unit-tested.
+pub fn table7_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4454,5 +4713,107 @@ mod tests {
         assert!(table6_separators_symmetric(&px));
         assert!(!table6_separators_symmetric(&[]));
         assert_eq!(table6_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table7_round1_sort_plus_align_wide_960() {
+        // Headless test proving edge fixture comparison/table-sort-960.json:
+        // sort-indicator glyph fixed 1-char right slot (SPACE_XS pad) me
+        // stable header height (Heading 21.6) ke saath, numeric cols
+        // right-align (pad math, grid origin-se) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table7/comparison/table-sort-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table7/round-1/comparison/table-sort-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-sort-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"sort_col\": 2"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header stable: table6 lock, body se taller, marker se nahi badhta.
+        assert!((table7_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table7_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table7_header_h(), table6_header_h());
+        assert!(table7_header_h_stable());
+        assert!((table7_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table7_row_h(), table_cell_row_h());
+        assert_eq!(TABLE7_CANVAS_W, 960.0);
+        assert_eq!(TABLE7_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table7_avail_w(), 936.0);
+        assert_eq!(table7_grid_origin(), (12.0, 12.0));
+        assert_eq!(table7_col_spacing(), 8.0);
+        assert_eq!(table7_grid_gap_y(), 4.0);
+        assert_eq!(TABLE7_SORT_SLOT_PAD, crate::theme::SPACE_XS);
+        assert_eq!(TABLE7_SORT_SLOT_PAD, 4.0);
+        assert_eq!(table7_header_underline_w(), 1.0);
+        assert!(table7_header_weight_ok());
+
+        // 2. Sort markers fixed 1-char, stable placement.
+        assert_eq!(table7_sort_marker(false, true), " ");
+        assert_eq!(table7_sort_marker(true, true), "▲");
+        assert_eq!(table7_sort_marker(true, false), "▼");
+        assert!(table7_is_sorted_col(Some(2), 2));
+        assert!(!table7_is_sorted_col(Some(2), 0));
+        assert_eq!(table7_header_label("Price", true, false), "Price▼");
+        assert_eq!(table7_header_label("ID", false, true), "ID ");
+        let cell = TableCellRect {
+            x: 112.0,
+            y: 12.0,
+            w: 64.0,
+            h: table7_header_h(),
+        };
+        let glyph_sorted = table7_sort_glyph_rect(cell, 8.0);
+        let glyph_plain = table7_sort_glyph_rect(cell, 8.0);
+        assert_eq!(glyph_sorted, glyph_plain);
+        assert_eq!(
+            glyph_sorted.map(|r| (r.x, r.w, r.h)),
+            Some((164.0, 8.0, table7_header_h()))
+        );
+        assert_eq!(table7_sort_glyph_rect(cell, 0.0), None);
+
+        // 3. Numeric right-align via pad math at grid origin.
+        assert!(table7_is_numeric_cell("100.50"));
+        assert!(table7_is_numeric_cell(" -3 "));
+        assert!(!table7_is_numeric_cell("apple"));
+        assert!(!table7_is_numeric_cell("-"));
+        assert!(!table7_is_numeric_cell(""));
+        assert!(!table7_is_numeric_cell("NaN"));
+        assert!(!table7_is_numeric_col(&[]));
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        assert_eq!(table7_col_aligns(&header, &rows), vec![true, false, true]);
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table7_row_h(),
+        };
+        assert_eq!(table7_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table7_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table7_cell_text_x(outer, 100.0, true), None);
+
+        // 4. Col widths char metrics se + fit at 960: [3,5,6] @8px
+        // -> outer [40,56,64], total 176, xs [0,48,112], seps [44,108].
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table7_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table7_grid_total_w(&px), 176.0);
+        assert_eq!(table7_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table7_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table7_column_grid_fit(table7_avail_w(), &px));
+        assert!(!table7_column_grid_fit(100.0, &px));
+        assert!(table7_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table7_visible_rows(600.0), 38);
     }
 }
