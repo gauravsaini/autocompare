@@ -10,10 +10,10 @@ use crate::home::{
     HOME_GRID_COLUMNS, RECENT_COL_GAP, RECENT_LIST_PAD, folder_empty_hint, home_model,
     recent_row_columns,
 };
-use crate::viewmodel::{TextRow, TextRowKind, gutter_geometry};
+use crate::viewmodel::{TextRow, TextRowKind, gutter_geometry, textcenter_hunk_head};
 use crate::views::{
-    PICTURE_ZOOM_STEPS, picture_center_offset, picture_fit_zoom_pct, wrap_find_scroll_sub,
-    wrap_pane_pair_count, wrap_width_for, zoom_label,
+    PICTURE_ZOOM_STEPS, picture_center_offset, picture_fit_zoom_pct, text_center_gutter_width,
+    wrap_find_scroll_sub, wrap_pane_pair_count, wrap_width_for, zoom_label,
 };
 use crate::views_table::{
     TABLE_FIND_BAR_H, TABLE_FIND_NEEDLE_W, TABLE_KEY_BAR_H, TABLE_MAX_COL_CHARS, TableKeyView,
@@ -134,6 +134,29 @@ pub const HOME_CTA_H: u32 = 28;
 pub const TEXT_PANE_W: u32 = 460;
 pub const TEXT_LEFT_X: u32 = 12;
 pub const TEXT_RIGHT_X: u32 = 476;
+/// Center-gap marker (exq-shot15): BC center gutter shows one yellow `=>`
+/// per changed hunk head; glyphs exist in the fixture 5px font (`=`/`>`
+/// advance 6px each), hue reuses `CHANGED_FG` (frozen, no new color).
+pub const TEXT_CENTER_MARK: &str = "=>";
+/// Default text-fixture center layout `(left_x, left_w, center_x,
+/// center_w, right_x, right_w)`: live 20px center
+/// (`views::text_center_gutter_width`, `SPACE_LG + SPACE_XS`) between two
+/// equal panes, overview ruler still starts at `GUTTER_X`:
+/// 12 + 448 + 4 + 20 + 4 + 448 = 936. Panes derive from the fixed ruler
+/// (no new literals); paint + headless test share this single source.
+pub fn text_fixture_center_layout() -> (u32, u32, u32, u32, u32, u32) {
+    let center_w = text_center_gutter_width() as u32;
+    let avail = GUTTER_X.saturating_sub(TEXT_LEFT_X);
+    let panes = avail
+        .saturating_sub(center_w)
+        .saturating_sub(PANE_GAP.saturating_mul(2));
+    let left_w = panes / 2;
+    let right_w = panes.saturating_sub(left_w);
+    let left_x = TEXT_LEFT_X;
+    let center_x = left_x.saturating_add(left_w).saturating_add(PANE_GAP);
+    let right_x = center_x.saturating_add(center_w).saturating_add(PANE_GAP);
+    (left_x, left_w, center_x, center_w, right_x, right_w)
+}
 /// Overview-ruler track: live contract `gutter::GUTTER_RULER_WIDE` (16,
 /// line numbers on) — old 14px inter-chrome gap ruler me sama gaya.
 /// Budget: 12 + 460 + 4 + 460 + 16 + 8 = 960; right pane 936 par khatam,
@@ -514,24 +537,33 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     // overflow par ">>" marker. Row 114..138, panes 142 se (4px rhythm gap).
     paint_topchrome_toolbar(&mut pixels, dims);
 
-    // Main diff pane borders
+    // Main diff pane borders: two equal panes with a live 20px center
+    // gutter between them (BC parity), overview ruler still at GUTTER_X.
     let pane_top = 142u32;
     let pane_bottom = 560u32;
     let pane_height = pane_bottom.saturating_sub(pane_top);
     let gutter_x = GUTTER_X;
     let gutter_w = GUTTER_W;
+    let (left_x, left_w, center_x, center_w, right_x, right_w) = text_fixture_center_layout();
 
     fill_rect(
         &mut pixels,
         dims,
-        (12, pane_top, 460, pane_height),
+        (left_x, pane_top, left_w, pane_height),
         [22, 22, 22, 255],
     );
     fill_rect(
         &mut pixels,
         dims,
-        (476, pane_top, 460, pane_height),
+        (right_x, pane_top, right_w, pane_height),
         [22, 22, 22, 255],
+    );
+    // Center floor: full-height base so the gap reads below the last row too.
+    fill_rect(
+        &mut pixels,
+        dims,
+        (center_x, pane_top, center_w, pane_height),
+        fixture_palette().bg,
     );
     fill_rect(
         &mut pixels,
@@ -637,12 +669,12 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         };
 
         // Left pane row
-        fill_rect(&mut pixels, dims, (12, y, 460, row_h), left_bg);
+        fill_rect(&mut pixels, dims, (left_x, y, left_w, row_h), left_bg);
         if let Some(no) = row.left_no {
             draw_string(
                 &mut pixels,
                 dims,
-                16,
+                left_x.saturating_add(4),
                 y.saturating_add(6),
                 &format!("{no:>2} "),
                 fixture_palette().dim,
@@ -651,7 +683,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         draw_string(
             &mut pixels,
             dims,
-            44,
+            left_x.saturating_add(32),
             y.saturating_add(6),
             &row.left,
             left_fg,
@@ -669,19 +701,21 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             if span.is_empty() {
                 continue;
             }
-            let ax = 44u32.saturating_add(text_width(&prefix));
+            let ax = left_x
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
             fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
             draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, left_bg);
         }
 
         // Right pane row
-        fill_rect(&mut pixels, dims, (476, y, 460, row_h), right_bg);
+        fill_rect(&mut pixels, dims, (right_x, y, right_w, row_h), right_bg);
         if let Some(no) = row.right_no {
             draw_string(
                 &mut pixels,
                 dims,
-                480,
+                right_x.saturating_add(4),
                 y.saturating_add(6),
                 &format!("{no:>2} "),
                 fixture_palette().dim,
@@ -690,7 +724,7 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         draw_string(
             &mut pixels,
             dims,
-            508,
+            right_x.saturating_add(32),
             y.saturating_add(6),
             &row.right,
             right_fg,
@@ -706,10 +740,26 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             if span.is_empty() {
                 continue;
             }
-            let ax = 508u32.saturating_add(text_width(&prefix));
+            let ax = right_x
+                .saturating_add(32)
+                .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
             fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
             draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, right_bg);
+        }
+        // Center-gap marker: yellow `=>` on changed-row hunk heads only;
+        // equal + continuation rows stay blank click-to-select (BC parity).
+        if row.kind != TextRowKind::Equal && textcenter_hunk_head(&rows, i) {
+            let mark_w = text_width(TEXT_CENTER_MARK);
+            let mx = center_x.saturating_add(center_w.saturating_sub(mark_w) / 2);
+            draw_string(
+                &mut pixels,
+                dims,
+                mx,
+                y.saturating_add(6),
+                TEXT_CENTER_MARK,
+                CHANGED_FG,
+            );
         }
     }
 
@@ -5129,6 +5179,59 @@ mod tests {
         if let Some(seg) = geom.segments.first() {
             assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
         }
+    }
+
+    #[test]
+    fn shot15_center_gap_markers_use_live_helpers() {
+        // Mirrors checks/gui-exq-shot15/round-1/comparison/shot-center-1200.json.
+        use crate::viewmodel::textcenter_fill_rows;
+        // Live 20px center (SPACE_LG + SPACE_XS); fixture derives from it.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        let (left_x, left_w, center_x, center_w, right_x, right_w) = text_fixture_center_layout();
+        assert_eq!(left_x, TEXT_LEFT_X);
+        assert_eq!(right_x.saturating_add(right_w), GUTTER_X);
+        assert_eq!(
+            center_x,
+            left_x.saturating_add(left_w).saturating_add(PANE_GAP)
+        );
+        // Marker fits the gap with a symmetric inset (20 - 12 = 8, 4 per side).
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        let mark_w = text_width(TEXT_CENTER_MARK);
+        assert!(mark_w <= center_w.saturating_sub(8));
+        assert_eq!(center_w.saturating_sub(mark_w) % 2, 0);
+        // Default 7-row fixture: one contiguous diff hunk, head at row 2 only.
+        let kinds = [
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+            TextRowKind::Changed,
+            TextRowKind::Deleted,
+            TextRowKind::Inserted,
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+        ];
+        let rows: Vec<TextRow> = kinds
+            .iter()
+            .map(|kind| TextRow {
+                kind: *kind,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            })
+            .collect();
+        for (idx, row) in rows.iter().enumerate() {
+            let want_head = idx == 2;
+            assert_eq!(textcenter_hunk_head(&rows, idx), want_head);
+            assert_eq!(row.kind != TextRowKind::Equal && want_head, idx == 2);
+        }
+        // Floor below the last row: 418px panes, 24px rows, 7 rows -> 11 slots.
+        assert_eq!(textcenter_fill_rows(418.0, ROW_H as f32, rows.len()), 11);
+        // 1200-wide edge: same 20px center, panes grow symmetric (12/578/20/578/12).
+        let wide = crate::gutter::gutter_text_layout(12.0, 20.0, 1200.0);
+        assert_eq!(wide, (12.0, 578.0, 20.0, 578.0, 12.0));
     }
 
     #[test]
