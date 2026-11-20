@@ -42,10 +42,11 @@
     "SWARM-RUN-N": "running opencode default-model localrun round-3 (OWNS checks/early-feedback-3, no code)",
     "SWARM-BIN-O": "landed 6f48467 pushed (G1-G6 PASS, tarball 5.5MB + sha256 ok, ad-hoc signed caveat noted)",
     "ORCH-PARALLEL10": "dispatched 2026-11-20 (8 agyx + 2 opencode, disjoint OWNS, layers ok plug-and-play)",
-    "ORCH-HEALTH": "2026-11-20 rescued 3 dead-swatch chunks, all strict-green, pushed ee22eff..701f0a4; dependents (compare/cli/sessions/vfs) 31 binaries green; leftovers: 2 sessionpaint PNGs + ac-loop/vcmp-j evidence dirs",
+    "ORCH-HEALTH": "2026-11-20 workspace gate 1145 green 0 fail (44 binaries) after rescue landings; tree clean; evidence rounds g1/geo1/vcmp-j landed d9dc8a9 pushed",
     "SWARM-OP-STUDY2": "landed 5d41ad5 verified+pushed (9 sessions, 3 capture notes, HIGH/MEDIUM/UNVERIFIED, no source)",
     "SWARM-OP-INT2": "landed 84bad20 verified+pushed (layers ok, 11 CLI outs, GUI PNG 9765B, sha256 ok, no source)",
     "PLAN-RECONCILE": "verified 2026-11-20 (pasted 21k spec already covered by PLAN.md 23k: Depth Tree + gates + check loop + risks; extend-existing confirmed, no subfolder, no PLAN overwrite to protect 7 live swarms)",
-    "ORCH-POLL-BACKOFF": "level 1 holding (ledger commit on WIP-delta>100 met: +589 since last)"
+    "ORCH-POLL-BACKOFF": "level 1 holding (ledger commit on WIP-delta>100 met: +589 since last)",
+    "ORCH-WORKSPACE-GATE": "pass 2026-11-20 (cargo test --workspace DONE_EXIT 0, 1145 passed, /tmp/ws-tests.log)"
   }
 }
