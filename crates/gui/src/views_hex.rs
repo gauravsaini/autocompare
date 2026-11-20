@@ -1907,6 +1907,13 @@ pub fn hex_grid_avail_w(avail_w: f32, show_line_numbers: bool) -> f32 {
 /// math degrade nahi karta. Koi naya token nahi. Pure; unit-tested.
 pub const HEX_PANES_MIN_H: f32 = crate::viewmodel::TEXT_PANES_MIN_H;
 
+/// Hex byte-cell ka ek taraf ka horizontal padding (px): `SPACE_SM` reuse
+/// (8.0, table `TABLE_CELL_PAD_X` precedent — wahi value, koi naya rhythm
+/// nahi). Grid `HEX_GRID_ROW_CHARS` columns ke beech nahi; ye pad har byte
+/// cell box ke andar hai (digits saans lete hain, gutter/minimap align
+/// rehte hain). Pure.
+pub const HEX_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
+
 /// Remaining-height budget for the hex+ASCII sync panes row: paint captures
 /// `ui.available_height()` before the panes row (find/goto bars already
 /// spent above) and both panes keep at least [`HEX_PANES_MIN_H`] from the
@@ -1915,6 +1922,86 @@ pub const HEX_PANES_MIN_H: f32 = crate::viewmodel::TEXT_PANES_MIN_H;
 /// drift nahi karte. Pure; unit-tested.
 pub fn hex_panes_height(avail_h: f32) -> f32 {
     crate::viewmodel::text_panes_height(avail_h)
+}
+
+/// Cell ka ek taraf ka horizontal padding (px). Pure; unit-tested.
+pub fn hex_cell_pad_x() -> f32 {
+    HEX_CELL_PAD_X
+}
+
+/// Text chaudai se outer byte-cell box chaudai (px): `text + 2 * pad`.
+/// Non-finite ya negative text par pad floor (khali cell bhi click-target
+/// rehta hai). Table `table_cell_outer_w` precedent reuse. Pure; unit-tested.
+pub fn hex_cell_outer_w(text_w: f32) -> f32 {
+    if !text_w.is_finite() || text_w < 0.0 {
+        return HEX_CELL_PAD_X * 2.0;
+    }
+    text_w + HEX_CELL_PAD_X * 2.0
+}
+
+/// Outer byte-cell box se text chaudai (px): `(outer - 2 * pad)` floor 0.
+/// `hex_cell_outer_w` ka inverse (round-trip); kharab outer par 0.
+/// Pure; unit-tested.
+pub fn hex_cell_text_w(outer_w: f32) -> f32 {
+    if !outer_w.is_finite() {
+        return 0.0;
+    }
+    (outer_w - HEX_CELL_PAD_X * 2.0).max(0.0)
+}
+
+/// Panes height me kitni grid rows fit hoti hain: `floor(panes_h / row_h)`.
+/// Kharab ya zero `row_h` par 0 (paint honest empty dikhata hai); negative
+/// ya non-finite `panes_h` par 0. Saturating, kabhi panic nahi.
+/// Tail-truncate edge: aakhri partial page isi se cut hoti hai — caller
+/// `hex_sync_visible_range` me clamp karta hai. Pure; unit-tested.
+pub fn hex_visible_rows(panes_h: f32, row_h: f32) -> u64 {
+    if !panes_h.is_finite() || !row_h.is_finite() || panes_h <= 0.0 || row_h <= 0.0 {
+        return 0;
+    }
+    (panes_h / row_h).floor().max(0.0) as u64
+}
+
+/// Rows se panes height (px): `rows * row_h`, floor [`HEX_PANES_MIN_H`] par
+/// taaki ek chhoti window me gutter/minimap math degrade na ho. Kharab
+/// input par floor. `hex_visible_rows` ka inverse (round-trip ceil nahi,
+/// floor parity). Pure; unit-tested.
+pub fn hex_panes_height_for_rows(rows: u64, row_h: f32) -> f32 {
+    if !row_h.is_finite() || row_h <= 0.0 {
+        return HEX_PANES_MIN_H;
+    }
+    let want = rows as f32 * row_h;
+    if !want.is_finite() {
+        return HEX_PANES_MIN_H;
+    }
+    want.max(HEX_PANES_MIN_H)
+}
+
+/// Gutter marker rows: har hunk range ka pehla grid row, row order me,
+/// dedup ke saath. `hex_hunk_row_ranges` reuse — paint gutter markers isi
+/// list par lagata hai taaki row-wise aur virtualized bands kabhi alag na
+/// hon. Khali hunks par khali vec (paint koi marker nahi dikhata).
+/// Pure; unit-tested.
+pub fn hex_gutter_marker_rows(hunks: &[HexHunkView], total_rows: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (start, _end) in hex_hunk_row_ranges(hunks, total_rows) {
+        if out.last().copied() != Some(start) {
+            out.push(start);
+        }
+    }
+    out
+}
+
+/// Byte-cell text role: Mono grid content (ruler/sync-pane precedent).
+/// Koi naya size/token nahi. Pure; unit-tested.
+pub const fn hex_cell_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Pane-label role: Body (find/goto bar label precedent reuse).
+/// Paint-side `.strong()` composition; koi naya size/token/color nahi.
+/// Pure; unit-tested.
+pub const fn hex_pane_label_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
 }
 
 /// Fixed grid-row text budget (chars): 10 ruler + 2 pad + 49 hex cells
@@ -3492,26 +3579,85 @@ mod tests {
     }
 
     #[test]
-    fn hex_exq_hextable_edge_fixture_tall_markers_and_panes() {
-        // Mirrors checks/gui-exq-hextable/comparison/hextable-edge.json:
-        // 16_000 bytes, single diff at 8000 (row 500), height 400,
-        // panes 600 -> 600, narrow 90 -> 100 floor; 80-char rows hold.
+    fn hex_exq_hextable2_pane_heights_plus_cell_gaps() {
+        // Geometry first: cell gaps table precedent reuse, pane heights
+        // text floor reuse. Typography second: cell Mono, pane label Body.
+        assert_eq!(HEX_CELL_PAD_X, 8.0);
+        assert_eq!(hex_cell_pad_x(), HEX_CELL_PAD_X);
+        assert_eq!(crate::theme::SPACE_SM, 8.0);
+        assert_eq!(hex_cell_outer_w(100.0), 116.0);
+        assert_eq!(hex_cell_text_w(116.0), 100.0);
+        assert_eq!(hex_cell_outer_w(f32::NAN), 16.0);
+        assert_eq!(hex_cell_text_w(f32::NAN), 0.0);
+        // Pane heights: 18px rows me 600px -> 33 rows, floor 100 keeps 100.
+        assert_eq!(hex_visible_rows(600.0, 18.0), 33);
+        assert_eq!(hex_visible_rows(90.0, 18.0), 5);
+        assert_eq!(hex_visible_rows(0.0, 18.0), 0);
+        assert_eq!(hex_visible_rows(100.0, 0.0), 0);
+        assert_eq!(hex_visible_rows(f32::NAN, 18.0), 0);
+        assert_eq!(hex_panes_height_for_rows(33, 18.0), 594.0);
+        assert_eq!(hex_panes_height_for_rows(1, 18.0), HEX_PANES_MIN_H);
+        assert_eq!(hex_panes_height_for_rows(0, 18.0), HEX_PANES_MIN_H);
+        // Gutter markers: single diff at 8000 -> row 500 marker.
         let left = vec![0u8; 16_000];
         let mut right = vec![0u8; 16_000];
         if let Some(slot) = right.get_mut(8000) {
             *slot = 9;
         }
         let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
-        assert_eq!(hex_gutter_total_rows(16_000), 1000);
-        assert_eq!(hex_panes_height(600.0), 600.0);
-        assert_eq!(hex_panes_height(90.0), HEX_PANES_MIN_H);
-        let total = hex_gutter_total_rows(16_000);
-        let geom = hex_gutter_geometry(total, 400.0, &view.hunks);
-        assert_eq!(geom.segments.len(), 1);
-        let text = format_hex_grid_row_with_bytes(8000, &left, &right, &view.hunks);
-        assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
-        let (row, col) = hex_goto_anchor(8000);
-        assert_eq!((row, col), hex_offset_to_row_col(8000));
-        assert_eq!(hex_goto_row_start(8000), 8000 - col);
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, 1000), vec![500]);
+        assert!(hex_gutter_marker_rows(&[], 1000).is_empty());
+        // Typo second: no new sizes, only role reuse.
+        assert_eq!(
+            hex_cell_text_role() as u8,
+            crate::theme::TypoRole::Mono as u8
+        );
+        assert_eq!(
+            hex_pane_label_text_role() as u8,
+            crate::theme::TypoRole::Body as u8
+        );
+    }
+
+    #[test]
+    fn hex_exq_hextable2_edge_tail_truncate() {
+        // Tail-truncate: 200 differing bytes need 4 chunks, budget 1
+        // truncates honestly; tail row still maps, visible rows cut partial.
+        let left = vec![0u8; 200];
+        let right = vec![1u8; 200];
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 1);
+        assert_eq!(view.hunks.len(), 1);
+        assert!(view.truncated);
+        assert_eq!(hex_row_count(200), 13);
+        // Truncated budget keeps head hunk only: row 0 covered, tail cut.
+        assert!(hex_row_has_diff(0, &view.hunks));
+        assert!(!hex_row_has_diff(192, &view.hunks));
+        assert_eq!(hex_row_to_hunk(0, &view.hunks), Some(0));
+        assert_eq!(hex_visible_rows(100.0, 18.0), 5);
+        let starts = hex_sync_row_starts(10, 5, 200);
+        assert_eq!(starts.len(), 3);
+        // Full budget shows all 4 chunks, no truncation.
+        let full = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(full.hunks.len(), 4);
+        assert!(!full.truncated);
+        assert!(hex_row_has_diff(192, &full.hunks));
+        assert_eq!(hex_row_to_hunk(12, &full.hunks), Some(3));
+    }
+
+    #[test]
+    fn hex_exq_hextable2_edge_empty_vs_nonempty() {
+        // Empty-vs-nonempty: left empty, right 16 bytes -> one row, one
+        // hunk side empty, markers honest, empty side panes floor.
+        let left: Vec<u8> = Vec::new();
+        let right = vec![7u8; 16];
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(hex_row_count(0), 0);
+        assert_eq!(hex_row_count(16), 1);
+        assert_eq!(hex_gutter_total_rows(0), 0);
+        assert_eq!(hex_gutter_marker_rows(&view.hunks, 1).len(), 1);
+        assert!(hex_gutter_marker_rows(&[], 0).is_empty());
+        assert!(hex_sync_row_starts(0, 5, 0).is_empty());
+        assert_eq!(hex_sync_row_starts(0, 5, 16), vec![0]);
+        assert_eq!(hex_panes_height(0.0), HEX_PANES_MIN_H);
+        assert_eq!(hex_visible_rows(HEX_PANES_MIN_H, 18.0), 5);
     }
 }

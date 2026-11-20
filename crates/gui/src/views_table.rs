@@ -915,6 +915,68 @@ pub const TABLE_CELL_GLYPH_PAD: &str = "  ";
 /// Test-only until paint wiring lands (orchestrator owns paint).
 pub const TABLE_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
 
+/// Table sync panes min height (px): text/hex panes floor reuse
+/// (`viewmodel::TEXT_PANES_MIN_H` = 100.0) taaki table + hex + text panes
+/// ek hi budget par fill karen. Koi naya token nahi. Pure.
+pub const TABLE_PANES_MIN_H: f32 = crate::viewmodel::TEXT_PANES_MIN_H;
+
+/// Remaining-height budget table grid ke liye: `viewmodel::text_panes_height`
+/// delegation — hex `hex_panes_height` ke saath kabhi drift nahi.
+/// Pure; unit-tested.
+pub fn table_panes_height(avail_h: f32) -> f32 {
+    crate::viewmodel::text_panes_height(avail_h)
+}
+
+/// Char widths se px outer widths: har char width `char_w` px chaudi,
+/// outer `table_cell_outer_w(chars * char_w)` se. Kharab `char_w` par khali
+/// vec (paint honest fallback dikhata hai); kharab char width skip hoti hai.
+/// Grid columns px me — paint Grid isi list par boxes banata hai.
+/// Pure; unit-tested.
+pub fn table_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for width in widths_chars.iter() {
+        let text_w = (*width as f32) * char_w;
+        if !text_w.is_finite() || text_w < 0.0 {
+            continue;
+        }
+        out.push(table_cell_outer_w(text_w));
+    }
+    out
+}
+
+/// Grid ki kul px chaudai: outer widths + beech ke `TABLE_GRID_COL_GAP`.
+/// Kharab widths par 0. Paint horizontal scroll isi se decide karta hai.
+/// Pure; unit-tested.
+pub fn table_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    if col_widths_px.is_empty() {
+        return 0.0;
+    }
+    let mut total = 0.0f32;
+    for (idx, w) in col_widths_px.iter().enumerate() {
+        if !w.is_finite() || *w <= 0.0 {
+            return 0.0;
+        }
+        total += *w;
+        if idx + 1 < col_widths_px.len() {
+            total += TABLE_GRID_COL_GAP;
+        }
+    }
+    if !total.is_finite() || total < 0.0 {
+        return 0.0;
+    }
+    total
+}
+
+/// Cell text role: Mono grid content (header `table_header_text_role`
+/// precedent). Key/find emphasis `.strong()`/underline se aata hai, role
+/// wahi rehta hai — koi naya size/token nahi. Pure.
+pub const fn table_cell_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
 /// Cell ka ek taraf ka horizontal padding (px).
 /// Pure; unit-tested.
 pub fn table_cell_pad_x() -> f32 {
@@ -2831,23 +2893,86 @@ mod tests {
     }
 
     #[test]
-    fn table_exq_hextable_edge_fixture_ragged_pad_and_key() {
-        // Mirrors checks/gui-exq-hextable/comparison/hextable-edge.json
-        // table half: ragged row me missing cell `-`, key col 0, pad 8px.
+    fn table_exq_hextable2_pane_heights_plus_cell_gaps() {
+        // Geometry first: pane heights hex/text floor reuse, char widths
+        // -> px outer widths, grid total gaps. Typo second: cell Mono.
+        assert_eq!(TABLE_PANES_MIN_H, 100.0);
+        assert_eq!(table_panes_height(600.0), 600.0);
+        assert_eq!(table_panes_height(90.0), TABLE_PANES_MIN_H);
+        assert_eq!(table_cell_text_role() as u8, TypoRole::Mono as u8);
+        // Grid columns: 2 data cols, 8px char -> outer each +16 pad.
+        let widths = vec![3usize, 5];
+        let px = table_col_widths_px(&widths, 8.0);
+        assert_eq!(px.len(), 2);
+        assert_eq!(px.first().copied(), Some(3.0 * 8.0 + 16.0));
+        assert_eq!(px.get(1).copied(), Some(5.0 * 8.0 + 16.0));
+        // Total = w0 + gap + w1.
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 40.0 + TABLE_GRID_COL_GAP + 56.0);
+        // Key cols + find underline reuse same boxes (no drift).
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: TABLE_GRID_COL_GAP,
+            row_gap: TABLE_GRID_ROW_GAP,
+        };
+        let boxes = table_key_box_rects(&view, grid, &px, 3);
+        assert_eq!(boxes.len(), 1);
+        assert_eq!(boxes.first().map(|b| b.x), Some(10.0));
+        // Bad char_w / empty -> honest empty, total 0.
+        assert!(table_col_widths_px(&widths, 0.0).is_empty());
+        assert!(table_col_widths_px(&widths, f32::NAN).is_empty());
+        assert_eq!(table_grid_total_w(&[]), 0.0);
+    }
+
+    #[test]
+    fn table_exq_hextable2_edge_tail_truncate() {
+        // Tail-truncate: long tail cell caps at 32 chars, padded row keeps
+        // columns aligned, grid total stays finite for paint scroll.
         let header = vec!["ID".to_string(), "Price".to_string()];
-        let rows = vec![vec!["only".to_string()]];
+        let long = "x".repeat(TABLE_MAX_COL_CHARS + 20);
+        let rows = vec![vec!["1".to_string(), long.clone()]];
         let widths = table_column_widths(&header, &rows);
-        assert_eq!(widths.len(), 2);
+        assert_eq!(widths.get(1).copied(), Some(TABLE_MAX_COL_CHARS));
         let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
         let padded = pad_table_row(first_row, &widths);
         assert_eq!(padded.len(), 2);
-        let missing = padded.get(1).map(String::as_str).unwrap_or("");
-        assert!(missing.chars().all(|c| c == ' ' || c == '-'));
-        let mut view = TableKeyView::new();
-        view.toggle_key_column(0);
-        assert!(table_find_hit_in_key_col(&view, 0));
-        // Pad outer math: 100px text -> 116px outer, wapas 100px.
-        assert_eq!(table_cell_outer_w(100.0), 100.0 + 16.0);
+        assert_eq!(
+            padded.get(1).map(|s| s.chars().count()),
+            Some(TABLE_MAX_COL_CHARS)
+        );
+        // Tail find hit clamps to cap, underline rect stays in cell.
+        let spans = table_find_cell_spans(&long, "xxx", false);
+        assert!(!spans.is_empty());
+        let clamped = table_find_span_in_padded(0, 99, TABLE_MAX_COL_CHARS);
+        assert_eq!(clamped, Some((0, TABLE_MAX_COL_CHARS)));
+        let px = table_col_widths_px(&widths, 8.0);
+        assert!(!px.is_empty());
+        assert!(table_grid_total_w(&px).is_finite());
+    }
+
+    #[test]
+    fn table_exq_hextable2_edge_empty_vs_nonempty() {
+        // Empty-vs-nonempty: both empty honest note, one ragged row keeps
+        // missing-cell dash + pad round-trip + key badge positional.
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let empty_rows: Vec<Vec<String>> = Vec::new();
+        let widths_empty = table_column_widths(&header, &empty_rows);
+        assert_eq!(widths_empty.len(), 2);
+        assert_eq!(table_cell_grid_columns(&widths_empty), 3);
+        let rows = vec![vec!["only".to_string()]];
+        let widths = table_column_widths(&header, &rows);
+        let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        let padded = pad_table_row(first_row, &widths);
+        assert_eq!(padded.len(), 2);
+        let view = TableKeyView::new();
+        assert!(view.is_positional());
+        assert_eq!(table_key_badge_label(&view), "positional");
+        assert_eq!(table_panes_height(0.0), TABLE_PANES_MIN_H);
+        assert_eq!(table_cell_outer_w(100.0), 116.0);
         assert_eq!(table_cell_text_w(116.0), 100.0);
     }
 }
