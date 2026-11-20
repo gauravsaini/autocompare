@@ -102,7 +102,8 @@
     "ORCH-POLL-EXP": "poll fixed 8s dropped, exp backoff 60->120->240->480->600 max, reset on activity, event-driven + harness check loop",
     "ORCH-AGYX-CONSISTENCY": "mix6 verdict so far: agyx 2-parallel consistent (uxkey pid 36207 + vcs2 pid 36329 both running, no EADDRINUSE, no silent-dead); keep mix, drop to opencode-only only if regresses",
     "ORCH-DIFF-DEPS": "landed 7c14aa5 pushed (zip 2.2 deflate + flate2 for xlsx, ponytail reuse vfs dep, cargo check green)",
-    "ORCH-MIX6": "live 2026-11-20 22:00 AEDT: op-table1 (diff/table deflate) + op-guiexq7 (hex/gutter exquisite) + agyx-uxkey (settings/keymap+theme) + agyx-clivcs2 (cli runner/args/session_cmd); disjoint OWNS, isolated targets, stagger 20s agyx"
+    "ORCH-MIX6": "2026-11-20 22:07 AEDT table1 LANDED 861dd28 pushed+verified; active: op-guiexq7 + agyx-uxkey + agyx-clivcs2 (cli args/session_cmd + settings + ux-keymap WIP, disjoint OWNS)",
+    "WAVE-TABLE-XLSX": "landed+pushed 861dd28 (REPORT PASS, 96 lib + 40 table integ green, clippy 0, fmt clean, banned 0 non-test, OWNS-clean, PNG noise reverted)"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
