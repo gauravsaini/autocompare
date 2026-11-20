@@ -1,0 +1,17 @@
+edge: nested left-only deep leaf + empty chain + newer ties + right-only extra
+
+LEFT                               RIGHT                              EXPECT
+sub/deep/leaf.txt (left-only)      -                                  UpdateRight/Both/Mirror copy rightwards
+-                                  extra.txt (right-only)             UpdateLeft/Both copy leftwards, Mirror deletes right
+a/b/c/ (empty chain)               -                                  prune_empty_directories removes 3 bottom-up, root kept
+newer_l.txt (mtime later on left)  newer_l.txt (older)                Both/UpdateRight CopyToRight
+newer_r.txt (older)                newer_r.txt (mtime later on right) Both/UpdateLeft CopyToLeft
+keep/file.txt (non-empty)          keep/file.txt (same, mtime pinned) Same: no step, no skip
+links/lnk -> outside (unix only)   -                                  never followed, parent dir kept, target survives
+
+PARITY (proven in unit tests, not by this file alone):
+- dry_run changes nothing on disk; apply copies/deletes exactly the planned steps
+- report.copied + report.deleted == plan.steps.len; re-plan after mtime pin is empty
+- pre-cancelled AtomicBool aborts plan and apply with Error::Cancelled
+- JobRunner spawn_sync_run / spawn_sync_apply emit per-file progress with total == steps
+- Mirror plans need consent; empty plans never do; preview-only writes nothing

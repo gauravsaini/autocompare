@@ -1279,6 +1279,7 @@ impl SyncReport {
 mod tests {
     use super::*;
     use std::fs;
+    use std::time::SystemTime;
 
     fn temp_dir(name: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1405,5 +1406,389 @@ mod tests {
         assert!(under(&root, "/absolute.txt").is_none());
         assert!(under(&root, "").is_none());
         assert!(under(&root, ".").is_none());
+    }
+
+    // --- round-sync3 edge coverage: exec semantics ---
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dir");
+        }
+        fs::write(path, contents).expect("write fixture");
+    }
+
+    fn set_mtime_to(path: &Path, modified: SystemTime) {
+        let file = fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open fixture to set mtime");
+        file.set_times(fs::FileTimes::new().set_modified(modified))
+            .expect("set fixture mtime");
+    }
+
+    fn fixed_stamp() -> SystemTime {
+        std::time::UNIX_EPOCH
+            .checked_add(std::time::Duration::from_secs(1_700_000_000))
+            .unwrap_or(std::time::UNIX_EPOCH)
+    }
+
+    fn later_stamp() -> SystemTime {
+        fixed_stamp()
+            .checked_add(std::time::Duration::from_secs(3_600))
+            .unwrap_or(fixed_stamp())
+    }
+
+    fn make_pair_in(base: &Path) -> (PathBuf, PathBuf) {
+        let left = base.join("left");
+        let right = base.join("right");
+        fs::create_dir_all(&left).expect("create left root");
+        fs::create_dir_all(&right).expect("create right root");
+        (left, right)
+    }
+
+    #[test]
+    fn test_update_left_apply_parity_and_dry_run_read_only() {
+        let base = temp_dir("sync3_update_left");
+        let (left, right) = make_pair_in(&base);
+        let t = fixed_stamp();
+        let later = later_stamp();
+
+        write_file(&left.join("shared.txt"), "old\n");
+        write_file(&right.join("shared.txt"), "new\n");
+        set_mtime_to(&left.join("shared.txt"), t);
+        set_mtime_to(&right.join("shared.txt"), later);
+        write_file(&right.join("rightonly.txt"), "r\n");
+        write_file(&left.join("leftonly.txt"), "l\n");
+
+        let planner = SyncPlanner::new(&left, &right, SyncMode::UpdateLeft);
+        let plan = planner.dry_run().expect("dry run");
+        // Dry run is read-only: nothing copied, nothing deleted.
+        assert!(!left.join("rightonly.txt").exists());
+        assert!(left.join("leftonly.txt").exists());
+        assert!(right.join("rightonly.txt").exists());
+        assert_eq!(
+            fs::read_to_string(left.join("shared.txt")).expect("read left"),
+            "old\n"
+        );
+
+        let step_for = |rel: &str| plan.steps.iter().find(|s| s.rel_path == rel);
+        assert_eq!(
+            step_for("shared.txt").map(|s| s.action),
+            Some(SyncAction::CopyToLeft)
+        );
+        assert_eq!(
+            step_for("rightonly.txt").map(|s| s.action),
+            Some(SyncAction::CopyToLeft)
+        );
+        assert!(step_for("leftonly.txt").is_none());
+        assert!(
+            plan.steps
+                .iter()
+                .all(|s| s.action == SyncAction::CopyToLeft)
+        );
+
+        let report = planner.apply(&plan).expect("apply");
+        assert!(report.failed.is_empty());
+        assert_eq!(report.copied, plan.steps.len());
+        assert_eq!(
+            fs::read_to_string(left.join("shared.txt")).expect("read applied"),
+            "new\n"
+        );
+        assert!(left.join("rightonly.txt").exists());
+
+        // Pin mtimes equal so synced files compare Same; re-plan converges.
+        for rel in ["shared.txt", "rightonly.txt"] {
+            set_mtime_to(&left.join(rel), t);
+            set_mtime_to(&right.join(rel), t);
+        }
+        let again = SyncPlanner::new(&left, &right, SyncMode::UpdateLeft)
+            .dry_run()
+            .expect("re-plan");
+        assert!(
+            again.steps.is_empty(),
+            "synced trees converge: {:?}",
+            again.steps
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_both_and_mirror_exec_parity() {
+        // Both: newer wins per side, one-sided copied, never deletes.
+        let base = temp_dir("sync3_both");
+        let (left, right) = make_pair_in(&base);
+        let t = fixed_stamp();
+        let later = later_stamp();
+        write_file(&left.join("newer_l.txt"), "aaa\n");
+        write_file(&right.join("newer_l.txt"), "bbb\n");
+        set_mtime_to(&left.join("newer_l.txt"), later);
+        set_mtime_to(&right.join("newer_l.txt"), t);
+        write_file(&left.join("newer_r.txt"), "ccc\n");
+        write_file(&right.join("newer_r.txt"), "ddd\n");
+        set_mtime_to(&left.join("newer_r.txt"), t);
+        set_mtime_to(&right.join("newer_r.txt"), later);
+        write_file(&left.join("only_l.txt"), "l\n");
+        write_file(&right.join("only_r.txt"), "r\n");
+
+        let both = SyncPlanner::new(&left, &right, SyncMode::Both);
+        assert!(both.is_bidirectional());
+        let plan = both.dry_run().expect("both dry run");
+        assert!(!left.join("only_r.txt").exists(), "dry run changes nothing");
+        assert!(
+            !right.join("only_l.txt").exists(),
+            "dry run changes nothing"
+        );
+        let at = |rel: &str| {
+            plan.steps
+                .iter()
+                .find(|s| s.rel_path == rel)
+                .map(|s| s.action)
+        };
+        assert_eq!(at("newer_l.txt"), Some(SyncAction::CopyToRight));
+        assert_eq!(at("newer_r.txt"), Some(SyncAction::CopyToLeft));
+        assert_eq!(at("only_l.txt"), Some(SyncAction::CopyToRight));
+        assert_eq!(at("only_r.txt"), Some(SyncAction::CopyToLeft));
+        assert!(
+            plan.steps
+                .iter()
+                .all(|s| !matches!(s.action, SyncAction::DeleteLeft | SyncAction::DeleteRight))
+        );
+
+        let report = both.apply(&plan).expect("both apply");
+        assert!(report.failed.is_empty());
+        assert_eq!(report.copied, plan.steps.len());
+        assert_eq!(report.deleted, 0);
+        assert!(left.join("only_r.txt").exists());
+        assert!(right.join("only_l.txt").exists());
+        let _ = fs::remove_dir_all(&base);
+
+        // Mirror left-to-right: copies left wins, prunes right-only.
+        let base = temp_dir("sync3_mirror");
+        let (left, right) = make_pair_in(&base);
+        write_file(&left.join("keep.txt"), "k\n");
+        write_file(&left.join("sub/inner.txt"), "i\n");
+        write_file(&right.join("extra.txt"), "e\n");
+        let mirror = SyncPlanner::new(&left, &right, SyncMode::Mirror);
+        assert!(mirror.is_mirror());
+        let plan = mirror.dry_run().expect("mirror dry run");
+        assert!(right.join("extra.txt").exists(), "dry run prunes nothing");
+        assert!(!right.join("keep.txt").exists(), "dry run copies nothing");
+        let del = plan
+            .steps
+            .iter()
+            .find(|s| s.rel_path == "extra.txt")
+            .expect("prune step");
+        assert_eq!(del.action, SyncAction::DeleteRight);
+        assert!(mirror.requires_consent(&plan));
+        let report = mirror.apply(&plan).expect("mirror apply");
+        assert!(report.failed.is_empty());
+        assert!(!right.join("extra.txt").exists());
+        assert!(right.join("keep.txt").exists());
+        assert!(right.join("sub/inner.txt").exists());
+        assert_eq!(report.total_applied(), plan.steps.len());
+        let _ = fs::remove_dir_all(&base);
+
+        // Mirror right-to-left: copies right wins, prunes left-only.
+        let base = temp_dir("sync3_mirror_left");
+        let (left, right) = make_pair_in(&base);
+        write_file(&right.join("keep.txt"), "k\n");
+        write_file(&left.join("stale.txt"), "s\n");
+        let mirror_l = SyncPlanner::new(&left, &right, SyncMode::MirrorLeft);
+        let plan = mirror_l.dry_run().expect("mirror-left dry run");
+        assert!(left.join("stale.txt").exists(), "dry run prunes nothing");
+        let del = plan
+            .steps
+            .iter()
+            .find(|s| s.rel_path == "stale.txt")
+            .expect("prune step");
+        assert_eq!(del.action, SyncAction::DeleteLeft);
+        assert_eq!(
+            plan.steps
+                .iter()
+                .find(|s| s.rel_path == "keep.txt")
+                .map(|s| s.action),
+            Some(SyncAction::CopyToLeft)
+        );
+        let report = mirror_l.apply(&plan).expect("mirror-left apply");
+        assert!(report.failed.is_empty());
+        assert!(!left.join("stale.txt").exists());
+        assert!(left.join("keep.txt").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_requires_consent_and_apply_with_consent() {
+        let base = temp_dir("sync3_consent");
+        let (left, right) = make_pair_in(&base);
+        write_file(&left.join("new.txt"), "n\n");
+
+        let empty = SyncPlan::default();
+        assert!(!SyncPlanner::new(&left, &right, SyncMode::Mirror).requires_consent(&empty));
+        assert!(!SyncPlanner::new(&left, &right, SyncMode::UpdateRight).requires_consent(&empty));
+
+        let mirror = SyncPlanner::new(&left, &right, SyncMode::Mirror);
+        let mirror_plan = mirror.dry_run().expect("mirror plan");
+        assert!(!mirror_plan.is_empty());
+        assert!(mirror.requires_consent(&mirror_plan));
+        assert!(SyncMode::Mirror.requires_consent());
+        assert!(SyncMode::Mirror.is_destructive());
+        assert!(SyncMode::Mirror.prunes());
+
+        let updater = SyncPlanner::new(&left, &right, SyncMode::UpdateRight);
+        let update_plan = updater.dry_run().expect("update plan");
+        assert!(!update_plan.is_empty());
+        assert!(!updater.requires_consent(&update_plan));
+        assert!(!SyncMode::UpdateRight.is_destructive());
+        assert!(!SyncMode::Both.requires_consent());
+        assert!(!SyncMode::Both.prunes());
+        assert_eq!(SyncMode::UpdateRight.display_name(), "Update Right");
+        assert_eq!(SyncMode::Mirror.display_name(), "Mirror Left to Right");
+        assert_eq!(SyncMode::Both.display_name(), "Update Both");
+
+        let err = updater.apply_with_consent(&update_plan, false).unwrap_err();
+        assert!(matches!(err, Error::Unsupported { .. }));
+        assert!(
+            !right.join("new.txt").exists(),
+            "preview-only writes nothing"
+        );
+
+        let report = updater
+            .apply_with_consent(&update_plan, true)
+            .expect("consented apply");
+        assert_eq!(report.copied, update_plan.steps.len());
+        assert!(right.join("new.txt").exists());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_apply_progress_callback_sequence() {
+        use std::cell::RefCell;
+        let base = temp_dir("sync3_progress");
+        let (left, right) = make_pair_in(&base);
+        write_file(&left.join("a.txt"), "a\n");
+        write_file(&left.join("b.txt"), "b\n");
+        let plan = plan_sync(
+            &left,
+            &right,
+            &SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: false,
+            },
+        )
+        .expect("plan");
+        assert_eq!(plan.steps.len(), 2);
+
+        let calls = RefCell::new(Vec::new());
+        let report = apply_sync_cancellable(
+            &left,
+            &right,
+            &plan,
+            None,
+            Some(&|idx: usize, total: usize, rel: &str| {
+                calls.borrow_mut().push((idx, total, rel.to_owned()));
+            }),
+        )
+        .expect("apply");
+        assert_eq!(report.copied, 2);
+        let calls = calls.borrow();
+        assert_eq!(calls.len(), 3);
+        assert_eq!(calls[0], (0, 2, "a.txt".to_owned()));
+        assert_eq!(calls[1], (1, 2, "b.txt".to_owned()));
+        assert_eq!(calls[2], (2, 2, "complete".to_owned()));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_precancelled_plan_and_apply_return_cancelled() {
+        let base = temp_dir("sync3_cancelled");
+        let (left, right) = make_pair_in(&base);
+        write_file(&left.join("a.txt"), "a\n");
+        let cancel = AtomicBool::new(true);
+
+        let err = plan_sync_cancellable(
+            &left,
+            &right,
+            &SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: false,
+            },
+            Some(&cancel),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
+
+        let err = plan_sync_with_compare_cancellable(
+            &left,
+            &right,
+            &SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: false,
+            },
+            &FolderOptions::default(),
+            Some(&cancel),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
+
+        let plan = plan_sync(
+            &left,
+            &right,
+            &SyncOptions {
+                direction: SyncDirection::LeftToRight,
+                prune: false,
+            },
+        )
+        .expect("plan");
+        assert!(!plan.steps.is_empty());
+        let err = apply_sync_cancellable(&left, &right, &plan, Some(&cancel), None).unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
+        assert!(
+            !right.join("a.txt").exists(),
+            "cancelled apply copies nothing"
+        );
+
+        let err = prune_empty_directories(&left, Some(&cancel)).unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
+
+        let planner = SyncPlanner::new(&left, &right, SyncMode::UpdateRight);
+        let err = planner.run_cancellable(&cancel).unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_prune_empty_dirs_keeps_symlinks_and_root() {
+        let base = temp_dir("sync3_prune_symlink");
+        let deep = base.join("a/b/c");
+        fs::create_dir_all(&deep).expect("create deep");
+        let keep = base.join("keep");
+        write_file(&keep.join("file.txt"), "k\n");
+        let link_dir = base.join("links");
+        fs::create_dir_all(&link_dir).expect("create link dir");
+        if cfg!(unix) {
+            let outside = base.join("outside.txt");
+            write_file(&outside, "secret\n");
+            std::os::unix::fs::symlink(&outside, link_dir.join("lnk")).expect("symlink");
+        } else {
+            write_file(&link_dir.join("placeholder.txt"), "p\n");
+        }
+
+        let pruned = prune_empty_directories(&base, None).expect("prune");
+        assert!(base.exists(), "root is never removed");
+        assert!(!base.join("a").exists(), "empty chain pruned");
+        assert!(keep.join("file.txt").exists(), "non-empty survives");
+        assert!(link_dir.exists(), "symlink dir survives");
+        if cfg!(unix) {
+            assert!(
+                fs::symlink_metadata(link_dir.join("lnk")).is_ok(),
+                "symlink itself survives"
+            );
+            assert!(base.join("outside.txt").exists(), "target survives");
+        }
+        assert_eq!(pruned, 3, "a/b/c pruned bottom-up");
+        let _ = fs::remove_dir_all(&base);
     }
 }

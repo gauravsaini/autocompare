@@ -598,6 +598,7 @@ impl JobRunner {
 )]
 mod tests {
     use super::*;
+    use crate::SyncMode;
     use std::time::Duration;
 
     #[test]
@@ -656,5 +657,124 @@ mod tests {
         let first = handle.try_recv_progress();
         assert!(first.is_some() || handle.progress_queue_len() <= 64);
         let _ = handle.join();
+    }
+
+    // --- round-sync3 edge coverage: cancellable sync progress ---
+
+    fn write_job_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dir");
+        }
+        std::fs::write(path, contents).expect("write fixture");
+    }
+
+    fn job_temp_base(name: &str) -> std::path::PathBuf {
+        let base = std::env::temp_dir().join(format!(
+            "autocompare_job_sync3_{name}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).expect("create temp base");
+        base
+    }
+
+    #[test]
+    fn test_spawn_sync_run_parity_and_progress() {
+        let base = job_temp_base("run");
+        let left = base.join("left");
+        let right = base.join("right");
+        std::fs::create_dir_all(&left).expect("create left");
+        std::fs::create_dir_all(&right).expect("create right");
+        write_job_file(&left.join("new.txt"), "new\n");
+        write_job_file(&left.join("sub/inner.txt"), "inner\n");
+        write_job_file(&right.join("extra.txt"), "extra\n");
+
+        let planner = SyncPlanner::new(&left, &right, SyncMode::Mirror);
+        let expected = planner.dry_run().expect("dry run");
+        let expected_steps = expected.steps.len();
+        assert_ne!(expected_steps, 0, "mirror fixture plans steps");
+        assert!(!right.join("new.txt").exists(), "dry run copies nothing");
+        assert!(right.join("extra.txt").exists(), "dry run prunes nothing");
+
+        let handle = JobRunner::spawn_sync_run(planner);
+        thread::sleep(Duration::from_millis(100));
+        assert!(handle.progress_queue_len() <= 64, "progress stays bounded");
+        let history = handle.progress_history();
+        assert!(!history.is_empty(), "progress visible before join");
+        assert!(
+            history.iter().any(|p| p.total == Some(expected_steps)),
+            "progress totals match the plan: {history:?}"
+        );
+        let report = handle.join().expect("sync run");
+        assert!(report.failed.is_empty());
+        assert_eq!(
+            report.copied.saturating_add(report.deleted),
+            expected_steps,
+            "apply parity: report totals match dry-run steps"
+        );
+        assert!(right.join("new.txt").exists());
+        assert!(right.join("sub/inner.txt").exists());
+        assert!(!right.join("extra.txt").exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_spawn_sync_apply_progress_sequence() {
+        let base = job_temp_base("apply");
+        let left = base.join("left");
+        let right = base.join("right");
+        std::fs::create_dir_all(&left).expect("create left");
+        std::fs::create_dir_all(&right).expect("create right");
+        write_job_file(&left.join("a.txt"), "a\n");
+        write_job_file(&left.join("b.txt"), "b\n");
+
+        let planner = SyncPlanner::new(&left, &right, SyncMode::UpdateRight);
+        let plan = planner.dry_run().expect("dry run");
+        let total = plan.steps.len();
+        assert_eq!(total, 2);
+
+        let handle = JobRunner::spawn_sync_apply(&left, &right, plan);
+        thread::sleep(Duration::from_millis(100));
+        let history = handle.progress_history();
+        assert!(!history.is_empty(), "apply emits progress");
+        assert!(
+            history.iter().any(|p| p.message.contains("a.txt")),
+            "per-file progress names the file: {history:?}"
+        );
+        assert!(
+            history
+                .iter()
+                .any(|p| p.message.contains("Sync apply complete")),
+            "final progress closes the run: {history:?}"
+        );
+        assert!(
+            history.iter().all(|p| p.total.is_none_or(|t| t == total)),
+            "every total matches the step count: {history:?}"
+        );
+        let report = handle.join().expect("apply");
+        assert_eq!(report.copied, total);
+        assert!(report.failed.is_empty());
+        assert!(right.join("a.txt").exists());
+        assert!(right.join("b.txt").exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_precancelled_token_job_reports_cancelled_status() {
+        let token = CancellationToken::new();
+        token.cancel();
+        assert!(token.is_cancelled());
+        let handle = JobRunner::spawn_with_token(token, |cancel, _progress| {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(Error::Cancelled);
+            }
+            Ok(1)
+        });
+        thread::sleep(Duration::from_millis(50));
+        assert_eq!(handle.status(), JobStatus::Cancelled);
+        let err = handle.join().unwrap_err();
+        assert!(matches!(err, Error::Cancelled));
     }
 }
