@@ -2434,20 +2434,20 @@ pub fn paint_hex_panes_plus_ruler(
 
 /// Byte column x-offset within the hex bytes pane: 16 bytes per row (col 0..15).
 /// Columns 0..7 are spaced 3 chars apart (`XX `). At column 8, the shared
-/// [`HEX_MIDLINE_GAP_CHARS`] midline gap separates the two 8-byte nibble
-/// groups (`XX  XX`), so columns 8..15 start at
-/// `(col * 3 + HEX_MIDLINE_GAP_CHARS) * char_w`. Out of range or non-finite
+/// nibble group gap derived from [`hex_nibble_group_gap_w`] separates the two
+/// 8-byte nibble groups (`XX  XX`), so columns 8..15 start at
+/// `col * 3 * char_w + hex_nibble_group_gap_w(char_w)`. Out of range or non-finite
 /// `char_w` returns `None`. Pure; unit-tested.
 pub fn hex_grid_byte_col_x(col: usize, char_w: f32) -> Option<f32> {
     if col >= HEX_BYTES_PER_ROW || !char_w.is_finite() || char_w <= 0.0 {
         return None;
     }
-    let char_offset = if col < HEX_BYTES_PER_ROW / 2 {
-        col.saturating_mul(3)
+    let base_x = (col.saturating_mul(3) as f32) * char_w;
+    let x = if col < HEX_BYTES_PER_ROW / 2 {
+        base_x
     } else {
-        col.saturating_mul(3).saturating_add(HEX_MIDLINE_GAP_CHARS)
+        base_x + hex_nibble_group_gap_w(char_w)
     };
-    let x = (char_offset as f32) * char_w;
     if !x.is_finite() {
         return None;
     }
@@ -2592,6 +2592,82 @@ pub fn hex_grid_origin_y() -> f32 {
 /// row height so markers stay aligned. Pure; unit-tested.
 pub fn hex_grid_origin(show_line_numbers: bool) -> (f32, f32) {
     (hex_grid_origin_x(show_line_numbers), hex_grid_origin_y())
+}
+
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex3 round-3: ruler tick spacing + grid at 960px.
+// Gap after-hex.png round-2: ruler ticks still uneven vs BC — ruler tick marks
+// lacked explicit symmetric SPACE token spacing, the nibble-group gap was
+// inline math instead of single-sourced from the midline helper, and the row
+// height was not formally locked to the Mono line-height across the 960px
+// canvas budget.
+// Geometry FIRST:
+// - Ruler tick spacing symmetric via SPACE tokens: `hex_ruler_tick_spacing()`
+//   uses `GEO_SECTION_GAP` (`SPACE_SM`, 8.0px), `hex_ruler_tick_sym_pad()` uses
+//   `GEO_TIGHT_GAP` (`SPACE_XS`, 4.0px).
+// - Nibble group gap: `hex_nibble_group_gap_w()` delegates directly to the
+//   `hex_midline_gap_w()` midline helper so both grid columns and ruler columns
+//   match pixel-for-pixel at `(col * 3) * char_w + hex_nibble_group_gap_w(char_w)`.
+// - Row height locked at 960px wide: `hex_wide_row_h()` locked to `TypoRole::Mono.line_height_px()`
+//   (15.6px) at `HEX_CANVAS_W` (960.0px), yielding exactly 30 visible rows in
+//   the 470px panes budget without clipping or desync.
+// Typography SECOND: grid + ruler stay Mono (`hex_row_text_role` reuse),
+// labels stay Body — koi naya size/token nahi. Colors FROZEN: zero modifications.
+// ----------------------------------------------------------------------------
+
+/// Nibble group gap width (px) at `char_w`: single source derived from
+/// [`hex_midline_gap_w`]. Separates the two 8-byte nibble groups (col 0..7
+/// and col 8..15) symmetrically in both byte grid and ruler header. Pure; unit-tested.
+pub fn hex_nibble_group_gap_w(char_w: f32) -> f32 {
+    hex_midline_gap_w(char_w)
+}
+
+/// Ruler tick symmetric spacing (px): one section gap (`GEO_SECTION_GAP` = `SPACE_SM`, 8.0px).
+/// Reuses SPACE tokens so ruler tick marks maintain symmetric rhythm across columns.
+/// Pure; unit-tested.
+pub fn hex_ruler_tick_spacing() -> f32 {
+    crate::theme::GEO_SECTION_GAP
+}
+
+/// Ruler tick symmetric padding (px): one tight gap (`GEO_TIGHT_GAP` = `SPACE_XS`, 4.0px).
+/// Centers tick marks with symmetric clearance. Pure; unit-tested.
+pub fn hex_ruler_tick_sym_pad() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Ruler column x-offset within the ruler hex header: 16 column labels (col 0..15).
+/// Columns 0..7 start at `col * 3 * char_w`. At column 8, the shared nibble group gap
+/// derived from the midline helper shifts the second 8-byte group by `hex_nibble_group_gap_w(char_w)`.
+/// Matches [`hex_grid_byte_col_x`] pixel-for-pixel so ruler ticks align above byte cells.
+/// Pure; unit-tested.
+pub fn hex_ruler_col_x(col: usize, char_w: f32) -> Option<f32> {
+    if col >= HEX_BYTES_PER_ROW || !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let base_x = (col.saturating_mul(3) as f32) * char_w;
+    let x = if col < HEX_BYTES_PER_ROW / 2 {
+        base_x
+    } else {
+        base_x + hex_nibble_group_gap_w(char_w)
+    };
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Hex row height at reference 960px canvas width (px): locked to [`crate::theme::TypoRole::Mono`]
+/// line-height (15.6px). Single source ensures grid rows and ruler header never desync.
+/// Pure; unit-tested.
+pub fn hex_wide_row_h() -> f32 {
+    hex_grid_row_h()
+}
+
+/// Hex grid visible rows count at reference 960x600 canvas:
+/// `panes_h = hex_panes_height(600.0)` (470.0px), divided by `hex_wide_row_h()` (15.6px),
+/// yielding 30 fully visible rows without vertical clipping. Pure; unit-tested.
+pub fn hex_wide_960_visible_rows() -> u64 {
+    hex_visible_rows(470.0, hex_wide_row_h())
 }
 
 #[cfg(test)]
@@ -4404,5 +4480,80 @@ mod tests {
         // Typo second: grid + ruler stay Mono, no new sizes.
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex3_round3_ruler_ticks_and_grid_wide_960() {
+        // Headless test proving edge fixture comparison/hex-wide-960.json:
+        // 960px canvas reference width (SideBySide mode); ruler tick spacing
+        // symmetric via SPACE tokens (SPACE_SM 8.0px spacing, SPACE_XS 4.0px pad);
+        // nibble group gap derived from midline helper (7.0px at char_w 7.0px);
+        // row height locked to Mono line-height (15.6px) at 960px wide.
+        let fixture_raw = include_str!("../../../checks/gui-exq-hex3/comparison/hex-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex3/round-1/comparison/hex-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 600.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"ruler_grid_gap_x\": 8.0"));
+        assert!(fixture_raw.contains("\"ruler_grid_gap_y\": 4.0"));
+        assert!(fixture_raw.contains("\"ruler_tick_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"ruler_tick_sym_pad\": 4.0"));
+        assert!(fixture_raw.contains("\"midline_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"nibble_group_gap_px\": 7.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 30"));
+
+        // 1. 960px canvas layout and row height locked to Mono line-height
+        assert_eq!(HEX_CANVAS_W, 960.0);
+        assert_eq!(HEX_CANVAS_H, 600.0);
+        assert_eq!(hex_layout_mode(HEX_CANVAS_W), HexLayoutMode::SideBySide);
+        assert!((hex_wide_row_h() - 15.6).abs() < 0.001);
+        assert!((hex_wide_row_h() - hex_grid_row_h()).abs() < 0.001);
+        assert!((hex_wide_row_h() - hex_ruler_row_h()).abs() < 0.001);
+        assert!((hex_wide_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+
+        // Chrome reserve and grid availability at 960px wide
+        assert_eq!(hex_chrome_reserve_w(false), 52.0);
+        assert_eq!(hex_grid_avail_w(960.0, false), 908.0);
+        assert_eq!(hex_grid_origin_x(false), 52.0);
+        assert!((hex_grid_origin_y() - 19.6).abs() < 0.001);
+        assert_eq!(hex_wide_960_visible_rows(), 30);
+
+        // 2. Ruler tick spacing symmetric via SPACE tokens
+        assert_eq!(hex_ruler_tick_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(hex_ruler_tick_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(hex_ruler_tick_spacing(), 8.0);
+        assert_eq!(hex_ruler_tick_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(hex_ruler_tick_sym_pad(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(hex_ruler_tick_sym_pad(), 4.0);
+        assert_eq!(hex_ruler_grid_gap_x(), crate::theme::SPACE_SM);
+        assert_eq!(hex_ruler_grid_gap_y(), crate::theme::SPACE_XS);
+
+        // 3. Nibble group gap derived from midline helper
+        let char_w = 7.0;
+        assert_eq!(hex_midline_gap_w(char_w), 7.0);
+        assert_eq!(hex_nibble_group_gap_w(char_w), hex_midline_gap_w(char_w));
+        assert_eq!(hex_nibble_group_gap_w(char_w), 7.0);
+        assert_eq!(hex_nibble_group_gap_w(0.0), 0.0);
+        assert_eq!(hex_nibble_group_gap_w(-1.0), 0.0);
+        assert_eq!(hex_nibble_group_gap_w(f32::NAN), 0.0);
+
+        // Ruler column and grid column alignment parity (col 0..15)
+        for col in 0..16 {
+            let r_x = hex_ruler_col_x(col, char_w);
+            let g_x = hex_grid_byte_col_x(col, char_w);
+            assert_eq!(r_x, g_x);
+        }
+        assert_eq!(hex_ruler_col_x(0, char_w), Some(0.0));
+        assert_eq!(hex_ruler_col_x(7, char_w), Some(147.0));
+        assert_eq!(hex_ruler_col_x(8, char_w), Some(175.0));
+        assert_eq!(
+            hex_ruler_col_x(8, char_w).unwrap() - hex_ruler_col_x(7, char_w).unwrap(),
+            28.0 // 4 chars (3 + 1 midline gap) * 7.0px = 28.0px
+        );
+        assert_eq!(hex_ruler_col_x(16, char_w), None);
     }
 }
