@@ -1444,3 +1444,14 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 
 ## 2026-11-20 - Wave BV plan (session model Wave 1, parallel with pathmeta)
 - BV-MODEL sess-model-bv: OWNS home.rs+checks/gui-sessionmodel-bv (PLAN Wave BU-SES-MODEL: Session/SessionList/T1-T7/title/cap). Disjoint from BU-PATHMETA (views+app). Commit locally NO PUSH, pathspec-only.
+
+## 2026-11-20 — Wave BV-MODEL landed + pushed (P0-1 Wave 1 session store)
+- Commit `334dee5` feat(gui): add headless Session and SessionList store with T1-T7 transitions (OWNS home.rs + checks/gui-sessionmodel-bv).
+- Gates: 642 green total, clippy zero, fmt clean, banned zero, colors zero new, PNG magic OK, STATUS untouched.
+- REPORT: checks/gui-sessionmodel-bv/REPORT.md (Hinglish-Roman).
+
+## 2026-11-20 — Wave BU-PATHMETA landed + pushed (P1-1 path meta row)
+- Commit `ca79a23` feat(gui): compact path meta row with history dropdown data (OWNS app.rs + views.rs + checks/gui-pathmeta-bu).
+- Gates: same full verify as above (642 green), all clean.
+- REPORT: checks/gui-pathmeta-bu/REPORT.md (Hinglish-Roman).
+- Testsuite now 642 green (629 -> 642, +13). Next: PLAN Wave 2 BU-SES-APP (app.rs wiring, depends on MODEL API) -> Wave 3 BU-SES-PAINT.
