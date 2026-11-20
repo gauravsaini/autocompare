@@ -102,7 +102,7 @@
   "WAVE-TOPCHROME": "landed+pushed 7edc614 REPORT PASS 804 green clippy0 fmt clean banned0 PNG 10401",
   "WAVE-TREE2": "landed+pushed abcf36c REPORT PASS 773 green indent-guides status-marks gutter-arrows (tree+gutter+copy)",
   "WAVE-TREE4": "landed+pushed 4654e5c REPORT PASS 798 green clippy0 fmt clean banned0 edge fixture",
-  "WAVE-TREE5": "refining sess-opencode-tree5 26 msgs tree309",
+  "WAVE-TREE5": "harness sess-opencode-tree5 28 msgs 822 green edge deep-nesting, REPORT pending",
   "WAVE-UXKEY2": "landed+pushed 9f8625e REPORT PASS 743+31 green keymap+AA",
   "WAVE-VFS3": "vfs3 round-1 LANDED 0f5d088 (466 ins OWNS-clean, REPORT PASS, 8 suites green, fmt/clippy/banned clean)",
   "schema_version": 1,
