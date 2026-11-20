@@ -165,7 +165,9 @@
  "WAVE-EXQ7B": "landed+pushed 5105090 REPORT PASS 743 green hex+gutter wave7b",
  "HARNESS-EXQUISITE": "landed round-0 PASS tools/exquisite/run.sh + skills/exquisite (743 green, PNG 9765B magic ok, geo-typo signals)",
  "WAVE-EXQ-HOME2B": "running opencode sess-opencode-exqhome2b OWNS home.rs,tree.rs (relaunched 22:48 fresh session, disk 20Gi)",
- "WAVE-EXQ-TEXT2B": "running agyx /swarm OWNS views.rs,copy.rs,take.rs (relaunched 22:48, disk 20Gi)",
+ "WAVE-EXQ-TEXT2B": "dead agyx 0B no-proc twice + probe 0B (consistent fail, abandoned per rule)",
  "WAVE-LOCALRUN5B": "running opencode sess-opencode-localrun5b OWNS checks/early-feedback-5 only (relaunched 22:48 fresh)",
- "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)"
+ "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)",
+ "WAVE-EXQ-TEXT2C": "running opencode sess-opencode-exqtext2c OWNS views.rs,copy.rs,take.rs (replaces dead agyx, launched 22:50, ps-confirmed)",
+ "AGYX-VERDICT": "agyx inconsistent (0B logs, instant death, probe fail) -> mat use karo, opencode default-model only"
 }
