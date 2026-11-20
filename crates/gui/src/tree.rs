@@ -91,6 +91,32 @@ pub fn tree_indent_for_depth(depth: usize) -> f32 {
     (depth as f32) * tree_indent_step()
 }
 
+// ----------------------------------------------------------------------------
+// Folder drill-down row geometry (first): fixed expander cell + indent.
+// BC pattern: har row me expander/glyph/path ek hi column origin se shuru
+// hote hain — file rows (bina expander) ka path dir rows se aage-peeche
+// nahi hota. Paint har row me expander cell reserve karta hai (button ya
+// blank), phir `tree_indent_for_depth(depth)` offset lagta hai.
+// ----------------------------------------------------------------------------
+
+/// Folder drill-down expander cell width px: standard 16px glyph cell
+/// (`home::SESSION_TREE_EXPANDER_W` parity) — `▶/▼` button ya blank
+/// jagah, har row me fixed taaki glyph/path columns align rahen.
+pub const FOLDER_EXPANDER_W: f32 = 16.0;
+
+/// Folder drill-down expander cell width px (single source).
+/// Pure; unit-tested.
+pub fn folder_expander_width() -> f32 {
+    FOLDER_EXPANDER_W
+}
+
+/// Drill-down row ka path-column x-offset px: indent + fixed expander
+/// cell. Paint path cell isi offset se shuru karta hai (glyph cell ke
+/// baad), taaki file/dir rows ek baseline par rahen. Pure; unit-tested.
+pub fn folder_row_x_offset(depth: usize) -> f32 {
+    tree_indent_for_depth(depth) + folder_expander_width()
+}
+
 /// Toggles one directory in the expanded set.
 pub fn toggle_expanded(expanded_dirs: &mut BTreeSet<String>, dir: &str) {
     if expanded_dirs.contains(dir) {
@@ -1383,6 +1409,15 @@ mod tests {
         assert_eq!(tree_indent_step(), 12.0);
         assert_eq!(tree_indent_for_depth(2), 24.0);
         assert_eq!(folder_column_defs().len(), 5);
+    }
+
+    #[test]
+    fn drill_row_offset_is_indent_plus_fixed_expander() {
+        assert_eq!(folder_expander_width(), 16.0);
+        assert_eq!(FOLDER_EXPANDER_W, 16.0);
+        assert_eq!(folder_row_x_offset(0), 16.0);
+        assert_eq!(folder_row_x_offset(1), 28.0);
+        assert_eq!(folder_row_x_offset(2), 40.0);
     }
 
     #[test]

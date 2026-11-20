@@ -122,13 +122,15 @@ pub const OUTER_PAD: u32 = 12;
 pub const PANE_GAP: u32 = 4;
 pub const STATUS_H: u32 = 30;
 /// Home card grid: live contract `home::HOME_GRID_COLUMNS` (3) ×
-/// `home::HOME_GRID_GAP` (8); card w 306 (min 240 se upar), h 100
-/// (contract min-height 99.6 ka ceiling). CTA 150x28 (contract min
-/// 120x28 se upar). Recent columns title-flex + kind 96 + age 72.
+/// `home::HOME_GRID_GAP` (8); card w 306 (960 canvas par flex
+/// `views::home_paint_card_width(936)` = 306.67 ka truncation, floor 240
+/// se upar), h 100 (contract min-height 99.6 ka ceiling). CTA 224x28
+/// (live `home::HOME_CARD_CTA_W` parity, card me centered). Recent
+/// columns title-flex + kind 96 + age 72.
 pub const HOME_CARD_W: u32 = 306;
 pub const HOME_CARD_H: u32 = 100;
 pub const HOME_CARD_GAP: u32 = 8;
-pub const HOME_CTA_W: u32 = 150;
+pub const HOME_CTA_W: u32 = 224;
 pub const HOME_CTA_H: u32 = 28;
 pub const TEXT_PANE_W: u32 = 460;
 pub const TEXT_LEFT_X: u32 = 12;
@@ -1073,7 +1075,9 @@ pub fn render_folder_fixture_png(out_path: &Path) -> Result<(), String> {
                 fixture_palette().dim,
             );
         }
-        let indent = (node.depth as u32).saturating_mul(4u32);
+        // Drill-down indent: live 12px/depth parity — bitmap font ~7px
+        // advance par 2 units = 14px/depth (live 12px ka nearest).
+        let indent = (node.depth as u32).saturating_mul(2u32);
         let gx = 34u32.saturating_add(indent.saturating_mul(7));
         draw_string(
             &mut pixels,
@@ -2400,16 +2404,18 @@ pub fn render_home_fixture_png(out_path: &Path) -> Result<(), String> {
             );
         }
         let cta_y = y.saturating_add(64);
+        // CTA live paint jaisa card me centered (vertical_centered parity).
+        let cta_x = x.saturating_add(HOME_CARD_W.saturating_sub(HOME_CTA_W) / 2);
         fill_rect(
             &mut pixels,
             dims,
-            (x.saturating_add(12), cta_y, HOME_CTA_W, HOME_CTA_H),
+            (cta_x, cta_y, HOME_CTA_W, HOME_CTA_H),
             [60, 60, 60, 255],
         );
         draw_string(
             &mut pixels,
             dims,
-            x.saturating_add(24),
+            cta_x.saturating_add(12),
             cta_y.saturating_add(10),
             &format!("Open {}", item.title),
             fixture_palette().text,
@@ -4525,10 +4531,35 @@ mod tests {
             (title_w + kind_w + age_w + RECENT_LIST_PAD * 2.0 + RECENT_COL_GAP * 2.0 - 936.0).abs()
                 < 0.001
         );
-        // Every CTA label fits its button text budget (150 - 2*12).
+        // Every CTA label fits its button text budget (224 - 2*12).
         for item in home_model().items.iter() {
             assert!(text_width(&format!("Open {}", item.title)) < HOME_CTA_W - 24);
         }
+    }
+
+    #[test]
+    fn home_fixture_mirrors_live_paint() {
+        use crate::home::{HOME_CARD_MIN_W, home_card_cta_width};
+        use crate::views::{home_paint_card_height, home_paint_card_width, home_paint_cta_size};
+        // Fixture card == live flex width @960 canvas (936 inner), truncated.
+        assert!((home_paint_card_width(936.0) - 306.6667).abs() < 0.01);
+        assert_eq!(HOME_CARD_W, 306);
+        assert_eq!(HOME_CARD_W as f32, HOME_CARD_MIN_W + 66.0);
+        // Fixture CTA == live CTA contract 224x28, card me centered.
+        assert_eq!(HOME_CTA_W as f32, home_card_cta_width());
+        assert_eq!((HOME_CTA_W, HOME_CTA_H), (224, 28));
+        assert_eq!(
+            home_paint_cta_size(),
+            (home_card_cta_width(), HOME_CARD_BUTTON_MIN_H)
+        );
+        assert_eq!(
+            HOME_CARD_W.saturating_sub(HOME_CTA_W) / 2,
+            41,
+            "CTA centered in card"
+        );
+        // Fixture card height == live paint height (contract ceiling 100).
+        assert!((HOME_CARD_H as f32) >= home_paint_card_height());
+        assert_eq!(HOME_CARD_H, home_paint_card_height().ceil() as u32);
     }
 
     #[test]

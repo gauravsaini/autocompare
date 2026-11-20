@@ -5743,8 +5743,10 @@ impl eframe::App for App {
                                             if ui.small_button(icon).clicked() {
                                                 toggle_dir = Some(node.row.rel_path.clone());
                                             }
-                                        } else if node.row.is_dir {
-                                            ui.label(RichText::new("  ").monospace());
+                                        } else {
+                                            // Fixed expander cell (button ya blank): file rows
+                                            // ka path dir rows se aage-peeche nahi hota.
+                                            ui.add_space(tree::folder_expander_width());
                                         }
                                         let glyph = node.row.glyph.to_string();
                                         ui.label(RichText::new(glyph).monospace().weak());

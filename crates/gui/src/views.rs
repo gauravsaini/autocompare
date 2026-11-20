@@ -58,7 +58,7 @@ pub const SECTION_GAP: f32 = 8.0;
 pub const TIGHT_GAP: f32 = 4.0;
 pub const FOOTER_GAP: f32 = 6.0;
 pub const TAB_BOTTOM_GAP: f32 = 6.0;
-pub const TREE_INDENT: f32 = 14.0;
+pub const TREE_INDENT: f32 = crate::theme::GEO_TREE_INDENT_STEP;
 pub const CARD_W: f32 = 240.0;
 pub const CARD_H: f32 = 75.0;
 const BROWSE_RESERVE: f32 = 75.0;
@@ -264,7 +264,10 @@ pub fn paint_split_handle(ui: &mut Ui, fraction: &mut f32, avail: f32) -> bool {
     false
 }
 
-/// Consistent tree indent for one depth level.
+/// Consistent tree indent for one depth level: canonical MD spacing
+/// step ([`TREE_INDENT`] = 12.0, [`crate::theme::GEO_TREE_INDENT_STEP`]
+/// parity) so drill-down rows match the headless
+/// [`crate::tree::tree_indent_for_depth`] contract.
 pub fn tree_indent(depth: usize) -> f32 {
     depth as f32 * TREE_INDENT
 }
@@ -371,6 +374,19 @@ pub fn home_paint_card_height() -> f32 {
 /// Pure; unit-tested.
 pub fn home_paint_cta_size() -> (f32, f32) {
     (home_card_cta_width(), HOME_CARD_BUTTON_MIN_H)
+}
+
+/// Paint-applied Home card width: flex fill of the grid row — 3 cards +
+/// 2 gaps me available width, [`CARD_W`] = 240 floor. 960 canvas par
+/// ~306.67 (fixture `HOME_CARD_W` = 306 parity, truncation); tang window
+/// par floor pakadta hai, grid scroll karta hai. Non-finite ya
+/// non-positive avail par floor (paint kabhi NaN na khaye). Pure;
+/// unit-tested.
+pub fn home_paint_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return CARD_W;
+    }
+    ((avail - HOME_GRID_GAP * 2.0) / 3.0).max(CARD_W)
 }
 
 /// Session toolbar button size: 96x24 floor. Width path Browse floor
@@ -605,13 +621,16 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
     ui.label(RichText::new("Select a session type or use the tabs above:").weak());
     ui.add_space(SECTION_GAP);
 
+    // Flex cards: chaudi window par row bharo (fixture 306 @960 parity),
+    // tang par 240 floor (grid scroll karta hai, cards crush nahi hote).
+    let card_w = home_paint_card_width(ui.available_width());
     egui::Grid::new("home_sessions_grid")
         .num_columns(home_paint_grid_columns())
         .spacing([HOME_GRID_GAP, HOME_GRID_GAP])
         .show(ui, |ui| {
             for (i, item) in model.items.iter().enumerate() {
                 ui.group(|ui| {
-                    ui.set_width(CARD_W);
+                    ui.set_width(card_w);
                     ui.set_height(home_paint_card_height());
                     ui.vertical_centered(|ui| {
                         ui.label(TypoRole::HomeTitle.rich(item.title));
@@ -7671,7 +7690,7 @@ mod tests {
         assert_eq!(TIGHT_GAP, 4.0);
         assert_eq!(FOOTER_GAP, 6.0);
         assert_eq!(TAB_BOTTOM_GAP, 6.0);
-        assert_eq!(TREE_INDENT, 14.0);
+        assert_eq!(TREE_INDENT, 12.0);
         assert_eq!((CARD_W, CARD_H), (240.0, 75.0));
     }
 
@@ -7835,8 +7854,20 @@ mod tests {
     #[test]
     fn tree_indent_scales_with_depth() {
         assert_eq!(tree_indent(0), 0.0);
-        assert_eq!(tree_indent(1), 14.0);
-        assert_eq!(tree_indent(2), 28.0);
+        assert_eq!(tree_indent(1), 12.0);
+        assert_eq!(tree_indent(2), 24.0);
+    }
+
+    #[test]
+    fn paint_indent_matches_headless_drill_contract() {
+        // Paint aur headless tree ek hi kadam par: drill-down rows ka
+        // x-offset dono taraf `indent + 16 expander` hai.
+        assert_eq!(TREE_INDENT, crate::tree::tree_indent_step());
+        assert_eq!(tree_indent(2), crate::tree::tree_indent_for_depth(2));
+        assert_eq!(
+            tree_indent(1) + crate::tree::folder_expander_width(),
+            crate::tree::folder_row_x_offset(1)
+        );
     }
 
     #[test]
@@ -7847,6 +7878,20 @@ mod tests {
         assert!(home_desc_paint_is_small_weak());
         assert_eq!(home_button_paint_size(), TYPO_BODY_SIZE);
         assert_eq!(home_button_paint_size(), 13.0);
+    }
+
+    #[test]
+    fn home_card_width_flexes_with_floor() {
+        // 960-canvas inner width 936 par ~306.67 (fixture 306 parity).
+        assert!((home_paint_card_width(936.0) - 306.6667).abs() < 0.01);
+        // Tang window par 240 floor (grid scroll, crush nahi).
+        assert_eq!(home_paint_card_width(600.0), CARD_W);
+        assert_eq!(home_paint_card_width(0.0), CARD_W);
+        assert_eq!(home_paint_card_width(f32::NAN), CARD_W);
+        // CTA card se bahar nahi: floor card 240 me 224 single-line fit.
+        let (cta_w, _) = home_paint_cta_size();
+        assert!(cta_w <= home_paint_card_width(936.0));
+        assert!(cta_w <= CARD_W);
     }
 
     #[test]
