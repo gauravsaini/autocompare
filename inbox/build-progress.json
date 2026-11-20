@@ -16,6 +16,7 @@
  "ORCH-BC": "BCompare pid 23316 running, outside-observe only, clean-room",
  "ORCH-DISK": "/tmp 117Mi -> 13Gi freed stale targets via python rmtree, active 4 targets preserved",
  "ORCH-DISK2": "2026-11-20 /tmp 100pct 117Mi blocked launches 0B logs, python rmtree freed 14Gi, warm target-orch-verify preserved",
+ "ORCH-DISK3": "2026-11-21 freed 15G stale targets (viewfill7/vtable7/typo8/hexdense8/gutter6/status7/guttercopy8 all landed), 7.3G->22G free for wave9 cold builds",
  "ORCH-EXQ7-STALL": "2026-11-20 22:21 AEDT exq7 sess 44msgs last 671s idle log 92872B 22:09, pid 36156 alive S+ 0.0pct, WIP preserved, no kill per no-rush, next check backoff",
  "ORCH-EXQ8": "3 waves typo8+hexdense8+guttercopy8 all landed 858 green, fresh local run next",
  "ORCH-EXQ8-ACTIVE": "sess 14msgs last 141s idle, pid 52450 alive, reading views.rs + screenshots, progressing",
