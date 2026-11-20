@@ -5,7 +5,10 @@
 
 #![forbid(unsafe_code)]
 
-use crate::gutter::GUTTER_SEGMENT_MIN_H;
+use crate::gutter::{
+    GUTTER_SEGMENT_MIN_H, gutter_overview_geometry_padded, gutter_padded_row_at_y,
+    gutter_padded_y_for_row,
+};
 use crate::home::{
     HOME_GRID_COLUMNS, RECENT_COL_GAP, RECENT_LIST_PAD, folder_empty_hint, home_model,
     recent_row_columns,
@@ -693,6 +696,58 @@ pub fn paint_bottom_legend_strip(pixels: &mut [u8], dims: (u32, u32), segments: 
         );
     }
 }
+/// Overview minimap helpers (exq-gutter28): the right strip compresses the
+/// whole file into a miniature map — each file row maps to a proportional
+/// vertical position inside a small top/bottom inset so edge bands never
+/// clip. Both directions reuse the live padded mapping, never ad-hoc math.
+/// Center gutter untouched (fixed 20px lane, hunk-head markers only).
+/// Pure; headless-tested. Colors frozen (caller picks hues).
+pub fn overview_row_y(row: usize, total_rows: usize, pane_top: u32, pane_h: u32) -> Option<u32> {
+    let inner_y = gutter_padded_y_for_row(row, total_rows, pane_h as f32)?;
+    if inner_y.is_finite() && inner_y >= 0.0 {
+        Some(pane_top.saturating_add(inner_y.round() as u32))
+    } else {
+        None
+    }
+}
+
+/// Inverse of [`overview_row_y`]: gutter-local y back to a model row.
+/// `None` on out-of-range y or bad geometry (same contract as live).
+/// Pure; headless-tested.
+pub fn overview_row_at_y(y: u32, total_rows: usize, pane_top: u32, pane_h: u32) -> Option<usize> {
+    if y < pane_top {
+        return None;
+    }
+    let local = y.saturating_sub(pane_top) as f32;
+    gutter_padded_row_at_y(local, total_rows, pane_h as f32)
+}
+
+/// Paints the right overview strip: full-file bands (same + diff) from the
+/// live padded geometry inside the track inset; diff hues frozen, same
+/// bands reuse the panel tone. Single source for the wide (960) and narrow
+/// (720) text routes; accent/wrap/hex routes keep their own paint.
+pub fn paint_overview_strip(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    gutter_x: u32,
+    gutter_w: u32,
+    pane_top: u32,
+    pane_h: u32,
+    rows: &[TextRow],
+) {
+    let geom = gutter_overview_geometry_padded(rows.len(), pane_h as f32, rows);
+    for seg in geom.segments {
+        let seg_y = pane_top.saturating_add(seg.y_start as u32);
+        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
+        let seg_color = match seg.kind {
+            TextRowKind::Equal => fixture_palette().panel,
+            TextRowKind::Changed => CHANGED_BG,
+            TextRowKind::Deleted => DELETED_BG,
+            TextRowKind::Inserted => INSERTED_BG,
+        };
+        fill_rect(pixels, dims, (gutter_x, seg_y, gutter_w, seg_h), seg_color);
+    }
+}
 
 /// Renders the Text comparison session fixture to a PNG at the given path.
 ///
@@ -1162,25 +1217,17 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
         );
     }
 
-    // Thumbnail overview gutter geometry: live ruler contract
-    // (`gutter::GUTTER_SEGMENT_MIN_H` = 4.0 floor, slop hit-test).
-    let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
-    for seg in geom.segments {
-        let seg_y = pane_top.saturating_add(seg.y_start as u32);
-        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
-        let seg_color = match seg.kind {
-            TextRowKind::Equal => fixture_palette().panel,
-            TextRowKind::Changed => CHANGED_BG,
-            TextRowKind::Deleted => DELETED_BG,
-            TextRowKind::Inserted => INSERTED_BG,
-        };
-        fill_rect(
-            &mut pixels,
-            dims,
-            (gutter_x, seg_y, gutter_w, seg_h),
-            seg_color,
-        );
-    }
+    // Right overview minimap (exq-gutter28): full-file bands via the live
+    // padded geometry; center gutter above stays the 20px hunk-head lane.
+    paint_overview_strip(
+        &mut pixels,
+        dims,
+        gutter_x,
+        gutter_w,
+        pane_top,
+        pane_height,
+        &rows,
+    );
 
     // Per-pane status strips above pane bottoms (BC parity: cursor, format word, result word).
     let strip_y = pane_bottom.saturating_sub(PANE_STATUS_H);
@@ -1578,23 +1625,17 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
         }
     }
 
-    let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
-    for seg in geom.segments {
-        let seg_y = pane_top.saturating_add(seg.y_start as u32);
-        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
-        let seg_color = match seg.kind {
-            TextRowKind::Equal => fixture_palette().panel,
-            TextRowKind::Changed => CHANGED_BG,
-            TextRowKind::Deleted => DELETED_BG,
-            TextRowKind::Inserted => INSERTED_BG,
-        };
-        fill_rect(
-            &mut pixels,
-            dims,
-            (gutter_x, seg_y, GUTTER_W, seg_h),
-            seg_color,
-        );
-    }
+    // Right overview minimap (exq-gutter28): full-file bands via the live
+    // padded geometry; 720 fallback columns unchanged (dual-pane split).
+    paint_overview_strip(
+        &mut pixels,
+        dims,
+        gutter_x,
+        GUTTER_W,
+        pane_top,
+        pane_height,
+        &rows,
+    );
 
     paint_status(
         &mut pixels,
@@ -6779,6 +6820,158 @@ mod tests {
             let bytes = std::fs::read(&out).unwrap_or_default();
             assert!(!bytes.is_empty());
             assert_ne!(three_bytes, bytes);
+        }
+    }
+
+    #[test]
+    fn gutter28_overview_row_mapping() {
+        // Row<->y dono disha live padded mapping se: ad-hoc math zero.
+        // 7-row fixture, 386px pane (174..560): inner 378, pad 4.
+        let pane_top = 174u32;
+        let pane_h = 386u32;
+        let total = 7usize;
+        let first = overview_row_y(0, total, pane_top, pane_h);
+        assert_eq!(first, Some(178));
+        let mid = overview_row_y(3, total, pane_top, pane_h);
+        assert!(mid.is_some());
+        if let Some(y) = mid {
+            assert!((y as f32 - 340.0).abs() <= 1.0);
+        }
+        let last = overview_row_y(6, total, pane_top, pane_h);
+        assert!(last.is_some());
+        if let Some(y) = last {
+            assert!((y as f32 - 502.0).abs() <= 1.0);
+        }
+        // Round-trip: y se wapas wahi row.
+        for row in 0..total {
+            let y = overview_row_y(row, total, pane_top, pane_h);
+            assert!(y.is_some());
+            if let Some(y) = y {
+                assert_eq!(overview_row_at_y(y, total, pane_top, pane_h), Some(row));
+            }
+        }
+        // Pane ke upar `None` (local humesha pane_top offset ke saath).
+        assert_eq!(overview_row_at_y(0, total, pane_top, pane_h), None);
+        assert_eq!(overview_row_at_y(173, total, pane_top, pane_h), None);
+        // Kharab geometry par `None`, kabhi wrap-around nahi.
+        assert_eq!(overview_row_y(0, 0, pane_top, pane_h), None);
+        assert_eq!(overview_row_y(7, total, pane_top, pane_h), None);
+        assert_eq!(overview_row_y(0, total, pane_top, 0), None);
+        // Live helper se seedha judav: offset ke alawa koi antar nahi.
+        let live = crate::gutter::gutter_padded_y_for_row(3, total, pane_h as f32);
+        assert!(live.is_some());
+        if let (Some(live_y), Some(y)) = (live, mid) {
+            assert!((y as f32 - (pane_top as f32 + live_y)).abs() < 1.0);
+        }
+    }
+
+    #[test]
+    fn gutter28_center_layout_intact() {
+        // Center gutter still fixed 20px lane; overview minimap ne ise
+        // chhua nahi: panes barabar, marker gap me centered.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        let (left_x, left_w, center_x, center_w, right_x, right_w) = text_fixture_center_layout();
+        assert_eq!(left_w, right_w);
+        assert_eq!(right_x.saturating_add(right_w), GUTTER_X);
+        assert_eq!(
+            center_x,
+            left_x.saturating_add(left_w).saturating_add(PANE_GAP)
+        );
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        let mark_w = text_width(TEXT_CENTER_MARK);
+        assert!(mark_w <= center_w.saturating_sub(8));
+    }
+
+    #[test]
+    fn gutter28_narrow_intact() {
+        // 720 fallback columns unchanged: dual-pane split + ruler + margin.
+        assert_eq!(crate::theme::VIEWPORT_MIN_W, 720);
+        assert_eq!(crate::viewmodel::dual_pane_widths(720, 0.50), (340, 340));
+        assert_eq!(
+            crate::viewmodel::dual_pane_x_positions(720, 0.50),
+            (12, 356, 696)
+        );
+        let (lx, rx, gx) = crate::viewmodel::dual_pane_x_positions(720, 0.50);
+        assert_eq!(lx, OUTER_PAD);
+        assert_eq!(rx, lx.saturating_add(340).saturating_add(PANE_GAP));
+        assert_eq!(gx, rx.saturating_add(340));
+        assert_eq!(gx.saturating_add(GUTTER_W).saturating_add(8), 720);
+        // Narrow overview bhi padded track me: pehli band pad par, aakhri
+        // andar; dono disha live se juden.
+        let pane_h = 436u32;
+        let first = overview_row_y(0, 15, 124, pane_h);
+        let last = overview_row_y(14, 15, 124, pane_h);
+        assert!(first.is_some() && last.is_some());
+        if let (Some(f), Some(l)) = (first, last) {
+            assert!(f >= 124 + crate::gutter::GUTTER_MINIMAP_TRACK_PAD as u32);
+            assert!(l < 124 + pane_h);
+            assert!(f < l);
+        }
+    }
+
+    #[test]
+    fn gutter28_overview_edge_fixture() {
+        // Mirrors checks/gui-exq-gutter28/round-1/comparison/gutter28-overview-720.json.
+        let raw = include_str!(
+            "../../../checks/gui-exq-gutter28/round-1/comparison/gutter28-overview-720.json"
+        );
+        assert!(raw.contains("\"name\":\"gutter28-overview-720\""));
+        assert!(raw.contains("\"track_pad\":4.0"));
+        assert!(raw.contains("\"narrow_gutter_x_720\":696"));
+        // Fixture numbers live helpers se milte hain (epsilon: f32 fraction).
+        assert_eq!(crate::gutter::GUTTER_MINIMAP_TRACK_PAD, 4.0);
+        let inner = crate::gutter::gutter_minimap_inner_height(386.0);
+        assert_eq!(inner, Some(378.0));
+        let y0 = crate::gutter::gutter_padded_y_for_row(0, 7, 386.0);
+        assert!(y0.is_some());
+        if let Some(y) = y0 {
+            assert!((y - 4.0).abs() < 0.01);
+        }
+        let y6 = crate::gutter::gutter_padded_y_for_row(6, 7, 386.0);
+        assert!(y6.is_some());
+        if let Some(y) = y6 {
+            assert!((y - 328.0).abs() < 0.5);
+        }
+        // Padded geometry me same+diff dono bands: 7-row fixture par
+        // overview segments poore file ko dhakte hain (diff-only nahi).
+        let kinds = [
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+            TextRowKind::Changed,
+            TextRowKind::Deleted,
+            TextRowKind::Inserted,
+            TextRowKind::Equal,
+            TextRowKind::Equal,
+        ];
+        let rows: Vec<TextRow> = kinds
+            .iter()
+            .map(|kind| TextRow {
+                kind: *kind,
+                left_no: None,
+                right_no: None,
+                left: String::new(),
+                right: String::new(),
+                accent_a: Vec::new(),
+                accent_b: Vec::new(),
+            })
+            .collect();
+        let geom = crate::gutter::gutter_overview_geometry_padded(7, 386.0, &rows);
+        assert!(!geom.segments.is_empty());
+        let has_equal = geom
+            .segments
+            .iter()
+            .any(|seg| seg.kind == TextRowKind::Equal);
+        let has_diff = geom
+            .segments
+            .iter()
+            .any(|seg| seg.kind != TextRowKind::Equal);
+        assert!(has_equal && has_diff);
+        if let Some(first) = geom.segments.first() {
+            assert!((first.y_start - 4.0).abs() < 0.5);
+        }
+        if let Some(last) = geom.segments.last() {
+            assert!(last.y_end <= 4.0 + 378.0 + 0.5);
         }
     }
 }
