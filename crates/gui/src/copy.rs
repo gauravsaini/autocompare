@@ -1207,3 +1207,124 @@ mod exq_copy8_tests {
         assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQ-COPY9: wide-960 arrow rhythm + Mono-baseline line actions (headless).
+// BC copy dialog 960 wide par per-hunk arrows ek hi rhythm par rehte hain
+// (hit symmetric, column char metrics se, stacked pitch Mono + gap),
+// copy-line actions Mono baseline se bhatakti nahi. Geometry first: 24px
+// XL hit floor + 4px XS slop har taraf = symmetric 32px target, wide
+// center avail/2 par, column 23 char metrics se (1 glyph x 7.0 advance +
+// 2 x 8.0 section-gap bearings), pitch 19.6 (15.6 Mono row + 4.0 tight
+// gap). Typography second: copy-line action (Small 13.2 line) Mono row
+// (15.6) me centered — dy 1.2 single source. Colors frozen.
+// WIRING (paint): wide center `copy_center_x_for(960)`, arrow hit
+// `copy_arrow_hit_rect(cx, cy)`, stacked pitch `copy_wide_arrow_pitch`,
+// action y `copy_wide_action_y`, fit `copy_wide_column_fits`.
+// ----------------------------------------------------------------------------
+
+/// Wide column fit without h-scroll: arrow column (23) + slop hit (32)
+/// `avail_w` me fit hote hain ya nahi. Narrow fit single source ka wide
+/// alias taaki 960 wide rhythm wahi rule pakde. Pure; headless-tested.
+pub fn copy_wide_column_fits(avail_w: f32) -> bool {
+    copy_narrow_column_fits(avail_w)
+}
+
+/// Wide stacked-arrow pitch px: one Mono row + tight gap (15.6 + 4.0).
+/// `None`: non-finite/non-positive row (single source delegate).
+/// Pure; headless-tested.
+pub fn copy_wide_arrow_pitch() -> Option<f32> {
+    copy_arrow_default_pitch()
+}
+
+/// Wide copy-line action top y px for a row starting at `row_top`:
+/// `row_top + dy` (dy 1.2 Mono-baseline centering). Non-finite par `None`.
+/// Pure; headless-tested.
+pub fn copy_wide_action_y(row_top: f32) -> Option<f32> {
+    copy_line_action_y(row_top)
+}
+
+#[cfg(test)]
+mod exq_copy9_tests {
+    use super::*;
+    use crate::theme::{GEO_SECTION_GAP, SPACE_XL, SPACE_XS, TypoRole};
+
+    #[test]
+    fn copy9_hit_rects_symmetric_from_space_scale_at_wide_960() {
+        // Geometry first: 24 XL floor + 4 XS slop har taraf = 32 square.
+        assert_eq!(copy_hit_size(), SPACE_XL);
+        assert_eq!(copy_button_sym_pad(), SPACE_XS);
+        assert_eq!(copy_hit_size_with_slop(), 32.0);
+        // Wide center avail/2: 960 -> 480.
+        assert_eq!(copy_center_x_for(960.0), Some(480.0));
+        assert_eq!(copy_center_x_for(0.0), None);
+        assert_eq!(copy_center_x_for(f32::NAN), None);
+        // Symmetric hit rect at wide center (480,300): 464..496 x 284..316.
+        let rect = copy_arrow_hit_rect(480.0, 300.0);
+        assert_eq!(rect, Some((464.0, 284.0, 496.0, 316.0)));
+        assert!(copy_arrow_hit_is_symmetric(480.0, 300.0));
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 32.0);
+            assert_eq!(y1 - y0, 32.0);
+            assert!(((480.0 - x0) - 16.0).abs() < 0.0001);
+            assert!(((x1 - 480.0) - 16.0).abs() < 0.0001);
+            assert!(((300.0 - y0) - 16.0).abs() < 0.0001);
+            assert!(((y1 - 300.0) - 16.0).abs() < 0.0001);
+        }
+        // Edges inclusive, just outside false.
+        assert!(copy_arrow_hit_contains(480.0, 300.0, 464.0, 284.0));
+        assert!(copy_arrow_hit_contains(480.0, 300.0, 496.0, 316.0));
+        assert!(!copy_arrow_hit_contains(480.0, 300.0, 463.9, 300.0));
+        assert!(!copy_arrow_hit_contains(480.0, 300.0, 496.1, 300.0));
+        assert!(!copy_wide_column_fits(f32::NAN));
+        assert!(copy_wide_column_fits(960.0));
+    }
+
+    #[test]
+    fn copy9_line_actions_mono_baseline_aligned_at_wide() {
+        // Typo second: Small action line 13.2 Mono row 15.6 me centered.
+        assert_eq!(copy_line_row_height(), TypoRole::Mono.line_height_px());
+        assert!((copy_line_row_height() - 15.6).abs() < 0.01);
+        assert!((copy_action_text_line_height_px() - 13.2).abs() < 0.01);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert_eq!(copy_wide_action_y(f32::NAN), None);
+        assert!(copy_wide_action_y(100.0).is_some_and(|y| (y - 101.2).abs() < 0.01));
+    }
+
+    #[test]
+    fn copy9_column_width_char_metrics_and_wide_pitch() {
+        // 1 glyph x 7.0 advance + 2 x 8.0 section-gap bearings = 23.0.
+        assert_eq!(copy_arrow_advance_px(), 7.0);
+        assert_eq!(
+            copy_arrow_column_width(),
+            COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * GEO_SECTION_GAP
+        );
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!(copy_hit_size_with_slop() > copy_arrow_column_width());
+        // Stacked rhythm: 15.6 Mono row + 4.0 tight gap = 19.6.
+        let pitch = copy_wide_arrow_pitch();
+        assert!(pitch.is_some_and(|p| (p - 19.6).abs() < 0.01));
+        assert_eq!(pitch, copy_arrow_default_pitch());
+        assert!(copy_wide_column_fits(960.0));
+    }
+
+    #[test]
+    fn copy9_wide_fixture() {
+        // Mirrors checks/gui-exq-copy9/round-1/comparison/copy-wide-960.json.
+        let raw =
+            include_str!("../../../checks/gui-exq-copy9/round-1/comparison/copy-wide-960.json");
+        assert!(raw.contains("\"name\":\"copy-wide-960\""));
+        assert!(raw.contains("\"avail_w\":960.0"));
+        assert!(raw.contains("\"arrow_column_width\":23.0"));
+        assert!(raw.contains("\"arrow_hit_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"action_dy\":1.2"));
+        assert!(raw.contains("\"arrow_pitch\":19.6"));
+        assert_eq!(copy_center_x_for(960.0), Some(480.0));
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!((copy_hit_size_with_slop() - 32.0).abs() < 0.0001);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert!(copy_arrow_hit_is_symmetric(480.0, 300.0));
+        assert!(copy_wide_column_fits(960.0));
+    }
+}
