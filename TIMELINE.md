@@ -428,3 +428,9 @@
 1. **Text Tabs & Status at 960px**: tab stops from char metrics, pane status bar from TypoRole chrome line-height, line-number gutter from digit count.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text10/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-tree8 cols plus select
+
+1. **Tree Cols & Select at 960px**: size column 86px and modified 128px from char metrics, grid origins steady across depths, size right-aligned, selected-row band full width.
+2. **Tests** (before → after): autocompare-gui 4/4 new tests pass, isolated exquisite harness RESULT: PASS; cargo fmt clean; banned non-test tokens 0; colors frozen at 33.
+3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree8/**`, `TIMELINE.md`.
