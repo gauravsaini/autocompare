@@ -244,3 +244,17 @@
 1. **Session Tabs & Toolbar at 960px**: Beyond Compare parity for session chrome: tab cell 150px from char metrics (16 mono chars x 7.2 + SPACE_XS slack = 120 label + 6 close gap + 24 close edge), inter-tab gap SPACE_SM (8), side chrome SPACE_MD (12), strip scroll triggers at 6 tabs (940 > 936 avail). Toolbar uniform 96 floored above 79 char need, item gap SPACE_XS (4), group gap SPACE_SM (8). Colors frozen at 33. Edge fixture comparison/chrome-tabs-960.json added; exquisite harness PASS.
 2. **Tests** (before → after): autocompare-gui 930 → 932 passed, 0 failed; clippy clean; rustfmt clean on owned app.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
 3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-chrome5/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-text6 spans plus filler
+
+1. **Inline Spans & Filler at 960px**: Beyond Compare parity for text inline diff: symmetric span pads SPACE_XS total (4.0, half per side), underline weight via TYPO tokens (regular 1px, semibold 2px), filler row height locked to Mono line-height 15.6, 960 layout 448+448+48+16, char-boundary clamp with multibyte-safe fixture. Colors frozen at 33. Edge fixture comparison/text-inline-960.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 930 → 932 passed, 0 failed; clippy clean; rustfmt clean on owned views.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-text6/**, TIMELINE.md.
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-tree3 rows plus guides
+
+1. **Tree Rows & Indent Guides at 960px**: Beyond Compare parity for folder compare rows: even row rhythm locked to TypoRole Mono line-height (15.6 + 2.0 pad = 17.6), guide x-positions from SPACE tokens, orphan label ellipsis char-boundary clamp at 960px wide, depth rhythm intact. Colors frozen at 33. Edge fixture comparison/tree-narrow-720.json added; exquisite harness PASS.
+2. **Tests** (before → after): autocompare-gui 932 → 936 passed, 0 failed; clippy clean; rustfmt clean on owned tree.rs; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 10,401 bytes >= 8192, colors 33 frozen).
+3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree3/**, TIMELINE.md.
