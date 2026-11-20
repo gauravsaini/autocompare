@@ -11,7 +11,7 @@
     "VFS-D": "D3 compile-fix done (cargo check green), gates running",
     "SYNC-E": "progressing (folder+sync+folder_merge+jobs M)",
     "MEDIA-F": "progressing (compare/table.rs + diff/table.rs M)",
-    "CLI-G": "progressing (args+bcomp+outcome+report+runner M)",
+    "CLI-G": "process ended, 5 files M uncommitted preserved, rescue after E/F/D3 land",
     "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
     "EXQ-TYPO": "src edits started (views_hex+views_table M OWNS-clean)"
   }
