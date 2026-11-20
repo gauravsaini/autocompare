@@ -1502,4 +1502,81 @@ mod tests {
         let replayed = apply_diff(&a, &script.ops);
         assert!(replayed.is_some());
     }
+
+    #[test]
+    fn test_myers_patience_replay_and_minimality() {
+        let a = ["alpha", "beta", "gamma", "delta"];
+        let b = ["alpha", "beta_mod", "gamma", "delta"];
+        for algo in [DiffAlgorithm::Myers, DiffAlgorithm::Patience] {
+            let script = diff(&a, &b, algo);
+            assert!(script.exact);
+            let dels: usize = script
+                .ops
+                .iter()
+                .filter_map(|op| match op {
+                    Op::Delete { len } => Some(*len),
+                    _ => None,
+                })
+                .sum();
+            let inss: usize = script
+                .ops
+                .iter()
+                .filter_map(|op| match op {
+                    Op::Insert { len } => Some(*len),
+                    _ => None,
+                })
+                .sum();
+            assert_eq!(dels, 1);
+            assert_eq!(inss, 1);
+            let a_cov: usize = script
+                .ops
+                .iter()
+                .map(|op| match op {
+                    Op::Equal { len } | Op::Delete { len } => *len,
+                    Op::Insert { .. } => 0,
+                })
+                .sum();
+            let b_cov: usize = script
+                .ops
+                .iter()
+                .map(|op| match op {
+                    Op::Equal { len } | Op::Insert { len } => *len,
+                    Op::Delete { .. } => 0,
+                })
+                .sum();
+            assert_eq!(a_cov, a.len());
+            assert_eq!(b_cov, b.len());
+            let expected: Vec<String> = b.iter().map(|s| s.to_string()).collect();
+            assert_eq!(apply_diff_slices(&a, &b, &script.ops), Some(expected));
+        }
+
+        let c = ["A", "B", "C", "D"];
+        let d = ["A", "C", "D", "B"];
+        for algo in [DiffAlgorithm::Myers, DiffAlgorithm::Patience] {
+            let script = diff(&c, &d, algo);
+            assert!(script.exact);
+            let expected: Vec<String> = d.iter().map(|s| s.to_string()).collect();
+            assert_eq!(apply_diff_slices(&c, &d, &script.ops), Some(expected));
+        }
+
+        let myers_moved = diff(&c, &d, DiffAlgorithm::Myers);
+        let dels: usize = myers_moved
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Delete { len } => Some(*len),
+                _ => None,
+            })
+            .sum();
+        let inss: usize = myers_moved
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Insert { len } => Some(*len),
+                _ => None,
+            })
+            .sum();
+        assert_eq!(dels, 1);
+        assert_eq!(inss, 1);
+    }
 }

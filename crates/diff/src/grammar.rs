@@ -1984,4 +1984,29 @@ mod tests {
             Importance::UnimportantDifference
         );
     }
+
+    #[test]
+    fn test_ignore_string_contents_suppression() {
+        let opt = GrammarOptions {
+            ignore_string_contents: true,
+            string_rules: vec![StringLiteralRule::double_quote()],
+            ..Default::default()
+        };
+        assert_eq!(
+            compare_lines_importance("let s = \"hello\";", "let s = \"world\";", &opt),
+            Importance::UnimportantDifference
+        );
+        let strict = GrammarOptions {
+            string_rules: vec![StringLiteralRule::double_quote()],
+            ..Default::default()
+        };
+        assert_eq!(
+            compare_lines_importance("let s = \"hello\";", "let s = \"world\";", &strict),
+            Importance::ImportantDifference
+        );
+        assert_eq!(
+            compare_lines_importance("let s = \"hello\";", "let t = \"hello\";", &opt),
+            Importance::ImportantDifference
+        );
+    }
 }

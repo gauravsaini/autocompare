@@ -1698,4 +1698,49 @@ mod tests {
         assert!(buf.undo());
         assert_eq!(buf.lines(), &["one", "two", "three"]);
     }
+
+    #[test]
+    fn test_merge_take_edge_empty_base_and_chunks() {
+        let base: [&str; 0] = [];
+        let left = ["only"];
+        let right = ["only"];
+        let session = MergeSession::new(&base, &left, &right);
+        assert_eq!(session.conflict_count(), 0);
+        assert!(session.is_fully_resolved());
+        assert_eq!(session.render_lines(), vec!["only"]);
+
+        let left_b = ["a"];
+        let right_b = ["b"];
+        let mut divergent = MergeSession::new(&base, &left_b, &right_b);
+        assert_eq!(divergent.conflict_count(), 1);
+        assert_eq!(divergent.unresolved_count(), 1);
+        let chunks = divergent.conflict_chunks();
+        assert_eq!(chunks.len(), 1);
+        if let Some(chunk) = chunks.first() {
+            assert_eq!(chunk.output_line_start, 0);
+            assert_eq!(chunk.output_line_count, 5);
+            assert!(!chunk.is_resolved);
+        } else {
+            panic!("expected one conflict chunk");
+        }
+
+        assert!(divergent.take_both_left_first(0));
+        assert_eq!(divergent.render_lines(), vec!["a", "b"]);
+        assert!(divergent.is_fully_resolved());
+
+        assert!(divergent.take_both_right_first(0));
+        assert_eq!(divergent.render_lines(), vec!["b", "a"]);
+
+        assert!(divergent.take_custom(0, Vec::new()));
+        assert_eq!(divergent.render_lines(), Vec::<String>::new());
+
+        assert!(divergent.clear_resolution(0));
+        assert_eq!(divergent.unresolved_count(), 1);
+
+        let base2 = ["x"];
+        let empty: [&str; 0] = [];
+        let both_deleted = MergeSession::new(&base2, &empty, &empty);
+        assert_eq!(both_deleted.conflict_count(), 0);
+        assert_eq!(both_deleted.render_lines(), Vec::<String>::new());
+    }
 }
