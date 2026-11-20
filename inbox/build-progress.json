@@ -176,7 +176,7 @@
   "WAVE-LOCAL6": "landed+pushed 0c9a065 REPORT PASS 5 PNGs magic ok 748 green 10/10 CLI TOP-10 gaps",
   "AGYX-REPROBE": "agyx still fail 2026-11-20 23:11 probe model gemini-4-neon not available in catalog -> opencode default-model only, mix when fixed",
   "POLL-STRATEGY": "exponential backoff 10s/20s/40s/80s, no fixed 8s, via opencode session export",
-  "WAVE-TOOLBAR": "running opencode sess-opencode-toolbar OWNS views.rs + checks/gui-exq-toolbar (session tabs + action bar + jump, launched 23:20)",
+  "WAVE-TOOLBAR": "landed+pushed f48710e REPORT PASS 778 green session-tabs action-bar jump-controls (views.rs)",
   "WAVE-PATHMETA": "landed+pushed ce74d5c REPORT PASS 778 green path-strip segmented-status (screenshot+viewmodel)",
   "WAVE-HOME3": "landed+pushed 502e404 REPORT PASS 773 green card-gaps type-steps (home.rs 137 + theme.rs 35)",
   "WAVE-TREE2": "landed+pushed abcf36c REPORT PASS 773 green indent-guides status-marks gutter-arrows (tree+gutter+copy)"
