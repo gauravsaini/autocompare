@@ -890,6 +890,148 @@ mod exq_merge2_tests {
     }
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-COPY7: copy-side arrow column + symmetric hit rects + copy-line row
+// affordance at 960 wide (headless; paint owner ke paas). BC center gutter
+// me per-hunk copy arrows hit-slop ke saath rehte hain (click paas se bhi
+// lage), arrow column ek hi glyph chaudha hai, har copy-line row Mono
+// rhythm par hai. Geometry first (SPACE tokens + char advance reuse, koi
+// naya literal nahi), typography second (Mono 15.6 single source), colors
+// frozen. WIRING (paint): center column width `copy_arrow_column_width`,
+// arrow hit `copy_arrow_hit_rect` / `copy_arrow_hit_contains`, row layout
+// `copy_line_row_height` (== `copy_row_height`).
+// ----------------------------------------------------------------------------
+
+/// Copy arrow advance px per char: take label advance reuse (7.0 body-13
+/// estimate parity, koi naya literal nahi). Pure; headless-tested.
+pub fn copy_arrow_advance_px() -> f32 {
+    crate::take::TAKE_LABEL_ADVANCE_PX
+}
+
+/// Copy arrow glyph width in chars: single ">" / "<" (see [`copy_arrow_label`]).
+pub const COPY_ARROW_GLYPH_CHARS: usize = 1;
+
+/// Copy-side arrow column width px: 1 glyph * advance + 2 x section-gap
+/// side bearings (7 + 16 = 23). Char metrics se, SPACE tokens se; slop
+/// hit (32) hamesha cover karta hai taaki arrows cramped na lagen.
+/// Pure; headless-tested.
+pub fn copy_arrow_column_width() -> f32 {
+    COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * crate::theme::GEO_SECTION_GAP
+}
+
+/// Copy-line row affordance height px: one Mono line (15.6) — [`copy_row_height`]
+/// ka paint alias taaki copy-line action wahi rhythm pakde. Pure; headless-tested.
+pub fn copy_line_row_height() -> f32 {
+    copy_row_height()
+}
+
+/// Copy-side arrow hit rect `(x0, y0, x1, y1)` px centered at `(cx, cy)`:
+/// [`copy_button_hit_rect`] ka alias — 24px hit floor + 4px XS slop har
+/// taraf = symmetric 32px target. Non-finite par `None`. Pure; headless-tested.
+pub fn copy_arrow_hit_rect(cx: f32, cy: f32) -> Option<(f32, f32, f32, f32)> {
+    copy_button_hit_rect(cx, cy)
+}
+
+/// Copy-side arrow hit test: `(x, y)` slop hit rect me hai ya nahi
+/// (edges inclusive). Non-finite par false. Pure; headless-tested.
+pub fn copy_arrow_hit_contains(cx: f32, cy: f32, x: f32, y: f32) -> bool {
+    copy_button_hit_contains(cx, cy, x, y)
+}
+
+/// True when the copy-side arrow hit rect is symmetric: centered square
+/// (32 x 32) jisme har taraf pad barabar ho. `copy_button_hit_rect` par
+/// delegate karta hai. Pure; headless-tested.
+pub fn copy_arrow_hit_is_symmetric(cx: f32, cy: f32) -> bool {
+    match copy_arrow_hit_rect(cx, cy) {
+        Some((x0, y0, x1, y1)) => {
+            let w = x1 - x0;
+            let h = y1 - y0;
+            let half = (copy_hit_size() / 2.0) + COPY_BUTTON_HIT_SLOP;
+            (w - copy_hit_size_with_slop()).abs() < 0.0001
+                && (h - copy_hit_size_with_slop()).abs() < 0.0001
+                && ((cx - x0) - half).abs() < 0.0001
+                && ((x1 - cx) - half).abs() < 0.0001
+                && ((cy - y0) - half).abs() < 0.0001
+                && ((y1 - cy) - half).abs() < 0.0001
+        }
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod exq_copy7_tests {
+    use super::*;
+    use crate::theme::{GEO_SECTION_GAP, SPACE_XS, TypoRole};
+
+    #[test]
+    fn copy7_arrow_hit_rects_symmetric_via_space_tokens() {
+        // 24 hit floor (XL) + 4 XS slop har taraf = 32 square, centered.
+        assert_eq!(COPY_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(copy_hit_size_with_slop(), 32.0);
+        let rect = copy_arrow_hit_rect(100.0, 50.0);
+        assert_eq!(rect, Some((84.0, 34.0, 116.0, 66.0)));
+        assert_eq!(rect, copy_button_hit_rect(100.0, 50.0));
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 32.0);
+            assert_eq!(y1 - y0, 32.0);
+            // Har taraf pad barabar: left == right == top == bottom == 16.
+            assert!(((100.0 - x0) - 16.0).abs() < 0.0001);
+            assert!(((x1 - 100.0) - 16.0).abs() < 0.0001);
+            assert!(((50.0 - y0) - 16.0).abs() < 0.0001);
+            assert!(((y1 - 50.0) - 16.0).abs() < 0.0001);
+        }
+        assert!(copy_arrow_hit_is_symmetric(100.0, 50.0));
+        assert!(!copy_arrow_hit_is_symmetric(f32::NAN, 50.0));
+        // Edges inclusive, bahar false.
+        assert!(copy_arrow_hit_contains(100.0, 50.0, 84.0, 34.0));
+        assert!(copy_arrow_hit_contains(100.0, 50.0, 116.0, 66.0));
+        assert!(!copy_arrow_hit_contains(100.0, 50.0, 83.9, 50.0));
+        assert!(!copy_arrow_hit_contains(100.0, 50.0, 100.0, 66.1));
+        assert!(!copy_arrow_hit_contains(f32::NAN, 50.0, 100.0, 50.0));
+    }
+
+    #[test]
+    fn copy7_arrow_column_width_from_char_metrics() {
+        // 1 glyph * 7.0 advance + 2 x 8.0 section-gap bearings = 23.0.
+        assert_eq!(COPY_ARROW_GLYPH_CHARS, 1);
+        assert_eq!(copy_arrow_advance_px(), crate::take::TAKE_LABEL_ADVANCE_PX);
+        assert_eq!(copy_arrow_advance_px(), 7.0);
+        assert_eq!(
+            copy_arrow_column_width(),
+            COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * GEO_SECTION_GAP
+        );
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        // Hit (32) column (23) ko cover karta hai — arrows cramped nahi.
+        assert!(copy_hit_size_with_slop() > copy_arrow_column_width());
+        assert!(copy_hit_size() > copy_arrow_column_width());
+    }
+
+    #[test]
+    fn copy7_copy_line_row_height_from_mono_at_960() {
+        // Row affordance Mono line-height single source (15.6), 960 wide par bhi.
+        assert_eq!(copy_line_row_height(), copy_row_height());
+        assert_eq!(copy_line_row_height(), TypoRole::Mono.line_height_px());
+        assert!((copy_line_row_height() - 15.6).abs() < 0.01);
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn copy7_wide_fixture() {
+        // Mirrors checks/gui-exq-copy7/round-1/comparison/copy-wide-960.json.
+        let raw =
+            include_str!("../../../checks/gui-exq-copy7/round-1/comparison/copy-wide-960.json");
+        assert!(raw.contains("\"name\":\"copy-wide-960\""));
+        assert!(raw.contains("\"avail_w\":960.0"));
+        assert!(raw.contains("\"arrow_column_width\":23.0"));
+        assert!(raw.contains("\"arrow_hit_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!((copy_hit_size_with_slop() - 32.0).abs() < 0.0001);
+        assert!((copy_line_row_height() - 15.6).abs() < 0.01);
+        assert!(copy_arrow_hit_is_symmetric(480.0, 300.0));
+    }
+}
+
 #[cfg(test)]
 mod exq_merge3_tests {
     use super::*;
