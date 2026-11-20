@@ -493,3 +493,9 @@
 1. **Hex Ruler Alignment & Tall 1200px View**: Ruler tick alignment locked to byte columns from char metrics (`hex_ruler_col_x` == `hex_grid_byte_col_x` across cols 0..15), byte cell size locked from TypoRole Mono (text_w 14.0, box_w 30.0, row_h 15.6), tall 1200px canvas lock (`HEX_TALL_CANVAS_H` 1200.0, panes_h 1070.0, 68 visible rows), and edge fixture `comparison/hex-tall-1200.json`.
 2. **Tests** (before → after): autocompare-gui 1003 green (including `hex_exq_hex8_ruler_plus_tall_1200`); rustfmt clean; clippy clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex8/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-copy10 narrow plus hits
+
+1. **Copy Narrow-720 Arrows & Hits**: per-hunk arrows keep symmetric 32px slop hit rects (24px XL floor + 4px XS slop every side, centered at narrow center 360,300) over a 23px char-metric column (1 glyph x 7.0 advance + 2 x 8.0 section-gap bearings), stacked arrows ride locked 19.6px pitch (15.6 Mono row + 4.0 tight gap), copy-line action text (Small 13.2 line) sits dy 1.2 inside one Mono row (15.6px), copy button 32px hit centered, and edge fixture `comparison/copy-narrow-720.json`.
+2. **Tests** (before → after): autocompare-gui 1008 green (including `copy10_narrow_*` narrow arrows/pitch/action-dy/fixture tests); rustfmt clean; banned non-test tokens 0; colors frozen at 33 touches; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy10/**`, `TIMELINE.md`.
