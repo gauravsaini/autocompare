@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::viewmodel::{TextRowKind, TextRows};
+use crate::viewmodel::{TextFilter, TextRowKind, TextRows};
 
 /// Direction for copying text lines between panes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,6 +215,95 @@ pub fn copy_center_arrow_visible(model: &TextRows, idx: usize) -> bool {
     copy_hunk_head(model, idx)
 }
 
+// ----------------------------------------------------------------------------
+// CopyTake6 actions + nav (headless; paint owner ke paas). BC parity:
+// inline copy left/right arrows, next/prev diff nav, display filter
+// All/Diffs/Same. Geometry first (24px hit floor + tight gaps, scale
+// reuse), typography second (action text Small weak status precedent
+// reuse — `copy_status_text` wahi tone me paint hota hai). Colors frozen.
+// WIRING (paint): center-gutter arrow button par `copy_arrow_label(dir)`
+// glyph; nav row me `copy_nav_pair_width` Prev/Next pair; filter
+// segmented me `copy_filter_options` + `copy_filter_short_label`.
+// ----------------------------------------------------------------------------
+
+/// Inline copy arrow glyph for paint: `>` LeftToRight, `<` RightToLeft.
+/// Text precedent, koi naya asset nahi. Pure; headless-tested.
+pub fn copy_arrow_label(dir: CopyDirection) -> &'static str {
+    match dir {
+        CopyDirection::LeftToRight => ">",
+        CopyDirection::RightToLeft => "<",
+    }
+}
+
+/// Next/prev diff nav button height px: copy hit floor parity (24).
+pub fn copy_nav_button_h() -> f32 {
+    COPY_HIT_MIN
+}
+
+/// Nav pair gap px: tight rhythm (4).
+pub fn copy_nav_gap() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Prev + Next pair width px: 2 x 24 + 4 = 52. Pure; headless-tested.
+pub fn copy_nav_pair_width() -> f32 {
+    COPY_HIT_MIN + COPY_HIT_MIN + crate::theme::GEO_TIGHT_GAP
+}
+
+/// BC display filter options: All / Differences / Same (Context paint me
+/// alag toggle hai, segmented me nahi). Pure; headless-tested.
+pub fn copy_filter_options() -> [TextFilter; 3] {
+    [TextFilter::All, TextFilter::Differences, TextFilter::Same]
+}
+
+/// Segmented filter short label (BC parity): "All/Diffs/Same".
+/// `Context` alag toggle par apna naam rakhta hai. Pure; headless-tested.
+pub fn copy_filter_short_label(filter: TextFilter) -> &'static str {
+    match filter {
+        TextFilter::All => "All",
+        TextFilter::Differences => "Diffs",
+        TextFilter::Same => "Same",
+        TextFilter::Context => "Context",
+    }
+}
+
+/// Filter segment button height px: copy hit floor parity (24).
+pub fn copy_filter_button_h() -> f32 {
+    COPY_HIT_MIN
+}
+
+/// Filter segment gap px: segmented control, buttons adjacent (0.0).
+/// Zero gap spacing scale ke bahar hai hi nahi — koi naya size nahi.
+pub fn copy_filter_segment_gap() -> f32 {
+    0.0
+}
+
+/// Copy action text role: Small weak proportional (status line precedent
+/// reuse). Hierarchy size + weight se, tracking zero rehta hai.
+pub const fn copy_action_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// Copy action text size px (single source: Small, 11.0).
+pub fn copy_action_text_size() -> f32 {
+    copy_action_text_role().size()
+}
+
+/// Copy action text line-height px (Small role se).
+pub fn copy_action_text_line_height_px() -> f32 {
+    copy_action_text_role().line_height_px()
+}
+
+/// Copy action text numeric weight (Small role se, 600).
+pub fn copy_action_text_weight_value() -> u16 {
+    copy_action_text_role().weight_value()
+}
+
+/// Copy action text tracking em (Small role se, zero).
+pub fn copy_action_text_tracking_em() -> f32 {
+    copy_action_text_role().letter_spacing_em()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,6 +471,68 @@ mod tests {
         // Last diff copied: no next diff.
         copy_line(&mut model, 2, CopyDirection::LeftToRight).unwrap_or_default();
         assert_eq!(copy_focus_after(&model, 2), None);
+    }
+}
+
+#[cfg(test)]
+mod exq_copytake6_tests {
+    use super::*;
+    use crate::theme::TypoRole;
+
+    #[test]
+    fn copytake6_arrows_point_along_copy_direction() {
+        assert_eq!(copy_arrow_label(CopyDirection::LeftToRight), ">");
+        assert_eq!(copy_arrow_label(CopyDirection::RightToLeft), "<");
+    }
+
+    #[test]
+    fn copytake6_nav_pair_shares_hit_floor_and_tight_gap() {
+        assert_eq!(copy_nav_button_h(), COPY_HIT_MIN);
+        assert_eq!(copy_nav_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(copy_nav_pair_width(), 52.0);
+        assert_eq!(
+            copy_nav_pair_width(),
+            copy_nav_button_h() + copy_nav_button_h() + copy_nav_gap()
+        );
+    }
+
+    #[test]
+    fn copytake6_filter_options_and_short_labels() {
+        assert_eq!(
+            copy_filter_options(),
+            [TextFilter::All, TextFilter::Differences, TextFilter::Same]
+        );
+        assert_eq!(copy_filter_short_label(TextFilter::All), "All");
+        assert_eq!(copy_filter_short_label(TextFilter::Differences), "Diffs");
+        assert_eq!(copy_filter_short_label(TextFilter::Same), "Same");
+        assert_eq!(copy_filter_short_label(TextFilter::Context), "Context");
+        assert_eq!(copy_filter_button_h(), COPY_HIT_MIN);
+        assert_eq!(copy_filter_segment_gap(), 0.0);
+    }
+
+    #[test]
+    fn copytake6_action_text_reuses_small_status_role() {
+        assert_eq!(copy_action_text_role(), TypoRole::chrome_status());
+        assert_eq!(copy_action_text_role(), TypoRole::Small);
+        assert_eq!(copy_action_text_size(), 11.0);
+        assert_eq!(
+            copy_action_text_line_height_px(),
+            TypoRole::Small.line_height_px()
+        );
+        assert_eq!(
+            copy_action_text_weight_value(),
+            TypoRole::Small.weight_value()
+        );
+        assert_eq!(copy_action_text_tracking_em(), 0.0);
+    }
+
+    #[test]
+    fn copytake6_narrow_fixture_numbers_hold() {
+        // Mirrors checks/gui-exq-copytake6/comparison/copytake-narrow-240.json:
+        // 240px avail par nav pair (52) fit, filter segmented adjacent.
+        assert_eq!(copy_nav_pair_width(), 52.0);
+        assert_eq!(copy_filter_options().len(), 3);
+        assert!(copy_nav_pair_width() < 240.0);
     }
 }
 

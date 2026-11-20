@@ -460,6 +460,101 @@ impl TakeSession {
     }
 }
 
+// ----------------------------------------------------------------------------
+// CopyTake6 take bar + conflict stepper (headless; paint owner ke paas).
+// BC parity: Take Left/Center/Right uniform bar, conflict stepper
+// (prev/next + honest counter), narrow par h-scroll. Geometry first
+// (uniform 93px buttons + 4px gaps, scale reuse), typography second
+// (bar text Body button precedent, counter Small status precedent).
+// Colors frozen. WIRING (paint): take bar me `take_bar_button_width`
+// uniform teeno buttons + `take_bar_gap`; stepper row me
+// `take_stepper_button_h` Prev/Next + `take_stepper_counter_text`;
+// `take_bar_needs_hscroll(avail_w)` par bar scroll me.
+// ----------------------------------------------------------------------------
+
+/// Ek Take-side button ki width px: paint label chars x advance + do
+/// taraf pad. "Take Center" sabse lamba (11 chars) = 93.
+/// Note: [`take_side_label`] se (paint parity), [`take_choice_label`] se
+/// nahi — Center paint me ancestor/base nahi, "Center" hai.
+/// Pure; headless-tested.
+pub fn take_side_button_width(side: TakeSide) -> f32 {
+    take_side_label(side).chars().count() as f32 * TAKE_LABEL_ADVANCE_PX + TAKE_BUTTON_PAD_X * 2.0
+}
+
+/// Take bar uniform button width px: teeno sides ek baseline — sabse
+/// chaude Center (93) sabko cover karta hai taaki bar aligned rahe.
+/// Pure; headless-tested.
+pub fn take_bar_button_width() -> f32 {
+    take_side_button_width(TakeSide::Left)
+        .max(take_side_button_width(TakeSide::Center))
+        .max(take_side_button_width(TakeSide::Right))
+}
+
+/// Take bar gap px: tight rhythm (4).
+pub fn take_bar_gap() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Take bar total width px: 3 x uniform + 2 x gap = 287.
+/// Non-finite par 0 (paint bar chhupata hai, kabhi NaN layout nahi).
+pub fn take_bar_total_width() -> f32 {
+    let total = take_bar_button_width() * 3.0 + take_bar_gap() * 2.0;
+    if total.is_finite() { total } else { 0.0 }
+}
+
+/// Take bar ko h-scroll chahiye ya nahi: avail < total par true.
+/// Non-finite avail par false. Pure; headless-tested.
+pub fn take_bar_needs_hscroll(avail_w: f32) -> bool {
+    if !avail_w.is_finite() {
+        return false;
+    }
+    avail_w < take_bar_total_width()
+}
+
+/// Conflict stepper button height px: take hit floor parity (24).
+pub fn take_stepper_button_h() -> f32 {
+    TAKE_BUTTON_H
+}
+
+/// Stepper gap px: tight rhythm (4, prev/counter/next beat).
+pub fn take_stepper_gap() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Stepper counter text: total 0 par "No conflicts"; cursor par 1-based
+/// "Conflict N of M"; cursor na ho par honest "{M} conflicts".
+/// `saturating_add` se 1-based display kabhi wrap nahi. Pure.
+pub fn take_stepper_counter_text(current: Option<usize>, total: usize) -> String {
+    if total == 0 {
+        return String::from("No conflicts");
+    }
+    match current {
+        Some(id) => format!("Conflict {} of {}", id.saturating_add(1), total),
+        None => format!("{total} conflicts"),
+    }
+}
+
+/// Take bar button text role: Body default (button precedent — HomeButton
+/// Body 13 scale; take label advance bhi wahi estimate hai).
+pub const fn take_action_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Take bar button text size px (single source: Body, 13.0).
+pub fn take_action_text_size() -> f32 {
+    take_action_text_role().size()
+}
+
+/// Stepper counter text role: Small weak proportional (status precedent).
+pub const fn take_counter_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// Stepper counter text size px (single source: Small, 11.0).
+pub fn take_counter_text_size() -> f32 {
+    take_counter_text_role().size()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -628,6 +723,76 @@ mod tests {
         assert_eq!(
             join_take_output(&["x".to_string(), "y".to_string()]),
             "x\ny\n"
+        );
+    }
+
+    #[test]
+    fn copytake6_take_bar_uniform_and_total() {
+        // Paint labels: Left 9 chars = 79, Center 11 = 93, Right 10 = 86.
+        assert_eq!(take_side_button_width(TakeSide::Left), 79.0);
+        assert_eq!(take_side_button_width(TakeSide::Center), 93.0);
+        assert_eq!(take_side_button_width(TakeSide::Right), 86.0);
+        assert_eq!(take_bar_button_width(), 93.0);
+        assert_eq!(take_bar_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(take_bar_total_width(), 287.0);
+        assert_eq!(
+            take_bar_total_width(),
+            take_bar_button_width() * 3.0 + take_bar_gap() * 2.0
+        );
+    }
+
+    #[test]
+    fn copytake6_take_bar_hscroll_only_when_narrow() {
+        // Mirrors checks/gui-exq-copytake6/comparison/copytake-narrow-240.json.
+        assert!(take_bar_needs_hscroll(240.0));
+        assert!(!take_bar_needs_hscroll(700.0));
+        assert!(!take_bar_needs_hscroll(take_bar_total_width()));
+        assert!(!take_bar_needs_hscroll(f32::NAN));
+        assert!(!take_bar_needs_hscroll(f32::INFINITY));
+    }
+
+    #[test]
+    fn copytake6_stepper_geometry_and_honest_counter() {
+        assert_eq!(take_stepper_button_h(), TAKE_BUTTON_H);
+        assert_eq!(take_stepper_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(take_stepper_counter_text(None, 0), "No conflicts");
+        assert_eq!(take_stepper_counter_text(Some(0), 2), "Conflict 1 of 2");
+        assert_eq!(take_stepper_counter_text(Some(1), 2), "Conflict 2 of 2");
+        assert_eq!(take_stepper_counter_text(None, 2), "2 conflicts");
+        // Saturating 1-based display: usize::MAX par bhi wrap nahi.
+        assert_eq!(
+            take_stepper_counter_text(Some(usize::MAX), usize::MAX),
+            format!("Conflict {} of {}", usize::MAX, usize::MAX)
+        );
+    }
+
+    #[test]
+    fn copytake6_take_roles_reuse_body_and_small() {
+        assert_eq!(take_action_text_role(), crate::theme::TypoRole::Body);
+        assert_eq!(take_action_text_size(), 13.0);
+        assert_eq!(
+            take_counter_text_role(),
+            crate::theme::TypoRole::chrome_status()
+        );
+        assert_eq!(take_counter_text_size(), 11.0);
+    }
+
+    #[test]
+    fn copytake6_stepper_counter_follows_session_cursor() {
+        let base = ["common", "base_val", "tail"];
+        let left = ["common", "left_val", "tail"];
+        let right = ["common", "right_val", "tail"];
+        let mut sess = TakeSession::new(&base, &left, &right);
+        assert_eq!(sess.conflict_count(), 1);
+        assert_eq!(
+            take_stepper_counter_text(sess.current(), sess.conflict_count()),
+            "Conflict 1 of 1"
+        );
+        assert!(sess.take_left(0));
+        assert_eq!(sess.current(), Some(0));
+        assert_eq!(
+            take_stepper_counter_text(sess.current(), sess.conflict_count()),
+            "Conflict 1 of 1"
         );
     }
 }
