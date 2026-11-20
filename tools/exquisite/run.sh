@@ -6,7 +6,8 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ROUND="${1:?usage: run.sh <round-dir>}"
 SRCDIR="${2:-$ROOT/crates/gui/src}"
-GUI="$ROOT/target/debug/autocompare-gui"
+GUI_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+GUI="$GUI_DIR/debug/autocompare-gui"
 mkdir -p "$ROUND"
 cargo build -p autocompare-gui --quiet --manifest-path "$ROOT/Cargo.toml" || exit 2
 "$GUI" --screenshot "$ROUND/after.png" > "$ROUND/screenshot.out" 2>&1 || exit 3
