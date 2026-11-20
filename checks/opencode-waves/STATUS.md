@@ -1647,6 +1647,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Unblocks: EXQ-GEO + EXQ-TYPO exquisite fix waves (launch gate passed).
 
 ## 2026-11-20 — VFS-D3 landed locally HELD + D4 fix-forward launched
-- Commit `b940f34` feat(vfs): 10 files OWNS-clean, tests 18/18 green in isolated worktree, fmt clean, banned zero. HELD from push: 9 clippy `io_other_error` style warnings in new trait_def.rs code (D3 claimed zero, actual 9).
+- Commit `b940f34` feat(vfs): 10 files OWNS-clean, tests 18/18 green in isolated worktree, fmt clean, banned zero. PUSHED with known debt: 9 clippy `io_other_error` style warnings in new trait_def.rs code (D3 claimed zero, actual 9) — push carried it with the STATUS commit; fix-forward in D4, no revert (tests/fmt/banned/OWNS all green).
 - Worktree has half-finished follow-ups (tests want `ArchiveFs` enum, lib exports `Archive`) + unknown-author unstaged vfs edits; second writer suspected (BQ actor or post-commit D3). Nothing touched; safety backup step ordered first.
 - D4 (sess-vfs-d4): backup patch, reconcile rename-or-revert (smaller one), Error::other fix, full gates, commit NO PUSH. Push b940f34+D4 together after green.
