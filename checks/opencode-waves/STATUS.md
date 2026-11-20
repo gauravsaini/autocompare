@@ -1542,3 +1542,6 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Gates: 669 green (CH 664 incl. +1 toolbar test, CI 669 incl. +5 persist/mode tests), clippy/fmt/banned clean, colors: CH zero, CI 6 touches sab existing Visuals::dark/light reuse (naya palette zero), PNGs valid, byte-stable vs CE baseline, OWNS clean.
 - CI ne beech ka self-recursion stack-overflow bug (fixture_palette replaceAll `of()` cycle) pakad kar fix kiya.
 - Queue: round-4 re-verify (dark C ke baad live-vs-fixture alignment + P1/P2 closure proof).
+
+## 2026-11-20 — Wave CJ-LOCALRUN4 launched (round-4 re-verify: dark C + P1/P2 closure)
+- Sess sess-local-cj, READ-ONLY (zero source change), OWNS checks/gui-localrun-cj. DELTA ca round-3 -> cj round-4: live dark check, P1/P2 live visibility, fixture light-mode proof + default-dark stability.
