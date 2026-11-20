@@ -463,3 +463,9 @@
 1. **Gutter Markers & Slop at 960px**: side column 20px via SPACE_LG+XS, marker box 16px, inset 2px + hit slop 2px symmetric, changed-only gating, layout 12+458+20+458+12 math.
 2. **Tests** (before → after): autocompare-gui 993 green; clippy 0 warnings on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0 (3 panics test-only); exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter9/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-copy9 arrows plus rhythm
+
+1. **Copy Arrows & Rhythm at 960px**: wide column fit from char metrics, arrow pitch 19.6 Mono+gap, action y dy 1.2 aligned, all space-token single-source delegates.
+2. **Tests** (before → after): autocompare-gui 993 green (4 new headless); clippy 0 warnings on owned `copy.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/copy.rs`, `checks/gui-exq-copy9/**`, `TIMELINE.md`.
