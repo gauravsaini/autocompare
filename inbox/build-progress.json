@@ -9,7 +9,7 @@
     "AGYX-C-diff": "landed",
     "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)",
     "VFS-D": "D3 compile-fix done (cargo check green), gates running",
-    "SYNC-E": "progressing (folder+sync+folder_merge M)",
+    "SYNC-E": "progressing (folder+sync+folder_merge+jobs M)",
     "MEDIA-F": "progressing (compare/table.rs + diff/table.rs M)",
     "CLI-G": "progressing (args+bcomp+outcome+report+runner M)",
     "EXQ-GEO": "STOPPED no-commit (sibling breakage diff/table.rs E0425, retry after F lands)",
