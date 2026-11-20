@@ -3053,6 +3053,181 @@ pub fn hex_nibble_gap_space_rhythm_ok(char_w: f32) -> bool {
         && hex_ruler_grid_gap_y() == crate::theme::GEO_TIGHT_GAP
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex7 round-2: offset plus gap at 960px.
+// Gap BC hex half: the offset column reads tight on wide (8-digit)
+// addresses and the ASCII pane sits without a clear gap — ours matched the
+// ruler chars but never locked the offset box to the 8-digit address width
+// or the ASCII gap to SPACE rhythm at 960px wide.
+// Geometry FIRST:
+// - Offset column from char metrics: `HEX_OFFSET_HEX_DIGITS` (8) plus the
+//   `0x` prefix reuse `HEX_RULER_CHARS` (10); `hex_offset_960_text_w`
+//   (70.0) and `hex_offset_960_gutter_w` (78.0) lock the 960px box, and
+//   `hex_offset_width_fit_ok` proves text + symmetric SPACE pads fit the
+//   widest 8-digit label (`format_hex_offset(u32::MAX)`, 10 chars).
+// - ASCII pane gap from SPACE tokens: `hex_ascii_gap_space_ok` locks the
+//   gutter to `SPACE_SM`/`GEO_SECTION_GAP` and proves the ASCII pane x
+//   leaves exactly that gap past the hex outer box.
+// - Byte cell size from TypoRole Mono metrics: `hex_byte_cell_960_ok`
+//   locks the 2-char text (14.0) plus symmetric cell pads (box 30.0) at
+//   the 7px reference char on the 960px canvas.
+// Typography SECOND: offset + grid + ruler + ASCII all Mono
+// (`hex_offset_text_role` reuse), labels Body — koi naya size/token nahi.
+// Colors FROZEN: koi Color32/Visuals nahi. No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Hex digits in one offset label: 8 (`0x00000000` tail). Pure.
+pub const HEX_OFFSET_HEX_DIGITS: usize = 8;
+
+/// `0x` prefix chars in one offset label. Pure.
+pub const HEX_OFFSET_PREFIX_CHARS: usize = 2;
+
+/// Full offset label chars: prefix + digits. Must equal
+/// [`HEX_RULER_CHARS`] (10) so the gutter text never clips the widest
+/// 8-digit address. Pure.
+pub const HEX_OFFSET_ADDR_CHARS: usize = HEX_OFFSET_PREFIX_CHARS + HEX_OFFSET_HEX_DIGITS;
+
+/// Offset label chars (10): `0x` prefix + 8 address digits. Pure.
+pub fn hex_offset_addr_chars() -> usize {
+    HEX_OFFSET_ADDR_CHARS
+}
+
+/// Offset-gutter text width (px) at the 960px reference char (7.0): 70.0.
+/// Single source over [`hex_offset_gutter_text_w`]. Pure; unit-tested.
+pub fn hex_offset_960_text_w() -> f32 {
+    hex_offset_gutter_text_w(7.0)
+}
+
+/// Offset-gutter outer box (px) at the 960px reference char: 78.0.
+/// Single source over [`hex_offset_gutter_w`]. Pure; unit-tested.
+pub fn hex_offset_960_gutter_w() -> f32 {
+    hex_offset_gutter_w(7.0)
+}
+
+/// Byte-cell text width (px) at the 960px reference char: 14.0 (2 chars).
+/// Single source over [`hex_grid_byte_cell_text_w`]. Pure; unit-tested.
+pub fn hex_byte_cell_960_text_w() -> f32 {
+    hex_grid_byte_cell_text_w(7.0)
+}
+
+/// Byte-cell outer box (px) at the 960px reference char: 30.0 (text plus
+/// symmetric [`HEX_CELL_PAD_X`] pads). Single source over
+/// [`hex_grid_byte_cell_box_w`]. Pure; unit-tested.
+pub fn hex_byte_cell_960_box_w() -> f32 {
+    hex_grid_byte_cell_box_w(7.0)
+}
+
+/// Offset-width fit at `char_w`: the label budget is exactly the 10-char
+/// address (`HEX_OFFSET_ADDR_CHARS == HEX_RULER_CHARS`), text width is
+/// `chars * char_w`, the outer box adds symmetric SPACE pads, and the
+/// widest 8-digit label (`format_hex_offset(u32::MAX)`) still fits.
+/// Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_offset_width_fit_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    if HEX_OFFSET_ADDR_CHARS != HEX_RULER_CHARS {
+        return false;
+    }
+    if HEX_OFFSET_ADDR_CHARS != HEX_OFFSET_PREFIX_CHARS + HEX_OFFSET_HEX_DIGITS {
+        return false;
+    }
+    let widest = format_hex_offset(u32::MAX as u64);
+    if widest.len() != HEX_OFFSET_ADDR_CHARS {
+        return false;
+    }
+    let text = hex_offset_gutter_text_w(char_w);
+    if !text.is_finite() {
+        return false;
+    }
+    if (text - (HEX_OFFSET_ADDR_CHARS as f32) * char_w).abs() > 0.001 {
+        return false;
+    }
+    let outer = hex_offset_gutter_w(char_w);
+    if !outer.is_finite() {
+        return false;
+    }
+    if (outer - (text + 2.0 * hex_offset_gutter_pad())).abs() > 0.001 {
+        return false;
+    }
+    if hex_offset_gutter_pad() != crate::theme::GEO_TIGHT_GAP {
+        return false;
+    }
+    hex_offset_gutter_gap() == crate::theme::GEO_SECTION_GAP
+}
+
+/// ASCII-pane gap from SPACE tokens at `char_w`: the gutter is exactly
+/// `SPACE_SM` (`GEO_SECTION_GAP`), and the ASCII pane x leaves exactly
+/// that gap past the hex outer box. Bad `char_w` returns false. Pure;
+/// unit-tested.
+pub fn hex_ascii_gap_space_ok(show_line_numbers: bool, char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    if hex_ascii_gutter_w() != crate::theme::SPACE_SM {
+        return false;
+    }
+    if hex_ascii_gutter_w() != crate::theme::GEO_SECTION_GAP {
+        return false;
+    }
+    let Some(byte_x) = hex_byte_pane_x(show_line_numbers, char_w) else {
+        return false;
+    };
+    let Some(ascii_x) = hex_ascii_pane_x(show_line_numbers, char_w) else {
+        return false;
+    };
+    let Some((hex_outer, _)) = hex_pane_outer_widths(char_w) else {
+        return false;
+    };
+    ((ascii_x - byte_x - hex_outer) - hex_ascii_gutter_w()).abs() < 0.001
+}
+
+/// Byte-cell size from TypoRole Mono metrics at `char_w`: text is 2 chars,
+/// the box adds symmetric [`HEX_CELL_PAD_X`] pads, the even step is
+/// 3 chars, and the grid rhythm rides the Mono line-height (12.0 x 1.30
+/// = 15.6). Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_byte_cell_960_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    let text = hex_grid_byte_cell_text_w(char_w);
+    if !text.is_finite() || (text - 2.0 * char_w).abs() > 0.001 {
+        return false;
+    }
+    let boxed = hex_grid_byte_cell_box_w(char_w);
+    if !boxed.is_finite() || (boxed - (text + 2.0 * HEX_CELL_PAD_X)).abs() > 0.001 {
+        return false;
+    }
+    let step = hex_byte_col_step_w(char_w);
+    if !step.is_finite() || (step - 3.0 * char_w).abs() > 0.001 {
+        return false;
+    }
+    if hex_cell_text_role() != crate::theme::TypoRole::Mono {
+        return false;
+    }
+    (crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.001
+}
+
+/// Offset-plus-gap sync at `char_w`: the offset box fits the widest
+/// 8-digit address, the ASCII pane leaves a SPACE-token gap, byte cells
+/// come from Mono char metrics, and the 960px canvas stays side-by-side.
+/// Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex_offset_plus_gap_sync_ok(char_w: f32) -> bool {
+    if !hex_offset_width_fit_ok(char_w) {
+        return false;
+    }
+    if !hex_ascii_gap_space_ok(false, char_w) {
+        return false;
+    }
+    if !hex_byte_cell_960_ok(char_w) {
+        return false;
+    }
+    if hex_layout_mode(HEX_CANVAS_W) != HexLayoutMode::SideBySide {
+        return false;
+    }
+    hex_grid_plus_offset_sync_ok(char_w)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5123,5 +5298,87 @@ mod tests {
         assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
         assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_exq_hex7_offset_plus_gap_wide_960() {
+        // Headless test proving edge fixture comparison/hex-offset-960.json:
+        // offset column width from char metrics for 8-digit addresses,
+        // ASCII pane gap from SPACE tokens, byte cell size from TypoRole
+        // Mono metrics at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-hex7/comparison/hex-offset-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex7/round-1/comparison/hex-offset-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-offset-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"SideBySide\""));
+        assert!(fixture_raw.contains("\"row_h\": 15.6"));
+        assert!(fixture_raw.contains("\"offset_addr_chars\": 10"));
+        assert!(fixture_raw.contains("\"offset_hex_digits\": 8"));
+        assert!(fixture_raw.contains("\"offset_widest_label\": \"0xffffffff\""));
+        assert!(fixture_raw.contains("\"offset_gutter_text_w\": 70.0"));
+        assert!(fixture_raw.contains("\"offset_gutter_w\": 78.0"));
+        assert!(fixture_raw.contains("\"byte_cell_text_w\": 14.0"));
+        assert!(fixture_raw.contains("\"byte_cell_box_w\": 30.0"));
+        assert!(fixture_raw.contains("\"byte_col_step_px\": 21.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_gutter_w\": 8.0"));
+        assert!(fixture_raw.contains("\"ascii_pane_x\": 505.0"));
+        assert!(fixture_raw.contains("\"visible_rows\": 30"));
+        // 1. Offset column width from char metrics for 8-digit addresses.
+        let char_w = 7.0;
+        assert_eq!(HEX_OFFSET_HEX_DIGITS, 8);
+        assert_eq!(HEX_OFFSET_PREFIX_CHARS, 2);
+        assert_eq!(HEX_OFFSET_ADDR_CHARS, 10);
+        assert_eq!(HEX_OFFSET_ADDR_CHARS, HEX_RULER_CHARS);
+        assert_eq!(hex_offset_addr_chars(), HEX_RULER_CHARS);
+        assert_eq!(format_hex_offset(u32::MAX as u64), "0xffffffff");
+        assert_eq!(
+            format_hex_offset(u32::MAX as u64).len(),
+            HEX_OFFSET_ADDR_CHARS
+        );
+        assert_eq!(hex_offset_gutter_text_w(char_w), 70.0);
+        assert_eq!(hex_offset_960_text_w(), 70.0);
+        assert_eq!(hex_offset_gutter_w(char_w), 78.0);
+        assert_eq!(hex_offset_960_gutter_w(), 78.0);
+        assert_eq!(hex_offset_gutter_pad(), 4.0);
+        assert_eq!(hex_offset_gutter_gap(), 8.0);
+        assert!(hex_offset_width_fit_ok(char_w));
+        assert!(!hex_offset_width_fit_ok(0.0));
+        assert!(!hex_offset_width_fit_ok(f32::NAN));
+        assert!(!hex_offset_width_fit_ok(f32::INFINITY));
+        // 2. ASCII pane gap from SPACE tokens.
+        assert_eq!(hex_ascii_gutter_w(), crate::theme::SPACE_SM);
+        assert_eq!(hex_ascii_gutter_w(), 8.0);
+        assert_eq!(hex_ascii_gutter_w(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(hex_byte_pane_x(false, char_w), Some(138.0));
+        assert_eq!(hex_ascii_pane_x(false, char_w), Some(505.0));
+        assert!(hex_ascii_gap_space_ok(false, char_w));
+        assert!(!hex_ascii_gap_space_ok(false, 0.0));
+        assert!(!hex_ascii_gap_space_ok(false, f32::NAN));
+        assert!(hex_ascii_pane_from_origin_ok(false, char_w));
+        // 3. Byte cell size from TypoRole Mono metrics at 960px wide.
+        assert_eq!(crate::theme::TypoRole::Mono.size(), 12.0);
+        assert!((crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.001);
+        assert_eq!(hex_grid_byte_cell_text_w(char_w), 14.0);
+        assert_eq!(hex_byte_cell_960_text_w(), 14.0);
+        assert_eq!(hex_grid_byte_cell_box_w(char_w), 30.0);
+        assert_eq!(hex_byte_cell_960_box_w(), 30.0);
+        assert_eq!(hex_byte_col_step_w(char_w), 21.0);
+        assert!(hex_byte_cell_960_ok(char_w));
+        assert!(!hex_byte_cell_960_ok(0.0));
+        assert!(!hex_byte_cell_960_ok(f32::NAN));
+        assert_eq!(hex_layout_mode(HEX_CANVAS_W), HexLayoutMode::SideBySide);
+        assert_eq!(hex_wide_960_visible_rows(), 30);
+        assert_eq!(hex_visible_rows(470.0, hex_grid_row_h()), 30);
+        assert!(hex_offset_plus_gap_sync_ok(char_w));
+        assert!(!hex_offset_plus_gap_sync_ok(0.0));
+        assert!(!hex_offset_plus_gap_sync_ok(f32::NAN));
+        // Typo second: offset + grid + ruler + ASCII all Mono.
+        assert_eq!(hex_offset_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_row_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_ruler_text_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(hex_cell_text_role(), crate::theme::TypoRole::Mono);
     }
 }
