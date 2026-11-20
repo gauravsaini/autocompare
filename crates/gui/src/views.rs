@@ -3010,7 +3010,10 @@ fn paint_text_body(
                                         left_bg,
                                     )
                                 };
-                                ui.label(left_job);
+                                let left_resp = ui.label(left_job);
+                                if text_side_is_filler(row.left.as_str()) {
+                                    paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
+                                }
 
                                 ui.vertical(|ui| {
                                     ui.set_width(text_center_gutter_width());
@@ -3069,7 +3072,10 @@ fn paint_text_body(
                                         right_bg,
                                     )
                                 };
-                                ui.label(right_job);
+                                let right_resp = ui.label(right_job);
+                                if text_side_is_filler(row.right.as_str()) {
+                                    paint_filler_hatch(ui.painter(), right_resp.rect, gutter_dim);
+                                }
                                 if scroll_to == Some(orig) {
                                     ui.scroll_to_rect(ui.min_rect(), Some(egui::Align::Center));
                                 }
@@ -3754,15 +3760,14 @@ pub fn filler_pad_width(pane: usize, line_len: usize) -> usize {
 }
 
 /// Hatched filler stripe step (px): [`TIGHT_GAP`] reuse, koi naya token
-/// nahi. Pure; unit-tested.
-#[allow(dead_code)] // contract-only: hatch paint wiring agle wave ka hai (screenshot frozen); tests lock karte hain
+/// nahi. Pure; unit-tested. Live paint [`paint_filler_hatch`] reuse karta hai.
 pub fn filler_hatch_step() -> f32 {
     TIGHT_GAP
 }
 
 /// Hatch stripes across a filler of `width` px: step-spaced ticks.
 /// Geometry only (paint inhe track par khinchta hai). Pure; unit-tested.
-#[allow(dead_code)] // contract-only: hatch paint wiring agle wave ka hai (screenshot frozen); tests lock karte hain
+/// Live paint [`paint_filler_hatch`] reuse karta hai.
 pub fn filler_hatch_count(width: f32) -> usize {
     if !width.is_finite() || width <= 0.0 {
         return 0;
@@ -3772,6 +3777,44 @@ pub fn filler_hatch_count(width: f32) -> usize {
         return 0;
     }
     (width / step).floor() as usize
+}
+
+/// Filler hatch paint: khaali (filler) side ke label rect me step-spaced
+/// vertical ticks — [`filler_hatch_step`]/[`filler_hatch_count`] geometry
+/// reuse, stroke [`INTRA_SPAN_UNDERLINE_W`] reuse, color caller ka existing
+/// `dim` (koi naya hue/token nahi). Ticks rect me horizontally step par,
+/// vertically centered hain (rect alignment; TypoRole/mono rhythm untouched
+/// — tick height row height ka aadha hai). Guards saturating/finite hain;
+/// koi unwrap/panic nahi.
+fn paint_filler_hatch(painter: &egui::Painter, rect: egui::Rect, color: egui::Color32) {
+    if !rect.is_positive() {
+        return;
+    }
+    let step = filler_hatch_step();
+    if !step.is_finite() || step <= 0.0 {
+        return;
+    }
+    let ticks = filler_hatch_count(rect.width());
+    if ticks == 0 {
+        return;
+    }
+    let tick_h = (rect.height() * 0.5).max(2.0);
+    let center_y = rect.center().y;
+    let mut i = 0usize;
+    while i < ticks {
+        let x = rect.min.x + (i as f32 + 0.5) * step;
+        if x > rect.max.x {
+            break;
+        }
+        painter.line_segment(
+            [
+                egui::pos2(x, center_y - tick_h * 0.5),
+                egui::pos2(x, center_y + tick_h * 0.5),
+            ],
+            egui::Stroke::new(INTRA_SPAN_UNDERLINE_W, color),
+        );
+        i = i.saturating_add(1);
+    }
 }
 
 /// The line-number gutter: right-aligned number plus one separating
@@ -7217,6 +7260,30 @@ mod tests {
         assert_eq!(filler_hatch_count(12.0), 3);
         assert_eq!(filler_hatch_count(0.0), 0);
         assert_eq!(filler_hatch_count(f32::NAN), 0);
+    }
+
+    #[test]
+    fn filler_side_paint_contract_transparent_base_with_hatch() {
+        // Live paint wiring contract (wrap-off path): khaali side filler
+        // hai — plain transparent base (selective palette) + us par hatch
+        // padta hai (nonzero ticks, TIGHT_GAP step). Dono taraf khaali nahi
+        // to hatch zero hona chahiye (guard rail).
+        let base = Color32::TRANSPARENT;
+        let deleted = TextRow {
+            kind: TextRowKind::Deleted,
+            left_no: Some(4),
+            right_no: None,
+            left: "    let legacy_flag = true;".to_string(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        assert!(text_side_is_filler(deleted.right.as_str()));
+        assert!(!text_side_is_filler(deleted.left.as_str()));
+        let (_, right_bg) = selective_side_palette(false, &deleted, Color32::WHITE);
+        assert_eq!(right_bg, base);
+        assert!(filler_hatch_count(460.0) > 0);
+        assert_eq!(filler_hatch_count(0.0), 0);
     }
 
     #[test]
