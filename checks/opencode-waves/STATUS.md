@@ -1519,3 +1519,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - `9e7b25b` feat(gui): apply dark visuals at startup in main (OWNS main.rs + checks/gui-darkfix-ce). Option A (1-line Visuals::dark, existing API). Gates: 661 green (clean-tree verify), all clean.
 - Colors: CE ka 1 Visuals touch fix khud hai (existing dark API, naya palette nahi). CD zero new.
 - Queue: P1-4 CTA width, mode-tab adopt + T7 rename, P2-1 toolbar, dark C full.
+
+## 2026-11-20 — Waves CF-P14 + CG-MODET7 launched (2 parallel, disjoint)
+- CF-P14 (sess-cta-cf): P1-4 home CTA width adoption, OWNS views.rs + checks/gui-ctawidth-cf.
+- CG-MODET7 (sess-mode-cg): mode-tab adopt + T7 rename, OWNS app.rs + home.rs + checks/gui-modet7-cg.
+- Queue: P2-1 toolbar (views, CF ke baad), dark C full, round-4 re-verify.
