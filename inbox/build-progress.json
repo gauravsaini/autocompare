@@ -124,5 +124,6 @@
   "ORCH-LOCALRUN-3": "2026-11-20 21:25 AEDT local run PASS: cli help+text-diff ok, autocompare-gui --screenshot exit0 9765B magic-ok deterministic (isolated /tmp/target-orch-local, HEAD incl gui2 b0520b1)",
   "ORCH-ACTIVE2": "s1 sessions round-1 done (agent doc-commit bc81138), s2 reports WIP, vfs3 early; next: land s2+vfs3 then sync/cli leaves",
   "WAVE-SESSIONS-H2-DONE": "s1 COMPLETE DONE:0 (69 passed 0 failed, clippy -D warnings 0, fmt 0, banned 0, REPORT PASS); all landed+verified; session closed",
-  "WAVE-REPORTS-H2": "s2 round-1 LANDED 2a0fd24 (473 ins OWNS-clean, REPORT PASS, 3 suites green, fmt/clippy/banned/deadcode clean)"
+  "WAVE-REPORTS-H2": "s2 round-1 LANDED 2a0fd24 (473 ins OWNS-clean, REPORT PASS, 3 suites green, fmt/clippy/banned/deadcode clean)",
+  "WAVE-REPORTS-H2-DONE": "s2 COMPLETE DONE:0; round-1 landed+verified+pushed; session closed"
 }
