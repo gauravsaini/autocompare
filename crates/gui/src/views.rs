@@ -133,6 +133,35 @@ pub fn text_gutter_has_copy(kind: TextRowKind) -> bool {
     kind != TextRowKind::Equal
 }
 
+/// Narrow breakpoint px: [`crate::theme::VIEWPORT_MIN_W`] reuse (720) —
+/// isse tang window par side-by-side panes stacked wrap me jate hain
+/// taaki 960x600 canvas par do pane + tang par ek-ek pane bina clip ke
+/// dikhe. Koi naya magic nahi; pure token.
+pub const TEXT_STACK_BREAKPOINT_W: f32 = crate::theme::VIEWPORT_MIN_W as f32;
+
+/// Text pane layout: chaudi window par side-by-side, breakpoint ke
+/// neeche stacked (left block phir right block, dono full-width).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TextLayout {
+    /// Do pane ek row me (default, 960x600 canonical).
+    #[default]
+    SideBySide,
+    /// Ek-ek pane poori chaudi me (narrow <720 fallback).
+    Stacked,
+}
+
+/// Available width se text layout: `TEXT_STACK_BREAKPOINT_W` (720) se
+/// tang par [`TextLayout::Stacked`], warna [`TextLayout::SideBySide`].
+/// Non-finite ya non-positive width par SideBySide (paint kabhi NaN
+/// branch na le). Pure; unit-tested.
+pub fn text_layout_for_width(avail_w: f32) -> TextLayout {
+    if avail_w.is_finite() && avail_w > 0.0 && avail_w < TEXT_STACK_BREAKPOINT_W {
+        TextLayout::Stacked
+    } else {
+        TextLayout::SideBySide
+    }
+}
+
 /// Centered 1px visual inside the split grab strip: equal inset on
 /// both sides so the line stays centered. Pure; unit-tested.
 pub fn split_visual_inset() -> f32 {
@@ -6863,6 +6892,77 @@ mod tests {
         assert!(text_gutter_has_copy(TextRowKind::Deleted));
         assert!(text_gutter_has_copy(TextRowKind::Inserted));
         assert!(!text_gutter_has_copy(TextRowKind::Equal));
+    }
+
+    #[test]
+    fn text_layout_breakpoint_reuses_viewport_min_and_guards() {
+        // Mirrors checks/gui-exq-text2/comparison/*.json canvases.
+        assert_eq!(TEXT_STACK_BREAKPOINT_W, 720.0);
+        assert_eq!(TEXT_STACK_BREAKPOINT_W as u32, crate::theme::VIEWPORT_MIN_W);
+        assert_eq!(text_layout_for_width(960.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(720.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(719.0), TextLayout::Stacked);
+        assert_eq!(text_layout_for_width(320.0), TextLayout::Stacked);
+        assert_eq!(text_layout_for_width(0.0), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(f32::NAN), TextLayout::SideBySide);
+        assert_eq!(text_layout_for_width(f32::INFINITY), TextLayout::SideBySide);
+    }
+
+    #[test]
+    fn text_edge_empty_vs_nonempty_stays_honest_and_wraps_long_line() {
+        // Mirrors checks/gui-exq-text2/comparison/empty-vs-nonempty.json:
+        // empty left vs two-line right must keep one diff row per line,
+        // line numbers only on the present side (no fake "0 B" numbers).
+        let model = viewmodel::TextRows {
+            rows: vec![
+                viewmodel::TextRow {
+                    kind: TextRowKind::Inserted,
+                    left_no: None,
+                    right_no: Some(1),
+                    right: "a".to_string(),
+                    ..Default::default()
+                },
+                viewmodel::TextRow {
+                    kind: TextRowKind::Inserted,
+                    left_no: None,
+                    right_no: Some(2),
+                    right: "b".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(model.rows.len(), 2);
+        for row in &model.rows {
+            assert_ne!(row.kind, TextRowKind::Equal);
+            assert_eq!(row.left_no, None);
+            assert!(row.right_no.is_some());
+        }
+        // Mirrors checks/gui-exq-text2/comparison/long-line-wrap.json:
+        // 200-char line wraps to 3 visuals at the 80-char cap, one at
+        // full width (wrap-off keeps bytes intact, no silent cut).
+        let long = "x".repeat(200);
+        assert_eq!(wrap_width_for(200, true), 80);
+        assert_eq!(wrap_width_for(200, false), 200);
+        assert_eq!(wrap_pane_pair_count(&long, &long, 80), 3);
+        assert_eq!(wrap_pane_pair_count(&long, &long, 200), 1);
+    }
+
+    #[test]
+    fn text_rows_reuse_mono_hierarchy_line_height_and_spacing() {
+        // Typography SECOND: code rows Mono (12 regular-mono), badges
+        // Small, line-height 1.30, letter-spacing 0. Colors untouched.
+        use crate::theme::{TYPO_LETTER_SPACING, TYPO_LINE_HEIGHT_MONO, TYPO_MONO_SIZE};
+        let role = TypoRole::Mono;
+        assert!(role.is_mono());
+        assert_eq!(role.size(), TYPO_MONO_SIZE);
+        assert_eq!(role.line_height(), TYPO_LINE_HEIGHT_MONO);
+        assert!((TYPO_LINE_HEIGHT_MONO - 1.30).abs() < 0.001);
+        assert_eq!(role.line_height_px(), TYPO_MONO_SIZE * 1.30);
+        assert_eq!(role.letter_spacing_em(), 0.0);
+        assert_eq!(TYPO_LETTER_SPACING, 0.0);
+        assert!(role.rank() > TypoRole::Body.rank());
+        assert!(TypoRole::Small.rank() > role.rank());
     }
 
     #[test]
