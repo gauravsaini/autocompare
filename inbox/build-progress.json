@@ -25,6 +25,7 @@
   "ORCH-RESCUE-AGYX": "2026-11-20 22:36 AEDT agyx uxkey+clivcs2 35m stall no-cargo killed, opencode retries launched same OWNS, WIP preserved",
   "ORCH-RESCUE-EXQ7": "2026-11-20 22:24 AEDT exq7 24m idle killed slot freed WIP +1983 preserved, home1 launched sess-opencode-guihome1 OWNS home.rs+tree.rs+checks/gui-home1",
   "ORCH-RESCUE-EXQ8": "2026-11-20 22:35 AEDT exq8 17m zero-edit stall killed, exq8b retry launched same OWNS views+viewmodel",
+  "ORCH-RESUME-EXQ7": "2026-11-20 22:40 AEDT exq7b retry launched same OWNS, WIP resume",
   "ORCH-STEER-FMT": "agents must run cargo fmt scoped (-p own-crate); workspace-wide fmt touches cross-OWNS files (cli runner/session_cmd reverted)",
   "ORCH-SWEEP-NOTE": "orchestrator commits must use pathspec (git commit <paths>) not bare commit, else staged agent work gets swept; corrected going forward",
   "ORCH-VERIFY": "2026-11-20 orch-verify reports 28 green isolated target/orch-verify",
