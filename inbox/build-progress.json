@@ -186,11 +186,11 @@
   "WAVE-LOCAL7": "landed+pushed 8395b55 REPORT PASS 5 PNGs magic 778 green 10/10 CLI TOP-10 (table/hex moved, text/folder/home stable)",
   "ORCH-GAP-HONEST": "2026-11-20 gap ack: BC 888K native toolbar+tabs+metadata+gutter vs ours 10K dark mono, geometry+typo far, colors frozen, exquisite waves prioritized",
   "ORCH-MIX-STATUS": "mix partial: agyx SWARM-GUI-T alive + 3 opencode (home4 local8 hextable2), agyx /swarm TTY-blocked headless, cap4 exp-backoff",
-  "WAVE-HOME4": "running sess-opencode-home4 nmsg12 server-side progressing, duplicate prompt queued, next: export poll exp-backoff",
+  "WAVE-HOME4": "nudged sess-opencode-home4 14msgs succeeded idle, design lock done, edits+harness+commit pending",
   "WAVE-HEXTABLE2-SWARM": "dead agyx /swarm needs TTY bubbletea no-dev-tty in headless, fallback opencode sess-opencode-hextable2 OWNS views_hex+views_table running 23:52",
-  "WAVE-LOCAL8": "running sess-opencode-local8 nmsg18 progressing",
+  "WAVE-LOCAL8": "running sess-opencode-local8 nmsg22, 3 PNGs valid 10363/14991/10153B magic to-verify, REPORT pending",
   "ORCH-PARALLEL": "4 instances: agyx SWARM-GUI-T text + agyx hex2 swarm + opencode home4 + opencode local8, mix balanced, cap4, exp backoff",
-  "WAVE-HEXTABLE2": "running sess-opencode-hextable2 nmsg12 progressing",
+  "WAVE-HEXTABLE2": "running sess-opencode-hextable2 nmsg15",
   "ORCH-DISK2": "2026-11-20 /tmp 100pct 117Mi blocked launches 0B logs, python rmtree freed 14Gi, warm target-orch-verify preserved",
   "ORCH-LAUNCH-FIX": "nohup file-attach relaunch ok, tmux blocked, setsid missing, agyx /swarm TTY blocked fallback opencode"
 }
