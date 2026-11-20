@@ -2125,6 +2125,90 @@ pub const fn hex_ruler_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hextable3 (headless; paint wiring stays with
+// the orchestrator).
+// Gap BC hex half: sync hex+ASCII panes need a locked width split (hex
+// digits pane vs ASCII pane plus one gutter), one shared row height, and
+// a goto bar that never clips at 960px. Geometry FIRST: char budgets come
+// from `HEX_GRID_ROW_CHARS` (80 = 10 ruler + 2 pad + 49 hex + 1 pad +
+// 16 ASCII + 2 pipes), widths reuse `hex_cell_outer_w` + `SPACE_SM`
+// gutter, row height reuses `TypoRole::Mono.line_height_px` (no new
+// size). Typography SECOND: row/pane/ruler all Mono (single role, no new
+// sizes). Colors frozen (koi Color32/Visuals nahi). No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Ruler address chars (`0x00000000` = 10). Pure.
+pub const HEX_RULER_CHARS: usize = 10;
+/// Hex digits pane chars per row: 16 bytes x 3 incl. spaces + midline gap.
+pub const HEX_HEX_PANE_CHARS: usize = 49;
+/// ASCII pane chars per row: 16 one-char marks. Pure.
+pub const HEX_ASCII_PANE_CHARS: usize = 16;
+
+/// Hex digits pane aur ASCII pane ke beech ka gutter (px): `SPACE_SM`
+/// reuse (table `TABLE_CELL_PAD_X` precedent — wahi value, koi naya
+/// rhythm nahi). Paint sync row isi gap se baant-ta hai. Pure.
+pub fn hex_ascii_gutter_w() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Grid row height (px): Mono role ka line-height (12.0 x 1.30 = 15.6).
+/// `TypoRole::Mono.line_height_px` reuse — koi naya size/token nahi.
+/// Paint hex rows + ASCII rows + ruler isi height par hain taaki sync
+/// panes kabhi desync na hon. Pure; unit-tested.
+pub fn hex_grid_row_h() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// Grid row text role: sync-pane Mono reuse (ruler/cells ek hi family).
+/// Koi naya size/token nahi. Pure.
+pub const fn hex_row_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Pane text widths (px): `(hex_text_w, ascii_text_w)` = chars x char_w.
+/// Kharab `char_w` par `None` (paint honest fallback dikhata hai).
+/// Pure; unit-tested.
+pub fn hex_pane_text_widths(char_w: f32) -> Option<(f32, f32)> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    let hex_w = (HEX_HEX_PANE_CHARS as f32) * char_w;
+    let ascii_w = (HEX_ASCII_PANE_CHARS as f32) * char_w;
+    if !hex_w.is_finite() || !ascii_w.is_finite() {
+        return None;
+    }
+    Some((hex_w, ascii_w))
+}
+
+/// Pane outer widths (px): text + `HEX_CELL_PAD_X` dono taraf
+/// (`hex_cell_outer_w` reuse). Kharab `char_w` par `None`. Pure.
+pub fn hex_pane_outer_widths(char_w: f32) -> Option<(f32, f32)> {
+    let (hex_text, ascii_text) = hex_pane_text_widths(char_w)?;
+    Some((hex_cell_outer_w(hex_text), hex_cell_outer_w(ascii_text)))
+}
+
+/// Kya dono sync panes `grid_avail_w` me fit hote hain (outers + ek
+/// gutter). Kharab input par false (paint stacked mode dikhata hai).
+/// Pure; unit-tested.
+pub fn hex_panes_fit(grid_avail_w: f32, char_w: f32) -> bool {
+    if !grid_avail_w.is_finite() || grid_avail_w <= 0.0 {
+        return false;
+    }
+    let Some((hex_outer, ascii_outer)) = hex_pane_outer_widths(char_w) else {
+        return false;
+    };
+    let total = hex_outer + hex_ascii_gutter_w() + ascii_outer;
+    total.is_finite() && total <= grid_avail_w
+}
+
+/// Goto bar min width (px): field + badge pad + label/button gaps
+/// (`SPACE_SM` x 2 reuse, koi naya rhythm nahi). Paint goto row isi se
+/// decide karta hai ki 960px canvas me clip hoga ya nahi. Pure.
+pub fn hex_goto_bar_min_w() -> f32 {
+    HEX_GOTO_FIELD_W + HEX_GOTO_BADGE_PAD + 2.0 * crate::theme::SPACE_SM
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3659,5 +3743,50 @@ mod tests {
         assert_eq!(hex_sync_row_starts(0, 5, 16), vec![0]);
         assert_eq!(hex_panes_height(0.0), HEX_PANES_MIN_H);
         assert_eq!(hex_visible_rows(HEX_PANES_MIN_H, 18.0), 5);
+    }
+
+    #[test]
+    fn hex_exq_hextable3_edge_empty_vs_nonempty_64bit() {
+        // Empty-vs-nonempty + 64-bit goto: empty side 0 rows, 16B side 1
+        // row; u64::MAX goto parses, anchors without wrap, clamps honest.
+        assert_eq!(hex_row_count(0), 0);
+        assert_eq!(hex_row_count(16), 1);
+        assert!(hex_sync_row_starts(0, 5, 0).is_empty());
+        assert_eq!(parse_hex_goto("0xFFFFFFFFFFFFFFFF"), Some(u64::MAX));
+        assert_eq!(parse_hex_goto(&u64::MAX.to_string()), Some(u64::MAX));
+        assert_eq!(parse_hex_goto("18446744073709551616"), None);
+        let (row, col) = hex_goto_anchor(u64::MAX);
+        assert_eq!((row, col), hex_offset_to_row_col(u64::MAX));
+        assert_eq!(hex_goto_row_start(u64::MAX), row.saturating_mul(16));
+        assert_eq!(clamp_hex_goto(u64::MAX, u64::MAX), None);
+        assert_eq!(clamp_hex_goto(u64::MAX - 1, u64::MAX), Some(u64::MAX - 1));
+        assert_eq!(clamp_hex_goto(0, 0), None);
+        // Geometry: 80-char budget splits 10 + 49 + 16 (+pads/pipes).
+        assert_eq!(HEX_RULER_CHARS, 10);
+        assert_eq!(HEX_HEX_PANE_CHARS, 49);
+        assert_eq!(HEX_ASCII_PANE_CHARS, 16);
+        assert_eq!(hex_ascii_gutter_w(), crate::theme::SPACE_SM);
+        // Row height is the Mono line-height, no new size.
+        assert!((hex_grid_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
+        assert_eq!(
+            hex_row_text_role() as u8,
+            crate::theme::TypoRole::Mono as u8
+        );
+        // Pane split at 7px char: hex 343 + ascii 112, outers + 8 gutter.
+        assert_eq!(hex_pane_text_widths(7.0), Some((343.0, 112.0)));
+        assert!(hex_pane_text_widths(0.0).is_none());
+        assert!(hex_pane_text_widths(f32::NAN).is_none());
+        let Some((hex_outer, ascii_outer)) = hex_pane_outer_widths(7.0) else {
+            return;
+        };
+        assert_eq!((hex_outer, ascii_outer), (359.0, 128.0));
+        assert!(hex_pane_outer_widths(0.0).is_none());
+        let grid_avail = hex_grid_avail_w(HEX_CANVAS_W, true);
+        assert!(hex_panes_fit(grid_avail, 7.0));
+        assert!(!hex_panes_fit(100.0, 7.0));
+        assert!(!hex_panes_fit(f32::NAN, 7.0));
+        // Goto bar min width: 120 field + 4 pad + 2x8 gaps = 140.
+        assert_eq!(hex_goto_bar_min_w(), 140.0);
+        assert_eq!(HEX_GOTO_FIELD_W, HEX_FIND_NEEDLE_W);
     }
 }

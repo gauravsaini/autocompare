@@ -1901,6 +1901,105 @@ impl TablePager {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite geometry wave hextable3 (headless; paint wiring stays
+// with the orchestrator).
+// Gap BC table half: key-column mapping needs sort-before-align (rows key
+// order me sort hokar align hote hain, positional smear nahi), aur column
+// grid ko ek locked total width chahiye taaki 960px canvas par scroll vs
+// clip honest ho. Geometry FIRST: sort pure index math hai (stable,
+// saturating, `.get()` only), grid fit `table_grid_total_w` reuse + ek
+// `SPACE_SM` gutter nahi — total hi fit gate hai (koi naya rhythm nahi).
+// Typography SECOND: kuch nahi (rect/index math me font nahi — char widths
+// caller measure karke deta hai, roles wahi Mono/Body/Small rehte hain).
+// Colors frozen (koi Color32/Visuals nahi). No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Ek row ka normalized sort key: key columns ki cells, `ignore_case` par
+/// lowercased, `trim_space` par trimmed. Range-bahar col `-` (missing-cell
+/// precedent `table_cell_display` jaisa) taaki ragged rows sort me panic
+/// na karen. Pure; unit-tested.
+pub fn table_sort_key_for_row(
+    row: &[String],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for col in key_columns.iter() {
+        let mut cell = row.get(*col).cloned().unwrap_or_else(|| String::from("-"));
+        if trim_space {
+            cell = cell.trim().to_string();
+        }
+        if ignore_case {
+            cell = cell.to_ascii_lowercase();
+        }
+        out.push(cell);
+    }
+    out
+}
+
+/// Sort-before-align row order: data-row indices key tuple se stable
+/// sorted (lexicographic, khali keys par identity — positional path sort
+/// nahi karta). Caller `refresh`/paint isi order me rows align karta hai
+/// taaki reordered rows deletes+inserts na banen. Pure; unit-tested.
+pub fn table_sorted_row_indices(
+    rows: &[Vec<String>],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..rows.len()).collect();
+    if key_columns.is_empty() {
+        return idx;
+    }
+    idx.sort_by(|a, b| {
+        let ra = rows.get(*a);
+        let rb = rows.get(*b);
+        match (ra, rb) {
+            (Some(ra), Some(rb)) => {
+                table_sort_key_for_row(ra, key_columns, ignore_case, trim_space).cmp(
+                    &table_sort_key_for_row(rb, key_columns, ignore_case, trim_space),
+                )
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
+    idx
+}
+
+/// Sort-before-align rows: `table_sorted_row_indices` order me cloned
+/// rows. Khali keys par identity clone (positional path untouched).
+/// Pure; unit-tested.
+pub fn table_sort_rows_by_key(
+    rows: &[Vec<String>],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<Vec<String>> {
+    let order = table_sorted_row_indices(rows, key_columns, ignore_case, trim_space);
+    let mut out = Vec::new();
+    for i in order {
+        if let Some(row) = rows.get(i) {
+            out.push(row.clone());
+        }
+    }
+    out
+}
+
+/// Kya column grid `avail_w` me fit hota hai: `table_grid_total_w` reuse.
+/// Kharab input par false (paint horizontal scroll dikhata hai).
+/// Pure; unit-tested.
+pub fn table_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    let total = table_grid_total_w(col_widths_px);
+    total > 0.0 && total.is_finite() && total <= avail_w
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2974,5 +3073,55 @@ mod tests {
         assert_eq!(table_panes_height(0.0), TABLE_PANES_MIN_H);
         assert_eq!(table_cell_outer_w(100.0), 116.0);
         assert_eq!(table_cell_text_w(116.0), 100.0);
+    }
+
+    #[test]
+    fn table_exq_hextable3_edge_sort_before_align() {
+        // Sort-before-align: reordered rows key order me sort hokar align
+        // hote hain; empty keys positional identity; ragged `-` safe.
+        let rows = vec![
+            vec!["2".to_string(), "b".to_string()],
+            vec!["10".to_string(), "a".to_string()],
+            vec!["1".to_string(), "c".to_string()],
+        ];
+        assert_eq!(
+            table_sorted_row_indices(&rows, &[0], false, false),
+            vec![2, 1, 0]
+        );
+        let sorted = table_sort_rows_by_key(&rows, &[0], false, false);
+        assert_eq!(sorted.first(), rows.get(2));
+        // Empty keys: identity (positional untouched).
+        assert_eq!(
+            table_sorted_row_indices(&rows, &[], false, false),
+            vec![0, 1, 2]
+        );
+        assert_eq!(table_sort_rows_by_key(&rows, &[], false, false), rows);
+        // Case + trim folding.
+        let mixed = vec![vec!["  B ".to_string()], vec!["a".to_string()]];
+        assert_eq!(
+            table_sorted_row_indices(&mixed, &[0], true, true),
+            vec![1, 0]
+        );
+        assert_eq!(
+            table_sort_key_for_row(&["  X ".to_string()], &[0], true, true),
+            vec![String::from("x")]
+        );
+        // Ragged row: missing key col `-` se, panic nahi.
+        let ragged = vec![vec!["only".to_string()]];
+        let first_ragged: &[String] = ragged.first().map(Vec::as_slice).unwrap_or(&[]);
+        assert_eq!(
+            table_sort_key_for_row(first_ragged, &[1], false, false),
+            vec![String::from("-")]
+        );
+        // Empty rows: khali order.
+        let empty: Vec<Vec<String>> = Vec::new();
+        assert!(table_sorted_row_indices(&empty, &[0], false, false).is_empty());
+        assert!(table_sort_rows_by_key(&empty, &[0], false, false).is_empty());
+        // Grid fit: total via table_grid_total_w reuse.
+        let px = table_col_widths_px(&[3, 5], 8.0);
+        assert!(table_column_grid_fit(1000.0, &px));
+        assert!(!table_column_grid_fit(10.0, &px));
+        assert!(!table_column_grid_fit(f32::NAN, &px));
+        assert!(!table_column_grid_fit(1000.0, &[]));
     }
 }
