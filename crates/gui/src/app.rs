@@ -4294,6 +4294,135 @@ impl App {
         )
     }
 
+    /// Shared row cursor readout (STATUS7 headless): text model ke
+    /// selected row se `row:col`, bina model/selection par "-".
+    /// Dono panes ek hi row cursor sajha karte hain (BC per-pane `1:1`
+    /// bhi wahi shared row dikhata hai), isliye left/right top ek hi
+    /// label reuse karte hain. Pure; headless-tested.
+    pub fn status_cursor_label(&self) -> String {
+        match self.text_model.as_ref() {
+            Some(model) => viewmodel::cursor_label(viewmodel::cursor_pos_for(model.selected)),
+            None => viewmodel::cursor_label(None),
+        }
+    }
+
+    /// Two-tier statusbar per-pane top rows (STATUS7 caller half):
+    /// left/right dono "{cursor} | rules/Default text". Cursor shared
+    /// row hai, rules tab-level format hai — dono panes aaj barabar
+    /// hain, tuple split-ready hai taaki kal per-pane format alag ho
+    /// sake. Pure; headless-tested.
+    pub fn chrome_status_pane_tops(&self) -> (String, String) {
+        let cursor = self.status_cursor_label();
+        let rules = chrome_default_text_label(self.path_rules_label());
+        (format!("{cursor} | {rules}"), format!("{cursor} | {rules}"))
+    }
+
+    /// Bottom-left "Unimportant differences" zone (STATUS7 headless):
+    /// unimportant rows chhupi hain ya dikh rahi hain — real state se.
+    /// Text par display filter (`Differences` chhupata hai), Folder par
+    /// `hide_orphans`, baaki tabs par koi hide affordance nahi (shown).
+    /// Pure; headless-tested.
+    pub fn status_unimportant_label(&self) -> String {
+        let shown = match self.tab {
+            Tab::Text => !matches!(
+                self.text_model.as_ref().map(|model| model.filter),
+                Some(viewmodel::TextFilter::Differences)
+            ),
+            Tab::Folder => !self.folder_session.display.hide_orphans,
+            Tab::Home
+            | Tab::Merge
+            | Tab::Hex
+            | Tab::Table
+            | Tab::Sync
+            | Tab::Picture
+            | Tab::FolderMerge
+            | Tab::Audio => true,
+        };
+        if shown {
+            String::from("Unimportant differences: shown")
+        } else {
+            String::from("Unimportant differences: hidden")
+        }
+    }
+
+    /// Bottom-mid verdict zone (STATUS7 headless): BC ka `Same`.
+    /// Text par focused row verdict, Folder par koi changed row ho to
+    /// `Different` warna `Same`; bina model/content par "-" (koi jhootha
+    /// verdict nahi). Pure; headless-tested.
+    pub fn status_verdict_label(&self) -> String {
+        match self.tab {
+            Tab::Text => match self.text_model.as_ref() {
+                Some(model) => {
+                    viewmodel::focused_kind_label(&model.rows, model.selected).to_string()
+                }
+                None => String::from("-"),
+            },
+            Tab::Folder => match self.folder_model.as_ref() {
+                Some((rows, _)) => {
+                    if rows.iter().any(|row| row.changed) {
+                        String::from("Different")
+                    } else {
+                        String::from("Same")
+                    }
+                }
+                None => String::from("-"),
+            },
+            Tab::Home
+            | Tab::Merge
+            | Tab::Hex
+            | Tab::Table
+            | Tab::Sync
+            | Tab::Picture
+            | Tab::FolderMerge
+            | Tab::Audio => String::from("-"),
+        }
+    }
+
+    /// Active tab me content loaded hai ya nahi (STATUS7 headless):
+    /// `Insert` copy/insert affordances live hain, "-" par kuch load
+    /// nahi hua. Pure; headless-tested.
+    fn active_model_present(&self) -> bool {
+        match self.tab {
+            Tab::Home => false,
+            Tab::Text => self.text_model.is_some(),
+            Tab::Folder => self.folder_model.is_some(),
+            Tab::Hex => self.hex_model.is_some(),
+            Tab::Merge => self.merge_model.is_some(),
+            Tab::Table => self.table_model.is_some(),
+            Tab::Sync => self.sync_model.is_some(),
+            Tab::Picture => self.picture_model.is_some(),
+            Tab::FolderMerge => self.folder_merge_model.is_some(),
+            Tab::Audio => self.audio_model.is_some(),
+        }
+    }
+
+    /// Bottom-right `Insert` zone (STATUS7 headless): content loaded
+    /// par `Insert`, khaali par "-". Pure; headless-tested.
+    pub fn status_insert_label(&self) -> &'static str {
+        if self.active_model_present() {
+            "Insert"
+        } else {
+            "-"
+        }
+    }
+
+    /// Bottom-right `Load` zone (STATUS7 headless): background job chal
+    /// raha ho to fraction se `Load: NN%` (unknown total par working),
+    /// idle par `Load: idle`. Pure; headless-tested.
+    pub fn status_load_label(&self) -> String {
+        if self.rx.is_some() {
+            match self.progress_fraction {
+                Some(frac) => {
+                    let pct = frac.clamp(0.0, 1.0).mul_add(100.0, 0.0) as u32;
+                    format!("Load: {pct}%")
+                }
+                None => String::from("Load: working"),
+            }
+        } else {
+            String::from("Load: idle")
+        }
+    }
+
     /// Diff-step selection (CHROME6 nav wiring): agla/pichhla diff row
     /// select karta hai, wrap ke saath. Bina model/rows/diffs par false
     /// + honest status; hit par true. Koi panic nahi.
@@ -6494,15 +6623,50 @@ impl eframe::App for App {
             ui.separator();
             ui.add_space(views::FOOTER_GAP);
             // Two-tier statusbar (BC bottom air): top row per-pane
-            // "cursor | rules/Default text" (Small side role), bottom row
-            // honest counts + status (chrome status role). Gaps existing
-            // tokens; typo existing roles; koi naya color/size nahi.
+            // "cursor | rules/Default text" split-aligned under the panes
+            // (left/right widths `layout_pane_widths` se, truncate clip),
+            // bottom row unimportant | verdict | insert | load | counts.
+            // Gaps existing tokens; typo existing roles; koi naya
+            // color/size nahi.
+            let fraction = self.split_fraction();
+            let (pane_left, pane_right) = self.chrome_status_pane_tops();
+            let (pane_lw, pane_rw) = layout_pane_widths(ui.available_width(), fraction);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = toolbar_group_gap();
-                ui.label(views::status_side_role().rich(self.chrome_status_top()));
+                ui.add_sized(
+                    egui::vec2(pane_lw, views::HEADER_H),
+                    egui::Label::new(views::status_side_role().rich(pane_left.as_str()))
+                        .truncate(),
+                );
+                ui.add_sized(
+                    egui::vec2(pane_rw, views::HEADER_H),
+                    egui::Label::new(views::status_side_role().rich(pane_right.as_str()))
+                        .truncate(),
+                );
             });
             ui.add_space(views::action_bar_row_gap());
-            ui.label(views::chrome_status_role().rich(self.status_line()));
+            let unimportant = self.status_unimportant_label();
+            let verdict = self.status_verdict_label();
+            let insert = self.status_insert_label();
+            let load = self.status_load_label();
+            let counts = self.status_line();
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = toolbar_group_gap();
+                ui.label(views::status_side_role().rich(unimportant.as_str()));
+                ui.separator();
+                ui.label(views::status_verdict_role().rich(verdict.as_str()));
+                ui.separator();
+                ui.label(views::status_side_role().rich(insert));
+                ui.separator();
+                ui.label(views::status_side_role().rich(load.as_str()));
+                ui.separator();
+                let rest = ui.available_width().max(0.0);
+                ui.add_sized(
+                    egui::vec2(rest, views::HEADER_H),
+                    egui::Label::new(views::chrome_status_role().rich(counts.as_str()))
+                        .truncate(),
+                );
+            });
         });
     }
 }
@@ -9543,6 +9707,165 @@ mod tests {
         assert_eq!((nav.position, nav.total), (None, 0));
         assert_eq!(nav.cursor, String::from("-"));
         assert!(app.chrome_status_top().contains("Default text"));
+    }
+
+    #[test]
+    fn status7_pane_tops_share_cursor_and_default_text() {
+        let app = App::default();
+        let (left, right) = app.chrome_status_pane_tops();
+        assert_eq!(left, right);
+        assert_eq!(left, "- | Default text");
+        assert_eq!(app.status_cursor_label(), "-");
+    }
+
+    #[test]
+    fn status7_pane_tops_follow_selection() {
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.text_model = Some(viewmodel::TextRows {
+            rows: vec![viewmodel::TextRow {
+                kind: viewmodel::TextRowKind::Equal,
+                left_no: Some(1),
+                right_no: Some(1),
+                left: String::from("a"),
+                right: String::from("a"),
+                ..Default::default()
+            }],
+            selected: Some(0),
+            ..Default::default()
+        });
+        let (left, right) = app.chrome_status_pane_tops();
+        assert_eq!(
+            (left.as_str(), right.as_str()),
+            ("1:1 | Text: exact", "1:1 | Text: exact")
+        );
+        assert_eq!(app.status_cursor_label(), "1:1");
+    }
+
+    #[test]
+    fn status7_unimportant_follows_filter_and_orphans() {
+        let mut app = App::default();
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: shown"
+        );
+        app.set_tab(Tab::Text);
+        app.text_model = Some(viewmodel::TextRows::default());
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: shown"
+        );
+        if let Some(model) = app.text_model.as_mut() {
+            model.filter = viewmodel::TextFilter::Differences;
+        }
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: hidden"
+        );
+        app.set_tab(Tab::Folder);
+        app.folder_model = Some((Vec::new(), String::from("empty")));
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: shown"
+        );
+        app.folder_session.display.hide_orphans = true;
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: hidden"
+        );
+    }
+
+    #[test]
+    fn status7_verdict_is_honest() {
+        let mut app = App::default();
+        assert_eq!(app.status_verdict_label(), "-");
+        assert_eq!(app.status_insert_label(), "-");
+        app.set_tab(Tab::Text);
+        assert_eq!(app.status_verdict_label(), "-");
+        app.text_model = Some(viewmodel::TextRows {
+            rows: vec![viewmodel::TextRow {
+                kind: viewmodel::TextRowKind::Changed,
+                left_no: Some(2),
+                right_no: Some(2),
+                left: String::from("beta"),
+                right: String::from("BETA"),
+                ..Default::default()
+            }],
+            selected: Some(0),
+            ..Default::default()
+        });
+        assert_eq!(app.status_verdict_label(), "Changed");
+        assert_eq!(app.status_insert_label(), "Insert");
+        app.set_tab(Tab::Folder);
+        app.folder_model = Some((
+            vec![viewmodel::FolderRow {
+                rel_path: String::from("a.txt"),
+                changed: false,
+                ..Default::default()
+            }],
+            String::from("1 same"),
+        ));
+        assert_eq!(app.status_verdict_label(), "Same");
+        app.folder_model = Some((
+            vec![viewmodel::FolderRow {
+                rel_path: String::from("b.txt"),
+                changed: true,
+                ..Default::default()
+            }],
+            String::from("1 different"),
+        ));
+        assert_eq!(app.status_verdict_label(), "Different");
+    }
+
+    #[test]
+    fn status7_load_reflects_job() {
+        let mut app = App::default();
+        assert_eq!(app.status_load_label(), "Load: idle");
+        let (_tx, rx) = channel::<CompareResult>();
+        app.rx = Some(rx);
+        assert_eq!(app.status_load_label(), "Load: working");
+        app.progress_fraction = Some(0.5);
+        assert_eq!(app.status_load_label(), "Load: 50%");
+        app.progress_fraction = Some(9.0);
+        assert_eq!(app.status_load_label(), "Load: 100%");
+    }
+
+    #[test]
+    fn status7_empty_vs_nonempty_fixture_stays_honest() {
+        let dir = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../checks/gui-exq-status7/round-1/comparison"
+        );
+        let left = std::path::Path::new(dir).join("left-empty.txt");
+        let right = std::path::Path::new(dir).join("right-basic.txt");
+        let cmp =
+            match autocompare_compare::compare_text_files(&left, &right, &TextOptions::default()) {
+                Ok(cmp) => cmp,
+                Err(err) => {
+                    let msg = format!("{err}");
+                    assert_eq!(msg, String::new(), "fixture compares");
+                    return;
+                }
+            };
+        let mut model = viewmodel::build_text_rows(&cmp);
+        assert!(!model.rows.is_empty());
+        assert!(model.rows.iter().all(|row| {
+            row.kind == viewmodel::TextRowKind::Inserted
+                || row.kind == viewmodel::TextRowKind::Equal
+        }));
+        model.selected = None;
+        let mut app = App::default();
+        app.set_tab(Tab::Text);
+        app.text_model = Some(model);
+        assert_eq!(app.status_verdict_label(), "no selection");
+        assert_eq!(app.status_insert_label(), "Insert");
+        assert_eq!(
+            app.status_unimportant_label(),
+            "Unimportant differences: shown"
+        );
+        let (pane_left, pane_right) = app.chrome_status_pane_tops();
+        assert!(pane_left.contains("Text: exact"));
+        assert_eq!(pane_left, pane_right);
     }
 
     #[test]
