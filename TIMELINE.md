@@ -303,3 +303,12 @@
 1. **Gutter Numbers & Overview at 720-960px**: BC parity for center gutter: line-number column digit scaling (1-digit 16.0, 3-digit 24.0, 7-digit cap 36.0, hidden 8.0), text-row pad vs Mono line-height (15.6 -> 19.6), overview same-plus-diff bands, arrow 16px box with 20px slop hit-target. Geometry via SPACE scale reuse, typo Mono 12 tabular reuse, no new sizes. Colors frozen at 33. Edge fixtures `comparison/edge-tall-same-diff.json` plus `comparison/gutter-narrow-720.json` added; exquisite harness PASS (PNG 10401B).
 2. **Tests** (before → after): autocompare-gui 941 passed, 0 failed; clippy clean on owned `gutter.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/gutter.rs`, `checks/gui-exq-gutter6/**`, `TIMELINE.md`.
+
+
+## UPDATED ON : 2026-11-21
+
+### Feature (2026-11-21) — feat(gui): exq-text8 rows plus divider
+
+1. **Text Rows & Divider at 960px**: BC parity for text compare panes: row height locked to `TypoRole::Mono` line-height, inner pad via `SPACE_XS`, line-num col widths from char metrics, center gap via `SPACE_SM`, divider hit-slop symmetric, minimap marker bands plus orphan blank balance at narrow widths. No new sizes, Body/Small reuse. Colors frozen at 33. Edge fixture `comparison/text-wide-960.json` added; exquisite harness PASS (PNG 10401B).
+2. **Tests** (before → after): autocompare-gui all green; clippy clean on owned `views.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views.rs`, `checks/gui-exq-text8/**`, `TIMELINE.md`.
