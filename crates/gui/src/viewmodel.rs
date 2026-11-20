@@ -1568,19 +1568,20 @@ pub fn text_panes_height(avail_h: f32) -> f32 {
 // clip ho jaate hain.
 //
 // Ye section density tokens + row-height formulas ka single source hai:
-// - `Compact`: maximum information density, text 18.0px (table parity),
-//   folder 20.0px (body 18.2px se upar — zero clip floor).
+// - `Compact`: maximum information density, text 20.0px (`SPACE_LG` 16.0 +
+//   `SPACE_XS` 4.0, folder-compact parity), folder 20.0px (body 18.2px se
+//   upar — zero clip floor).
 // - `Comfortable`: default 24.0px (`SPACE_XL`, screenshot/tree parity).
 // - `Spacious`: relaxed 28.0px (`CHROME_HEADER_BAR_H` parity).
 // - Viewport audits at canonical 960x600 and 720px fallback prove zero
 //   vertical or horizontal text clipping. Pure; unit-tested.
 
-/// Compact text row height (px): 18.0.
-/// Parity with table grid row height (`views_table::TABLE_GRID_ROW_H`).
-/// Accommodates `TypoRole::Mono` (15.6px line-height) with 2.4px padding,
-/// and `TYPO_MONO_SIZE_MAX` (16.9px line-height) with 1.1px padding,
+/// Compact text row height (px): 20.0 (`SPACE_LG` 16.0 + `SPACE_XS` 4.0,
+/// folder-compact parity for one shared dense rhythm).
+/// Accommodates `TypoRole::Mono` (15.6px line-height) with 4.4px padding,
+/// and `TYPO_MONO_SIZE_MAX` (16.9px line-height) with 3.1px padding,
 /// ensuring zero vertical glyph clipping.
-pub const TEXT_ROW_HEIGHT_COMPACT: f32 = 18.0;
+pub const TEXT_ROW_HEIGHT_COMPACT: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
 
 /// Comfortable text row height (px): 24.0.
 /// Parity with screenshot fixtures (`screenshot.rs` 24px row_h) and [`crate::theme::SPACE_XL`].
@@ -1607,7 +1608,7 @@ pub const FOLDER_ROW_HEIGHT_SPACIOUS: f32 = 28.0;
 /// text diff and folder tree views.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum RowDensity {
-    /// Dense packing: maximum visible rows (18px text, 20px folder).
+    /// Dense packing: maximum visible rows (20px text, 20px folder).
     Compact,
     /// Canonical default: balanced readability and touch targets (24px text, 24px folder).
     #[default]
@@ -1843,6 +1844,67 @@ pub fn audit_viewmodel_density() -> ViewportDensityAudit {
         folder_capacity_450,
         zero_clipping_verified: zero_clipping,
     }
+}
+
+// ----------------------------------------------------------------------------
+// Live text typo (text30 headless): roles + metrics for the text panes.
+// Paint-neutral this wave — `views.rs` adopts in a later wave; these lock
+// the headless contract so the live panes read as one mono rhythm: both
+// panes + gutter reuse `TypoRole::Mono` (12px, 1.30 -> 15.6px line box),
+// counts/meta reuse `TypoRole::Small`, tracking stays 0.0, and wrap caps
+// at 80 chars so the 720px fallback wraps well under the cap. Every value
+// delegates to an existing `TypoRole` accessor or `theme` token; no new
+// size, no new token, no color. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Live text body role: both panes read Mono (12 regular monospace).
+/// Value-stable alias over [`crate::theme::TypoRole::content_textcenter`].
+pub const fn live_text_body_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::content_textcenter()
+}
+
+/// Live text gutter role: line numbers read the same Mono as the panes.
+/// Value-stable alias over [`crate::theme::TypoRole::gutter_text`].
+pub const fn live_text_gutter_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::gutter_text()
+}
+
+/// Live text meta role: counts/hints read Small (11 weak proportional).
+/// Value-stable alias over [`crate::theme::TypoRole::caption`].
+pub const fn live_text_meta_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::caption()
+}
+
+/// Live text mono line-height multiplier: 1.30.
+/// [`crate::theme::TypoRole::line_height`] ka alias — paint ab bhi
+/// measured mono row height par hai; ye headless intent hai.
+pub const fn live_text_mono_line_height() -> f32 {
+    crate::theme::TypoRole::Mono.line_height()
+}
+
+/// Live text mono line-height px: 12.0 * 1.30 = 15.6.
+/// [`crate::theme::TypoRole::line_height_px`] ka alias.
+pub const fn live_text_mono_line_height_px() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// Live text letter-spacing em: 0.0 no-op ([`crate::theme::TYPO_LETTER_SPACING`]
+/// reuse — egui has no tracking, headers ke siwa sab 0.0).
+pub const fn live_text_letter_spacing_em() -> f32 {
+    crate::theme::TYPO_LETTER_SPACING
+}
+
+/// Live text wrap cap (chars): 80 ([`crate::theme::TYPO_WRAP_PANE_CHARS`]
+/// reuse — word wrap kabhi isse zyada nahi dikhata).
+pub const fn live_text_wrap_chars() -> usize {
+    crate::theme::TYPO_WRAP_PANE_CHARS
+}
+
+/// Narrow-pane wrap chars: longest mono run fitting `pane_w` at
+/// `advance_px`, capped at [`live_text_wrap_chars`]. Degenerate budgets
+/// yield 0 so headless callers never divide by zero. Pure; unit-tested.
+pub fn live_text_wrap_chars_for_width(pane_w: u32, advance_px: f32) -> usize {
+    text_pane_char_capacity(pane_w, advance_px).min(live_text_wrap_chars())
 }
 
 // ----------------------------------------------------------------------------
@@ -5120,7 +5182,9 @@ mod tests {
 
     #[test]
     fn density_tokens_strictly_greater_than_line_heights() {
-        use crate::theme::{CHROME_HEADER_BAR_H, SPACE_XL, TYPO_MONO_SIZE_MAX, TypoRole};
+        use crate::theme::{
+            CHROME_HEADER_BAR_H, SPACE_LG, SPACE_XL, SPACE_XS, TYPO_MONO_SIZE_MAX, TypoRole,
+        };
         use crate::tree::FOLDER_ROW_HEIGHT;
 
         // Text row heights strictly exceed mono line heights (no vertical clip)
@@ -5138,6 +5202,8 @@ mod tests {
         assert!(FOLDER_ROW_HEIGHT_SPACIOUS > FOLDER_ROW_HEIGHT_COMFORTABLE);
 
         // Parity with existing design tokens
+        assert_eq!(TEXT_ROW_HEIGHT_COMPACT, SPACE_LG + SPACE_XS);
+        assert_eq!(TEXT_ROW_HEIGHT_COMPACT, 20.0);
         assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, SPACE_XL);
         assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, 24.0);
         assert_eq!(FOLDER_ROW_HEIGHT_COMFORTABLE, FOLDER_ROW_HEIGHT);
@@ -5191,7 +5257,7 @@ mod tests {
         );
 
         // Text padding budgets
-        assert!((RowDensity::Compact.text_row_pad() - 1.2).abs() < 0.01);
+        assert!((RowDensity::Compact.text_row_pad() - 2.2).abs() < 0.01);
         assert!((RowDensity::Comfortable.text_row_pad() - 4.2).abs() < 0.01);
         assert!((RowDensity::Spacious.text_row_pad() - 6.2).abs() < 0.01);
 
@@ -5234,7 +5300,7 @@ mod tests {
         // Text capacities
         assert_eq!(
             RowDensity::Compact.text_viewport_capacity(panes_h),
-            26 // 476 / 18 = 26.44
+            23 // 476 / 20 = 23.8
         );
         assert_eq!(
             RowDensity::Comfortable.text_viewport_capacity(panes_h),
@@ -5296,9 +5362,61 @@ mod tests {
         assert!(audit.fallback_folder_path_w_d3 >= min_path_w);
 
         // Capacities
-        assert_eq!(audit.text_capacity_600, [26, 19, 17]);
-        assert_eq!(audit.text_capacity_450, [18, 13, 11]);
+        assert_eq!(audit.text_capacity_600, [23, 19, 17]);
+        assert_eq!(audit.text_capacity_450, [16, 13, 11]);
         assert_eq!(audit.folder_capacity_600, [23, 19, 17]);
         assert_eq!(audit.folder_capacity_450, [16, 13, 11]);
+    }
+
+    #[test]
+    fn text30_wrap700_zero_clip() {
+        use crate::theme::{TYPO_MONO_SIZE_MAX, TYPO_WRAP_PANE_CHARS, TypoRole, VIEWPORT_MIN_W};
+        // Mirrors checks/gui-exq-text30/round-1/comparison/narrow700-wrap.json:
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-text30/round-1/comparison/narrow700-wrap.json");
+        assert!(fixture_raw.contains("\"name\": \"narrow700-wrap\""));
+
+        // Live-text typo roles reuse existing TypoRole aliases, no new sizes.
+        assert_eq!(live_text_body_role(), TypoRole::Mono);
+        assert_eq!(live_text_gutter_role(), TypoRole::Mono);
+        assert_eq!(live_text_meta_role(), TypoRole::Small);
+        assert_eq!(live_text_body_role(), TypoRole::content_textcenter());
+        assert_eq!(live_text_gutter_role(), TypoRole::gutter_text());
+        assert_eq!(live_text_meta_role(), TypoRole::caption());
+        assert_eq!(live_text_body_role().size(), TypoRole::Mono.size());
+        assert_eq!(live_text_meta_role().size(), TypoRole::Small.size());
+
+        // Mono line-height 1.30 -> 15.6px box; letter-spacing 0.0 no-op.
+        assert!((live_text_mono_line_height() - 1.30).abs() < 0.0001);
+        assert_eq!(live_text_mono_line_height(), TypoRole::Mono.line_height());
+        assert!((live_text_mono_line_height_px() - 15.6).abs() < 0.01);
+        assert_eq!(live_text_letter_spacing_em(), 0.0);
+        assert_eq!(live_text_wrap_chars(), TYPO_WRAP_PANE_CHARS);
+        assert_eq!(live_text_wrap_chars(), 80);
+
+        // Narrow700 edge: avail 700 (below 720 fallback), 88 chrome -> 306/306.
+        assert_eq!(textcenter_chrome_w(), 88);
+        assert_eq!(textcenter_pane_widths(700, 0.5), (306, 306));
+        assert!(700 < VIEWPORT_MIN_W);
+        let (left_w, _) = textcenter_pane_widths(700, 0.5);
+        let wrap = live_text_wrap_chars_for_width(left_w, 7.2);
+        assert_eq!(wrap, 42); // 306 / 7.2 = 42.5 -> 42, well under the 80 cap
+        assert!(wrap < live_text_wrap_chars());
+        assert_eq!(text_pane_char_capacity(left_w, 7.2), wrap);
+
+        // Zero vertical clip at every density: rows above mono-max 16.9.
+        let mono_max_line_h = TYPO_MONO_SIZE_MAX * TypoRole::Mono.line_height();
+        assert!((mono_max_line_h - 16.9).abs() < 0.01);
+        for density in [
+            RowDensity::Compact,
+            RowDensity::Comfortable,
+            RowDensity::Spacious,
+        ] {
+            assert!(!row_height_has_clip_risk(
+                density.text_row_height(),
+                mono_max_line_h
+            ));
+        }
+        assert_eq!(RowDensity::Compact.text_row_height(), 20.0);
     }
 }
