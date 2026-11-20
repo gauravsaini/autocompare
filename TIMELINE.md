@@ -404,3 +404,9 @@
 1. **Chrome Toolbar & Filebar at 960px**: toolbar button size from space scale, file-bar height from TypoRole chrome line-height, status strip padding symmetric.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `app.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/app.rs`, `checks/gui-exq-chrome8/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-table6 header plus rhythm
+
+1. **Table Header & Rhythm at 960px**: header row height from TypoRole strong line-height, body rows Mono line-height lock, separator insets symmetric.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `views_table.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/views_table.rs`, `checks/gui-exq-table6/**`, `TIMELINE.md`.
