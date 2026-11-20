@@ -1,0 +1,33 @@
+{
+  "name": "hatch-tall-1200",
+  "intent": "Hatch25 tall-1200 fixture proof: trailing slots below the last content row stay calm at tall viewports — a single content-base-tone fill from the exact row-grid content end to the exact status-strip top, zero filler glyphs, no alternating banding. Geometry first, typography untouched, colors frozen.",
+  "inputs": {
+    "canvas_h": 1200,
+    "pane_top": 174,
+    "bottom_budget": 40,
+    "pane_bottom": 1160,
+    "strip_h": 18,
+    "strip_top": 1142,
+    "row_h": 18,
+    "content_rows": 50,
+    "content_end": 1074
+  },
+  "assertions": {
+    "strip_top": 1142,
+    "content_end_row_grid_aligned": true,
+    "trailing_h": 68,
+    "fill_bands": 1,
+    "filler_glyphs": 0,
+    "pad_vs_last_row": 0,
+    "pad_vs_strips": 0,
+    "bottom_gap": 10,
+    "single_tone_calm": true,
+    "no_banding": true,
+    "fixture_scale_content_end": 300,
+    "fixture_scale_strip_top": 542,
+    "fixture_scale_trailing_h": 242,
+    "center_layout_intact": [12, 448, 464, 20, 488, 448],
+    "pane_top_intact": 174,
+    "strip_h_intact": 18
+  }
+}

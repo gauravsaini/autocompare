@@ -1000,11 +1000,13 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     let num_x_off = fixture_text_inner_pad();
     let text_x_off = fixture_text_x_off(rows.len());
     let base_dy = fixture_text_baseline_dy(row_h);
+    let mut content_end = pane_top;
     for (i, row) in rows.iter().enumerate() {
         let y = pane_top.saturating_add((i as u32).saturating_mul(row_h));
         if y.saturating_add(row_h) > pane_bottom {
             break;
         }
+        content_end = y.saturating_add(row_h);
 
         let (left_bg, left_fg, right_bg, right_fg) = match row.kind {
             TextRowKind::Equal => (
@@ -1135,6 +1137,29 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 CHANGED_FG,
             );
         }
+    }
+
+    // Trailing calm fill (exq-hatch25): slots below the last content row
+    // read as one calm field — same content-base tone the equal rows use,
+    // zero filler glyphs, no banding edge against the content block. Starts
+    // exactly at the last row (zero pad) and stops above the status20
+    // strips; center floor already carries this tone, gutter untouched.
+    let strip_top = pane_bottom.saturating_sub(PANE_STATUS_H);
+    for (pane_x, pane_w) in [(left_x, left_w), (right_x, right_w)] {
+        if pane_w == 0 || content_end >= strip_top {
+            continue;
+        }
+        fill_rect(
+            &mut pixels,
+            dims,
+            (
+                pane_x,
+                content_end,
+                pane_w,
+                strip_top.saturating_sub(content_end),
+            ),
+            fixture_palette().bg,
+        );
     }
 
     // Thumbnail overview gutter geometry: live ruler contract
@@ -5814,6 +5839,59 @@ mod tests {
         assert_eq!(TEXT_CENTER_MARK, "=>");
         assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
         assert_eq!(PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4), 174);
+    }
+
+    #[test]
+    fn hatch25_tall_no_banding() {
+        // Mirrors checks/gui-exq-hatch25/round-1/comparison/hatch-tall-1200.json:
+        // trailing slots below the last content row stay calm at tall
+        // viewports — one single-tone fill from the exact row-grid content
+        // end to the exact status-strip top, zero filler glyphs, no banding.
+        // Geometry FIRST, typography untouched, colors FROZEN.
+        let raw =
+            include_str!("../../../checks/gui-exq-hatch25/round-1/comparison/hatch-tall-1200.json");
+        assert!(raw.contains("\"name\": \"hatch-tall-1200\""));
+        assert!(raw.contains("\"fill_bands\": 1"));
+        assert!(raw.contains("\"filler_glyphs\": 0"));
+        assert!(raw.contains("\"no_banding\": true"));
+
+        // 1. Tall-1200 pane budget: same 40px bottom budget as the 600
+        // canvas (legend 30 + 10 air), strips 18 above the legend gap.
+        let canvas_h = 1200u32;
+        let pane_bottom = canvas_h.saturating_sub(40);
+        assert_eq!(pane_bottom, 1160);
+        assert_eq!(PANE_STATUS_H, 18);
+        let strip_top = pane_bottom.saturating_sub(PANE_STATUS_H);
+        assert_eq!(strip_top, 1142);
+
+        // 2. Content end lands exactly on the row grid; trailing fill starts
+        // there with zero pad and stops exactly at the strips (zero pad).
+        let row_h = fixture_text_row_h();
+        assert_eq!(row_h, 18);
+        let pane_top = PATH_TOOLBAR_Y.saturating_add(56).saturating_add(4);
+        assert_eq!(pane_top, 174);
+        let content_end = pane_top.saturating_add(50u32.saturating_mul(row_h));
+        assert_eq!(content_end, 1074);
+        assert_eq!(content_end.saturating_sub(pane_top) % row_h, 0);
+        assert!(content_end < strip_top);
+        assert_eq!(strip_top.saturating_sub(content_end), 68);
+
+        // 3. Fixture-scale (600 canvas) rhythm locks the real renderer edit:
+        // 7 content rows end at 300, strips start at 542, one 242px calm band.
+        let fixture_end = pane_top.saturating_add(7u32.saturating_mul(row_h));
+        assert_eq!(fixture_end, 300);
+        let fixture_strip = 560u32.saturating_sub(PANE_STATUS_H);
+        assert_eq!(fixture_strip, 542);
+        assert_eq!(fixture_strip.saturating_sub(fixture_end), 242);
+
+        // 4. Shot15/shot18/shot19 + status20 intact: center layout, markers,
+        // toolbar rhythm, typo row height, strips, legend segments.
+        assert_eq!(text_fixture_center_layout(), (12, 448, 464, 20, 488, 448));
+        assert_eq!(TEXT_CENTER_MARK, "=>");
+        assert!(text_width(TEXT_CENTER_MARK) <= 20u32.saturating_sub(8));
+        assert_eq!(fixture_text_inner_pad(), 4);
+        assert_eq!(fixture_text_baseline_dy(row_h), 5);
+        assert_eq!(fixture_legend_segments().len(), 4);
     }
 
     #[test]
