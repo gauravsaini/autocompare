@@ -2539,6 +2539,172 @@ pub fn gutter_overview_diff_kinds(geom: &GutterGeometry) -> Vec<TextRowKind> {
     out
 }
 
+// ----------------------------------------------------------------------------
+// GUTTER8 round-2: changed-only center markers + SPACE-width column at 960.
+// BC center gutter shows change markers ONLY at changed rows (Equal rows
+// blank click-to-select), column ~20px between panes from SPACE tokens,
+// arrow glyph centered in the column at 960px wide. Geometry first: marker
+// visibility gated on the changed-row flag (single source), column width
+// and glyph insets all SPACE scale reuse, no new literals. Typography
+// second: nothing (no text here). Colors frozen: shape only (33 touches).
+// WIRING (paint owner ke paas): per-row marker `gutter_marker_visible(..)`
+// se gate karo (false -> blank, no arrow); changed rows
+// `gutter_changed_rows(..)` se; center column x
+// `gutter_center_column_x_960()` se, arrow cx `gutter_center_arrow_cx_960()`
+// se, glyph `gutter_center_glyph_960(..)` se.
+// ----------------------------------------------------------------------------
+
+/// Center marker visibility for one row: changed rows only.
+///
+/// Single source for paint gating: `Equal` rows stay blank (no arrow),
+/// every diff kind (`Deleted`/`Inserted`/`Changed`) gets a marker.
+/// Pure; unit-tested.
+pub fn gutter_marker_visible(kind: TextRowKind) -> bool {
+    kind != TextRowKind::Equal
+}
+
+/// Changed-row indices in row order: every row paint must mark.
+///
+/// `Equal` rows never appear here, so markers land ONLY on changed rows.
+/// Pure; unit-tested.
+pub fn gutter_changed_rows(rows: &[TextRow]) -> Vec<usize> {
+    let mut out: Vec<usize> = Vec::new();
+    let mut idx = 0usize;
+    while idx < rows.len() {
+        match rows.get(idx) {
+            Some(row) => {
+                if gutter_marker_visible(row.kind) {
+                    out.push(idx);
+                }
+                idx = idx.saturating_add(1);
+            }
+            None => break,
+        }
+    }
+    out
+}
+
+/// 960px canvas center-column x px: `margin + pane` from the symmetric
+/// text layout (12 + 456 = 468). Column is [`GUTTER_CENTER_W`] wide
+/// ([`crate::theme::SPACE_XL`], 24). Pure; unit-tested.
+pub fn gutter_center_column_x_960() -> f32 {
+    let (margin, pane, _, _, _) = gutter_text5_layout_960();
+    margin + pane
+}
+
+/// 960px canvas center-arrow cx px: column center (468 + 24/2 = 480 =
+/// canvas middle), so the glyph sits centered in the gutter. `None` only
+/// when the column math goes non-finite. Pure; unit-tested.
+pub fn gutter_center_arrow_cx_960() -> Option<f32> {
+    gutter_arrow_center_x(gutter_center_column_x_960())
+}
+
+/// 960px canvas center glyph rect `(x0, y0, x1, y1)` px: 12px chevron
+/// ([`gutter_arrow_glyph_rect`]) centered at canvas middle (480) for the
+/// given row-center y. `None` for non-finite y. Pure; unit-tested.
+pub fn gutter_center_glyph_960(center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_center_arrow_cx_960()?;
+    gutter_arrow_glyph_rect(cx, center_y)
+}
+
+#[cfg(test)]
+mod exq_gutter8_tests {
+    use super::*;
+
+    fn mrow(kind: TextRowKind) -> TextRow {
+        TextRow {
+            kind,
+            left_no: None,
+            right_no: None,
+            left: String::new(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        }
+    }
+
+    fn mixed_960_rows() -> Vec<TextRow> {
+        vec![
+            mrow(TextRowKind::Equal),
+            mrow(TextRowKind::Deleted),
+            mrow(TextRowKind::Equal),
+            mrow(TextRowKind::Changed),
+            mrow(TextRowKind::Equal),
+            mrow(TextRowKind::Inserted),
+            mrow(TextRowKind::Equal),
+            mrow(TextRowKind::Equal),
+        ]
+    }
+
+    #[test]
+    fn gutter8_markers_only_on_changed_rows() {
+        // Mirrors checks/gui-exq-gutter8/round-1/comparison/gutter-mixed-960.json.
+        let rows = mixed_960_rows();
+        assert!(!gutter_marker_visible(TextRowKind::Equal));
+        assert!(gutter_marker_visible(TextRowKind::Deleted));
+        assert!(gutter_marker_visible(TextRowKind::Inserted));
+        assert!(gutter_marker_visible(TextRowKind::Changed));
+        assert_eq!(gutter_changed_rows(&rows), vec![1, 3, 5]);
+        assert_eq!(gutter_changed_rows(&rows).len(), 3);
+        // Segments agree: diff-only geometry yields exactly the changed bands.
+        let geom = gutter_geometry(rows.len(), 800.0, &rows);
+        assert_eq!(geom.segments.len(), 3);
+        let kinds: Vec<TextRowKind> = geom.segments.iter().map(|s| s.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                TextRowKind::Deleted,
+                TextRowKind::Changed,
+                TextRowKind::Inserted
+            ]
+        );
+        assert_eq!(
+            gutter_overview_diff_kinds(&gutter_overview_geometry(8, 800.0, &rows)),
+            kinds
+        );
+        // Every Equal row maps to no segment: markers never land there.
+        let mut idx = 0usize;
+        while idx < rows.len() {
+            if let Some(row) = rows.get(idx) {
+                if row.kind == TextRowKind::Equal {
+                    if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+                        assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+                    }
+                }
+            }
+            idx = idx.saturating_add(1);
+        }
+        assert!(gutter_changed_rows(&[]).is_empty());
+    }
+
+    #[test]
+    fn gutter8_center_width_from_space_tokens_centered_at_960() {
+        // Mirrors checks/gui-exq-gutter8/round-1/comparison/gutter-mixed-960.json:
+        // column 24 (SPACE_XL), 12 + 456 + 24 + 456 + 12 = 960, cx 480.
+        assert_eq!(GUTTER_CENTER_W, crate::theme::SPACE_XL);
+        assert_eq!(gutter_center_width(), 24.0);
+        assert_eq!(gutter_text5_layout_960(), (12.0, 456.0, 24.0, 456.0, 12.0));
+        assert_eq!(gutter_center_column_x_960(), 468.0);
+        assert_eq!(gutter_center_arrow_cx_960(), Some(480.0));
+        // Glyph 12px chevron centered in the 24px gutter at canvas middle.
+        assert_eq!(
+            gutter_center_glyph_960(200.0),
+            Some((474.0, 194.0, 486.0, 206.0))
+        );
+        assert_eq!(gutter_center_glyph_960(f32::NAN), None);
+        // Arrow box + 2 * side gap == center width (16 + 8 == 24).
+        assert!(
+            (gutter_arrow_box() + 2.0 * gutter_center_side_gap() - gutter_center_width()).abs()
+                < 0.001
+        );
+        // Hit target ~20px (16 box + 2 slop/side) centered at 480: 470..490.
+        assert_eq!(
+            gutter_arrow_hit_rect(480.0, 200.0),
+            Some((470.0, 190.0, 490.0, 210.0))
+        );
+    }
+}
+
 #[cfg(test)]
 mod exq_gutter7_tests {
     use super::*;
