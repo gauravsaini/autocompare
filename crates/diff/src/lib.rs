@@ -20,6 +20,7 @@ mod word_diff;
 
 pub use audio::{
     AudioDiff, MAX_SAMPLES, PcmAudio, decode_audio, decode_mp3, decode_wav, diff_audio,
+    diff_audio_with_tolerance,
 };
 pub use grammar::{
     CommentRule, CommentState, DisplayFilter, GrammarDiffScript, GrammarInlineSpan,
@@ -27,7 +28,9 @@ pub use grammar::{
     compare_lines_importance, diff_lines_with_grammar, grammar_inline_diff, is_blank_line,
     normalize_line, normalize_lines, strip_comments,
 };
-pub use image::{PictureDiff, RgbaImage, decode_png, diff_pictures, encode_png, picture_heatmap};
+pub use image::{
+    PictureDiff, RgbaImage, decode_image, decode_png, diff_pictures, encode_png, picture_heatmap,
+};
 pub use table::{
     KeyRowDiff, Sheet, SheetDiff, SheetDiffStatus, Table, TableCompareOptions, TableKeyDiff,
     Workbook, WorkbookDiff, cells_equal_with_options, cells_equal_with_tolerance,

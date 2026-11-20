@@ -10,8 +10,8 @@
 use std::path::Path;
 
 use autocompare_diff::{
-    Table, TableCompareOptions, TableKeyDiff, Workbook, WorkbookDiff, diff_rows,
-    diff_table_by_key_with_options, diff_workbooks, parse_delimited, sort_table_rows,
+    Table, TableCompareOptions, TableKeyDiff, diff_rows, diff_table_by_key_with_options,
+    parse_delimited,
 };
 
 use crate::{Error, Result, TableComparison, TableOptions};
@@ -110,111 +110,4 @@ pub(crate) fn compare_table_files_by_key(
         header_r: right_table.header,
         diff,
     })
-}
-
-/// Detects table delimiter from file extension or content (supports CSV and TSV).
-#[allow(dead_code)]
-pub fn detect_table_delimiter(path: &Path, content: &str) -> char {
-    if path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|s| s.eq_ignore_ascii_case("tsv") || s.eq_ignore_ascii_case("tab"))
-        .unwrap_or(false)
-    {
-        return '\t';
-    }
-    if content.contains('\t') && !content.contains(',') {
-        '\t'
-    } else {
-        ','
-    }
-}
-
-/// Reads and parses a tab-separated values (TSV) file.
-#[allow(dead_code)]
-pub fn load_table_tsv(path: &Path, header: bool) -> Result<Table> {
-    let opts = TableOptions {
-        delimiter: '\t',
-        header,
-    };
-    load_table(path, &opts)
-}
-
-/// Compares two tab-separated values (TSV) files.
-#[allow(dead_code)]
-pub fn compare_table_files_tsv(left: &Path, right: &Path, header: bool) -> Result<TableComparison> {
-    let opts = TableOptions {
-        delimiter: '\t',
-        header,
-    };
-    compare_table_files(left, right, &opts)
-}
-
-/// Compares two delimited files aligned by key columns after sorting their data
-/// rows across `sort_columns` (sort-before-align parity).
-#[allow(dead_code)]
-pub fn compare_table_files_by_key_sorted(
-    left: &Path,
-    right: &Path,
-    opts: &TableOptions,
-    key_opts: &TableKeyOptions,
-    sort_columns: &[usize],
-    ascending: bool,
-) -> Result<TableKeyFileComparison> {
-    let mut left_table = load_table(left, opts)?;
-    let mut right_table = load_table(right, opts)?;
-    sort_table_rows(&mut left_table, sort_columns, ascending);
-    sort_table_rows(&mut right_table, sort_columns, ascending);
-    let cmp_opts = TableCompareOptions {
-        key_columns: key_opts.key_columns.clone(),
-        numeric_tolerance: key_opts.numeric_tolerance,
-        ignore_case: key_opts.ignore_case,
-        trim_space: key_opts.trim_space,
-    };
-    let diff = diff_table_by_key_with_options(&left_table, &right_table, &cmp_opts);
-    Ok(TableKeyFileComparison {
-        header_l: left_table.header,
-        header_r: right_table.header,
-        diff,
-    })
-}
-
-/// Loads a multi-sheet Excel (.xlsx) workbook from the filesystem.
-#[allow(dead_code)]
-pub fn load_workbook(path: &Path) -> Result<Workbook> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::Missing {
-                path: path.display().to_string(),
-            });
-        }
-        Err(e) => {
-            return Err(Error::Io {
-                path: path.display().to_string(),
-                source: e,
-            });
-        }
-    };
-    Workbook::from_xlsx(&bytes).ok_or_else(|| Error::Unsupported {
-        path: path.display().to_string(),
-        what: "not a decodable .xlsx workbook",
-    })
-}
-
-/// The result of comparing two multi-sheet Excel workbooks.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
-pub struct WorkbookComparison {
-    /// Multi-sheet difference across all sheets.
-    pub diff: WorkbookDiff,
-}
-
-/// Compares two multi-sheet Excel (.xlsx) workbooks sheet by sheet.
-#[allow(dead_code)]
-pub fn compare_workbook_files(left: &Path, right: &Path) -> Result<WorkbookComparison> {
-    let wb_l = load_workbook(left)?;
-    let wb_r = load_workbook(right)?;
-    let diff = diff_workbooks(&wb_l, &wb_r);
-    Ok(WorkbookComparison { diff })
 }

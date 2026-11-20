@@ -154,7 +154,6 @@ pub fn encode_png(image: &RgbaImage) -> Option<Vec<u8>> {
 
 /// Decodes uncompressed 24-bit or 32-bit BMP bytes into an [`RgbaImage`].
 /// Supports both bottom-up (standard positive height) and top-down (negative height) layouts.
-#[allow(dead_code)]
 pub fn decode_bmp(bytes: &[u8]) -> Option<RgbaImage> {
     if bytes.len() < 54 || bytes.get(0..2) != Some(b"BM") {
         return None;
@@ -253,62 +252,7 @@ pub fn decode_bmp(bytes: &[u8]) -> Option<RgbaImage> {
     })
 }
 
-/// Encodes an [`RgbaImage`] as a 24-bit uncompressed Windows BMP file.
-#[allow(dead_code)]
-pub fn encode_bmp(image: &RgbaImage) -> Option<Vec<u8>> {
-    if image.width == 0 || image.height == 0 {
-        return None;
-    }
-    let w = usize::try_from(image.width).ok()?;
-    let h = usize::try_from(image.height).ok()?;
-    let unpadded_row = w.checked_mul(3)?;
-    let row_stride = unpadded_row.checked_add(3)? / 4 * 4;
-    let image_data_size = row_stride.checked_mul(h)?;
-    let file_size = 54usize.checked_add(image_data_size)?;
-
-    let mut out = Vec::new();
-    out.try_reserve_exact(file_size).ok()?;
-
-    // BITMAPFILEHEADER (14 bytes)
-    out.extend_from_slice(b"BM");
-    out.extend_from_slice(&(file_size as u32).to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // reserved
-    out.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
-
-    // BITMAPINFOHEADER (40 bytes)
-    out.extend_from_slice(&40u32.to_le_bytes()); // header size
-    out.extend_from_slice(&(image.width as i32).to_le_bytes());
-    out.extend_from_slice(&(image.height as i32).to_le_bytes()); // positive = bottom-up
-    out.extend_from_slice(&1u16.to_le_bytes()); // planes
-    out.extend_from_slice(&24u16.to_le_bytes()); // bpp
-    out.extend_from_slice(&0u32.to_le_bytes()); // compression (BI_RGB)
-    out.extend_from_slice(&(image_data_size as u32).to_le_bytes());
-    out.extend_from_slice(&2835u32.to_le_bytes()); // 72 DPI
-    out.extend_from_slice(&2835u32.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // colors used
-    out.extend_from_slice(&0u32.to_le_bytes()); // important colors
-
-    // Pixel data (bottom-up, BGR)
-    let pad_len = row_stride.saturating_sub(unpadded_row);
-    for y in (0..h).rev() {
-        let src_row = y.checked_mul(w)?.checked_mul(4)?;
-        for x in 0..w {
-            let px_idx = src_row.checked_add(x.checked_mul(4)?)?;
-            let r = image.pixels.get(px_idx).copied()?;
-            let g = image.pixels.get(px_idx.checked_add(1)?).copied()?;
-            let b = image.pixels.get(px_idx.checked_add(2)?).copied()?;
-            out.push(b);
-            out.push(g);
-            out.push(r);
-        }
-        out.extend(std::iter::repeat_n(0, pad_len));
-    }
-
-    Some(out)
-}
-
 /// Decodes a binary Netpbm PPM (P6 format) image into an [`RgbaImage`].
-#[allow(dead_code)]
 pub fn decode_ppm(bytes: &[u8]) -> Option<RgbaImage> {
     if bytes.len() < 10 || bytes.get(0..2) != Some(b"P6") {
         return None;
@@ -384,7 +328,6 @@ pub fn decode_ppm(bytes: &[u8]) -> Option<RgbaImage> {
 }
 
 /// Decodes image bytes into an [`RgbaImage`], sniffing format (PNG, BMP, PPM).
-#[allow(dead_code)]
 pub fn decode_image(bytes: &[u8]) -> Option<RgbaImage> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return decode_png(bytes);
@@ -400,39 +343,14 @@ pub fn decode_image(bytes: &[u8]) -> Option<RgbaImage> {
         .or_else(|| decode_ppm(bytes))
 }
 
-/// Blend or composition mode for image comparison and rendering.
+/// Options controlling picture comparison sensitivity, tolerance and range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(dead_code)]
-pub enum PictureBlendMode {
-    /// Exact raw RGBA channel comparison.
-    #[default]
-    Exact,
-    /// Alpha-composites pixels over a solid RGB backdrop before comparing.
-    CompositeBackdrop([u8; 3]),
-    /// Absolute difference blend evaluation.
-    Difference,
-}
-
-/// Options controlling picture comparison sensitivity, tolerance, range, and blending.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PictureOptions {
     /// Maximum difference allowed on any individual channel (0..=255) for two pixels to match.
     pub tolerance: u8,
     /// Maximum total channel delta (sum of absolute differences across all channels, 0..=1020).
     /// If 0, only `tolerance` is checked.
     pub channel_range: u16,
-    /// Blending / composition strategy.
-    pub blend_mode: PictureBlendMode,
-}
-
-impl Default for PictureOptions {
-    fn default() -> Self {
-        Self {
-            tolerance: 0,
-            channel_range: 0,
-            blend_mode: PictureBlendMode::Exact,
-        }
-    }
 }
 
 /// Statistics of a pixel-wise comparison over the two images'
@@ -522,34 +440,28 @@ pub fn diff_pictures_with_options(
     }
 }
 
-/// Decides whether two RGBA pixels match given tolerance, range, and blend settings.
+/// Decides whether two RGBA pixels match given tolerance and range settings.
 fn pixel_matches(pa: [u8; 4], pb: [u8; 4], opts: &PictureOptions) -> bool {
-    let (ca, cb) = match opts.blend_mode {
-        PictureBlendMode::Exact => (pa, pb),
-        PictureBlendMode::CompositeBackdrop(bg) => (composite_over(pa, bg), composite_over(pb, bg)),
-        PictureBlendMode::Difference => (pa, pb),
-    };
-
-    let dr = ca
+    let dr = pa
         .first()
         .copied()
         .unwrap_or(0)
-        .abs_diff(cb.first().copied().unwrap_or(0));
-    let dg = ca
+        .abs_diff(pb.first().copied().unwrap_or(0));
+    let dg = pa
         .get(1)
         .copied()
         .unwrap_or(0)
-        .abs_diff(cb.get(1).copied().unwrap_or(0));
-    let db = ca
+        .abs_diff(pb.get(1).copied().unwrap_or(0));
+    let db = pa
         .get(2)
         .copied()
         .unwrap_or(0)
-        .abs_diff(cb.get(2).copied().unwrap_or(0));
-    let da = ca
+        .abs_diff(pb.get(2).copied().unwrap_or(0));
+    let da = pa
         .get(3)
         .copied()
         .unwrap_or(0)
-        .abs_diff(cb.get(3).copied().unwrap_or(0));
+        .abs_diff(pb.get(3).copied().unwrap_or(0));
 
     if dr > opts.tolerance || dg > opts.tolerance || db > opts.tolerance || da > opts.tolerance {
         return false;
@@ -568,33 +480,12 @@ fn pixel_matches(pa: [u8; 4], pb: [u8; 4], opts: &PictureOptions) -> bool {
     true
 }
 
-/// Alpha composites an RGBA sample over a solid RGB background color.
-fn composite_over(sample: [u8; 4], bg: [u8; 3]) -> [u8; 4] {
-    let [r, g, b, a] = sample;
-    let alpha = f64::from(a) / 255.0;
-    let bg_r = f64::from(bg.first().copied().unwrap_or(0));
-    let bg_g = f64::from(bg.get(1).copied().unwrap_or(0));
-    let bg_b = f64::from(bg.get(2).copied().unwrap_or(0));
-
-    let out_r = ((f64::from(r) * alpha) + (bg_r * (1.0 - alpha)))
-        .round()
-        .clamp(0.0, 255.0) as u8;
-    let out_g = ((f64::from(g) * alpha) + (bg_g * (1.0 - alpha)))
-        .round()
-        .clamp(0.0, 255.0) as u8;
-    let out_b = ((f64::from(b) * alpha) + (bg_b * (1.0 - alpha)))
-        .round()
-        .clamp(0.0, 255.0) as u8;
-
-    [out_r, out_g, out_b, 255]
-}
-
 /// A heatmap of differences over the overlap with default exact comparison.
 pub fn picture_heatmap(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
     picture_heatmap_with_options(a, b, &PictureOptions::default())
 }
 
-/// A heatmap of differences over the overlap using custom tolerance, range, and blend settings.
+/// A heatmap of differences over the overlap using custom tolerance and range settings.
 pub fn picture_heatmap_with_options(
     a: &RgbaImage,
     b: &RgbaImage,
@@ -631,283 +522,6 @@ pub fn picture_heatmap_with_options(
     RgbaImage {
         width: overlap_w,
         height: overlap_h,
-        pixels,
-    }
-}
-
-/// Blends two images pixel-by-pixel with `alpha_ratio` (`0.0` = only `a`, `1.0` = only `b`).
-#[allow(dead_code)]
-pub fn picture_blend(a: &RgbaImage, b: &RgbaImage, alpha_ratio: f32) -> RgbaImage {
-    let overlap_w = a.width.min(b.width);
-    let overlap_h = a.height.min(b.height);
-    let clamped_ratio = f64::from(alpha_ratio).clamp(0.0, 1.0);
-    let byte_len = u64::from(overlap_w)
-        .saturating_mul(u64::from(overlap_h))
-        .saturating_mul(4);
-    let byte_len = usize::try_from(byte_len).unwrap_or(usize::MAX);
-    let mut pixels: Vec<u8> = Vec::new();
-    if pixels.try_reserve_exact(byte_len).is_err() {
-        return RgbaImage {
-            width: 0,
-            height: 0,
-            pixels,
-        };
-    }
-    for y in 0..overlap_h {
-        for x in 0..overlap_w {
-            let pa = pixel(a, x, y).unwrap_or([0, 0, 0, 255]);
-            let pb = pixel(b, x, y).unwrap_or([0, 0, 0, 255]);
-            let r = (f64::from(pa[0]) * (1.0 - clamped_ratio) + f64::from(pb[0]) * clamped_ratio)
-                .round() as u8;
-            let g = (f64::from(pa[1]) * (1.0 - clamped_ratio) + f64::from(pb[1]) * clamped_ratio)
-                .round() as u8;
-            let b_ch = (f64::from(pa[2]) * (1.0 - clamped_ratio) + f64::from(pb[2]) * clamped_ratio)
-                .round() as u8;
-            let a_ch = (f64::from(pa[3]) * (1.0 - clamped_ratio) + f64::from(pb[3]) * clamped_ratio)
-                .round() as u8;
-            pixels.extend_from_slice(&[r, g, b_ch, a_ch]);
-        }
-    }
-    RgbaImage {
-        width: overlap_w,
-        height: overlap_h,
-        pixels,
-    }
-}
-
-/// Computes an absolute difference blend image `|a - b|` over the overlap.
-#[allow(dead_code)]
-pub fn picture_difference_blend(a: &RgbaImage, b: &RgbaImage) -> RgbaImage {
-    let overlap_w = a.width.min(b.width);
-    let overlap_h = a.height.min(b.height);
-    let byte_len = u64::from(overlap_w)
-        .saturating_mul(u64::from(overlap_h))
-        .saturating_mul(4);
-    let byte_len = usize::try_from(byte_len).unwrap_or(usize::MAX);
-    let mut pixels: Vec<u8> = Vec::new();
-    if pixels.try_reserve_exact(byte_len).is_err() {
-        return RgbaImage {
-            width: 0,
-            height: 0,
-            pixels,
-        };
-    }
-    for y in 0..overlap_h {
-        for x in 0..overlap_w {
-            let pa = pixel(a, x, y).unwrap_or([0, 0, 0, 255]);
-            let pb = pixel(b, x, y).unwrap_or([0, 0, 0, 255]);
-            let r = pa[0].abs_diff(pb[0]);
-            let g = pa[1].abs_diff(pb[1]);
-            let b_ch = pa[2].abs_diff(pb[2]);
-            pixels.extend_from_slice(&[r, g, b_ch, 255]);
-        }
-    }
-    RgbaImage {
-        width: overlap_w,
-        height: overlap_h,
-        pixels,
-    }
-}
-
-/// Compares two images pixel by pixel over their overlap with an (offset_x, offset_y)
-/// nudge applied to the right image.
-#[allow(dead_code)]
-pub fn diff_pictures_with_offset(
-    a: &RgbaImage,
-    b: &RgbaImage,
-    offset_x: i32,
-    offset_y: i32,
-    opts: &PictureOptions,
-) -> PictureDiff {
-    let w_a = a.width as i32;
-    let h_a = a.height as i32;
-    let w_b = b.width as i32;
-    let h_b = b.height as i32;
-
-    let min_x = 0.max(offset_x);
-    let max_x = w_a.min(offset_x.saturating_add(w_b));
-    let min_y = 0.max(offset_y);
-    let max_y = h_a.min(offset_y.saturating_add(h_b));
-
-    if min_x >= max_x || min_y >= max_y {
-        return PictureDiff {
-            width_l: a.width,
-            height_l: a.height,
-            width_r: b.width,
-            height_r: b.height,
-            overlap_w: 0,
-            overlap_h: 0,
-            differing: 0,
-            total: 0,
-            bbox: None,
-            identical: false,
-        };
-    }
-
-    let overlap_w = (max_x - min_x) as u32;
-    let overlap_h = (max_y - min_y) as u32;
-    let total = u64::from(overlap_w).saturating_mul(u64::from(overlap_h));
-    let mut differing: u64 = 0;
-    let mut bbox: Option<(u32, u32, u32, u32)> = None;
-
-    for y in min_y..max_y {
-        for x in min_x..max_x {
-            let bx = x.saturating_sub(offset_x);
-            let by = y.saturating_sub(offset_y);
-            let same = match (pixel(a, x as u32, y as u32), pixel(b, bx as u32, by as u32)) {
-                (Some(pa), Some(pb)) => pixel_matches(pa, pb, opts),
-                _ => false,
-            };
-            if !same {
-                differing = differing.saturating_add(1);
-                let ux = x as u32;
-                let uy = y as u32;
-                bbox = Some(match bbox {
-                    None => (ux, uy, ux, uy),
-                    Some((min_bx, min_by, max_bx, max_by)) => (
-                        min_bx.min(ux),
-                        min_by.min(uy),
-                        max_bx.max(ux),
-                        max_by.max(uy),
-                    ),
-                });
-            }
-        }
-    }
-
-    let identical = offset_x == 0
-        && offset_y == 0
-        && a.width == b.width
-        && a.height == b.height
-        && differing == 0;
-
-    PictureDiff {
-        width_l: a.width,
-        height_l: a.height,
-        width_r: b.width,
-        height_r: b.height,
-        overlap_w,
-        overlap_h,
-        differing,
-        total,
-        bbox,
-        identical,
-    }
-}
-
-/// Generates a difference heatmap over the overlapping region with (offset_x, offset_y) nudge.
-#[allow(dead_code)]
-pub fn picture_heatmap_with_offset(
-    a: &RgbaImage,
-    b: &RgbaImage,
-    offset_x: i32,
-    offset_y: i32,
-    opts: &PictureOptions,
-) -> RgbaImage {
-    let w_a = a.width as i32;
-    let h_a = a.height as i32;
-    let w_b = b.width as i32;
-    let h_b = b.height as i32;
-
-    let min_x = 0.max(offset_x);
-    let max_x = w_a.min(offset_x.saturating_add(w_b));
-    let min_y = 0.max(offset_y);
-    let max_y = h_a.min(offset_y.saturating_add(h_b));
-
-    if min_x >= max_x || min_y >= max_y {
-        return RgbaImage {
-            width: 0,
-            height: 0,
-            pixels: Vec::new(),
-        };
-    }
-
-    let overlap_w = (max_x - min_x) as u32;
-    let overlap_h = (max_y - min_y) as u32;
-    let byte_len = match usize::try_from(
-        u64::from(overlap_w)
-            .saturating_mul(u64::from(overlap_h))
-            .saturating_mul(4),
-    ) {
-        Ok(l) => l,
-        Err(_) => {
-            return RgbaImage {
-                width: 0,
-                height: 0,
-                pixels: Vec::new(),
-            };
-        }
-    };
-
-    let mut pixels = Vec::new();
-    if pixels.try_reserve_exact(byte_len).is_err() {
-        return RgbaImage {
-            width: 0,
-            height: 0,
-            pixels: Vec::new(),
-        };
-    }
-
-    for y in min_y..max_y {
-        for x in min_x..max_x {
-            let bx = x.saturating_sub(offset_x);
-            let by = y.saturating_sub(offset_y);
-            let out = match (pixel(a, x as u32, y as u32), pixel(b, bx as u32, by as u32)) {
-                (Some(pa), Some(pb)) if pixel_matches(pa, pb, opts) => {
-                    let [r, g, b_ch, _] = pa;
-                    let luma =
-                        0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b_ch);
-                    let gray = (luma * 30.0 / 100.0).round().clamp(0.0, 255.0) as u8;
-                    [gray, gray, gray, 255]
-                }
-                _ => [255, 0, 0, 255],
-            };
-            pixels.extend_from_slice(&out);
-        }
-    }
-
-    RgbaImage {
-        width: overlap_w,
-        height: overlap_h,
-        pixels,
-    }
-}
-
-/// Nudges an image by `(offset_x, offset_y)`, returning a shifted image of identical size
-/// with newly exposed areas filled with `fill`.
-#[allow(dead_code)]
-pub fn nudge_image(img: &RgbaImage, offset_x: i32, offset_y: i32, fill: [u8; 4]) -> RgbaImage {
-    let w = img.width as i32;
-    let h = img.height as i32;
-    let byte_len = match usize::try_from(
-        u64::from(img.width)
-            .saturating_mul(u64::from(img.height))
-            .saturating_mul(4),
-    ) {
-        Ok(l) => l,
-        Err(_) => return img.clone(),
-    };
-    let mut pixels = Vec::new();
-    if pixels.try_reserve_exact(byte_len).is_err() {
-        return img.clone();
-    }
-
-    for y in 0..h {
-        for x in 0..w {
-            let src_x = x.saturating_sub(offset_x);
-            let src_y = y.saturating_sub(offset_y);
-            let px = if src_x >= 0 && src_x < w && src_y >= 0 && src_y < h {
-                pixel(img, src_x as u32, src_y as u32).unwrap_or(fill)
-            } else {
-                fill
-            };
-            pixels.extend_from_slice(&px);
-        }
-    }
-
-    RgbaImage {
-        width: img.width,
-        height: img.height,
         pixels,
     }
 }
@@ -949,7 +563,6 @@ mod tests {
         let opts = PictureOptions {
             tolerance: 5,
             channel_range: 0,
-            blend_mode: PictureBlendMode::Exact,
         };
         let relaxed = diff_pictures_with_options(&a, &b, &opts);
         assert_eq!(relaxed.differing, 0);
@@ -972,57 +585,63 @@ mod tests {
         let opts_fail = PictureOptions {
             tolerance: 10,
             channel_range: 3,
-            blend_mode: PictureBlendMode::Exact,
         };
         assert_eq!(diff_pictures_with_options(&a, &b, &opts_fail).differing, 1);
 
         let opts_pass = PictureOptions {
             tolerance: 10,
             channel_range: 5,
-            blend_mode: PictureBlendMode::Exact,
         };
         assert_eq!(diff_pictures_with_options(&a, &b, &opts_pass).differing, 0);
     }
 
     #[test]
-    fn test_blend_functions() {
-        let a = RgbaImage {
-            width: 1,
-            height: 1,
-            pixels: vec![0, 0, 0, 255],
-        };
-        let b = RgbaImage {
-            width: 1,
-            height: 1,
-            pixels: vec![100, 100, 100, 255],
-        };
-        let blended = picture_blend(&a, &b, 0.5);
-        assert_eq!(blended.pixels, vec![50, 50, 50, 255]);
-
-        let diff_blend = picture_difference_blend(&a, &b);
-        assert_eq!(diff_blend.pixels, vec![100, 100, 100, 255]);
+    fn test_bmp_decode_bottom_up() {
+        // Hand-built 2x1 24-bit BMP (bottom-up, row stride padded to 4).
+        let mut bmp = Vec::new();
+        bmp.extend_from_slice(b"BM");
+        bmp.extend_from_slice(&62u32.to_le_bytes());
+        bmp.extend_from_slice(&0u32.to_le_bytes());
+        bmp.extend_from_slice(&54u32.to_le_bytes());
+        bmp.extend_from_slice(&40u32.to_le_bytes());
+        bmp.extend_from_slice(&2i32.to_le_bytes());
+        bmp.extend_from_slice(&1i32.to_le_bytes());
+        bmp.extend_from_slice(&1u16.to_le_bytes());
+        bmp.extend_from_slice(&24u16.to_le_bytes());
+        bmp.extend_from_slice(&0u32.to_le_bytes());
+        bmp.extend_from_slice(&8u32.to_le_bytes());
+        bmp.extend_from_slice(&2835u32.to_le_bytes());
+        bmp.extend_from_slice(&2835u32.to_le_bytes());
+        bmp.extend_from_slice(&0u32.to_le_bytes());
+        bmp.extend_from_slice(&0u32.to_le_bytes());
+        // BGR pixels: red, green, then 2 pad bytes.
+        bmp.extend_from_slice(&[0, 0, 255, 0, 255, 0, 0, 0]);
+        let decoded = decode_bmp(&bmp);
+        assert!(decoded.is_some());
+        if let Some(dec) = decoded {
+            assert_eq!(dec.width, 2);
+            assert_eq!(dec.height, 1);
+            assert_eq!(dec.pixels, vec![255, 0, 0, 255, 0, 255, 0, 255]);
+        }
     }
 
     #[test]
-    fn test_bmp_encode_decode_roundtrip() {
-        let img = RgbaImage {
-            width: 2,
-            height: 2,
-            pixels: vec![
-                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
-            ],
+    fn test_decode_image_sniffs_format() {
+        let png_img = RgbaImage {
+            width: 1,
+            height: 1,
+            pixels: vec![9, 9, 9, 255],
         };
-        let bmp_bytes = encode_bmp(&img);
-        assert!(bmp_bytes.is_some());
-        if let Some(bytes) = bmp_bytes {
-            let decoded = decode_bmp(&bytes);
+        let png_bytes = encode_png(&png_img);
+        assert!(png_bytes.is_some());
+        if let Some(bytes) = png_bytes {
+            let decoded = decode_image(&bytes);
             assert!(decoded.is_some());
             if let Some(dec) = decoded {
-                assert_eq!(dec.width, 2);
-                assert_eq!(dec.height, 2);
-                assert_eq!(dec.pixels, img.pixels);
+                assert_eq!(dec.pixels, png_img.pixels);
             }
         }
+        assert!(decode_image(b"definitely not an image").is_none());
     }
 
     #[test]
@@ -1043,32 +662,9 @@ mod tests {
     }
 
     #[test]
-    fn test_diff_pictures_with_offset_nudge() {
-        let a = RgbaImage {
-            width: 3,
-            height: 3,
-            pixels: vec![
-                10, 10, 10, 255, 20, 20, 20, 255, 30, 30, 30, 255, 40, 40, 40, 255, 50, 50, 50,
-                255, 60, 60, 60, 255, 70, 70, 70, 255, 80, 80, 80, 255, 90, 90, 90, 255,
-            ],
-        };
-        // Nudge b by (1, 0)
-        let b = RgbaImage {
-            width: 2,
-            height: 3,
-            pixels: vec![
-                20, 20, 20, 255, 30, 30, 30, 255, 50, 50, 50, 255, 60, 60, 60, 255, 80, 80, 80,
-                255, 90, 90, 90, 255,
-            ],
-        };
-        let opts = PictureOptions::default();
-        let diff = diff_pictures_with_offset(&a, &b, 1, 0, &opts);
-        assert_eq!(diff.overlap_w, 2);
-        assert_eq!(diff.overlap_h, 3);
-        assert_eq!(diff.differing, 0);
-
-        let nudged = nudge_image(&a, 1, 0, [0, 0, 0, 255]);
-        assert_eq!(nudged.width, 3);
-        assert_eq!(nudged.height, 3);
+    fn test_decode_image_rejects_hostile_input() {
+        assert!(decode_image(b"").is_none());
+        assert!(decode_image(b"BM\x00\x01").is_none());
+        assert!(decode_image(b"P6\n1 1\n255\n\xff").is_none());
     }
 }

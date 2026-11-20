@@ -32,110 +32,12 @@ pub struct PcmAudio {
 }
 
 impl PcmAudio {
-    /// Sanitizes samples in-place: replaces any NaN with 0.0 and clamps to [-1.0, 1.0].
-    #[allow(dead_code)]
-    pub fn sanitize(&mut self) {
-        for s in &mut self.samples {
-            if s.is_nan() {
-                *s = 0.0;
-            } else {
-                *s = s.clamp(-1.0, 1.0);
-            }
-        }
-    }
-
-    /// Returns a sanitized copy of the audio stream.
-    #[allow(dead_code)]
-    pub fn sanitized(&self) -> Self {
-        let mut cloned = self.clone();
-        cloned.sanitize();
-        cloned
-    }
-
-    /// Downmixes multi-channel audio to mono (1 channel) by averaging channels.
-    #[allow(dead_code)]
-    pub fn to_mono(&self) -> Self {
-        if self.channels <= 1 || self.samples.is_empty() {
-            return self.clone();
-        }
-        let ch = usize::from(self.channels);
-        let frames = self.samples.len() / ch;
-        let mut mono = Vec::new();
-        if mono.try_reserve_exact(frames).is_err() {
-            return self.clone();
-        }
-        for f in 0..frames {
-            let start = f.saturating_mul(ch);
-            let mut sum = 0.0f32;
-            for c in 0..ch {
-                if let Some(&s) = self.samples.get(start.saturating_add(c)) {
-                    sum += s;
-                }
-            }
-            mono.push(sum / (ch as f32));
-        }
-        PcmAudio {
-            sample_rate: self.sample_rate,
-            channels: 1,
-            samples: mono,
-        }
-    }
-
-    /// Linear interpolation resampling to `target_rate`.
-    #[allow(dead_code)]
-    pub fn resample(&self, target_rate: u32) -> Option<Self> {
-        if target_rate == 0 || self.sample_rate == 0 || self.channels == 0 {
-            return None;
-        }
-        if target_rate == self.sample_rate {
-            return Some(self.clone());
-        }
-        let ch = usize::from(self.channels);
-        let src_frames = self.samples.len() / ch;
-        if src_frames == 0 {
-            return Some(PcmAudio {
-                sample_rate: target_rate,
-                channels: self.channels,
-                samples: Vec::new(),
-            });
-        }
-
-        let ratio = f64::from(target_rate) / f64::from(self.sample_rate);
-        let dst_frames = (src_frames as f64 * ratio).round() as usize;
-        let dst_samples = dst_frames.checked_mul(ch)?;
-        let mut out = Vec::new();
-        out.try_reserve_exact(dst_samples).ok()?;
-
-        for df in 0..dst_frames {
-            let src_f = (df as f64) / ratio;
-            let f0 = src_f.floor() as usize;
-            let f1 = (f0 + 1).min(src_frames.saturating_sub(1));
-            let frac = (src_f - f0 as f64) as f32;
-
-            for c in 0..ch {
-                let idx0 = f0.saturating_mul(ch).saturating_add(c);
-                let idx1 = f1.saturating_mul(ch).saturating_add(c);
-                let s0 = self.samples.get(idx0).copied().unwrap_or(0.0);
-                let s1 = self.samples.get(idx1).copied().unwrap_or(0.0);
-                out.push(s0 * (1.0 - frac) + s1 * frac);
-            }
-        }
-
-        Some(PcmAudio {
-            sample_rate: target_rate,
-            channels: self.channels,
-            samples: out,
-        })
-    }
-
     /// Peak absolute sample value in [-1.0, 1.0].
-    #[allow(dead_code)]
     pub fn peak(&self) -> f32 {
         self.samples.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()))
     }
 
     /// Root-mean-square amplitude across all samples.
-    #[allow(dead_code)]
     pub fn rms(&self) -> f64 {
         if self.samples.is_empty() {
             return 0.0;
@@ -387,41 +289,12 @@ pub struct AudioDiff {
     pub identical: bool,
 }
 
-/// Comprehensive totality metrics over the common audio span.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PcmTotalityMetrics {
-    /// Maximum absolute sample difference.
-    pub peak_delta: f32,
-    /// Root-mean-square difference across compared samples.
-    pub rms_delta: f64,
-    /// Maximum peak amplitude in left audio.
-    pub left_peak: f32,
-    /// Maximum peak amplitude in right audio.
-    pub right_peak: f32,
-    /// RMS energy in left audio.
-    pub left_rms: f64,
-    /// RMS energy in right audio.
-    pub right_rms: f64,
-}
-
-/// Comprehensive audio comparison result with totality metrics.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TotalAudioDiff {
-    /// Window-based difference statistics.
-    pub standard_diff: AudioDiff,
-    /// Detailed sample-level totality metrics.
-    pub metrics: PcmTotalityMetrics,
-    /// Difference in duration (seconds).
-    pub duration_diff: f64,
-}
-
 /// Compares two decoded streams with exact equality (0.0 tolerance).
 pub fn diff_audio(a: &PcmAudio, b: &PcmAudio) -> AudioDiff {
     diff_audio_with_tolerance(a, b, 0.0)
 }
 
 /// Compares two decoded streams with an amplitude tolerance.
-#[allow(dead_code)]
 pub fn diff_audio_with_tolerance(
     a: &PcmAudio,
     b: &PcmAudio,
@@ -497,46 +370,6 @@ pub fn diff_audio_with_tolerance(
         windows_total,
         windows_differing,
         identical,
-    }
-}
-
-/// Comprehensive totality audio comparison including peak and RMS statistics.
-#[allow(dead_code)]
-pub fn diff_audio_total(a: &PcmAudio, b: &PcmAudio, amplitude_tolerance: f32) -> TotalAudioDiff {
-    let std_diff = diff_audio_with_tolerance(a, b, amplitude_tolerance);
-    let common = a.samples.len().min(b.samples.len());
-    let mut peak_delta = 0.0f32;
-    let mut sum_sq_diff = 0.0f64;
-
-    for (&l, &r) in a.samples.iter().zip(b.samples.iter()).take(common) {
-        let delta = (l - r).abs();
-        if delta > peak_delta {
-            peak_delta = delta;
-        }
-        sum_sq_diff += f64::from(delta) * f64::from(delta);
-    }
-
-    let rms_delta = if common > 0 {
-        (sum_sq_diff / common as f64).sqrt()
-    } else {
-        0.0
-    };
-
-    let metrics = PcmTotalityMetrics {
-        peak_delta,
-        rms_delta,
-        left_peak: a.peak(),
-        right_peak: b.peak(),
-        left_rms: a.rms(),
-        right_rms: b.rms(),
-    };
-
-    let duration_diff = (std_diff.duration_l - std_diff.duration_r).abs();
-
-    TotalAudioDiff {
-        standard_diff: std_diff,
-        metrics,
-        duration_diff,
     }
 }
 
@@ -682,51 +515,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pcm_totality_sanitization() {
-        let mut audio = PcmAudio {
-            sample_rate: 44100,
-            channels: 1,
-            samples: vec![f32::NAN, 2.5, -3.0, 0.5],
-        };
-        audio.sanitize();
-        assert_eq!(audio.samples, vec![0.0, 1.0, -1.0, 0.5]);
-    }
-
-    #[test]
-    fn test_pcm_to_mono() {
-        let stereo = PcmAudio {
-            sample_rate: 44100,
-            channels: 2,
-            samples: vec![0.2, 0.4, 0.6, 0.8],
-        };
-        let mono = stereo.to_mono();
-        assert_eq!(mono.channels, 1);
-        assert_eq!(mono.samples.len(), 2);
-        assert!(
-            mono.samples
-                .first()
-                .is_some_and(|&s| (s - 0.3).abs() < 1e-6)
-        );
-        assert!(mono.samples.get(1).is_some_and(|&s| (s - 0.7).abs() < 1e-6));
-    }
-
-    #[test]
-    fn test_pcm_resample() {
-        let audio = PcmAudio {
-            sample_rate: 44100,
-            channels: 1,
-            samples: vec![0.0, 0.5, 1.0],
-        };
-        let upsampled_opt = audio.resample(88200);
-        assert!(upsampled_opt.is_some());
-        if let Some(upsampled) = upsampled_opt {
-            assert_eq!(upsampled.sample_rate, 88200);
-            assert_eq!(upsampled.channels, 1);
-            assert_eq!(upsampled.samples.len(), 6);
-        }
-    }
-
-    #[test]
     fn test_diff_audio_with_tolerance() {
         let a = PcmAudio {
             sample_rate: 44100,
@@ -745,23 +533,5 @@ mod tests {
         // With tolerance 0.001, it matches
         let relaxed = diff_audio_with_tolerance(&a, &b, 0.001);
         assert!(relaxed.identical);
-    }
-
-    #[test]
-    fn test_diff_audio_total_metrics() {
-        let a = PcmAudio {
-            sample_rate: 44100,
-            channels: 1,
-            samples: vec![0.0, 0.5, 1.0],
-        };
-        let b = PcmAudio {
-            sample_rate: 44100,
-            channels: 1,
-            samples: vec![0.0, 0.6, 1.0],
-        };
-        let total = diff_audio_total(&a, &b, 0.0);
-        assert!((total.metrics.peak_delta - 0.1).abs() < 1e-6);
-        assert_eq!(total.metrics.left_peak, 1.0);
-        assert_eq!(total.metrics.right_peak, 1.0);
     }
 }

@@ -11,7 +11,9 @@
 
 mod common;
 
-use autocompare_compare::{Error, compare_audio_files};
+use autocompare_compare::{
+    AudioTolerance, Error, compare_audio_files, compare_audio_files_with_tolerance,
+};
 use common::{cleanup, temp_root, write_bytes};
 use std::path::{Path, PathBuf};
 
@@ -146,5 +148,25 @@ fn config_mismatch_is_reported_not_errored() {
     assert_eq!(cmp.diff.windows_differing, 0);
     assert_eq!(cmp.diff.sample_rate_l, 8000);
     assert_eq!(cmp.diff.sample_rate_r, 44100);
+    cleanup(&dir);
+}
+
+#[test]
+fn tolerance_absorbs_one_lsb_through_files() {
+    let dir = temp_root();
+    let left = write_wav(&dir, "left.wav", 8000, &BASE);
+    // One LSB at 16-bit depth: 1/32768, far below the tolerance.
+    let mut changed = BASE;
+    changed[0] = changed[0].saturating_add(1);
+    let right = write_wav(&dir, "right.wav", 8000, &changed);
+    let strict = compare_audio_files(&left, &right).expect("valid files must compare");
+    assert!(!strict.diff.identical);
+    let tol = AudioTolerance {
+        amplitude_tolerance: 0.001,
+    };
+    let relaxed = compare_audio_files_with_tolerance(&left, &right, &tol)
+        .expect("tolerant compare must work");
+    assert!(relaxed.diff.identical);
+    assert!(!relaxed.diff.config_mismatch);
     cleanup(&dir);
 }

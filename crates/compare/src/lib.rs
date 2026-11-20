@@ -20,6 +20,7 @@ pub use autocompare_diff::hex::HexAlignment;
 pub use folder::{FolderCompare, compare_folders_cancellable};
 pub use folder_merge::FolderMerge;
 pub use jobs::{JobHandle, JobProgress, JobRunner};
+pub use media::{AudioTolerance, compare_audio_files_with_tolerance};
 pub use sync::{SyncMode, SyncPlanner};
 pub use table::{TableKeyFileComparison, TableKeyOptions};
 

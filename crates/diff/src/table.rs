@@ -162,12 +162,6 @@ pub fn parse_delimited(text: &str, delimiter: char, first_row_is_header: bool) -
     Table { header, rows: data }
 }
 
-/// Parses tab-separated values (TSV) text into a [`Table`].
-#[allow(dead_code)]
-pub fn parse_tsv(text: &str, first_row_is_header: bool) -> Table {
-    parse_delimited(text, '\t', first_row_is_header)
-}
-
 /// Row-level diff over whole cell rows: the Myers engine over `Vec<String>` rows.
 pub fn diff_rows(a: &[Vec<String>], b: &[Vec<String>]) -> DiffScript {
     let (ops, exact) = engine::diff_slices(a, b, Some(EDIT_BUDGET));
@@ -574,23 +568,6 @@ pub fn diff_table_by_key_with_options(
     }
 }
 
-/// Compares two tables aligned by key columns after sorting their data rows
-/// across `sort_columns` (sort-before-align parity).
-#[allow(dead_code)]
-pub fn diff_table_by_key_sorted(
-    a: &Table,
-    b: &Table,
-    opts: &TableCompareOptions,
-    sort_columns: &[usize],
-    ascending: bool,
-) -> TableKeyDiff {
-    let mut sorted_a = a.clone();
-    let mut sorted_b = b.clone();
-    sort_table_rows(&mut sorted_a, sort_columns, ascending);
-    sort_table_rows(&mut sorted_b, sort_columns, ascending);
-    diff_table_by_key_with_options(&sorted_a, &sorted_b, opts)
-}
-
 /// Numeric equality of two cells: both must parse as finite `f64`
 /// after trimming, with `|a - b| <= tolerance`.
 fn numeric_equal(a: &str, b: &str, tolerance: f64) -> bool {
@@ -719,7 +696,6 @@ fn compare_cells_natural(a: &str, b: &str) -> Ordering {
 ///
 /// Parses ZIP container and worksheet XML. If the file is not a valid
 /// PKZIP spreadsheet or corrupted, returns `None` safely without panic.
-#[allow(dead_code)]
 pub fn decode_xlsx(bytes: &[u8]) -> Option<Workbook> {
     if bytes.len() < 30 || bytes.get(0..4) != Some(b"PK\x03\x04") {
         return None;
@@ -1274,49 +1250,6 @@ mod tests {
         assert_eq!(diff.matching_rows, 1);
         assert_eq!(diff.modified_rows, 1);
         assert_eq!(diff.left_only_rows, 1);
-        assert_eq!(diff.right_only_rows, 0);
-    }
-
-    #[test]
-    fn test_parse_tsv_tab_delimited() {
-        let tsv = "ID\tName\tPrice\n1\tApple\t1.50\n2\tBanana\t0.75";
-        let table = parse_tsv(tsv, true);
-        assert_eq!(table.header, vec!["ID", "Name", "Price"]);
-        assert_eq!(table.rows.len(), 2);
-        assert_eq!(
-            table.rows.first().cloned().unwrap_or_default(),
-            vec!["1", "Apple", "1.50"]
-        );
-    }
-
-    #[test]
-    fn test_diff_table_by_key_sorted_order() {
-        let t1 = Table {
-            header: vec!["ID".into(), "Val".into()],
-            rows: vec![
-                vec!["2".into(), "b".into()],
-                vec!["1".into(), "a".into()],
-                vec!["3".into(), "c".into()],
-            ],
-        };
-        let t2 = Table {
-            header: vec!["ID".into(), "Val".into()],
-            rows: vec![
-                vec!["3".into(), "c".into()],
-                vec!["1".into(), "a".into()],
-                vec!["2".into(), "b".into()],
-            ],
-        };
-        let opts = TableCompareOptions {
-            key_columns: vec![0],
-            numeric_tolerance: None,
-            ignore_case: false,
-            trim_space: false,
-        };
-        let diff = diff_table_by_key_sorted(&t1, &t2, &opts, &[0], true);
-        assert_eq!(diff.matching_rows, 3);
-        assert_eq!(diff.modified_rows, 0);
-        assert_eq!(diff.left_only_rows, 0);
         assert_eq!(diff.right_only_rows, 0);
     }
 

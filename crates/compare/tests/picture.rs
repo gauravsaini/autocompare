@@ -171,3 +171,77 @@ fn heatmap_at_unwritable_path_is_io_error() {
     assert!(err.to_string().contains("blocked.png"));
     cleanup(&dir);
 }
+
+/// Builds a minimal 1x1 24-bit BMP with the given RGB pixel.
+fn bmp_bytes(rgb: [u8; 3]) -> Vec<u8> {
+    let [r, g, b] = rgb;
+    let mut bmp = vec![0u8; 58];
+    if let Some(tag) = bmp.get_mut(0..2) {
+        tag.copy_from_slice(b"BM");
+    }
+    if let Some(size) = bmp.get_mut(2..6) {
+        size.copy_from_slice(&58u32.to_le_bytes());
+    }
+    if let Some(off) = bmp.get_mut(10..14) {
+        off.copy_from_slice(&54u32.to_le_bytes());
+    }
+    if let Some(head) = bmp.get_mut(14..18) {
+        head.copy_from_slice(&40u32.to_le_bytes());
+    }
+    if let Some(w) = bmp.get_mut(18..22) {
+        w.copy_from_slice(&1i32.to_le_bytes());
+    }
+    if let Some(h) = bmp.get_mut(22..26) {
+        h.copy_from_slice(&1i32.to_le_bytes());
+    }
+    if let Some(planes) = bmp.get_mut(26..28) {
+        planes.copy_from_slice(&1u16.to_le_bytes());
+    }
+    if let Some(bpp) = bmp.get_mut(28..30) {
+        bpp.copy_from_slice(&24u16.to_le_bytes());
+    }
+    if let Some(px) = bmp.get_mut(54..57) {
+        px.copy_from_slice(&[b, g, r]);
+    }
+    bmp
+}
+
+#[test]
+fn bmp_files_compare_through_format_sniffing() {
+    let dir = temp_root();
+    let left = dir.join("left.bmp");
+    write_bytes(&left, &bmp_bytes([10, 20, 30]));
+    let right = dir.join("right.bmp");
+    write_bytes(&right, &bmp_bytes([10, 20, 30]));
+    let cmp = compare_picture_files(&left, &right, &PictureOptions::default())
+        .expect("identical BMPs must compare");
+    assert!(cmp.diff.identical);
+    assert_eq!(cmp.diff.total, 1);
+
+    write_bytes(&right, &bmp_bytes([11, 20, 30]));
+    let cmp = compare_picture_files(&left, &right, &PictureOptions::default())
+        .expect("differing BMPs must compare");
+    assert!(!cmp.diff.identical);
+    assert_eq!(cmp.diff.differing, 1);
+    cleanup(&dir);
+}
+
+#[test]
+fn ppm_and_png_with_same_pixels_compare_identical() {
+    let dir = temp_root();
+    let png_img = RgbaImage {
+        width: 2,
+        height: 1,
+        pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
+    };
+    let left = write_png(&dir, "left.png", &png_img);
+    let mut ppm = b"P6\n2 1\n255\n".to_vec();
+    ppm.extend_from_slice(&[255, 0, 0, 0, 255, 0]);
+    let right = dir.join("right.ppm");
+    write_bytes(&right, &ppm);
+    let cmp = compare_picture_files(&left, &right, &PictureOptions::default())
+        .expect("cross-format files must compare");
+    assert!(cmp.diff.identical);
+    assert_eq!(cmp.diff.total, 2);
+    cleanup(&dir);
+}

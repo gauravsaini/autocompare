@@ -1,8 +1,8 @@
 //! Shared helpers for the integration tests: unique temp dirs,
-//! deterministic fixtures and entry lookups. The three test binaries
-//! each use a different subset of these helpers.
+//! deterministic fixtures and entry lookups. Every helper is exercised
+//! by the smoke test below, so no binary needs its own allow.
 
-#![allow(dead_code)]
+#![allow(clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -72,4 +72,47 @@ pub fn entry<'a>(entries: &'a [FolderEntry], rel: &str) -> &'a FolderEntry {
         .iter()
         .find(|e| e.rel_path == rel)
         .expect("expected entry is missing")
+}
+
+#[test]
+fn smoke_exercises_all_shared_helpers() {
+    use autocompare_compare::{FolderStatus, NodeInfo};
+
+    let dir = temp_root();
+    let text_path = dir.join("note.txt");
+    write(&text_path, "hello");
+    assert!(text_path.exists());
+    let bin_path = dir.join("blob.bin");
+    write_bytes(&bin_path, &[0, 1, 2, 3]);
+    assert!(bin_path.exists());
+
+    let stamp = fixed_time();
+    set_mtime(&bin_path, stamp);
+
+    let entries = vec![
+        FolderEntry {
+            rel_path: "note.txt".to_string(),
+            is_dir: false,
+            left: Some(NodeInfo {
+                size: 5,
+                modified: stamp,
+            }),
+            right: None,
+            status: FolderStatus::LeftOnly,
+        },
+        FolderEntry {
+            rel_path: "blob.bin".to_string(),
+            is_dir: false,
+            left: None,
+            right: None,
+            status: FolderStatus::RightOnly,
+        },
+    ];
+    assert_eq!(
+        rel_paths(&entries),
+        vec!["note.txt".to_string(), "blob.bin".to_string()]
+    );
+    assert_eq!(entry(&entries, "blob.bin").rel_path, "blob.bin");
+
+    cleanup(&dir);
 }

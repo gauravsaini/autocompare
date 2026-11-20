@@ -60,7 +60,6 @@ pub struct MediaTagsDiff {
 }
 
 /// Reads media tags by sniffing container type (FLAC, MP3, MP4/M4A, or AAC).
-#[allow(dead_code)]
 pub fn read_media_tags(bytes: &[u8]) -> Option<MediaTags> {
     if bytes.len() < 4 {
         return None;
