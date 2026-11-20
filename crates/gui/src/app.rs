@@ -5269,29 +5269,25 @@ impl eframe::App for App {
             ui.label(RichText::new(self.session_identity()).small().weak());
             ui.add_space(views::TAB_BOTTOM_GAP);
 
-            // Single aligned toolbar row: actions + view toggles.
+            // Single aligned toolbar row: actions (views call-site) + view toggles.
             let toolbar_active = self.tab != Tab::Home;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = toolbar_item_gap();
-                let (tool_w, tool_h) = views::session_toolbar_button_size();
-                let swap_resp = ui.add_enabled(
-                    toolbar_active,
-                    egui::Button::new("Swap Sides").min_size(egui::vec2(tool_w, tool_h)),
-                );
-                if swap_resp.clicked() {
-                    // Swap, then re-run so both sides refresh like
-                    // Beyond Compare does; empty sides report validation.
-                    if self.swap_sides() {
+                // Icon-led Swap/Reload row: views::paint_session_toolbar live
+                // call-site (glyph + chrome role + 120x28 floor andar hi);
+                // hit par caller swap/run chalata hai.
+                match views::paint_session_toolbar(ui, toolbar_active) {
+                    views::ToolbarAction::Swap => {
+                        // Swap, then re-run so both sides refresh like
+                        // Beyond Compare does; empty sides report validation.
+                        if self.swap_sides() {
+                            self.run_active_tab();
+                        }
+                    }
+                    views::ToolbarAction::Reload => {
                         self.run_active_tab();
                     }
-                }
-                let reload_resp = ui.add_enabled(
-                    toolbar_active,
-                    egui::Button::new("Reload / Recompare")
-                        .min_size(egui::vec2(tool_w, tool_h)),
-                );
-                if reload_resp.clicked() {
-                    self.run_active_tab();
+                    views::ToolbarAction::None => {}
                 }
                 ui.add_space(toolbar_group_gap());
                 ui.separator();
