@@ -4502,6 +4502,81 @@ pub fn chrome5_hierarchy_ok() -> bool {
         && (chrome5_toolbar_w() - 996.0).abs() < 0.001
 }
 
+/// EXQ-CHROME6 pathbar plus info (app-side contracts, paint FROZEN).
+/// BC: two equal-width path fields with folder-icon slots plus dropdowns,
+/// neeche second info line date | bytes | filter. Caller (App) geometry
+/// sirf tokens se: avail = viewport minus 2 * SPACE_MD, fields =
+/// [`views::split_field_widths`] at 0.50 (equal, no truncate), icon slot =
+/// SPACE_LG parity, Browse/Compare uniform = [`views::path_browse_button_size`],
+/// info line = [`views::format_path_meta`] join. Koi naya size/token/color
+/// nahi. Pure; headless-tested.
+pub fn exq_chrome6_viewport_w() -> f32 {
+    960.0
+}
+
+/// EXQ-CHROME6 avail width px: viewport minus outer side chrome
+/// (2 * SPACE_MD). Non-finite par 0. Pure; headless-tested.
+pub fn exq_chrome6_avail_w(viewport: f32) -> f32 {
+    if !viewport.is_finite() {
+        return 0.0;
+    }
+    (viewport - 2.0 * crate::theme::SPACE_MD).max(0.0)
+}
+
+/// EXQ-CHROME6 path field widths px: draggable split at default 0.50,
+/// so left == right (equal, fixtures/left.rs truncate nahi). Pure;
+/// headless-tested.
+pub fn exq_chrome6_field_widths(avail: f32) -> (f32, f32) {
+    views::split_field_widths(avail, views::SPLIT_DEFAULT_FRACTION)
+}
+
+/// EXQ-CHROME6 equal-width gate: left vs right 0.001 andar. Pure;
+/// headless-tested.
+pub fn exq_chrome6_fields_equal(left: f32, right: f32) -> bool {
+    (left - right).abs() < 0.001
+}
+
+/// EXQ-CHROME6 folder-icon slot px via SPACE_LG (16). Pure; headless-tested.
+pub fn exq_chrome6_icon_slot_w() -> f32 {
+    crate::theme::SPACE_LG
+}
+
+/// EXQ-CHROME6 Browse/Compare uniform button width px (frozen 120).
+/// Pure; headless-tested.
+pub fn exq_chrome6_browse_button_w() -> f32 {
+    views::path_browse_button_size().0
+}
+
+/// EXQ-CHROME6 Browse/Compare uniform button height px (frozen 28).
+/// Pure; headless-tested.
+pub fn exq_chrome6_browse_button_h() -> f32 {
+    views::path_browse_button_size().1
+}
+
+/// EXQ-CHROME6 info line: timestamp | bytes | rules | flags, khali parts
+/// girte hain ([`views::format_path_meta`] reuse). Pure; headless-tested.
+pub fn exq_chrome6_info_line(timestamp: &str, bytes: &str, rules: &str, flags: &str) -> String {
+    views::format_path_meta(timestamp, bytes, rules, flags)
+}
+
+/// EXQ-CHROME6 hierarchy contract at 960: avail 936, fields 274/274
+/// equal, icon SPACE_LG parity, buttons uniform 120x28. Pure;
+/// headless-tested.
+pub fn exq_chrome6_hierarchy_ok() -> bool {
+    (exq_chrome6_avail_w(exq_chrome6_viewport_w()) - 936.0).abs() < 0.001
+        && exq_chrome6_icon_slot_w() == crate::theme::SPACE_LG
+        && (exq_chrome6_icon_slot_w() - crate::home::TOPCHROME_FOLDER_ICON_W).abs() < 0.001
+        && (exq_chrome6_browse_button_w() - 120.0).abs() < 0.001
+        && (exq_chrome6_browse_button_h() - 28.0).abs() < 0.001
+        && {
+            let (left, right) =
+                exq_chrome6_field_widths(exq_chrome6_avail_w(exq_chrome6_viewport_w()));
+            exq_chrome6_fields_equal(left, right) && (left - 274.0).abs() < 0.001
+        }
+        && exq_chrome6_info_line("Yesterday", "12 B", "Text: exact", "wrap:off")
+            == String::from("Yesterday | 12 B | Text: exact | wrap:off")
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -10992,5 +11067,32 @@ mod tests {
         assert_eq!(chrome5_toolbar_visible_count(960.0), 9);
         assert_eq!(chrome5_toolbar_overflow_count(960.0), 1);
         assert!(chrome5_hierarchy_ok());
+    }
+
+    #[test]
+    fn exq_chrome6_pathbar_plus_info_wide960() {
+        assert_eq!(exq_chrome6_viewport_w(), 960.0);
+        assert_eq!(exq_chrome6_avail_w(960.0), 936.0);
+        assert_eq!(exq_chrome6_avail_w(f32::NAN), 0.0);
+        let (left, right) = exq_chrome6_field_widths(exq_chrome6_avail_w(960.0));
+        assert_eq!((left, right), (274.0, 274.0));
+        assert!(exq_chrome6_fields_equal(left, right));
+        assert_eq!(exq_chrome6_icon_slot_w(), crate::theme::SPACE_LG);
+        assert_eq!(exq_chrome6_icon_slot_w(), 16.0);
+        assert_eq!(
+            exq_chrome6_icon_slot_w(),
+            crate::home::TOPCHROME_FOLDER_ICON_W
+        );
+        assert_eq!(exq_chrome6_browse_button_w(), 120.0);
+        assert_eq!(exq_chrome6_browse_button_h(), 28.0);
+        assert_eq!(
+            exq_chrome6_info_line("Yesterday", "12 B", "Text: exact", "wrap:off"),
+            "Yesterday | 12 B | Text: exact | wrap:off"
+        );
+        assert_eq!(
+            exq_chrome6_info_line("", "", "Text: exact", ""),
+            "Text: exact"
+        );
+        assert!(exq_chrome6_hierarchy_ok());
     }
 }
