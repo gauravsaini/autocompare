@@ -1477,6 +1477,138 @@ pub fn home_tab_hierarchy_ok() -> bool {
         && crate::theme::TypoRole::HomeButton.size() == crate::theme::TYPO_BODY_SIZE
 }
 
+// ----------------------------------------------------------------------------
+// Wave-9 Home polish, geometry first: session-tree Cmd-F find, narrow
+// responsive grid, tab-strip fit. BC pattern, outside observation only:
+// Cmd-F ek tree filter row par focus karta hai, Enter agle match par,
+// Shift+Enter pichhle par; tang window 3-col card grid ko neeche lapet-ti
+// hai (clip nahi); 10-tab strip labels katne ke bajaye scroll hoti hai.
+// Typography second: find text session item/meta roles reuse karta hai,
+// zero naye sizes. Paint adoption paint-owner wave ka hai; colors untouched.
+// Binding khud theme keymap me hai (`KeyAction::Find`, Default Cmd-F
+// precedent) — ye module sirf match math + row geometry rakhta hai taaki
+// headless tests imaandaar rahen.
+// ----------------------------------------------------------------------------
+
+/// Session-tree find bar height px: compact hit row
+/// ([`HOME_TOOLBAR_BUTTON_H`] parity, 24) taaki sidebar row 28 par na jaye.
+pub const SESSION_TREE_FIND_BAR_H: f32 = HOME_TOOLBAR_BUTTON_H;
+/// Session-tree find bar side pad px: sidebar pad ([`SESSION_TREE_PAD_X`]
+/// parity, 8) — 240 sidebar par label kabhi clip na ho.
+pub const SESSION_TREE_FIND_PAD_X: f32 = SESSION_TREE_PAD_X;
+
+/// Session-tree label matcher: khali needle kabhi match nahi karta.
+/// (`tree` folder-find precedent — group labels me spaces hote hain isliye
+/// sirf khali needle short-circuit hota hai, whitespace-only nahi.)
+fn session_tree_label_contains(label: &str, needle: &str, ignore_case: bool) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if ignore_case {
+        label.to_lowercase().contains(&needle.to_lowercase())
+    } else {
+        label.contains(needle)
+    }
+}
+
+/// Agla session-tree node jiske label me needle hai, `from` se (inclusive),
+/// wrap ke saath. Group headers bhi milte hain (label par match).
+/// Khali needle/nodes par `None`. Pure; headless-tested.
+pub fn session_tree_find_next(
+    nodes: &[SessionTreeNode],
+    needle: &str,
+    from: usize,
+    ignore_case: bool,
+) -> Option<usize> {
+    if needle.is_empty() || nodes.is_empty() {
+        return None;
+    }
+    let total = nodes.len();
+    let mut idx = from % total.max(1);
+    for _ in 0..total {
+        let node = nodes.get(idx)?;
+        if session_tree_label_contains(&node.label, needle, ignore_case) {
+            return Some(idx);
+        }
+        idx = idx.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhla session-tree node jiske label me needle hai, `from` se peeche
+/// (exclusive), wrap ke saath. Khali needle/nodes par `None`.
+/// Pure; headless-tested.
+pub fn session_tree_find_prev(
+    nodes: &[SessionTreeNode],
+    needle: &str,
+    from: usize,
+    ignore_case: bool,
+) -> Option<usize> {
+    if needle.is_empty() || nodes.is_empty() {
+        return None;
+    }
+    let total = nodes.len();
+    let mut idx = if from == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let node = nodes.get(idx)?;
+        if session_tree_label_contains(&node.label, needle, ignore_case) {
+            return Some(idx);
+        }
+        idx = if idx == 0 {
+            total.saturating_sub(1)
+        } else {
+            idx.saturating_sub(1)
+        };
+    }
+    None
+}
+
+/// Grid columns jo `total_w` px me fit hote hain: har column
+/// [`HOME_CARD_MIN_W`] chahta hai, beech gaps [`HOME_GRID_GAP`]; 1 se kam
+/// nahi (zero-clip: tang par ek column), [`HOME_GRID_COLUMNS`] se zyada
+/// nahi (canonical 3-col layout barkarar). Non-finite input par canonical
+/// count taaki paint kabhi NaN layout na khaye. Pure; headless-tested.
+pub fn home_grid_columns_for_width(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME_CARD_MIN_W + cols as f32 * HOME_GRID_GAP <= total_w
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Grid rows `item_count` cards ke liye `total_w` px par: columns tang par
+/// ghatte hain isliye rows badhte hain, clip nahi hota. Khali par 0.
+/// Pure; paint grid row count isi se aani chahiye narrow par.
+pub fn home_grid_rows_for_width(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home_grid_columns_for_width(total_w).max(1))
+}
+
+/// Tab strip `total_w` px me overflow karti hai ya nahi: paint labels
+/// katne ke bajaye scroll karti hai. Non-finite par false (koi jhootha
+/// overflow nahi). Pure; headless-tested.
+pub fn home_tab_bar_overflows(titles: &[&str], total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    home_tab_bar_width(titles) > total_w
+}
+
+/// Find-match highlight role: session item role reuse (body 13, medium) —
+/// match ek selected item bankar dikhta hai, meta [`session_tree_meta_role`]
+/// rehti hai. Koi naya size nahi. Pure; headless-tested.
+pub const fn session_tree_find_match_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::HomeButton
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2235,5 +2367,110 @@ mod tests {
         assert_eq!(super::home_tab_weight_value(true), 500);
         assert_eq!(super::home_tab_weight_value(false), 400);
         assert!(super::home_tab_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homegeo_wave9_find_narrow_tabs_edge() {
+        fn node(label: &str, depth: usize, is_group: bool) -> super::SessionTreeNode {
+            super::SessionTreeNode {
+                id: format!("t:{label}"),
+                label: label.to_string(),
+                depth,
+                is_group,
+                is_expanded: false,
+                has_children: is_group,
+                kind: Some(super::Tab::Text),
+                session_id: None,
+                snapshot: None,
+            }
+        }
+
+        // Edge: khali nodes/needle par koi jhootha match nahi.
+        let empty: Vec<super::SessionTreeNode> = Vec::new();
+        assert_eq!(super::session_tree_find_next(&empty, "a", 0, true), None);
+        assert_eq!(super::session_tree_find_prev(&empty, "a", 0, true), None);
+        let nodes = vec![
+            node("Folder (2)", 0, true),
+            node("mydoc", 1, false),
+            node("notes.txt", 1, false),
+        ];
+        assert_eq!(super::session_tree_find_next(&nodes, "", 0, true), None);
+        assert_eq!(super::session_tree_find_prev(&nodes, "", 2, true), None);
+        // Group header bhi milta hai; case flag imaandaar hai.
+        assert_eq!(
+            super::session_tree_find_next(&nodes, "folder", 0, true),
+            Some(0)
+        );
+        assert_eq!(
+            super::session_tree_find_next(&nodes, "FOLDER", 0, false),
+            None
+        );
+        // Wrap: aakhri ke baad pehla, pehle se peeche aakhri.
+        assert_eq!(
+            super::session_tree_find_next(&nodes, "mydoc", 2, true),
+            Some(1)
+        );
+        assert_eq!(
+            super::session_tree_find_prev(&nodes, "notes.txt", 0, true),
+            Some(2)
+        );
+        assert_eq!(
+            super::session_tree_find_prev(&nodes, "folder", 0, true),
+            Some(0)
+        );
+        assert_eq!(
+            super::session_tree_find_next(&nodes, "zzz-no-match", 0, true),
+            None
+        );
+        assert_eq!(
+            super::session_tree_find_prev(&nodes, "zzz-no-match", 2, true),
+            None
+        );
+
+        // Edge: tang widths par columns ghatte hain, rows badhte hain.
+        assert_eq!(super::SESSION_TREE_FIND_BAR_H, 24.0);
+        assert_eq!(super::SESSION_TREE_FIND_BAR_H, super::HOME_TOOLBAR_BUTTON_H);
+        assert_eq!(super::SESSION_TREE_FIND_PAD_X, 8.0);
+        assert_eq!(super::SESSION_TREE_FIND_PAD_X, super::SESSION_TREE_PAD_X);
+        assert_eq!(
+            super::home_grid_columns_for_width(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        assert_eq!(super::home_grid_columns_for_width(960.0), 3);
+        assert_eq!(super::home_grid_columns_for_width(736.0), 3);
+        assert_eq!(super::home_grid_columns_for_width(720.0), 2);
+        assert_eq!(super::home_grid_columns_for_width(240.0), 1);
+        assert_eq!(super::home_grid_columns_for_width(100.0), 1);
+        assert_eq!(super::home_grid_columns_for_width(-50.0), 1);
+        assert_eq!(super::home_grid_rows_for_width(0, 960.0), 0);
+        assert_eq!(super::home_grid_rows_for_width(9, 960.0), 3);
+        assert_eq!(super::home_grid_rows_for_width(9, 720.0), 5);
+        assert_eq!(super::home_grid_rows_for_width(9, 100.0), 9);
+
+        // Edge: 10-tab strip canonical par fit, tang par overflow, NaN par jhooth nahi.
+        let tabs = [
+            "Home",
+            "Text",
+            "Folder",
+            "Hex",
+            "Merge",
+            "Table",
+            "Sync",
+            "Picture",
+            "FolderMerge",
+            "Audio",
+        ];
+        assert!(!super::home_tab_bar_overflows(&tabs, 960.0));
+        assert!(super::home_tab_bar_overflows(&tabs, 300.0));
+        assert!(!super::home_tab_bar_overflows(&tabs, f32::NAN));
+        assert!(!super::home_tab_bar_overflows(&[], 300.0));
+
+        // Typography second: match highlight item role reuse, koi naya size nahi.
+        assert_eq!(
+            super::session_tree_find_match_role(),
+            super::session_tree_item_role()
+        );
+        assert_eq!(super::session_tree_find_match_role().size(), 13.0);
     }
 }
