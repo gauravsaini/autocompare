@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Desktop client over the autocompare engine"
 
+[lib]
+name = "autocompare_gui"
+path = "src/lib.rs"
+
 [[bin]]
 name = "autocompare-gui"
 path = "src/main.rs"

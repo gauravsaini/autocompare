@@ -636,7 +636,6 @@ pub fn filter_counts(rows: &[TextRow], filter: TextFilter) -> FilterCounts {
 // yahan koi egui code nahi.
 
 /// 3-zone status bar model: left flags, mid verdict, right hints.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StatusZones {
     /// Left zone: filter label plus honest counts.
@@ -648,7 +647,6 @@ pub struct StatusZones {
 }
 
 /// 1-based cursor position; column hamesha 1 (row cursor only, col cursor nahi).
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CursorPos {
     /// 1-based model row.
@@ -658,7 +656,6 @@ pub struct CursorPos {
 }
 
 /// Focused-line preview strip model: focused row ke dono panes ka text.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FocusedLinePreview {
     /// Line-number label: dono taraf barabar hon to `3`, alag hon to
@@ -673,11 +670,9 @@ pub struct FocusedLinePreview {
 }
 
 /// Preview text cap (chars); lambi lines `...` suffix se cut.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
 pub const STATUS_PREVIEW_MAX_CHARS: usize = 120;
 
 /// Display label of a text filter (status left zone).
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub fn text_filter_label(filter: TextFilter) -> &'static str {
     match filter {
         TextFilter::All => "All",
@@ -688,7 +683,6 @@ pub fn text_filter_label(filter: TextFilter) -> &'static str {
 }
 
 /// Verdict label of one text row kind.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub fn text_row_kind_label(kind: TextRowKind) -> &'static str {
     match kind {
         TextRowKind::Equal => "Same",
@@ -700,7 +694,6 @@ pub fn text_row_kind_label(kind: TextRowKind) -> &'static str {
 
 /// Focused row ka verdict label (status mid zone): no selection ya OOB
 /// index par `no selection`, kabhi jhootha verdict nahi.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub fn focused_kind_label(rows: &[TextRow], selected: Option<usize>) -> &'static str {
     selected
         .and_then(|idx| rows.get(idx).map(|row| text_row_kind_label(row.kind)))
@@ -709,7 +702,6 @@ pub fn focused_kind_label(rows: &[TextRow], selected: Option<usize>) -> &'static
 
 /// 0-based model selection se 1-based cursor; column hamesha 1.
 /// `None` ka matlab koi cursor nahi (paint `-` dikhaye).
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
 pub fn cursor_pos_for(selected: Option<usize>) -> Option<CursorPos> {
     selected.map(|idx| CursorPos {
         row: idx.saturating_add(1),
@@ -718,7 +710,6 @@ pub fn cursor_pos_for(selected: Option<usize>) -> Option<CursorPos> {
 }
 
 /// Cursor strip label: `row:col` (`3:1`), koi cursor na ho to `-`.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) cursor strip
 pub fn cursor_label(pos: Option<CursorPos>) -> String {
     match pos {
         Some(at) => format!("{}:{}", at.row, at.col),
@@ -727,7 +718,6 @@ pub fn cursor_label(pos: Option<CursorPos>) -> String {
 }
 
 /// Long preview text ko cap par cut; chhoti text jaisi hai waisi.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
 fn preview_cut(text: &str) -> String {
     if text.chars().count() <= STATUS_PREVIEW_MAX_CHARS {
         return text.to_string();
@@ -746,7 +736,6 @@ fn preview_cut(text: &str) -> String {
 }
 
 /// Focused row ka preview strip model; no selection ya OOB par `None`.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) preview strip
 pub fn focused_line_preview_for(
     rows: &[TextRow],
     selected: Option<usize>,
@@ -772,7 +761,6 @@ pub fn focused_line_preview_for(
 /// verdict, right me nav badge + key hints. `mid` aur `nav_badge` paint
 /// [`focused_kind_label`] aur diff-nav badge se banakar deta hai taaki nav
 /// math ek jagah rahe.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub fn status_zones_for(
     counts: &FilterCounts,
     filter: TextFilter,
@@ -796,7 +784,6 @@ pub fn status_zones_for(
 /// dim-contrast gap weight/size se mite (color frozen). Paint
 /// wiring-pending (views.rs status bar isko adopt karega). Pure;
 /// unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub const fn status_verdict_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
@@ -805,7 +792,6 @@ pub const fn status_verdict_text_role() -> crate::theme::TypoRole {
 /// Small (11 weak proportional, tabular intent — counts stable).
 /// Verdict (Body) se ek step neeche taaki hierarchy mid > sides
 /// rahe. Koi naya size/token nahi. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (BT-DIFF) status bar
 pub const fn status_side_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::caption()
 }
@@ -1141,13 +1127,11 @@ pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
 /// strip with a centered 1px visual) so headless hit math stays in
 /// sync with paint without importing egui. Geometry only, no
 /// color/typo. Pure token; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) uses this hit width
 pub const SPLIT_HANDLE_HIT_W: f32 = 8.0;
 
 /// Cursor affordance id for the split handle: paint maps this to its
 /// resize-column cursor (`egui::CursorIcon::ResizeColumn`). Headless
 /// `&str` keeps this module egui-free. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) maps this to ResizeColumn
 pub fn split_cursor_affordance() -> &'static str {
     "resize-column"
 }
@@ -1157,7 +1141,6 @@ pub fn split_cursor_affordance() -> &'static str {
 /// non-positive `avail` fall back to [`SPLIT_DEFAULT_FRACTION`] so
 /// headless callers never divide by zero or feed NaN into paint.
 /// Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) uses absolute position mapping
 pub fn split_fraction_from_x(x: f32, avail: f32) -> f32 {
     if !x.is_finite() || !avail.is_finite() || avail <= 0.0 {
         return SPLIT_DEFAULT_FRACTION;
@@ -1170,7 +1153,6 @@ pub fn split_fraction_from_x(x: f32, avail: f32) -> f32 {
 /// exposes the delta alone for handle-drag models. Non-finite `dx`,
 /// non-finite or non-positive `avail` yield `0.0` (no move). Pure;
 /// unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) uses the delta form
 pub fn split_drag_delta_fraction(dx: f32, avail: f32) -> f32 {
     if !dx.is_finite() || !avail.is_finite() || avail <= 0.0 {
         return 0.0;
@@ -1185,7 +1167,6 @@ pub fn split_drag_delta_fraction(dx: f32, avail: f32) -> f32 {
 /// of spilling out. Degenerate (non-finite/non-positive) `avail`
 /// yields `(0.0, 0.0)`; non-finite `fraction` falls back to
 /// [`SPLIT_DEFAULT_FRACTION`]. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) hit-tests with this range
 pub fn split_handle_x_range(avail: f32, fraction: f32) -> (f32, f32) {
     if !avail.is_finite() || avail <= 0.0 {
         return (0.0, 0.0);
@@ -1205,7 +1186,6 @@ pub fn split_handle_x_range(avail: f32, fraction: f32) -> (f32, f32) {
 
 /// Hit test: `x` lies inside [`split_handle_x_range`]. Non-finite `x`
 /// or degenerate `avail` never hits. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) hit-tests pointer x with this
 pub fn split_handle_contains_x(x: f32, avail: f32, fraction: f32) -> bool {
     if !x.is_finite() || !avail.is_finite() || avail <= 0.0 {
         return false;
@@ -1214,11 +1194,71 @@ pub fn split_handle_contains_x(x: f32, avail: f32, fraction: f32) -> bool {
     x >= x0 && x <= x1
 }
 
+/// Dual-pane widths for `avail_w`: chrome
+/// ([`crate::theme::DUAL_PANE_CHROME_W`]) comes off first, the rest
+/// splits by `fraction` (clamped). At 960 the pair is 460/460, at the
+/// 720 fallback 340/340; chrome wider than `avail_w` yields `(0, 0)`
+/// so paint stacks instead of underflowing. Pure; unit-tested.
+pub fn dual_pane_widths(avail_w: u32, fraction: f32) -> (u32, u32) {
+    let free = avail_w.saturating_sub(crate::theme::DUAL_PANE_CHROME_W);
+    let clamped = clamp_split_fraction(fraction);
+    let share = if clamped.is_finite() {
+        clamped
+    } else {
+        SPLIT_DEFAULT_FRACTION
+    };
+    let left = if free > 0 {
+        (free as f32 * share).min(free as f32) as u32
+    } else {
+        0
+    };
+    (left.min(free), free.saturating_sub(left.min(free)))
+}
+
+/// Ellipsis clip to `max_chars` characters: fits return as-is, longer
+/// text keeps `max_chars - 3` chars plus `"..."`. Char-boundary safe
+/// (unicode width never splits). Tiny budgets (`<= 3`) keep the first
+/// `max_chars` chars with no room for dots. Pure; unit-tested.
+pub fn clip_text_end(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars <= 3 {
+        return text.chars().take(max_chars).collect();
+    }
+    let keep = max_chars.saturating_sub(3);
+    let mut out: String = text.chars().take(keep).collect();
+    out.push_str("...");
+    out
+}
+
+/// Width clip: longest ellipsis-clipped prefix whose `measure` fits
+/// `budget_px`. Fits return as-is. Shrinks one char at a time so the
+/// result is the longest honest label, never raw-cut pixels. Empty or
+/// zero-budget text yields `""`. Pure; unit-tested with a stub measure.
+pub fn clip_to_width(text: &str, budget_px: u32, measure: impl Fn(&str) -> u32) -> String {
+    if measure(text) <= budget_px {
+        return text.to_string();
+    }
+    if measure("...") > budget_px {
+        return String::new();
+    }
+    let mut keep = text.chars().count();
+    while keep > 0 {
+        keep = keep.saturating_sub(1);
+        let head: String = text.chars().take(keep).collect();
+        let shown = format!("{head}...");
+        if measure(&shown) <= budget_px {
+            return shown;
+        }
+    }
+    "...".to_string()
+}
+
 /// Screen-reader/keyboard label for the split handle: honest left-pane
 /// percent plus the draggable bounds, so the drag target stays
 /// operable without a pointer. Non-finite input falls back to the
 /// default share. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: views paint (next wave) exposes this as the handle a11y label
 pub fn split_accessibility_label(fraction: f32) -> String {
     let clamped = clamp_split_fraction(fraction);
     let share = if clamped.is_finite() {
@@ -1591,7 +1631,6 @@ pub fn build_table_rows(cmp: &TableComparison) -> TableModel {
 /// Pure; paint-side `views::text_find_badge_label` ka model-side judvaan —
 /// `FindState::count_label` badge label ke liye isko use karta hai.
 /// Unit-tested.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) wires FindState paint
 pub fn find_count_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -1601,7 +1640,6 @@ pub fn find_count_label(position: Option<usize>, total: usize) -> String {
 
 /// One pane text me needle hai ya nahi: khali needle kabhi hit nahi.
 /// Table (`views_table`) / folder (`tree`) find precedent jaisa case flag.
-#[allow(dead_code)] // wiring-pending: see find_match_indices_cased
 fn find_text_contains(hay: &str, needle: &str, ignore_case: bool) -> bool {
     if needle.is_empty() {
         return false;
@@ -1618,7 +1656,6 @@ fn find_text_contains(hay: &str, needle: &str, ignore_case: bool) -> bool {
 /// Returns original-model row indices in order. Empty or
 /// whitespace-only queries match nothing (table/folder precedent).
 /// Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: FindState + paint (orchestrator) call this
 pub fn find_match_indices_cased(rows: &[TextRow], query: &str, ignore_case: bool) -> Vec<usize> {
     if query.trim().is_empty() {
         return Vec::new();
@@ -1641,14 +1678,12 @@ pub fn find_match_indices_cased(rows: &[TextRow], query: &str, ignore_case: bool
 /// [`find_match_indices_cased`] ka `ignore_case = true` wrapper (App
 /// default `true` se match; purane callers/tests unchanged). Pure;
 /// unit-tested.
-#[allow(dead_code)] // wiring-pending: FindState::set_query calls this
 pub fn find_match_indices(rows: &[TextRow], query: &str) -> Vec<usize> {
     find_match_indices_cased(rows, query, true)
 }
 
 /// Headless find-box state: current query, its matches, cursor into them.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // wiring-pending: views::paint_text_with_find owns one per text view
 pub struct FindState {
     query: String,
     matches: Vec<usize>,
@@ -1657,7 +1692,6 @@ pub struct FindState {
     rows_len: usize,
 }
 
-#[allow(dead_code)] // wiring-pending: views::paint_text_with_find calls these
 impl FindState {
     /// Recomputes matches for a new query; cursor rests on the first hit.
     /// Case-insensitive (App default `true` se match; purane callers unchanged).
@@ -1744,6 +1778,7 @@ impl FindState {
     }
 
     /// Advances with wrap; `None` when there are no matches.
+    #[allow(clippy::should_implement_trait)] // FindState is not an Iterator; `next` mirrors the paint find-bar label.
     pub fn next(&mut self) -> Option<usize> {
         if self.matches.is_empty() {
             return None;
@@ -1785,7 +1820,6 @@ impl FindState {
 /// One conflict block in a merged line stream: half-open line span
 /// plus its conflict index for [`crate::take::resolve_take`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (agent A) lists one card per hunk
 pub struct MergeHunk {
     /// Conflict index (0-based among well-formed blocks).
     pub conflict_index: usize,
@@ -1798,7 +1832,6 @@ pub struct MergeHunk {
 /// Well-formed conflict blocks in scan order. Malformed blocks (no
 /// closing marker) are skipped so paint never offers an unresolvable
 /// hunk. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (agent A) lists hunk cards
 pub fn merge_conflict_hunks(lines: &[String]) -> Vec<MergeHunk> {
     let mut hunks = Vec::new();
     let mut i = 0usize;
@@ -1835,7 +1868,6 @@ pub fn merge_conflict_hunks(lines: &[String]) -> Vec<MergeHunk> {
 
 /// One staged per-hunk choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (agent A) stages button picks
 pub struct MergeHunkPick {
     /// Which conflict block this pick resolves.
     pub conflict_index: usize,
@@ -1846,7 +1878,6 @@ pub struct MergeHunkPick {
 /// Applies staged per-hunk picks, highest index first so earlier spans
 /// stay valid. Duplicate picks for one hunk keep the last staged
 /// choice. Errors when a pick names no real conflict. Pure.
-#[allow(dead_code)] // wiring-pending: paint (agent A) Apply-all calls this
 pub fn apply_merge_picks(
     lines: &[String],
     picks: &[MergeHunkPick],
@@ -1875,7 +1906,6 @@ pub fn apply_merge_picks(
 
 /// Honest per-hunk progress over the live merged lines.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (agent A) summary line
 pub struct MergePickSummary {
     /// Well-formed conflict blocks in the lines.
     pub total: usize,
@@ -1889,7 +1919,6 @@ pub struct MergePickSummary {
 
 /// Summarizes staged picks against the current lines. Picks naming no
 /// real block do not count as resolved. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (agent A) summary line
 pub fn merge_pick_summary(lines: &[String], picks: &[MergeHunkPick]) -> MergePickSummary {
     let total = merge_conflict_hunks(lines).len();
     let mut seen: Vec<usize> = Vec::new();
@@ -1925,7 +1954,6 @@ pub fn merge_pick_summary(lines: &[String], picks: &[MergeHunkPick]) -> MergePic
 
 /// One aligned hunk ka change shape.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (next wave) lists one card per hunk
 pub enum ThreePaneKind {
     /// Teenon sides ek jaise.
     #[default]
@@ -1942,7 +1970,6 @@ pub enum ThreePaneKind {
 
 /// Teen panes ki ek aligned hunk row.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (next wave) lists one card per hunk
 pub struct ThreePaneHunk {
     /// Hunk order (0-based, `decisions` isi se judte hain).
     pub index: usize,
@@ -1961,7 +1988,6 @@ pub struct ThreePaneHunk {
 /// Ek hunk par staged take-side decision (`TakeChoice` reuse:
 /// Left/Right/Base/Both).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (next wave) stages button picks
 pub struct ThreePaneDecision {
     /// Kaunsa hunk resolve hota hai.
     pub hunk: usize,
@@ -1971,7 +1997,6 @@ pub struct ThreePaneDecision {
 
 /// Teen panes ka poora plan: hunks plus staged decisions.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (next wave) keeps one per merge tab
 pub struct ThreePanePlan {
     /// Aligned hunks, order me.
     pub hunks: Vec<ThreePaneHunk>,
@@ -1981,7 +2006,6 @@ pub struct ThreePanePlan {
 
 /// Per-hunk progress over the plan.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
 pub struct ThreePaneSummary {
     /// Kul hunks.
     pub total: usize,
@@ -1993,7 +2017,6 @@ pub struct ThreePaneSummary {
     pub conflicted: bool,
 }
 
-#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
 impl ThreePaneSummary {
     /// Honest one-line progress.
     pub fn summary_line(self) -> String {
@@ -2009,7 +2032,6 @@ impl ThreePaneSummary {
 
 /// Ek line position ka shape: missing tail `None` hai, isliye chhoti
 /// side ki extra lines apne side ka change banti hain. Pure.
-#[allow(dead_code)] // wiring-pending: `three_pane_hunks` helper
 fn three_pane_line_kind(
     base: Option<&str>,
     left: Option<&str>,
@@ -2031,7 +2053,6 @@ fn three_pane_line_kind(
 /// Base/left/right slices ko maximal same-shape runs me align karta hai.
 /// Missing tails `None` hain (koi padding line nahi), har side apni
 /// maujood lines rakhta hai. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: `ThreePanePlan::new` + paint (next wave)
 pub fn three_pane_hunks(base: &[String], left: &[String], right: &[String]) -> Vec<ThreePaneHunk> {
     let total = base.len().max(left.len()).max(right.len());
     let mut hunks: Vec<ThreePaneHunk> = Vec::new();
@@ -2074,7 +2095,6 @@ pub fn three_pane_hunks(base: &[String], left: &[String], right: &[String]) -> V
 /// undecided non-conflict auto-resolve hota hai (badli side jeetti hai,
 /// dono-same par left), undecided conflict marker block banata hai taaki
 /// `merge_conflict_hunks` use downstream dekh sake. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (next wave) output pane
 pub fn three_pane_merge_lines(
     hunks: &[ThreePaneHunk],
     decisions: &[ThreePaneDecision],
@@ -2118,7 +2138,6 @@ pub fn three_pane_merge_lines(
 
 /// Hunks + decisions par honest progress: unknown hunk naam wale picks
 /// kabhi decided nahi ginte. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (next wave) summary line
 pub fn three_pane_summary(
     hunks: &[ThreePaneHunk],
     decisions: &[ThreePaneDecision],
@@ -2146,7 +2165,6 @@ pub fn three_pane_summary(
     }
 }
 
-#[allow(dead_code)] // wiring-pending: paint (next wave) keeps one per merge tab
 impl ThreePanePlan {
     /// Teen slices se naya plan (koi decision staged nahi).
     pub fn new(base: &[String], left: &[String], right: &[String]) -> Self {
@@ -2194,12 +2212,10 @@ impl ThreePanePlan {
 // the honest `(start, end)` window. No egui code here.
 
 /// Default page step for load-more paging over truncated models.
-#[allow(dead_code)] // wiring-pending: paint (agent A) load-more step
 pub const PAGE_SIZE: usize = 5_000;
 
 /// A load-more cursor over a truncated row list.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[allow(dead_code)] // wiring-pending: paint (agent A) keeps one per view
 pub struct PageCursor {
     /// Full model length the window views.
     pub total: usize,
@@ -2212,7 +2228,6 @@ pub struct PageCursor {
 /// Clamped `(start, end)` window for `page` (0-based) over `total`
 /// rows with `page_size` rows per page. Zero page size shows nothing.
 /// Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: paint (agent A) page buttons
 pub fn page_window(total: usize, page: usize, page_size: usize) -> (usize, usize) {
     if page_size == 0 || total == 0 {
         return (0, 0);
@@ -2222,7 +2237,6 @@ pub fn page_window(total: usize, page: usize, page_size: usize) -> (usize, usize
     (start, end)
 }
 
-#[allow(dead_code)] // wiring-pending: see struct
 impl PageCursor {
     /// New cursor showing the first page over `total` rows.
     pub fn new(total: usize, page_size: usize) -> Self {
@@ -2330,43 +2344,36 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
 
 /// Hex goto zone label role: Body (find-bar label precedent reuse).
 /// Paint-side `.strong()` composition; badge (Small) se ek step upar.
-#[allow(dead_code)]
 pub const fn hex_goto_zone_label_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
 
 /// Hex goto zone value role: Mono (offset ruler precedent reuse).
-#[allow(dead_code)]
 pub const fn hex_goto_zone_value_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
 
 /// Hex goto zone badge role: Small (find-bar badge precedent reuse).
-#[allow(dead_code)]
 pub const fn hex_goto_zone_badge_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Small
 }
 
 /// Table key zone label role: Body (section-label precedent reuse).
-#[allow(dead_code)]
 pub const fn table_key_zone_label_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
 
 /// Table key zone value role: Mono (grid-cell precedent reuse).
-#[allow(dead_code)]
 pub const fn table_key_zone_value_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
 
 /// Table sheet zone label role: Body (sheet-bar label precedent reuse).
-#[allow(dead_code)]
 pub const fn table_sheet_zone_label_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
 
 /// Table sheet zone value role: Mono (sheet-name precedent reuse).
-#[allow(dead_code)]
 pub const fn table_sheet_zone_value_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
@@ -2374,7 +2381,6 @@ pub const fn table_sheet_zone_value_role() -> crate::theme::TypoRole {
 /// Zone badge role (hex goto / table key / table sheet badges): Small.
 /// Teenon badges ek hi role se taaki N/M + source badges kabhi drift na
 /// karen. Pure.
-#[allow(dead_code)]
 pub const fn zone_badge_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Small
 }
@@ -2382,14 +2388,12 @@ pub const fn zone_badge_role() -> crate::theme::TypoRole {
 /// Zone role ki paint weight spelling (`strong`/`weak`/`default`/
 /// `regular-mono`) — hierarchy carrier (egui me tracking nahi).
 /// [`crate::theme::TypoRole::weight`] ka zone alias; koi naya token nahi.
-#[allow(dead_code)]
 pub const fn zone_weight(role: crate::theme::TypoRole) -> &'static str {
     role.weight()
 }
 
 /// Zone role ki font family (`monospace` vs `proportional`).
 /// [`crate::theme::TypoRole::family`] ka zone alias. Pure.
-#[allow(dead_code)]
 pub const fn zone_family(role: crate::theme::TypoRole) -> &'static str {
     role.family()
 }
@@ -2397,7 +2401,6 @@ pub const fn zone_family(role: crate::theme::TypoRole) -> &'static str {
 /// Zone role ki line-height px (`size * multiplier`, Wave V tight rows).
 /// [`crate::theme::TypoRole::line_height_px`] ka zone alias — paint ab bhi
 /// shared measured mono row height se lagata hai, ye headless intent hai.
-#[allow(dead_code)]
 pub const fn zone_line_height_px(role: crate::theme::TypoRole) -> f32 {
     role.line_height_px()
 }
@@ -2405,14 +2408,12 @@ pub const fn zone_line_height_px(role: crate::theme::TypoRole) -> f32 {
 /// Zone role ki letter-tracking em (headers 0.02, rest 0.0; egui paint
 /// 0.0 no-op rehta hai). [`crate::theme::TypoRole::letter_spacing_em`]
 /// ka zone alias. Pure.
-#[allow(dead_code)]
 pub const fn zone_letter_spacing_em(role: crate::theme::TypoRole) -> f32 {
     role.letter_spacing_em()
 }
 
 /// Kya zone role tabular numerals chahta hai (Mono + Small only).
 /// [`crate::theme::TypoRole::is_tabular`] ka zone alias. Pure.
-#[allow(dead_code)]
 pub const fn zone_is_tabular(role: crate::theme::TypoRole) -> bool {
     role.is_tabular()
 }
@@ -3671,6 +3672,46 @@ mod tests {
         assert!(max_label.contains("80"));
         // NaN label default 50% par girta hai, crash nahi.
         assert!(split_accessibility_label(f32::NAN).contains("50"));
+    }
+
+    #[test]
+    fn dual_pane_widths_honor_chrome_budget() {
+        assert_eq!(dual_pane_widths(960, 0.50), (460, 460));
+        assert_eq!(dual_pane_widths(720, 0.50), (340, 340));
+        let (left, right) = dual_pane_widths(960, 0.25);
+        assert_eq!(
+            left.saturating_add(right)
+                .saturating_add(crate::theme::DUAL_PANE_CHROME_W),
+            960
+        );
+        assert!(left < right);
+        assert_eq!(dual_pane_widths(960, 9.9), dual_pane_widths(960, 0.80));
+        assert_eq!(dual_pane_widths(960, -9.9), dual_pane_widths(960, 0.20));
+        assert_eq!(dual_pane_widths(960, f32::NAN), (460, 460));
+        assert_eq!(dual_pane_widths(30, 0.50), (0, 0));
+        assert_eq!(dual_pane_widths(0, 0.50), (0, 0));
+    }
+
+    #[test]
+    fn clip_text_end_ellipsis_and_boundaries() {
+        assert_eq!(clip_text_end("abc", 10), "abc");
+        assert_eq!(clip_text_end("abcdef", 6), "abcdef");
+        assert_eq!(clip_text_end("abcdefg", 6), "abc...");
+        assert_eq!(clip_text_end("abcdef", 3), "abc");
+        assert_eq!(clip_text_end("abcdef", 0), "");
+        assert_eq!(clip_text_end("caf\u{e9} \u{1f980}rust", 7), "caf\u{e9}...");
+        assert_eq!(clip_text_end("caf\u{e9}", 4), "caf\u{e9}");
+    }
+
+    #[test]
+    fn clip_to_width_keeps_longest_fitting_label() {
+        let measure = |s: &str| s.len() as u32;
+        assert_eq!(clip_to_width("abc", 10, measure), "abc");
+        assert_eq!(clip_to_width("abcdef", 6, measure), "abcdef");
+        assert_eq!(clip_to_width("abcdef", 5, measure), "ab...");
+        assert_eq!(clip_to_width("abcdef", 3, measure), "...");
+        assert_eq!(clip_to_width("abcdef", 2, measure), "");
+        assert_eq!(clip_to_width("", 0, measure), "");
     }
 
     // ---- three-pane merge plan (Gap #7 model half) ----

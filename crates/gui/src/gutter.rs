@@ -13,7 +13,6 @@
 //! only `gutter.rs` owns them.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use crate::viewmodel::{TextRow, TextRowKind};
 

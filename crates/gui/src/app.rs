@@ -8,7 +8,6 @@
 //! clear the model. Nothing here panics.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -1714,13 +1713,13 @@ impl App {
     }
 
     /// eframe Storage key jisme `dark_mode` per-run se aage persist hota hai.
-    pub(crate) const DARK_MODE_STORAGE_KEY: &'static str = "dark_mode";
+    pub const DARK_MODE_STORAGE_KEY: &'static str = "dark_mode";
 
     /// Persisted dark_mode flag padhta hai (main.rs load path).
     /// `SessionSnapshot::new` trim precedent: aas-paas whitespace ignore hota hai;
     /// unknown/khali/missing par declared intent dark (true) — jhootha light kabhi nahi
     /// (`SessionSnapshot::age_secs` unknown→None precedent jaisa graceful default).
-    pub(crate) fn dark_mode_from_storage(raw: Option<&str>) -> bool {
+    pub fn dark_mode_from_storage(raw: Option<&str>) -> bool {
         !matches!(raw.map(str::trim), Some("0" | "false" | "light"))
     }
 

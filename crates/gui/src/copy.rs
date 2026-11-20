@@ -3,7 +3,6 @@
 //! Provides pure mutations for transferring text rows Left-to-Right or Right-to-Left.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use crate::viewmodel::{TextRowKind, TextRows};
 

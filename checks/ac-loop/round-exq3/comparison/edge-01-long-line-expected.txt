@@ -1,0 +1,4 @@
+edge fixture 1: long-line wrap/clip probe (geometry: pane wrap at 80 chars, 960 canvas + 720 fallback; typo: mono 12 diff rows)
+left: checks/ac-loop/round-exq3/comparison/edge-long-line-left.txt
+right: checks/ac-loop/round-exq3/comparison/edge-long-line-right.txt
+expected: no clipped text at 960x600 and 720 fallback, wrap-on caps pane at 80 chars

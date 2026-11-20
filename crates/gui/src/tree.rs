@@ -8,7 +8,6 @@
 //! without touching the filesystem.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 
@@ -1658,7 +1657,6 @@ mod tests {
 /// Agle changed row ka index `from` se aage (exclusive), wrap ke saath.
 /// Koi changed row nahi to `None`. Gutter next-change isi ko use karta hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_next_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
     if rows.is_empty() {
         return None;
@@ -1678,7 +1676,6 @@ pub fn folder_next_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
 /// Pichhle changed row ka index `from` se peeche (exclusive), wrap ke saath.
 /// Koi changed row nahi to `None`. Gutter prev-change isi ko use karta hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_prev_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
     if rows.is_empty() {
         return None;
@@ -1707,7 +1704,6 @@ pub fn folder_prev_changed(rows: &[FolderRow], from: usize) -> Option<usize> {
 /// uske baad ka agla changed (wrap ke saath). Paint click ko index
 /// me badalkar ye helper deta hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_gutter_target(rows: &[FolderRow], row_idx: usize) -> Option<usize> {
     let row = rows.get(row_idx)?;
     if row.changed {
@@ -1731,7 +1727,6 @@ fn folder_name_contains(path: &str, needle: &str, ignore_case: bool) -> bool {
 /// Agla folder row jiske path me needle hai, `from` se (inclusive),
 /// wrap ke saath. Khali needle/rows par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_find_next(
     rows: &[FolderRow],
     needle: &str,
@@ -1756,7 +1751,6 @@ pub fn folder_find_next(
 /// Pichhla folder row jiske path me needle hai, `from` se peeche
 /// (exclusive), wrap ke saath. Khali needle/rows par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_find_prev(
     rows: &[FolderRow],
     needle: &str,
@@ -1797,7 +1791,6 @@ pub fn folder_find_prev(
 
 /// Per-row merge choice: kaunsi side ka content rakha jaye.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FolderMergeSide {
     /// Left content rakho (right par copy).
@@ -1809,7 +1802,6 @@ pub enum FolderMergeSide {
 
 /// Ek folder row ka merge action, `None` jab koi copy na ho.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn folder_resolve_row(glyph: char, is_dir: bool, side: FolderMergeSide) -> Option<SyncAction> {
     if is_dir || glyph == '=' || glyph == '!' {
         return None;
@@ -1829,7 +1821,6 @@ pub fn folder_resolve_row(glyph: char, is_dir: bool, side: FolderMergeSide) -> O
 
 /// Page-wise scroll state ek folder tree ke liye.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RowPager {
     /// Kul visible nodes.
@@ -1841,7 +1832,6 @@ pub struct RowPager {
 }
 
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 impl RowPager {
     /// Naya pager: page size kam se kam 1, top 0.
     pub fn new(total_rows: usize, rows_per_page: usize) -> Self {

@@ -1,0 +1,22 @@
+/very/deep/nested/path/to/enterprise/component/service/v2/module/with/extreme/depth/source_controller_configuration_production_v2_final_revision.rs
+/var/log/autocompare/analytics/telemetry/session_dumps/2026-11-20/run_99999_full_stack_trace_inspection_dump_left.log
+Short line left 1
+Short line left 2
+Short line left 3
+Short line left 4
+Short line left 5
+Short line left 6
+Short line left 7
+Short line left 8
+Short line left 9
+Short line left 10
+Short line left 11
+Short line left 12
+Short line left 13
+Short line left 14
+Short line left 15
+Short line left 16
+Short line left 17
+Short line left 18
+Short line left 19
+Short line left 20

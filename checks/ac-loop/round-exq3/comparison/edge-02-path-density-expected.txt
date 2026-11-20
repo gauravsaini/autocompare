@@ -1,0 +1,5 @@
+edge fixture 2: 720px fallback with long path wrapping and high density rows
+left: checks/ac-loop/round-exq3/comparison/edge-path-density-left.txt
+right: checks/ac-loop/round-exq3/comparison/edge-path-density-right.txt
+scenario: 720px narrow window fallback, deeply nested path wrapping in header/breadcrumb, dense diff gutter and line numbering
+expected: paths wrap or truncate cleanly without overlapping UI panes or pushing actions offscreen; line numbers align with diff rows; zero clipped text; responsive layout intact

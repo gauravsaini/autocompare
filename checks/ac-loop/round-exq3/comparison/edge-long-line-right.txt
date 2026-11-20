@@ -1,0 +1,3 @@
+right alpha
+same line
+new value 123456789 with a very long trailing token that must wrap without clipping at 960 and 720 widths

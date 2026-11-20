@@ -47,7 +47,6 @@
 //! `ui.visuals().dark_mode`; no color values move in this wave.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use eframe::egui::{self, Color32};
 
@@ -263,6 +262,23 @@ pub const GUTTER_MERGE_GAP: f32 = 2.0;
 /// Canonical tree indent step: one MD step on the scale.
 pub const GEO_TREE_INDENT_STEP: f32 = SPACE_MD;
 
+// ----------------------------------------------------------------------------
+// Viewport geometry (headless, px): canonical shot + narrow fallback.
+// ----------------------------------------------------------------------------
+
+/// Canonical viewport width in px: every fixture PNG proves this size.
+pub const VIEWPORT_W: u32 = 960;
+/// Canonical viewport height in px.
+pub const VIEWPORT_H: u32 = 600;
+/// Narrow fallback width in px: live window minimum; dual panes shrink
+/// to fit, text ellipsis-clips instead of painting past the edge.
+pub const VIEWPORT_MIN_W: u32 = 720;
+/// Narrow fallback height in px: keeps the canonical 8:5 aspect.
+pub const VIEWPORT_MIN_H: u32 = 450;
+/// Fixed chrome around the dual panes in px: 12 outer lead + 4 pane
+/// gap + 16 overview gutter + 8 right margin (fixture budget parity).
+pub const DUAL_PANE_CHROME_W: u32 = 40;
+
 /// One typographic role: size + family + weight, line-height shared.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TypoRole {
@@ -335,6 +351,19 @@ impl TypoRole {
     /// Whether this role paints weak (dimmed secondary text).
     pub const fn is_weak(self) -> bool {
         matches!(self, Self::Small | Self::HomeDesc)
+    }
+
+    /// Hierarchy rank: 0 app header, 1 card title, 2 tab/body,
+    /// 3 mono content, 4 small hints. Ranks follow point size, so a
+    /// higher rank always paints smaller. Pure; unit-tested.
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::Heading => 0,
+            Self::HomeTitle => 1,
+            Self::Body | Self::HomeButton => 2,
+            Self::Mono => 3,
+            Self::Small | Self::HomeDesc => 4,
+        }
     }
 
     /// Whether this role uses the small scale.
@@ -1548,5 +1577,33 @@ mod tests {
             TypoRole::Heading.resolved_font_id(&style).family,
             egui::FontFamily::Proportional
         );
+    }
+
+    #[test]
+    fn viewport_tokens_match_canvas_and_fallback() {
+        assert_eq!(VIEWPORT_W, 960);
+        assert_eq!(VIEWPORT_H, 600);
+        assert_eq!(VIEWPORT_MIN_W, 720);
+        assert_eq!(VIEWPORT_MIN_H, 450);
+        assert_eq!(DUAL_PANE_CHROME_W, 40);
+        const {
+            assert!(VIEWPORT_MIN_W < VIEWPORT_W);
+            assert!(VIEWPORT_MIN_H < VIEWPORT_H);
+        }
+    }
+
+    #[test]
+    fn typo_rank_follows_point_size() {
+        assert!(TypoRole::Heading.rank() < TypoRole::HomeTitle.rank());
+        assert!(TypoRole::HomeTitle.rank() < TypoRole::Body.rank());
+        assert_eq!(TypoRole::Body.rank(), TypoRole::HomeButton.rank());
+        assert!(TypoRole::Body.rank() < TypoRole::Mono.rank());
+        assert!(TypoRole::Mono.rank() < TypoRole::Small.rank());
+        assert_eq!(TypoRole::Small.rank(), TypoRole::HomeDesc.rank());
+        // Rank steps down as point size steps down.
+        assert!(TypoRole::Heading.size() > TypoRole::HomeTitle.size());
+        assert!(TypoRole::HomeTitle.size() > TypoRole::Body.size());
+        assert!(TypoRole::Body.size() > TypoRole::Mono.size());
+        assert!(TypoRole::Mono.size() > TypoRole::Small.size());
     }
 }

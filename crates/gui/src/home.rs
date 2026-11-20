@@ -3,7 +3,6 @@
 //! Provides the 9 comparison session types matching the CLI commands.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use std::collections::BTreeSet;
 

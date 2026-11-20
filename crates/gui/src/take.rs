@@ -3,7 +3,6 @@
 //! Provides pure headless conflict resolution by taking Left, Right, Base, or Both.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 /// Choice of source when resolving a three-way merge conflict block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

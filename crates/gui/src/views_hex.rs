@@ -76,7 +76,6 @@ impl HexCompareMode {
     /// Parses a selector label back into a mode. Test-only: the binary
     /// selector drives the typed [`HexCompareMode`] via [`Self::all`], so
     /// no runtime path parses labels; unit tests guard the round-trip.
-    #[allow(dead_code)]
     pub fn from_label(label: &str) -> Option<HexCompareMode> {
         match label.trim() {
             "None" => Some(HexCompareMode::None),
@@ -176,7 +175,6 @@ impl HexCompareView {
     /// view with no hunks instead of comparing. Test-only: the binary
     /// compares files via the engine plus [`Self::from_comparison`];
     /// unit tests drive this pure slice path.
-    #[allow(dead_code)]
     pub fn build_from_slices(
         left: &[u8],
         right: &[u8],
@@ -377,14 +375,12 @@ fn chunk_run(
 
 /// Bytes per hex grid row: the classic 16-byte ruler step.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const HEX_BYTES_PER_ROW: usize = 16;
 
 /// Per-byte cursor over one side's byte length: absolute offset plus
 /// which nibble the next keystroke edits. `total_len` bounds every
 /// move so the cursor never leaves the input.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct HexCursor {
     /// Absolute byte offset of the cursor.
@@ -396,7 +392,6 @@ pub struct HexCursor {
 }
 
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 impl HexCursor {
     /// Cursor at offset 0 (or nowhere when `total_len` is 0).
     pub fn at_start(total_len: u64) -> Self {
@@ -502,14 +497,12 @@ impl HexCursor {
 
 /// Offset ruler label for one grid row, e.g. `0x00000010`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn format_hex_offset(offset: u64) -> String {
     format!("{offset:#010x}")
 }
 
 /// Grid row count for `total_len` bytes (partial tail counts as one row).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_count(total_len: u64) -> u64 {
     if total_len == 0 {
         return 0;
@@ -522,7 +515,6 @@ pub fn hex_row_count(total_len: u64) -> u64 {
 
 /// Start offset of grid row `row`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_start(row: u64) -> u64 {
     row.saturating_mul(HEX_BYTES_PER_ROW as u64)
 }
@@ -530,7 +522,6 @@ pub fn hex_row_start(row: u64) -> u64 {
 /// Whether any displayed hunk touches the 16-byte row at `row_start`.
 /// Hunk ranges are `[offset, offset + max(left_len, right_len))`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_has_diff(row_start: u64, hunks: &[HexHunkView]) -> bool {
     let row_end = row_start.saturating_add(HEX_BYTES_PER_ROW as u64);
     for hunk in hunks {
@@ -560,7 +551,6 @@ pub fn hex_row_has_diff(row_start: u64, hunks: &[HexHunkView]) -> bool {
 /// Hunk index jo `offset` byte ko cover karta hai, agar koi hai.
 /// Hunk range `[offset, offset + max(left_len, right_len))` hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_hunk_at_offset(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
     for (idx, hunk) in hunks.iter().enumerate() {
         let run = (hunk.left_len).max(hunk.right_len);
@@ -578,7 +568,6 @@ pub fn hex_hunk_at_offset(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
 /// Pehla hunk jo `offset` par ya uske baad shuru hota hai.
 /// Gutter next-change button isi ko `navigate_to_offset` jaisa use karta hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_next_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
     let mut found: Option<usize> = None;
     for (idx, hunk) in hunks.iter().enumerate() {
@@ -594,7 +583,6 @@ pub fn hex_next_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
 /// Gutter prev-change button isko use karta hai; already-selected hunk
 /// par dobara rukne ke bajaye peeche jata hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_prev_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
     let mut found: Option<usize> = None;
     for (idx, hunk) in hunks.iter().enumerate() {
@@ -611,7 +599,6 @@ pub fn hex_prev_hunk_from(offset: u64, hunks: &[HexHunkView]) -> Option<usize> {
 /// Row range `[hex_row_start(row), +16)` hai; jo hunk is range ko
 /// chhuta hai wahi jump target hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_to_hunk(row: u64, hunks: &[HexHunkView]) -> Option<usize> {
     let row_start = hex_row_start(row);
     let row_end = row_start.saturating_add(HEX_BYTES_PER_ROW as u64);
@@ -639,7 +626,6 @@ pub fn hex_row_to_hunk(row: u64, hunks: &[HexHunkView]) -> Option<usize> {
 /// Agli needle occurrence `from` se (inclusive), wrap ke saath.
 /// Khali needle ya khali haystack par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_next(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
     if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
         return None;
@@ -664,7 +650,6 @@ pub fn hex_find_next(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
 /// Pichhli needle occurrence `from` se peeche (exclusive), wrap ke saath.
 /// Khali needle ya khali haystack par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_prev(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
     if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
         return None;
@@ -705,7 +690,6 @@ pub fn hex_find_prev(haystack: &[u8], needle: &[u8], from: u64) -> Option<u64> {
 
 /// Grid `(row, col)` ek byte offset ke liye (`HEX_BYTES_PER_ROW` = 16).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_offset_to_row_col(offset: u64) -> (u64, u64) {
     (
         offset / (HEX_BYTES_PER_ROW as u64),
@@ -715,7 +699,6 @@ pub fn hex_offset_to_row_col(offset: u64) -> (u64, u64) {
 
 /// Grid `(row, col)` se byte offset. `col >= HEX_BYTES_PER_ROW` par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_col_to_offset(row: u64, col: u64) -> Option<u64> {
     if col >= HEX_BYTES_PER_ROW as u64 {
         return None;
@@ -730,7 +713,6 @@ pub fn hex_row_col_to_offset(row: u64, col: u64) -> Option<u64> {
 /// grid `(row, col)` hit ke roop me. Khali needle/haystack ya invalid `col`
 /// par `None`. Andar `hex_find_next` reuse hota hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_next_position(
     haystack: &[u8],
     needle: &[u8],
@@ -746,7 +728,6 @@ pub fn hex_find_next_position(
 /// ke saath, grid `(row, col)` hit ke roop me. Khali needle/haystack ya
 /// invalid `col` par `None`. Andar `hex_find_prev` reuse hota hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_prev_position(
     haystack: &[u8],
     needle: &[u8],
@@ -762,7 +743,6 @@ pub fn hex_find_prev_position(
 /// koi hit chhute nahi). Khali needle/haystack ya badi needle par `0`.
 /// Badge ke `total` ke liye; position cursor se aati hai.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_count(haystack: &[u8], needle: &[u8]) -> usize {
     if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
         return 0;
@@ -782,7 +762,6 @@ pub fn hex_find_count(haystack: &[u8], needle: &[u8]) -> usize {
 /// Pure; `viewmodel::find_count_label` ka hex-side judvaan — agla paint
 /// wave isko badge label ke liye use karega. Unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -807,15 +786,12 @@ pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
 
 /// Hex find bar ki height (table precedent reuse, koi naya token nahi).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const HEX_FIND_BAR_H: f32 = 28.0;
 /// Hex find needle field ki chaudai (table precedent reuse).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const HEX_FIND_NEEDLE_W: f32 = 120.0;
 /// Hex find badge ka right-end pad (table precedent reuse).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const HEX_FIND_BADGE_PAD: f32 = 4.0;
 
 /// Hex find-bar section-label role: Body (13 default proportional).
@@ -824,7 +800,6 @@ pub const HEX_FIND_BADGE_PAD: f32 = 4.0;
 /// hierarchy tute; input values Mono family me (needle field
 /// `.font(Monospace)`) taaki label-vs-input confuse na ho. Koi naya
 /// size/token/color nahi. Pure; unit-tested.
-#[allow(dead_code)]
 pub const fn hex_find_label_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
@@ -835,7 +810,6 @@ pub const fn hex_find_label_text_role() -> crate::theme::TypoRole {
 /// depend nahi kar sakta, isliye same semantics yahin rehti hai taaki
 /// agla wiring wave dono taraf ek jaisi needle samjhe). Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn parse_hex_needle_text(text: &str) -> Vec<u8> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -882,7 +856,6 @@ pub fn parse_hex_needle_text(text: &str) -> Vec<u8> {
 /// (`len()` count ke barabar aata hai); N/M total + Next/Prev nav isi
 /// par chalta hai. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_find_match_offsets(haystack: &[u8], needle: &[u8]) -> Vec<u64> {
     let mut out = Vec::new();
     if needle.is_empty() || haystack.is_empty() || needle.len() > haystack.len() {
@@ -907,7 +880,6 @@ pub fn hex_find_match_offsets(haystack: &[u8], needle: &[u8]) -> Vec<u64> {
 /// Caller signature same rehti hai (hex tab wiring isi ko chalaye, KEVL
 /// caller me koi edit nahi).
 /// Wiring-pending until orchestrator wires the hex tab caller.
-#[allow(dead_code)]
 pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
     let mut prev = false;
     let mut next = false;
@@ -945,7 +917,6 @@ pub fn paint_hex_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -
 
 /// Per-hunk merge choice: kaunsi side ke bytes rakhe jayen.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HunkSide {
     /// Left side ke bytes rakho.
@@ -971,7 +942,6 @@ fn slice_hunk_bytes(data: &[u8], offset: u64, len: usize) -> Vec<u8> {
 
 /// Ek hunk ka merge result: chosen side ke bytes.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_resolve_hunk(left: &[u8], right: &[u8], hunk: &HexHunkView, side: HunkSide) -> Vec<u8> {
     match side {
         HunkSide::Left => slice_hunk_bytes(left, hunk.offset, hunk.left_len),
@@ -988,7 +958,6 @@ pub fn hex_resolve_hunk(left: &[u8], right: &[u8], hunk: &HexHunkView, side: Hun
 
 /// Page-wise scroll state ek hex grid ke liye (rows = `hex_row_count`).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct HexPager {
     /// Kul grid rows.
@@ -1000,7 +969,6 @@ pub struct HexPager {
 }
 
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 impl HexPager {
     /// Naya pager: page size kam se kam 1, top 0.
     pub fn new(total_rows: u64, rows_per_page: u64) -> Self {
@@ -1112,7 +1080,6 @@ impl HexPager {
 
 /// Hex grid rows kul bytes se (`hex_row_count` reuse, `usize` me cap).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_total_rows(total_len: u64) -> usize {
     hex_row_count(total_len).min(usize::MAX as u64) as usize
 }
@@ -1122,7 +1089,6 @@ pub fn hex_gutter_total_rows(total_len: u64) -> usize {
 /// wahi `GUTTER_MIN_SEGMENT_H`/`GUTTER_MERGE_GAP` tokens, kind `Changed`
 /// (text `Changed` jaisa paired-diff marker). Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_geometry(
     total_rows: usize,
     height: f32,
@@ -1171,56 +1137,48 @@ pub fn hex_gutter_geometry(
 
 /// Hex gutter bar width: text precedent ka seedha reuse (12.0/6.0).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_bar_width(show_line_numbers: bool) -> f32 {
     crate::gutter::gutter_bar_width(show_line_numbers)
 }
 
 /// Font size se scaled gutter width: text precedent ka seedha reuse.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_bar_width_for_font(font_size: f32, show_line_numbers: bool) -> f32 {
     crate::gutter::gutter_bar_width_for_font(font_size, show_line_numbers)
 }
 
 /// Hex gutter text role: text precedent ka seedha reuse (Mono).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const fn hex_gutter_text_role() -> crate::theme::TypoRole {
     crate::gutter::gutter_text_role()
 }
 
 /// Hex gutter text size: text precedent ka seedha reuse (mono token).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const fn hex_gutter_text_size() -> f32 {
     crate::gutter::gutter_text_size()
 }
 
 /// Hex gutter line-height source: text precedent ka seedha reuse.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const fn hex_gutter_line_height_source() -> &'static str {
     crate::gutter::gutter_line_height_source()
 }
 
 /// Gutter-local y se grid row: text mapping ka seedha reuse.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_row_at_y(y: f32, total_rows: usize, height: f32) -> Option<usize> {
     crate::gutter::gutter_row_at_y(y, total_rows, height)
 }
 
 /// Gutter-local y se segment hit: text hit-test ka seedha reuse.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_segment_at_y(segments: &[crate::gutter::GutterSegment], y: f32) -> Option<usize> {
     crate::gutter::gutter_segment_at_y(segments, y)
 }
 
 /// Grid row se gutter-local y: text inverse mapping ka seedha reuse.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_y_for_row(row: usize, total_rows: usize, height: f32) -> Option<f32> {
     crate::gutter::gutter_y_for_row(row, total_rows, height)
 }
@@ -1229,7 +1187,6 @@ pub fn hex_gutter_y_for_row(row: usize, total_rows: usize, height: f32) -> Optio
 /// (`format_hex_offset(hex_row_start(row))` reuse). Marker alignment
 /// geometry se aati hai (row bands), ye sirf label text hai. Pure.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_row_label(row: u64) -> String {
     format_hex_offset(hex_row_start(row))
 }
@@ -1239,7 +1196,6 @@ pub fn hex_gutter_row_label(row: u64) -> String {
 /// me pehla covering hunk, warna peeche ka aakhri. Khali hunks ya
 /// out-of-range click par `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_gutter_jump_target(
     hunks: &[HexHunkView],
     total_rows: usize,
@@ -1288,7 +1244,6 @@ pub fn hex_gutter_jump_target(
 /// (`gutter_bar_width(true)`); test paint ke `HEX_MINIMAP_W` se equality
 /// lock karta hai taaki allocate rect aur hit-rect kabhi alag na hon.
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_minimap_strip_width() -> f32 {
     crate::gutter::gutter_bar_width(true) * 2.0
 }
@@ -1299,7 +1254,6 @@ pub fn hex_minimap_strip_width() -> f32 {
 /// `hex_minimap_seg_end` = `y0 + ROW_PAD` jaisa, wahi theme token, wahi
 /// 2px). Khali run, row se bahar hunk ya kharab input par `None`.
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_minimap_band_for_hunk(
     hunk: &HexHunkView,
     total_rows: u64,
@@ -1332,7 +1286,6 @@ pub fn hex_minimap_band_for_hunk(
 /// inline hunk loop isi list par aata hai (track rect + `CHANGED_BG`
 /// frozen rehte hain). Khali/kharab input par khali vec.
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_minimap_bands(total_len: u64, height: f32, hunks: &[HexHunkView]) -> Vec<(f32, f32)> {
     let total_rows = hex_row_count(total_len);
     if total_rows == 0 || !height.is_finite() || height <= 0.0 {
@@ -1351,7 +1304,6 @@ pub fn hex_minimap_bands(total_len: u64, height: f32, hunks: &[HexHunkView]) -> 
 /// Gutter `gutter_y_for_row` (usize) ka u64 grid judvaan; selection marker
 /// paint isi par lagta hai taaki marker clicked band par baithe. Wahi
 /// `None` contract. Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_minimap_y_for_row(row: u64, total_rows: u64, height: f32) -> Option<f32> {
     if total_rows == 0 || !height.is_finite() || height <= 0.0 {
         return None;
@@ -1382,7 +1334,6 @@ pub fn hex_minimap_y_for_row(row: u64, total_rows: u64, height: f32) -> Option<f
 
 /// Ek badle byte ka nibble-level cell: grid column + kaun sa nibble alag
 /// hai. Paint Grid cell isi par accent lagata hai (poori row par nahi).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HexNibbleCell {
     /// Absolute byte offset.
@@ -1397,7 +1348,6 @@ pub struct HexNibbleCell {
 
 /// Do byte values me kaun sa nibble alag hai: `(high, low)`. Barabar
 /// bytes par `(false, false)`. Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_nibbles_differ(left: u8, right: u8) -> (bool, bool) {
     (left >> 4 != right >> 4, left & 0x0F != right & 0x0F)
 }
@@ -1407,7 +1357,6 @@ pub fn hex_nibbles_differ(left: u8, right: u8) -> (bool, bool) {
 /// (saturating, kabhi panic nahi). Khali vec = is row me koi nibble antar
 /// nahi — paint poori-row accent chhodkar inhi cells par lagata hai.
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_diff_nibble_cells(row_start: u64, left: &[u8], right: &[u8]) -> Vec<HexNibbleCell> {
     let mut out = Vec::new();
     let mut col: u64 = 0;
@@ -1433,7 +1382,6 @@ pub fn hex_diff_nibble_cells(row_start: u64, left: &[u8], right: &[u8]) -> Vec<H
 
 /// Nibble cell text role: grid cells monospace paint hote hain, wahi
 /// shared mono token (koi naya token nahi). Pure; unit-tested.
-#[allow(dead_code)]
 pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
@@ -1460,7 +1408,6 @@ pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
 /// headless judvaan (220px fixed strip height). Test paint token se
 /// equality lock karta hai. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_alloc_height() -> f32 {
     220.0
 }
@@ -1469,7 +1416,6 @@ pub fn hex_minimap_alloc_height() -> f32 {
 /// `allocate_exact_size(vec2(bar_w, HEX_MINIMAP_H))` isi size par aata hai.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_alloc_size() -> egui::Vec2 {
     egui::vec2(hex_minimap_strip_width(), hex_minimap_alloc_height())
 }
@@ -1478,7 +1424,6 @@ pub fn hex_minimap_alloc_size() -> egui::Vec2 {
 /// rect + click/drag sense isi rect par hai (24px hit-rect). Pure;
 /// unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_track_rect(origin: egui::Pos2) -> egui::Rect {
     egui::Rect::from_min_size(origin, hex_minimap_alloc_size())
 }
@@ -1489,7 +1434,6 @@ pub fn hex_minimap_track_rect(origin: egui::Pos2) -> egui::Rect {
 /// (`from_min_max((min.x, y0), (max.x, min(y1, max.y)))`). Zero-area ya
 /// non-finite track, kharab input par `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_band_rect(
     track: egui::Rect,
     total_rows: u64,
@@ -1519,7 +1463,6 @@ pub fn hex_minimap_band_rect(
 /// hunk loop isi list par aata hai (track rect + `CHANGED_BG` frozen rehte
 /// hain). Kharab input par khali vec. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_band_rects(
     track: egui::Rect,
     total_len: u64,
@@ -1544,7 +1487,6 @@ pub fn hex_minimap_band_rects(
 /// kharab input par `None`). Selection marker paint isi par jump karta hai.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_minimap_row_at_pos(track: egui::Rect, total_rows: u64, pos_y: f32) -> Option<u64> {
     if total_rows == 0 || !track.height().is_finite() || track.height() <= 0.0 {
         return None;
@@ -1564,7 +1506,6 @@ pub fn hex_minimap_row_at_pos(track: egui::Rect, total_rows: u64, pos_y: f32) ->
 /// Grid paint row rect isi par bant-ta hai taaki accent sahi cell par lage.
 /// `col >= 16`, zero-area ya non-finite row par `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_nibble_cell_rect(row_rect: egui::Rect, col: u64) -> Option<egui::Rect> {
     if col >= HEX_BYTES_PER_ROW as u64 {
         return None;
@@ -1596,7 +1537,6 @@ pub fn hex_nibble_cell_rect(row_rect: egui::Rect, col: u64) -> Option<egui::Rect
 /// `None` (paint poori-row accent chhodkar inhi halves par lagata hai).
 /// Zero-area cell par `None` joda. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_nibble_accent_rects(
     cell_rect: egui::Rect,
     cell: &HexNibbleCell,
@@ -1637,7 +1577,6 @@ pub fn hex_nibble_accent_rects(
 /// paint ke paas accent karne ko kuch nahi to poori-row band bhi nahi.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_row_nibble_accent_rects(
     row_rect: egui::Rect,
     cells: &[HexNibbleCell],
@@ -1681,7 +1620,6 @@ pub fn hex_row_nibble_accent_rects(
 /// `views::hunk_covers_offset` ka views_hex-local judvaan (views_hex views
 /// par depend nahi kar sakta, isliye same semantics yahin).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 fn hex_grid_covers_offset(offset: u64, hunks: &[HexHunkView]) -> bool {
     for hunk in hunks {
         let run = (hunk.left_len).max(hunk.right_len);
@@ -1700,7 +1638,6 @@ fn hex_grid_covers_offset(offset: u64, hunks: &[HexHunkView]) -> bool {
 /// dono missing par `None`. Insertion hunk (ek side khali) isi se honest
 /// rehta hai — jo side maujood hai uske digits dikhte hain.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 fn hex_grid_cell_byte(offset: u64, left: &[u8], right: &[u8]) -> Option<u8> {
     let idx = offset.min(usize::MAX as u64) as usize;
     if let Some(byte) = left.get(idx).copied() {
@@ -1712,7 +1649,6 @@ fn hex_grid_cell_byte(offset: u64, left: &[u8], right: &[u8]) -> Option<u8> {
 /// Ek covered byte ka ASCII mark: printable `0x20..=0x7E` wahi char,
 /// warna `.` (fixture style). Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn hex_grid_ascii_mark(byte: u8) -> char {
     if (0x20..=0x7Eu8).contains(&byte) {
         byte as char
@@ -1729,7 +1665,6 @@ pub fn hex_grid_ascii_mark(byte: u8) -> char {
 /// fallback; dono missing par blank (Grid chaudai stable). Pure;
 /// unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn format_hex_grid_cells_with_bytes(
     row_start: u64,
     left: &[u8],
@@ -1770,7 +1705,6 @@ pub fn format_hex_grid_cells_with_bytes(
 /// baant-ta hai. Back-compat join (logs/tests); Grid cells use karenge.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn format_hex_grid_row_with_bytes(
     row_start: u64,
     left: &[u8],
@@ -1799,13 +1733,10 @@ pub fn format_hex_grid_row_with_bytes(
 // ----------------------------------------------------------------------------
 
 /// Hex goto bar height: find-bar precedent reuse (koi naya token nahi).
-#[allow(dead_code)]
 pub const HEX_GOTO_BAR_H: f32 = HEX_FIND_BAR_H;
 /// Hex goto field chaudai: find needle precedent reuse.
-#[allow(dead_code)]
 pub const HEX_GOTO_FIELD_W: f32 = HEX_FIND_NEEDLE_W;
 /// Hex goto badge right-end pad: find badge precedent reuse.
-#[allow(dead_code)]
 pub const HEX_GOTO_BADGE_PAD: f32 = HEX_FIND_BADGE_PAD;
 
 /// Hex goto section-label role: Body (13 default proportional).
@@ -1813,7 +1744,6 @@ pub const HEX_GOTO_BADGE_PAD: f32 = HEX_FIND_BADGE_PAD;
 /// label hint/badge (Small 11-weak) se ek step upar taaki flat hierarchy
 /// tute; input values Mono family me (field `.font(Monospace)`) taaki
 /// label-vs-input confuse na ho. Koi naya size/token/color nahi. Pure.
-#[allow(dead_code)]
 pub const fn hex_goto_label_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Body
 }
@@ -1822,7 +1752,6 @@ pub const fn hex_goto_label_text_role() -> crate::theme::TypoRole {
 /// Goto offset ruler text jaisa dikhta hai (`format_hex_offset` precedent),
 /// isliye value field Mono me taaki label(Body) vs value confuse na ho.
 /// Koi naya size/token/color nahi. Pure.
-#[allow(dead_code)]
 pub const fn hex_goto_value_text_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::Mono
 }
@@ -1832,7 +1761,6 @@ pub const fn hex_goto_value_text_role() -> crate::theme::TypoRole {
 /// `0xFF_FF` jaise paste kaam karen. Khali/invalid/overflow par `None`
 /// (kabhi panic nahi, `u64::from_str_radix` honest `None` deta hai).
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn parse_hex_goto(text: &str) -> Option<u64> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -1864,7 +1792,6 @@ pub fn parse_hex_goto(text: &str) -> Option<u64> {
 /// Goto offset ko `total_len` me clamp: valid par `Some(offset)`,
 /// khali input (`total_len == 0`) ya bahar (`offset >= total_len`) par
 /// `None` (paint bahar jump par honest no-op dikhata hai). Pure.
-#[allow(dead_code)]
 pub fn clamp_hex_goto(offset: u64, total_len: u64) -> Option<u64> {
     if total_len == 0 || offset >= total_len {
         return None;
@@ -1874,7 +1801,6 @@ pub fn clamp_hex_goto(offset: u64, total_len: u64) -> Option<u64> {
 
 /// Ek hex char ki nibble value (0..=15). Non-hex par `None`.
 /// Pure; unit-tested.
-#[allow(dead_code)]
 pub fn hex_nibble_value(ch: char) -> Option<u8> {
     ch.to_digit(16).and_then(|v| u8::try_from(v).ok())
 }
@@ -1882,7 +1808,6 @@ pub fn hex_nibble_value(ch: char) -> Option<u8> {
 /// Ek byte me ek nibble lagata hai: `high` par upper 4 bits, warna lower
 /// 4 bits; dusra nibble untouched rehta hai. Non-hex char par `None`
 /// (paint invalid keystroke honest ignore karta hai). Pure; unit-tested.
-#[allow(dead_code)]
 pub fn apply_hex_nibble(byte: u8, hex: char, high: bool) -> Option<u8> {
     let v = hex_nibble_value(hex)?;
     if high {
@@ -1897,7 +1822,6 @@ pub fn apply_hex_nibble(byte: u8, hex: char, high: bool) -> Option<u8> {
 /// (kabhi panic nahi — `usize::try_from` + `.get_mut()` only).
 /// Caller undo/history engine buffer par rakhta hai; ye paint-preview
 /// aur tests ke liye single-byte path hai. Pure.
-#[allow(dead_code)]
 pub fn edit_byte_at(bytes: &mut [u8], offset: u64, new_val: u8) -> bool {
     let idx = match usize::try_from(offset) {
         Ok(i) => i,
@@ -1918,7 +1842,6 @@ pub fn edit_byte_at(bytes: &mut [u8], offset: u64, new_val: u8) -> bool {
 /// Body-strong, value Mono family). Returns `go_clicked` — cursor/row
 /// advance caller ke locals me hota hai (App fields untouched).
 /// Wiring-pending until orchestrator wires the hex tab caller.
-#[allow(dead_code)]
 pub fn paint_hex_goto_bar(ui: &mut egui::Ui, goto_text: &mut String, badge: &str) -> bool {
     let mut go = false;
     let avail = ui.available_width();

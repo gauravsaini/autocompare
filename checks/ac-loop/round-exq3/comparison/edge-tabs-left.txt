@@ -1,0 +1,4 @@
+name	age	city
+anna	30	berlin
+café	7	naïve
+bär	5	zürich

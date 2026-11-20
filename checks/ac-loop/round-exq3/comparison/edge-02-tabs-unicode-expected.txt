@@ -1,0 +1,4 @@
+edge fixture 2: tabs-vs-spaces + unicode width probe (typography: mono 12 cells align on tab stops, umlauts never split; geometry: wrap-on caps pane at 80 chars, ellipsis clips long rows at 960 and 720 widths)
+left: checks/ac-loop/round-exq3/comparison/edge-tabs-left.txt
+right: checks/ac-loop/round-exq3/comparison/edge-tabs-right.txt
+expected: tab stops vs spaces show as changed cells (not misaligned columns), café/naïve/bär/zürich/günter/köln intact (char-boundary clip only), added günter row reads inserted

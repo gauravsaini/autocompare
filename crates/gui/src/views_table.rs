@@ -134,7 +134,6 @@ impl TableKeyView {
     /// Refreshes [`Self::suggested_keys`] from the left table. Test-only:
     /// the file-driven wiring never holds parsed tables (engine consumes
     /// paths), so only unit tests drive the headless suggestion path.
-    #[allow(dead_code)]
     pub fn suggest_for(&mut self, left: &Table) {
         self.suggested_keys = detect_key_columns(left);
     }
@@ -142,7 +141,6 @@ impl TableKeyView {
     /// Adopts the last suggestion as the selected key. Test-only: see
     /// [`Self::suggest_for`]; the file-driven wiring toggles key columns
     /// manually via [`Self::toggle_key_column`].
-    #[allow(dead_code)]
     pub fn apply_suggestion(&mut self) {
         self.key_columns = self.suggested_keys.clone();
     }
@@ -187,7 +185,6 @@ impl TableKeyView {
     /// Compares two cells under this view's tolerant options. Test-only:
     /// runtime cell comparison runs inside the engine diff; unit tests
     /// probe the view's tolerance folding through this wrapper.
-    #[allow(dead_code)]
     pub fn cells_equal(&self, left: &str, right: &str) -> bool {
         cells_equal_with_options(left, right, &self.to_compare_options())
     }
@@ -195,7 +192,6 @@ impl TableKeyView {
     /// Runs the key-aligned diff over two parsed tables and records
     /// the summary. Pure and total. Test-only: see [`Self::suggest_for`];
     /// the file-driven wiring summarizes via [`summarize`] on engine output.
-    #[allow(dead_code)]
     pub fn refresh(&mut self, left: &Table, right: &Table) {
         let opts = self.to_compare_options();
         let diff = diff_table_by_key_with_options(left, right, &opts);
@@ -292,7 +288,6 @@ pub fn table_key_badge_label(view: &TableKeyView) -> String {
 /// `positional_note()` reuse, koi naya wording nahi). Caller signature
 /// stable rehti hai (table tab wiring isi ko chalati hai).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
     let avail = ui.available_width();
     let mut clicked: Option<usize> = None;
@@ -345,17 +340,14 @@ pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &
 /// Upper bound for ek column ki char width, taaki ek lambi cell poori
 /// grid ko faila na de. Paint isse aage ka text kaat kar dikhaye.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const TABLE_MAX_COL_CHARS: usize = 32;
 
 /// Minimum column width taaki header kabhi dab na jaye.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const TABLE_MIN_COL_CHARS: usize = 3;
 
 /// Ek cell ka grid position: data-row index plus column index.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TableCellCursor {
     /// Data row (header ko count nahi karta).
@@ -365,7 +357,6 @@ pub struct TableCellCursor {
 }
 
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 impl TableCellCursor {
     /// Grid dimensions ke andar cursor, warna `None`.
     pub fn clamp(self, row_count: usize, col_count: usize) -> Option<Self> {
@@ -412,7 +403,6 @@ impl TableCellCursor {
 /// Column widths chars me: har column ka max(header, cells), min par
 /// floor aur max par cap. Kabhi khali nahi jab header khali nahi.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_column_widths(header: &[String], rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths: Vec<usize> = Vec::new();
     for cell in header.iter() {
@@ -443,7 +433,6 @@ pub fn table_column_widths(header: &[String], rows: &[Vec<String>]) -> Vec<usize
 /// kat-ta hai taaki columns align rahen. Char-based hai taaki
 /// multibyte text par bhi column na tute.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn pad_table_cell(text: &str, width: usize) -> String {
     let capped: String = text.chars().take(width.max(1)).collect();
     let len = capped.chars().count();
@@ -473,7 +462,6 @@ pub fn pad_table_row(cells: &[String], widths: &[usize]) -> Vec<String> {
 
 /// Header row ka display text, widths ke hisab se padded.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn format_table_header(header: &[String], widths: &[usize]) -> Vec<String> {
     let mut out = Vec::new();
     for (idx, cell) in header.iter().enumerate() {
@@ -486,7 +474,6 @@ pub fn format_table_header(header: &[String], widths: &[usize]) -> Vec<String> {
 /// Data cell ka display text: missing cell `-` dikhta hai taaki ragged
 /// rows me bhi columns align rahen.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_cell_display(rows: &[Vec<String>], pos: TableCellCursor) -> Option<String> {
     let row = rows.get(pos.row)?;
     let width_hint = row.len().max(1);
@@ -512,7 +499,6 @@ fn table_cell_contains(cell: &str, needle: &str, ignore_case: bool) -> bool {
 /// Agli cell `(row, col)` jisme needle hai, `from_row` se (inclusive),
 /// row-major order me, wrap ke saath. Khali needle/rows par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_next(
     rows: &[Vec<String>],
     needle: &str,
@@ -539,7 +525,6 @@ pub fn table_find_next(
 /// Pichhli cell `(row, col)` jisme needle hai, `from_row` se peeche
 /// (exclusive), wrap ke saath. Khali needle/rows par `None`.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_prev(
     rows: &[Vec<String>],
     needle: &str,
@@ -681,7 +666,6 @@ pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str)
 /// Table find underline width (px): `INTRA_SPAN_UNDERLINE_W` precedent
 /// mirror (`views.rs`), same value — koi naya size/token nahi.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub const TABLE_FIND_UNDERLINE_W: f32 = 1.0;
 
 /// Ek cell me needle ke char-index spans: `(start, end)` char offsets,
@@ -689,7 +673,6 @@ pub const TABLE_FIND_UNDERLINE_W: f32 = 1.0;
 /// matches allowed (har char offset se ek window). Case-fold ascii-only hai
 /// taaki indices multibyte text par bhi sahi rahen. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_cell_spans(cell: &str, needle: &str, ignore_case: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if needle.is_empty() {
@@ -724,7 +707,6 @@ pub fn table_find_cell_spans(cell: &str, needle: &str, ignore_case: bool) -> Vec
 /// Ek row ki sab hits `(col, start, end)` me, column order me.
 /// `table_find_match_rows` ka span judvaan. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_row_spans(
     cells: &[String],
     needle: &str,
@@ -749,7 +731,6 @@ pub fn table_find_row_spans(
 /// cells me nahi hilte (`table_find_span_in_padded` sirf cap par clamp
 /// karta hai). Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_grid_spans(
     rows: &[Vec<String>],
     needle: &str,
@@ -771,7 +752,6 @@ pub fn table_find_grid_spans(
 /// (`table_find_current_cell`); `None` par koi current nahi (sab other).
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_is_current(found: (usize, usize), current: Option<(usize, usize)>) -> bool {
     match current {
         Some(at) => at == found,
@@ -783,7 +763,6 @@ pub fn table_find_is_current(found: (usize, usize), current: Option<(usize, usiz
 /// Khali list par `None`; bada cursor wrap hota hai (modulo, saturating).
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_current_cell(
     matches: &[(usize, usize)],
     cursor: usize,
@@ -798,7 +777,6 @@ pub fn table_find_current_cell(
 /// spans nahi hilte; cap (`TABLE_MAX_COL_CHARS`) ke bahar ka hissa kat-ta
 /// hai, poora bahar ho to `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_span_in_padded(start: usize, end: usize, width: usize) -> Option<(usize, usize)> {
     if start >= end || start >= width {
         return None;
@@ -811,7 +789,6 @@ pub fn table_find_span_in_padded(start: usize, end: usize, width: usize) -> Opti
 /// grid se aati hai, isliye key-col highlight kabhi column se bahar nahi
 /// jata. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_hit_in_key_col(view: &TableKeyView, col: usize) -> bool {
     is_key_column(view, col)
 }
@@ -822,7 +799,6 @@ pub fn table_find_hit_in_key_col(view: &TableKeyView, col: usize) -> bool {
 /// distinct. `TABLE_FIND_UNDERLINE_W` reuse, koi naya token/color nahi.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_hit_format(
     font_id: egui::FontId,
     fg: egui::Color32,
@@ -848,7 +824,6 @@ pub fn table_find_hit_format(
 /// ke barabar rahe. Headless-first: `LayoutJob` ctx ke bina banta hai,
 /// isliye unit-test me sections inspect hote hain. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_cell_job(
     cell: &str,
     needle: &str,
@@ -1001,7 +976,6 @@ pub struct TableCellStyle {
 /// Ek key-aware grid cell: mono hamesha, key col par strong (header +
 /// key-bar selected precedent, koi naya color nahi).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_key_cell(ui: &mut egui::Ui, view: &TableKeyView, cell: &str, col: usize) {
     let mut rich = egui::RichText::new(cell).monospace();
     if is_key_column(view, col) {
@@ -1014,7 +988,6 @@ pub fn paint_table_key_cell(ui: &mut egui::Ui, view: &TableKeyView, cell: &str, 
 /// `table_find_cell_job` LayoutJob (current block, others
 /// `TABLE_FIND_UNDERLINE_W` line).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_find_cell(
     ui: &mut egui::Ui,
     cell: &str,
@@ -1042,7 +1015,6 @@ pub fn paint_table_find_cell(
 /// precedence — hit jeetta hai, key bar/badge identity rakhte hain).
 /// `row`/`col` grid coords hain (data-row index + column index).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_data_cell(
     ui: &mut egui::Ui,
     view: &TableKeyView,
@@ -1079,7 +1051,6 @@ pub fn paint_table_data_cell(
 /// single-string fallback (views.rs fallback precedent — column geometry
 /// header ke bina undefined hai).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_cell_grid(
     ui: &mut egui::Ui,
     view: &mut TableKeyView,
@@ -1159,7 +1130,6 @@ pub const fn table_section_label_text_role() -> TypoRole {
 /// (honest — data grid khud empty note dikhata hai). `TABLE_CELL_GRID_ID`
 /// ko chhoota nahi (header ka apna id, compose me takrao nahi).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[usize]) {
     if header.is_empty() {
         return;
@@ -1186,7 +1156,6 @@ pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[us
 /// [`table_header_text_role`] strong me (BR wave me, `views.rs`
 /// NO-TOUCH is wave me). Koi naya size/token nahi. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_column_letter(col: usize) -> String {
     let mut out = String::new();
     let mut n = col.saturating_add(1);
@@ -1204,7 +1173,6 @@ pub fn table_column_letter(col: usize) -> String {
 /// (gutter `gutter_text_role` precedent — wahan se copy nahi, sirf role
 /// reuse). Koi naya size/token nahi. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_row_gutter_label(row: usize) -> String {
     row.saturating_add(1).to_string()
 }
@@ -1214,7 +1182,6 @@ pub fn table_row_gutter_label(row: usize) -> String {
 /// [`TablePager::page_count`] + [`TablePager::visible_range`] reuse,
 /// saturating only. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn format_table_page_label(pager: TablePager) -> String {
     let per_page = pager.rows_per_page.max(1);
     let page = pager.top.saturating_div(per_page).saturating_add(1);
@@ -1228,7 +1195,6 @@ pub fn format_table_page_label(pager: TablePager) -> String {
 /// Caller cursor/pager advance App state me karta hai
 /// (`table_find_next_row` / `pager.next_page` precedent). Copy; unit-tested
 /// defaults.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TableToolbarAction {
     /// Find Prev daba (needle cursor peeche).
@@ -1251,7 +1217,6 @@ pub struct TableToolbarAction {
 /// small weak me, page label Small role me (status precedent). Returns
 /// find + page clicks.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn paint_table_toolbar(
     ui: &mut egui::Ui,
     needle: &mut String,
@@ -1300,7 +1265,6 @@ pub fn paint_table_toolbar(
 
 /// Table input source: path extension se (engine `detect_table_delimiter`
 /// + `Workbook::from_xlsx` ka GUI-side judvaan — parse yahan nahi hota).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TableSourceKind {
     /// Comma-delimited (`.csv` ya default).
@@ -1317,7 +1281,6 @@ pub enum TableSourceKind {
 /// Path se source kind: extension lowercase karke (`tsv`/`tab` -> Tsv,
 /// `xlsx` -> Xlsx, `csv` -> Csv, baaki/empty -> Unknown). Query/params
 /// nahi hat-te (dialog paths hamesha plain hote hain). Pure.
-#[allow(dead_code)]
 pub fn table_source_kind_for_path(path: &str) -> TableSourceKind {
     let trimmed = path.trim();
     let ext = trimmed.rsplit('.').next().unwrap_or("").trim();
@@ -1339,7 +1302,6 @@ pub fn table_source_kind_for_path(path: &str) -> TableSourceKind {
 /// Source ka field delimiter: Tsv par tab, baaki par comma (xlsx sheets
 /// engine parse karta hai — delimiter wahan irrelevant hai, badge honest
 /// `xlsx` rehta hai). Pure.
-#[allow(dead_code)]
 pub fn table_delimiter_for_source(kind: TableSourceKind) -> char {
     match kind {
         TableSourceKind::Tsv => '\t',
@@ -1349,7 +1311,6 @@ pub fn table_delimiter_for_source(kind: TableSourceKind) -> char {
 
 /// Source badge text sheet bar ke right-end ke liye: `csv`/`tsv`/`xlsx`/
 /// unknown par `auto`. Pure.
-#[allow(dead_code)]
 pub fn table_source_badge_label(kind: TableSourceKind) -> &'static str {
     match kind {
         TableSourceKind::Csv => "csv",
@@ -1360,40 +1321,33 @@ pub fn table_source_badge_label(kind: TableSourceKind) -> &'static str {
 }
 
 /// Sheet selector bar height: key-bar precedent reuse (koi naya token nahi).
-#[allow(dead_code)]
 pub const TABLE_SHEET_BAR_H: f32 = TABLE_KEY_BAR_H;
 /// Sheet buttons ke beech gap: key-col gap precedent reuse.
-#[allow(dead_code)]
 pub const TABLE_SHEET_COL_GAP: f32 = TABLE_KEY_COL_GAP;
 /// Sheet badge right-end pad: key badge precedent reuse.
-#[allow(dead_code)]
 pub const TABLE_SHEET_BADGE_PAD: f32 = TABLE_KEY_BADGE_PAD;
 
 /// Sheet bar section-label role: Body (key-bar label precedent reuse).
 /// Paint-side `.strong()` composition; hint/badge Small se ek step upar.
 /// Koi naya size/token/color nahi. Pure.
-#[allow(dead_code)]
 pub const fn table_sheet_label_text_role() -> TypoRole {
     TypoRole::Body
 }
 
 /// Sheet name role: Mono (key-bar cell precedent reuse — selected par
 /// `.strong()` composition, plain par mono). Koi naya size/token nahi.
-#[allow(dead_code)]
 pub const fn table_sheet_value_text_role() -> TypoRole {
     TypoRole::Mono
 }
 
 /// Sheet names ki ginti (workbook sheets ya single csv/tsv par 1).
 /// Khali par 0 (paint honest empty note dikhata hai). Pure.
-#[allow(dead_code)]
 pub fn table_sheet_count(names: &[String]) -> usize {
     names.len()
 }
 
 /// Sheet index clamp: valid par `Some(index)`, khali/out-of-range par
 /// `None` (paint bahar select par honest no-op). Pure.
-#[allow(dead_code)]
 pub fn table_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
     if names.get(index).is_some() {
         Some(index)
@@ -1404,7 +1358,6 @@ pub fn table_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
 
 /// Sheet label text: `names[index]` ka clone, OOB par `None`.
 /// Pure.
-#[allow(dead_code)]
 pub fn table_sheet_label(names: &[String], index: usize) -> Option<String> {
     names.get(index).cloned()
 }
@@ -1417,7 +1370,6 @@ pub fn table_sheet_label(names: &[String], index: usize) -> Option<String> {
 /// Selection caller ke `&mut Option<usize>` me likhti hai (App fields
 /// untouched); `None` = koi sheet select nahi (honest empty).
 /// Wiring-pending until orchestrator wires the table tab caller.
-#[allow(dead_code)]
 pub fn paint_table_sheet_bar(
     ui: &mut egui::Ui,
     selected: &mut Option<usize>,
@@ -1475,7 +1427,6 @@ pub fn paint_table_sheet_bar(
 /// rect. `char_w` yahan nahi — `col_widths_px` caller px me deta hai
 /// (font measure paint-side rehta hai). Pure data; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TableCellRect {
     /// Left edge px.
@@ -1493,7 +1444,6 @@ pub struct TableCellRect {
 /// struct me bandhne se call-sites 4 args me rehte hain (clippy
 /// `too_many_arguments` bina `allow` ke clean). Pure data; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TableCellGrid {
     /// Grid top-left x px.
@@ -1514,7 +1464,6 @@ pub struct TableCellGrid {
 /// (non-finite, `row_h <= 0`, negative gap, range-bahar `col`) par
 /// `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_cell_rect(
     grid: TableCellGrid,
     col: usize,
@@ -1564,7 +1513,6 @@ pub fn table_cell_rect(
 /// Caller `is_key_column` se gate karta hai (geometry khud neutral hai).
 /// Khali grid ya range-bahar col par `None`. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_key_col_box_rect(
     grid: TableCellGrid,
     col: usize,
@@ -1597,7 +1545,6 @@ pub fn table_key_col_box_rect(
 /// `is_key_column` ka box judvaan — paint isi list par key boxes draw
 /// karta hai. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_key_box_rects(
     view: &TableKeyView,
     grid: TableCellGrid,
@@ -1620,7 +1567,6 @@ pub fn table_key_box_rects(
 /// (cap ke bahar/ulta par `None`). Kharab `char_w`/cell par `None`.
 /// Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_underline_rect(
     cell: TableCellRect,
     span_start: usize,
@@ -1673,7 +1619,6 @@ pub fn table_find_underline_rect(
 /// hote hain. `table_find_row_spans`/`table_find_grid_spans` ke `(start,
 /// end)` isi me aate hain. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_find_underline_rects_for_cell(
     cell: TableCellRect,
     spans: &[(usize, usize)],
@@ -1704,7 +1649,6 @@ pub fn table_find_underline_rects_for_cell(
 
 /// Per-row merge choice: kaunsi side ki row rakhi jaye.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TableMergeSide {
     /// Left row rakho.
@@ -1717,7 +1661,6 @@ pub enum TableMergeSide {
 /// Ek row ka merge result: chosen side ki cells. `None` side matlab
 /// orphan ka missing side: dusri side milti hai; dono `None` par khali row.
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 pub fn table_resolve_row(
     left_row: Option<&[String]>,
     right_row: Option<&[String]>,
@@ -1739,7 +1682,6 @@ pub fn table_resolve_row(
 
 /// Page-wise scroll state ek table grid ke liye (header fixed rehta hai).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TablePager {
     /// Kul data rows (header ko count nahi karta).
@@ -1751,7 +1693,6 @@ pub struct TablePager {
 }
 
 /// Test-only until paint wiring lands (orchestrator owns paint).
-#[allow(dead_code)]
 impl TablePager {
     /// Naya pager: page size kam se kam 1, top 0.
     pub fn new(total_rows: usize, rows_per_page: usize) -> Self {

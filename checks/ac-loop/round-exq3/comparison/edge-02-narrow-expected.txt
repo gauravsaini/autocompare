@@ -1,0 +1,4 @@
+edge fixture 2: narrow-viewport + table-row typo probe (geometry: 720 fallback budget 12+340+4+340+16+8=720 via dual_pane_widths; typo: filter/status roles Body>Small)
+left: checks/ac-loop/round-exq3/comparison/edge-02-table-left.txt
+right: checks/ac-loop/round-exq3/comparison/edge-02-table-right.txt
+expected: ellipsis clip only, gutter bands honest, no raw mid-glyph cut at 720

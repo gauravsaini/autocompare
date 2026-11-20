@@ -4,7 +4,6 @@
 //! requiring an interactive window or display server.
 
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
 
 use crate::gutter::GUTTER_SEGMENT_MIN_H;
 use crate::home::{
@@ -213,6 +212,9 @@ fn render_fixture_png_routed(out_path: &Path) -> Result<(), String> {
         Some(name) => name.to_lowercase(),
         None => String::new(),
     };
+    if lower.contains("narrow") {
+        return render_narrow_text_fixture_png(out_path);
+    }
     if lower.contains("accent") {
         return render_text_accent_fixture_png(out_path);
     }
@@ -614,6 +616,242 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
     }
     std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+/// Renders the 720px fallback text fixture on the shared headless
+/// budget ([`crate::theme::VIEWPORT_MIN_W`] wide,
+/// [`crate::viewmodel::dual_pane_widths`] panes, gutter [`GUTTER_W`]).
+/// Every pane string passes `clip_to_width` (ellipsis, never a raw
+/// mid-glyph cut); word accents stay on the 960 route, bands + gutter +
+/// chrome are the fallback proof. Colors frozen.
+pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
+    let width = crate::theme::VIEWPORT_MIN_W;
+    let height = SNAP_H;
+    let dims = (width, height);
+    let total_pixels = match (width as usize).checked_mul(height as usize) {
+        Some(p) => p,
+        None => return Err("dimension overflow".to_string()),
+    };
+    let byte_count = match total_pixels.checked_mul(4) {
+        Some(b) => b,
+        None => return Err("byte count overflow".to_string()),
+    };
+    let mut pixels = vec![0u8; byte_count];
+    paint_chrome(
+        &mut pixels,
+        dims,
+        "fixtures/left.rs <--> fixtures/right.rs - Text (720 fallback)",
+        1,
+    );
+
+    // Compact path row: one summary box, ellipsis-clipped to the canvas.
+    let summary = crate::viewmodel::clip_to_width(
+        "fixtures/left.rs <--> fixtures/right.rs",
+        width.saturating_sub(24),
+        text_width,
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (OUTER_PAD, 76, width.saturating_sub(24), 24),
+        [45, 45, 45, 255],
+    );
+    draw_string(
+        &mut pixels,
+        dims,
+        OUTER_PAD.saturating_add(8),
+        82,
+        &summary,
+        fixture_palette().text,
+    );
+
+    draw_string(
+        &mut pixels,
+        dims,
+        16,
+        104,
+        "[Swap Sides] [Reload/Recompare] [x] Word Wrap [x] Line Numbers [x] Syntax",
+        fixture_palette().text,
+    );
+
+    let (left_w, right_w) = crate::viewmodel::dual_pane_widths(width, 0.50);
+    let left_x = OUTER_PAD;
+    let right_x = left_x.saturating_add(left_w).saturating_add(PANE_GAP);
+    let gutter_x = right_x.saturating_add(right_w);
+    let text_budget = left_w.saturating_sub(32);
+    let pane_top = 124u32;
+    let pane_bottom = 560u32;
+    let pane_height = pane_bottom.saturating_sub(pane_top);
+    fill_rect(
+        &mut pixels,
+        dims,
+        (left_x, pane_top, left_w, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (right_x, pane_top, right_w, pane_height),
+        [22, 22, 22, 255],
+    );
+    fill_rect(
+        &mut pixels,
+        dims,
+        (gutter_x, pane_top, GUTTER_W, pane_height),
+        [32, 32, 32, 255],
+    );
+
+    let rows = vec![
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(1),
+            right_no: Some(1),
+            left: "use std::path::Path;".to_string(),
+            right: "use std::path::Path;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(2),
+            right_no: Some(2),
+            left: "    let content = read_to_string(path)?;".to_string(),
+            right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Deleted,
+            left_no: Some(3),
+            right_no: None,
+            left: "    let legacy_flag = true;".to_string(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Inserted,
+            left_no: None,
+            right_no: Some(3),
+            left: String::new(),
+            right: "    validate_safe_path(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+        TextRow {
+            kind: TextRowKind::Equal,
+            left_no: Some(4),
+            right_no: Some(4),
+            left: "    Ok(content.len())".to_string(),
+            right: "    Ok(content.len())".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        },
+    ];
+
+    let row_h = ROW_H;
+    for (i, row) in rows.iter().enumerate() {
+        let y = pane_top.saturating_add((i as u32).saturating_mul(row_h));
+        if y.saturating_add(row_h) > pane_bottom {
+            break;
+        }
+        let (left_bg, left_fg, right_bg, right_fg) = match row.kind {
+            TextRowKind::Equal => (
+                fixture_palette().bg,
+                fixture_palette().text,
+                fixture_palette().bg,
+                fixture_palette().text,
+            ),
+            TextRowKind::Changed => (CHANGED_BG, CHANGED_FG, CHANGED_BG, CHANGED_FG),
+            TextRowKind::Deleted => (
+                DELETED_BG,
+                DELETED_FG,
+                fixture_palette().bg,
+                fixture_palette().dim,
+            ),
+            TextRowKind::Inserted => (
+                fixture_palette().bg,
+                fixture_palette().dim,
+                INSERTED_BG,
+                INSERTED_FG,
+            ),
+        };
+        let left_shown = crate::viewmodel::clip_to_width(&row.left, text_budget, text_width);
+        let right_shown = crate::viewmodel::clip_to_width(&row.right, text_budget, text_width);
+        fill_rect(&mut pixels, dims, (left_x, y, left_w, row_h), left_bg);
+        if let Some(no) = row.left_no {
+            draw_string(
+                &mut pixels,
+                dims,
+                left_x.saturating_add(4),
+                y.saturating_add(6),
+                &format!("{no:>2} "),
+                fixture_palette().dim,
+            );
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            left_x.saturating_add(32),
+            y.saturating_add(6),
+            &left_shown,
+            left_fg,
+        );
+        fill_rect(&mut pixels, dims, (right_x, y, right_w, row_h), right_bg);
+        if let Some(no) = row.right_no {
+            draw_string(
+                &mut pixels,
+                dims,
+                right_x.saturating_add(4),
+                y.saturating_add(6),
+                &format!("{no:>2} "),
+                fixture_palette().dim,
+            );
+        }
+        draw_string(
+            &mut pixels,
+            dims,
+            right_x.saturating_add(32),
+            y.saturating_add(6),
+            &right_shown,
+            right_fg,
+        );
+    }
+
+    let geom = gutter_geometry(rows.len(), pane_height as f32, &rows);
+    for seg in geom.segments {
+        let seg_y = pane_top.saturating_add(seg.y_start as u32);
+        let seg_h = ((seg.y_end - seg.y_start) as u32).max(GUTTER_SEGMENT_MIN_H as u32);
+        let seg_color = match seg.kind {
+            TextRowKind::Equal => fixture_palette().panel,
+            TextRowKind::Changed => CHANGED_BG,
+            TextRowKind::Deleted => DELETED_BG,
+            TextRowKind::Inserted => INSERTED_BG,
+        };
+        fill_rect(
+            &mut pixels,
+            dims,
+            (gutter_x, seg_y, GUTTER_W, seg_h),
+            seg_color,
+        );
+    }
+
+    paint_status(
+        &mut pixels,
+        dims,
+        "720 fallback: 5 rows, bands + gutter honest, text ellipsis-clipped",
+    );
+    let image = RgbaImage {
+        width,
+        height,
+        pixels,
+    };
+    let png_bytes = encode_png(&image).ok_or_else(|| "PNG encode failed".to_string())?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(out_path, png_bytes).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -3629,7 +3867,8 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
     fill_rect(pixels, dims, (12, 12, 12, 12), [255, 95, 87, 255]);
     fill_rect(pixels, dims, (32, 12, 12, 12), [254, 188, 46, 255]);
     fill_rect(pixels, dims, (52, 12, 12, 12), [40, 201, 64, 255]);
-    draw_string(pixels, dims, 80, 14, title, fixture_palette().text);
+    let title_shown = crate::viewmodel::clip_to_width(title, width.saturating_sub(88), text_width);
+    draw_string(pixels, dims, 80, 14, &title_shown, fixture_palette().text);
 
     fill_rect(pixels, dims, (0, TITLE_H, width, TAB_H), [32, 32, 32, 255]);
     // Highlight box per active tab.
@@ -3782,7 +4021,8 @@ fn paint_chrome(pixels: &mut [u8], dims: (u32, u32), title: &str, active: u8) {
 fn paint_status(pixels: &mut [u8], dims: (u32, u32), line: &str) {
     let width = dims.0;
     fill_rect(pixels, dims, (0, 570, width, STATUS_H), [32, 32, 32, 255]);
-    draw_string(pixels, dims, 16, 578, line, fixture_palette().dim);
+    let line_shown = crate::viewmodel::clip_to_width(line, width.saturating_sub(24), text_width);
+    draw_string(pixels, dims, 16, 578, &line_shown, fixture_palette().dim);
 }
 
 fn fill_rect(pixels: &mut [u8], dims: (u32, u32), rect: (u32, u32, u32, u32), color: [u8; 4]) {
@@ -3867,7 +4107,7 @@ fn text_width(s: &str) -> u32 {
 }
 
 /// Count of non-empty columns in a 5-wide pattern (readability probe helper).
-fn nonzero_columns(pattern: &[u8; 5]) -> usize {
+pub fn nonzero_columns(pattern: &[u8; 5]) -> usize {
     pattern.iter().filter(|c| **c != 0).count()
 }
 
@@ -4299,6 +4539,40 @@ mod tests {
     }
 
     #[test]
+    fn narrow_fixture_uses_shared_headless_budget() {
+        // Fallback geometry comes from the theme + viewmodel budget, not
+        // local magic: 720 wide, 340/340 panes, gutter + margins close.
+        assert_eq!(crate::theme::VIEWPORT_MIN_W, 720);
+        assert_eq!(crate::viewmodel::dual_pane_widths(720, 0.50), (340, 340));
+        let (left_w, right_w) = crate::viewmodel::dual_pane_widths(720, 0.50);
+        let gutter_x = OUTER_PAD
+            .saturating_add(left_w)
+            .saturating_add(PANE_GAP)
+            .saturating_add(right_w);
+        assert_eq!(gutter_x.saturating_add(GUTTER_W).saturating_add(8), 720);
+        // Clipped pane text always fits its budget; short rows untouched.
+        let budget = left_w.saturating_sub(32);
+        let wide: String = "W".repeat(100);
+        let shown = crate::viewmodel::clip_to_width(&wide, budget, text_width);
+        assert!(text_width(&shown) <= budget);
+        assert!(shown.ends_with("..."));
+        let short = "    Ok(content.len())";
+        assert_eq!(
+            crate::viewmodel::clip_to_width(short, budget, text_width),
+            short
+        );
+    }
+
+    #[test]
+    fn narrow_fixture_renders_valid_png() {
+        let out = std::env::temp_dir().join("vis-ao-narrow-fixture.png");
+        assert!(render_narrow_text_fixture_png(&out).is_ok());
+        let bytes = std::fs::read(&out).unwrap_or_default();
+        assert!(!bytes.is_empty());
+        assert!(png_magic_ok(&bytes));
+    }
+
+    #[test]
     fn draw_string_returns_pen_and_clips_safely() {
         let dims = (20u32, 10u32);
         let total = 20usize.saturating_mul(10).saturating_mul(4);
@@ -4308,6 +4582,25 @@ mod tests {
         // Pen near the right edge clips glyph pixels but still advances.
         let edge = draw_string(&mut pixels, dims, 19, 1, "Hi.", fixture_palette().text);
         assert_eq!(edge, 19u32.saturating_add(text_width("Hi.")));
+        assert_eq!(pixels.len(), total);
+    }
+
+    #[test]
+    fn paint_chrome_clips_long_title_without_oob_write() {
+        let dims = (200u32, 68u32);
+        let total = 200usize.saturating_mul(68).saturating_mul(4);
+        let mut pixels = vec![0u8; total];
+        paint_chrome(
+            &mut pixels,
+            dims,
+            "a very long session title <--> that must never paint past the canvas edge",
+            1,
+        );
+        paint_status(
+            &mut pixels,
+            dims,
+            "a very long status line that must ellipsis-clip instead of raw-cutting pixels",
+        );
         assert_eq!(pixels.len(), total);
     }
 

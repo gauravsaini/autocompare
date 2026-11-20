@@ -11,18 +11,8 @@
 
 #![forbid(unsafe_code)]
 
-mod app;
-mod copy;
-mod gutter;
-mod home;
-mod screenshot;
-mod take;
-mod theme;
-mod tree;
-mod viewmodel;
-mod views;
-mod views_hex;
-mod views_table;
+use autocompare_gui::theme::{VIEWPORT_H, VIEWPORT_MIN_H, VIEWPORT_MIN_W, VIEWPORT_W};
+use autocompare_gui::{app, screenshot};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -68,7 +58,10 @@ fn main() {
     };
 
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default().with_title("Home - autocompare"),
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_title("Home - autocompare")
+            .with_inner_size([VIEWPORT_W as f32, VIEWPORT_H as f32])
+            .with_min_inner_size([VIEWPORT_MIN_W as f32, VIEWPORT_MIN_H as f32]),
         ..Default::default()
     };
     if let Err(err) = eframe::run_native(

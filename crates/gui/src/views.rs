@@ -72,7 +72,10 @@ const MIN_THIRD: f32 = 130.0;
 /// `viewmodel` directly. Per-run state only (lives on `App`, no
 /// filesystem writes).
 pub use crate::viewmodel::{SPLIT_DEFAULT_FRACTION, clamp_split_fraction, split_apply_drag};
-const SPLIT_HANDLE_W: f32 = 8.0;
+/// Split grab-strip width: single source is the headless hit model
+/// ([`crate::viewmodel::SPLIT_HANDLE_HIT_W`]) so paint and hit math
+/// never drift; [`SPLIT_HIT_W`] aliases this below.
+const SPLIT_HANDLE_W: f32 = crate::viewmodel::SPLIT_HANDLE_HIT_W;
 
 // Exquisite geometry tokens (px): every magic offset lives here so
 // text/table/folder painters share one rhythm. Colors out of scope.
@@ -141,7 +144,6 @@ pub fn indented_content(line: &str) -> String {
 /// Equal half width for two path fields sharing one row.
 /// Kept as the centered wrapper over [`split_field_widths`]; new
 /// paint code goes through the draggable split instead.
-#[allow(dead_code)]
 pub fn half_field_width(avail: f32) -> f32 {
     split_field_widths(avail, SPLIT_DEFAULT_FRACTION).0
 }
@@ -335,11 +337,25 @@ pub fn chrome_status_role() -> TypoRole {
     TypoRole::chrome_status()
 }
 
+/// Status verdict role: Body (13 default proportional) — one step above
+/// the side counts so the mid verdict reads first. Size + family carry
+/// the hierarchy (color frozen). Single source is
+/// [`viewmodel::status_verdict_text_role`]. Pure; unit-tested.
+pub fn status_verdict_role() -> TypoRole {
+    viewmodel::status_verdict_text_role()
+}
+
+/// Status side role: Small (11 weak proportional, tabular intent) —
+/// counts + hints stay one step below the verdict. Single source is
+/// [`viewmodel::status_side_text_role`]. Pure; unit-tested.
+pub fn status_side_role() -> TypoRole {
+    viewmodel::status_side_text_role()
+}
+
 /// Paint-applied Home title size: routes through the home contract
 /// so paint stays in sync headlessly. Test-only since typo adoption
 /// (paint `TypoRole::HomeTitle.rich` directly); unit tests lock the
 /// contract here.
-#[allow(dead_code)] // test-only since typo adoption
 pub fn home_title_paint_size() -> f32 {
     home_card_title_size()
 }
@@ -347,7 +363,6 @@ pub fn home_title_paint_size() -> f32 {
 /// Whether the Home description paints small + weak. Test-only since
 /// typo adoption (paint branches on this but renders
 /// `TypoRole::HomeDesc.rich`); unit tests lock the contract here.
-#[allow(dead_code)] // test-only since typo adoption
 pub fn home_desc_paint_is_small_weak() -> bool {
     home_card_desc_is_small_weak()
 }
@@ -355,7 +370,6 @@ pub fn home_desc_paint_is_small_weak() -> bool {
 /// Paint-applied Home button size (body scale). Test-only since typo
 /// adoption (paint `TypoRole::HomeButton.rich` directly); unit tests
 /// lock the contract here.
-#[allow(dead_code)] // test-only since typo adoption
 pub fn home_button_paint_size() -> f32 {
     home_card_button_size()
 }
@@ -409,7 +423,6 @@ pub const TOOLBAR_RELOAD_GLYPH: &str = "▶";
 
 /// Icon-to-label gap (px): [`TIGHT_GAP`] reuse taaki glyph + label
 /// toolbar item rhythm par baithe. Koi naya size nahi; pure; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn toolbar_icon_gap() -> f32 {
     TIGHT_GAP
 }
@@ -447,7 +460,6 @@ pub fn toolbar_reload_label() -> String {
 /// Session toolbar hit: Swap vs Reload. Caller (`App`, agle wave) is par
 /// swap/run chalata hai; [`SessionAction`] precedent — paint sirf emit
 /// karta hai, mutate nahi. Pure shape; unit-tested.
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ToolbarAction {
     /// Koi hit nahi (default).
@@ -465,12 +477,11 @@ pub enum ToolbarAction {
 /// [`session_toolbar_button_size`] (min_size taaki chhote labels bhi poori
 /// ungli se lagen). `enabled` false par dono grey (App `toolbar_active`
 /// mirror: Home par off).
-#[allow(dead_code)] // App call-site wiring agle wave ka hai; tab tak tests live rakhte hain
 pub fn paint_session_toolbar(ui: &mut Ui, enabled: bool) -> ToolbarAction {
     let (tool_w, tool_h) = session_toolbar_button_size();
     let mut hit = ToolbarAction::None;
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = TIGHT_GAP;
+        ui.spacing_mut().item_spacing.x = toolbar_icon_gap();
         if ui
             .add_enabled(
                 enabled,
@@ -560,7 +571,6 @@ pub fn home_paint_grid_columns() -> usize {
 /// Paint-applied gutter width at the mono scale: reproduces 12/6 via
 /// [`gutter_bar_width_for_font`]. Legacy bar lock (ruler ab 16/8 contract
 /// par hai); `GUTTER_W` parity tests isi par hain.
-#[allow(dead_code)] // Legacy chrome lock; ruler contract `text_minimap_ruler_width` par gaya
 pub fn text_gutter_paint_width(show_line_numbers: bool) -> f32 {
     gutter_bar_width_for_font(TYPO_MONO_SIZE, show_line_numbers)
 }
@@ -665,7 +675,6 @@ pub fn paint_home(ui: &mut Ui, tab: &mut Tab) {
 /// base samahit, dono paths khali par sirf session kind (clip ka jhooth
 /// nahi — khali list rows kabhi fake paths nahi dikhati). Pure;
 /// unit-tested.
-#[allow(dead_code)] // App call-site wiring (history + now_secs) agle wave ka hai; tab tak tests live rakhte hain
 pub fn home_recent_row_title(snapshot: &SessionSnapshot) -> String {
     let left = snapshot.left.trim();
     let right = snapshot.right.trim();
@@ -684,7 +693,6 @@ pub fn home_recent_row_title(snapshot: &SessionSnapshot) -> String {
 /// `now_secs` caller (App) se; unknown waqt par age chhupta hai (koi
 /// "just now" ka jhooth nahi). Geometry/typo callee tokens me (section
 /// gap, column gaps, title/meta roles) — koi naya size/color nahi.
-#[allow(dead_code)] // App call-site wiring (history + now_secs) agle wave ka hai; tab tak tests live rakhte hain
 pub fn paint_home_recent(ui: &mut Ui, history: &SessionHistory, now_secs: u64) {
     ui.add_space(HOME_SECTION_GAP);
     ui.label(recent_row_title_role().rich("Recent sessions"));
@@ -804,7 +812,6 @@ pub fn session_tab_close_edge() -> f32 {
 /// hai, paint_tabs wali highlight reuse hoti hai (koi naya color nahi).
 /// Close pehle check hota hai (destructive intent jeetta hai). Caller
 /// `App` hit par switch/close chalata hai (agle wave).
-#[allow(dead_code)] // App call-site wiring agle wave ka hai (screenshot frozen); tests live rakhte hain
 pub fn paint_session_tab(ui: &mut Ui, session: &Session, is_active: bool) -> SessionAction {
     let edge = session_tab_close_edge();
     let label = session_tab_label(session);
@@ -834,7 +841,6 @@ pub fn paint_session_tab(ui: &mut Ui, session: &Session, is_active: bool) -> Ses
 /// Poori session patti: mode tabs ke UPAR, horizontal ScrollArea me
 /// (overflow scroll, tabs sikudte nahi). Khaali list par honest hint.
 /// Neeche [`TAB_BOTTOM_GAP`]. First-hit-wins (ek frame me ek click).
-#[allow(dead_code)] // App call-site wiring agle wave ka hai (screenshot frozen); tests live rakhte hain
 pub fn paint_session_tab_strip(ui: &mut Ui, list: &SessionList, action: &mut SessionAction) {
     if session_strip_is_empty(list) {
         ui.label(chrome_status_role().rich(session_strip_empty_hint()));
@@ -1103,7 +1109,6 @@ pub fn format_hex_grid_cells(
 /// aadhe alag dikhen. [`format_hex_grid_cells`] ka single-string join;
 /// shape wahi hai jo Grid cells paint karte hain. Back-compat wrapper
 /// (logs/tests); Grid paint cells use karta hai. Pure; unit-tested.
-#[allow(dead_code)] // Grid paint cells use karta hai; ye join logs/tests ke liye hai
 pub fn format_hex_grid_row(row_start: u64, hunks: &[views_hex::HexHunkView]) -> String {
     let (addr, hex, ascii) = format_hex_grid_cells(row_start, hunks);
     format!("{addr}  {hex} |{ascii}|")
@@ -1167,7 +1172,6 @@ pub fn parse_gutter_row_text(text: &str) -> Option<u64> {
 /// `data_cells` par `table_find_match_rows` chalata hai — grid coords
 /// align karne ke liye); unit tests isi par find row mapping lock
 /// karte hain. Pure; unit-tested.
-#[allow(dead_code)] // test-only since P3 (paint uses data_cells grid coords now)
 pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
     model
         .rows
@@ -1179,7 +1183,6 @@ pub fn table_model_text_rows(model: &TableModel) -> Vec<Vec<String>> {
 /// Adapts folder rows to the headless find API
 /// [`crate::tree::folder_find_next`]: paths in paint order. Pure;
 /// unit-tested.
-#[allow(dead_code)]
 pub fn folder_path_rows(rows: &[FolderRow]) -> Vec<String> {
     rows.iter().map(|row| row.rel_path.clone()).collect()
 }
@@ -1268,7 +1271,6 @@ pub fn find_cursor_step(
 /// hex grid rows ke liye. Pure; unit-tested.
 /// Legacy path (paint ab track-relative `hex_minimap_row_at_pos` par hai —
 /// BD spec §4 point 3); ruler parity tests isi par hain.
-#[allow(dead_code)] // legacy paint path; tests + ruler parity live rakhte hain
 pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64> {
     if total_rows == 0 || !height.is_finite() || height <= 0.0 {
         return None;
@@ -1286,7 +1288,6 @@ pub fn hex_minimap_row_at_y(y: f32, height: f32, total_rows: u64) -> Option<u64>
 /// unit-tested.
 /// Legacy floor (paint ab `hex_minimap_band_rects` floor par hai —
 /// BD spec §4 point 2); band parity tests isi par hain.
-#[allow(dead_code)] // legacy paint floor; tests live rakhte hain
 pub fn hex_minimap_seg_end(y0: f32, y1: f32) -> f32 {
     y1.max(y0 + ROW_PAD)
 }
@@ -1836,7 +1837,6 @@ pub fn paint_table_keyed(
 /// Merge 3-pane column count: left / base / right teen panes.
 /// Headless contract (test-locked); paint spells the three panes
 /// explicitly for readability. Pure.
-#[allow(dead_code)] // test-only contract; paint lists panes explicitly
 pub fn merge_pane_count() -> usize {
     3
 }
@@ -2710,7 +2710,6 @@ fn paint_note(ui: &mut Ui, text: &str) {
 /// (word wrap off, line numbers on, syntax on). Kept so the existing
 /// `App` call-site compiles; new code should prefer
 /// [`paint_text_with_prefs`].
-#[allow(dead_code)] // compat: App text tab ab `paint_text_with_find` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn paint_text(ui: &mut Ui, model: &mut TextRows) {
     let prefs = TextViewPrefs::default();
     paint_text_with_prefs(ui, model, &prefs);
@@ -2757,12 +2756,12 @@ pub fn paint_text_status_bar(ui: &mut Ui, zones: &viewmodel::StatusZones) {
     ui.horizontal(|ui| {
         ui.set_min_size(egui::vec2(avail, HEADER_H));
         ui.spacing_mut().item_spacing.x = TIGHT_GAP;
-        ui.label(chrome_status_role().rich(zones.left.as_str()));
+        ui.label(status_side_role().rich(zones.left.as_str()));
         ui.separator();
-        ui.label(chrome_status_role().rich(zones.mid.as_str()));
+        ui.label(status_verdict_role().rich(zones.mid.as_str()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(BADGE_PAD);
-            ui.label(chrome_status_role().rich(zones.right.as_str()));
+            ui.label(status_side_role().rich(zones.right.as_str()));
         });
     });
 }
@@ -2881,14 +2880,26 @@ fn paint_text_body(
         }
         ui.separator();
         ui.label(TypoRole::Small.rich("Show:"));
-        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::All, "All");
+        ui.selectable_value(
+            &mut model.filter,
+            viewmodel::TextFilter::All,
+            chrome_tab_role().rich("All"),
+        );
         ui.selectable_value(
             &mut model.filter,
             viewmodel::TextFilter::Differences,
-            "Differences",
+            chrome_tab_role().rich("Differences"),
         );
-        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Same, "Same");
-        ui.selectable_value(&mut model.filter, viewmodel::TextFilter::Context, "Context");
+        ui.selectable_value(
+            &mut model.filter,
+            viewmodel::TextFilter::Same,
+            chrome_tab_role().rich("Same"),
+        );
+        ui.selectable_value(
+            &mut model.filter,
+            viewmodel::TextFilter::Context,
+            chrome_tab_role().rich("Context"),
+        );
         ui.separator();
         if ui
             .small_button("Section →")
@@ -4752,7 +4763,6 @@ pub fn wrap_visual_offset(counts: &[usize], vis_pos: usize, sub: usize) -> Optio
 /// Visible position for one model row: `visible` (model order) me
 /// pehla index jahan `visible[i] == model_row`. Filtered-out par
 /// `None`. Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this for jump
 pub fn wrap_vis_pos_for_model(visible: &[usize], model_row: usize) -> Option<usize> {
     let mut idx = 0usize;
     while idx < visible.len() {
@@ -4768,7 +4778,6 @@ pub fn wrap_vis_pos_for_model(visible: &[usize], model_row: usize) -> Option<usi
 /// start plus matched sub (clamped). Bina hit par row head (sub 0).
 /// Filtered-out ya OOB par `None` (koi fake scroll nahi). Pure;
 /// unit-tested.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this for jump
 pub fn wrap_find_jump_visual(
     counts: &[usize],
     visible: &[usize],
@@ -4793,7 +4802,6 @@ pub fn wrap_find_jump_visual(
 /// Viewport window over flat visual rows: `[top, top+viewport)` ko
 /// `[0, total]` me clamp karta hai. Khali viewport par empty window.
 /// Pure; unit-tested.
-#[allow(dead_code)] // contract-only: paint scroll math isi window par hai (dual precedent)
 pub fn wrap_viewport_window(
     total_visual: usize,
     top_visual: usize,
@@ -4810,7 +4818,6 @@ pub fn wrap_viewport_window(
 /// Ek sub-row ka continuation indent (chars): pehle sub par 0, baad
 /// me chunk indent. OOB par 0. Geometry review ke liye (paint indent
 /// carry ka headless contract). Pure; unit-tested.
-#[allow(dead_code)] // contract-only: indent-carry geometry ka headless lock
 pub fn wrap_sub_indent_chars(line: &str, width: usize, sub: usize) -> usize {
     match wrap_chunks(line, width).get(sub) {
         Some(chunk) => chunk.indent,
@@ -4894,7 +4901,6 @@ pub fn folder_filtered_summary(rows: &[FolderRow], display: &crate::tree::Folder
 
 /// Khali view ka paint-stable hint: model rows vs visible nodes par.
 /// `None` (kuch dikh raha hai) par khali string. Pure; unit-tested.
-#[allow(dead_code)] // Legacy glyph-blind paint lock; frozen test is par hai, paint `_full_rows` par gaya
 pub fn folder_paint_empty_hint(
     rows: &[FolderRow],
     visible_rows: usize,
@@ -4992,7 +4998,6 @@ pub fn paint_folder_filter_bar(ui: &mut Ui, display: &mut crate::tree::FolderDis
 /// the same way as the text view. `pager` ka total visible nodes se
 /// sync hota hai; filter badle to top girta hai; page buttons aur
 /// PageUp/PageDown `next_page`/`prev_page` chalate hain.
-#[allow(dead_code)]
 pub fn paint_folder(
     ui: &mut Ui,
     rows: &[FolderRow],
@@ -5148,7 +5153,6 @@ pub fn paint_folder(
 /// The glyph column color: same/dim, different and left-only/red,
 /// newer/blue, right-only/green, like the CLI's coloring.
 /// Kept for the pending App rewiring (see the note on theme blues).
-#[allow(dead_code)]
 fn glyph_color(row: &FolderRow, dark: bool) -> Color32 {
     match row.glyph {
         '=' => dim_for(dark),
@@ -5163,8 +5167,7 @@ fn glyph_color(row: &FolderRow, dark: bool) -> Color32 {
 /// times, then the path with the directory mark.
 /// Kept for the pending App rewiring (see the note on theme blues).
 /// Covered by the `folder_columns_match_the_cli_shape` unit test.
-#[allow(dead_code)]
-fn folder_columns(row: &FolderRow) -> String {
+pub fn folder_columns(row: &FolderRow) -> String {
     let ls = row.left_size.as_deref().unwrap_or("-");
     let rs = row.right_size.as_deref().unwrap_or("-");
     let lt = row.left_time.as_deref().unwrap_or("-");
@@ -5251,7 +5254,6 @@ pub fn sync_badge_for_paint(row: &FolderRow, mode: crate::tree::SyncModeChoice) 
 /// to paint saath chale. Grid aaj text se auto-size hota hai, isliye
 /// ye width contract test-locked hai (fixed layout baad me).
 /// Pure; unit-tested.
-#[allow(dead_code)] // contract-only (half_field_width precedent); grid auto-sizes
 pub fn sync_badge_column_width() -> f32 {
     crate::tree::sync_badge_min_px()
 }
@@ -5563,7 +5565,6 @@ pub fn dual_tree_pane_widths(avail: f32, fraction: f32) -> (f32, f32) {
 /// Left pane row line: glyph + naam (+ dir mark) + left side cell.
 /// Frozen contract (G-F2 grid paint `dual_grid_row_left` par gaya hai;
 /// ye line helper + uske tests rakhe hain). Pure; unit-tested.
-#[allow(dead_code)] // frozen contract; grid paint `dual_grid_row_left` use karta hai
 pub fn dual_left_line(node: &crate::tree::FolderTreeNode) -> String {
     let dir_mark = if node.row.is_dir { "/" } else { "" };
     format!(
@@ -5578,7 +5579,6 @@ pub fn dual_left_line(node: &crate::tree::FolderTreeNode) -> String {
 /// Right pane row line: glyph + naam (+ dir mark) + right side cell.
 /// Frozen contract (G-F2 grid paint `dual_grid_row_right` par gaya hai;
 /// ye line helper + uske tests rakhe hain). Pure; unit-tested.
-#[allow(dead_code)] // frozen contract; grid paint `dual_grid_row_right` use karta hai
 pub fn dual_right_line(node: &crate::tree::FolderTreeNode) -> String {
     let dir_mark = if node.row.is_dir { "/" } else { "" };
     format!(
@@ -5667,8 +5667,7 @@ pub fn dual_pending_text(action: crate::tree::DualRowAction, rel_path: &str) -> 
 /// kisi bhi pane me shared select set karta hai; `···` menu stub
 /// action stage karta hai. `state` me select/scroll/pending rehta hai,
 /// `split` drag se pane widths badalti hai (agli frame se).
-/// App wiring baad me; tab tak `#[allow(dead_code)]`.
-#[allow(dead_code)]
+/// App wiring baad me; tab tak test-locked contract.
 pub fn paint_folder_dual(
     ui: &mut Ui,
     rows: &[FolderRow],
@@ -5930,7 +5929,6 @@ fn premul(channel: u8, alpha: u8) -> u8 {
 /// of crushing the image. Kept as the centered wrapper over
 /// [`split_picture_widths`]; new paint code goes through the
 /// draggable split instead.
-#[allow(dead_code)]
 pub fn picture_column_width(avail: f32) -> f32 {
     split_picture_widths(avail, SPLIT_DEFAULT_FRACTION).0
 }
@@ -6528,7 +6526,6 @@ pub fn three_way_header_line(
 /// path aur decision display; conflict rows par real Take Left, Take Base aur
 /// Take Right buttons (koi stub nahi). Click staged decisions me jata hai
 /// (model rows untouched); FolderMerge tab wiring agli wave ka hai.
-#[allow(dead_code)] // FolderMerge tab rewiring baad me; tab tak pending painter
 pub fn paint_three_way_tree(
     ui: &mut Ui,
     rows: &[crate::tree::ThreeWayTreeRow],
@@ -6652,7 +6649,6 @@ pub fn paint_audio_checklist(ui: &mut Ui, list: &mut AudioChecklist) {
 /// N/M badge text for the text find bar: "2/5", no hit par "0/0".
 /// Pure; App badge model ko paint bina App borrow ke dikhata hai.
 /// App text tab se called (Wave T wiring).
-#[allow(dead_code)] // compat: App text tab ab `FindState::count_label` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
     match position {
         Some(pos) => format!("{pos}/{total}"),
@@ -6664,7 +6660,6 @@ pub fn text_find_badge_label(position: Option<usize>, total: usize) -> String {
 /// Returns `(prev_clicked, next_clicked)`; cursor/badge advance App
 /// ke `text_find_next_row` / `text_find_prev_row` me hota hai.
 /// App text tab se called (Wave T wiring).
-#[allow(dead_code)] // compat: App text tab ab `paint_text_with_find` route karta hai (Gap #12 final wiring, sibling wave); tests + API compat ke liye rehta hai
 pub fn paint_text_find_bar(
     ui: &mut Ui,
     needle: &mut String,
@@ -6701,7 +6696,6 @@ pub fn paint_text_find_bar(
 /// Headless find-nav step: Prev/Next clicks ko `FindState` advance me
 /// badalta hai. Click na ho to `None` (selection untouched rehta hai,
 /// taaki F3 diff-nav selection se ladai na ho). Pure; unit-tested.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this via paint
 pub fn advance_text_find(
     find: &mut FindState,
     prev_clicked: bool,
@@ -6725,7 +6719,6 @@ pub fn advance_text_find(
 /// aata hai. Returns `(prev_clicked, next_clicked)`; cursor advance
 /// [`advance_text_find`] me hota hai. Purana App-wired
 /// [`paint_text_find_bar`] compat ke liye untouched hai.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this
 pub fn paint_text_find_state_bar(
     ui: &mut Ui,
     find: &mut FindState,
@@ -6777,7 +6770,6 @@ pub fn paint_text_find_state_bar(
 /// current row inverted block, others underline line (existing palette
 /// reuse, wrap continuations samahit). Prefs/counts behavior
 /// `paint_text_with_prefs` jaisa hi hai.
-#[allow(dead_code)] // wiring-pending: App text tab (orchestrator) calls this
 pub fn paint_text_with_find(
     ui: &mut Ui,
     model: &mut TextRows,
@@ -10003,6 +9995,22 @@ mod tests {
         assert!(chrome_status_role().is_tabular());
         assert!(!chrome_status_role().is_mono());
         assert!(chrome_tab_role().is_chrome());
+    }
+
+    #[test]
+    fn status_roles_carry_verdict_hierarchy() {
+        // Verdict (mid) one step above the side counts; single sources
+        // are the viewmodel pending fns paint now adopts.
+        assert_eq!(status_verdict_role(), viewmodel::status_verdict_text_role());
+        assert_eq!(status_side_role(), viewmodel::status_side_text_role());
+        assert_eq!(status_verdict_role(), TypoRole::Body);
+        assert_eq!(status_side_role(), TypoRole::Small);
+        assert_eq!(status_verdict_role().size(), 13.0);
+        assert_eq!(status_side_role().size(), 11.0);
+        assert!(status_verdict_role().size() > status_side_role().size());
+        // Sides match the frozen status chrome; verdict leaves it.
+        assert_eq!(status_side_role(), chrome_status_role());
+        assert_ne!(status_verdict_role(), chrome_status_role());
     }
 
     #[test]
