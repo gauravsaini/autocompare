@@ -2314,6 +2314,109 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     (y, m, d)
 }
 
+// ----------------------------------------------------------------------------
+// Hex/table zone-role helpers (typography second; paint wiring stays with
+// the orchestrator).
+// Gap EXQ-L viewmodel half: hex goto bar + table key/sheet bars ke zone
+// roles alag-alag call-sites me bikhre hain (`views_hex`/`views_table`
+// local roles) — status bar ke `status_verdict/side_text_role` precedent
+// jaisa single zone contract chahiye taaki label(13-strong) > value(12)
+// > hint(11-weak) hierarchy har zone me ek jaisi rahe. Geometry yahan
+// nahi (bars apni `*_BAR_H`/`*_GAP`/`*_PAD` geometry khud rakhte hain);
+// ye sirf family/weight/line-height/spacing hai — har accessor existing
+// [`crate::theme::TypoRole`] ko reuse karta hai, koi naya size/token/color
+// nahi. Colors frozen (koi Color32/Visuals nahi). Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Hex goto zone label role: Body (find-bar label precedent reuse).
+/// Paint-side `.strong()` composition; badge (Small) se ek step upar.
+#[allow(dead_code)]
+pub const fn hex_goto_zone_label_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Hex goto zone value role: Mono (offset ruler precedent reuse).
+#[allow(dead_code)]
+pub const fn hex_goto_zone_value_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Hex goto zone badge role: Small (find-bar badge precedent reuse).
+#[allow(dead_code)]
+pub const fn hex_goto_zone_badge_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Small
+}
+
+/// Table key zone label role: Body (section-label precedent reuse).
+#[allow(dead_code)]
+pub const fn table_key_zone_label_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Table key zone value role: Mono (grid-cell precedent reuse).
+#[allow(dead_code)]
+pub const fn table_key_zone_value_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Table sheet zone label role: Body (sheet-bar label precedent reuse).
+#[allow(dead_code)]
+pub const fn table_sheet_zone_label_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Table sheet zone value role: Mono (sheet-name precedent reuse).
+#[allow(dead_code)]
+pub const fn table_sheet_zone_value_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Zone badge role (hex goto / table key / table sheet badges): Small.
+/// Teenon badges ek hi role se taaki N/M + source badges kabhi drift na
+/// karen. Pure.
+#[allow(dead_code)]
+pub const fn zone_badge_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Small
+}
+
+/// Zone role ki paint weight spelling (`strong`/`weak`/`default`/
+/// `regular-mono`) — hierarchy carrier (egui me tracking nahi).
+/// [`crate::theme::TypoRole::weight`] ka zone alias; koi naya token nahi.
+#[allow(dead_code)]
+pub const fn zone_weight(role: crate::theme::TypoRole) -> &'static str {
+    role.weight()
+}
+
+/// Zone role ki font family (`monospace` vs `proportional`).
+/// [`crate::theme::TypoRole::family`] ka zone alias. Pure.
+#[allow(dead_code)]
+pub const fn zone_family(role: crate::theme::TypoRole) -> &'static str {
+    role.family()
+}
+
+/// Zone role ki line-height px (`size * multiplier`, Wave V tight rows).
+/// [`crate::theme::TypoRole::line_height_px`] ka zone alias — paint ab bhi
+/// shared measured mono row height se lagata hai, ye headless intent hai.
+#[allow(dead_code)]
+pub const fn zone_line_height_px(role: crate::theme::TypoRole) -> f32 {
+    role.line_height_px()
+}
+
+/// Zone role ki letter-tracking em (headers 0.02, rest 0.0; egui paint
+/// 0.0 no-op rehta hai). [`crate::theme::TypoRole::letter_spacing_em`]
+/// ka zone alias. Pure.
+#[allow(dead_code)]
+pub const fn zone_letter_spacing_em(role: crate::theme::TypoRole) -> f32 {
+    role.letter_spacing_em()
+}
+
+/// Kya zone role tabular numerals chahta hai (Mono + Small only).
+/// [`crate::theme::TypoRole::is_tabular`] ka zone alias. Pure.
+#[allow(dead_code)]
+pub const fn zone_is_tabular(role: crate::theme::TypoRole) -> bool {
+    role.is_tabular()
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -3875,5 +3978,39 @@ mod tests {
         }];
         let kept = focused_line_preview_for(&exact_rows, Some(0)).unwrap_or_default();
         assert_eq!(kept.left, exact);
+    }
+
+    #[test]
+    fn exq_l_zone_roles_keep_label_above_value_and_badge() {
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_MONO_SIZE, TYPO_SMALL_SIZE, TypoRole};
+        assert_eq!(hex_goto_zone_label_role(), TypoRole::Body);
+        assert_eq!(hex_goto_zone_value_role(), TypoRole::Mono);
+        assert_eq!(hex_goto_zone_badge_role(), TypoRole::Small);
+        assert_eq!(table_key_zone_label_role(), TypoRole::Body);
+        assert_eq!(table_key_zone_value_role(), TypoRole::Mono);
+        assert_eq!(table_sheet_zone_label_role(), TypoRole::Body);
+        assert_eq!(table_sheet_zone_value_role(), TypoRole::Mono);
+        assert_eq!(zone_badge_role(), TypoRole::Small);
+        assert_eq!(hex_goto_zone_label_role().size(), TYPO_BODY_SIZE);
+        assert_eq!(hex_goto_zone_value_role().size(), TYPO_MONO_SIZE);
+        assert_eq!(zone_badge_role().size(), TYPO_SMALL_SIZE);
+        // Hierarchy: label(13) > value(12) > badge(11); value tabular hai.
+        assert!(hex_goto_zone_label_role().size() > hex_goto_zone_value_role().size());
+        assert!(hex_goto_zone_value_role().size() > zone_badge_role().size());
+        assert!(zone_is_tabular(hex_goto_zone_value_role()));
+        assert!(zone_is_tabular(zone_badge_role()));
+        assert!(!zone_is_tabular(hex_goto_zone_label_role()));
+        // Family/weight/spacing aliases TypoRole se drift nahi karte.
+        assert_eq!(zone_family(TypoRole::Mono), "monospace");
+        assert_eq!(zone_family(TypoRole::Body), "proportional");
+        assert_eq!(zone_weight(TypoRole::Body), TypoRole::Body.weight());
+        assert_eq!(
+            zone_line_height_px(TypoRole::Mono),
+            TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(
+            zone_letter_spacing_em(TypoRole::Heading),
+            TypoRole::Heading.letter_spacing_em()
+        );
     }
 }

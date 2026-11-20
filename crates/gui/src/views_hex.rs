@@ -1781,6 +1781,167 @@ pub fn format_hex_grid_row_with_bytes(
     format!("{addr}  {hex} |{ascii}|")
 }
 
+// ----------------------------------------------------------------------------
+// Hex 64-bit goto + byte-edit (headless; paint wiring stays with the
+// orchestrator).
+// Gap EXQ-L hex half: hex tab me 64-bit offset jump + nibble byte-edit
+// nahi hai — manual scroll se badi file me jump/edit slow hai. Ye section
+// pure goto/edit helpers hai: text se u64 offset, total_len clamp, nibble
+// apply, slice edit. Geometry first: goto bar find-bar geometry reuse
+// (wahi bar height, wahi field chaudai, wahi badge pad — koi naya rhythm
+// nahi). Typography second: label Body-strong, value Mono family, badge
+// Small-role (find-bar hierarchy reuse: label(13-strong) > value(12-mono)
+// > hint(11-weak)); koi naya size/token/color nahi. No I/O; colors frozen
+// (koi Color32/Visuals nahi). Paint caller ke locals par chalti hai
+// (`&mut String` goto text + badge `&str`), App/viewer struct me koi field
+// edit nahi hota; returns `go_clicked` taaki cursor advance caller ke paas
+// rahe. Unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Hex goto bar height: find-bar precedent reuse (koi naya token nahi).
+#[allow(dead_code)]
+pub const HEX_GOTO_BAR_H: f32 = HEX_FIND_BAR_H;
+/// Hex goto field chaudai: find needle precedent reuse.
+#[allow(dead_code)]
+pub const HEX_GOTO_FIELD_W: f32 = HEX_FIND_NEEDLE_W;
+/// Hex goto badge right-end pad: find badge precedent reuse.
+#[allow(dead_code)]
+pub const HEX_GOTO_BADGE_PAD: f32 = HEX_FIND_BADGE_PAD;
+
+/// Hex goto section-label role: Body (13 default proportional).
+/// Paint-side `.strong()` composition (find-bar label precedent): section
+/// label hint/badge (Small 11-weak) se ek step upar taaki flat hierarchy
+/// tute; input values Mono family me (field `.font(Monospace)`) taaki
+/// label-vs-input confuse na ho. Koi naya size/token/color nahi. Pure.
+#[allow(dead_code)]
+pub const fn hex_goto_label_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Body
+}
+
+/// Hex goto value role: Mono (12 regular monospace, tabular).
+/// Goto offset ruler text jaisa dikhta hai (`format_hex_offset` precedent),
+/// isliye value field Mono me taaki label(Body) vs value confuse na ho.
+/// Koi naya size/token/color nahi. Pure.
+#[allow(dead_code)]
+pub const fn hex_goto_value_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Goto text se 64-bit offset: `0x`/`0X` prefix par hex, warna decimal.
+/// Visual separators (`_`, `,`, space, tab) hat-te hain taaki `1_000`,
+/// `0xFF_FF` jaise paste kaam karen. Khali/invalid/overflow par `None`
+/// (kabhi panic nahi, `u64::from_str_radix` honest `None` deta hai).
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn parse_hex_goto(text: &str) -> Option<u64> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut compact = String::new();
+    for ch in trimmed.chars() {
+        if ch == '_' || ch == ',' || ch == ' ' || ch == '\t' {
+            continue;
+        }
+        compact.push(ch);
+    }
+    if compact.is_empty() {
+        return None;
+    }
+    let (digits, radix) = match compact
+        .strip_prefix("0x")
+        .or_else(|| compact.strip_prefix("0X"))
+    {
+        Some(rest) => (rest, 16),
+        None => (compact.as_str(), 10),
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    u64::from_str_radix(digits, radix).ok()
+}
+
+/// Goto offset ko `total_len` me clamp: valid par `Some(offset)`,
+/// khali input (`total_len == 0`) ya bahar (`offset >= total_len`) par
+/// `None` (paint bahar jump par honest no-op dikhata hai). Pure.
+#[allow(dead_code)]
+pub fn clamp_hex_goto(offset: u64, total_len: u64) -> Option<u64> {
+    if total_len == 0 || offset >= total_len {
+        return None;
+    }
+    Some(offset)
+}
+
+/// Ek hex char ki nibble value (0..=15). Non-hex par `None`.
+/// Pure; unit-tested.
+#[allow(dead_code)]
+pub fn hex_nibble_value(ch: char) -> Option<u8> {
+    ch.to_digit(16).and_then(|v| u8::try_from(v).ok())
+}
+
+/// Ek byte me ek nibble lagata hai: `high` par upper 4 bits, warna lower
+/// 4 bits; dusra nibble untouched rehta hai. Non-hex char par `None`
+/// (paint invalid keystroke honest ignore karta hai). Pure; unit-tested.
+#[allow(dead_code)]
+pub fn apply_hex_nibble(byte: u8, hex: char, high: bool) -> Option<u8> {
+    let v = hex_nibble_value(hex)?;
+    if high {
+        Some((v << 4) | (byte & 0x0F))
+    } else {
+        Some((byte & 0xF0) | v)
+    }
+}
+
+/// Slice me ek byte likhta hai (`ByteEditBuffer::set_byte` ka headless
+/// judvaan bina history ke): valid offset par `true`, OOB par `false`
+/// (kabhi panic nahi — `usize::try_from` + `.get_mut()` only).
+/// Caller undo/history engine buffer par rakhta hai; ye paint-preview
+/// aur tests ke liye single-byte path hai. Pure.
+#[allow(dead_code)]
+pub fn edit_byte_at(bytes: &mut [u8], offset: u64, new_val: u8) -> bool {
+    let idx = match usize::try_from(offset) {
+        Ok(i) => i,
+        Err(_) => return false,
+    };
+    match bytes.get_mut(idx) {
+        Some(slot) => {
+            *slot = new_val;
+            true
+        }
+        None => false,
+    }
+}
+
+/// Hex window ke andar goto row: label + offset field + Go + badge.
+/// Find bar (`paint_hex_find_bar`) ka geometry/typo mirror (wahi bar
+/// height, wahi field chaudai, wahi badge right-end Small-role me; label
+/// Body-strong, value Mono family). Returns `go_clicked` — cursor/row
+/// advance caller ke locals me hota hai (App fields untouched).
+/// Wiring-pending until orchestrator wires the hex tab caller.
+#[allow(dead_code)]
+pub fn paint_hex_goto_bar(ui: &mut egui::Ui, goto_text: &mut String, badge: &str) -> bool {
+    let mut go = false;
+    let avail = ui.available_width();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), HEX_GOTO_BAR_H));
+        ui.label(hex_goto_label_text_role().rich("Goto:").strong());
+        ui.add(
+            egui::TextEdit::singleline(goto_text)
+                .desired_width(HEX_GOTO_FIELD_W)
+                .font(egui::TextStyle::Monospace)
+                .hint_text("0x10 / 16"),
+        );
+        if ui.small_button("Go ▶").clicked() {
+            go = true;
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(HEX_GOTO_BADGE_PAD);
+            ui.label(crate::theme::TypoRole::Small.rich(badge));
+        });
+    });
+    go
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2941,5 +3102,44 @@ mod tests {
         assert_eq!(hex_grid_ascii_mark(0x20), ' ');
         assert_eq!(hex_grid_ascii_mark(0x00), '.');
         assert_eq!(hex_grid_ascii_mark(0x7F), '.');
+    }
+
+    #[test]
+    fn hex_goto_parses_64bit_decimal_and_hex() {
+        assert_eq!(parse_hex_goto("16"), Some(16));
+        assert_eq!(parse_hex_goto("0x10"), Some(16));
+        assert_eq!(parse_hex_goto("0XFF"), Some(255));
+        assert_eq!(parse_hex_goto("1_000"), Some(1000));
+        assert_eq!(parse_hex_goto("0xFF_FF"), Some(65535));
+        assert_eq!(parse_hex_goto(&u64::MAX.to_string()), Some(u64::MAX));
+        assert_eq!(parse_hex_goto("0xFFFFFFFFFFFFFFFF"), Some(u64::MAX));
+        assert_eq!(parse_hex_goto(""), None);
+        assert_eq!(parse_hex_goto("   "), None);
+        assert_eq!(parse_hex_goto("0x"), None);
+        assert_eq!(parse_hex_goto("banana"), None);
+        assert_eq!(parse_hex_goto("18446744073709551616"), None);
+        // Geometry parity: goto bar find-bar rhythm reuse karta hai.
+        assert_eq!(HEX_GOTO_BAR_H, HEX_FIND_BAR_H);
+        assert_eq!(HEX_GOTO_FIELD_W, HEX_FIND_NEEDLE_W);
+        assert_eq!(HEX_GOTO_BADGE_PAD, HEX_FIND_BADGE_PAD);
+        assert_eq!(hex_goto_label_text_role(), crate::theme::TypoRole::Body);
+        assert_eq!(hex_goto_value_text_role(), crate::theme::TypoRole::Mono);
+    }
+
+    #[test]
+    fn hex_goto_clamps_and_edits_bytes_honestly() {
+        assert_eq!(clamp_hex_goto(5, 10), Some(5));
+        assert_eq!(clamp_hex_goto(10, 10), None);
+        assert_eq!(clamp_hex_goto(0, 0), None);
+        assert_eq!(hex_nibble_value('f'), Some(15));
+        assert_eq!(hex_nibble_value('G'), None);
+        assert_eq!(apply_hex_nibble(0xAB, '0', true), Some(0x0B));
+        assert_eq!(apply_hex_nibble(0xAB, 'C', false), Some(0xAC));
+        assert_eq!(apply_hex_nibble(0xAB, 'z', true), None);
+        let mut buf = vec![1u8, 2, 3];
+        assert!(edit_byte_at(&mut buf, 1, 9));
+        assert_eq!(buf, vec![1, 9, 3]);
+        assert!(!edit_byte_at(&mut buf, 9, 0));
+        assert_eq!(buf, vec![1, 9, 3]);
     }
 }

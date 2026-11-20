@@ -1281,6 +1281,180 @@ pub fn paint_table_toolbar(
 }
 
 // ----------------------------------------------------------------------------
+// Table xlsx/tsv source + sheet selector (headless; paint wiring stays with
+// the orchestrator).
+// Gap EXQ-L table half: table tab csv-only dikhta hai — tsv delimiter +
+// multi-sheet xlsx sheet switch key-column parity ke liye chahiye. Engine
+// (`compare::detect_table_delimiter`, `Workbook::from_xlsx`) parse kab ka
+// karta hai; ye section uska GUI-side headless judvaan hai: path se source
+// kind, kind se delimiter, sheet names par clamp/label, key-column reuse.
+// Geometry first: sheet bar key-bar geometry reuse (wahi bar height, wahi
+// col gap, wahi badge pad — koi naya rhythm nahi). Typography second:
+// label Body-strong, sheet names mono (+strong selected), badge Small-role
+// (key-bar hierarchy reuse); koi naya size/token/color nahi. No I/O
+// (sheet bytes engine ke paas rehte hain); colors frozen (koi
+// Color32/Visuals nahi). Paint caller ke locals par chalti hai (`&mut
+// Option<usize>` selection + `&[String]` names), App/viewer struct me koi
+// field edit nahi hota. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Table input source: path extension se (engine `detect_table_delimiter`
+/// + `Workbook::from_xlsx` ka GUI-side judvaan — parse yahan nahi hota).
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableSourceKind {
+    /// Comma-delimited (`.csv` ya default).
+    #[default]
+    Csv,
+    /// Tab-delimited (`.tsv` / `.tab`).
+    Tsv,
+    /// Multi-sheet workbook (`.xlsx`).
+    Xlsx,
+    /// Bina pehchane extension (csv jaisa treat hota hai).
+    Unknown,
+}
+
+/// Path se source kind: extension lowercase karke (`tsv`/`tab` -> Tsv,
+/// `xlsx` -> Xlsx, `csv` -> Csv, baaki/empty -> Unknown). Query/params
+/// nahi hat-te (dialog paths hamesha plain hote hain). Pure.
+#[allow(dead_code)]
+pub fn table_source_kind_for_path(path: &str) -> TableSourceKind {
+    let trimmed = path.trim();
+    let ext = trimmed.rsplit('.').next().unwrap_or("").trim();
+    if ext.len() == trimmed.len() {
+        return TableSourceKind::Unknown;
+    }
+    let mut lower = String::new();
+    for ch in ext.chars() {
+        lower.push(ch.to_ascii_lowercase());
+    }
+    match lower.as_str() {
+        "tsv" | "tab" => TableSourceKind::Tsv,
+        "xlsx" => TableSourceKind::Xlsx,
+        "csv" => TableSourceKind::Csv,
+        _ => TableSourceKind::Unknown,
+    }
+}
+
+/// Source ka field delimiter: Tsv par tab, baaki par comma (xlsx sheets
+/// engine parse karta hai — delimiter wahan irrelevant hai, badge honest
+/// `xlsx` rehta hai). Pure.
+#[allow(dead_code)]
+pub fn table_delimiter_for_source(kind: TableSourceKind) -> char {
+    match kind {
+        TableSourceKind::Tsv => '\t',
+        TableSourceKind::Csv | TableSourceKind::Xlsx | TableSourceKind::Unknown => ',',
+    }
+}
+
+/// Source badge text sheet bar ke right-end ke liye: `csv`/`tsv`/`xlsx`/
+/// unknown par `auto`. Pure.
+#[allow(dead_code)]
+pub fn table_source_badge_label(kind: TableSourceKind) -> &'static str {
+    match kind {
+        TableSourceKind::Csv => "csv",
+        TableSourceKind::Tsv => "tsv",
+        TableSourceKind::Xlsx => "xlsx",
+        TableSourceKind::Unknown => "auto",
+    }
+}
+
+/// Sheet selector bar height: key-bar precedent reuse (koi naya token nahi).
+#[allow(dead_code)]
+pub const TABLE_SHEET_BAR_H: f32 = TABLE_KEY_BAR_H;
+/// Sheet buttons ke beech gap: key-col gap precedent reuse.
+#[allow(dead_code)]
+pub const TABLE_SHEET_COL_GAP: f32 = TABLE_KEY_COL_GAP;
+/// Sheet badge right-end pad: key badge precedent reuse.
+#[allow(dead_code)]
+pub const TABLE_SHEET_BADGE_PAD: f32 = TABLE_KEY_BADGE_PAD;
+
+/// Sheet bar section-label role: Body (key-bar label precedent reuse).
+/// Paint-side `.strong()` composition; hint/badge Small se ek step upar.
+/// Koi naya size/token/color nahi. Pure.
+#[allow(dead_code)]
+pub const fn table_sheet_label_text_role() -> TypoRole {
+    TypoRole::Body
+}
+
+/// Sheet name role: Mono (key-bar cell precedent reuse — selected par
+/// `.strong()` composition, plain par mono). Koi naya size/token nahi.
+#[allow(dead_code)]
+pub const fn table_sheet_value_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Sheet names ki ginti (workbook sheets ya single csv/tsv par 1).
+/// Khali par 0 (paint honest empty note dikhata hai). Pure.
+#[allow(dead_code)]
+pub fn table_sheet_count(names: &[String]) -> usize {
+    names.len()
+}
+
+/// Sheet index clamp: valid par `Some(index)`, khali/out-of-range par
+/// `None` (paint bahar select par honest no-op). Pure.
+#[allow(dead_code)]
+pub fn table_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
+    if names.get(index).is_some() {
+        Some(index)
+    } else {
+        None
+    }
+}
+
+/// Sheet label text: `names[index]` ka clone, OOB par `None`.
+/// Pure.
+#[allow(dead_code)]
+pub fn table_sheet_label(names: &[String], index: usize) -> Option<String> {
+    names.get(index).cloned()
+}
+
+/// Sheet selector bar: label + per-sheet single-select + source badge.
+/// Key bar (`paint_table_key_bar`) ka geometry/typo mirror (wahi bar
+/// height, wahi col gap, wahi badge right-end Small-role me; label
+/// Body-strong, names Mono (+strong selected), marker reuse
+/// `key_column_marker(selected)` taaki indicator column align rahe).
+/// Selection caller ke `&mut Option<usize>` me likhti hai (App fields
+/// untouched); `None` = koi sheet select nahi (honest empty).
+/// Wiring-pending until orchestrator wires the table tab caller.
+#[allow(dead_code)]
+pub fn paint_table_sheet_bar(
+    ui: &mut egui::Ui,
+    selected: &mut Option<usize>,
+    sheets: &[String],
+    source: TableSourceKind,
+) {
+    let avail = ui.available_width();
+    let mut clicked: Option<usize> = None;
+    ui.horizontal(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_SHEET_BAR_H));
+        ui.spacing_mut().item_spacing.x = TABLE_SHEET_COL_GAP;
+        ui.label(table_sheet_label_text_role().rich("Sheet:").strong());
+        for (idx, name) in sheets.iter().enumerate() {
+            let is_selected = *selected == Some(idx);
+            let marker = key_column_marker(is_selected);
+            let text = format!("{marker} {name}");
+            let rich = if is_selected {
+                egui::RichText::new(text).monospace().strong()
+            } else {
+                egui::RichText::new(text).monospace()
+            };
+            if ui.selectable_label(is_selected, rich).clicked() {
+                clicked = Some(idx);
+            }
+            ui.add_space(TABLE_SHEET_COL_GAP);
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_SHEET_BADGE_PAD);
+            ui.label(TypoRole::Small.rich(table_source_badge_label(source)));
+        });
+    });
+    if let Some(idx) = clicked {
+        *selected = table_sheet_clamp(sheets, idx);
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Table cell geometry (pure rect math; paint wiring stays with the
 // orchestrator).
 // Gap AY re-scope: table body Grid paint `views.rs` me hai
@@ -2558,5 +2732,36 @@ mod tests {
         assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
         assert_eq!(TABLE_FIND_BADGE_PAD, TABLE_KEY_BADGE_PAD);
         assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+    }
+
+    #[test]
+    fn table_source_kind_and_sheet_helpers_stay_honest() {
+        assert_eq!(table_source_kind_for_path("a.csv"), TableSourceKind::Csv);
+        assert_eq!(table_source_kind_for_path("a.TSV"), TableSourceKind::Tsv);
+        assert_eq!(table_source_kind_for_path("a.tab"), TableSourceKind::Tsv);
+        assert_eq!(table_source_kind_for_path("a.xlsx"), TableSourceKind::Xlsx);
+        assert_eq!(
+            table_source_kind_for_path("a.txt"),
+            TableSourceKind::Unknown
+        );
+        assert_eq!(table_source_kind_for_path(""), TableSourceKind::Unknown);
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Tsv), '\t');
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Csv), ',');
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Xlsx), ',');
+        assert_eq!(table_source_badge_label(TableSourceKind::Xlsx), "xlsx");
+        // Sheet clamp/label: OOB par None (kabhi panic nahi).
+        let names = vec!["S1".to_string(), "S2".to_string()];
+        assert_eq!(table_sheet_count(&names), 2);
+        assert_eq!(table_sheet_clamp(&names, 1), Some(1));
+        assert_eq!(table_sheet_clamp(&names, 9), None);
+        assert_eq!(table_sheet_clamp(&[], 0), None);
+        assert_eq!(table_sheet_label(&names, 0), Some("S1".to_string()));
+        assert_eq!(table_sheet_label(&names, 9), None);
+        // Geometry parity: sheet bar key-bar rhythm reuse karta hai.
+        assert_eq!(TABLE_SHEET_BAR_H, TABLE_KEY_BAR_H);
+        assert_eq!(TABLE_SHEET_COL_GAP, TABLE_KEY_COL_GAP);
+        assert_eq!(TABLE_SHEET_BADGE_PAD, TABLE_KEY_BADGE_PAD);
+        assert_eq!(table_sheet_label_text_role(), TypoRole::Body);
+        assert_eq!(table_sheet_value_text_role(), TypoRole::Mono);
     }
 }
