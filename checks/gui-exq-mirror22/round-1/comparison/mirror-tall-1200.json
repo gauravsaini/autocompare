@@ -1,0 +1,76 @@
+{
+  "assertions": {
+    "arrow_cx_1200": 600.0,
+    "band_fill_selected": true,
+    "band_fill_unselected": false,
+    "bottom_legend_segments": 4,
+    "center_gutter_w": 20.0,
+    "column_x_1200": 590.0,
+    "hit_band_1200": [
+      588.0,
+      612.0
+    ],
+    "hit_slop": 2.0,
+    "live_wrap_default": "off (App word_wrap false; live Text Compare via --open uses wrap-off virtualized path)",
+    "marker_box": 16.0,
+    "marker_fg": "CHANGED_FG (frozen reuse, no new color)",
+    "marker_frame": false,
+    "marker_inset": 2.0,
+    "marker_label_Changed": "=>",
+    "marker_label_Deleted": "=>",
+    "marker_label_Equal": null,
+    "marker_label_Inserted": "=>",
+    "pane_labels_empty": [
+      "L-",
+      "R-"
+    ],
+    "scroll_window_0_60_heads": [
+      2
+    ],
+    "scroll_window_470_530_heads": [
+      500
+    ],
+    "scroll_window_980_1040_heads": [
+      1000
+    ],
+    "tall_heads_1200rows": [
+      2,
+      500,
+      1000
+    ],
+    "track_fill_selected": false,
+    "track_fill_unselected": true,
+    "trailing_floor_balanced_tall_1200_9": 60
+  },
+  "description": "mirror22 live-path tall scroll: default wrap-off live Text Compare (--open) keeps 20px center gutter (column 590, cx 600, hit 588..612) with frameless yellow '=>' hunk-head markers only at [2,500,1000]; unselected rows paint track fill (continuous strip), selected rows band fill; trailing floor balanced; live bottom bar already paints per-pane L-/R- + 4-segment legend with honest fallback.",
+  "inputs": {
+    "avail_w": 1200.0,
+    "live_paint_sites": [
+      "wrap-off head (~views.rs paint_text_body wrap-off branch)",
+      "wrap-off continuation",
+      "wrap-off trailing-blank (track fill)",
+      "wrap-on head/continuation/trailing (same 20px helpers, parity)"
+    ],
+    "panes_h": 1200.0,
+    "row_h": 17.6,
+    "rows": "1200 rows, Equal except Changed@2..3, Deleted@500, Inserted@1000..1001",
+    "scroll_windows": [
+      [
+        0,
+        60
+      ],
+      [
+        470,
+        530
+      ],
+      [
+        980,
+        1040
+      ]
+    ],
+    "visible_rows": 9
+  },
+  "intent": "live-path stability: width + arrow cx + hunk heads + band/track complement identical at every scroll offset; marker frameless; status honest",
+  "mode": "None",
+  "name": "mirror-tall-1200"
+}

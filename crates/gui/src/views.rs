@@ -3645,6 +3645,19 @@ fn paint_text_body(
                                                     ),
                                                 );
                                                 ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                            } else if text_center_gutter_track_fill(is_selected) {
+                                                let track = egui::Rect::from_min_size(
+                                                    ui.min_rect().min,
+                                                    egui::vec2(
+                                                        text_center_gutter_width(),
+                                                        row_height,
+                                                    ),
+                                                );
+                                                ui.painter().rect_filled(
+                                                    track,
+                                                    0.0,
+                                                    track_for(dark),
+                                                );
                                             }
                                             if text_center_hunk_head(&model.rows, orig) {
                                                 let kind_opt = model.rows.get(orig).map(|r| r.kind);
@@ -3666,10 +3679,14 @@ fn paint_text_body(
                                                                 text_center_marker_inset(),
                                                             );
                                                             if ui
-                                                                .small_button(
-                                                                    RichText::new(label).color(
-                                                                        text_center_marker_fg(),
-                                                                    ),
+                                                                .add(
+                                                                    egui::Button::new(
+                                                                        RichText::new(label).color(
+                                                                            text_center_marker_fg(),
+                                                                        ),
+                                                                    )
+                                                                    .small()
+                                                                    .frame(false),
                                                                 )
                                                                 .on_hover_text("Copy changed hunk")
                                                                 .clicked()
@@ -3692,6 +3709,14 @@ fn paint_text_body(
                                                             ui.painter().rect_filled(
                                                                 g_rect, 0.0, CHANGED_BG,
                                                             );
+                                                        } else if text_center_gutter_track_fill(
+                                                            is_selected,
+                                                        ) {
+                                                            ui.painter().rect_filled(
+                                                                g_rect,
+                                                                0.0,
+                                                                track_for(dark),
+                                                            );
                                                         }
                                                         if resp.clicked() {
                                                             select_action = Some(orig);
@@ -3709,6 +3734,13 @@ fn paint_text_body(
                                                 if text_center_gutter_band_fill(is_selected) {
                                                     ui.painter()
                                                         .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                } else if text_center_gutter_track_fill(is_selected)
+                                                {
+                                                    ui.painter().rect_filled(
+                                                        g_rect,
+                                                        0.0,
+                                                        track_for(dark),
+                                                    );
                                                 }
                                                 if resp.clicked() {
                                                     select_action = Some(orig);
@@ -3739,6 +3771,12 @@ fn paint_text_body(
                                             );
                                             if text_center_gutter_band_fill(is_selected) {
                                                 ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                            } else if text_center_gutter_track_fill(is_selected) {
+                                                ui.painter().rect_filled(
+                                                    g_rect,
+                                                    0.0,
+                                                    track_for(dark),
+                                                );
                                             }
                                         });
                                         ui.label(right_job);
@@ -3779,10 +3817,11 @@ fn paint_text_body(
                                 paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
                                 ui.vertical(|ui| {
                                     ui.set_width(text_center_gutter_width());
-                                    ui.allocate_exact_size(
+                                    let (g_rect, _) = ui.allocate_exact_size(
                                         egui::vec2(text_center_gutter_width(), row_height),
                                         egui::Sense::hover(),
                                     );
+                                    ui.painter().rect_filled(g_rect, 0.0, track_for(dark));
                                 });
                                 let blank_right = wrap_blank_sub_job(
                                     font_id.clone(),
@@ -3839,10 +3878,11 @@ fn paint_text_body(
                                     paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
                                     ui.vertical(|ui| {
                                         ui.set_width(text_center_gutter_width());
-                                        ui.allocate_exact_size(
+                                        let (g_rect, _) = ui.allocate_exact_size(
                                             egui::vec2(text_center_gutter_width(), row_height),
                                             egui::Sense::hover(),
                                         );
+                                        ui.painter().rect_filled(g_rect, 0.0, track_for(dark));
                                     });
                                     let right_job = side_job_with_prefs(
                                         Side::Right,
@@ -3927,6 +3967,12 @@ fn paint_text_body(
                                             egui::vec2(text_center_gutter_width(), row_height),
                                         );
                                         ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                    } else if text_center_gutter_track_fill(is_selected) {
+                                        let track = egui::Rect::from_min_size(
+                                            ui.min_rect().min,
+                                            egui::vec2(text_center_gutter_width(), row_height),
+                                        );
+                                        ui.painter().rect_filled(track, 0.0, track_for(dark));
                                     }
                                     if text_center_hunk_head(&model.rows, orig) {
                                         let kind_opt = model.rows.get(orig).map(|r| r.kind);
@@ -3941,9 +3987,13 @@ fn paint_text_body(
                                                     // symmetric hit-slop).
                                                     ui.add_space(text_center_marker_inset());
                                                     if ui
-                                                        .small_button(
-                                                            RichText::new(label)
-                                                                .color(text_center_marker_fg()),
+                                                        .add(
+                                                            egui::Button::new(
+                                                                RichText::new(label)
+                                                                    .color(text_center_marker_fg()),
+                                                            )
+                                                            .small()
+                                                            .frame(false),
                                                         )
                                                         .on_hover_text("Copy changed hunk")
                                                         .clicked()
@@ -3963,6 +4013,13 @@ fn paint_text_body(
                                                 if text_center_gutter_band_fill(is_selected) {
                                                     ui.painter()
                                                         .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                } else if text_center_gutter_track_fill(is_selected)
+                                                {
+                                                    ui.painter().rect_filled(
+                                                        g_rect,
+                                                        0.0,
+                                                        track_for(dark),
+                                                    );
                                                 }
                                                 if resp.clicked() {
                                                     select_action = Some(orig);
@@ -3976,6 +4033,8 @@ fn paint_text_body(
                                         );
                                         if text_center_gutter_band_fill(is_selected) {
                                             ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                        } else if text_center_gutter_track_fill(is_selected) {
+                                            ui.painter().rect_filled(g_rect, 0.0, track_for(dark));
                                         }
                                         if resp.clicked() {
                                             select_action = Some(orig);
@@ -4870,6 +4929,16 @@ pub fn text_center_hunk_marker(kind: TextRowKind) -> bool {
 /// hue/token nahi). Pure; unit-tested.
 pub fn text_center_gutter_band_fill(selected: bool) -> bool {
     selected
+}
+
+/// Center-gutter track fill: unselected rows par bhi 20px strip dikhe
+/// taaki gutter full-height continuous lage (BC center-bar precedent).
+/// [`text_center_gutter_band_fill`] ka complement — har row exactly ek
+/// fill pata hai (band ya track), koi transparent gap nahi. Paint caller
+/// existing `track_for(dark)` reuse karta hai (koi naya hue/token nahi).
+/// Pure; unit-tested.
+pub fn text_center_gutter_track_fill(selected: bool) -> bool {
+    !text_center_gutter_band_fill(selected)
 }
 
 /// Center-gutter marker content width px: ek arrow box
@@ -9614,6 +9683,105 @@ mod tests {
         assert!((row_h - 17.6).abs() < 0.01);
         assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9), 60);
         assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9) % 2, 0);
+    }
+
+    #[test]
+    fn mirror22_live_gutter_path() {
+        // Mirrors checks/gui-exq-mirror22/round-1/comparison/mirror-tall-1200.json:
+        // LIVE wrap-off path (default word_wrap false, --open Text Compare)
+        // 1200-row model par stable: 20px gutter, column 590, cx 600,
+        // heads [2,500,1000]; band/track complement se continuous strip;
+        // marker frameless yellow `=>` sirf hunk heads par; bottom bar
+        // honest fallback (L-/R-, 4-segment legend). Sab existing helpers.
+        use viewmodel::TextRow;
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-mirror22/round-1/comparison/mirror-tall-1200.json"
+        );
+        assert!(fixture_raw.contains("\"center_gutter_w\": 20.0"));
+        assert!(fixture_raw.contains("\"column_x_1200\": 590.0"));
+        assert!(fixture_raw.contains("\"arrow_cx_1200\": 600.0"));
+        assert!(fixture_raw.contains("\"marker_frame\": false"));
+        assert!(fixture_raw.contains("\"tall_heads_1200rows\": ["));
+        let mut rows = Vec::new();
+        let mut idx = 0usize;
+        while idx < 1200 {
+            let kind = if idx == 2 || idx == 3 {
+                TextRowKind::Changed
+            } else if idx == 500 {
+                TextRowKind::Deleted
+            } else if idx == 1000 || idx == 1001 {
+                TextRowKind::Inserted
+            } else {
+                TextRowKind::Equal
+            };
+            rows.push(TextRow {
+                kind,
+                ..TextRow::default()
+            });
+            idx = idx.saturating_add(1);
+        }
+        assert_eq!(rows.len(), 1200);
+        let mut heads = Vec::new();
+        let mut i = 0usize;
+        while i < rows.len() {
+            if text_center_hunk_head(&rows, i) {
+                heads.push(i);
+            }
+            i = i.saturating_add(1);
+        }
+        assert_eq!(heads, vec![2, 500, 1000]);
+        let window_heads = |lo: usize, hi: usize| {
+            let mut found = Vec::new();
+            let mut j = lo;
+            while j < hi && j < rows.len() {
+                if text_center_hunk_head(&rows, j) {
+                    found.push(j);
+                }
+                j = j.saturating_add(1);
+            }
+            found
+        };
+        assert_eq!(window_heads(0, 60), vec![2]);
+        assert_eq!(window_heads(470, 530), vec![500]);
+        assert_eq!(window_heads(980, 1040), vec![1000]);
+        assert_eq!(window_heads(60, 470), Vec::<usize>::new());
+        // LIVE width: wrap-off head bhi wahi 20px helper.
+        assert_eq!(text_center_gutter_width(), 20.0);
+        assert_eq!(
+            text_center_gutter_width(),
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text_center_column_x_for_avail(1200.0), 590.0);
+        assert!((text_center_arrow_cx_for_avail(1200.0) - 600.0).abs() < 0.001);
+        assert_eq!(text_center_hit_band_for_avail(1200.0), (588.0, 612.0));
+        assert_eq!(text_center_marker_content_w(), 16.0);
+        assert_eq!(text_center_marker_inset(), 2.0);
+        // Frameless yellow arrows: label gate + ink, Equal blank.
+        assert_eq!(text_center_marker_label(TextRowKind::Changed), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Deleted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Inserted), Some("=>"));
+        assert_eq!(text_center_marker_label(TextRowKind::Equal), None);
+        assert!(!text_center_hunk_head(&rows, 0));
+        assert!(!text_center_hunk_head(&rows, 3));
+        assert!(!text_center_hunk_head(&rows, 1001));
+        assert_eq!(text_center_marker_fg(), CHANGED_FG);
+        assert_eq!(text_center_marker_fg(), crate::theme::CHANGED_FG);
+        // Continuous strip: band selected par, track unselected par — complement.
+        assert!(text_center_gutter_band_fill(true));
+        assert!(!text_center_gutter_band_fill(false));
+        assert!(!text_center_gutter_track_fill(true));
+        assert!(text_center_gutter_track_fill(false));
+        // Tall floor balanced.
+        let row_h = text_row_top_rhythm_px();
+        assert!((row_h - 17.6).abs() < 0.01);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9), 60);
+        assert_eq!(text_trailing_blank_rows_balanced(1200.0, row_h, 9) % 2, 0);
+        // Live bottom bar honest fallback: empty par L-/R-, legend 4 segments.
+        let (left_label, right_label) = text_pane_cursor_labels(&[], None);
+        assert_eq!(left_label, "L-");
+        assert_eq!(right_label, "R-");
+        assert_eq!(text_legend_segments().len(), 4);
+        assert!(format_text_legend_line().contains(" | "));
     }
 
     #[test]
