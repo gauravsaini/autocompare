@@ -1,0 +1,44 @@
+{
+  "name": "tree-wide-960",
+  "intent": "Indent-step consistency at 960px wide: every depth advances one SPACE_MD step, arrows carry symmetric slop, row height locks to Mono line-height",
+  "width_px": 960.0,
+  "indent_step_px": 12.0,
+  "indent_step_source": "SPACE_MD",
+  "depths": {
+    "0": { "indent_px": 0.0, "path_x_px": 40.0 },
+    "1": { "indent_px": 12.0, "path_x_px": 52.0 },
+    "2": { "indent_px": 24.0, "path_x_px": 64.0 },
+    "3": { "indent_px": 36.0, "path_x_px": 76.0 },
+    "4": { "indent_px": 48.0, "path_x_px": 88.0 },
+    "5": { "indent_px": 60.0, "path_x_px": 100.0 },
+    "6": { "indent_px": 72.0, "path_x_px": 112.0 },
+    "7": { "indent_px": 84.0, "path_x_px": 124.0 },
+    "8": { "indent_px": 96.0, "path_x_px": 136.0 }
+  },
+  "successive_delta_px": 12.0,
+  "expander": {
+    "cell_w_px": 16.0,
+    "hit_slop_px": 4.0,
+    "hit_slop_source": "SPACE_XS",
+    "symmetric": true,
+    "rect_depth1_top24": [8.0, 24.0, 32.0, 41.6],
+    "left_slop_px": 4.0,
+    "right_slop_px": 4.0
+  },
+  "row": {
+    "role": "Mono",
+    "size_px": 12.0,
+    "line_height": 1.3,
+    "line_height_px": 15.6,
+    "pad_y_px": 1.0,
+    "row_height_px": 17.6
+  },
+  "columns_960": {
+    "name_x_px": 0.0,
+    "size_x_px": 738.0,
+    "modified_x_px": 832.0,
+    "fixed_cols_total_w_px": 222.0,
+    "canvas_right_edge_px": 960.0
+  },
+  "notes": "indent(d+1)-indent(d) == 12.0 for depths 0..=8; path_x == indent + 40.0; expander rect widens cell by 4.0 each side; row 17.6 == 15.6 + 2*1.0; columns steady (0.0, 738.0, 832.0) across depths"
+}

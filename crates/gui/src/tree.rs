@@ -7177,3 +7177,185 @@ mod exq_tree6_tests {
         );
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE7: indent-step consistency lock at 960px wide + symmetric arrows +
+// Mono-locked row height (headless).
+// BC folder compare tree: indent advances one even step per depth (no drift),
+// expander chevron carries equal hit-slop both sides, row height follows the
+// mono line-height. TREE6 already ships the rhythm (`tree_wide_row_h` 17.6,
+// `tree_expander_hit_rect_symmetric`); TREE7 locks the consistency so future
+// edits cannot drift one spelling: every indent source agrees, successive
+// depth deltas stay constant through depth 8, arrow slop stays symmetric, row
+// height stays Mono-derived. Geometry FIRST (SPACE_MD step, SPACE_XS slop),
+// typography SECOND (Mono line-height + pad, no new sizes). Colors FROZEN.
+// WIRING (paint): unchanged from TREE6 — `tree_expander_hit_rect_symmetric`
+// for hits, `tree_wide_row_h` rhythm at 960 via `tree_wide_960_row_top`.
+// ----------------------------------------------------------------------------
+
+/// TREE7 indent step px: one MD step from SPACE tokens (12.0).
+/// Single source for the consistency lock; equals [`tree_indent_step`],
+/// [`tree_indent_step_from_space`] and [`tree_guide_step_px`].
+/// Pure; unit-tested.
+pub fn tree7_indent_step() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// TREE7 indent px for `depth`: `depth * SPACE_MD`, no drift.
+/// Pure; unit-tested.
+pub fn tree7_indent_for_depth(depth: usize) -> f32 {
+    (depth as f32) * tree7_indent_step()
+}
+
+/// Whether every tree-side indent spelling agrees and successive depth
+/// deltas stay constant through depth 8: all sources read 12.0 and each
+/// `indent(d+1) - indent(d)` step holds. Pure; unit-tested.
+pub fn tree7_indent_step_consistent() -> bool {
+    let step = tree7_indent_step();
+    let space_ok = (step - crate::theme::SPACE_MD).abs() < 0.001
+        && (step - crate::theme::GEO_TREE_INDENT_STEP).abs() < 0.001
+        && (step - tree_indent_step()).abs() < 0.001
+        && (step - tree_indent_step_from_space()).abs() < 0.001
+        && (step - tree_guide_step_px()).abs() < 0.001;
+    if !space_ok {
+        return false;
+    }
+    let mut depth = 0usize;
+    while depth <= 8 {
+        let here = tree7_indent_for_depth(depth);
+        let legacy = tree_indent_for_depth(depth);
+        if (here - legacy).abs() >= 0.001 {
+            return false;
+        }
+        if depth > 0 {
+            let prev = tree7_indent_for_depth(depth.saturating_sub(1));
+            if ((here - prev) - step).abs() >= 0.001 {
+                return false;
+            }
+        }
+        depth = depth.saturating_add(1);
+    }
+    true
+}
+
+/// Whether the expander hit rect carries symmetric x slop at
+/// (`depth`, `row_top`): left slop == right slop == [`TREE_EXPANDER_HIT_SLOP`]
+/// and the rect tiles the locked row height. Pure; unit-tested.
+pub fn tree7_expander_symmetric(depth: usize, row_top: f32) -> bool {
+    let (x0, y0, x1, y1) = tree_expander_hit_rect_symmetric(depth, row_top);
+    let cell_x0 = tree_indent_for_depth(depth);
+    let left_slop = cell_x0 - x0;
+    let right_slop = x1 - (cell_x0 + folder_expander_width());
+    (left_slop - TREE_EXPANDER_HIT_SLOP).abs() < 0.001
+        && (right_slop - TREE_EXPANDER_HIT_SLOP).abs() < 0.001
+        && (left_slop - right_slop).abs() < 0.001
+        && ((y1 - y0) - tree_wide_row_h()).abs() < 0.001
+}
+
+/// TREE7 row height px at 960 wide: the Mono-locked rhythm (17.6).
+/// Same single source as [`tree_wide_row_h`]. Pure; unit-tested.
+pub fn tree7_row_height() -> f32 {
+    tree_wide_row_h()
+}
+
+/// Whether the TREE7 row height matches `TypoRole::Mono` line-height plus
+/// symmetric table pad (15.6 + 2 x 1.0 = 17.6). Pure; unit-tested.
+pub fn tree7_row_height_matches_mono() -> bool {
+    let locked = crate::theme::TypoRole::Mono.line_height_px() + 2.0 * TREE_ROW_PAD_Y;
+    (tree7_row_height() - locked).abs() < 0.001
+}
+
+#[cfg(test)]
+mod exq_tree7_tests {
+    use super::*;
+
+    #[test]
+    fn tree7_indent_step_from_space_tokens() {
+        assert_eq!(tree7_indent_step(), 12.0);
+        assert_eq!(tree7_indent_step(), crate::theme::SPACE_MD);
+        assert_eq!(tree7_indent_step(), crate::theme::GEO_TREE_INDENT_STEP);
+        assert_eq!(tree7_indent_step(), tree_indent_step());
+        assert_eq!(tree7_indent_step(), tree_indent_step_from_space());
+        assert_eq!(tree7_indent_step(), tree_guide_step_px());
+        assert!(tree7_indent_step_consistent());
+    }
+
+    #[test]
+    fn tree7_indent_deltas_constant_through_depth8() {
+        let mut depth = 0usize;
+        while depth <= 8 {
+            assert_eq!(tree7_indent_for_depth(depth), depth as f32 * 12.0);
+            assert_eq!(
+                folder_row_path_x_separated(depth),
+                depth as f32 * 12.0 + 40.0
+            );
+            if depth > 0 {
+                let delta = tree7_indent_for_depth(depth) - tree7_indent_for_depth(depth - 1);
+                assert!((delta - 12.0).abs() < 0.001);
+            }
+            depth += 1;
+        }
+    }
+
+    #[test]
+    fn tree7_arrows_symmetric_slop() {
+        assert_eq!(TREE_EXPANDER_HIT_SLOP, crate::theme::SPACE_XS);
+        assert_eq!(TREE_EXPANDER_HIT_SLOP, 4.0);
+        assert!(tree7_expander_symmetric(0, 0.0));
+        assert!(tree7_expander_symmetric(1, 24.0));
+        assert!(tree7_expander_symmetric(5, 88.0));
+        // Depth-1 rect: cell 12.0..28.0 widened by 4.0 each side.
+        let rect = tree_expander_hit_rect_symmetric(1, 24.0);
+        assert_eq!(rect.0, 8.0);
+        assert_eq!(rect.2, 32.0);
+        assert!((rect.3 - rect.1 - tree7_row_height()).abs() < 0.001);
+        // Slop hit tests agree with the rect on both edges.
+        assert!(tree_expander_contains_x_with_slop(1, 8.0));
+        assert!(tree_expander_contains_x_with_slop(1, 32.0));
+        assert!(!tree_expander_contains_x_with_slop(1, 7.9));
+        assert!(!tree_expander_contains_x_with_slop(1, 32.1));
+        assert!(!tree_expander_contains_x_with_slop(0, f32::NAN));
+    }
+
+    #[test]
+    fn tree7_row_height_from_mono_line_height() {
+        assert!((crate::theme::TypoRole::Mono.line_height_px() - 15.6).abs() < 0.001);
+        assert!((tree7_row_height() - 17.6).abs() < 0.001);
+        assert_eq!(tree7_row_height(), tree_wide_row_h());
+        assert_eq!(tree7_row_height(), tree_row_height());
+        assert!(tree7_row_height_matches_mono());
+        assert!((tree_wide_960_row_top(3) - 3.0 * tree7_row_height()).abs() < 0.001);
+    }
+
+    #[test]
+    fn exq_tree7_round1_tree_wide_960_indent_consistency() {
+        // Headless test proving edge fixture comparison/tree-wide-960.json
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree7/round-1/comparison/tree-wide-960.json");
+        assert!(fixture_raw.contains("\"name\": \"tree-wide-960\""));
+        assert!(fixture_raw.contains("\"width_px\": 960.0"));
+        assert!(fixture_raw.contains("\"indent_step_px\": 12.0"));
+        assert!(fixture_raw.contains("\"successive_delta_px\": 12.0"));
+        assert!(fixture_raw.contains("\"line_height_px\": 15.6"));
+        assert!(fixture_raw.contains("\"row_height_px\": 17.6"));
+        assert!(fixture_raw.contains("\"hit_slop_px\": 4.0"));
+        assert!(fixture_raw.contains("\"symmetric\": true"));
+        assert!(fixture_raw.contains("738.0"));
+        assert!(fixture_raw.contains("832.0"));
+        // Lock holds: every spelling agrees, deltas constant, arrows
+        // symmetric, row Mono-derived, columns steady at 960.
+        assert!(tree7_indent_step_consistent());
+        assert!(tree7_row_height_matches_mono());
+        let mut depth = 0usize;
+        while depth <= 8 {
+            assert_eq!(tree7_indent_for_depth(depth), depth as f32 * 12.0);
+            assert!(tree7_expander_symmetric(
+                depth,
+                depth as f32 * tree7_row_height()
+            ));
+            let cols = tree_columns_aligned_at_960(depth.min(5));
+            assert_eq!(cols, (0.0, 738.0, 832.0));
+            depth += 1;
+        }
+    }
+}
