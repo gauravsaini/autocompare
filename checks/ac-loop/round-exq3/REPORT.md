@@ -5,7 +5,18 @@
 - own sessions: text folder hex merge table sync picture folder-merge audio (own-help.txt)
 - comparison dir: add new edge fixtures here each round, rerun same dir on fix, advance N only on PASS series
 RESULT: PASS
-- exq3 wave (geometry first, typo second, colors frozen): lib+bin split (view-model pub API, egui thin); zero dead-code suppressions; viewport 960x600 + 720 fallback (window min-size, narrow fixture 720x600 proves zero raw clip); dual_pane_widths/clip_text_end/clip_to_width headless + paint-chrome/status adoption; TypoRole::rank locks hierarchy; edge-02 tabs-vs-spaces+unicode added
-- exq3a wave (geometry first, typo second, colors frozen): completed lib+bin split (new crates/gui/src/lib.rs pub API x12, main.rs thin launcher) so `pub` headless helpers no longer need suppression; dead-code suppressions 253 -> 0 with zero suppressions added. Geometry: toolbar gap single-sourced (`toolbar_icon_gap()` adopted in `paint_session_toolbar`), split grab width single-sourced (`SPLIT_HANDLE_W = viewmodel::SPLIT_HANDLE_HIT_W`), 720 fallback fixture (`render_narrow_text_fixture_png`) on the shared headless budget (`VIEWPORT_MIN_W` + `dual_pane_widths` + `clip_to_width`), proof `comparison/narrow-720-proof.png` 720x600 magic-ok. Typography: status mid verdict wired to `status_verdict_role()` (Body 13) vs side counts `status_side_role()` (Small 11), filter labels at tab chrome Body 13; colors untouched (Color32 touches 29 = baseline). Fixtures added: edge-01 long-line wrap/clip, edge-02 narrow-table; edge-02 narrow-expected.
-- exq3a gates: cargo test -p autocompare-gui 712 pass; cargo clippy --all-targets -D warnings clean; cargo fmt --check clean; dead-code-suppression grep 0 in OWNS; after.png 9765B magic-ok distinct-256; narrow-720-proof.png 8162B 720x600 magic-ok.
-- RESULT: PASS
+
+## Exquisite GUI Geometry + Typography Verification (round-exq3)
+- **Harness execution**: `tools/ac-loop/run.sh checks/ac-loop/round-exq3` -> EXIT 0, RESULT: PASS
+- **Test suite**: 714 passed, 0 failed (`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/agent-exq3 cargo test -p autocompare-gui`)
+- **Clippy check**: 0 warnings clean (`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/agent-exq3 cargo clippy -p autocompare-gui --no-deps --all-targets -- -D warnings`)
+- **Format check**: 0 diffs clean (`cargo fmt -p autocompare-gui -- --check`)
+- **Dead code attribute grep**: 0 hits
+- **Screenshot validation**:
+  - `checks/ac-loop/round-exq3/gui/after.png`: size=9765 bytes (>= 8192: ok), magic=True, distinct=256 (> 64: ok)
+  - `checks/ac-loop/round-exq3/comparison/narrow-720-proof.png`: size=8162 bytes, 720x600 responsive fallback verified
+- **Edge fixtures in comparison/**:
+  - `edge-01-long-line-expected.txt`, `edge-long-line-left.txt`, `edge-long-line-right.txt` (long line wrap/clip at 80 chars)
+  - `edge-02-path-density-expected.txt`, `edge-path-density-left.txt`, `edge-path-density-right.txt` (720px fallback with long path wrapping and density)
+  - `edge-02-narrow-expected.txt`, `edge-02-table-left.txt`, `edge-02-table-right.txt` (table and narrow views)
+  - `edge-02-tabs-unicode-expected.txt`, `edge-tabs-left.txt`, `edge-tabs-right.txt` (tabs vs spaces and unicode)
