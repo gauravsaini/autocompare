@@ -1,0 +1,12 @@
+{
+  "id": "edge-bcomp-case-01",
+  "scope": "crates/cli/src/bcomp*",
+  "observation": "BC switches are case-insensitive (/RO, /AUTOMERGE, -TITLE1). Lowercase already worked; uppercase failed with exit 2.",
+  "invocations": [
+    {"args": ["-RO", "edge-bcomp-case-01-left.txt", "edge-bcomp-case-01-right.txt"], "want_exit": 1},
+    {"args": ["/RO", "edge-bcomp-case-01-left.txt", "edge-bcomp-case-01-right.txt"], "want_exit": 1},
+    {"args": ["-TITLE1=Local", "-TITLE2=Remote", "text", "edge-bcomp-case-01-left.txt", "edge-bcomp-case-01-right.txt"], "want_exit": 1}
+  ],
+  "root_cause": "normalize_single_dash_flags matched exact lowercase only",
+  "fix": "lowercase flag part before '=' for -// prefixes, preserve value case; unknown passthrough keeps original"
+}

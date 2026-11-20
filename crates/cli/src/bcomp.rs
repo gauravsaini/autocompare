@@ -34,6 +34,17 @@ fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
 
     for arg in args {
+        // BC switches are case-insensitive; lower only the flag part, preserve value case.
+        // Paths and @session values stay verbatim.
+        let cmp_arg: String = match arg.split_once('=') {
+            Some((flag, val)) if flag.starts_with('-') || flag.starts_with('/') => {
+                format!("{}={val}", flag.to_ascii_lowercase())
+            }
+            None if arg.starts_with('-') || arg.starts_with('/') => arg.to_ascii_lowercase(),
+            _ => arg.clone(),
+        };
+        let orig = arg;
+        let arg = &cmp_arg;
         // Read-only flags
         if arg == "-ro" || arg == "/ro" || arg == "-readonly" || arg == "/readonly" {
             out.push("--ro".to_string());
@@ -258,7 +269,7 @@ fn normalize_single_dash_flags(args: &[String]) -> Vec<String> {
         } else if arg == "-audio" || arg == "/audio" {
             out.push("audio".to_string());
         } else {
-            out.push(arg.clone());
+            out.push(orig.clone());
         }
     }
 
