@@ -1618,3 +1618,8 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - Commit `c978d2a` feat(sessions): versioned WorkspaceConfig roundtrip + migration (lib/session/workspace + 3 test files). OWNS crates/sessions + checks/agyx-sessions-b only.
 - Gates: sessions tests 14+8+11+5 green, clippy 0 warnings, fmt clean, banned only test-expects (clippy --all-targets green), colors 0. Pushed origin/main.
 - Still running: AGYX-A reports (6 files), AGYX-C diff (2 files).
+
+## 2026-11-20 — AGYX-C DIFF landed + pushed
+- Commit `2b0917d` feat(diff): grammar + unimportant-rules line diffing with BC5 display filters. OWNS crates/diff + checks/agyx-diff-c only.
+- Gates: diff tests 59+33+44+20+38 green, clippy 0 warnings, fmt clean, banned 0, colors 0. Pushed origin/main (post-verify, all green).
+- Still running: AGYX-A reports (6 files + checks/agyx-reports-a).
