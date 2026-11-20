@@ -9,7 +9,7 @@ use autocompare_sessions::{SessionDocument, SessionTab};
 
 use crate::error::CliError;
 use crate::outcome::Outcome;
-use crate::report::{ReportSpec, write_report};
+use crate::report::{write_report, ReportSpec};
 use crate::{
     render_audio, render_folder, render_hex, render_picture, render_sync, render_table, render_text,
 };

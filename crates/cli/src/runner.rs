@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::args::{Cli, Command, SyncDir};
 use crate::error::CliError;
 use crate::outcome::Outcome;
-use crate::report::{ReportSpec, write_report};
+use crate::report::{write_report, ReportSpec};
 use crate::{
     render_audio, render_folder, render_foldermerge, render_hex, render_picture, render_sync,
     render_table, render_text, render_text_unified, session_cmd, term,
