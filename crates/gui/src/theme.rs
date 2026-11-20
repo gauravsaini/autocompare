@@ -295,6 +295,22 @@ pub const VIEWPORT_MIN_H: u32 = 450;
 /// Fixed chrome around the dual panes in px: 12 outer lead + 4 pane
 /// gap + 16 overview gutter + 8 right margin (fixture budget parity).
 pub const DUAL_PANE_CHROME_W: u32 = 40;
+/// Text-center gutter width in px: two independent panes ke beech
+/// fixed-width center gutter jisme per-hunk copy arrows rehte hain.
+/// Ponytail reuse: `CHROME_HEADER_BAR_H + GUTTER_BAR_WIDE +
+/// 2 * GEO_TIGHT_GAP` = 48.0 — do chhote copy buttons side-by-side fit
+/// hote hain, equal rows par blank click-to-select rehta hai. No new
+/// literal, no color; paint (`views::TEXT_CENTER_GUTTER_W`) adopts in
+/// a later wave. Pure token; unit-tested.
+pub const TEXT_CENTER_GUTTER_W: f32 =
+    CHROME_HEADER_BAR_H + GUTTER_BAR_WIDE + GEO_TIGHT_GAP + GEO_TIGHT_GAP;
+/// Inline accent span underline width in px: sharp 1px line under the
+/// changed word block (1px visual precedent, same as the split visual).
+/// Spans hug the word exactly (zero char padding — the headless
+/// `accent_a`/`accent_b` ranges are already half-open char offsets), so
+/// emphasis comes from block + 1px line, never a full-width wash.
+/// No color move; pure token; unit-tested.
+pub const TEXT_INLINE_SPAN_UNDERLINE_W: f32 = 1.0;
 
 /// One typographic role: size + family + weight, line-height shared.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -448,6 +464,15 @@ impl TypoRole {
     /// delegates here in a later wave (`gutter.rs` is out of scope now).
     /// Paint adoption is a later wave; no size/color/geometry moves here.
     pub const fn gutter_text() -> Self {
+        Self::Mono
+    }
+
+    /// Text-center diff-body role: Mono (12 regular monospace, tabular).
+    /// Both text panes paint as Mono content, never chrome — gutter text
+    /// (`gutter_text`) same family me rehta hai taaki gutter + body ek
+    /// rhythm me padhe. Value-stable alias over [`TypoRole::content_grid`];
+    /// paint adoption later wave; no size/color/geometry move here.
+    pub const fn content_textcenter() -> Self {
         Self::Mono
     }
 
@@ -1282,6 +1307,45 @@ pub fn keymap_has_core_mac_bindings(preset: KeymapPreset) -> bool {
     let has_reset =
         keymap_resolve(preset, egui::Key::Num0, &cmd_modifiers) == Some(KeyAction::ResetZoom);
     has_find && has_info && has_reset
+}
+
+// ----------------------------------------------------------------------------
+// TEXT CENTER exquisite type steps (second): diff-body Mono 12, chrome
+// Body 13, hints Small 11 — calm hierarchy, no new sizes. Sab maujooda
+// tokens reuse, colors untouched. Paint adoption baad ki wave me; ye
+// headless intent hai.
+// ----------------------------------------------------------------------------
+
+/// TEXT CENTER type steps ok: Body 13 > Mono 12 > Small 11; line-height
+/// px order body (18.2) > mono (15.6) > small (13.2); weights 400
+/// body/mono < 600 small-counts; tracking trio 0.0, headers 0.02em;
+/// tabular Mono + Small, Body never. TypoSpec delegation locked per role.
+/// Pure; headless-tested.
+pub fn typo_textcenter_steps_ok() -> bool {
+    let body = TypoRole::Body;
+    let mono = TypoRole::content_textcenter();
+    let small = TypoRole::Small;
+    mono.size() == TYPO_MONO_SIZE
+        && body.size() == TYPO_BODY_SIZE
+        && small.size() == TYPO_SMALL_SIZE
+        && mono.size() < body.size()
+        && small.size() < mono.size()
+        && body.line_height_px() > mono.line_height_px()
+        && mono.line_height_px() > small.line_height_px()
+        && mono.weight_value() == TYPO_WEIGHT_REGULAR
+        && body.weight_value() == TYPO_WEIGHT_REGULAR
+        && small.weight_value() == TYPO_WEIGHT_SEMIBOLD
+        && mono.letter_spacing_em() == 0.0
+        && body.letter_spacing_em() == 0.0
+        && small.letter_spacing_em() == 0.0
+        && TypoRole::Heading.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
+        && mono.is_tabular()
+        && small.is_tabular()
+        && !body.is_tabular()
+        && mono.is_mono()
+        && mono.spec().weight_value == TYPO_WEIGHT_REGULAR
+        && body.spec().size == TYPO_BODY_SIZE
+        && small.spec().size == TYPO_SMALL_SIZE
 }
 
 // ----------------------------------------------------------------------------
@@ -2251,6 +2315,73 @@ mod tests {
         assert_eq!(TypoRole::HomeTitle.letter_spacing_em(), 0.02);
         assert_eq!(TypoRole::HomeButton.letter_spacing_em(), 0.0);
         assert_eq!(TypoRole::HomeDesc.letter_spacing_em(), 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn typo_textcenter_steps_carry_hierarchy_without_new_sizes() {
+        // TEXT CENTER: diff-body Mono 12, chrome Body 13, hints Small 11.
+        // TypoRole + TYPO_* reuse only; koi naya size, koi color move nahi.
+        assert!(typo_textcenter_steps_ok());
+        assert_eq!(TypoRole::content_textcenter(), TypoRole::Mono);
+        assert_eq!(TypoRole::content_textcenter(), TypoRole::content_grid());
+        assert_eq!(TypoRole::content_textcenter(), TypoRole::gutter_text());
+        assert_eq!(TypoRole::content_textcenter().size(), TYPO_MONO_SIZE);
+        assert_eq!(TypoRole::Body.size(), TYPO_BODY_SIZE);
+        assert_eq!(TypoRole::Small.size(), TYPO_SMALL_SIZE);
+        // Weights: 400 body/mono, 600 small-counts, 500 headers.
+        assert_eq!(
+            TypoRole::content_textcenter().weight_value(),
+            TYPO_WEIGHT_REGULAR
+        );
+        assert_eq!(TypoRole::Body.weight_value(), TYPO_WEIGHT_REGULAR);
+        assert_eq!(TypoRole::Small.weight_value(), TYPO_WEIGHT_SEMIBOLD);
+        assert_eq!(TypoRole::Heading.weight_value(), TYPO_WEIGHT_MEDIUM);
+        // Line-height px order: body 18.2 > mono 15.6 > small 13.2.
+        assert_eq!(
+            TypoRole::Body.line_height_px(),
+            13.0 * TYPO_LINE_HEIGHT_BODY
+        );
+        assert_eq!(
+            TypoRole::content_textcenter().line_height_px(),
+            12.0 * TYPO_LINE_HEIGHT_MONO
+        );
+        assert_eq!(
+            TypoRole::Small.line_height_px(),
+            11.0 * TYPO_LINE_HEIGHT_CHROME
+        );
+        // Tracking: trio 0.0, sirf headers 0.02em.
+        assert_eq!(TypoRole::content_textcenter().letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Body.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::Small.letter_spacing_em(), 0.0);
+        assert_eq!(
+            TypoRole::Heading.letter_spacing_em(),
+            TYPO_TRACKING_HEADING_EM
+        );
+        // Tabular: mono + small stable, body kabhi nahi.
+        assert!(TypoRole::content_textcenter().is_tabular());
+        assert!(TypoRole::Small.is_tabular());
+        assert!(!TypoRole::Body.is_tabular());
+        // TypoSpec delegation: har field accessor se match.
+        let spec = TypoRole::content_textcenter().spec();
+        assert_eq!(spec.size, TYPO_MONO_SIZE);
+        assert_eq!(spec.weight_value, TYPO_WEIGHT_REGULAR);
+        assert_eq!(spec.line_height, TYPO_LINE_HEIGHT_MONO);
+        assert_eq!(spec.line_height_px, 12.0 * TYPO_LINE_HEIGHT_MONO);
+        assert!(spec.is_tabular);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn textcenter_geometry_tokens_reuse_scale() {
+        // 48 = header-bar 28 + gutter-bar 12 + 2 x tight-gap 4.
+        // Underline 1px visual precedent. Koi naya literal/color nahi.
+        assert_eq!(TEXT_CENTER_GUTTER_W, 48.0);
+        assert_eq!(
+            TEXT_CENTER_GUTTER_W,
+            CHROME_HEADER_BAR_H + GUTTER_BAR_WIDE + GEO_TIGHT_GAP + GEO_TIGHT_GAP
+        );
+        assert_eq!(TEXT_INLINE_SPAN_UNDERLINE_W, 1.0);
     }
 
     #[test]

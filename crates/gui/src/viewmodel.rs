@@ -1237,6 +1237,121 @@ pub fn dual_pane_x_positions(avail_w: u32, fraction: f32) -> (u32, u32, u32) {
     (left_x, right_x, gutter_x)
 }
 
+// ----------------------------------------------------------------------------
+// Text-center exquisite geometry (headless): center gutter + viewport fill.
+// Paint-neutral this wave — `views.rs` adopts in a later wave; these lock
+// the budget math headless so the BC gap (no gutter, black void, one-blob
+// accents) has a measured target. All margins reuse the SPACE scale via
+// theme tokens; no new px literals, no color moves.
+// ----------------------------------------------------------------------------
+
+/// Text-center gutter width in px (headless): single source over
+/// [`crate::theme::TEXT_CENTER_GUTTER_W`] (48.0 = header 28 + gutter bar
+/// 12 + 2 x tight gap 4). Fixed column between the two panes carrying
+/// per-hunk copy arrows; equal rows keep it blank click-to-select.
+/// Pure; unit-tested.
+pub fn text_center_gutter_w() -> f32 {
+    crate::theme::TEXT_CENTER_GUTTER_W
+}
+
+/// Text-center chrome in px: dual-pane chrome (40) plus the fixed center
+/// gutter (48) = 88. Panes split what remains; chrome wider than
+/// `avail_w` yields zero free so paint stacks instead of underflowing.
+/// Pure; unit-tested.
+pub fn textcenter_chrome_w() -> u32 {
+    crate::theme::DUAL_PANE_CHROME_W.saturating_add(text_center_gutter_w() as u32)
+}
+
+/// Text-center pane widths for `avail_w` at `fraction`: `(left_w,
+/// right_w)` after the 88px chrome comes off, split by the clamped
+/// fraction (same [`clamp_split_fraction`] contract as
+/// [`dual_pane_widths`]). At 960 the pair is 436/436, at the 720
+/// fallback 316/316; chrome wider than `avail_w` yields `(0, 0)`.
+/// Pure; unit-tested.
+pub fn textcenter_pane_widths(avail_w: u32, fraction: f32) -> (u32, u32) {
+    let free = avail_w.saturating_sub(textcenter_chrome_w());
+    let clamped = clamp_split_fraction(fraction);
+    let share = if clamped.is_finite() {
+        clamped
+    } else {
+        SPLIT_DEFAULT_FRACTION
+    };
+    let left = if free > 0 {
+        (free as f32 * share).min(free as f32) as u32
+    } else {
+        0
+    };
+    (left.min(free), free.saturating_sub(left.min(free)))
+}
+
+/// Text-center x positions for `avail_w` at `fraction`: `(left_x,
+/// gutter_x, right_x)` on the shared headless budget (OUTER_PAD 12 lead,
+/// PANE_GAP 4 pane-to-gutter on each side, widths from
+/// [`textcenter_pane_widths`]). At 960 the triple is (12, 452, 504), at
+/// the 720 fallback (12, 332, 384). Degenerate input yields the stacked
+/// origin (12, 12, 12) so paint never underflows. Pure; unit-tested.
+pub fn textcenter_x_positions(avail_w: u32, fraction: f32) -> (u32, u32, u32) {
+    const OUTER_PAD: u32 = 12;
+    const PANE_GAP: u32 = 4;
+    let (left_w, right_w) = textcenter_pane_widths(avail_w, fraction);
+    if left_w == 0 && right_w == 0 {
+        // Degenerate: chrome ne poora budget kha liya — stacked origin.
+        return (OUTER_PAD, OUTER_PAD, OUTER_PAD);
+    }
+    let gutter_w = text_center_gutter_w() as u32;
+    let left_x = OUTER_PAD;
+    let gutter_x = left_x.saturating_add(left_w).saturating_add(PANE_GAP);
+    let right_x = gutter_x.saturating_add(gutter_w).saturating_add(PANE_GAP);
+    (left_x, gutter_x, right_x)
+}
+
+/// Viewport fill: how many blank ruled rows the empty area below short
+/// content needs so the viewport fills instead of leaving a black void
+/// (BC ruled-empty-area precedent). Slots are `ceil(panes_h / row_h)`,
+/// trailing is slots minus `visible_len` — short files get positive
+/// fill, full/overflow gets zero. Mirrors the paint-side trailing-blank
+/// math; non-finite/non-positive budgets yield 0 so headless callers
+/// never divide by zero. Pure; unit-tested.
+pub fn textcenter_fill_rows(panes_h: f32, row_h: f32, visible_len: usize) -> usize {
+    if !panes_h.is_finite() || !row_h.is_finite() || panes_h <= 0.0 || row_h <= 0.0 {
+        return 0;
+    }
+    let slots = (panes_h / row_h).ceil().clamp(0.0, 100_000.0) as usize;
+    slots.saturating_sub(visible_len)
+}
+
+/// Center-gutter hunk head: first row of a contiguous difference block.
+/// Reuses [`section_bounds`] so the gate lives in one place — Equal rows
+/// and out-of-bounds indices are never heads, continuation rows are
+/// never heads. Paint shows one copy-arrow pair per hunk head and keeps
+/// the rest of the gutter blank click-to-select. Pure; unit-tested.
+pub fn textcenter_hunk_head(rows: &[TextRow], idx: usize) -> bool {
+    match section_bounds(rows, idx) {
+        Some((start, _)) => start == idx,
+        None => false,
+    }
+}
+
+/// Inline accent span pair for one row side: half-open char offsets
+/// into the left (`accent_a`) and right (`accent_b`) text. Clippy
+/// `type_complexity` gate ke liye named alias taaki
+/// [`textcenter_accent_spans`] signature simple rahe.
+pub type CharSpanPair<'a> = (&'a [(usize, usize)], &'a [(usize, usize)]);
+
+/// Inline accent spans for one row: half-open char offsets hugging the
+/// changed words exactly (zero char padding — sharp inline diff, never
+/// a full-width wash). Only `Changed` rows carry spans; every other kind
+/// reads blank. Emphasis is block + the 1px
+/// [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`] line. Pure;
+/// unit-tested.
+pub fn textcenter_accent_spans(row: &TextRow) -> CharSpanPair<'_> {
+    if row.kind == TextRowKind::Changed {
+        (row.accent_a.as_slice(), row.accent_b.as_slice())
+    } else {
+        (&[], &[])
+    }
+}
+
 /// Virtualized row window for `show_rows` callers: clamps `(top,
 /// top+per_page)` into `[0, total]`. Empty or zero-page input yields
 /// `(0, 0)`; overshoot pins to `total`. Mirrors
@@ -4349,5 +4464,188 @@ mod tests {
         // Segmented edge: sirf cursor ho to bhi line honest rehti hai.
         let cursor_only = path_segmented_status_for("L- R5", "", "", "");
         assert_eq!(path_segmented_status_line(&cursor_only), "L- R5");
+    }
+
+    // ---- text-center exquisite geometry (headless) ----
+
+    #[test]
+    fn textcenter_gutter_reuses_space_scale() {
+        use crate::theme::{
+            CHROME_HEADER_BAR_H, GEO_TIGHT_GAP, GUTTER_BAR_WIDE, TEXT_CENTER_GUTTER_W,
+        };
+        // 28 + 12 + 4 + 4 = 48: do chhote copy buttons fit, koi naya literal nahi.
+        assert_eq!(TEXT_CENTER_GUTTER_W, 48.0);
+        assert_eq!(text_center_gutter_w(), TEXT_CENTER_GUTTER_W);
+        assert_eq!(
+            text_center_gutter_w(),
+            CHROME_HEADER_BAR_H + GUTTER_BAR_WIDE + GEO_TIGHT_GAP + GEO_TIGHT_GAP
+        );
+    }
+
+    #[test]
+    fn textcenter_pane_widths_split_free_budget() {
+        // Chrome 88 (40 dual + 48 center): 960 -> 436/436, 720 -> 316/316.
+        assert_eq!(textcenter_chrome_w(), 88);
+        assert_eq!(textcenter_pane_widths(960, 0.5), (436, 436));
+        assert_eq!(textcenter_pane_widths(720, 0.5), (316, 316));
+        // Clamp: fraction bahar ho to 20/80 edge par tikta hai.
+        let (lo_l, lo_r) = textcenter_pane_widths(960, 0.0);
+        assert_eq!(lo_l, 174);
+        assert_eq!(lo_l.saturating_add(lo_r), 872);
+        // Degenerate: chrome se tang window par (0, 0) — paint stacks.
+        assert_eq!(textcenter_pane_widths(80, 0.5), (0, 0));
+        assert_eq!(textcenter_pane_widths(88, 0.5), (0, 0));
+    }
+
+    #[test]
+    fn textcenter_x_positions_pin_gutter_between_panes() {
+        // 960: left 12, gutter 12+436+4=452, right 452+48+4=504.
+        assert_eq!(textcenter_x_positions(960, 0.5), (12, 452, 504));
+        // 720 fallback: left 12, gutter 12+316+4=332, right 332+48+4=384.
+        assert_eq!(textcenter_x_positions(720, 0.5), (12, 332, 384));
+        // Order invariant: gutter hamesha panes ke beech.
+        let (lx, gx, rx) = textcenter_x_positions(960, 0.3);
+        assert!(lx < gx && gx < rx);
+        // Degenerate: stacked origin, kabhi underflow nahi.
+        assert_eq!(textcenter_x_positions(80, 0.5), (12, 12, 12));
+        assert_eq!(textcenter_x_positions(0, 0.5), (12, 12, 12));
+    }
+
+    #[test]
+    fn textcenter_fill_rows_fills_viewport_not_content() {
+        // 6 rows of 24px in a 600px viewport: 25 slots - 6 = 19 ruled blanks.
+        assert_eq!(textcenter_fill_rows(600.0, 24.0, 6), 19);
+        // Full/overflow: zero, kabhi negative nahi.
+        assert_eq!(textcenter_fill_rows(600.0, 24.0, 25), 0);
+        assert_eq!(textcenter_fill_rows(600.0, 24.0, 40), 0);
+        assert_eq!(textcenter_fill_rows(100.0, 24.0, 0), 5);
+        // Guards: degenerate budgets yield 0, kabhi panic/NaN nahi.
+        assert_eq!(textcenter_fill_rows(0.0, 24.0, 6), 0);
+        assert_eq!(textcenter_fill_rows(600.0, 0.0, 6), 0);
+        assert_eq!(textcenter_fill_rows(f32::NAN, 24.0, 6), 0);
+        assert_eq!(textcenter_fill_rows(600.0, f32::NAN, 6), 0);
+        assert_eq!(textcenter_fill_rows(f32::INFINITY, 24.0, 6), 0);
+    }
+
+    #[test]
+    fn textcenter_hunk_head_marks_block_starts_only() {
+        let diff = |kind: TextRowKind| TextRow {
+            kind,
+            ..TextRow::default()
+        };
+        let rows = vec![
+            diff(TextRowKind::Equal),
+            diff(TextRowKind::Changed),
+            diff(TextRowKind::Changed),
+            diff(TextRowKind::Deleted),
+            diff(TextRowKind::Equal),
+        ];
+        assert!(!textcenter_hunk_head(&rows, 0));
+        assert!(textcenter_hunk_head(&rows, 1));
+        assert!(!textcenter_hunk_head(&rows, 2));
+        // Index 3 head nahi: Changed+Deleted contiguous ek hi section hai.
+        assert!(!textcenter_hunk_head(&rows, 3));
+        assert!(!textcenter_hunk_head(&rows, 4));
+        // Alag blocks (Equal separator) me do heads.
+        let split = vec![
+            diff(TextRowKind::Changed),
+            diff(TextRowKind::Equal),
+            diff(TextRowKind::Inserted),
+        ];
+        assert!(textcenter_hunk_head(&split, 0));
+        assert!(!textcenter_hunk_head(&split, 1));
+        assert!(textcenter_hunk_head(&split, 2));
+        // OOB kabhi head nahi.
+        assert!(!textcenter_hunk_head(&rows, 99));
+        assert!(!textcenter_hunk_head(&[], 0));
+    }
+
+    #[test]
+    fn textcenter_accent_spans_only_changed_rows_carry_them() {
+        use crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+        // Underline 1px visual precedent; spans char-hugging, zero pad.
+        assert_eq!(TEXT_INLINE_SPAN_UNDERLINE_W, 1.0);
+        let changed = TextRow {
+            kind: TextRowKind::Changed,
+            accent_a: vec![(10, 15)],
+            accent_b: vec![(10, 13)],
+            ..TextRow::default()
+        };
+        let (a, b) = textcenter_accent_spans(&changed);
+        assert_eq!(a, &[(10, 15)]);
+        assert_eq!(b, &[(10, 13)]);
+        for kind in [
+            TextRowKind::Equal,
+            TextRowKind::Deleted,
+            TextRowKind::Inserted,
+        ] {
+            let row = TextRow {
+                kind,
+                accent_a: vec![(0, 2)],
+                accent_b: vec![(0, 2)],
+                ..TextRow::default()
+            };
+            let (a, b) = textcenter_accent_spans(&row);
+            assert!(a.is_empty() && b.is_empty());
+        }
+    }
+
+    // ---- text-center edge fixtures ----
+
+    #[test]
+    fn textcenter_edge_empty_vs_nonempty_is_all_inserted() {
+        // Edge fixture: empty left vs 3-line right — sab Inserted,
+        // right-only numbers, gutter floor 4, pane right se banta hai.
+        let cmp = cmp_text(
+            &[],
+            &["alpha", "beta", "gamma"],
+            vec![Op::Insert { len: 3 }],
+            true,
+        );
+        let model = build_text_rows(&cmp);
+        assert_eq!(model.rows.len(), 3);
+        for (i, row) in model.rows.iter().enumerate() {
+            assert_eq!(row.kind, TextRowKind::Inserted);
+            assert_eq!(row.left_no, None);
+            assert_eq!(row.right_no, Some(i + 1));
+            assert!(row.left.is_empty());
+        }
+        assert_eq!(model.pane_chars, 5); // "gamma"
+        assert_eq!(model.gutter_chars, 4);
+        // Viewport fill: 3 rows visible hon to bhi viewport bharta hai.
+        assert!(textcenter_fill_rows(600.0, 24.0, model.rows.len()) > 0);
+        // Center gutter: inserted block ka head sirf pehla row.
+        assert!(textcenter_hunk_head(&model.rows, 0));
+        assert!(!textcenter_hunk_head(&model.rows, 1));
+    }
+
+    #[test]
+    fn textcenter_edge_tail_insertion_pairs_numbers_honestly() {
+        // Edge fixture: equal head + tail insertion — pehle Equal with
+        // paired numbers, phir Inserted right-only; accents kahin nahi.
+        let cmp = cmp_text(
+            &["alpha", "beta"],
+            &["alpha", "beta", "gamma", "delta"],
+            vec![Op::Equal { len: 2 }, Op::Insert { len: 2 }],
+            true,
+        );
+        let model = build_text_rows(&cmp);
+        assert_eq!(model.rows.len(), 4);
+        for (i, row) in model.rows.iter().take(2).enumerate() {
+            assert_eq!(row.kind, TextRowKind::Equal);
+            assert_eq!(row.left_no, Some(i + 1));
+            assert_eq!(row.right_no, Some(i + 1));
+        }
+        for (i, row) in model.rows.iter().skip(2).enumerate() {
+            assert_eq!(row.kind, TextRowKind::Inserted);
+            assert_eq!(row.left_no, None);
+            assert_eq!(row.right_no, Some(i + 3));
+            let (a, b) = textcenter_accent_spans(row);
+            assert!(a.is_empty() && b.is_empty());
+        }
+        // Tail block head: index 2; gutter x-order bana rehta hai.
+        assert!(textcenter_hunk_head(&model.rows, 2));
+        let (lx, gx, rx) = textcenter_x_positions(960, 0.5);
+        assert!(lx < gx && gx < rx);
     }
 }
