@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use autocompare_diff::{decode_image, diff_pictures, encode_png, picture_heatmap, RgbaImage};
+use autocompare_diff::{RgbaImage, decode_image, diff_pictures, encode_png, picture_heatmap};
 
 use crate::{Error, PictureComparison, PictureOptions, Result};
 

@@ -223,11 +223,7 @@ pub fn decode_bmp(bytes: &[u8]) -> Option<RgbaImage> {
             let r = row_bytes.get(px_idx.checked_add(2)?).copied()?;
             let a = if bytes_per_pixel == 4 {
                 let raw_a = row_bytes.get(px_idx.checked_add(3)?).copied()?;
-                if raw_a == 0 {
-                    255
-                } else {
-                    raw_a
-                }
+                if raw_a == 0 { 255 } else { raw_a }
             } else {
                 255
             };
@@ -875,7 +871,9 @@ mod tests {
             assert_eq!(dec.height, 2);
             assert_eq!(
                 dec.pixels,
-                vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,]
+                vec![
+                    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+                ]
             );
         }
     }
@@ -948,12 +946,13 @@ mod tests {
         if let Some(big) = one.scaled(2) {
             assert_eq!((big.width, big.height), (2, 2));
             assert_eq!(big.pixels.len(), 16);
-            assert!(big
-                .pixels
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .all(|px| *px == [9, 8, 7, 255]));
+            assert!(
+                big.pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|px| *px == [9, 8, 7, 255])
+            );
         } else {
             assert_eq!(one.width, 0, "x2 zoom of 1x1 must succeed");
         }
