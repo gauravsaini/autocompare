@@ -5178,3 +5178,276 @@ mod exq_tree2_tests {
         assert!(!path.strong);
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE4: folder grid columns + indent-guide span + gutter arrows (headless).
+// BC pattern, outside observation only: size/time apne fixed grid columns
+// me right-aligned block me padhte hain (count kabhi path se wrap nahi hota),
+// indent guides poori row height span karti hain taaki levels juden, aur
+// gutter me prev/next changed arrows hote hain. Geometry first: side block
+// right-aligned (tang window par path-min ke baad left-stack fallback, paint
+// scroll karta hai, crush nahi), guide span row height, arrow cell expander
+// parity. Typography second: arrow typo header-strong reuse, koi naya size
+// nahi. Colors frozen: yahan koi hue nahi.
+// WIRING (paint): har visible node ke liye path
+// `folder_row_path_x_separated(depth)` se `folder_path_avail_px` tak (truncate
+// jab `folder_path_needs_truncate`), side cols `folder_grid_column_xs` se
+// `folder_column_align` me; guides `tree_indent_guide_xs(depth)` par
+// `tree_indent_guide_row_span(row_top)` tak; gutter arrows
+// `folder_gutter_arrow_hit_rect(row_top, is_next)` par
+// `folder_gutter_arrow_typo()` me.
+// ----------------------------------------------------------------------------
+
+/// Folder gutter prev/next arrow cell width px: expander parity (16.0 LG).
+pub const FOLDER_GUTTER_ARROW_W: f32 = crate::theme::SPACE_LG;
+
+/// Gutter arrow cell width px (single source). Pure; unit-tested.
+pub fn folder_gutter_arrow_width() -> f32 {
+    FOLDER_GUTTER_ARROW_W
+}
+
+/// Gutter arrow hit rect `(x0, y0, x1, y1)` px: prev arrow row ke upar aadhe
+/// me, next arrow neeche aadhe me — ek 16px cell me stacked, poori row
+/// height cover. Non-finite `row_top` par origin fallback (koi NaN nahi).
+/// Pure; unit-tested.
+pub fn folder_gutter_arrow_hit_rect(row_top: f32, is_next: bool) -> (f32, f32, f32, f32) {
+    let top = if row_top.is_finite() { row_top } else { 0.0 };
+    let half = FOLDER_ROW_HEIGHT / 2.0;
+    if is_next {
+        (
+            0.0,
+            top + half,
+            FOLDER_GUTTER_ARROW_W,
+            top + FOLDER_ROW_HEIGHT,
+        )
+    } else {
+        (0.0, top, FOLDER_GUTTER_ARROW_W, top + half)
+    }
+}
+
+/// Gutter arrow typo: header-strong reuse (caption-strong mono) — koi naya
+/// size nahi, farak sirf weight se. Pure; unit-tested.
+pub fn folder_gutter_arrow_typo() -> FolderTypo {
+    folder_header_typo()
+}
+
+/// Side block width px: 4 fixed cols (L/R size + L/R time) + unke beech 3
+/// gaps. Paint isi block ko right-align karta hai. Pure; unit-tested.
+pub fn folder_grid_side_px() -> f32 {
+    let size = folder_column_min_px(FolderColumn::LeftSize);
+    let time = folder_column_min_px(FolderColumn::LeftTime);
+    size + size + time + time + FOLDER_COL_GAP * 3.0
+}
+
+/// Side block ka x-origin px: right-aligned (`avail_w - side`), par path +
+/// path-min se takraye to left-stack fallback (tang window scroll karti hai,
+/// columns crush nahi hote). Non-finite `avail_w` par fallback. Pure.
+fn folder_grid_side_x0(avail_w: f32, depth: usize) -> f32 {
+    let floor = folder_row_path_x_separated(depth) + folder_column_min_px(FolderColumn::Path);
+    if !avail_w.is_finite() {
+        return floor;
+    }
+    let right = avail_w - folder_grid_side_px();
+    if right < floor { floor } else { right }
+}
+
+/// Grid column x-origins px `(path, lsize, rsize, ltime, rtime)`: path
+/// separated offset se, side block tile hota hai (har agli = pichhli + min +
+/// gap, bina overlap). Paint har cell isi x se `min_px` width me karta hai.
+/// Pure; unit-tested.
+pub fn folder_grid_column_xs(avail_w: f32, depth: usize) -> (f32, f32, f32, f32, f32) {
+    let path_x = folder_row_path_x_separated(depth);
+    let size = folder_column_min_px(FolderColumn::LeftSize);
+    let time = folder_column_min_px(FolderColumn::LeftTime);
+    let side_x0 = folder_grid_side_x0(avail_w, depth);
+    let rsize_x = side_x0 + size + FOLDER_COL_GAP;
+    let ltime_x = rsize_x + size + FOLDER_COL_GAP;
+    let rtime_x = ltime_x + time + FOLDER_COL_GAP;
+    (path_x, side_x0, rsize_x, ltime_x, rtime_x)
+}
+
+/// Path cell ki avail width px: side block se pehle bachi jagah (min 0).
+/// Non-finite budget par 0. Pure; unit-tested.
+pub fn folder_path_avail_px(avail_w: f32, depth: usize) -> f32 {
+    if !avail_w.is_finite() {
+        return 0.0;
+    }
+    (folder_grid_side_x0(avail_w, depth) - folder_row_path_x_separated(depth)).max(0.0)
+}
+
+/// Path truncate faisla: `path_chars` mono advance me avail se bahar.
+/// Khali path / non-finite budget par kabhi truncate nahi. Pure.
+pub fn folder_path_needs_truncate(avail_w: f32, depth: usize, path_chars: usize) -> bool {
+    if path_chars == 0 || !avail_w.is_finite() {
+        return false;
+    }
+    path_chars as f32 * FOLDER_MONO_ADVANCE > folder_path_avail_px(avail_w, depth)
+}
+
+/// Ek row par indent guides ka vertical span `(y0, y1)` px: poori row height,
+/// taaki guides upar-neeche rows se juden. Pure; unit-tested.
+pub fn tree_indent_guide_row_span(row_top: f32) -> (f32, f32) {
+    let top = if row_top.is_finite() { row_top } else { 0.0 };
+    (top, top + FOLDER_ROW_HEIGHT)
+}
+
+#[cfg(test)]
+mod exq_tree4_tests {
+    use super::*;
+
+    fn sized_row(path: &str, glyph: char) -> FolderRow {
+        FolderRow {
+            rel_path: path.to_string(),
+            is_dir: false,
+            glyph,
+            left_size: Some("2048".to_string()),
+            left_time: Some("2026-01-02 03:04".to_string()),
+            right_size: None,
+            right_time: None,
+            changed: glyph != '=',
+        }
+    }
+
+    #[test]
+    fn tree4_gutter_arrows_stack_full_row_height() {
+        // Cell expander parity (16 LG); prev upar aadha, next neeche aadha.
+        assert_eq!(folder_gutter_arrow_width(), 16.0);
+        assert_eq!(folder_gutter_arrow_width(), crate::theme::SPACE_LG);
+        assert_eq!(folder_gutter_arrow_width(), folder_expander_width());
+        assert_eq!(
+            folder_gutter_arrow_hit_rect(0.0, false),
+            (0.0, 0.0, 16.0, 12.0)
+        );
+        assert_eq!(
+            folder_gutter_arrow_hit_rect(0.0, true),
+            (0.0, 12.0, 16.0, 24.0)
+        );
+        assert_eq!(
+            folder_gutter_arrow_hit_rect(24.0, true),
+            (0.0, 36.0, 16.0, 48.0)
+        );
+        // Dono halves milkar poori row (24): koi dead tap nahi.
+        let prev = folder_gutter_arrow_hit_rect(48.0, false);
+        let next = folder_gutter_arrow_hit_rect(48.0, true);
+        assert_eq!(prev.3, next.1);
+        assert_eq!(next.3 - prev.1, FOLDER_ROW_HEIGHT);
+        // NaN guard: origin fallback, kabhi NaN rect nahi.
+        let nan_prev = folder_gutter_arrow_hit_rect(f32::NAN, false);
+        assert!(nan_prev.0.is_finite() && nan_prev.1.is_finite());
+        // Typo second: header-strong reuse, koi naya size nahi.
+        let arrow = folder_gutter_arrow_typo();
+        let header = folder_header_typo();
+        assert_eq!(arrow.size, header.size);
+        assert_eq!(arrow.size, FOLDER_HEADER_SIZE);
+        assert!(arrow.mono && arrow.strong);
+    }
+
+    #[test]
+    fn tree4_grid_side_block_right_aligns_at_960() {
+        // Side: 86+86+128+128 + 3x8 = 452; 960 par x0 = 508.
+        assert_eq!(folder_grid_side_px(), 452.0);
+        let (path, lsize, rsize, ltime, rtime) = folder_grid_column_xs(960.0, 0);
+        assert_eq!(path, 40.0);
+        assert_eq!((lsize, rsize, ltime, rtime), (508.0, 602.0, 696.0, 832.0));
+        // Tile bina overlap: har agli = pichhli + min + gap; aakhri edge par.
+        let size = folder_column_min_px(FolderColumn::LeftSize);
+        let time = folder_column_min_px(FolderColumn::LeftTime);
+        assert_eq!(rsize, lsize + size + FOLDER_COL_GAP);
+        assert_eq!(ltime, rsize + size + FOLDER_COL_GAP);
+        assert_eq!(rtime, ltime + time + FOLDER_COL_GAP);
+        assert_eq!(rtime + time, 960.0);
+        // Depth ke saath path aage sarakta hai, side block sthir rehta hai.
+        let (deep_path, deep_lsize, _, _, _) = folder_grid_column_xs(960.0, 3);
+        assert_eq!(deep_path, 76.0);
+        assert_eq!(deep_lsize, lsize);
+        // Path avail: 508 - 40 = 468; chhota naam fit, lamba truncate.
+        assert_eq!(folder_path_avail_px(960.0, 0), 468.0);
+        assert!(!folder_path_needs_truncate(960.0, 0, 9));
+        assert!(folder_path_needs_truncate(960.0, 0, 67));
+        assert!(!folder_path_needs_truncate(960.0, 0, 0));
+        assert!(!folder_path_needs_truncate(f32::NAN, 0, 67));
+        assert_eq!(folder_path_avail_px(f32::NAN, 0), 0.0);
+    }
+
+    #[test]
+    fn tree4_narrow_window_stacks_without_crush() {
+        // 400px: right-align takrayega (400-452 < 40+184), left-stack 224 par.
+        let (path, lsize, rsize, ltime, rtime) = folder_grid_column_xs(400.0, 0);
+        assert_eq!(path, 40.0);
+        assert_eq!((lsize, rsize, ltime, rtime), (224.0, 318.0, 412.0, 548.0));
+        // Columns kabhi crush nahi: min widths barkarar, paint scroll karta hai.
+        assert_eq!(
+            rsize - lsize,
+            folder_column_min_px(FolderColumn::LeftSize) + FOLDER_COL_GAP
+        );
+        assert_eq!(folder_path_avail_px(400.0, 0), 184.0);
+        assert!(folder_path_needs_truncate(400.0, 0, 27));
+        assert!(!folder_path_needs_truncate(400.0, 0, 26));
+        // Non-finite budget bhi stacked fallback, NaN-free.
+        let stacked = folder_grid_column_xs(f32::NAN, 1);
+        assert!(stacked.0.is_finite() && stacked.1.is_finite());
+        assert_eq!(stacked.0, folder_row_path_x_separated(1));
+    }
+
+    #[test]
+    fn tree4_guide_span_covers_full_row_height() {
+        assert_eq!(tree_indent_guide_row_span(0.0), (0.0, 24.0));
+        assert_eq!(tree_indent_guide_row_span(48.0), (48.0, 72.0));
+        assert_eq!(tree_indent_guide_row_span(f32::NAN), (0.0, 24.0));
+        // Span row height ke barabar: guides rows ke beech tootti nahi.
+        let span = tree_indent_guide_row_span(24.0);
+        assert_eq!(span.1 - span.0, folder_row_height());
+    }
+
+    #[test]
+    fn tree4_edge_deep_nesting_plus_orphan_newer() {
+        // Fixture checks/gui-exq-tree4/round-1/comparison/edge-deep-nesting-orphan-newer.json:
+        // 5-deep chain + orphan-newer (L, left sides set, right dashes).
+        let chain = [
+            "a",
+            "a/d1",
+            "a/d1/d2",
+            "a/d1/d2/d3",
+            "a/d1/d2/d3/d4",
+            "a/d1/d2/d3/d4/deep.txt",
+        ];
+        for (depth, rel) in chain.iter().enumerate() {
+            assert_eq!(tree_indent_guide_xs(depth).len(), depth);
+            assert_eq!(
+                folder_row_path_x_separated(depth),
+                depth as f32 * tree_indent_step() + 40.0
+            );
+            let _ = rel;
+        }
+        // Sabse gehre level par 5 guides; aakhri guide level-4 expander center.
+        assert_eq!(tree_indent_guide_xs(5), vec![8.0, 20.0, 32.0, 44.0, 56.0]);
+        // Orphan-newer: right sides dash par padded widths barkarar (align).
+        let orphan = sized_row("orphan-newer.txt", 'L');
+        assert_eq!(folder_cell_text(&orphan, FolderColumn::RightSize), "-");
+        assert_eq!(folder_cell_text(&orphan, FolderColumn::RightTime), "-");
+        assert_eq!(
+            pad_folder_cell(
+                &folder_cell_text(&orphan, FolderColumn::RightSize),
+                FOLDER_SIZE_CHARS
+            )
+            .chars()
+            .count(),
+            FOLDER_SIZE_CHARS
+        );
+        // Orphan aur normal row ke grid xs ek jaise: columns kabhi hilte nahi.
+        // Gehre depth (5) par bhi side block sthir, sirf path aage sarakta hai.
+        let (deep_path, deep_lsize, _, _, deep_rtime) = folder_grid_column_xs(960.0, 5);
+        assert_eq!(deep_path, 100.0);
+        assert_eq!(deep_lsize, 508.0);
+        assert_eq!(deep_rtime, 832.0);
+        let both = FolderRow {
+            right_size: Some("4096".to_string()),
+            right_time: Some("2026-01-03 04:05".to_string()),
+            ..sized_row("both.txt", '=')
+        };
+        assert_eq!(
+            dual_right_cell(&orphan).chars().count(),
+            dual_right_cell(&both).chars().count()
+        );
+    }
+}
