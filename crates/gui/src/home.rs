@@ -1705,6 +1705,26 @@ pub fn home_bottom_waste(
         .max(0.0)
 }
 
+// ----------------------------------------------------------------------------
+// Folder2 viewport fill (first): tab strip + status chrome ke baad folder
+// chrome (filter row + dual panes, `tree::` se aata hai) ke liye bachi jagah.
+// Geometry first: sab maujooda rhythm tokens se derive; colors untouched.
+// WIRING (paint): `folder_chrome_h` me `tree::folder_filter_row_height(wrapped)`
+// + `tree::folder_dual_chrome_height(pending)` jodo, result
+// `tree::folder_dual_visible_rows` me do taaki panes frame bharein.
+// ----------------------------------------------------------------------------
+
+/// Folder view avail height px: viewport minus tab strip, uska gap, folder
+/// chrome (filter + dual, caller se) aur status line. Tang par 0 floor (clip
+/// ka jhooth nahi); non-finite input par 0 (koi phantom avail nahi). Pure;
+/// headless-tested.
+pub fn folder_view_avail_height(viewport_h: f32, folder_chrome_h: f32) -> f32 {
+    if !viewport_h.is_finite() || !folder_chrome_h.is_finite() {
+        return 0.0;
+    }
+    (viewport_h - HOME_TAB_BAR_H - HOME_TAB_GAP - folder_chrome_h - HOME_STATUS_BAR_H).max(0.0)
+}
+
 /// Session-tree content height px: visible rows times row height plus
 /// upar-neeche pad. Khali ped par 0 (paint khali list chhupata hai). Pure;
 /// headless-tested.
@@ -2676,5 +2696,21 @@ mod tests {
         assert!(super::session_tree_needs_scroll(9, 200.0));
         assert!(!super::session_tree_needs_scroll(9, 600.0));
         assert!(!super::session_tree_needs_scroll(0, 200.0));
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn folder2_viewport_fill_wires_tree_chrome() {
+        // 600px viewport, wrapped filter (56) + dual chrome (64) = 120.
+        let chrome = crate::tree::folder_filter_row_height(true)
+            + crate::tree::folder_dual_chrome_height(false);
+        assert_eq!(chrome, 120.0);
+        // 600 - 28 - 4 - 120 - 28 = 420 avail.
+        assert_eq!(super::folder_view_avail_height(600.0, chrome), 420.0);
+        // 420px me 14 poori dual rows: (420 - 64) / 24 = 14.
+        assert_eq!(crate::tree::folder_dual_visible_rows(420.0, false), 14);
+        assert_eq!(super::folder_view_avail_height(100.0, chrome), 0.0);
+        assert_eq!(super::folder_view_avail_height(f32::NAN, chrome), 0.0);
+        assert_eq!(super::folder_view_avail_height(600.0, f32::NAN), 0.0);
     }
 }

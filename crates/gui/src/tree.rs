@@ -2567,6 +2567,313 @@ mod dual_tree_tests {
 }
 
 // ----------------------------------------------------------------------------
+// Folder2 dual-pane fill + filter row geometry (headless; paint `views.rs`).
+// BC pattern, outside observation only: dono panes + gap hamesha row bharte
+// hain (tang window scroll karti hai, crush nahi); filter row naam field +
+// Type/Status chunte (+ active chip + Clear jab lage) ek fit-check par.
+// Geometry first: widths, heights, chrome, offsets, wrap — sab maujooda
+// rhythm tokens se derive. Typography second: koi naya size nahi — bar
+// `folder_filter_typo` (body-regular mono), chip `folder_filter_active_typo`
+// (caption-strong mono) reuse; Clear button paint-default. Colors frozen.
+// WIRING (paint): panes `folder_dual_pane_widths(avail, split)` se (yeh
+// `split_picture_widths` parity hai); rows `folder_dual_visible_rows` se;
+// filter bar `folder_filter_row_content_width(active)` se wrap faisla karke
+// `folder_filter_row_height(wrapped)` par, controls
+// `folder_filter_row_offsets(active)` se.
+// ----------------------------------------------------------------------------
+
+/// Dual-pane min half width px: `views::MIN_HALF` parity (wahan private hai,
+/// isliye own const + parity note; paint wahi floor rakhta hai taaki tang
+/// window scroll kare, fields crush na hon).
+pub const FOLDER_DUAL_MIN_HALF: f32 = 180.0;
+/// Dual-pane beech gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`]).
+pub const FOLDER_DUAL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Dual-pane split handle hit width px: model single-source
+/// ([`crate::viewmodel::SPLIT_HANDLE_HIT_W`]).
+pub const FOLDER_DUAL_HANDLE_W: f32 = crate::viewmodel::SPLIT_HANDLE_HIT_W;
+/// Dual-pane page bar height px: standard hit row
+/// ([`crate::theme::CHROME_HEADER_BAR_H`]).
+pub const FOLDER_DUAL_PAGE_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+
+/// Dono folder panes ki widths px: `views::split_picture_widths` parity
+/// (gap ghata kar, `MIN_HALF` floor, leftover fill taaki pair hamesha row
+/// bhare). Fraction shared clamp ([`crate::viewmodel::clamp_split_fraction`],
+/// 0.20..=0.80); non-finite fraction default 0.50, non-finite avail floor
+/// pair. Pure; unit-tested.
+pub fn folder_dual_pane_widths(avail: f32, fraction: f32) -> (f32, f32) {
+    if !avail.is_finite() {
+        return (FOLDER_DUAL_MIN_HALF, FOLDER_DUAL_MIN_HALF);
+    }
+    let total = (avail - FOLDER_DUAL_GAP).max(2.0 * FOLDER_DUAL_MIN_HALF);
+    let share = if fraction.is_finite() {
+        crate::viewmodel::clamp_split_fraction(fraction)
+    } else {
+        crate::viewmodel::SPLIT_DEFAULT_FRACTION
+    };
+    let left = (total * share).clamp(FOLDER_DUAL_MIN_HALF, total - FOLDER_DUAL_MIN_HALF);
+    (left, total - left)
+}
+
+/// Dual-pane width waste px: `avail` me panes + gap ke baad bachi jagah.
+/// [`folder_dual_pane_widths`] se aaye widths par 0 (pair hamesha row bharta
+/// hai); bahar se aaye widths par dead-space check. Non-finite par 0 (koi
+/// phantom waste nahi). Pure; unit-tested.
+pub fn folder_dual_width_waste(avail: f32, left_w: f32, right_w: f32) -> f32 {
+    if !avail.is_finite() || !left_w.is_finite() || !right_w.is_finite() {
+        return 0.0;
+    }
+    (avail - (left_w + right_w + FOLDER_DUAL_GAP)).max(0.0)
+}
+
+/// Dual-pane rows se upar ka chrome px: page bar + header + 3 tight gaps
+/// (summary/note ke baad, header se pehle — paint `paint_folder_dual` order
+/// parity). Pending stub row par ek row + gap aur.
+pub fn folder_dual_chrome_height(has_pending: bool) -> f32 {
+    let mut chrome =
+        FOLDER_DUAL_PAGE_BAR_H + FOLDER_HEADER_HEIGHT + crate::theme::GEO_TIGHT_GAP * 3.0;
+    if has_pending {
+        chrome += FOLDER_ROW_HEIGHT + crate::theme::GEO_TIGHT_GAP;
+    }
+    chrome
+}
+
+/// Dual-pane me `avail_h` px me fit poori rows: chrome ke baad bachi jagah
+/// me kitne row-height rows. Tang/khali/non-finite budget par 0. Pure;
+/// headless-tested.
+pub fn folder_dual_visible_rows(avail_h: f32, has_pending: bool) -> usize {
+    if !avail_h.is_finite() {
+        return 0;
+    }
+    let inner = avail_h - folder_dual_chrome_height(has_pending);
+    if inner < FOLDER_ROW_HEIGHT {
+        return 0;
+    }
+    (inner / FOLDER_ROW_HEIGHT) as usize
+}
+
+/// Dual-pane content height px: chrome (page bar + headers, khaali ped par
+/// bhi dikhte hain) + visible rows. Khaali tree par chrome-only (0 nahi —
+/// panes ka frame rehta hai). Pure; headless-tested.
+pub fn folder_dual_content_height(visible_count: usize, has_pending: bool) -> f32 {
+    folder_dual_chrome_height(has_pending) + visible_count as f32 * FOLDER_ROW_HEIGHT
+}
+
+/// Dual-pane ko scroll window chahiye: content budget se bahar. Non-finite
+/// par false. Pure; headless-tested.
+pub fn folder_dual_needs_scroll(visible_count: usize, avail_h: f32, has_pending: bool) -> bool {
+    if !avail_h.is_finite() {
+        return false;
+    }
+    folder_dual_content_height(visible_count, has_pending) > avail_h
+}
+
+/// Dual-pane height waste px: content ke baad viewport me bachi jagah.
+/// Overflow par 0 (scroll), non-finite par 0. Paint isi se dead-space check
+/// karta hai. Pure; headless-tested.
+pub fn folder_dual_height_waste(avail_h: f32, visible_count: usize, has_pending: bool) -> f32 {
+    if !avail_h.is_finite() {
+        return 0.0;
+    }
+    (avail_h - folder_dual_content_height(visible_count, has_pending)).max(0.0)
+}
+
+/// Filter naam field width px: paint `views::FIND_NEEDLE_W` parity (120).
+pub const FOLDER_FILTER_NAME_W: f32 = 120.0;
+/// Type combo longest label chars: "Files only" (10).
+pub const FOLDER_FILTER_KIND_CHARS: usize = 10;
+/// Status combo longest label chars: "All statuses" (12).
+pub const FOLDER_FILTER_STATUS_CHARS: usize = 12;
+/// Combo/button frame pad px: button frame precedent (text pad + frame dono
+/// taraf; `home::HOME_CARD_CTA_FRAME_PAD` = 24 parity).
+pub const FOLDER_FILTER_COMBO_PAD: f32 = 24.0;
+/// Active chip longest text chars: "7 active" (8, `active_count` max 7).
+pub const FOLDER_FILTER_CHIP_CHARS: usize = 8;
+/// Clear button label chars: "Clear filters" (13).
+pub const FOLDER_FILTER_CLEAR_CHARS: usize = 13;
+
+/// Type combo width px: longest label x mono advance + frame pad.
+pub fn folder_filter_kind_width() -> f32 {
+    FOLDER_FILTER_KIND_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDER_FILTER_COMBO_PAD
+}
+
+/// Status combo width px: longest label x mono advance + frame pad.
+pub fn folder_filter_status_width() -> f32 {
+    FOLDER_FILTER_STATUS_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDER_FILTER_COMBO_PAD
+}
+
+/// Active chip width px: count label mono me, koi frame nahi.
+pub fn folder_filter_chip_width() -> f32 {
+    FOLDER_FILTER_CHIP_CHARS as f32 * FOLDER_MONO_ADVANCE
+}
+
+/// Clear button width px: label + button frame pad.
+pub fn folder_filter_clear_width() -> f32 {
+    FOLDER_FILTER_CLEAR_CHARS as f32 * FOLDER_MONO_ADVANCE + FOLDER_FILTER_COMBO_PAD
+}
+
+/// Filter row content width px: leading pad + naam + kind + status (+ chip +
+/// Clear jab active). Paint `paint_folder_filter_bar` order parity: pad,
+/// field, Type, Status, [chip, Clear], beech gaps. Pure; headless-tested.
+pub fn folder_filter_row_content_width(has_active: bool) -> f32 {
+    let mut width = FOLDER_FILTER_BAR_PAD_X
+        + FOLDER_FILTER_NAME_W
+        + FOLDER_FILTER_BAR_GAP
+        + folder_filter_kind_width()
+        + FOLDER_FILTER_BAR_GAP
+        + folder_filter_status_width();
+    if has_active {
+        width += FOLDER_FILTER_BAR_GAP
+            + folder_filter_chip_width()
+            + FOLDER_FILTER_BAR_GAP
+            + folder_filter_clear_width();
+    }
+    width
+}
+
+/// Filter row ko wrap chahiye: content `avail_w` se bahar. Non-finite par
+/// false (koi jhootha wrap nahi). Pure; headless-tested.
+pub fn folder_filter_row_needs_wrap(avail_w: f32, has_active: bool) -> bool {
+    if !avail_w.is_finite() {
+        return false;
+    }
+    folder_filter_row_content_width(has_active) > avail_w
+}
+
+/// Filter row height px: single row bar, wrapped par do bar + gap. Pure;
+/// headless-tested.
+pub fn folder_filter_row_height(wrapped: bool) -> f32 {
+    if wrapped {
+        FOLDER_FILTER_BAR_HEIGHT * 2.0 + FOLDER_FILTER_BAR_GAP
+    } else {
+        FOLDER_FILTER_BAR_HEIGHT
+    }
+}
+
+/// Filter row control x-offsets px `(name, kind, status, chip, clear)`:
+/// leading pad se, beech gaps ke saath, paint order parity. Inactive par
+/// chip/clear 0.0 (paint unhe dikhata nahi). Pure; headless-tested.
+pub fn folder_filter_row_offsets(has_active: bool) -> (f32, f32, f32, f32, f32) {
+    let name_x = FOLDER_FILTER_BAR_PAD_X;
+    let kind_x = name_x + FOLDER_FILTER_NAME_W + FOLDER_FILTER_BAR_GAP;
+    let status_x = kind_x + folder_filter_kind_width() + FOLDER_FILTER_BAR_GAP;
+    if !has_active {
+        return (name_x, kind_x, status_x, 0.0, 0.0);
+    }
+    let chip_x = status_x + folder_filter_status_width() + FOLDER_FILTER_BAR_GAP;
+    let clear_x = chip_x + folder_filter_chip_width() + FOLDER_FILTER_BAR_GAP;
+    (name_x, kind_x, status_x, chip_x, clear_x)
+}
+
+#[cfg(test)]
+mod folder2_tests {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn dual_pane_widths_fill_row_with_floor() {
+        // Tokens: floor 180 (views MIN_HALF parity), gap section rhythm,
+        // handle viewmodel single-source.
+        assert_eq!(FOLDER_DUAL_MIN_HALF, 180.0);
+        assert_eq!(FOLDER_DUAL_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(FOLDER_DUAL_GAP, 8.0);
+        assert_eq!(FOLDER_DUAL_HANDLE_W, crate::viewmodel::SPLIT_HANDLE_HIT_W);
+        // 960 canonical: (960 - 8) x 0.5 = 476 each, waste 0.
+        assert_eq!(folder_dual_pane_widths(960.0, 0.5), (476.0, 476.0));
+        let (left, right) = folder_dual_pane_widths(960.0, 0.5);
+        assert_eq!(folder_dual_width_waste(960.0, left, right), 0.0);
+        // 720 fallback: (720 - 8) x 0.5 = 356 each.
+        assert_eq!(folder_dual_pane_widths(720.0, 0.5), (356.0, 356.0));
+        // Clamp: 0.0 -> 0.20 floor (952 x 0.2 = 190.4).
+        let (clamped, _) = folder_dual_pane_widths(960.0, 0.0);
+        assert!((clamped - 190.4).abs() < 0.01);
+        // Tang 300: total (292).max(360) = 360 -> floor pair, crush nahi.
+        assert_eq!(folder_dual_pane_widths(300.0, 0.5), (180.0, 180.0));
+        assert_eq!(folder_dual_width_waste(300.0, 180.0, 180.0), 0.0);
+        // Guards: non-finite kabhi NaN layout nahi deta.
+        assert_eq!(folder_dual_pane_widths(f32::NAN, 0.5), (180.0, 180.0));
+        assert_eq!(folder_dual_pane_widths(960.0, f32::NAN), (476.0, 476.0));
+        assert_eq!(folder_dual_width_waste(f32::NAN, 476.0, 476.0), 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn dual_vertical_fill_chrome_and_rows() {
+        assert_eq!(FOLDER_DUAL_PAGE_BAR_H, 28.0);
+        assert_eq!(FOLDER_DUAL_PAGE_BAR_H, crate::theme::CHROME_HEADER_BAR_H);
+        // Chrome: 28 + 24 + 3x4 = 64; pending stub row +28 = 92.
+        assert_eq!(folder_dual_chrome_height(false), 64.0);
+        assert_eq!(folder_dual_chrome_height(true), 92.0);
+        // 200px budget, no pending: (200 - 64) / 24 = 5 poori rows.
+        assert_eq!(folder_dual_visible_rows(200.0, false), 5);
+        assert_eq!(folder_dual_visible_rows(60.0, false), 0);
+        assert_eq!(folder_dual_visible_rows(f32::NAN, false), 0);
+        // Content: chrome + rows; khaali ped par chrome-only frame rehta hai.
+        assert_eq!(folder_dual_content_height(0, false), 64.0);
+        assert_eq!(folder_dual_content_height(5, false), 184.0);
+        // 184 <= 200: scroll nahi, waste 16; 6 rows par scroll, waste 0.
+        assert!(!folder_dual_needs_scroll(5, 200.0, false));
+        assert_eq!(folder_dual_height_waste(200.0, 5, false), 16.0);
+        assert!(folder_dual_needs_scroll(6, 200.0, false));
+        assert_eq!(folder_dual_height_waste(200.0, 6, false), 0.0);
+        assert!(!folder_dual_needs_scroll(5, f32::NAN, false));
+        assert_eq!(folder_dual_height_waste(f32::NAN, 5, false), 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn filter_row_geometry_fits_and_wraps() {
+        // Widths: kind 10x7+24 = 94, status 12x7+24 = 108, chip 8x7 = 56,
+        // clear 13x7+24 = 115; naam field paint FIND_NEEDLE_W parity.
+        assert_eq!(FOLDER_FILTER_NAME_W, 120.0);
+        assert_eq!(FOLDER_FILTER_NAME_W, crate::views::FIND_NEEDLE_W);
+        assert_eq!(folder_filter_kind_width(), 94.0);
+        assert_eq!(folder_filter_status_width(), 108.0);
+        assert_eq!(folder_filter_chip_width(), 56.0);
+        assert_eq!(folder_filter_clear_width(), 115.0);
+        // Row: 8+120+8+94+8+108 = 346; active +8+56+8+115 = 533.
+        assert_eq!(folder_filter_row_content_width(false), 346.0);
+        assert_eq!(folder_filter_row_content_width(true), 533.0);
+        // Offsets tile bina overlap: kind 136, status 238, chip 354, clear 418.
+        assert_eq!(
+            folder_filter_row_offsets(false),
+            (8.0, 136.0, 238.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            folder_filter_row_offsets(true),
+            (8.0, 136.0, 238.0, 354.0, 418.0)
+        );
+        // 400px narrow: inactive fits, active wraps (24 -> 56).
+        assert!(!folder_filter_row_needs_wrap(400.0, false));
+        assert!(folder_filter_row_needs_wrap(400.0, true));
+        assert_eq!(folder_filter_row_height(false), 24.0);
+        assert_eq!(folder_filter_row_height(true), 56.0);
+        assert!(!folder_filter_row_needs_wrap(f32::NAN, true));
+        // Typo second: koi naya size nahi — bar body mono, chip caption-strong.
+        let bar = folder_filter_typo();
+        assert!(bar.mono && !bar.strong && bar.size == FOLDER_BODY_SIZE);
+        let chip = folder_filter_active_typo();
+        assert!(chip.mono && chip.strong && chip.size == FOLDER_SIDE_SIZE);
+    }
+
+    #[test]
+    fn folder2_narrow_edge_fixture() {
+        // Edge fixture `checks/gui-exq-folder2/round-1/comparison/dual-narrow-400.json`:
+        // 400px window (avail 376), active filters — row wraps, panes floor par.
+        let avail = 376.0;
+        assert!(folder_filter_row_needs_wrap(avail, true));
+        assert_eq!(folder_filter_row_height(true), 56.0);
+        assert!(!folder_filter_row_needs_wrap(avail, false));
+        let (left, right) = folder_dual_pane_widths(avail, 0.5);
+        assert_eq!((left, right), (184.0, 184.0));
+        assert!(left >= FOLDER_DUAL_MIN_HALF && right >= FOLDER_DUAL_MIN_HALF);
+        assert_eq!(folder_dual_width_waste(avail, left, right), 0.0);
+        // Vertical: 200px me 5 rows, waste 16 — dead space nahi badhta.
+        assert_eq!(folder_dual_visible_rows(200.0, false), 5);
+        assert_eq!(folder_dual_height_waste(200.0, 5, false), 16.0);
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Three-way tree merge plan (headless; paint wiring next wave).
 // Gap #7 model half (tree side): `TriplePaths` (base/left/right) se folder
 // 3-way plan. Teen snapshots ki presence union se sorted rows bante hain,

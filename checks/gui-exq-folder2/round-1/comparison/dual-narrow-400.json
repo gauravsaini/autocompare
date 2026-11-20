@@ -1,0 +1,32 @@
+{
+  "name": "dual-narrow-400",
+  "viewport_w": 400,
+  "viewport_h": 300,
+  "outer_margin": 12,
+  "filter": {
+    "active": true,
+    "content_w": 533.0,
+    "avail_w": 376.0,
+    "wraps": true,
+    "row_h": 56.0,
+    "inactive_content_w": 346.0,
+    "inactive_wraps": false
+  },
+  "dual_panes": {
+    "avail_w": 376.0,
+    "fraction": 0.5,
+    "left_w": 184.0,
+    "right_w": 184.0,
+    "min_half": 180.0,
+    "width_waste": 0.0
+  },
+  "dual_vertical": {
+    "avail_h": 200.0,
+    "has_pending": false,
+    "chrome_h": 64.0,
+    "visible_rows": 5,
+    "content_h": 184.0,
+    "needs_scroll": false,
+    "height_waste": 16.0
+  }
+}
