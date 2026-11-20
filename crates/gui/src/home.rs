@@ -2804,6 +2804,142 @@ pub fn home5_typo_reuses_home_roles() -> bool {
         && session_tree_hierarchy_ok()
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME2 exquisite (first): cards plus search @960px wide.
+// BC pattern, outside observation only: 960px canonical wide window par
+// 3-col card grid evenly flexed (936 avail, 8px gaps, 306.67px cards),
+// header TypoRole chrome line-height se, button hit-slop symmetric.
+// Geometry first: gaps via SPACE_SM (8.0, SECTION_GAP parity), side
+// margins via SPACE_MD (12.0), hit-slop via SPACE_XS (4.0). Typography
+// second: Heading/Body/Small reuse, koi naya size nahi. Paint adoption
+// paint-owner wave ka hai; colors untouched (zero Color32/Visuals).
+// Edge fixture: `checks/gui-exq-home2/comparison/home-wide-960.json`.
+// ----------------------------------------------------------------------------
+
+/// Home2 header bar height px: TypoRole Heading chrome line-height
+/// (`18.0 * 1.2 = 21.6`) single-source.
+pub const HOME2_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Home2 card grid gap px: SECTION_GAP / SPACE_SM (8.0 parity).
+pub const HOME2_CARD_GRID_GAP: f32 = crate::theme::SPACE_SM;
+
+/// Home2 content outer margin px: SPACE_MD (12.0 parity).
+pub const HOME2_CONTENT_MARGIN_X: f32 = crate::theme::SPACE_MD;
+
+/// Home2 button hit-slop px: SPACE_XS (4.0 parity), symmetric on all edges.
+pub const HOME2_BUTTON_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+
+/// Home2 button width px: compact floor ([`HOME_TOOLBAR_BUTTON_W`] = 96 parity).
+pub const HOME2_BUTTON_W: f32 = HOME_TOOLBAR_BUTTON_W;
+
+/// Home2 button height px: compact hit floor ([`HOME_TOOLBAR_BUTTON_H`] = 24 parity).
+pub const HOME2_BUTTON_H: f32 = HOME_TOOLBAR_BUTTON_H;
+
+/// Home2 button padded width px: 96 + 2 * 4 = 104.
+pub const HOME2_BUTTON_PADDED_W: f32 = HOME2_BUTTON_W + 2.0 * HOME2_BUTTON_HIT_SLOP;
+
+/// Home2 button padded height px: 24 + 2 * 4 = 32.
+pub const HOME2_BUTTON_PADDED_H: f32 = HOME2_BUTTON_H + 2.0 * HOME2_BUTTON_HIT_SLOP;
+
+/// Home2 header height px (single source). Pure; headless-tested.
+pub fn home2_header_height() -> f32 {
+    HOME2_HEADER_H
+}
+
+/// Home2 card grid gap px (single source). Pure; headless-tested.
+pub fn home2_card_grid_gap() -> f32 {
+    HOME2_CARD_GRID_GAP
+}
+
+/// Home2 button hit-slop px (single source). Pure; headless-tested.
+pub fn home2_button_hit_slop() -> f32 {
+    HOME2_BUTTON_HIT_SLOP
+}
+
+/// Home2 content avail width px: total minus side margins. Tang par 0,
+/// non-finite passthrough. Pure; headless-tested.
+pub fn home2_content_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME2_CONTENT_MARGIN_X * 2.0).max(0.0)
+}
+
+/// Home2 card grid columns at `total_w`: 960 par 3, tang par wrap, NaN par 3.
+pub fn home2_grid_columns(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let avail = home2_content_avail_width(total_w);
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME_CARD_MIN_W + cols as f32 * HOME2_CARD_GRID_GAP <= avail
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Home2 card grid rows for `item_count` at `total_w`. Pure; headless-tested.
+pub fn home2_grid_rows(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home2_grid_columns(total_w).max(1))
+}
+
+/// Home2 evenly flexed card width px: (avail - gaps) / cols, floor at min.
+/// Pure; headless-tested.
+pub fn home2_grid_card_width(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME_CARD_MIN_W;
+    }
+    let cols = HOME_GRID_COLUMNS as f32;
+    let gaps = (cols - 1.0) * HOME2_CARD_GRID_GAP;
+    ((avail - gaps) / cols).max(HOME_CARD_MIN_W)
+}
+
+/// Home2 grid content height px: rows * card min + gaps. Pure; headless-tested.
+pub fn home2_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    let rows = home2_grid_rows(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME2_CARD_GRID_GAP
+}
+
+/// Home2 symmetric button hit rect: expands by hit-slop on all four edges.
+/// Non-finite/inverted par `None`. Pure; headless-tested.
+pub fn home2_button_hit_rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Option<(f32, f32, f32, f32)> {
+    if !x0.is_finite()
+        || !y0.is_finite()
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x0 > x1
+        || y0 > y1
+    {
+        return None;
+    }
+    Some((
+        x0 - HOME2_BUTTON_HIT_SLOP,
+        y0 - HOME2_BUTTON_HIT_SLOP,
+        x1 + HOME2_BUTTON_HIT_SLOP,
+        y1 + HOME2_BUTTON_HIT_SLOP,
+    ))
+}
+
+/// Home2 hierarchy: header = Heading lh, gap = SPACE_SM/SECTION_GAP,
+/// slop = SPACE_XS, buttons 96x24 -> 104x32. Pure; headless-tested.
+pub fn home2_hierarchy_ok() -> bool {
+    use crate::theme::TypoRole;
+    (TypoRole::Heading.line_height_px() - HOME2_HEADER_H).abs() < 0.001
+        && HOME2_CARD_GRID_GAP == crate::theme::SPACE_SM
+        && HOME2_CARD_GRID_GAP == crate::theme::GEO_SECTION_GAP
+        && HOME2_CONTENT_MARGIN_X == crate::theme::SPACE_MD
+        && HOME2_BUTTON_HIT_SLOP == crate::theme::SPACE_XS
+        && HOME2_BUTTON_W == 96.0
+        && HOME2_BUTTON_H == crate::theme::SPACE_XL
+        && HOME2_BUTTON_PADDED_W == 104.0
+        && HOME2_BUTTON_PADDED_H == 32.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4279,5 +4415,70 @@ mod tests {
 
         // Hierarchy contract passes
         assert!(super::chrome4_hierarchy_ok());
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home2_cards_search_saved_wide960_edge() {
+        // Edge fixture: `checks/gui-exq-home2/comparison/home-wide-960.json`.
+        // Geometry first: header from Heading lh, gaps via SPACE_SM, hit-slop
+        // symmetric via SPACE_XS at 960px. Typography second: roles reuse.
+        use crate::theme::{SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS, TypoRole};
+
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home2/comparison/home-wide-960.json");
+        assert!(fixture_raw.contains("\"header_h\":21.6"));
+        assert!(fixture_raw.contains("\"card_grid_gap\":8.0"));
+        assert!(fixture_raw.contains("\"button_hit_slop\":4.0"));
+        assert!(fixture_raw.contains("\"button_padded_w\":104.0"));
+        assert!(fixture_raw.contains("\"button_padded_h\":32.0"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_960\":306.66666"));
+        assert!(fixture_raw.contains("\"grid_cols_at_960\":3"));
+        assert!(fixture_raw.contains("\"grid_content_h_9_at_960\":314.8"));
+
+        // Header height from TypoRole chrome line-height (18.0 * 1.2 = 21.6).
+        assert!((TypoRole::Heading.line_height_px() - 21.6).abs() < 0.001);
+        assert_eq!(super::HOME2_HEADER_H, 21.6);
+        assert_eq!(super::home2_header_height(), 21.6);
+
+        // Card grid gaps via SPACE tokens (8.0 = SECTION_GAP).
+        assert_eq!(super::HOME2_CARD_GRID_GAP, SPACE_SM);
+        assert_eq!(super::HOME2_CARD_GRID_GAP, 8.0);
+        assert_eq!(super::home2_card_grid_gap(), 8.0);
+        assert_eq!(super::HOME2_CARD_GRID_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(super::HOME2_CONTENT_MARGIN_X, SPACE_MD);
+        assert_eq!(super::home2_content_avail_width(960.0), 936.0);
+
+        // 960px: 3 cols evenly flexed, 9 cards -> 3 rows, content 314.8.
+        assert_eq!(super::home2_grid_columns(960.0), 3);
+        assert_eq!(super::home2_grid_rows(9, 960.0), 3);
+        let card_w = super::home2_grid_card_width(936.0);
+        assert!((card_w - 306.66666).abs() < 0.001);
+        assert!((super::home2_grid_content_height(9, 960.0) - 314.8).abs() < 0.01);
+        assert_eq!(super::home2_grid_content_height(0, 960.0), 0.0);
+
+        // Hit-slop symmetric via SPACE_XS (4.0): 96x24 -> 104x32.
+        assert_eq!(super::HOME2_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(super::home2_button_hit_slop(), 4.0);
+        assert_eq!(super::HOME2_BUTTON_W, 96.0);
+        assert_eq!(super::HOME2_BUTTON_H, SPACE_XL);
+        assert_eq!(super::HOME2_BUTTON_PADDED_W, 104.0);
+        assert_eq!(super::HOME2_BUTTON_PADDED_H, 32.0);
+        assert_eq!(
+            super::home2_button_hit_rect(10.0, 20.0, 106.0, 44.0),
+            Some((6.0, 16.0, 110.0, 48.0))
+        );
+        assert_eq!(
+            super::home2_button_hit_rect(f32::NAN, 0.0, 10.0, 10.0),
+            None
+        );
+        assert_eq!(super::home2_button_hit_rect(10.0, 0.0, 5.0, 10.0), None);
+
+        // Search + saved sections beside the grid: find bar 24px, tree 224.
+        assert_eq!(super::SESSION_TREE_FIND_BAR_H, 24.0);
+        assert_eq!(super::SESSION_TREE_FIND_BAR_H, super::HOME2_BUTTON_H);
+        assert!((super::session_tree_content_height(9) - 224.0).abs() < 0.001);
+
+        assert!(super::home2_hierarchy_ok());
     }
 }
