@@ -1086,53 +1086,18 @@ pub fn hex_gutter_total_rows(total_len: u64) -> usize {
 
 /// Hex diff rows ka gutter geometry: har `hex_row_has_diff` wali row ek
 /// band hai, lagatar diff rows merge hote hain. Wahi `GutterGeometry` type,
-/// wahi `GUTTER_MIN_SEGMENT_H`/`GUTTER_MERGE_GAP` tokens, kind `Changed`
-/// (text `Changed` jaisa paired-diff marker). Pure; unit-tested.
+/// wahi ruler floor (`gutter::GUTTER_SEGMENT_MIN_H` = 4.0) + `GUTTER_MERGE_GAP`
+/// tokens, kind `Changed` (text `Changed` jaisa paired-diff marker).
+/// Single source: [`hex_gutter_geometry_fast`] par delegate karta hai taaki
+/// row-wise aur virtualized (`gutter_geometry_from_ranges`) bands kabhi
+/// alag na hon — tall files me 2px vs 4px drift nahi. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
 pub fn hex_gutter_geometry(
     total_rows: usize,
     height: f32,
     hunks: &[HexHunkView],
 ) -> crate::gutter::GutterGeometry {
-    if total_rows == 0 || !height.is_finite() || height <= 0.0 {
-        return crate::gutter::GutterGeometry {
-            total_height: height.max(0.0),
-            segments: Vec::new(),
-        };
-    }
-    let mut segments: Vec<crate::gutter::GutterSegment> = Vec::new();
-    let total_f = total_rows as f32;
-    let mut idx: usize = 0;
-    while idx < total_rows {
-        let row_start = hex_row_start(idx as u64);
-        if hex_row_has_diff(row_start, hunks) {
-            let y_start = (idx as f32 / total_f) * height;
-            let mut y_end = ((idx.saturating_add(1)) as f32 / total_f) * height;
-            if y_end < y_start + crate::theme::GUTTER_MIN_SEGMENT_H {
-                y_end = (y_start + crate::theme::GUTTER_MIN_SEGMENT_H).min(height);
-            }
-            let mut merged = false;
-            if let Some(last) = segments.last_mut()
-                && last.kind == crate::viewmodel::TextRowKind::Changed
-                && y_start <= last.y_end + crate::theme::GUTTER_MERGE_GAP
-            {
-                last.y_end = last.y_end.max(y_end);
-                merged = true;
-            }
-            if !merged {
-                segments.push(crate::gutter::GutterSegment {
-                    y_start,
-                    y_end,
-                    kind: crate::viewmodel::TextRowKind::Changed,
-                });
-            }
-        }
-        idx = idx.saturating_add(1);
-    }
-    crate::gutter::GutterGeometry {
-        total_height: height,
-        segments,
-    }
+    hex_gutter_geometry_fast(total_rows, height, hunks)
 }
 
 /// Hex gutter bar width: text precedent ka seedha reuse (12.0/6.0).
@@ -1250,9 +1215,10 @@ pub fn hex_minimap_strip_width() -> f32 {
 
 /// Ek hunk ka offset-proportional minimap band `(y_start, y_end)`.
 /// `first = offset / 16`, `last = (offset + run - 1) / 16`, y fraction
-/// se; sub-row bands `GUTTER_MIN_SEGMENT_H` floor par (paint ke
-/// `hex_minimap_seg_end` = `y0 + ROW_PAD` jaisa, wahi theme token, wahi
-/// 2px). Khali run, row se bahar hunk ya kharab input par `None`.
+/// se; sub-row bands ruler floor (`gutter::GUTTER_SEGMENT_MIN_H` = 4.0)
+/// par taaki tall files me gutter bands aur minimap bands ek jaise dikhen
+/// (text gutter + `gutter_geometry_from_ranges` parity, 2px vs 4px drift
+/// nahi). Khali run, row se bahar hunk ya kharab input par `None`.
 /// Pure; unit-tested.
 pub fn hex_minimap_band_for_hunk(
     hunk: &HexHunkView,
@@ -1277,7 +1243,7 @@ pub fn hex_minimap_band_for_hunk(
     let total_f = total_rows as f32;
     let y_start = (first as f32 / total_f) * height;
     let raw_end = ((last.saturating_add(1)) as f32 / total_f) * height;
-    let floored = raw_end.max(y_start + crate::theme::GUTTER_MIN_SEGMENT_H);
+    let floored = raw_end.max(y_start + crate::gutter::GUTTER_SEGMENT_MIN_H);
     Some((y_start, floored.min(height)))
 }
 
@@ -1396,7 +1362,7 @@ pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
 // ye section usko track-anchored rects me badalta hai taaki paint ka inline
 // first/last/y0/y1 loop aur `??` whole-row marks isi mapping par aayen.
 // Koi naya token ya color nahi: width gutter se, height paint token se,
-// floor `GUTTER_MIN_SEGMENT_H` (= paint `ROW_PAD`) se, typo `Mono` se.
+// floor ruler `GUTTER_SEGMENT_MIN_H` (gutter parity, 4.0) se, typo `Mono` se.
 // Sab pure fns, `.get()`/saturating only, no `Ui`/painter/I/O, no paint
 // colors. Paint allocate rect `hex_minimap_track_rect` se
 // banata hai, bands `hex_minimap_band_rects` se nikalta hai, click y ko
@@ -1933,6 +1899,22 @@ pub fn hex_grid_avail_w(avail_w: f32, show_line_numbers: bool) -> f32 {
         return 0.0;
     }
     (avail_w - hex_chrome_reserve_w(show_line_numbers)).max(0.0)
+}
+
+/// Hex sync panes min height (px): text/merge panes floor reuse
+/// (`viewmodel::TEXT_PANES_MIN_H` = 100.0) taaki dono hex panes + text
+/// panes ek hi budget par fill karen — ek pane sukadkar gutter/minimap
+/// math degrade nahi karta. Koi naya token nahi. Pure; unit-tested.
+pub const HEX_PANES_MIN_H: f32 = crate::viewmodel::TEXT_PANES_MIN_H;
+
+/// Remaining-height budget for the hex+ASCII sync panes row: paint captures
+/// `ui.available_height()` before the panes row (find/goto bars already
+/// spent above) and both panes keep at least [`HEX_PANES_MIN_H`] from the
+/// one shared window, so hex digits aur ASCII kabhi alag height par desync
+/// nahi hote. `viewmodel::text_panes_height` delegation — do budgets kabhi
+/// drift nahi karte. Pure; unit-tested.
+pub fn hex_panes_height(avail_h: f32) -> f32 {
+    crate::viewmodel::text_panes_height(avail_h)
 }
 
 /// Fixed grid-row text budget (chars): 10 ruler + 2 pad + 49 hex cells
@@ -2747,7 +2729,7 @@ mod tests {
         let wide_bands = hex_minimap_bands(64, 400.0, &wide);
         assert_eq!(wide_bands.len(), 1);
         assert_eq!(wide_bands.first(), Some(&(100.0, 400.0)));
-        // Tall file: sub-row band floor par (y0 + 2px, paint seg_end jaisa).
+        // Tall file: sub-row band floor par (y0 + 4px ruler floor).
         // 16000 bytes = 1000 rows, height 400: har row 0.4px band.
         let tall = vec![HexHunkView {
             offset: 8000,
@@ -2760,7 +2742,7 @@ mod tests {
             return;
         };
         assert_eq!(y0, 200.0);
-        assert!((y1 - y0 - crate::theme::GUTTER_MIN_SEGMENT_H).abs() < 0.001);
+        assert!((y1 - y0 - crate::gutter::GUTTER_SEGMENT_MIN_H).abs() < 0.001);
         // Khali run / row se bahar / kharab input: koi band nahi.
         let empty_run = vec![HexHunkView {
             offset: 20,
@@ -2943,7 +2925,7 @@ mod tests {
                 egui::pos2(34.0, 450.0),
             ))
         );
-        // Tall file: sub-row floor (y0 + 2px) track-anchored.
+        // Tall file: sub-row floor (y0 + 4px ruler floor) track-anchored.
         let tall_track = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(24.0, 400.0));
         let tall = HexHunkView {
             offset: 8000,
@@ -2956,7 +2938,7 @@ mod tests {
         assert_eq!(tall_rect.min.x, 0.0);
         assert_eq!(tall_rect.max.x, 24.0);
         assert_eq!(tall_rect.min.y, 200.0);
-        assert!((tall_rect.height() - crate::theme::GUTTER_MIN_SEGMENT_H).abs() < 0.001);
+        assert!((tall_rect.height() - crate::gutter::GUTTER_SEGMENT_MIN_H).abs() < 0.001);
         // Bad inputs: khali run / row se bahar / zero-area track -> None.
         let empty_run = HexHunkView {
             offset: 20,
@@ -3456,5 +3438,80 @@ mod tests {
             assert!(role.rank() > TypoRole::Body.rank());
             assert!(TypoRole::Small.rank() > role.rank());
         }
+    }
+
+    #[test]
+    fn hex_exq_hextable_pane_heights_share_text_budget() {
+        use crate::viewmodel::{TEXT_PANES_MIN_H, text_panes_height};
+        // Single source: hex floor text floor ke barabar, koi naya token nahi.
+        assert_eq!(HEX_PANES_MIN_H, TEXT_PANES_MIN_H);
+        assert_eq!(HEX_PANES_MIN_H, 100.0);
+        // Delegation: hex budget text budget se kabhi drift nahi karta.
+        assert_eq!(hex_panes_height(600.0), text_panes_height(600.0));
+        assert_eq!(hex_panes_height(600.0), 600.0);
+        assert_eq!(hex_panes_height(99.9), TEXT_PANES_MIN_H);
+        assert_eq!(hex_panes_height(0.0), TEXT_PANES_MIN_H);
+        assert_eq!(hex_panes_height(-50.0), TEXT_PANES_MIN_H);
+        assert_eq!(hex_panes_height(f32::NAN), TEXT_PANES_MIN_H);
+        assert_eq!(hex_panes_height(f32::INFINITY), TEXT_PANES_MIN_H);
+    }
+
+    #[test]
+    fn hex_exq_hextable_gutter_markers_use_ruler_floor() {
+        use crate::gutter::GUTTER_SEGMENT_MIN_H;
+        // Tall file: 16_000 bytes = 1000 rows, height 400 -> 0.4px/row.
+        // Slow (row-wise) aur fast (virtualized) dono 4px floor par.
+        let left = vec![0u8; 16_000];
+        let mut right = vec![0u8; 16_000];
+        if let Some(slot) = right.get_mut(8000) {
+            *slot = 9;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert!(!view.hunks.is_empty());
+        let total = hex_gutter_total_rows(16_000);
+        assert_eq!(total, 1000);
+        let slow = hex_gutter_geometry(total, 400.0, &view.hunks);
+        let fast = hex_gutter_geometry_fast(total, 400.0, &view.hunks);
+        assert_eq!(slow, fast);
+        assert_eq!(slow.segments.len(), 1);
+        let Some(seg) = slow.segments.first() else {
+            return;
+        };
+        assert!((seg.y_end - seg.y_start - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+        assert_eq!(GUTTER_SEGMENT_MIN_H, 4.0);
+        // Minimap band bhi wahi floor: gutter marker se drift nahi.
+        let bands = hex_minimap_bands(16_000, 400.0, &view.hunks);
+        assert_eq!(bands.len(), 1);
+        let Some((_, y1)) = bands.first().copied() else {
+            return;
+        };
+        let Some((y0, _)) = bands.first().copied() else {
+            return;
+        };
+        assert!((y1 - y0 - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
+    }
+
+    #[test]
+    fn hex_exq_hextable_edge_fixture_tall_markers_and_panes() {
+        // Mirrors checks/gui-exq-hextable/comparison/hextable-edge.json:
+        // 16_000 bytes, single diff at 8000 (row 500), height 400,
+        // panes 600 -> 600, narrow 90 -> 100 floor; 80-char rows hold.
+        let left = vec![0u8; 16_000];
+        let mut right = vec![0u8; 16_000];
+        if let Some(slot) = right.get_mut(8000) {
+            *slot = 9;
+        }
+        let view = HexCompareView::build_from_slices(&left, &right, HexCompareMode::None, 8);
+        assert_eq!(hex_gutter_total_rows(16_000), 1000);
+        assert_eq!(hex_panes_height(600.0), 600.0);
+        assert_eq!(hex_panes_height(90.0), HEX_PANES_MIN_H);
+        let total = hex_gutter_total_rows(16_000);
+        let geom = hex_gutter_geometry(total, 400.0, &view.hunks);
+        assert_eq!(geom.segments.len(), 1);
+        let text = format_hex_grid_row_with_bytes(8000, &left, &right, &view.hunks);
+        assert_eq!(text.chars().count(), HEX_GRID_ROW_CHARS);
+        let (row, col) = hex_goto_anchor(8000);
+        assert_eq!((row, col), hex_offset_to_row_col(8000));
+        assert_eq!(hex_goto_row_start(8000), 8000 - col);
     }
 }

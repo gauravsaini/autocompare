@@ -908,6 +908,68 @@ pub const TABLE_GRID_ROW_GAP: f32 = 4.0;
 /// Glyph placeholder: `CONTENT_LEAD` mirror (same two spaces, koi naya text
 /// nahi) — header grid precedent jaisa neutral first column.
 pub const TABLE_CELL_GLYPH_PAD: &str = "  ";
+/// Cell ka ek taraf ka horizontal padding (px): `SPACE_SM` reuse (8.0,
+/// folder `FOLDER_CELL_PAD_X` precedent — wahi value, koi naya rhythm nahi).
+/// Grid `TABLE_GRID_COL_GAP` columns ke beech hai; ye pad har cell box ke
+/// andar hai (text saans leta hai, columns align rehte hain). Pure.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
+
+/// Cell ka ek taraf ka horizontal padding (px).
+/// Pure; unit-tested.
+pub fn table_cell_pad_x() -> f32 {
+    TABLE_CELL_PAD_X
+}
+
+/// Text chaudai se outer cell box chaudai (px): `text + 2 * pad`.
+/// Non-finite ya negative text par pad floor (khali cell bhi click-target
+/// rehta hai). Paint `col_widths_px` outer widths isi se banata hai.
+/// Pure; unit-tested.
+pub fn table_cell_outer_w(text_w: f32) -> f32 {
+    if !text_w.is_finite() || text_w < 0.0 {
+        return TABLE_CELL_PAD_X * 2.0;
+    }
+    text_w + TABLE_CELL_PAD_X * 2.0
+}
+
+/// Outer cell box se text chaudai (px): `(outer - 2 * pad)` floor 0 par.
+/// `table_cell_outer_w` ka inverse (round-trip); kharab outer par 0.
+/// Pure; unit-tested.
+pub fn table_cell_text_w(outer_w: f32) -> f32 {
+    if !outer_w.is_finite() {
+        return 0.0;
+    }
+    (outer_w - TABLE_CELL_PAD_X * 2.0).max(0.0)
+}
+
+/// Outer cell box se inset text box: x me ek pad andar, w me do pad kam;
+/// y/h same rehte hain (vertical rhythm `TABLE_GRID_ROW_GAP` se aata hai).
+/// Bahut tang box (w <= 2*pad) ya kharab input par `None` — paint aise
+/// cell par pad ke bina plain box dikhata hai. Char-span indices nahi
+/// hilte (pad box ke bahar hai, `pad_table_row` trailing pad precedent
+/// jaisa). Pure; unit-tested.
+pub fn table_cell_text_rect(cell: TableCellRect) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.y.is_finite() || !cell.w.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= TABLE_CELL_PAD_X * 2.0 || cell.h <= 0.0 {
+        return None;
+    }
+    let w = cell.w - TABLE_CELL_PAD_X * 2.0;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    let x = cell.x + TABLE_CELL_PAD_X;
+    if !x.is_finite() {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: cell.y,
+        w,
+        h: cell.h,
+    })
+}
 
 /// Grid columns: glyph column plus ek per data column. Khali widths par
 /// sirf glyph (views.rs `table_grid_columns` wahi shape — owned contract
@@ -2704,5 +2766,88 @@ mod tests {
         assert_eq!(TABLE_SHEET_BADGE_PAD, TABLE_KEY_BADGE_PAD);
         assert_eq!(table_sheet_label_text_role(), TypoRole::Body);
         assert_eq!(table_sheet_value_text_role(), TypoRole::Mono);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_padding_reuses_space_scale() {
+        use crate::theme::SPACE_SM;
+        // Single source: cell pad folder pad + grid col gap ke barabar.
+        assert_eq!(TABLE_CELL_PAD_X, SPACE_SM);
+        assert_eq!(TABLE_CELL_PAD_X, 8.0);
+        assert_eq!(table_cell_pad_x(), TABLE_CELL_PAD_X);
+        assert_eq!(table_cell_pad_x(), crate::tree::FOLDER_CELL_PAD_X);
+        assert_eq!(table_cell_pad_x(), TABLE_GRID_COL_GAP);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_outer_text_widths_round_trip() {
+        // Outer = text + 2*pad; text = outer - 2*pad floor 0.
+        assert_eq!(table_cell_outer_w(100.0), 116.0);
+        assert_eq!(table_cell_text_w(116.0), 100.0);
+        assert_eq!(table_cell_text_w(table_cell_outer_w(60.0)), 60.0);
+        // Guards: kharab input kabhi NaN/negative nahi deta.
+        assert_eq!(table_cell_outer_w(f32::NAN), 16.0);
+        assert_eq!(table_cell_outer_w(-5.0), 16.0);
+        assert_eq!(table_cell_text_w(f32::NAN), 0.0);
+        assert_eq!(table_cell_text_w(10.0), 0.0);
+        assert_eq!(table_cell_text_w(16.0), 0.0);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_text_rect_insets_by_pad() {
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: TABLE_GRID_COL_GAP,
+            row_gap: TABLE_GRID_ROW_GAP,
+        };
+        let widths = vec![116.0];
+        let Some(cell) = table_cell_rect(grid, 0, 0, &widths) else {
+            return;
+        };
+        let Some(text) = table_cell_text_rect(cell) else {
+            return;
+        };
+        // x ek pad andar, w do pad kam; y/h same (vertical rhythm gap se).
+        assert_eq!(text.x, cell.x + TABLE_CELL_PAD_X);
+        assert_eq!(text.w, cell.w - TABLE_CELL_PAD_X * 2.0);
+        assert_eq!((text.y, text.h), (cell.y, cell.h));
+        // Tang box (w <= 2*pad) par None — paint plain box dikhata hai.
+        let tight = TableCellRect {
+            x: 0.0,
+            y: 0.0,
+            w: 16.0,
+            h: 18.0,
+        };
+        assert_eq!(table_cell_text_rect(tight), None);
+        let flat = TableCellRect {
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 0.0,
+        };
+        assert_eq!(table_cell_text_rect(flat), None);
+    }
+
+    #[test]
+    fn table_exq_hextable_edge_fixture_ragged_pad_and_key() {
+        // Mirrors checks/gui-exq-hextable/comparison/hextable-edge.json
+        // table half: ragged row me missing cell `-`, key col 0, pad 8px.
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let rows = vec![vec!["only".to_string()]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths.len(), 2);
+        let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        let padded = pad_table_row(first_row, &widths);
+        assert_eq!(padded.len(), 2);
+        let missing = padded.get(1).map(String::as_str).unwrap_or("");
+        assert!(missing.chars().all(|c| c == ' ' || c == '-'));
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        assert!(table_find_hit_in_key_col(&view, 0));
+        // Pad outer math: 100px text -> 116px outer, wapas 100px.
+        assert_eq!(table_cell_outer_w(100.0), 100.0 + 16.0);
+        assert_eq!(table_cell_text_w(116.0), 100.0);
     }
 }
