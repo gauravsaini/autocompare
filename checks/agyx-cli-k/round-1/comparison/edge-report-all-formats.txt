@@ -1,0 +1,13 @@
+# Edge Fixture: Report Formats (HTML, Plain Text, XML, Patch)
+
+Reporting option: `--report <fmt:path>` or `--report <path>` (inferred)
+Supported formats:
+1. `html` / `html-color`: Full styled HTML diff table.
+2. `html-mono`: Printer-friendly monochrome HTML table.
+3. `text`: Human-readable plain text layout.
+4. `xml`: Machine-readable XML hierarchy (`<diff-report>`, `<summary>`, `<lines>`).
+5. `patch` / `unified`: Standard unified diff format (`---`, `+++`, `@@ -a,b +c,d @@`).
+6. `context`: Context patch format (`***`, `---`).
+
+Report title override: `--report-title <TITLE>`.
+Safe destination creation: auto-creates missing parent directories.

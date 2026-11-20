@@ -1,0 +1,5 @@
+subcommands_count: 10
+subcommands_list: text folder hex merge table sync picture folder-merge audio session
+all_support_reporting: true (--report)
+all_support_session_persistence: true (--save-session)
+all_respect_read_only: true (-ro, -ro1, -ro2)

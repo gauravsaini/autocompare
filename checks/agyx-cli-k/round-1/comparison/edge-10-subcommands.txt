@@ -1,0 +1,12 @@
+# Edge Fixture: 10 Subcommands Matrix
+
+1. `text`: Line-by-line comparison with -i, -b, -u, -w.
+2. `folder`: Hierarchical tree comparison with -i, -d, -r, --content, --include, --exclude.
+3. `hex`: Byte-by-byte alignment comparison with --max-hunks.
+4. `merge`: 3-way ancestor/ours/theirs merge with --output and conflict markers.
+5. `table`: Delimited CSV/TSV table comparison with --delimiter and --no-header.
+6. `sync`: Two-way folder synchronization planning and --apply execution.
+7. `picture`: Pixel-by-pixel PNG comparison with --heatmap output.
+8. `folder-merge`: 3-way folder tree merge planning and --apply execution.
+9. `audio`: Audio waveform/sample comparison.
+10. `session`: Saved session document loading and tab execution.

@@ -1,0 +1,10 @@
+diff_mode:
+  same: 0
+  diff: 1
+  error: 2
+bc_mode:
+  success: 0
+  binary_diff: 11
+  rules_diff: 13
+  conflicts: 14
+  error: 2

@@ -1,0 +1,32 @@
+# Edge Fixture: 4-Way Git Mergetool Invocation
+
+Beyond Compare parity specification for Git mergetool integration:
+Git mergetool runs `bcomp $LOCAL $REMOTE $BASE $MERGED`.
+
+## Command Line Syntax
+```sh
+autocompare <LOCAL> <REMOTE> <BASE> <MERGED>
+```
+
+## Argument Transformation Matrix
+- Input pos 0: `<LOCAL>` (left / ours)
+- Input pos 1: `<REMOTE>` (right / theirs)
+- Input pos 2: `<BASE>` (center / common ancestor)
+- Input pos 3: `<MERGED>` (output destination)
+- Subcommand: `merge` (or `folder-merge` if inputs are directories)
+- Final invocation: `merge <BASE> <LOCAL> <REMOTE> --output=<MERGED>`
+
+## Test Scenarios & Ground Truth
+1. Clean 3-way merge:
+   All sides identical or non-overlapping clean modifications.
+   Expected exit code: 0
+   Output: clean resolved content written to `<MERGED>`.
+
+2. Conflicted 3-way merge:
+   Overlapping edits in `<LOCAL>` and `<REMOTE>`.
+   Expected exit code: 1
+   Output: standard conflict markers `<<<<<<<`, `=======`, `>>>>>>>` written to `<MERGED>`.
+
+3. Read-only mode (-ro, /ro, -ro1, -ro2):
+   Attempting to write to `<MERGED>` with `-ro` active is blocked.
+   Expected exit code: 2 (error).

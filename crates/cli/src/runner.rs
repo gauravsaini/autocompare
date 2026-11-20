@@ -250,7 +250,8 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             apply,
         } => {
             let out_dest = cli.mergeoutput.as_ref().or(output.as_ref());
-            if is_ro && *apply {
+            let should_apply = *apply || (cli.automerge && out_dest.is_some());
+            if is_ro && should_apply {
                 return Err(CliError::ReadOnly(
                     "cannot apply folder merge in read-only mode".into(),
                 ));
@@ -275,7 +276,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 right,
                 is_ro,
             )?;
-            if !apply {
+            if !should_apply {
                 println!(
                     "{}",
                     term::paint(

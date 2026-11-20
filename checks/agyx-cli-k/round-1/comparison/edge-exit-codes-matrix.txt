@@ -1,0 +1,13 @@
+# Edge Fixture: Exit Codes Matrix (Diff Mode vs Beyond Compare Mode)
+
+## Diff Mode (`--exit-code-mode diff`, default)
+- 0: Identical inputs (text, folder, hex, picture, audio) or clean 3-way merge.
+- 1: Differences found or merge conflicts detected.
+- 2: Error, missing path, read-only violation, or invalid syntax.
+
+## Beyond Compare Mode (`--bc-exit-code`, `-bcexitcode`, `-qc`, `-quickcompare`)
+- 0: Success, identical, clean merge.
+- 11: Binary differences (hex).
+- 13: Rules-based differences (text).
+- 14: Merge conflicts detected.
+- 2 / 100+: Execution errors or read-only violations.

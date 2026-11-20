@@ -1,0 +1,5 @@
+formats: html html-mono text xml patch context
+title_override: supported (--report-title)
+path_inference: .html -> html, .xml -> xml, .patch -> patch, other -> text
+auto_mkdir: parent directories created if nonexistent
+error_on_empty: exit code 2 if spec is empty

@@ -10,7 +10,9 @@ use autocompare_sessions::{SessionDocument, SessionTab};
 use crate::error::CliError;
 use crate::outcome::Outcome;
 use crate::report::{ReportSpec, write_report};
-use crate::{render_folder, render_hex, render_picture, render_table, render_text};
+use crate::{
+    render_audio, render_folder, render_hex, render_picture, render_sync, render_table, render_text,
+};
 
 /// Loads a session document from disk and runs comparison for the active tab.
 pub fn load_and_run(
@@ -96,6 +98,26 @@ pub fn load_and_run(
                 write_report(spec, &input)?;
             }
             Ok(render_picture::outcome(&cmp))
+        }
+        "audio" => {
+            let cmp = autocompare_compare::compare_audio_files(Path::new(left), Path::new(right))?;
+            render_audio::print(&cmp, color);
+            if let Some(spec) = report {
+                let input = crate::report::audio_report_input(left, right, &cmp);
+                write_report(spec, &input)?;
+            }
+            Ok(render_audio::outcome(&cmp))
+        }
+        "sync" => {
+            let opts = autocompare_compare::SyncOptions::default();
+            let plan = autocompare_compare::plan_sync(Path::new(left), Path::new(right), &opts)?;
+            render_sync::print_plan(&plan, color);
+            if let Some(spec) = report {
+                let input = crate::report::sync_report_input(left, right, &plan);
+                write_report(spec, &input)?;
+            }
+            let diff = !plan.steps.is_empty();
+            Ok(Outcome::for_diff(diff, crate::outcome::ExitCodeMode::Diff))
         }
         other => Err(CliError::InvalidArg(format!(
             "unsupported session tab type '{other}'"

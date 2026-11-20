@@ -1,0 +1,17 @@
+# Edge Fixture: Beyond Compare VCS Flags and Shorthand Switches
+
+Supported switches:
+- `-ro`, `/ro`, `-readonly`, `/readonly`
+- `-ro1`, `/ro1`, `-leftreadonly`, `/leftreadonly`
+- `-ro2`, `/ro2`, `-rightreadonly`, `/rightreadonly`
+- `-automerge`, `/automerge`
+- `-mergeoutput=<path>`, `/mergeoutput=<path>`, `-savetarget=<path>`, `/savetarget=<path>`
+- `-vcs1..4`, `/vcs1..4`, `-ancestor`, `-base`, `-center`
+- `-title1..4`, `/title1..4`, `-lefttitle`, `-righttitle`, etc.
+- `-bcexitcode`, `-qc`, `-quickcompare`
+- `@session.json` shorthand for `--session=session.json`
+
+Ground truth:
+- Read-only forbids writing output files (exit code 2).
+- -automerge enables automatic resolution where no conflicts exist.
+- VCS aliases properly route to 2-way text or 3-way merge.

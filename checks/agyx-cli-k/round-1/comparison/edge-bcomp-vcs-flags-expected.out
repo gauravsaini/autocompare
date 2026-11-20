@@ -1,0 +1,5 @@
+flags_tested: -ro /ro -ro1 -ro2 -automerge /automerge -mergeoutput /mergeoutput -vcs1 -vcs2 -vcs3 -vcs4 -title1 -title2 -title3 -title4 -bcexitcode -qc @session
+normalization: canonical clap flags
+read_only_protection: exit code 2 on mutation
+merge_write_behavior: writes to output or stdout
+session_at_syntax: resolves to --session

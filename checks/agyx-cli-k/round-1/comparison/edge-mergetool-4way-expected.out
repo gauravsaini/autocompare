@@ -1,0 +1,8 @@
+command: autocompare $LOCAL $REMOTE $BASE $MERGED
+mapping: merge $BASE $LOCAL $REMOTE --output=$MERGED
+clean_exit: 0
+conflict_exit: 1
+readonly_exit: 2
+directory_mode: folder-merge
+automerge_flag: supported (-automerge, /automerge)
+mergeoutput_flag: supported (-mergeoutput, /mergeoutput, -savetarget, /savetarget)
