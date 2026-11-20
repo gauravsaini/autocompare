@@ -1556,3 +1556,9 @@ Hinglish Roman only, clean-room outside observation, MS rust guidelines (forbid 
 - CK-DARKBUG (sess-dark-ck): live-dark FAIL root-cause (eframe 0.37 behavior) + 1-jagah fix + live-dark photo-proof. OWNS main.rs + app.rs + checks/gui-darkbug-ck.
 - CL-TOOLWIRE (sess-tool-cl): P2-1 toolbar call-site wiring (dead_code hatao). OWNS views.rs + checks/gui-toolwire-cl.
 - Queue: round-5 (tab-switch allowed interactive captures) dono ke baad.
+
+## 2026-11-20 — Waves CK-DARKBUG + CL-TOOLWIRE landed + pushed
+- `01dbf01` feat(gui): fix live-dark desync via per-frame theme re-assert (OWNS app.rs + checks/gui-darkbug-ck). ROOT-CAUSE SOLVED: eframe har frame visuals override karta tha, isliye startup-only set_visuals tikta nahi tha. Live-home DARK photo-proof (avg RGB 0,1,2 + pixel samples + final-tree binary re-proof). P2-dark CLOSED.
+- `48946aa` feat(gui): wire toolbar reload label via paint_session_toolbar call-site (OWNS views.rs + checks/gui-toolwire-cl). dead_code 42->39. P2-1 call-site DONE.
+- Gates: 670 green, clippy/fmt/banned clean, colors: CK 2 code touches existing Visuals::dark/light reuse (naya palette zero), PNGs valid, OWNS clean.
+- Queue: round-5 interactive (tab-switch ON: Text-tab live captures + multi-session strip + toolbar pixel-verify).
