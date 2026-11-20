@@ -1609,6 +1609,132 @@ pub const fn session_tree_find_match_role() -> crate::theme::TypoRole {
     crate::theme::TypoRole::HomeButton
 }
 
+// ----------------------------------------------------------------------------
+// Wave-home2 polish, geometry first: tab-strip chrome-aware fit + scroll
+// window, Home grid content height + bottom-waste budget, session-tree
+// content height + visible window. BC pattern, outside observation only:
+// toolbar filter row + session tree + status line frame bharte hain, neeche
+// koi dead jagah nahi; tang window card grid ko kam columns me lapet-ti hai
+// aur tab strip labels katne ke bajaye scroll hoti hai. Typography second:
+// zero naye sizes — har helper maujooda role line-heights aur rhythm consts
+// compose karta hai. Paint adoption paint-owner wave ka hai; colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Tab strip side chrome px: har taraf outer margin
+/// ([`crate::theme::GEO_OUTER_MARGIN`] = 12 parity).
+pub const HOME_TAB_STRIP_SIDE_CHROME: f32 = crate::theme::GEO_OUTER_MARGIN;
+
+/// Status line height px: standard hit row
+/// ([`crate::theme::CHROME_HEADER_BAR_H`] = 28 parity).
+pub const HOME_STATUS_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+
+/// Tab strip available width px: window minus side chrome. Non-finite
+/// passthrough taaki paint kabhi NaN na khaye; tang par 0 floor (clip ka
+/// jhooth nahi). Pure; headless-tested.
+pub fn home_tab_bar_avail_width(total_w: f32) -> f32 {
+    if !total_w.is_finite() {
+        return total_w;
+    }
+    (total_w - HOME_TAB_STRIP_SIDE_CHROME * 2.0).max(0.0)
+}
+
+/// Tab strip ko scroll window chahiye: content chrome-aware available width
+/// se bahar hai. Non-finite par kabhi scroll ka jhooth nahi. Pure;
+/// headless-tested.
+pub fn home_tab_bar_needs_scroll(titles: &[&str], total_w: f32) -> bool {
+    if !total_w.is_finite() {
+        return false;
+    }
+    home_tab_bar_width(titles) > home_tab_bar_avail_width(total_w)
+}
+
+/// Tab strip max scroll offset px: content minus viewport, 0 floor.
+/// Non-finite input par 0 (koi phantom scroll nahi). Pure; headless-tested.
+pub fn home_tab_bar_scroll_max(content_w: f32, viewport_w: f32) -> f32 {
+    if !content_w.is_finite() || !viewport_w.is_finite() {
+        return 0.0;
+    }
+    (content_w - viewport_w).max(0.0)
+}
+
+/// Tab strip scroll offset clamp px: `offset` 0..=max me pin hota hai.
+/// Non-finite offset 0 par tikta hai. Pure; headless-tested.
+pub fn home_tab_bar_scroll_clamp(offset: f32, content_w: f32, viewport_w: f32) -> f32 {
+    if !offset.is_finite() {
+        return 0.0;
+    }
+    offset.clamp(0.0, home_tab_bar_scroll_max(content_w, viewport_w))
+}
+
+/// Grid content height px `total_w` par: rows (tang par columns ghatte hain
+/// isliye rows badhte hain, clip nahi hota) times card minimum plus beech
+/// gaps. Khali grid par 0. Pure; headless-tested.
+pub fn home_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    let rows = home_grid_rows_for_width(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME_GRID_GAP
+}
+
+/// Home view content height px: tab strip + uska gap + card grid + section
+/// gap + do-line recent list. Frame ka used budget; paint isko viewport se
+/// compare karke scroll window lagata hai taaki neeche dead jagah na bache.
+/// Pure; headless-tested.
+pub fn home_view_content_height(item_count: usize, recent_count: usize, total_w: f32) -> f32 {
+    HOME_TAB_BAR_H
+        + HOME_TAB_GAP
+        + home_grid_content_height(item_count, total_w)
+        + HOME_SECTION_GAP
+        + recent_list_height_two_line(recent_count)
+}
+
+/// Bottom waste px: content + status line ke baad viewport me bachi jagah.
+/// Content bhare ya overflow kare to 0 (paint tab scroll karta hai).
+/// Non-finite viewport par 0 (koi phantom waste nahi). Pure; headless-tested.
+pub fn home_bottom_waste(
+    viewport_h: f32,
+    item_count: usize,
+    recent_count: usize,
+    total_w: f32,
+) -> f32 {
+    if !viewport_h.is_finite() {
+        return 0.0;
+    }
+    (viewport_h - home_view_content_height(item_count, recent_count, total_w) - HOME_STATUS_BAR_H)
+        .max(0.0)
+}
+
+/// Session-tree content height px: visible rows times row height plus
+/// upar-neeche pad. Khali ped par 0 (paint khali list chhupata hai). Pure;
+/// headless-tested.
+pub fn session_tree_content_height(visible_count: usize) -> f32 {
+    if visible_count == 0 {
+        return 0.0;
+    }
+    visible_count as f32 * SESSION_TREE_ROW_H + SESSION_TREE_PAD_Y * 2.0
+}
+
+/// Session-tree visible rows `avail_h` px me: sidebar budget me kitni poori
+/// rows fit hoti hain (pehle pad, phir rows). Tang/khali budget par 0.
+/// Pure; headless-tested.
+pub fn session_tree_visible_rows(avail_h: f32) -> usize {
+    if !avail_h.is_finite() {
+        return 0;
+    }
+    let inner = avail_h - SESSION_TREE_PAD_Y * 2.0;
+    if inner < SESSION_TREE_ROW_H {
+        return 0;
+    }
+    (inner / SESSION_TREE_ROW_H) as usize
+}
+
+/// Session tree ko scroll window chahiye: rows sidebar budget se bahar hain.
+/// Pure; headless-tested.
+pub fn session_tree_needs_scroll(visible_count: usize, avail_h: f32) -> bool {
+    session_tree_content_height(visible_count) > avail_h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2472,5 +2598,83 @@ mod tests {
             super::session_tree_item_role()
         );
         assert_eq!(super::session_tree_find_match_role().size(), 13.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn homegeo_wave_home2_8tabs_narrow_wrap_edge() {
+        // Edge fixture: 8-tab strip tang window me scroll karti hai (clip
+        // nahi), card grid 1-2 columns me lapet-ta hai, session tree +
+        // status line frame budget me rehte hain. Comparison fixture
+        // `checks/gui-exq-home2/comparison/8tabs-narrow-wrap.json`.
+        let eight = [
+            "Home", "Text", "Folder", "Hex", "Merge", "Table", "Sync", "Picture",
+        ];
+        let content = super::home_tab_bar_width(&eight);
+        // 44+44+58+37+51+51+44+65 = 394 + 7 gaps x 4 = 422.
+        assert!((content - 422.0).abs() < 0.001);
+
+        // Chrome-aware fit: side chrome 12 each (outer margin parity).
+        assert_eq!(super::HOME_TAB_STRIP_SIDE_CHROME, 12.0);
+        assert_eq!(
+            super::HOME_TAB_STRIP_SIDE_CHROME,
+            crate::theme::GEO_OUTER_MARGIN
+        );
+        assert!((super::home_tab_bar_avail_width(960.0) - 936.0).abs() < 0.001);
+        assert_eq!(super::home_tab_bar_avail_width(20.0), 0.0);
+        assert!(super::home_tab_bar_avail_width(f32::NAN).is_nan());
+
+        // 960 par fit (koi scroll nahi), 300 par scroll (labels kat-te nahi).
+        assert!(!super::home_tab_bar_needs_scroll(&eight, 960.0));
+        assert!(super::home_tab_bar_needs_scroll(&eight, 300.0));
+        assert!(!super::home_tab_bar_needs_scroll(&eight, f32::NAN));
+        assert!(!super::home_tab_bar_needs_scroll(&[], 300.0));
+
+        // Scroll window clamp: content 422, viewport 276 (300 - chrome 24).
+        let viewport = super::home_tab_bar_avail_width(300.0);
+        assert!((viewport - 276.0).abs() < 0.001);
+        assert!((super::home_tab_bar_scroll_max(content, viewport) - 146.0).abs() < 0.001);
+        assert_eq!(super::home_tab_bar_scroll_max(content, 999.0), 0.0);
+        assert_eq!(super::home_tab_bar_scroll_max(f32::NAN, viewport), 0.0);
+        assert_eq!(
+            super::home_tab_bar_scroll_clamp(-5.0, content, viewport),
+            0.0
+        );
+        assert_eq!(
+            super::home_tab_bar_scroll_clamp(999.0, content, viewport),
+            146.0
+        );
+        assert_eq!(
+            super::home_tab_bar_scroll_clamp(f32::NAN, content, viewport),
+            0.0
+        );
+
+        // Narrow wrap: 8 cards 600px par 2 columns x 4 rows (clip nahi).
+        assert_eq!(super::home_grid_columns_for_width(600.0), 2);
+        assert_eq!(super::home_grid_rows_for_width(8, 600.0), 4);
+        let narrow_grid = super::home_grid_content_height(8, 600.0);
+        let wide_grid = super::home_grid_content_height(8, 960.0);
+        assert_eq!(super::home_grid_rows_for_width(8, 960.0), 3);
+        assert!(narrow_grid > wide_grid);
+        assert!((wide_grid - (3.0 * super::home_card_min_height() + 16.0)).abs() < 0.01);
+        assert_eq!(super::home_grid_content_height(0, 960.0), 0.0);
+
+        // Status line 28 (hit-row parity); bhari view me waste 0 (scroll),
+        // khali recent me waste imaandaar ginati (paint hint/tree se bharta hai).
+        assert_eq!(super::HOME_STATUS_BAR_H, 28.0);
+        assert_eq!(super::HOME_STATUS_BAR_H, crate::theme::CHROME_HEADER_BAR_H);
+        assert_eq!(super::home_bottom_waste(600.0, 9, 8, 960.0), 0.0);
+        assert!(super::home_bottom_waste(600.0, 9, 0, 960.0) > 0.0);
+        assert_eq!(super::home_bottom_waste(f32::NAN, 9, 8, 960.0), 0.0);
+
+        // Session tree: 9 collapsed groups = 9 x 24 + 2 x 4 = 224.
+        assert!((super::session_tree_content_height(9) - 224.0).abs() < 0.001);
+        assert_eq!(super::session_tree_content_height(0), 0.0);
+        assert_eq!(super::session_tree_visible_rows(200.0), 8);
+        assert_eq!(super::session_tree_visible_rows(20.0), 0);
+        assert_eq!(super::session_tree_visible_rows(f32::NAN), 0);
+        assert!(super::session_tree_needs_scroll(9, 200.0));
+        assert!(!super::session_tree_needs_scroll(9, 600.0));
+        assert!(!super::session_tree_needs_scroll(0, 200.0));
     }
 }
