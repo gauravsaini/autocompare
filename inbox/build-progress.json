@@ -72,9 +72,10 @@
     "BINARY-orch2": "delivered autocompare-orch-2-macos-arm64.tar.gz (20MB) on draft v0.5.0-early; notes in checks/binary-orch-2",
     "LOOP-orch1": "round-orch-1 rerun RESULT PASS (cli 10/10 + gui geo-typo green) after swarm unblocked workspace",
     "VFS-DEPTH2": "verified+landed e9dc316 pushed (symlink safety, archive extract_to, snapshot diffs; 34 green, clippy 0, fmt clean)",
-    "LOCALRUN-5": "running opencode sess-localrun-5 (OWNS checks/early-feedback-5, CLI 10 cmds + 960x600 PNG + TOP-10 geo-typo vs live BC, no source)",
-    "BINARY-4": "running opencode sess-binary-4 (OWNS checks/binary-4, release tarball + sha256 6/6, no source)",
-    "EXQ5-GEO": "running opencode sess-exq5-geo (OWNS crates/gui + round-exq5, geometry first + typography, colors FROZEN, clean-worktree verify if dirty churn)"
+    "LOCALRUN-5": "running sess-localrun-5 REPORT.md + gui.png present, commit pending (OWNS checks/early-feedback-5, no source)",
+    "BINARY-4": "running sess-binary-4 artifacts present (tarball 5.8MB + sha256 + cli outs + gui-smoke.png 9765B, REPORT pending, no source)",
+    "EXQ5-GEO": "running opencode sess-exq5-geo (OWNS crates/gui + round-exq5, geometry first + typography, colors FROZEN, clean-worktree verify if dirty churn)",
+    "TIMELINE-EXQ3": "landed+pushed 1b0daa7 docs(timeline) round-exq3 geometry+typo"
   },
   "SWARM-EXQ4": "verified+landed aa884b9 (714 green clean-tree, clippy 0, fmt clean, banned 0, allow 0, 720px + 960px PNGs, REPORT PASS)",
   "SWARM-LOCAL4": "verified+landed 06586a0 (CLI 10/10, 3 PNGs 960x600 valid, TOP-10 geo-typo ISSUES, no source edits)",
