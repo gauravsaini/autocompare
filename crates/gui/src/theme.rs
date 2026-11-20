@@ -106,6 +106,23 @@ pub const TYPO_LINE_HEIGHT_MONO: f32 = 1.30;
 /// Slight header tracking as em ratio (0.02em; egui has no tracking).
 pub const TYPO_TRACKING_HEADING_EM: f32 = 0.02;
 
+/// Home3 exquisite scale intent (headless, paint-neutral): visible size steps
+/// (18 > 14 > 13 > 12 > 11) + non-zero header tracking (0.02em) while paint
+/// tracking no-op ([`TYPO_LETTER_SPACING`] 0.0) untouched rehta hai taaki
+/// paint-lock tests green rahen. Sab maujooda tokens reuse, koi naya size
+/// nahi, colors untouched. Pure; headless-tested.
+pub fn typo_exq_home_scale_ok() -> bool {
+    TYPO_HEADING_SIZE > TYPO_HOME_TITLE_SIZE
+        && TYPO_HOME_TITLE_SIZE > TYPO_BODY_SIZE
+        && TYPO_BODY_SIZE > TYPO_MONO_SIZE
+        && TYPO_MONO_SIZE > TYPO_SMALL_SIZE
+        && TYPO_TRACKING_HEADING_EM > 0.0
+        && TYPO_LETTER_SPACING == 0.0
+        && TypoRole::HomeTitle.letter_spacing_em() > 0.0
+        && TypoRole::HomeButton.letter_spacing_em() == 0.0
+        && TypoRole::HomeDesc.letter_spacing_em() == 0.0
+}
+
 // ----------------------------------------------------------------------------
 // Chrome hierarchy (headless): tab bar, section headers, home cards and
 // status lines share one documented scale. No new point sizes — every
@@ -2187,5 +2204,23 @@ mod tests {
             assert!(keymap_shortcut_hint(*preset, KeyAction::ToggleInfo).contains("⌘I"));
             assert_eq!(keymap_shortcut_hint(*preset, KeyAction::ResetZoom), "⌘0");
         }
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn typo_exq_home_scale_has_visible_steps_and_tracking() {
+        // Edge: Home3 exquisite scale — visible size steps + non-zero header
+        // tracking, paint no-op untouched. Koi naya size nahi, colors frozen.
+        assert!(typo_exq_home_scale_ok());
+        assert_eq!(TYPO_HEADING_SIZE, 18.0);
+        assert_eq!(TYPO_HOME_TITLE_SIZE, 14.0);
+        assert_eq!(TYPO_BODY_SIZE, 13.0);
+        assert_eq!(TYPO_MONO_SIZE, 12.0);
+        assert_eq!(TYPO_SMALL_SIZE, 11.0);
+        assert!(TYPO_TRACKING_HEADING_EM > 0.0);
+        assert_eq!(TYPO_LETTER_SPACING, 0.0);
+        assert_eq!(TypoRole::HomeTitle.letter_spacing_em(), 0.02);
+        assert_eq!(TypoRole::HomeButton.letter_spacing_em(), 0.0);
+        assert_eq!(TypoRole::HomeDesc.letter_spacing_em(), 0.0);
     }
 }

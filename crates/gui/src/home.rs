@@ -177,6 +177,12 @@ pub const HOME_CARD_DESC_LINES: usize = 2;
 /// Session-card grid gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8
 /// parity) — cards aur rows dono isi beat par, koi naya gap nahi.
 pub const HOME_GRID_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Session-card grid generous gap px: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24,
+/// `SPACE_XL`) — BC icon-tile wali saans; purana [`HOME_GRID_GAP`] (8) untouched hai
+/// taaki paint-lock tests green rahen (`views.rs`/`screenshot.rs` 8 par lock hain).
+/// Paint adoption paint-owner wave ka hai; ye headless budget + helpers sirf exq proof
+/// ke liye hain. Colors untouched.
+pub const HOME_GRID_GAP_EXQ: f32 = crate::theme::GEO_CARD_GAP;
 /// Toolbar compact button width px: path button floor se 0.8× (96)
 /// taaki wide text pills compact rahen; sabse lamba toolbar label
 /// content-driven ab bhi poora dikhta hai (floor sirf chhote labels ko
@@ -236,6 +242,66 @@ pub fn home_card_cta_single_line_ok() -> bool {
 /// Pure; headless-tested.
 pub fn home_card_cta_hit_area() -> f32 {
     HOME_CARD_CTA_W * HOME_CARD_BUTTON_MIN_H
+}
+
+// ----------------------------------------------------------------------------
+// Home3 exquisite geometry (first): generous grid gaps + full-width CTA proof.
+// Purane [`HOME_GRID_GAP`] (8) / [`HOME_CARD_CTA_W`] (224) untouched — paint-lock
+// green; naye EXQ helpers card rhythm (24) par saans dikhate hain. Sab rhythm
+// tokens se derive, koi magic number nahi, colors untouched.
+// ----------------------------------------------------------------------------
+
+/// Grid columns jo `total_w` px me EXQ gap par fit hote hain: har column
+/// [`HOME_CARD_MIN_W`] chahta hai, beech gaps [`HOME_GRID_GAP_EXQ`]; 1 se kam
+/// nahi (zero-clip), [`HOME_GRID_COLUMNS`] se zyada nahi (canonical 3-col).
+/// Non-finite par canonical count. Pure; headless-tested.
+pub fn home_grid_columns_for_width_exq(total_w: f32) -> usize {
+    if !total_w.is_finite() {
+        return HOME_GRID_COLUMNS;
+    }
+    let mut cols = 1usize;
+    while cols < HOME_GRID_COLUMNS
+        && (cols + 1) as f32 * HOME_CARD_MIN_W + cols as f32 * HOME_GRID_GAP_EXQ <= total_w
+    {
+        cols += 1;
+    }
+    cols
+}
+
+/// Grid rows `item_count` cards ke liye `total_w` px par EXQ gap se: columns
+/// tang par ghatte hain isliye rows badhte hain, clip nahi hota. Khali par 0.
+/// Pure; headless-tested.
+pub fn home_grid_rows_for_width_exq(item_count: usize, total_w: f32) -> usize {
+    item_count.div_ceil(home_grid_columns_for_width_exq(total_w).max(1))
+}
+
+/// Grid content height px EXQ gap par: rows times card minimum plus beech gaps.
+/// Khali par 0. Pure; headless-tested.
+pub fn home_grid_content_height_exq(item_count: usize, total_w: f32) -> f32 {
+    let rows = home_grid_rows_for_width_exq(item_count, total_w);
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f32 * home_card_min_height() + rows.saturating_sub(1) as f32 * HOME_GRID_GAP_EXQ
+}
+
+/// EXQ flex card width px: 3 cards + 2 EXQ gaps me available width,
+/// [`HOME_CARD_MIN_W`] = 240 floor. Non-finite ya non-positive avail par floor.
+/// Pure; headless-tested.
+pub fn home_grid_card_width_exq(avail: f32) -> f32 {
+    if !avail.is_finite() || avail <= 0.0 {
+        return HOME_CARD_MIN_W;
+    }
+    ((avail - HOME_GRID_GAP_EXQ * 2.0) / 3.0).max(HOME_CARD_MIN_W)
+}
+
+/// Full-width CTA EXQ card me fit hota hai: CTA width card inner width hai
+/// (224 = 240 − 2×8) aur EXQ flex card (936 avail par 296) isse chauda hai,
+/// sabse lamba label single-line budget me hai. Pure; headless-tested.
+pub fn home_card_cta_fits_exq_card(avail: f32) -> bool {
+    home_card_cta_single_line_ok()
+        && (HOME_CARD_CTA_W - (HOME_CARD_MIN_W - HOME_CARD_PAD * 2.0)).abs() < 0.001
+        && home_grid_card_width_exq(avail) >= HOME_CARD_CTA_W
 }
 
 /// Card title-vs-desc hierarchy theek hai: title desc se bada + strong,
@@ -1138,6 +1204,29 @@ pub fn home_card_roles_are_chrome_proportional() -> bool {
     roles
         .iter()
         .all(|role| role.is_chrome() && role.family() == "proportional")
+}
+
+/// Home3 exquisite type scale (second): visible steps + non-zero tracker.
+/// Title 14 > button 13 > desc 11 (size steps), title 500 > desc 400 (weight
+/// step), title tracking 0.02 > button/desc 0.0 (non-zero tracker). Sab
+/// `TypoRole` reuse, koi naya size nahi, colors untouched. Paint tracking
+/// no-op ([`crate::theme::TYPO_LETTER_SPACING`] 0.0) untouched rehta hai —
+/// ye headless intent hai, paint adoption baad ki wave me. Pure; headless-tested.
+pub fn home_card_type_scale_exq_ok() -> bool {
+    use crate::theme::TypoRole;
+    let title = TypoRole::HomeTitle;
+    let button = TypoRole::HomeButton;
+    let desc = TypoRole::HomeDesc;
+    title.size() > button.size()
+        && button.size() > desc.size()
+        && title.weight_value() > desc.weight_value()
+        && title.letter_spacing_em() > 0.0
+        && button.letter_spacing_em() == 0.0
+        && desc.letter_spacing_em() == 0.0
+        && title.is_chrome()
+        && button.is_chrome()
+        && desc.is_chrome()
+        && crate::theme::typo_exq_home_scale_ok()
 }
 
 /// Empty-state guidance for the Folder tab so the view never looks
@@ -2712,5 +2801,53 @@ mod tests {
         assert_eq!(super::folder_view_avail_height(100.0, chrome), 0.0);
         assert_eq!(super::folder_view_avail_height(f32::NAN, chrome), 0.0);
         assert_eq!(super::folder_view_avail_height(600.0, f32::NAN), 0.0);
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)]
+    fn home3_exq_generous_gap_fullwidth_cta_type_steps_edge() {
+        use crate::theme::{GEO_CARD_GAP, GEO_SECTION_GAP};
+        // Edge fixture: `checks/gui-exq-home3/comparison/home3-generous-gap.json`.
+        // Geometry first: purana gap untouched (paint-lock), exq gap card rhythm.
+        assert_eq!(super::HOME_GRID_GAP, 8.0);
+        assert_eq!(super::HOME_GRID_GAP, GEO_SECTION_GAP);
+        assert_eq!(super::HOME_GRID_GAP_EXQ, 24.0);
+        assert_eq!(super::HOME_GRID_GAP_EXQ, GEO_CARD_GAP);
+        assert!(super::HOME_GRID_GAP_EXQ > super::HOME_GRID_GAP);
+        // 736 edge: purana 3 cols (736 <= 736), exq 2 cols (768 > 736) — saans.
+        assert_eq!(super::home_grid_columns_for_width(736.0), 3);
+        assert_eq!(super::home_grid_columns_for_width_exq(736.0), 2);
+        assert_eq!(super::home_grid_columns_for_width_exq(960.0), 3);
+        assert_eq!(super::home_grid_columns_for_width_exq(720.0), 2);
+        assert_eq!(super::home_grid_columns_for_width_exq(600.0), 2);
+        assert_eq!(super::home_grid_columns_for_width_exq(240.0), 1);
+        assert_eq!(
+            super::home_grid_columns_for_width_exq(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 960.0), 3);
+        assert_eq!(super::home_grid_rows_for_width_exq(9, 720.0), 5);
+        assert_eq!(super::home_grid_rows_for_width_exq(0, 960.0), 0);
+        // Content heights: exq gaps se unche, purane se alag beat.
+        let wide_exq = super::home_grid_content_height_exq(9, 960.0);
+        assert!((wide_exq - (3.0 * super::home_card_min_height() + 48.0)).abs() < 0.01);
+        assert!((wide_exq - 346.8).abs() < 0.01);
+        assert!(wide_exq > super::home_grid_content_height(9, 960.0));
+        let narrow_exq = super::home_grid_content_height_exq(8, 600.0);
+        assert!((narrow_exq - 470.4).abs() < 0.01);
+        assert_eq!(super::home_grid_content_height_exq(0, 960.0), 0.0);
+        // Full-width CTA: inner width + single-line + exq card me fit.
+        assert_eq!(super::HOME_CARD_CTA_W, 224.0);
+        assert!(super::home_card_cta_single_line_ok());
+        assert!((super::home_grid_card_width_exq(936.0) - 296.0).abs() < 0.01);
+        assert!(super::home_card_cta_fits_exq_card(936.0));
+        assert!(super::home_card_cta_fits_exq_card(600.0));
+        // Tang avail par bhi floor (240) CTA (224) se chauda — clip ka jhooth nahi.
+        assert!(super::home_card_cta_fits_exq_card(100.0));
+        assert_eq!(super::home_grid_card_width_exq(f32::NAN), 240.0);
+        assert_eq!(super::home_grid_card_width_exq(0.0), 240.0);
+        // Typography second: visible steps + non-zero tracker, koi naya size nahi.
+        assert!(super::home_card_type_scale_exq_ok());
+        assert!(crate::theme::typo_exq_home_scale_ok());
     }
 }

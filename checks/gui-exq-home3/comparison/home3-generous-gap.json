@@ -1,0 +1,32 @@
+{
+  "description": "Home3 exquisite edge: generous 24px card rhythm vs 8px paint-lock; CTA 224 full-inner single-line; type steps 14>13>11 with 0.02 tracker. 736px edge splits old 3-col vs exq 2-col.",
+  "inputs": {"total_w": [960.0, 736.0, 720.0, 600.0, 240.0], "avail_w": [936.0, 600.0, 100.0], "item_count": [9, 8, 0]},
+  "assertions": {
+    "grid_gap_old": 8.0,
+    "grid_gap_exq": 24.0,
+    "cols_old_at_736": 3,
+    "cols_exq_at_736": 2,
+    "cols_exq_at_960": 3,
+    "cols_exq_at_720": 2,
+    "cols_exq_at_600": 2,
+    "rows_exq_9_at_960": 3,
+    "rows_exq_9_at_720": 5,
+    "grid_content_h_exq_9_at_960": 346.8,
+    "grid_content_h_exq_8_at_600": 470.4,
+    "grid_content_h_old_9_at_960": 314.8,
+    "card_w_exq_at_936": 296.0,
+    "cta_w": 224.0,
+    "cta_longest_chars": 20,
+    "cta_single_line_ok": true,
+    "cta_fits_exq_at_936": true,
+    "cta_fits_exq_at_100_floor": true,
+    "title_size": 14.0,
+    "button_size": 13.0,
+    "desc_size": 11.0,
+    "title_tracking_em": 0.02,
+    "paint_tracking_noop": 0.0,
+    "type_scale_exq_ok": true,
+    "typo_exq_home_scale_ok": true
+  },
+  "mode": "geometry-first, typography-second, colors frozen"
+}
