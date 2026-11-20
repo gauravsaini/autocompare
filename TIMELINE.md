@@ -392,3 +392,9 @@
 1. **Tree Indent & Arrows at 960px**: indent step from space scale, arrow hit rects symmetric, row height from TypoRole Mono line-height.
 2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `tree.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
 3. **Files changed**: `crates/gui/src/tree.rs`, `checks/gui-exq-tree7/**`, `TIMELINE.md`.
+
+### Feature (2026-11-21) — feat(gui): exq-home4 cards plus gaps
+
+1. **Home Cards & Gaps at 960px**: card gaps from space scale, card rows from TypoRole chrome line-height, section padding symmetric.
+2. **Tests** (before → after): autocompare-gui all green; clippy 0 warnings on owned `home.rs`; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: `crates/gui/src/home.rs`, `checks/gui-exq-home4/**`, `TIMELINE.md`.
