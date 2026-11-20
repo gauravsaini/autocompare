@@ -163,5 +163,9 @@
   "round-7-verify": "landed 32b36a0 (674 green, 19 PNGs PASS, pushed)"
  },
  "WAVE-EXQ7B": "landed+pushed 5105090 REPORT PASS 743 green hex+gutter wave7b",
- "HARNESS-EXQUISITE": "landed round-0 PASS tools/exquisite/run.sh + skills/exquisite (743 green, PNG 9765B magic ok, geo-typo signals)"
+ "HARNESS-EXQUISITE": "landed round-0 PASS tools/exquisite/run.sh + skills/exquisite (743 green, PNG 9765B magic ok, geo-typo signals)",
+ "WAVE-EXQ-HOME2B": "running opencode sess-opencode-exqhome2b OWNS home.rs,tree.rs (relaunched 22:48 fresh session, disk 20Gi)",
+ "WAVE-EXQ-TEXT2B": "running agyx /swarm OWNS views.rs,copy.rs,take.rs (relaunched 22:48, disk 20Gi)",
+ "WAVE-LOCALRUN5B": "running opencode sess-opencode-localrun5b OWNS checks/early-feedback-5 only (relaunched 22:48 fresh)",
+ "DISK-CLEAN": "freed 20Gi by removing stale /tmp/target-* (old sessions without b were terminal, fresh b sessions launched)"
 }
