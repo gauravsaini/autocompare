@@ -446,3 +446,8 @@
 1. **Hex Offset & Gap at 960px**: offset column 70px text / 78px gutter from char metrics for 8-digit addresses, ASCII pane gap from SPACE tokens, byte cell 30px box at 7px reference char.
 2. **Tests** (before → after): autocompare-gui new offset-fit test green, isolated harness RESULT: PASS; clippy 0 warnings on owned `views_hex.rs`; rustfmt clean; banned non-test tokens 0; colors frozen at 33.
 3. **Files changed**: `crates/gui/src/views_hex.rs`, `checks/gui-exq-hex7/**`, `TIMELINE.md`.
+
+### Chore (2026-11-21) — chore(localrun): refresh after-text plus dist
+
+1. **Localrun Refresh after hex7/table7/tree8**: all 10 after-*.png recaptured headless 960x600, cli+gui tarballs repacked + VERSION re-pinned, REPORT3.md with geometry/typo deltas vs reference in own words.
+2. **Files changed**: `checks/localrun/REPORT3.md`, `dist/VERSION`, `dist/*.tar.gz`, `TIMELINE.md`.
