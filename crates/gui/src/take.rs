@@ -791,8 +791,9 @@ pub fn merge_three_panes_fill_exact(avail_w: f32) -> bool {
 // scroll me `take_marker_visible_y` / `take_tall_hit_locked_y`.
 // ----------------------------------------------------------------------------
 
-/// Tall take canvas height px: 1200 fixture (edge over 600 canonical).
-pub const TAKE_TALL_CANVAS_H: f32 = 1200.0;
+/// Tall take canvas height px: double canonical viewport height
+/// ([`crate::theme::VIEWPORT_H`] 600 x 2 = 1200 fixture, edge over 600 canonical).
+pub const TAKE_TALL_CANVAS_H: f32 = crate::theme::VIEWPORT_H as f32 * 2.0;
 
 /// Tall take canvas height px (single source: [`TAKE_TALL_CANVAS_H`]).
 /// Pure; headless-tested.
@@ -1805,5 +1806,66 @@ mod exq_take44_tests {
         let (nl, _, _) = merge_three_pane_widths(360.0);
         assert_eq!(nl, 130.0);
         assert!(merge_three_pane_needs_hscroll(360.0));
+    }
+}
+
+#[cfg(test)]
+mod exq_take70_tests {
+    use super::*;
+
+    #[test]
+    fn take70_geometry_tokens_are_value_identical() {
+        // Buttons / gaps / slop: single-source SPACE/GEO tokens, hit math untouched.
+        assert_eq!(TAKE_BUTTON_H, crate::theme::SPACE_XL);
+        assert_eq!(TAKE_BUTTON_H, 24.0);
+        assert_eq!(TAKE_BUTTON_PAD_X, crate::theme::SPACE_SM);
+        assert_eq!(TAKE_BUTTON_PAD_X, 8.0);
+        assert_eq!(MERGE_SECTION_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(MERGE_SECTION_GAP, 8.0);
+        assert_eq!(TAKE_BUTTON_HIT_SLOP, crate::theme::SPACE_XS);
+        assert_eq!(TAKE_MINIMAP_MARK_MIN_H, crate::theme::SPACE_XS);
+        assert_eq!(take_bar_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(take_stepper_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(merge_divider_gap(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(take_conflict_badge_inset(), crate::theme::SPACE_XS);
+        // Row rhythm: Mono line-height single source.
+        assert_eq!(
+            merge_row_height(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(take_row_height(), merge_row_height());
+        assert!((merge_row_height() - 15.6).abs() < 0.01);
+        // Derived widths: token math, behavior-identical.
+        assert_eq!(
+            take_button_row_pitch(),
+            TAKE_BUTTON_H + crate::theme::GEO_TIGHT_GAP
+        );
+        assert_eq!(take_button_row_pitch(), 28.0);
+        assert_eq!(take_button_hit_height_with_slop(), 32.0);
+        assert_eq!(
+            take_button_hit_height_with_slop(),
+            TAKE_BUTTON_H + 2.0 * crate::theme::SPACE_XS
+        );
+        assert_eq!(
+            MERGE_TOTAL_MIN_W,
+            MERGE_PANE_MIN_W * 3.0 + MERGE_SECTION_GAP * 2.0
+        );
+        assert_eq!(MERGE_TOTAL_MIN_W, 406.0);
+        // Tall canvas: viewport token x2, value-identical 1200.
+        assert_eq!(TAKE_TALL_CANVAS_H, crate::theme::VIEWPORT_H as f32 * 2.0);
+        assert_eq!(TAKE_TALL_CANVAS_H, 1200.0);
+        assert_eq!(take_tall_canvas_h(), TAKE_TALL_CANVAS_H);
+    }
+
+    #[test]
+    fn take70_remaining_literals_have_no_identical_token() {
+        // 130.0 pane floor: no 130-valued SPACE/GEO/CHROME token exists (rg proof in gate).
+        assert_eq!(MERGE_PANE_MIN_W, 130.0);
+        // 7.0 label advance: no 7-valued typo token exists (rg proof in gate).
+        assert_eq!(TAKE_LABEL_ADVANCE_PX, 7.0);
+        // Hit behavior unchanged spot-checks (same numbers as merge2/copytake6 gates).
+        assert_eq!(take_choice_button_width(TakeChoice::Right), 86.0);
+        assert_eq!(take_side_button_width(TakeSide::Center), 93.0);
+        assert_eq!(take_bar_total_width(), 287.0);
     }
 }
