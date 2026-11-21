@@ -1243,7 +1243,7 @@ pub fn split_apply_drag(fraction: f32, dx: f32, avail: f32) -> f32 {
 /// strip with a centered 1px visual) so headless hit math stays in
 /// sync with paint without importing egui. Geometry only, no
 /// color/typo. Pure token; unit-tested.
-pub const SPLIT_HANDLE_HIT_W: f32 = 8.0;
+pub const SPLIT_HANDLE_HIT_W: f32 = crate::theme::SPACE_SM;
 
 /// Cursor affordance id for the split handle: paint maps this to its
 /// resize-column cursor (`egui::CursorIcon::ResizeColumn`). Headless
@@ -1341,8 +1341,8 @@ pub fn dual_pane_widths(avail_w: u32, fraction: f32) -> (u32, u32) {
 /// unit-tested. Single source for the screenshot narrow route and the
 /// live dual-pane painters.
 pub fn dual_pane_x_positions(avail_w: u32, fraction: f32) -> (u32, u32, u32) {
-    const OUTER_PAD: u32 = 12;
-    const PANE_GAP: u32 = 4;
+    const OUTER_PAD: u32 = crate::theme::GEO_OUTER_MARGIN as u32;
+    const PANE_GAP: u32 = crate::theme::GEO_TIGHT_GAP as u32;
     let (left_w, right_w) = dual_pane_widths(avail_w, fraction);
     if left_w == 0 && right_w == 0 {
         return (OUTER_PAD, OUTER_PAD, OUTER_PAD);
@@ -1407,8 +1407,8 @@ pub fn textcenter_pane_widths(avail_w: u32, fraction: f32) -> (u32, u32) {
 /// the 720 fallback (12, 332, 384). Degenerate input yields the stacked
 /// origin (12, 12, 12) so paint never underflows. Pure; unit-tested.
 pub fn textcenter_x_positions(avail_w: u32, fraction: f32) -> (u32, u32, u32) {
-    const OUTER_PAD: u32 = 12;
-    const PANE_GAP: u32 = 4;
+    const OUTER_PAD: u32 = crate::theme::GEO_OUTER_MARGIN as u32;
+    const PANE_GAP: u32 = crate::theme::GEO_TIGHT_GAP as u32;
     let (left_w, right_w) = textcenter_pane_widths(avail_w, fraction);
     if left_w == 0 && right_w == 0 {
         // Degenerate: chrome ne poora budget kha liya — stacked origin.
@@ -4449,7 +4449,32 @@ mod tests {
         // bana taaki hit math paint se alag na ho. Visual 1px centered
         // rehta hai, isliye inset dono taraf barabar banta hai.
         assert_eq!(SPLIT_HANDLE_HIT_W, 8.0);
+        assert_eq!(SPLIT_HANDLE_HIT_W, crate::theme::SPACE_SM);
         assert_eq!((SPLIT_HANDLE_HIT_W / 2.0) * 2.0, SPLIT_HANDLE_HIT_W);
+    }
+
+    #[test]
+    fn viewmodel_token_parity() {
+        // Geometry consolidation: headless budgets reuse theme tokens,
+        // values identical so paint output never moves.
+        assert_eq!(SPLIT_HANDLE_HIT_W, crate::theme::SPACE_SM);
+        assert_eq!(
+            crate::theme::GEO_OUTER_MARGIN as u32,
+            12,
+            "OUTER_PAD token parity"
+        );
+        assert_eq!(
+            crate::theme::GEO_TIGHT_GAP as u32,
+            4,
+            "PANE_GAP token parity"
+        );
+        // Token-backed budgets give the documented triples/origins.
+        assert_eq!(dual_pane_x_positions(960, 0.50), (12, 476, 936));
+        assert_eq!(dual_pane_x_positions(720, 0.50), (12, 356, 696));
+        assert_eq!(textcenter_x_positions(960, 0.50), (12, 452, 504));
+        assert_eq!(textcenter_x_positions(720, 0.50), (12, 332, 384));
+        assert_eq!(dual_pane_x_positions(0, 0.50), (12, 12, 12));
+        assert_eq!(textcenter_x_positions(0, 0.50), (12, 12, 12));
     }
 
     #[test]
