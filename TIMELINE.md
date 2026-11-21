@@ -1034,3 +1034,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-localrun78 local entry
 - `crates/gui/src/main.rs` me boot hint stderr pe, persist_window=false + tmp persistence, --help/--screenshot unchanged, 11 lines.
 - Proof: 1140+2 green, fmt clean, banned 0, smoke --help + --screenshot PASS tmp-only, RUN.md docs.
+
+### Feature (2026-11-21) — feat(gui): exq-geometry77 geometry polish
+- `crates/gui/src/views.rs` me geometry polish SPACE_* reuse, colors/typography frozen, 52 lines.
+- Proof: 1141+2+1 green, fmt clean, banned 0, harness PASS 10946B.
