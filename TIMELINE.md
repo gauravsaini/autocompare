@@ -1118,3 +1118,7 @@
 ### Feature (2026-11-21) — feat(gui): gui97 clippy clean
 - Root-4 G1 unblocked: workspace clippy exit 0, fmt exit 0, gui tests 1163 passed + 2 shots passed, added banned 0, OWNS crates/gui + checks/gui-clip97 clean.
 - Proof: leaf tree clean, NO PUSH, cherry-picked 5a5a776.
+
+### Feature (2026-11-21) — feat(xtask): sec99 secrets false-positive fix
+- Root-4 G1 secrets gate: shape-based detection, REPORT.md:7 FP gone, real ghp_/github_pat_/AKIA/banner still caught, xtask tests 6 passed, clippy/fmt/banned clean.
+- Proof: leaf OWNS xtask + checks/gui-sec99 clean, NO PUSH, cherry-picked 228da2e.
