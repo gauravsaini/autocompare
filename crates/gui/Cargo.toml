@@ -19,5 +19,8 @@ autocompare-compare = { path = "../compare" }
 eframe = "0.37.0"
 rfd = "0.18.0"
 
+[dev-dependencies]
+egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
+
 [lints]
 workspace = true
