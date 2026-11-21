@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-views57 live tabs strip
+
+1. **Live wiring**: mode tabs + session strip active indicator adopts staged vector geometry natively in views.rs via paint_tab_active_indicator (underline-only accent in bottom padding, no text occlusion); hit-rects + interactions byte-identical; 16px delta in real-egui.png [x=0..140, y=67..98]. Toolbar Swap/Reload vector marks preserved.
+2. **Tests**: 1117 green + 1 kittest real_egui_shot PASS; rustfmt clean (views.rs); new banned tokens 0; harness PASS (10946B).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-views57/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-hygiene52 test-output hygiene
 
 1. **Hygiene**: RgbaImage::opaque() forces alpha 255 (RGB untouched, unit + PNG roundtrip tested); real_egui_shot writes to target tmp by default, EXQ_KEEP_PNG=1 refreshes tracked copy. Machine proof: tmp PNG alpha-0 px 0/576000 (was 568630); default cargo test leaves tracked real-egui.png untouched.
