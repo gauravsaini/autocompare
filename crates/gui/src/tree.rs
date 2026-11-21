@@ -3105,8 +3105,9 @@ pub const FOLDER_FILTER_KIND_CHARS: usize = 10;
 /// Status combo longest label chars: "All statuses" (12).
 pub const FOLDER_FILTER_STATUS_CHARS: usize = 12;
 /// Combo/button frame pad px: button frame precedent (text pad + frame dono
-/// taraf; `home::HOME_CARD_CTA_FRAME_PAD` = 24 parity).
-pub const FOLDER_FILTER_COMBO_PAD: f32 = 24.0;
+/// taraf; `home::HOME_CARD_CTA_FRAME_PAD` parity — wahi [`crate::theme::SPACE_XL`],
+/// isliye own const token par ride karta hai, value-identical 24.0).
+pub const FOLDER_FILTER_COMBO_PAD: f32 = crate::theme::SPACE_XL;
 /// Active chip longest text chars: "7 active" (8, `active_count` max 7).
 pub const FOLDER_FILTER_CHIP_CHARS: usize = 8;
 /// Clear button label chars: "Clear filters" (13).
@@ -3247,6 +3248,9 @@ mod folder2_tests {
         // clear 13x7+24 = 115; naam field paint FIND_NEEDLE_W parity.
         assert_eq!(FOLDER_FILTER_NAME_W, 120.0);
         assert_eq!(FOLDER_FILTER_NAME_W, crate::views::FIND_NEEDLE_W);
+        // exq-tree82: combo pad token parity (SPACE_XL, home CTA frame parity).
+        assert_eq!(FOLDER_FILTER_COMBO_PAD, crate::theme::SPACE_XL);
+        assert_eq!(FOLDER_FILTER_COMBO_PAD, 24.0);
         assert_eq!(folder_filter_kind_width(), 94.0);
         assert_eq!(folder_filter_status_width(), 108.0);
         assert_eq!(folder_filter_chip_width(), 56.0);
