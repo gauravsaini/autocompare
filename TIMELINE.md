@@ -812,3 +812,9 @@
 1. **Early feedback**: CLI 10/10 PASS, 3 PNGs default 11040B / dark 11236B / light 11040B magic ok, dist tarball 5816820B + sha, REPORT RESULT: PASS, exquisite PASS colors 38 frozen.
 2. **Tests**: owned scope no Rust files, harness side-effect PNGs reverted, no contamination.
 3. **Files changed**: checks/ac-loop/round-lr6/**, dist/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-viewmodel39 live text row rhythm (opencode default)
+
+1. **Text row rhythm round-2**: TypoRole line-height reuse, padding XS/SM, narrow700 zero-clip, 1200px no h-scroll.
+2. **Tests**: 1088 green (+1 viewmodel), exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Sessions + sessionpaint strays reverted in worktree, none landed.
+3. **Files changed**: crates/gui/src/viewmodel.rs, checks/gui-exq-viewmodel39/**, TIMELINE.md.
