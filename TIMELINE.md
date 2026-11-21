@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-icons52 wiring audit (UNWIRED, honest)
+
+1. **Negative result with evidence**: staged icons50 paint fns have no live call site in app.rs (rects owned by FROZEN views.rs which already paints glyphs; TOPCHROME-10 toolbar is fixture-only, live bar is 4 buttons). No fake wiring added; 0-byte PNG delta documented with sha256 in report.md. Key methodology fix: --screenshot bypasses App paint entirely, so future paint waves must prove via kittest real-egui.png, not harness after.png.
+2. **Tests**: 1105 green; rustfmt clean (direct); banned 0; harness PASS.
+3. **Files changed**: crates/gui/src/app.rs (contract test only), checks/gui-exq-icons52/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-light51 live mode-aware palette wiring
 
 1. **Live wiring**: kind_palette + selective_side_palette dark-flagged via theme *_for helpers; minimap segments + gutter selection bands mode-aware; dark byte-identical, light wash + dark ink with contrast checks; zero new colors, geometry/typo untouched. agyx-delivered, verified same as opencode waves.
