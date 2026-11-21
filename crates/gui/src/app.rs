@@ -5552,16 +5552,49 @@ pub fn exq_icons50_tab_pill_rect(tab: egui::Rect) -> egui::Rect {
     )
 }
 
-/// EXQ-ICONS50 inline accent: dark par existing span ink
-/// ([`crate::theme::accent_fg_for`]), light par harsh ink ki jagah
-/// existing changed wash ([`crate::theme::changed_bg_for`]) — softer,
-/// zero naya `Color32`. Pure; headless-tested.
+/// EXQ-ICONS50 inline accent, EXQ-LIGHTVISUAL68 light routing: dark par
+/// existing span ink (dark arm untouched = dark byte-identical), light par
+/// wash ki jagah existing changed ink ([`crate::theme::accent_fg_for`],
+/// `LIGHT_CHANGED_FG`) — wash near-white chrome par ~invisible thi (wahi
+/// weak tab affordance), ink AA pass karti hai
+/// ([`crate::theme::light_diff_accents_aa`]) aur markers se softer
+/// same-amber family me rehti hai. Mode flag seedha theme `*_for` helper
+/// me route hota hai (koi hardcoded bool nahi), zero naya `Color32`.
+/// Pure; headless-tested.
 pub fn exq_icons50_inline_accent_for(dark: bool) -> egui::Color32 {
+    crate::theme::accent_fg_for(dark)
+}
+
+/// EXQ-LIGHTVISUAL68 active-tab pill rect (mode-routed readiness): dark
+/// arm legacy [`exq_icons50_tab_pill_rect`] EXACT (dark byte-identical,
+/// test-locked), light arm horizontal inset wahi SPACE_XS/2 rakhkar
+/// vertical inset [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`] (1.0)
+/// karta hai — light pill lambi (26 vs 24, tab-bar rhythm untouched,
+/// pill tab ke andar), taaki stronger light ink ke saath affordance
+/// geometry se bhi carry ho. Rounding shared
+/// ([`exq_icons50_tab_pill_rounding`]) rehta hai. Zero naya size/color.
+/// Unwired readiness (views wiring agle wave, icons52 precedent); behavior
+/// unchanged. Non-finite par tab wapas. Pure; headless-tested.
+pub fn exq_lightvisual68_tab_pill_rect_for(tab: egui::Rect, dark: bool) -> egui::Rect {
     if dark {
-        crate::theme::accent_fg_for(true)
-    } else {
-        crate::theme::changed_bg_for(false)
+        return exq_icons50_tab_pill_rect(tab);
     }
+    if !tab.min.x.is_finite()
+        || !tab.min.y.is_finite()
+        || !tab.max.x.is_finite()
+        || !tab.max.y.is_finite()
+    {
+        return tab;
+    }
+    let pad_x = crate::theme::SPACE_XS / 2.0;
+    let pad_y = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+    egui::Rect::from_min_max(
+        egui::pos2(tab.min.x + pad_x, tab.min.y + pad_y),
+        egui::pos2(
+            (tab.max.x - pad_x).max(tab.min.x + pad_x),
+            (tab.max.y - pad_y).max(tab.min.y + pad_y),
+        ),
+    )
 }
 
 /// EXQ-ICONS50 mark paint: Ring = circle outline, Bars/Rails/Wedge =
@@ -12721,19 +12754,89 @@ mod tests {
 
     #[test]
     fn icons_exq_icons50_light_accent_reuses_tokens() {
-        // Light arm harsh ink nahi — existing changed wash reuse.
+        // Light arm wash nahi — existing changed ink (LIGHT_CHANGED_FG):
+        // wash near-white chrome par ~invisible thi (weak tab affordance),
+        // ink AA pass karti hai aur markers se softer same-amber family
+        // me rehti hai. Koi naya Color32 nahi.
         assert_eq!(
             super::exq_icons50_inline_accent_for(false),
-            crate::theme::changed_bg_for(false)
+            crate::theme::accent_fg_for(false)
         );
         assert_eq!(
             super::exq_icons50_inline_accent_for(false),
-            crate::theme::LIGHT_CHANGED_BG
+            crate::theme::LIGHT_CHANGED_FG
         );
-        // Dark arm existing span ink reuse (koi naya Color32 nahi).
+        assert!(crate::theme::light_diff_accents_aa());
+        // Dark arm existing span ink reuse, byte-identical lock (ACCENT_FG
+        // literal se bandha — dark PNG kabhi nahi badalta).
         assert_eq!(
             super::exq_icons50_inline_accent_for(true),
             crate::theme::accent_fg_for(true)
+        );
+        assert_eq!(
+            super::exq_icons50_inline_accent_for(true),
+            crate::theme::ACCENT_FG
+        );
+    }
+
+    #[test]
+    fn lightvisual68_pill_rect_for_routes_dark_identical() {
+        // Dark arm legacy rect EXACT (dark byte-identical, value se bandha).
+        let tab = eframe::egui::Rect::from_min_max(
+            eframe::egui::pos2(10.0, 20.0),
+            eframe::egui::pos2(110.0, 48.0),
+        );
+        assert_eq!(
+            super::exq_lightvisual68_tab_pill_rect_for(tab, true),
+            super::exq_icons50_tab_pill_rect(tab)
+        );
+        // Light arm: horizontal SPACE_XS/2 (2.0), vertical 1px underline
+        // token — pill lambi (26 vs 24), tab ke andar, rounding shared.
+        let light = super::exq_lightvisual68_tab_pill_rect_for(tab, false);
+        assert!((light.min.x - 12.0).abs() < 0.001);
+        assert!((light.min.y - 21.0).abs() < 0.001);
+        assert!((light.max.x - 108.0).abs() < 0.001);
+        assert!((light.max.y - 47.0).abs() < 0.001);
+        assert!((light.height() - 26.0).abs() < 0.001);
+        assert!(tab.contains_rect(light));
+        assert_eq!(
+            super::exq_icons50_tab_pill_rounding(),
+            crate::theme::SPACE_XS
+        );
+    }
+
+    #[test]
+    fn lightvisual68_pill_rect_for_edge_tabs_stay_finite() {
+        // Edge fixture: tang (3px) tab par bhi finite, non-inverted pill —
+        // min/max clamp kabhi ulta nahi padta, NaN paint kabhi nahi.
+        let tiny = eframe::egui::Rect::from_min_max(
+            eframe::egui::pos2(10.0, 20.0),
+            eframe::egui::pos2(13.0, 48.0),
+        );
+        for dark in [true, false] {
+            let pill = super::exq_lightvisual68_tab_pill_rect_for(tiny, dark);
+            assert!(pill.min.x.is_finite() && pill.max.x.is_finite());
+            assert!(pill.min.y.is_finite() && pill.max.y.is_finite());
+            assert!(pill.min.x <= pill.max.x && pill.min.y <= pill.max.y);
+        }
+        // Non-finite tab wapas (dono arms, NaN guard).
+        let nan = eframe::egui::Rect::from_min_max(
+            eframe::egui::pos2(f32::NAN, 20.0),
+            eframe::egui::pos2(110.0, 48.0),
+        );
+        assert_eq!(
+            super::exq_lightvisual68_tab_pill_rect_for(nan, true)
+                .min
+                .x
+                .is_finite(),
+            false
+        );
+        assert_eq!(
+            super::exq_lightvisual68_tab_pill_rect_for(nan, false)
+                .min
+                .x
+                .is_finite(),
+            false
         );
     }
 
