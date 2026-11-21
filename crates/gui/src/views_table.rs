@@ -3948,6 +3948,151 @@ pub fn table30_visible_rows(panes_h: f32) -> u64 {
     table_wide_960_visible_rows(panes_h)
 }
 
+// ----------------------------------------------------------------------------
+// Table exquisite wave table43 round-1: live table compare grid geometry lock
+// (headless; paint wiring stays with the orchestrator).
+// Gap live table compare grid: live grid apne widths/gaps/rhythm khud
+// compute kare to header/body/key paint drift karte hain. Ye section thin
+// delegation lock hai — har helper table30 single-source ko chalata hai
+// (koi naya math/token/color nahi), taaki live views kabhi drift na karen.
+// Geometry FIRST: 1200px canvas, avail 1176, origin (12,12), col gap 8,
+// row gap 4, header 21.6 / body 15.6, sep 35.6 / body-first 37.6, char-metric
+// outer widths, grid total, fit gate, col xs, symmetric separators, grid
+// column count, grid default, cell rect. Typography SECOND: underline 1.0 +
+// weight strong/600 reuse — koi naya size/family nahi. Colors FROZEN (koi
+// Color32/Visuals nahi). No egui ctx, no I/O. Pure; unit-tested. Edge
+// fixture `checks/gui-exq-table43/comparison/live-table-grid.json` ka
+// headless judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table43 live canvas width (px): [`TABLE30_CANVAS_W`] reuse (1200.0). Pure.
+pub const TABLE43_CANVAS_W: f32 = TABLE30_CANVAS_W;
+
+/// Table43 live avail width (px): [`table30_avail_w`] reuse (1176.0). Pure; unit-tested.
+pub fn table43_avail_w() -> f32 {
+    table30_avail_w()
+}
+
+/// Table43 grid origin (px): [`table30_grid_origin`] reuse (12.0, 12.0). Pure; unit-tested.
+pub fn table43_grid_origin() -> (f32, f32) {
+    table30_grid_origin()
+}
+
+/// Table43 header row height (px): [`table30_header_h`] reuse (21.6). Pure; unit-tested.
+pub fn table43_header_h() -> f32 {
+    table30_header_h()
+}
+
+/// Table43 body row height (px): [`table30_row_h`] reuse (15.6). Pure; unit-tested.
+pub fn table43_row_h() -> f32 {
+    table30_row_h()
+}
+
+/// Table43 header/body delta (px): [`table30_header_body_delta`] reuse (6.0). Pure; unit-tested.
+pub fn table43_header_body_delta() -> f32 {
+    table30_header_body_delta()
+}
+
+/// Table43 header/body separator y (px): [`table30_header_sep_y`] reuse (35.6). Pure; unit-tested.
+pub fn table43_header_sep_y() -> f32 {
+    table30_header_sep_y()
+}
+
+/// Table43 pehli body row ka y (px): [`table30_body_first_y`] reuse (37.6). Pure; unit-tested.
+pub fn table43_body_first_y() -> f32 {
+    table30_body_first_y()
+}
+
+/// Table43 column spacing (px): [`table30_col_spacing`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table43_col_spacing() -> f32 {
+    table30_col_spacing()
+}
+
+/// Table43 grid row gap (px): [`table30_grid_gap_y`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table43_grid_gap_y() -> f32 {
+    table30_grid_gap_y()
+}
+
+/// Table43 row symmetric pad (px): [`table30_row_sym_pad`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table43_row_sym_pad() -> f32 {
+    table30_row_sym_pad()
+}
+
+/// Table43 cell padding x (px): [`table30_cell_pad_x`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table43_cell_pad_x() -> f32 {
+    table30_cell_pad_x()
+}
+
+/// Table43 header underline width (px): [`table30_header_underline_w`] reuse (1.0). Pure; unit-tested.
+pub fn table43_header_underline_w() -> f32 {
+    table30_header_underline_w()
+}
+
+/// Table43 header weight contract: [`table30_header_weight_ok`] reuse (strong/600). Pure; unit-tested.
+pub fn table43_header_weight_ok() -> bool {
+    table30_header_weight_ok()
+}
+
+/// Table43 char widths se px outer widths: [`table30_col_widths_px`] delegation. Pure; unit-tested.
+pub fn table43_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table30_col_widths_px(widths_chars, char_w)
+}
+
+/// Table43 grid kul px chaudai: [`table30_grid_total_w`] reuse. Pure; unit-tested.
+pub fn table43_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table30_grid_total_w(col_widths_px)
+}
+
+/// Table43 1200px fit gate: [`table30_column_grid_fit`] reuse. Pure; unit-tested.
+pub fn table43_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table30_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table43 sab columns ki x-positions: [`table30_col_xs`] delegation. Pure; unit-tested.
+pub fn table43_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table30_col_xs(col_widths_px)
+}
+
+/// Table43 vertical separators: [`table30_separator_xs`] delegation. Pure; unit-tested.
+pub fn table43_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table30_separator_xs(col_widths_px)
+}
+
+/// Table43 column alignments: [`table30_col_aligns`] delegation. Pure; unit-tested.
+pub fn table43_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table30_col_aligns(header, rows)
+}
+
+/// Table43 cell text ka x outer box me: [`table30_cell_text_x`] delegation. Pure; unit-tested.
+pub fn table43_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table30_cell_text_x(outer, text_w, right)
+}
+
+/// Table43 grid column count: [`table_cell_grid_columns`] reuse (glyph + data cols). Pure; unit-tested.
+pub fn table43_grid_columns(widths: &[usize]) -> usize {
+    table_cell_grid_columns(widths)
+}
+
+/// Table43 grid default rhythm: [`table_cell_grid_default`] reuse (origin + Mono row + SPACE gaps). Pure; unit-tested.
+pub fn table43_grid_default() -> TableCellGrid {
+    table_cell_grid_default()
+}
+
+/// Table43 ek data cell ka px box: [`table_cell_rect`] delegation. Pure; unit-tested.
+pub fn table43_cell_rect(
+    grid: TableCellGrid,
+    col: usize,
+    row: usize,
+    col_widths_px: &[f32],
+) -> Option<TableCellRect> {
+    table_cell_rect(grid, col, row, col_widths_px)
+}
+
+/// Table43 visible rows: [`table30_visible_rows`] reuse (Mono row height par ek hi budget). Pure; unit-tested.
+pub fn table43_visible_rows(panes_h: f32) -> u64 {
+    table30_visible_rows(panes_h)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6208,5 +6353,79 @@ mod tests {
 
         // 8. Visible rows
         assert_eq!(table30_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table43_live_table_grid() {
+        // Headless test proving edge fixture comparison/live-table-grid.json:
+        // live grid geometry lock at 1200px canvas (needs_hscroll: false),
+        // char widths [3,4,3] -> outer [40,48,40], total 144.0 fits in
+        // 1176.0 avail, grid columns 4, cell rect + text-x locked.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table43/comparison/live-table-grid.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table43/round-1/comparison/live-table-grid.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"live-table-grid\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 1200.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 1176.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\": false"));
+
+        // 1. Canvas / origin / spacing single-source lock.
+        assert_eq!(TABLE43_CANVAS_W, 1200.0);
+        assert_eq!(table43_avail_w(), 1176.0);
+        assert_eq!(table43_grid_origin(), (12.0, 12.0));
+        assert_eq!(table43_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table43_grid_gap_y(), crate::theme::SPACE_XS);
+        assert_eq!(table43_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table43_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // 2. Header/body rhythm + typo reuse (no new sizes).
+        assert!((table43_header_h() - 21.6).abs() < 0.001);
+        assert!((table43_row_h() - 15.6).abs() < 0.001);
+        assert!((table43_header_body_delta() - 6.0).abs() < 0.001);
+        assert!((table43_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table43_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table43_header_underline_w(), 1.0);
+        assert!(table43_header_weight_ok());
+
+        // 3. Live grid widths at 1200px: total 144.0 fits in 1176.0.
+        let header = vec!["ID".to_string(), "Name".to_string(), "Qty".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "Ana".to_string(), "10".to_string()],
+            vec!["22".to_string(), "Bo".to_string(), "300".to_string()],
+        ];
+        let widths_chars = table_column_widths(&header, &rows);
+        assert_eq!(widths_chars, vec![3, 4, 3]);
+        let col_widths_px = table43_col_widths_px(&widths_chars, 8.0);
+        assert_eq!(col_widths_px, vec![40.0, 48.0, 40.0]);
+        let total_w = table43_grid_total_w(&col_widths_px);
+        assert_eq!(total_w, 144.0);
+        assert!(table43_column_grid_fit(table43_avail_w(), &col_widths_px));
+        assert!(total_w <= table43_avail_w());
+        assert_eq!(table43_col_xs(&col_widths_px), vec![0.0, 48.0, 104.0]);
+        assert_eq!(table43_separator_xs(&col_widths_px), vec![44.0, 100.0]);
+        assert_eq!(table43_col_aligns(&header, &rows), vec![true, false, true]);
+
+        // 4. Grid columns + default rhythm + cell rect + text-x.
+        assert_eq!(table43_grid_columns(&widths_chars), 4);
+        let grid = table43_grid_default();
+        assert_eq!((grid.origin_x, grid.origin_y), (12.0, 12.0));
+        assert!((grid.row_h - 15.6).abs() < 0.001);
+        assert_eq!(grid.col_gap, 8.0);
+        assert_eq!(grid.row_gap, 4.0);
+        let cell = table43_cell_rect(grid, 1, 0, &col_widths_px);
+        assert!(cell.is_some());
+        if let Some(rect) = cell {
+            assert_eq!(rect.x, 60.0);
+            assert_eq!(rect.y, 12.0);
+            assert_eq!(rect.w, 48.0);
+            assert!((rect.h - 15.6).abs() < 0.001);
+            assert_eq!(table43_cell_text_x(rect, 16.0, false), Some(68.0));
+            assert_eq!(table43_cell_text_x(rect, 16.0, true), Some(84.0));
+        }
+
+        // 5. Visible rows.
+        assert_eq!(table43_visible_rows(600.0), 38);
     }
 }
