@@ -1,0 +1,29 @@
+{
+  "name": "gutter-narrow-700",
+  "scene": {
+    "note": "Clean-room Beyond Compare 5 parity: 700px narrow canvas budget with symmetric twin panes, 20px center lane, right-aligned line numbers, centered omit/copy marks, and zero double-padding."
+  },
+  "assertions": {
+    "canvas_w": 700.0,
+    "outer_margin": 12.0,
+    "avail_w": 676.0,
+    "center_lane_w": 20.0,
+    "center_lane_col_x": 340.0,
+    "center_lane_cx": 350.0,
+    "is_canvas_midpoint_aligned": true,
+    "show_linenums": true,
+    "linenum_digits_1_to_9": 1,
+    "linenum_col_w_1_digit": 16.0,
+    "pane_w_with_1_digit_linenum": 312.0,
+    "total_allocated_w_1_digit": 700.0,
+    "pane_w_without_linenum": 328.0,
+    "total_allocated_w_without_linenum": 700.0,
+    "copy_arrow_box": 16.0,
+    "copy_arrow_pad_x": 2.0,
+    "omit_marker_col_w": 16.0,
+    "omit_marker_box": 12.0,
+    "omit_marker_pad": 2.0,
+    "has_clip": false,
+    "has_double_padding": false
+  }
+}

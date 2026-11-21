@@ -4037,3 +4037,553 @@ mod exq_text38_tests {
         assert!(narrow.contains("\"needs_hscroll\": false"));
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQUISITE GEO55: Gutter geometry parity across canvas budgets
+// (narrow <720px / 700px, normal 960px, wide 1200px).
+//
+// In comparative side-by-side editing, text panes and gutter columns (line
+// numbers, omit markers, and overview rulers) must share canvas width without
+// clipping or double-padding.
+// Clean-room observation: Beyond Compare 5 allocates outer margins, twin text
+// panes, and centered affordance columns with deterministic, single-sourced
+// geometry. In narrow viewports (<720px, specifically 700px), equal pane
+// widths are maintained while preserving necessary gutter affordances.
+// In normal (960px) and wide (1200px) views, extra horizontal space expands
+// panes symmetrically while gutters remain anchored to the design scale.
+//
+// Geometry rules:
+// 1. Single-source width: all width calculations delegate to existing constants
+//    (`GEO_OUTER_MARGIN`, `SPACE_XS`, `SPACE_SM`, `SPACE_MD`, `SPACE_LG`,
+//    `SPACE_XL`, `TEXT38_CENTER_LANE_W`, `GUTTER_LINENUM_PAD`).
+// 2. No double-padding: inter-element padding is strictly unified so adjacent
+//    gutter boundaries and pane text content never compound padding.
+// 3. Strict alignment: line number cells are right-aligned tabular strings with
+//    two-space trailing pad; centered marker glyphs and chevrons align exactly
+//    to gutter column center and canvas midpoint (`avail_w / 2.0`).
+// 4. Zero new colors, zero new sizes, zero typography edits.
+// ----------------------------------------------------------------------------
+
+/// Canvas width for narrow comparison view edge (<720 breakpoint, px): 700.0.
+pub const GUTTER_CANVAS_NARROW_700: f32 = 700.0;
+
+/// Canvas width for canonical comparison view (px): 960.0.
+pub const GUTTER_CANVAS_NORMAL_960: f32 = 960.0;
+
+/// Canvas width for wide comparison view (px): 1200.0.
+pub const GUTTER_CANVAS_WIDE_1200: f32 = 1200.0;
+
+/// Omit / status marker gutter column width px: one LG step (16.0).
+/// Single-source reuse of [`crate::theme::SPACE_LG`].
+pub const GUTTER_OMIT_MARKER_COL_W: f32 = crate::theme::SPACE_LG;
+
+/// Omit / status marker box size px: one MD step (12.0).
+/// Single-source reuse of [`crate::theme::SPACE_MD`].
+pub const GUTTER_OMIT_MARKER_BOX: f32 = crate::theme::SPACE_MD;
+
+/// Gutter outer margin px (single source delegating to [`crate::theme::GEO_OUTER_MARGIN`]). Pure.
+pub fn gutter_geo_outer_margin() -> f32 {
+    crate::theme::GEO_OUTER_MARGIN
+}
+
+/// Gutter space XS step px (single source delegating to [`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_space_xs() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Gutter space SM step px (single source delegating to [`crate::theme::SPACE_SM`]). Pure.
+pub fn gutter_geo_space_sm() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Gutter space MD step px (single source delegating to [`crate::theme::SPACE_MD`]). Pure.
+pub fn gutter_geo_space_md() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// Gutter space LG step px (single source delegating to [`crate::theme::SPACE_LG`]). Pure.
+pub fn gutter_geo_space_lg() -> f32 {
+    crate::theme::SPACE_LG
+}
+
+/// Gutter space XL step px (single source delegating to [`crate::theme::SPACE_XL`]). Pure.
+pub fn gutter_geo_space_xl() -> f32 {
+    crate::theme::SPACE_XL
+}
+
+/// Gutter merge gap px (single source delegating to [`crate::theme::GUTTER_MERGE_GAP`]). Pure.
+pub fn gutter_geo_merge_gap() -> f32 {
+    crate::theme::GUTTER_MERGE_GAP
+}
+
+/// Available canvas width between left and right outer margins.
+/// Returns None if canvas_w is non-finite or smaller than `2 * GEO_OUTER_MARGIN`. Pure; unit-tested.
+pub fn gutter_canvas_avail_w(canvas_w: f32) -> Option<f32> {
+    if !canvas_w.is_finite() || canvas_w <= 2.0 * crate::theme::GEO_OUTER_MARGIN {
+        return None;
+    }
+    Some(canvas_w - 2.0 * crate::theme::GEO_OUTER_MARGIN)
+}
+
+/// Geometric budget distribution across margins, gutters, and twin panes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GutterCanvasBudget {
+    /// Total canvas width in logical pixels.
+    pub canvas_w: f32,
+    /// Outer margin on left and right edges (GEO_OUTER_MARGIN = 12.0).
+    pub outer_margin: f32,
+    /// Available width between margins (`canvas_w - 2 * outer_margin`).
+    pub avail_w: f32,
+    /// Center divider / lane width (e.g. 20.0 or 24.0).
+    pub center_lane_w: f32,
+    /// Left pane line-number column width.
+    pub left_linenum_w: f32,
+    /// Right pane line-number column width.
+    pub right_linenum_w: f32,
+    /// Left and right individual text pane content width.
+    pub pane_w: f32,
+    /// Total width allocated across all columns and margins.
+    pub total_allocated_w: f32,
+    /// True if content fits with pane_w > 0 without clipping.
+    pub is_valid: bool,
+}
+
+/// Pure budget calculation distributing canvas width across margins, gutters, and twin panes.
+///
+/// Ensures exact pixel budget:
+/// `2 * outer_margin + 2 * pane_w + center_lane_w + left_linenum_w + right_linenum_w == canvas_w`.
+/// If canvas is too small to fit gutters, `is_valid` is false and `pane_w` is 0.0.
+/// Pure; unit-tested.
+pub fn gutter_compute_canvas_budget(
+    canvas_w: f32,
+    max_line_no: usize,
+    show_line_numbers: bool,
+    center_lane_w: f32,
+) -> Option<GutterCanvasBudget> {
+    if !canvas_w.is_finite() || canvas_w <= 0.0 || !center_lane_w.is_finite() || center_lane_w < 0.0
+    {
+        return None;
+    }
+    let outer_margin = crate::theme::GEO_OUTER_MARGIN;
+    let avail_w = canvas_w - 2.0 * outer_margin;
+    if avail_w <= 0.0 {
+        return None;
+    }
+    let linenum_w = if show_line_numbers {
+        gutter_linenum_column_width(max_line_no, true)
+    } else {
+        0.0
+    };
+    let total_gutters = center_lane_w + 2.0 * linenum_w;
+    let rem = avail_w - total_gutters;
+    let (pane_w, is_valid) = if rem > 0.0 {
+        (rem / 2.0, true)
+    } else {
+        (0.0, false)
+    };
+    let total_allocated_w = 2.0 * outer_margin + 2.0 * pane_w + total_gutters;
+    Some(GutterCanvasBudget {
+        canvas_w,
+        outer_margin,
+        avail_w,
+        center_lane_w,
+        left_linenum_w: linenum_w,
+        right_linenum_w: linenum_w,
+        pane_w,
+        total_allocated_w,
+        is_valid,
+    })
+}
+
+/// Gutter budget for narrow 700px canvas edge (<720 breakpoint). Pure; unit-tested.
+pub fn gutter_budget_narrow_700(
+    max_line_no: usize,
+    show_line_numbers: bool,
+) -> Option<GutterCanvasBudget> {
+    gutter_compute_canvas_budget(
+        GUTTER_CANVAS_NARROW_700,
+        max_line_no,
+        show_line_numbers,
+        TEXT38_CENTER_LANE_W,
+    )
+}
+
+/// Gutter budget for canonical 960px normal canvas. Pure; unit-tested.
+pub fn gutter_budget_normal_960(
+    max_line_no: usize,
+    show_line_numbers: bool,
+) -> Option<GutterCanvasBudget> {
+    gutter_compute_canvas_budget(
+        GUTTER_CANVAS_NORMAL_960,
+        max_line_no,
+        show_line_numbers,
+        TEXT38_CENTER_LANE_W,
+    )
+}
+
+/// Gutter budget for 1200px wide canvas. Pure; unit-tested.
+pub fn gutter_budget_wide_1200(
+    max_line_no: usize,
+    show_line_numbers: bool,
+) -> Option<GutterCanvasBudget> {
+    gutter_compute_canvas_budget(
+        GUTTER_CANVAS_WIDE_1200,
+        max_line_no,
+        show_line_numbers,
+        TEXT38_CENTER_LANE_W,
+    )
+}
+
+/// Returns horizontal center `col_x + col_w / 2.0` of a gutter column.
+/// None for non-finite or non-positive values. Pure; unit-tested.
+pub fn gutter_mark_centered_cx(col_x: f32, col_w: f32) -> Option<f32> {
+    if !col_x.is_finite() || !col_w.is_finite() || col_w <= 0.0 {
+        return None;
+    }
+    let cx = col_x + col_w / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// Returns vertical center `row_y + row_h / 2.0` of a row.
+/// None for non-finite or non-positive values. Pure; unit-tested.
+pub fn gutter_mark_centered_cy(row_y: f32, row_h: f32) -> Option<f32> {
+    if !row_y.is_finite() || !row_h.is_finite() || row_h <= 0.0 {
+        return None;
+    }
+    let cy = row_y + row_h / 2.0;
+    if cy.is_finite() { Some(cy) } else { None }
+}
+
+/// Bounding rect for a mark centered at `(cx, cy)` with square dimensions `box_size`.
+/// None for non-finite or non-positive box_size. Pure; unit-tested.
+pub fn gutter_center_mark_rect(cx: f32, cy: f32, box_size: f32) -> Option<(f32, f32, f32, f32)> {
+    if !cx.is_finite() || !cy.is_finite() || !box_size.is_finite() || box_size <= 0.0 {
+        return None;
+    }
+    let half = box_size / 2.0;
+    Some((cx - half, cy - half, cx + half, cy + half))
+}
+
+/// Returns true if `mark_cx` aligns with the horizontal midpoint of `canvas_w` (`canvas_w / 2.0`).
+/// Pure; unit-tested.
+pub fn gutter_mark_is_canvas_midpoint_aligned(canvas_w: f32, mark_cx: f32) -> bool {
+    if !canvas_w.is_finite() || canvas_w <= 0.0 || !mark_cx.is_finite() {
+        return false;
+    }
+    (mark_cx - canvas_w / 2.0).abs() < 0.001
+}
+
+/// Right-aligned horizontal text x coordinate within a column `col_x..col_x + col_w`.
+/// Decrements `pad_right` from right edge. Returns None if invalid or out of bounds. Pure; unit-tested.
+pub fn gutter_linenum_right_aligned_x(col_x: f32, col_w: f32, pad_right: f32) -> Option<f32> {
+    if !col_x.is_finite() || !col_w.is_finite() || !pad_right.is_finite() {
+        return None;
+    }
+    if col_w <= pad_right || pad_right < 0.0 {
+        return None;
+    }
+    let x = col_x + col_w - pad_right;
+    if x.is_finite() { Some(x) } else { None }
+}
+
+/// Omit / status marker gutter column width px (single source). Pure.
+pub fn gutter_omit_marker_col_w() -> f32 {
+    GUTTER_OMIT_MARKER_COL_W
+}
+
+/// Omit / status marker box size px (single source). Pure.
+pub fn gutter_omit_marker_box() -> f32 {
+    GUTTER_OMIT_MARKER_BOX
+}
+
+/// Horizontal padding for omit marker within its 16px column: `(16 - 12) / 2 = 2.0` (`GUTTER_MERGE_GAP`). Pure.
+pub fn gutter_omit_marker_pad() -> f32 {
+    (GUTTER_OMIT_MARKER_COL_W - GUTTER_OMIT_MARKER_BOX) / 2.0
+}
+
+/// Omit marker bounding rect `(x0, y0, x1, y1)` centered within `(col_x, col_x + 16.0)` and `(row_y, row_y + row_h)`.
+/// Pure; unit-tested.
+pub fn gutter_omit_marker_rect(col_x: f32, row_y: f32, row_h: f32) -> Option<(f32, f32, f32, f32)> {
+    let cx = gutter_mark_centered_cx(col_x, GUTTER_OMIT_MARKER_COL_W)?;
+    let cy = gutter_mark_centered_cy(row_y, row_h)?;
+    gutter_center_mark_rect(cx, cy, GUTTER_OMIT_MARKER_BOX)
+}
+
+/// Hit-tests whether point `(x, y)` falls within the omit marker hitbox with 2.0px slop.
+/// Pure; unit-tested.
+pub fn gutter_omit_marker_hit_contains(col_x: f32, row_y: f32, row_h: f32, x: f32, y: f32) -> bool {
+    let Some(rect) = gutter_omit_marker_rect(col_x, row_y, row_h) else {
+        return false;
+    };
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let slop = crate::theme::GUTTER_MERGE_GAP;
+    let (x0, y0, x1, y1) = rect;
+    x >= x0 - slop && x <= x1 + slop && y >= y0 - slop && y <= y1 + slop
+}
+
+/// Verifies that layout does not double-pad at boundaries.
+/// Outer margin must equal `GEO_OUTER_MARGIN` (12.0) and padding tokens must belong to standard space scale.
+/// Pure; unit-tested.
+pub fn gutter_verify_no_double_padding(outer_margin: f32, pad_step: f32) -> bool {
+    if (outer_margin - crate::theme::GEO_OUTER_MARGIN).abs() >= 0.001 {
+        return false;
+    }
+    (pad_step - crate::theme::SPACE_XS).abs() < 0.001
+        || (pad_step - crate::theme::SPACE_SM).abs() < 0.001
+        || (pad_step - crate::theme::SPACE_MD).abs() < 0.001
+        || (pad_step - crate::theme::SPACE_LG).abs() < 0.001
+        || (pad_step - crate::theme::GUTTER_MERGE_GAP).abs() < 0.001
+}
+
+/// Verifies that a budget has no clipping (pane_w > 0) and exactly sums to canvas width.
+/// Pure; unit-tested.
+pub fn gutter_budget_has_no_clipping_or_overflow(budget: &GutterCanvasBudget) -> bool {
+    budget.is_valid
+        && budget.pane_w > 0.0
+        && (budget.total_allocated_w - budget.canvas_w).abs() < 0.001
+}
+
+#[cfg(test)]
+mod exq_geo55_tests {
+    use super::*;
+
+    #[test]
+    fn geo55_single_source_token_delegations() {
+        assert_eq!(GUTTER_CANVAS_NARROW_700, 700.0);
+        assert_eq!(GUTTER_CANVAS_NORMAL_960, 960.0);
+        assert_eq!(GUTTER_CANVAS_WIDE_1200, 1200.0);
+
+        assert_eq!(gutter_geo_outer_margin(), crate::theme::GEO_OUTER_MARGIN);
+        assert_eq!(gutter_geo_outer_margin(), 12.0);
+        assert_eq!(gutter_geo_space_xs(), crate::theme::SPACE_XS);
+        assert_eq!(gutter_geo_space_xs(), 4.0);
+        assert_eq!(gutter_geo_space_sm(), crate::theme::SPACE_SM);
+        assert_eq!(gutter_geo_space_sm(), 8.0);
+        assert_eq!(gutter_geo_space_md(), crate::theme::SPACE_MD);
+        assert_eq!(gutter_geo_space_md(), 12.0);
+        assert_eq!(gutter_geo_space_lg(), crate::theme::SPACE_LG);
+        assert_eq!(gutter_geo_space_lg(), 16.0);
+        assert_eq!(gutter_geo_space_xl(), crate::theme::SPACE_XL);
+        assert_eq!(gutter_geo_space_xl(), 24.0);
+        assert_eq!(gutter_geo_merge_gap(), crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(gutter_geo_merge_gap(), 2.0);
+
+        assert_eq!(gutter_canvas_avail_w(700.0), Some(676.0));
+        assert_eq!(gutter_canvas_avail_w(960.0), Some(936.0));
+        assert_eq!(gutter_canvas_avail_w(1200.0), Some(1176.0));
+        assert_eq!(gutter_canvas_avail_w(20.0), None);
+        assert_eq!(gutter_canvas_avail_w(f32::NAN), None);
+    }
+
+    #[test]
+    fn geo55_budget_narrow_700_parity() {
+        // Narrow 700px canvas budget with 1-digit line numbers:
+        // 12 margin + 16 linenum + 312 pane + 20 center + 312 pane + 16 linenum + 12 margin = 700.
+        let Some(budget_lines) = gutter_budget_narrow_700(7, true) else {
+            assert!(false, "narrow budget with lines");
+            return;
+        };
+        assert_eq!(budget_lines.canvas_w, 700.0);
+        assert_eq!(budget_lines.outer_margin, 12.0);
+        assert_eq!(budget_lines.avail_w, 676.0);
+        assert_eq!(budget_lines.center_lane_w, 20.0);
+        assert_eq!(budget_lines.left_linenum_w, 16.0);
+        assert_eq!(budget_lines.right_linenum_w, 16.0);
+        assert_eq!(budget_lines.pane_w, 312.0);
+        assert_eq!(budget_lines.total_allocated_w, 700.0);
+        assert!(budget_lines.is_valid);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_lines));
+
+        // Center lane midpoint check:
+        // col_x = 12 + 16 + 312 = 340.0; cx = 340 + 20/2 = 350.0 (700 / 2).
+        let center_col_x =
+            budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
+        assert_eq!(center_col_x, 340.0);
+        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
+        else {
+            assert!(false, "cx");
+            return;
+        };
+        assert_eq!(center_cx, 350.0);
+        assert!(gutter_mark_is_canvas_midpoint_aligned(700.0, center_cx));
+
+        // Narrow 700px canvas without line numbers:
+        // 12 margin + 328 pane + 20 center + 328 pane + 12 margin = 700.
+        let Some(budget_no_lines) = gutter_budget_narrow_700(7, false) else {
+            assert!(false, "narrow budget no lines");
+            return;
+        };
+        assert_eq!(budget_no_lines.left_linenum_w, 0.0);
+        assert_eq!(budget_no_lines.right_linenum_w, 0.0);
+        assert_eq!(budget_no_lines.pane_w, 328.0);
+        assert_eq!(budget_no_lines.total_allocated_w, 700.0);
+        assert!(budget_no_lines.is_valid);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_no_lines));
+    }
+
+    #[test]
+    fn geo55_budget_normal_960_parity() {
+        // Normal 960px canvas budget with 1-digit line numbers:
+        // 12 margin + 16 linenum + 442 pane + 20 center + 442 pane + 16 linenum + 12 margin = 960.
+        let Some(budget_lines) = gutter_budget_normal_960(5, true) else {
+            assert!(false, "normal budget with lines");
+            return;
+        };
+        assert_eq!(budget_lines.canvas_w, 960.0);
+        assert_eq!(budget_lines.pane_w, 442.0);
+        assert_eq!(budget_lines.total_allocated_w, 960.0);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_lines));
+
+        let center_col_x =
+            budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
+        assert_eq!(center_col_x, 470.0);
+        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
+        else {
+            assert!(false, "cx");
+            return;
+        };
+        assert_eq!(center_cx, 480.0);
+        assert!(gutter_mark_is_canvas_midpoint_aligned(960.0, center_cx));
+
+        // Normal 960px canvas without line numbers:
+        // 12 margin + 458 pane + 20 center + 458 pane + 12 margin = 960.
+        let Some(budget_no_lines) = gutter_budget_normal_960(5, false) else {
+            assert!(false, "normal budget no lines");
+            return;
+        };
+        assert_eq!(budget_no_lines.pane_w, 458.0);
+        assert_eq!(budget_no_lines.total_allocated_w, 960.0);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_no_lines));
+    }
+
+    #[test]
+    fn geo55_budget_wide_1200_parity() {
+        // Wide 1200px canvas budget with 1-digit line numbers:
+        // 12 margin + 16 linenum + 562 pane + 20 center + 562 pane + 16 linenum + 12 margin = 1200.
+        let Some(budget_lines) = gutter_budget_wide_1200(9, true) else {
+            assert!(false, "wide budget with lines");
+            return;
+        };
+        assert_eq!(budget_lines.canvas_w, 1200.0);
+        assert_eq!(budget_lines.pane_w, 562.0);
+        assert_eq!(budget_lines.total_allocated_w, 1200.0);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_lines));
+
+        let center_col_x =
+            budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
+        assert_eq!(center_col_x, 590.0);
+        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
+        else {
+            assert!(false, "cx");
+            return;
+        };
+        assert_eq!(center_cx, 600.0);
+        assert!(gutter_mark_is_canvas_midpoint_aligned(1200.0, center_cx));
+
+        // Wide 1200px canvas without line numbers:
+        // 12 margin + 578 pane + 20 center + 578 pane + 12 margin = 1200.
+        let Some(budget_no_lines) = gutter_budget_wide_1200(9, false) else {
+            assert!(false, "wide budget no lines");
+            return;
+        };
+        assert_eq!(budget_no_lines.pane_w, 578.0);
+        assert_eq!(budget_no_lines.total_allocated_w, 1200.0);
+        assert!(gutter_budget_has_no_clipping_or_overflow(&budget_no_lines));
+    }
+
+    #[test]
+    fn geo55_omit_marker_and_alignment_parity() {
+        assert_eq!(GUTTER_OMIT_MARKER_COL_W, crate::theme::SPACE_LG);
+        assert_eq!(gutter_omit_marker_col_w(), 16.0);
+        assert_eq!(GUTTER_OMIT_MARKER_BOX, crate::theme::SPACE_MD);
+        assert_eq!(gutter_omit_marker_box(), 12.0);
+        assert_eq!(gutter_omit_marker_pad(), 2.0);
+
+        // Omit marker placed in row: col 100..116, row 50..70 (20px high)
+        // cx = 100 + 16/2 = 108.0, cy = 50 + 20/2 = 60.0. Box 12x12 -> x: 102..114, y: 54..66.
+        let rect = gutter_omit_marker_rect(100.0, 50.0, 20.0);
+        assert_eq!(rect, Some((102.0, 54.0, 114.0, 66.0)));
+        assert_eq!(gutter_omit_marker_rect(f32::NAN, 50.0, 20.0), None);
+
+        // Hit testing with 2px slop: box is 102..114 x 54..66; slop makes it 100..116 x 52..68.
+        assert!(gutter_omit_marker_hit_contains(
+            100.0, 50.0, 20.0, 108.0, 60.0
+        ));
+        assert!(gutter_omit_marker_hit_contains(
+            100.0, 50.0, 20.0, 100.0, 52.0
+        ));
+        assert!(gutter_omit_marker_hit_contains(
+            100.0, 50.0, 20.0, 116.0, 68.0
+        ));
+        assert!(!gutter_omit_marker_hit_contains(
+            100.0, 50.0, 20.0, 99.0, 60.0
+        ));
+        assert!(!gutter_omit_marker_hit_contains(
+            100.0, 50.0, 20.0, 117.0, 60.0
+        ));
+
+        // Right-aligned line number x:
+        // col 10..30 (width 20), pad_right 4 -> x = 26.
+        assert_eq!(gutter_linenum_right_aligned_x(10.0, 20.0, 4.0), Some(26.0));
+        assert_eq!(gutter_linenum_right_aligned_x(10.0, 20.0, 25.0), None);
+        assert_eq!(gutter_linenum_right_aligned_x(f32::NAN, 20.0, 4.0), None);
+
+        // No double padding verification
+        assert!(gutter_verify_no_double_padding(12.0, 4.0));
+        assert!(gutter_verify_no_double_padding(12.0, 8.0));
+        assert!(gutter_verify_no_double_padding(12.0, 2.0));
+        assert!(!gutter_verify_no_double_padding(16.0, 4.0)); // wrong outer margin
+        assert!(!gutter_verify_no_double_padding(12.0, 5.0)); // non-token pad
+    }
+
+    #[test]
+    fn geo55_narrow_700_edge_fixture() {
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-geo55/round-1/comparison/gutter-narrow-700.json");
+        assert!(fixture_raw.contains("\"name\": \"gutter-narrow-700\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 700.0"));
+        assert!(fixture_raw.contains("\"outer_margin\": 12.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 676.0"));
+        assert!(fixture_raw.contains("\"center_lane_w\": 20.0"));
+        assert!(fixture_raw.contains("\"center_lane_col_x\": 340.0"));
+        assert!(fixture_raw.contains("\"center_lane_cx\": 350.0"));
+        assert!(fixture_raw.contains("\"is_canvas_midpoint_aligned\": true"));
+        assert!(fixture_raw.contains("\"linenum_col_w_1_digit\": 16.0"));
+        assert!(fixture_raw.contains("\"pane_w_with_1_digit_linenum\": 312.0"));
+        assert!(fixture_raw.contains("\"total_allocated_w_1_digit\": 700.0"));
+        assert!(fixture_raw.contains("\"pane_w_without_linenum\": 328.0"));
+        assert!(fixture_raw.contains("\"total_allocated_w_without_linenum\": 700.0"));
+        assert!(fixture_raw.contains("\"copy_arrow_box\": 16.0"));
+        assert!(fixture_raw.contains("\"copy_arrow_pad_x\": 2.0"));
+        assert!(fixture_raw.contains("\"omit_marker_col_w\": 16.0"));
+        assert!(fixture_raw.contains("\"omit_marker_box\": 12.0"));
+        assert!(fixture_raw.contains("\"omit_marker_pad\": 2.0"));
+        assert!(fixture_raw.contains("\"has_clip\": false"));
+        assert!(fixture_raw.contains("\"has_double_padding\": false"));
+
+        // Match against live helpers
+        let Some(budget_with_lines) = gutter_budget_narrow_700(7, true) else {
+            assert!(false, "live budget with lines");
+            return;
+        };
+        assert_eq!(budget_with_lines.canvas_w, 700.0);
+        assert_eq!(budget_with_lines.avail_w, 676.0);
+        assert_eq!(budget_with_lines.center_lane_w, 20.0);
+        assert_eq!(budget_with_lines.pane_w, 312.0);
+        assert_eq!(budget_with_lines.total_allocated_w, 700.0);
+
+        let Some(budget_no_lines) = gutter_budget_narrow_700(7, false) else {
+            assert!(false, "live budget no lines");
+            return;
+        };
+        assert_eq!(budget_no_lines.pane_w, 328.0);
+        assert_eq!(budget_no_lines.total_allocated_w, 700.0);
+
+        assert_eq!(gutter_omit_marker_col_w(), 16.0);
+        assert_eq!(gutter_omit_marker_box(), 12.0);
+        assert_eq!(gutter_omit_marker_pad(), 2.0);
+        assert!(gutter_mark_is_canvas_midpoint_aligned(700.0, 350.0));
+    }
+}
