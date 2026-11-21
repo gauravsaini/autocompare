@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-typo48 live font wiring
+
+1. **Live font plan**: typo48_live_font_plan() maps Proportional to TYPO_UI_SANS_STACK + Monospace to TYPO_MONO_STACK (single source, zero new sizes/weights/tokens); guarded once-install on first live ui() frame, headless tests untouched; startup stderr logs installed families as machine evidence.
+2. **Tests**: 1099 green (1098 + typo_exq_typo48_live_fonts); rustfmt clean on OWNS; banned non-test tokens 0; exquisite harness RESULT: PASS both modes. Honest limit: plan re-asserts stock egui families (no shipped binaries); real system-font byte loading is a follow-up wave.
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-typo48/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-palette47 live mode-aware palette
 
 1. **Mode-aware palette**: kind_palette()/selective_side_palette() dark-flagged via theme *_for helpers (dark byte-identical, light wash + dark ink AA); toolbar icon blocks to real shapes, zero new colors/tokens, zero geometry edits.
