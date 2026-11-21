@@ -3670,11 +3670,11 @@ pub const TEXT38_COPY_ARROW_BOX: f32 = crate::theme::SPACE_LG;
 /// Center gutter copy arrow side padding px: `(20.0 - 16.0) / 2.0 = 2.0` (`GUTTER_MERGE_GAP`).
 pub const TEXT38_COPY_ARROW_PAD_X: f32 = crate::theme::GUTTER_MERGE_GAP;
 
-/// Canvas width for wide comparison view (px): 1200.0.
-pub const TEXT38_CANVAS_WIDE_W: f32 = 1200.0;
+/// Canvas width for wide comparison view (px): 1200.0 via [`GUTTER_CANVAS_WIDE_1200`].
+pub const TEXT38_CANVAS_WIDE_W: f32 = GUTTER_CANVAS_WIDE_1200;
 
-/// Canvas width for narrow comparison view edge (<720 breakpoint, px): 700.0.
-pub const TEXT38_CANVAS_NARROW_W: f32 = 700.0;
+/// Canvas width for narrow comparison view edge (<720 breakpoint, px): 700.0 via [`GUTTER_CANVAS_NARROW_700`].
+pub const TEXT38_CANVAS_NARROW_W: f32 = GUTTER_CANVAS_NARROW_700;
 
 /// Center gutter lane width px (single source). Pure; unit-tested.
 pub fn text38_center_lane_w() -> f32 {
@@ -4126,6 +4126,66 @@ pub fn gutter_geo_space_xl() -> f32 {
 /// Gutter merge gap px (single source delegating to [`crate::theme::GUTTER_MERGE_GAP`]). Pure.
 pub fn gutter_geo_merge_gap() -> f32 {
     crate::theme::GUTTER_MERGE_GAP
+}
+
+/// Gutter ruler wide track width (px): one LG step ([`crate::theme::SPACE_LG`]). Pure.
+pub fn gutter_geo_ruler_wide() -> f32 {
+    crate::theme::SPACE_LG
+}
+
+/// Gutter ruler narrow track width (px): one SM step ([`crate::theme::SPACE_SM`]). Pure.
+pub fn gutter_geo_ruler_narrow() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Gutter overview segment min height (px): one XS step ([`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_segment_min_h() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Gutter viewport min height (px): one XS step ([`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_viewport_min_h() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Gutter center column width (px): one XL step ([`crate::theme::SPACE_XL`]). Pure.
+pub fn gutter_geo_center_w() -> f32 {
+    crate::theme::SPACE_XL
+}
+
+/// Gutter center arrow box size (px): one LG step ([`crate::theme::SPACE_LG`]). Pure.
+pub fn gutter_geo_arrow_box() -> f32 {
+    crate::theme::SPACE_LG
+}
+
+/// Gutter center lane width (px): 20px via `SPACE_LG + SPACE_XS`. Pure.
+pub fn gutter_geo_center_lane_w() -> f32 {
+    crate::theme::SPACE_LG + crate::theme::SPACE_XS
+}
+
+/// Gutter side marker column width (px): 20px via `SPACE_LG + SPACE_XS`. Pure.
+pub fn gutter_geo_side_marker_col_w() -> f32 {
+    crate::theme::SPACE_LG + crate::theme::SPACE_XS
+}
+
+/// Gutter side marker box size (px): one LG step ([`crate::theme::SPACE_LG`]). Pure.
+pub fn gutter_geo_side_marker_box() -> f32 {
+    crate::theme::SPACE_LG
+}
+
+/// Gutter line number pad per extra digit (px): one XS step ([`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_linenum_pad() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Gutter minimap track pad top/bottom (px): one XS step ([`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_minimap_track_pad() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Gutter center side gap (px): one XS step ([`crate::theme::SPACE_XS`]). Pure.
+pub fn gutter_geo_center_side_gap() -> f32 {
+    crate::theme::SPACE_XS
 }
 
 /// Available canvas width between left and right outer margins.
@@ -4678,5 +4738,156 @@ mod exq_gutter59_tests {
         assert_eq!(gutter_text5_layout_960(), (12.0, 456.0, 24.0, 456.0, 12.0));
         assert_eq!(gutter_side_layout_1200(), (12.0, 578.0, 20.0, 578.0, 12.0));
         assert_eq!(gutter_text_layout_1200(), (12.0, 576.0, 24.0, 576.0, 12.0));
+    }
+}
+
+#[cfg(test)]
+mod exq_agyxswarm80_gutter_tests {
+    use super::*;
+
+    #[test]
+    fn gutter_geometry_space_scale_tokens_hold() {
+        use crate::theme::{SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XL, SPACE_XS};
+
+        // XS step (4.0)
+        assert_eq!(gutter_geo_space_xs(), SPACE_XS);
+        assert_eq!(gutter_geo_space_xs(), 4.0);
+        assert_eq!(GUTTER_SEGMENT_MIN_H, SPACE_XS);
+        assert_eq!(GUTTER_VIEWPORT_MIN_H, SPACE_XS);
+        assert_eq!(GUTTER_LINENUM_PAD, SPACE_XS);
+        assert_eq!(GUTTER_MINIMAP_TRACK_PAD, SPACE_XS);
+        assert_eq!(GUTTER_CENTER_SIDE_GAP, SPACE_XS);
+        assert_eq!(gutter_geo_segment_min_h(), SPACE_XS);
+        assert_eq!(gutter_geo_viewport_min_h(), SPACE_XS);
+        assert_eq!(gutter_geo_linenum_pad(), SPACE_XS);
+        assert_eq!(gutter_geo_minimap_track_pad(), SPACE_XS);
+        assert_eq!(gutter_geo_center_side_gap(), SPACE_XS);
+
+        // SM step (8.0)
+        assert_eq!(gutter_geo_space_sm(), SPACE_SM);
+        assert_eq!(gutter_geo_space_sm(), 8.0);
+        assert_eq!(GUTTER_RULER_NARROW, SPACE_SM);
+        assert_eq!(gutter_geo_ruler_narrow(), SPACE_SM);
+
+        // MD step (12.0)
+        assert_eq!(gutter_geo_space_md(), SPACE_MD);
+        assert_eq!(gutter_geo_space_md(), 12.0);
+        assert_eq!(crate::theme::GUTTER_BAR_WIDE, SPACE_MD);
+        assert_eq!(GUTTER_OMIT_MARKER_BOX, SPACE_MD);
+        assert_eq!(gutter_geo_outer_margin(), crate::theme::GEO_OUTER_MARGIN);
+        assert_eq!(crate::theme::GEO_OUTER_MARGIN, SPACE_MD);
+
+        // LG step (16.0)
+        assert_eq!(gutter_geo_space_lg(), SPACE_LG);
+        assert_eq!(gutter_geo_space_lg(), 16.0);
+        assert_eq!(GUTTER_RULER_WIDE, SPACE_LG);
+        assert_eq!(GUTTER_ARROW_BOX, SPACE_LG);
+        assert_eq!(GUTTER_ICON_COL_W, SPACE_LG);
+        assert_eq!(GUTTER_SIDE_MARKER_BOX, SPACE_LG);
+        assert_eq!(GUTTER_OMIT_MARKER_COL_W, SPACE_LG);
+        assert_eq!(TEXT38_COPY_ARROW_BOX, SPACE_LG);
+        assert_eq!(gutter_geo_ruler_wide(), SPACE_LG);
+        assert_eq!(gutter_geo_arrow_box(), SPACE_LG);
+        assert_eq!(gutter_geo_side_marker_box(), SPACE_LG);
+
+        // XL step (24.0)
+        assert_eq!(gutter_geo_space_xl(), SPACE_XL);
+        assert_eq!(gutter_geo_space_xl(), 24.0);
+        assert_eq!(GUTTER_CENTER_W, SPACE_XL);
+        assert_eq!(gutter_geo_center_w(), SPACE_XL);
+
+        // Additive 20px step (SPACE_LG + SPACE_XS)
+        assert_eq!(GUTTER_SIDE_MARKER_COL_W, SPACE_LG + SPACE_XS);
+        assert_eq!(TEXT38_CENTER_LANE_W, SPACE_LG + SPACE_XS);
+        assert_eq!(gutter_geo_center_lane_w(), SPACE_LG + SPACE_XS);
+        assert_eq!(gutter_geo_side_marker_col_w(), SPACE_LG + SPACE_XS);
+
+        // Strict monotonic spacing scale
+        assert!(SPACE_XS < SPACE_SM);
+        assert!(SPACE_SM < SPACE_MD);
+        assert!(SPACE_MD < SPACE_LG);
+        assert!(SPACE_LG < SPACE_XL);
+    }
+
+    #[test]
+    fn gutter_geometry_canvas_budget_space_reuse() {
+        use crate::theme::{GEO_OUTER_MARGIN, SPACE_LG, SPACE_SM, SPACE_XL, SPACE_XS};
+
+        assert_eq!(GUTTER_RULER_NARROW, SPACE_SM);
+        assert_eq!(GUTTER_CENTER_W, SPACE_XL);
+
+        // Narrow 700 budget: 12 outer margin + twin 312 panes + 20 center lane + twin 16 line numbers = 700
+        let Some(b700) = gutter_budget_narrow_700(7, true) else {
+            panic!("b700 must be valid");
+        };
+        assert_eq!(b700.canvas_w, GUTTER_CANVAS_NARROW_700);
+        assert_eq!(b700.outer_margin, GEO_OUTER_MARGIN);
+        assert_eq!(b700.center_lane_w, SPACE_LG + SPACE_XS);
+        assert_eq!(b700.left_linenum_w, SPACE_LG);
+        assert_eq!(b700.right_linenum_w, SPACE_LG);
+        assert_eq!(b700.total_allocated_w, GUTTER_CANVAS_NARROW_700);
+
+        // Normal 960 budget: 12 outer margin + twin 442 panes + 20 center lane + twin 16 line numbers = 960
+        let Some(b960) = gutter_budget_normal_960(5, true) else {
+            panic!("b960 must be valid");
+        };
+        assert_eq!(b960.canvas_w, GUTTER_CANVAS_NORMAL_960);
+        assert_eq!(b960.outer_margin, GEO_OUTER_MARGIN);
+        assert_eq!(b960.center_lane_w, SPACE_LG + SPACE_XS);
+        assert_eq!(b960.left_linenum_w, SPACE_LG);
+        assert_eq!(b960.right_linenum_w, SPACE_LG);
+        assert_eq!(b960.total_allocated_w, GUTTER_CANVAS_NORMAL_960);
+
+        // Wide 1200 budget: 12 outer margin + twin 562 panes + 20 center lane + twin 16 line numbers = 1200
+        let Some(b1200) = gutter_budget_wide_1200(9, true) else {
+            panic!("b1200 must be valid");
+        };
+        assert_eq!(b1200.canvas_w, GUTTER_CANVAS_WIDE_1200);
+        assert_eq!(b1200.outer_margin, GEO_OUTER_MARGIN);
+        assert_eq!(b1200.center_lane_w, SPACE_LG + SPACE_XS);
+        assert_eq!(b1200.left_linenum_w, SPACE_LG);
+        assert_eq!(b1200.right_linenum_w, SPACE_LG);
+        assert_eq!(b1200.total_allocated_w, GUTTER_CANVAS_WIDE_1200);
+
+        // Single-source canvas consts
+        assert_eq!(TEXT38_CANVAS_WIDE_W, GUTTER_CANVAS_WIDE_1200);
+        assert_eq!(TEXT38_CANVAS_NARROW_W, GUTTER_CANVAS_NARROW_700);
+    }
+
+    #[test]
+    fn gutter_geometry_hit_slop_and_merge_tokens_hold() {
+        use crate::theme::GUTTER_MERGE_GAP;
+
+        assert_eq!(gutter_geo_merge_gap(), GUTTER_MERGE_GAP);
+        assert_eq!(gutter_geo_merge_gap(), 2.0);
+        assert_eq!(GUTTER_HIT_SLOP, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_TEXT_ROW_PAD, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_ARROW_HIT_SLOP, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_ARROW_GLYPH_INSET, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_LINENUM_INSET, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_SIDE_MARKER_INSET, GUTTER_MERGE_GAP);
+        assert_eq!(GUTTER_SIDE_HIT_SLOP, GUTTER_MERGE_GAP);
+        assert_eq!(TEXT38_COPY_ARROW_PAD_X, GUTTER_MERGE_GAP);
+    }
+
+    #[test]
+    fn gutter_geometry_pure_safe_and_frozen_colors() {
+        // Verification that pure safe calculation contracts hold:
+        assert!(gutter_verify_no_double_padding(12.0, 4.0));
+        assert!(gutter_verify_no_double_padding(12.0, 8.0));
+        assert!(gutter_verify_no_double_padding(12.0, 12.0));
+        assert!(gutter_verify_no_double_padding(12.0, 16.0));
+        assert!(gutter_verify_no_double_padding(12.0, 2.0));
+        assert!(!gutter_verify_no_double_padding(14.0, 4.0));
+        assert!(!gutter_verify_no_double_padding(12.0, 5.0));
+
+        // Invalid geometry inputs fail safely without panic:
+        assert_eq!(gutter_canvas_avail_w(f32::NAN), None);
+        assert_eq!(gutter_canvas_avail_w(-10.0), None);
+        assert_eq!(gutter_mark_centered_cx(f32::NAN, 20.0), None);
+        assert_eq!(gutter_mark_centered_cy(10.0, f32::NAN), None);
+        assert_eq!(gutter_center_mark_rect(f32::NAN, 10.0, 16.0), None);
+        assert_eq!(gutter_linenum_right_aligned_x(f32::NAN, 20.0, 4.0), None);
+        assert_eq!(gutter_omit_marker_rect(f32::NAN, 10.0, 20.0), None);
     }
 }
