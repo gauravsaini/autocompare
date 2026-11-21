@@ -1042,3 +1042,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-fonts76 typography
 - `crates/gui/src/theme.rs` me typography polish bundled sans/mono + light Visuals, geometry frozen, 72 lines.
 - Proof: 1141+2 green, fmt clean, banned 0, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-agyxswarm80 take/copy/gutter
+- agyx `/swarm` trial: 3 parallel sub-tasks in `/tmp/wt-agyxswarm80`, each OWNS one file only (`take.rs` 327 lines, `copy.rs` 523 lines, `gutter.rs` 219 lines), colors FROZEN.
+- Proof: 1159 lib green on main (worktree 1154 + main delta), fmt clean, banned 0 non-test (panic only inside #[test]), harness untouched, NO PUSH from leaf, cherry-picked 9fa203e/510c2ee/32b3bf4.
