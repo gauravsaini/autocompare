@@ -3810,7 +3810,11 @@ fn paint_text_body(
                                                         row_height,
                                                     ),
                                                 );
-                                                ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                                ui.painter().rect_filled(
+                                                    band,
+                                                    0.0,
+                                                    changed_bg_for(dark),
+                                                );
                                             } else if text_center_gutter_track_fill(is_selected) {
                                                 let track = egui::Rect::from_min_size(
                                                     ui.min_rect().min,
@@ -3880,7 +3884,9 @@ fn paint_text_body(
                                                         if text_center_gutter_band_fill(is_selected)
                                                         {
                                                             ui.painter().rect_filled(
-                                                                g_rect, 0.0, CHANGED_BG,
+                                                                g_rect,
+                                                                0.0,
+                                                                changed_bg_for(dark),
                                                             );
                                                         } else if text_center_gutter_track_fill(
                                                             is_selected,
@@ -3905,8 +3911,11 @@ fn paint_text_body(
                                                     egui::Sense::click(),
                                                 );
                                                 if text_center_gutter_band_fill(is_selected) {
-                                                    ui.painter()
-                                                        .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                    ui.painter().rect_filled(
+                                                        g_rect,
+                                                        0.0,
+                                                        changed_bg_for(dark),
+                                                    );
                                                 } else if text_center_gutter_track_fill(is_selected)
                                                 {
                                                     ui.painter().rect_filled(
@@ -3943,7 +3952,11 @@ fn paint_text_body(
                                                 egui::Sense::hover(),
                                             );
                                             if text_center_gutter_band_fill(is_selected) {
-                                                ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                ui.painter().rect_filled(
+                                                    g_rect,
+                                                    0.0,
+                                                    changed_bg_for(dark),
+                                                );
                                             } else if text_center_gutter_track_fill(is_selected) {
                                                 ui.painter().rect_filled(
                                                     g_rect,
@@ -4139,7 +4152,7 @@ fn paint_text_body(
                                             ui.min_rect().min,
                                             egui::vec2(text_center_gutter_width(), row_height),
                                         );
-                                        ui.painter().rect_filled(band, 0.0, CHANGED_BG);
+                                        ui.painter().rect_filled(band, 0.0, changed_bg_for(dark));
                                     } else if text_center_gutter_track_fill(is_selected) {
                                         let track = egui::Rect::from_min_size(
                                             ui.min_rect().min,
@@ -4191,8 +4204,11 @@ fn paint_text_body(
                                                     egui::Sense::click(),
                                                 );
                                                 if text_center_gutter_band_fill(is_selected) {
-                                                    ui.painter()
-                                                        .rect_filled(g_rect, 0.0, CHANGED_BG);
+                                                    ui.painter().rect_filled(
+                                                        g_rect,
+                                                        0.0,
+                                                        changed_bg_for(dark),
+                                                    );
                                                 } else if text_center_gutter_track_fill(is_selected)
                                                 {
                                                     ui.painter().rect_filled(
@@ -4212,7 +4228,11 @@ fn paint_text_body(
                                             egui::Sense::click(),
                                         );
                                         if text_center_gutter_band_fill(is_selected) {
-                                            ui.painter().rect_filled(g_rect, 0.0, CHANGED_BG);
+                                            ui.painter().rect_filled(
+                                                g_rect,
+                                                0.0,
+                                                changed_bg_for(dark),
+                                            );
                                         } else if text_center_gutter_track_fill(is_selected) {
                                             ui.painter().rect_filled(g_rect, 0.0, track_for(dark));
                                         }
@@ -4282,9 +4302,9 @@ fn paint_text_body(
             );
             let color = match seg.kind {
                 TextRowKind::Equal => Color32::TRANSPARENT,
-                TextRowKind::Deleted => DELETED_BG,
-                TextRowKind::Inserted => INSERTED_BG,
-                TextRowKind::Changed => CHANGED_BG,
+                TextRowKind::Deleted => deleted_bg_for(dark),
+                TextRowKind::Inserted => inserted_bg_for(dark),
+                TextRowKind::Changed => changed_bg_for(dark),
             };
             ui.painter().rect_filled(seg_rect, 0.0, color);
         }
@@ -4941,7 +4961,7 @@ pub fn prefs_pane_segments(
 /// route via `theme::*_for(dark)`: dark keeps the byte-identical saturated
 /// pairs, light uses the pale washes with dark ink (WCAG AA per
 /// `theme_contrast_ok`). Pure; unit-tested.
-fn kind_palette(kind: TextRowKind, base_text: Color32, dark: bool) -> (Color32, Color32) {
+pub fn kind_palette(kind: TextRowKind, base_text: Color32, dark: bool) -> (Color32, Color32) {
     match kind {
         TextRowKind::Equal => (base_text, Color32::TRANSPARENT),
         TextRowKind::Deleted => (deleted_fg_for(dark), deleted_bg_for(dark)),
@@ -11533,6 +11553,166 @@ mod tests {
         assert_eq!(inserted_bg_for(true), INSERTED_BG);
         assert_eq!(changed_fg_for(true), CHANGED_FG);
         assert_eq!(changed_bg_for(true), CHANGED_BG);
+    }
+
+    #[test]
+    fn light_exq_light51_mode_aware() {
+        // exq-light51: mode-aware palette wiring in views.rs.
+        // kind_palette + selective_side_palette dark-flagged via theme *_for helpers.
+        // Dark arm: byte-identical saturated pairs (DELETED_FG/BG, INSERTED_FG/BG, CHANGED_FG/BG).
+        // Light arm: pale washes (LIGHT_DELETED_BG, LIGHT_INSERTED_BG, LIGHT_CHANGED_BG) + dark ink.
+        // Zero new colors/tokens: reuses existing theme tokens and contracts.
+        use crate::theme::{
+            LIGHT_CHANGED_BG, LIGHT_DELETED_BG, LIGHT_INSERTED_BG, changed_bg_for, changed_fg_for,
+            deleted_bg_for, deleted_fg_for, inserted_bg_for, inserted_fg_for,
+            light_diff_accents_aa, theme_contrast_ok_color32,
+        };
+
+        let base = Color32::WHITE;
+
+        // 1. kind_palette contract: dark byte-identical
+        assert_eq!(
+            kind_palette(TextRowKind::Equal, base, true),
+            (base, Color32::TRANSPARENT)
+        );
+        assert_eq!(
+            kind_palette(TextRowKind::Deleted, base, true),
+            (DELETED_FG, DELETED_BG)
+        );
+        assert_eq!(
+            kind_palette(TextRowKind::Inserted, base, true),
+            (INSERTED_FG, INSERTED_BG)
+        );
+        assert_eq!(
+            kind_palette(TextRowKind::Changed, base, true),
+            (CHANGED_FG, CHANGED_BG)
+        );
+
+        // 2. kind_palette contract: light wash + dark ink via *_for(false)
+        assert_eq!(
+            kind_palette(TextRowKind::Equal, base, false),
+            (base, Color32::TRANSPARENT)
+        );
+        let (del_fg_l, del_bg_l) = kind_palette(TextRowKind::Deleted, base, false);
+        assert_eq!(del_fg_l, deleted_fg_for(false));
+        assert_eq!(del_bg_l, deleted_bg_for(false));
+        assert_eq!(del_bg_l, LIGHT_DELETED_BG);
+        assert_ne!(del_bg_l, DELETED_BG);
+
+        let (ins_fg_l, ins_bg_l) = kind_palette(TextRowKind::Inserted, base, false);
+        assert_eq!(ins_fg_l, inserted_fg_for(false));
+        assert_eq!(ins_bg_l, inserted_bg_for(false));
+        assert_eq!(ins_bg_l, LIGHT_INSERTED_BG);
+        assert_ne!(ins_bg_l, INSERTED_BG);
+
+        let (chg_fg_l, chg_bg_l) = kind_palette(TextRowKind::Changed, base, false);
+        assert_eq!(chg_fg_l, changed_fg_for(false));
+        assert_eq!(chg_bg_l, changed_bg_for(false));
+        assert_eq!(chg_bg_l, LIGHT_CHANGED_BG);
+        assert_ne!(chg_bg_l, CHANGED_BG);
+
+        // 3. Contrast verification (WCAG AA)
+        assert!(light_diff_accents_aa());
+        assert!(theme_contrast_ok_color32(del_fg_l, del_bg_l));
+        assert!(theme_contrast_ok_color32(ins_fg_l, ins_bg_l));
+        assert!(theme_contrast_ok_color32(chg_fg_l, chg_bg_l));
+
+        // 4. selective_side_palette contract
+        let del_row = TextRow {
+            kind: TextRowKind::Deleted,
+            left_no: Some(1),
+            right_no: None,
+            left: "deleted line".to_string(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        // Dark mode
+        assert_eq!(
+            selective_side_palette(true, &del_row, base, true),
+            (DELETED_FG, DELETED_BG)
+        );
+        assert_eq!(
+            selective_side_palette(false, &del_row, base, true),
+            (base, Color32::TRANSPARENT)
+        );
+        // Light mode
+        assert_eq!(
+            selective_side_palette(true, &del_row, base, false),
+            (deleted_fg_for(false), LIGHT_DELETED_BG)
+        );
+        assert_eq!(
+            selective_side_palette(false, &del_row, base, false),
+            (base, Color32::TRANSPARENT)
+        );
+
+        let ins_row = TextRow {
+            kind: TextRowKind::Inserted,
+            left_no: None,
+            right_no: Some(1),
+            left: String::new(),
+            right: "inserted line".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        // Dark mode
+        assert_eq!(
+            selective_side_palette(false, &ins_row, base, true),
+            (INSERTED_FG, INSERTED_BG)
+        );
+        assert_eq!(
+            selective_side_palette(true, &ins_row, base, true),
+            (base, Color32::TRANSPARENT)
+        );
+        // Light mode
+        assert_eq!(
+            selective_side_palette(false, &ins_row, base, false),
+            (inserted_fg_for(false), LIGHT_INSERTED_BG)
+        );
+        assert_eq!(
+            selective_side_palette(true, &ins_row, base, false),
+            (base, Color32::TRANSPARENT)
+        );
+
+        let chg_row = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(1),
+            right_no: Some(1),
+            left: "old text".to_string(),
+            right: "new text".to_string(),
+            accent_a: vec![(0, 3)],
+            accent_b: vec![(0, 3)],
+        };
+        // Changed text sides stay plain in both modes (word spans carry accent).
+        assert_eq!(
+            selective_side_palette(true, &chg_row, base, true),
+            (base, Color32::TRANSPARENT)
+        );
+        assert_eq!(
+            selective_side_palette(true, &chg_row, base, false),
+            (base, Color32::TRANSPARENT)
+        );
+
+        // 5. Minimap color parity check: dark byte-identical, light uses wash helpers
+        let minimap_dark = |k: TextRowKind| match k {
+            TextRowKind::Equal => Color32::TRANSPARENT,
+            TextRowKind::Deleted => deleted_bg_for(true),
+            TextRowKind::Inserted => inserted_bg_for(true),
+            TextRowKind::Changed => changed_bg_for(true),
+        };
+        assert_eq!(minimap_dark(TextRowKind::Deleted), DELETED_BG);
+        assert_eq!(minimap_dark(TextRowKind::Inserted), INSERTED_BG);
+        assert_eq!(minimap_dark(TextRowKind::Changed), CHANGED_BG);
+
+        let minimap_light = |k: TextRowKind| match k {
+            TextRowKind::Equal => Color32::TRANSPARENT,
+            TextRowKind::Deleted => deleted_bg_for(false),
+            TextRowKind::Inserted => inserted_bg_for(false),
+            TextRowKind::Changed => changed_bg_for(false),
+        };
+        assert_eq!(minimap_light(TextRowKind::Deleted), LIGHT_DELETED_BG);
+        assert_eq!(minimap_light(TextRowKind::Inserted), LIGHT_INSERTED_BG);
+        assert_eq!(minimap_light(TextRowKind::Changed), LIGHT_CHANGED_BG);
     }
 
     #[test]
