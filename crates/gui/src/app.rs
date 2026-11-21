@@ -5634,6 +5634,16 @@ pub fn chrome_default_text_label(rules: &str) -> &str {
 /// size ya color nahi. Paint [`views::paint_session_tab_strip`] me hai
 /// (FROZEN), yahan sirf caller contracts hain.
 impl App {
+    /// Session action bar live paint delegator (exq-icons55 App half).
+    /// Calls [`views::paint_session_action_bar`] using App's active toolbar state
+    /// and chrome nav state, executing the wired vector mark path in live paint.
+    /// Pure paint caller; hit-targets and interactions remain byte-identical.
+    pub fn paint_session_action_bar_live(&self, ui: &mut egui::Ui) -> views::ActionBarHits {
+        let toolbar_active = self.tab != Tab::Home;
+        let nav = self.chrome_nav_state();
+        views::paint_session_action_bar(ui, toolbar_active, &nav)
+    }
+
     /// Khule sessions ki ginti (strip cells).
     /// Pure; headless-tested.
     pub fn strip_tab_count(&self) -> usize {
@@ -7129,9 +7139,7 @@ impl eframe::App for App {
             // hata — checkboxes Swap/Reload ke left edge se shuru hote
             // hain (alignment fix, 16px hawa khatm). Gaps toolbar tokens
             // reuse; koi naya color/size nahi.
-            let toolbar_active = self.tab != Tab::Home;
-            let nav = self.chrome_nav_state();
-            let hits = views::paint_session_action_bar(ui, toolbar_active, &nav);
+            let hits = self.paint_session_action_bar_live(ui);
             match hits.action {
                 views::ToolbarAction::Swap => {
                     // Swap, then re-run so both sides refresh like
@@ -12676,5 +12684,45 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn toolbar_exq_icons55_live_vector_wiring() {
+        // exq-icons55: proves App's live action bar delegation executes the
+        // wired vector layer (paint_exq_icons50_mark Ring for Swap and Bars for Reload).
+        let app = App {
+            tab: Tab::Text,
+            ..App::default()
+        };
+        let ctx = egui::Context::default();
+        let mut executed_ring = false;
+        let mut executed_bars = false;
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let hits = app.paint_session_action_bar_live(ui);
+            assert_eq!(hits.action, views::ToolbarAction::None);
+            assert_eq!(hits.nav, views::ActionBarNav::None);
+        });
+        for shape in &output.shapes {
+            match &shape.shape {
+                egui::Shape::Circle(circle) => {
+                    if (circle.radius - super::exq_icons50_ring_r()).abs() < 0.001 {
+                        executed_ring = true;
+                    }
+                }
+                egui::Shape::LineSegment { .. } => {
+                    executed_bars = true;
+                }
+                _ => {}
+            }
+        }
+        output.textures_delta.clear();
+        assert!(
+            executed_ring,
+            "live paint must execute paint_exq_icons50_mark Ring for Swap"
+        );
+        assert!(
+            executed_bars,
+            "live paint must execute paint_exq_icons50_mark Bars for Reload"
+        );
     }
 }
