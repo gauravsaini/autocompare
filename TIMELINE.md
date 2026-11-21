@@ -925,3 +925,9 @@
 1. **Light underline-only accent**: `paint_inline_accent` in `screenshot.rs`, dark keeps byte-identical inverted block, light paints dark-ink text + 1px fg underline, zero geometry shift, zero new colors.
 2. **Tests**: 1115 green (+3 light56), exquisite harness RESULT: PASS 10946B, fmt clean, banned 0 non-test, colors 35 frozen. Dark after == baseline byte-identical 10928B, light 10973 -> 10946 27B delta. Sessionpaint strays reverted, none landed.
 3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-light56/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-icons55 wire vector icons live (agyx)
+
+1. **Live vector delegation**: `App::paint_session_action_bar_live` in `app.rs` delegates to `views::paint_session_action_bar`, executing staged Ring/Bars vector marks, hit-targets byte-identical.
+2. **Tests**: 1113 green (+1 toolbar_exq_icons55_live_vector_wiring), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0 non-test, colors 35 frozen. Strays self-reverted, OWNS-only landed.
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-icons55/**, TIMELINE.md.
