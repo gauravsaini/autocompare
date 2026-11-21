@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-palette47 live mode-aware palette
+
+1. **Mode-aware palette**: kind_palette()/selective_side_palette() dark-flagged via theme *_for helpers (dark byte-identical, light wash + dark ink AA); toolbar icon blocks to real shapes, zero new colors/tokens, zero geometry edits.
+2. **Tests**: 1098 green; rustfmt clean on OWNS; banned non-test tokens 0; exquisite harness RESULT: PASS both modes.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-palette47/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-shot46 honest screenshot harness
 
 1. **Honest harness**: screenshot.rs colors/layout now single-sourced from theme.rs mode-aware helpers + live pure geometry fns; Light mode paints dark-ink-on-light-wash (dark-on-dark gone); fake-chrome divergence documented; parity/ holds before/after dark+light PNGs. Verdict TOKEN-SOURCED-LIMITED (sandbox live-capture unavailable, machine-checked single-source tests instead).
