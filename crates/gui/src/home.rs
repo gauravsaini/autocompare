@@ -161,8 +161,8 @@ pub const fn home_card_button_role() -> crate::theme::TypoRole {
 
 /// Session-card grid columns: 9 cards / 3 = 3 poori rows, section rhythm barkarar.
 pub const HOME_GRID_COLUMNS: usize = 3;
-/// Card min width px: `views::CARD_W` parity (paint wahi rakhta hai).
-pub const HOME_CARD_MIN_W: f32 = 240.0;
+/// Card min width px: SPACE scale single-source (10 * [`crate::theme::SPACE_XL`] = 240).
+pub const HOME_CARD_MIN_W: f32 = crate::theme::SPACE_XL * 10.0;
 /// Card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8).
 pub const HOME_CARD_PAD: f32 = crate::theme::GEO_SECTION_GAP;
 /// Card inner gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4, title/desc/button beech).
@@ -190,8 +190,8 @@ pub const HOME_GRID_GAP_EXQ: f32 = crate::theme::GEO_CARD_GAP;
 pub const HOME_TOOLBAR_BUTTON_W: f32 = HOME_CARD_BUTTON_MIN_W * 0.8;
 /// Toolbar compact button height px: 24 exquisite hit floor (find-nav
 /// precedent, `app::LAYOUT_FIND_HIT_MIN` mirror) taaki toolbar row 28 se
-/// 24 par aaye. Pure; headless-tested.
-pub const HOME_TOOLBAR_BUTTON_H: f32 = 24.0;
+/// 24 par aaye. Single-source [`crate::theme::SPACE_XL`]. Pure; headless-tested.
+pub const HOME_TOOLBAR_BUTTON_H: f32 = crate::theme::SPACE_XL;
 /// Card button min hit width px: card aadha (report ka 120-wide "Open …"
 /// label budget; `HOME_CARD_MIN_W` se derive, koi magic number nahi).
 pub const HOME_CARD_BUTTON_MIN_W: f32 = HOME_CARD_MIN_W * 0.5;
@@ -213,7 +213,8 @@ pub const HOME_CARD_CTA_W: f32 = HOME_CARD_MIN_W - HOME_CARD_PAD * 2.0;
 /// (kind-column precedent ~7, koi naya metric nahi).
 pub const HOME_CARD_CTA_ADVANCE_PX: f32 = 7.0;
 /// CTA button frame pad px: text pad + do taraf frame (16 + 8).
-pub const HOME_CARD_CTA_FRAME_PAD: f32 = 24.0;
+/// Single-source [`crate::theme::SPACE_XL`] (value-identical 24.0).
+pub const HOME_CARD_CTA_FRAME_PAD: f32 = crate::theme::SPACE_XL;
 
 /// CTA width px (single source: [`HOME_CARD_CTA_W`]). Pure; headless-tested.
 pub fn home_card_cta_width() -> f32 {
@@ -948,10 +949,12 @@ pub fn recent_list_needs_scroll(count: usize, max_visible: usize) -> bool {
 pub const RECENT_COL_GAP: f32 = HOME_CARD_INNER_GAP;
 /// Kind column width px: sabse lamba kind "FolderMerge" (11 chars, body 13
 /// ~7px advance = 77 + 16 pad = 93) ka wrap budget, 96 par goal.
-pub const RECENT_COL_KIND_W: f32 = 96.0;
+/// Single-source 4 * [`crate::theme::SPACE_XL`] (value-identical 96.0).
+pub const RECENT_COL_KIND_W: f32 = crate::theme::SPACE_XL * 4.0;
 /// Age column width px: "just now" / "23h ago" (desc 11 + bullet + pad)
 /// ka wrap budget, 72 par goal.
-pub const RECENT_COL_AGE_W: f32 = 72.0;
+/// Single-source 3 * [`crate::theme::SPACE_XL`] (value-identical 72.0).
+pub const RECENT_COL_AGE_W: f32 = crate::theme::SPACE_XL * 3.0;
 
 /// `total_w` me title column ki flex width px: kul me se list pad (do taraf),
 /// kind + age columns aur do column gaps ghatao; tang par 0 (clip ka jhooth
@@ -1427,9 +1430,11 @@ pub const SESSION_TREE_PAD_X: f32 = HOME_CARD_PAD;
 /// Session tree vertical padding px: card inner gap (`HOME_CARD_INNER_GAP` = 4.0).
 pub const SESSION_TREE_PAD_Y: f32 = HOME_CARD_INNER_GAP;
 /// Session tree expander triangle width px: standard 16px glyph cell.
-pub const SESSION_TREE_EXPANDER_W: f32 = 16.0;
+/// Single-source [`crate::theme::SPACE_LG`] (value-identical 16.0).
+pub const SESSION_TREE_EXPANDER_W: f32 = crate::theme::SPACE_LG;
 /// Session tree session icon / glyph width px: standard 16px icon cell.
-pub const SESSION_TREE_ICON_W: f32 = 16.0;
+/// Single-source [`crate::theme::SPACE_LG`] (value-identical 16.0).
+pub const SESSION_TREE_ICON_W: f32 = crate::theme::SPACE_LG;
 
 /// Sidebar width px for session tree. Pure.
 pub fn session_tree_width() -> f32 {
@@ -3925,6 +3930,32 @@ mod tests {
         assert!((height - 99.6).abs() < 0.01);
         assert!(height > super::HOME_CARD_BUTTON_MIN_H);
         assert_eq!(super::HOME_CARD_MIN_W, 240.0);
+    }
+
+    #[test]
+    fn exq_home65_geometry_tokens_value_identical() {
+        use crate::theme::{SPACE_LG, SPACE_XL};
+        // Card min-w SPACE scale (10 x XL = 240), toolbar/CTA pad XL (24),
+        // kind/age cols XL multiples (96/72), tree glyph cells LG (16).
+        assert_eq!(super::HOME_CARD_MIN_W, SPACE_XL * 10.0);
+        assert_eq!(super::HOME_CARD_MIN_W, 240.0);
+        assert_eq!(super::HOME_TOOLBAR_BUTTON_H, SPACE_XL);
+        assert_eq!(super::HOME_TOOLBAR_BUTTON_H, 24.0);
+        assert_eq!(super::HOME_CARD_CTA_FRAME_PAD, SPACE_XL);
+        assert_eq!(super::HOME_CARD_CTA_FRAME_PAD, 24.0);
+        assert_eq!(super::RECENT_COL_KIND_W, SPACE_XL * 4.0);
+        assert_eq!(super::RECENT_COL_KIND_W, 96.0);
+        assert_eq!(super::RECENT_COL_AGE_W, SPACE_XL * 3.0);
+        assert_eq!(super::RECENT_COL_AGE_W, 72.0);
+        assert_eq!(super::SESSION_TREE_EXPANDER_W, SPACE_LG);
+        assert_eq!(super::SESSION_TREE_EXPANDER_W, 16.0);
+        assert_eq!(super::SESSION_TREE_ICON_W, SPACE_LG);
+        assert_eq!(super::SESSION_TREE_ICON_W, 16.0);
+        // 7.0 advance / 75.0 browse / 150.0 tab-cell / 21.2 status ka koi
+        // identical token nahi (repo-wide grep) — literals rehte hain.
+        assert_eq!(super::HOME_CARD_CTA_ADVANCE_PX, 7.0);
+        assert_eq!(super::TOPCHROME_BROWSE_W, 75.0);
+        assert_eq!(super::CHROME3_SESSION_TAB_CELL_W, 150.0);
     }
 
     #[test]
