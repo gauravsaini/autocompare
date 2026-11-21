@@ -1,0 +1,2616 @@
+   Compiling unicode-ident v1.0.27
+   Compiling bitflags v2.13.2
+   Compiling cfg-if v1.0.5
+   Compiling foldhash v0.2.0
+   Compiling log v0.4.35
+   Compiling libc v0.2.191
+   Compiling simd-adler32 v0.3.10
+   Compiling libm v0.2.16
+   Compiling adler2 v2.0.1
+   Compiling proc-macro2 v1.0.107
+   Compiling hashbrown v0.17.1
+   Compiling smallvec v1.16.6
+   Compiling crc32fast v1.5.5
+   Compiling miniz_oxide v0.9.1
+   Compiling equivalent v1.0.3
+   Compiling memchr v2.8.3
+   Compiling serde_core v1.0.229
+   Compiling quote v1.0.47
+   Compiling indexmap v2.14.2
+   Compiling miniz_oxide v0.8.9
+   Compiling fdeflate v0.3.7
+   Compiling bumpalo v3.20.4
+   Compiling syn v3.0.10
+   Compiling num-traits v0.2.19
+   Compiling flate2 v1.1.11
+   Compiling zopfli v0.8.4
+   Compiling once_cell v1.21.4
+   Compiling zmij v1.0.23
+   Compiling itoa v1.0.19
+   Compiling errno v0.3.15
+   Compiling rustix v1.1.6
+   Compiling png v0.18.1
+   Compiling filetime v0.2.30
+   Compiling zip v2.6.1
+   Compiling num-complex v0.4.6
+   Compiling lazy_static v1.5.1
+   Compiling autocompare-evidence v0.5.0 (/private/tmp/wt-final100/crates/evidence)
+   Compiling objc2-encode v4.1.0
+   Compiling syn v2.0.119
+   Compiling arrayvec v0.7.8
+   Compiling objc2 v0.6.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling getrandom v0.4.3
+   Compiling serde_json v1.0.154
+   Compiling xattr v1.7.0
+   Compiling tar v0.4.46
+   Compiling fastrand v2.5.0
+   Compiling scopeguard v1.2.0
+   Compiling raw-window-handle v0.6.2
+   Compiling lock_api v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling parking_lot_core v0.9.12
+   Compiling polycool v0.4.0
+   Compiling objc2-core-foundation v0.3.2
+   Compiling block2 v0.6.2
+   Compiling linebender_resource_handle v0.1.1
+   Compiling parking_lot v0.12.5
+   Compiling kurbo v0.13.1
+   Compiling objc-sys v0.3.5
+   Compiling euclid v0.22.14
+   Compiling litemap v0.8.3
+   Compiling rustc-hash v1.1.0
+   Compiling writeable v0.6.4
+   Compiling static_assertions v1.1.0
+   Compiling profiling v1.0.18
+   Compiling utf_types v1.0.0
+   Compiling objc2 v0.5.3
+   Compiling uuid v1.29.3
+   Compiling utf8_iter v1.1.0
+   Compiling guillotiere v0.7.0
+   Compiling bit-vec v0.9.1
+   Compiling unicode-width v0.2.3
+   Compiling synstructure v0.14.0
+   Compiling objc2-foundation v0.3.2
+   Compiling objc2-core-graphics v0.3.2
+   Compiling fearless_simd v0.4.1
+   Compiling block2 v0.5.1
+   Compiling bit-set v0.10.0
+   Compiling codespan-reporting v0.13.1
+   Compiling accesskit v0.25.2
+   Compiling utf8parse v0.2.2
+   Compiling core-foundation-sys v0.8.7
+   Compiling dispatch v0.2.0
+   Compiling objc2-foundation v0.2.2
+   Compiling core-foundation v0.9.4
+   Compiling zerocopy-derive v0.8.63
+   Compiling anstyle-parse v1.0.0
+   Compiling icu_normalizer_data v2.4.0
+   Compiling icu_properties_data v2.4.0
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling bytemuck_derive v1.12.1
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling zerofrom-derive v0.1.8
+   Compiling bytemuck v1.25.2
+   Compiling zerofrom v0.1.8
+   Compiling thiserror v2.0.21
+   Compiling yoke-derive v0.8.4
+   Compiling zerocopy v0.8.63
+   Compiling symphonia-core v0.6.1
+   Compiling zerovec-derive v0.11.7
+   Compiling displaydoc v0.2.7
+   Compiling font-types v0.12.7
+   Compiling yoke v0.8.4
+   Compiling read-fonts v0.41.0
+   Compiling color v0.3.3
+   Compiling serde v1.0.229
+   Compiling zerovec v0.11.9
+   Compiling peniko v0.6.1
+   Compiling symphonia-bundle-mp3 v0.6.1
+   Compiling autocompare-vfs v0.5.0 (/private/tmp/wt-final100/crates/vfs)
+   Compiling tinystr v0.8.5
+   Compiling potential_utf v0.1.6
+   Compiling autocompare-diff v0.5.0 (/private/tmp/wt-final100/crates/diff)
+   Compiling icu_locale_core v2.4.0
+   Compiling zerotrie v0.2.5
+   Compiling naga-types v30.0.2
+   Compiling icu_collections v2.4.0
+   Compiling vello_common v0.2.0
+   Compiling autocompare-sessions v0.5.0 (/private/tmp/wt-final100/crates/sessions)
+   Compiling icu_provider v2.4.0
+   Compiling objc2-metal v0.3.2
+   Compiling wgpu-types v30.0.2
+   Compiling half v2.7.1
+   Compiling autocompare-compare v0.5.0 (/private/tmp/wt-final100/crates/compare)
+   Compiling naga v30.0.2
+   Compiling emath v0.37.0
+   Compiling foreign-types-macros v0.2.4
+   Compiling anstyle v1.0.14
+   Compiling anstyle-query v1.1.5
+   Compiling foreign-types-shared v0.3.1
+   Compiling bitflags v1.3.2
+   Compiling anstream v1.0.0
+   Compiling core-graphics-types v0.1.3
+   Compiling foreign-types v0.5.0
+   Compiling ecolor v0.37.0
+   Compiling ahash v0.8.12
+   Compiling icu_properties v2.4.0
+   Compiling icu_normalizer v2.4.0
+   Compiling objc2-app-kit v0.2.2
+   Compiling objc2-uniform-type-identifiers v0.3.2
+   Compiling objc2-quartz-core v0.3.2
+   Compiling skrifa v0.44.0
+   Compiling raw-window-metal v1.1.0
+   Compiling harfrust v0.12.0
+   Compiling unicode-general-category v1.1.0
+   Compiling libloading v0.8.9
+   Compiling autocompare-reports v0.5.0 (/private/tmp/wt-final100/crates/reports)
+   Compiling zune-core v0.5.3
+   Compiling tracing-core v0.1.36
+   Compiling strsim v0.11.1
+   Compiling self_cell v1.3.0
+   Compiling pin-project-lite v0.2.17
+   Compiling unicode-segmentation v1.13.3
+   Compiling clap_lex v1.1.2
+   Compiling nohash-hasher v0.2.0
+   Compiling epaint_default_fonts v0.37.0
+   Compiling unicode-properties v0.1.5
+   Compiling clap_builder v4.6.7
+   Compiling tracing v0.1.44
+   Compiling clap_derive v4.6.8
+   Compiling zune-jpeg v0.5.15
+   Compiling glifo v0.3.0
+   Compiling idna_adapter v1.2.2
+   Compiling objc2-app-kit v0.3.2
+   Compiling vello_cpu v0.2.0
+   Compiling core-graphics v0.23.2
+   Compiling wgpu-naga-bridge v30.0.2
+   Compiling wgpu-hal v30.0.2
+   Compiling accesskit_consumer v0.39.2
+   Compiling epaint v0.37.0
+   Compiling cursor-icon v1.2.0
+   Compiling percent-encoding v2.3.2
+   Compiling weezl v0.1.12
+   Compiling pxfm v0.1.30
+   Compiling either v1.19.0
+   Compiling quick-error v2.0.1
+   Compiling fax v0.2.7
+   Compiling smol_str v0.2.2
+   Compiling dpi v0.1.2
+   Compiling tiff v0.11.3
+   Compiling winit v0.30.13
+   Compiling moxcms v0.8.1
+   Compiling wgpu-core-deps-apple v30.0.2
+   Compiling itertools v0.15.0
+   Compiling form_urlencoded v1.2.2
+   Compiling clap v4.6.8
+   Compiling idna v1.1.0
+   Compiling byteorder-lite v0.1.0
+   Compiling url v2.5.8
+   Compiling wgpu-core v30.0.2
+   Compiling accesskit_macos v0.27.2
+   Compiling objc2-core-text v0.3.2
+   Compiling memmap2 v0.9.12
+   Compiling egui v0.37.0
+   Compiling parlance v0.1.1
+   Compiling web-time v1.1.0
+   Compiling rustc-hash v2.1.3
+   Compiling fontique v0.11.1
+   Compiling type-map v0.5.1
+   Compiling accesskit_winit v0.34.2
+   Compiling webbrowser v1.2.7
+   Compiling autocompare-cli v0.5.0 (/private/tmp/wt-final100/crates/cli)
+   Compiling poll-promise v0.3.0
+   Compiling unicode-script v0.5.9
+   Compiling sys-locale v0.3.2
+   Compiling pollster v1.0.2
+   Compiling dispatch2 v0.3.1
+   Compiling winnow v1.0.5
+   Compiling egui_system_font_provider v0.37.0
+   Compiling rfd v0.18.0
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling toml_datetime v1.1.3+spec-1.1.0
+   Compiling image v0.25.10
+   Compiling serde_spanned v1.1.3
+   Compiling kittest v0.5.0
+   Compiling toml v1.2.1+spec-1.1.0
+   Compiling arboard v3.7.0
+   Compiling egui-winit v0.37.0
+   Compiling wgpu v30.0.2
+   Compiling egui-wgpu v0.37.0
+   Compiling eframe v0.37.0
+   Compiling egui_kittest v0.37.0
+   Compiling autocompare-gui v0.5.0 (/private/tmp/wt-final100/crates/gui)
+   Compiling xtask v0.1.0 (/private/tmp/wt-final100/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 01s
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_cli-dce967cc9adbdad3)
+
+running 37 tests
+test bcomp::tests::test_normalize_read_only_flags ... ok
+test bcomp::tests::test_normalize_automerge_and_mergeoutput ... ok
+test bcomp::tests::test_normalize_subcommand_aliases ... ok
+test bcomp::tests::test_normalize_vcs_inputs_and_titles ... ok
+test bcomp::tests::test_resolve_git_mergetool_four_way_dirs ... ok
+test bcomp::tests::test_resolve_git_mergetool_four_way_files ... ok
+test bcomp::tests::test_resolve_two_positionals_files_vs_dirs ... ok
+test bcomp::tests::test_resolve_two_way_with_vcs3_ancestor ... ok
+test bcomp::tests::test_resolve_vcs_dirs_two_way ... ok
+test bcomp::tests::test_resolve_three_positionals_files_vs_dirs ... ok
+test bcomp::tests::test_resolve_vcs_flags_space_syntax_and_output ... ok
+test render_sync::tests::test_format_plan_empty_reports_nothing_to_do ... ok
+test render_sync::tests::test_format_plan_truncated_flag_stays_on_stderr ... ok
+test render_sync::tests::test_format_plan_steps_skipped_and_summary ... ok
+test render_sync::tests::test_format_report_counts_failures_and_color ... ok
+test report::tests::test_report_format_infer_from_path ... ok
+test args::tests::test_cli_read_only_flags ... ok
+test report::tests::test_report_format_parse_str ... ok
+test args::tests::test_cli_effective_exit_code_mode ... ok
+test report::tests::test_report_spec_display_and_parse ... ok
+test report_adapter::tests::test_folder_report_input_all_statuses ... ok
+test report_adapter::tests::test_hex_report_input_identical_and_differing ... ok
+test report_adapter::tests::test_merge_report_input_clean_and_conflict ... ok
+test report_adapter::tests::test_table_report_input_operations ... ok
+test report_adapter::tests::test_text_report_input_operations ... ok
+test report_adapter_media::tests::test_audio_report_input_identical_and_differing ... ok
+test report_adapter_media::tests::test_foldermerge_report_input_all_actions ... ok
+test report_adapter_media::tests::test_picture_report_input_identical_and_differing ... ok
+test report_adapter_media::tests::test_sync_report_input_steps_and_skipped ... ok
+test runner::tests::test_runner_text_exit_codes_both_modes ... ok
+test runner::tests::test_runner_hex_exit_codes_both_modes ... ok
+test runner::tests::test_runner_merge_clean_conflicted_and_readonly_guard ... ok
+test session_cmd::tests::test_session_report_generation_with_tab_title ... ok
+test runner::tests::test_runner_report_wiring_with_title_override_and_vcs_titles ... ok
+test report::tests::test_render_and_write_all_report_formats ... ok
+test session_cmd::tests::test_session_save_and_reload_all_types ... ok
+test args::tests::test_cli_subcommands_clap_parse ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (/tmp/target-final100/debug/deps/autocompare-8444f57fba8fd943)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bcomp_test.rs (/tmp/target-final100/debug/deps/bcomp_test-5650e4962d58e0ef)
+
+running 8 tests
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   1 alpha                             |    1 alpha                            
+   1 alpha                             |    1 alpha                            
+   1 alpha                             |    1 alpha                            
+   3 gamma                             |    3 gamma                            
+   3 gamma                             |    3 gamma                            
+   2 beta                              |    2 BETA                             
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   3 gamma                             |    3 gamma                            
+R          -         11                 - 2026-11-21 05:50  extra.txt
+<          5          5  2026-11-21 05:50 2026-11-21 05:50  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+autocompare: the merge has conflicts
+autocompare: the merge has conflicts
+test test_bcomp_direct_invocation_two_folders ... ok
+autocompare: read-only mode: cannot apply sync in read-only mode
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+test test_bcomp_four_way_git_mergetool ... ok
+test test_bcomp_direct_invocation_two_files ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_bcomp_vcs_alias_flags ... ok
+autocompare: read-only mode: cannot write merge in read-only mode
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+test test_bcomp_ro_read_only_flags ... ok
+test test_bcomp_automerge_and_mergeoutput ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_bcomp_vcs_titles_and_at_session_syntax ... ok
+left:  11 bytes
+right: 11 bytes
+no differences
+autocompare: the merge has conflicts
+test test_bcomp_exit_codes_bc_mode ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/errors_test.rs (/tmp/target-final100/debug/deps/errors_test-47df76e1fff534a0)
+
+running 5 tests
+autocompare: invalid argument: --report argument cannot be empty
+autocompare: path not found: nonexistent_left.txt
+test test_empty_report_spec_exits_with_code_2 ... ok
+test test_missing_file_exits_with_code_2 ... ok
+error: unexpected argument '--completely-invalid-flag' found
+
+  tip: to pass '--completely-invalid-flag' as a value, use '-- --completely-invalid-flag'
+
+Usage: autocompare text [OPTIONS] <LEFT> <RIGHT>
+
+For more information, try '--help'.
+autocompare: invalid argument: no comparison command or input files specified
+Compare text, folders and bytes, and merge three ways
+
+Usage: autocompare [OPTIONS] [COMMAND]
+
+Commands:
+  text          Compare two text files line by line, side by side
+  folder        Compare two folder trees recursively by size and modified time
+  hex           Compare two files byte by byte
+  merge         Merge two files that share a common base version
+  table         Compare two delimited (CSV-style) tables cell by cell
+  sync          Plan (and optionally apply) a folder sync
+  picture       Compare two PNG images pixel by pixel
+  folder-merge  Plan (and optionally apply) a three-way folder merge
+  audio         Compare two audio files (WAV, MP3) sample by sample
+  session       Load and run a saved comparison session
+
+Options:
+      --color <COLOR>
+          When to color output
+
+          Possible values:
+          - auto:   Detect terminal capability automatically
+          - always: Force ANSI color sequences on
+          - never:  Suppress all ANSI color sequences
+          
+          [default: auto]
+
+      --report <REPORT>
+          Generate comparison report: format:path (html, text, xml, patch)
+
+      --ro
+          Read-only mode for VCS tools and sessions
+
+      --ro1
+          Read-only mode for left input
+
+test test_invalid_flag_exits_with_code_2 ... ok
+      --ro2
+          Read-only mode for right input
+
+test test_no_arguments_exits_with_code_2 ... ok
+      --ro3
+          Read-only mode for base / ancestor / center input
+
+      --ro4
+          Read-only mode for output input
+
+      --automerge
+          Automatically merge when there are no conflicts
+
+      --mergeoutput <MERGEOUTPUT>
+          Output destination path for 3-way merge results
+
+      --vcs1 <VCS1>
+          VCS input 1 alias (typically left/local)
+
+      --vcs2 <VCS2>
+          VCS input 2 alias (typically right/remote)
+
+      --vcs3 <VCS3>
+          VCS input 3 alias (typically base/ancestor)
+
+      --vcs4 <VCS4>
+          VCS input 4 alias (typically output/merged)
+
+      --title1 <TITLE1>
+          VCS title/label for left / first input
+
+      --title2 <TITLE2>
+          VCS title/label for right / second input
+
+      --title3 <TITLE3>
+          VCS title/label for center / base input
+
+      --title4 <TITLE4>
+          VCS title/label for output input
+
+      --session <SESSION>
+          Path to a session document to load and execute
+
+      --save-session <SAVE_SESSION>
+          Save the current comparison session configuration to path
+
+      --exit-code-mode <EXIT_CODE_MODE>
+          Exit code convention mode: diff (0/1/2) or bc (Beyond Compare return codes)
+
+          Possible values:
+          - diff: Standard diff(1) exit codes: 0 = same, 1 = different / conflicts, 2 = error
+          - bc:   Beyond Compare exit codes: 0 = success, 11 = binary diff, 13 = rules diff, 14 = conflicts
+          
+          [default: diff]
+
+      --bc-exit-code
+          Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts)
+
+      --report-title <REPORT_TITLE>
+          Title override for comparison reports
+
+      --solo
+          Run in a separate solo process without reusing background instances
+
+      --nobackups
+          Suppress backup file creation during merge/save operations
+
+      --reviewconflicts
+          Automatically review conflicts in interactive mode if present
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+test test_help_flag_exits_with_code_0 ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/parity_hardening_test.rs (/tmp/target-final100/debug/deps/parity_hardening_test-0757c2144872a271)
+
+running 4 tests
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+R          -         11                 - 2026-11-21 05:50  extra.txt
+<          5          5  2026-11-21 05:50 2026-11-21 05:50  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+test test_audio_and_sync_session_execution ... ok
+autocompare: read-only mode: cannot write merge in read-only mode
+left:  11 bytes
+right: 11 bytes
+no differences
+test test_four_way_git_mergetool_folder_and_slash_flags ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_all_report_formats_xml_patch_html_text ... ok
+=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)
+left:  4x4
+right: 4x4
+no differences
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+test test_ten_subcommands_direct_execution ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/session_test.rs (/tmp/target-final100/debug/deps/session_test-950f7c165ef34f95)
+
+running 1 test
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_session_save_and_reload ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/subcommands_media_test.rs (/tmp/target-final100/debug/deps/subcommands_media_test-2b9c29b5743f14d5)
+
+running 5 tests
+=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+test test_sync_subcommand_exit_code_and_report ... ok
+test test_table_subcommand_exit_code_and_report ... ok
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+test test_folder_merge_subcommand_exit_code_and_report ... ok
+left:  4x4
+right: 4x4
+overlap: 4x4 (16 pixels)
+differing pixels: 1 (6.25%)
+difference bounds: (1,1)..(1,1)
+left:  4x4
+right: 4x4
+no differences
+test test_picture_subcommand_exit_code_and_report ... ok
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+test test_audio_subcommand_exit_code_and_report ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/subcommands_text_test.rs (/tmp/target-final100/debug/deps/subcommands_text_test-8a1fc93ff90f8689)
+
+running 4 tests
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+R          -         11                 - 2026-11-21 05:50  extra.txt
+<          5          5  2026-11-21 05:50 2026-11-21 05:50  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+autocompare: the merge has conflicts
+test test_folder_subcommand_exit_code_and_report ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+base
+left:  11 bytes
+right: 11 bytes
+no differences
+test test_merge_subcommand_exit_code_and_report ... ok
+test test_hex_subcommand_exit_code_and_report ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_text_subcommand_exit_codes_and_reports ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_compare-dbf7de91bebf328a)
+
+running 26 tests
+test folder::tests::test_folder_comparison_helpers ... ok
+test folder::tests::test_mtime_tolerance_comparison ... ok
+test folder_merge::tests::test_tree_merge_plan_sort_steps ... ok
+test jobs::tests::test_cancellation_token_and_status ... ok
+test jobs::tests::test_progress_queue_polling_helpers ... ok
+test jobs::tests::test_job_status_success_and_failure ... ok
+test media::tests::test_config_mismatch_is_not_comparable ... ok
+test media::tests::test_zero_tolerance_matches_exact_diff ... ok
+test picture::tests::test_decode_side_sniffs_png_bmp_ppm ... ok
+test picture::tests::test_offset_aligns_nudged_files ... ok
+test media::tests::test_pcm_wav_kept_identical_through_files ... ok
+test sync::tests::test_apply_progress_callback_sequence ... ok
+test sync::tests::test_precancelled_plan_and_apply_return_cancelled ... ok
+test sync::tests::test_custom_rules_sync ... ok
+test sync::tests::test_prune_empty_directories_nested ... ok
+test sync::tests::test_sort_steps_ordering ... ok
+test folder_merge::tests::test_conflict_detection_and_policies ... ok
+test sync::tests::test_under_path_safety ... ok
+test sync::tests::test_requires_consent_and_apply_with_consent ... ok
+test sync::tests::test_prune_empty_dirs_keeps_symlinks_and_root ... ok
+test sync::tests::test_sync_modes_and_planner_options ... ok
+test sync::tests::test_update_left_apply_parity_and_dry_run_read_only ... ok
+test sync::tests::test_both_and_mirror_exec_parity ... ok
+test jobs::tests::test_precancelled_token_job_reports_cancelled_status ... ok
+test jobs::tests::test_spawn_sync_apply_progress_sequence ... ok
+test jobs::tests::test_spawn_sync_run_parity_and_progress ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/binary.rs (/tmp/target-final100/debug/deps/binary-84c023460bd01e83)
+
+running 15 tests
+test compare_binary_directory_is_io_error ... ok
+test aligned_missing_file_is_missing_error ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test aligned_none_matches_positional_scan ... ok
+test compare_binary_hunk_at_end_is_clipped_to_file ... ok
+test aligned_complete_finds_insertion_as_gap ... ok
+test aligned_fast_resyncs_on_anchor ... ok
+test aligned_identical_and_truncation ... ok
+test compare_binary_hunks_cap_truncates ... ok
+test compare_binary_prefix_file_reports_shorter_length ... ok
+test compare_binary_hunks_do_not_overlap ... ok
+test compare_binary_single_difference_hunks_64_bytes ... ok
+test compare_binary_zero_max_hunks_still_finds_first_diff ... ok
+test compare_binary_missing_file_is_missing_error ... ok
+test compare_binary_identical_files ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/folder.rs (/tmp/target-final100/debug/deps/folder-b61e63dda4294494)
+
+running 21 tests
+test compare_folders_case_insensitive_names_pair_up ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test compare_folders_dir_symlink_loop_terminates ... ok
+test compare_folders_file_root_reports_missing ... ok
+test compare_folders_missing_roots_report_missing ... ok
+test compare_folders_content_compare_classifies_by_bytes ... ok
+test compare_folders_depth_limit_zero_skips_root_children ... ok
+test compare_folders_depth_limit_one_skips_grandchildren ... ok
+test compare_folders_does_not_follow_symlinks ... ok
+test compare_folders_mixed_kinds_are_different ... ok
+test compare_folders_entries_are_sorted_by_rel_path ... ok
+test compare_folders_exclude_glob_prunes_subtrees ... ok
+test compare_folders_one_sided_file_is_left_or_right_only ... ok
+test compare_folders_one_sided_directory_is_walked ... ok
+test compare_folders_include_glob_filters_by_name ... ok
+test compare_folders_size_differ_is_different ... ok
+test folder_compare_tree_over_local_fs_and_cancellation ... ok
+test compare_folders_same_tree_equal_mtimes_is_all_same ... ok
+test compare_folders_same_tree_with_content_compare_is_all_same ... ok
+test folder_tree_expand_collapse_and_visibility ... ok
+test compare_folders_newer_mtime_wins ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/folder_merge.rs (/tmp/target-final100/debug/deps/folder_merge-f1cfef900ed8c801)
+
+running 17 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test clean_text_merge_takes_edits_from_both_sides ... ok
+test both_changed_binaries_conflict_without_merged_content ... ok
+test a_vanished_source_fails_one_step_and_the_rest_still_apply ... ok
+test both_new_files_merge_over_an_empty_base ... ok
+test directories_on_either_side_become_make_dir_steps ... ok
+test apply_refuses_non_empty_output_and_accepts_empty ... ok
+test deletions_follow_the_delete_rules ... ok
+test missing_or_non_directory_roots_are_hard_errors ... ok
+test folder_merge_struct_api ... ok
+test overlapping_text_edits_conflict_with_markers ... ok
+test unsafe_relative_paths_fail_without_escaping ... ok
+test symlink_sources_are_never_followed ... ok
+test folder_merge_conflict_navigation_and_cancellation ... ok
+test steps_are_sorted_with_directories_before_children ... ok
+test one_sided_changes_take_the_changed_side ... ok
+test apply_writes_the_plan_and_the_output_is_a_fixed_point ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/jobs.rs (/tmp/target-final100/debug/deps/jobs-557b5bc3acd4033f)
+
+running 11 tests
+test job_progress_bounded_calculations ... ok
+test job_runner_bounded_progress_queue_and_polling ... ok
+test job_runner_basic_spawn_and_join ... ok
+test job_runner_folder_compare_background ... ok
+test job_runner_cancellation_aborts_job ... ok
+test job_runner_sync_background ... ok
+test job_runner_sync_plan_with_compare_respects_filter ... ok
+test job_runner_folder_merge_background_cancellation ... ok
+test job_runner_progress_tracking ... ok
+test job_runner_history_survives_join_via_drain_before_join ... ok
+test job_runner_progress_visible_before_join_and_drained ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/media.rs (/tmp/target-final100/debug/deps/media-ca71abf1b005dd12)
+
+running 7 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test one_differing_sample_is_reported ... ok
+test tolerance_absorbs_one_lsb_through_files ... ok
+test missing_file_reports_missing_with_path ... ok
+test config_mismatch_is_reported_not_errored ... ok
+test non_audio_file_is_unsupported ... ok
+test identical_wavs_report_identical ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/picture.rs (/tmp/target-final100/debug/deps/picture-ee6f314030381e6d)
+
+running 10 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test missing_file_reports_missing_with_path ... ok
+test identical_png_files_report_identical ... ok
+test bmp_files_compare_through_format_sniffing ... ok
+test heatmap_option_writes_a_decodable_png ... ok
+test heatmap_written_for_identical_files_too ... ok
+test non_png_file_is_unsupported ... ok
+test one_differing_pixel_is_reported ... ok
+test heatmap_at_unwritable_path_is_io_error ... ok
+test ppm_and_png_with_same_pixels_compare_identical ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/sync.rs (/tmp/target-final100/debug/deps/sync-ca8cd0736c8765be)
+
+running 25 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test apply_refuses_unsafe_rel_paths ... ok
+test apply_prune_removes_a_symlink_without_following_it ... ok
+test apply_records_vanished_sources_and_continues ... ok
+test missing_or_file_roots_are_hard_errors ... ok
+test apply_prune_deletes_right_only_entries ... ok
+test apply_refuses_to_copy_through_symlinks ... ok
+test apply_l2r_copies_files_and_creates_missing_dirs ... ok
+test plan_prune_l2r_deletes_right_only_files_and_dirs ... ok
+test plan_reports_truncated_false_on_shallow_trees ... ok
+test plan_prune_r2l_deletes_left_only_files_and_dirs ... ok
+test plan_refuses_to_copy_symlink_sources ... ok
+test plan_r2l_mirrors_l2r ... ok
+test plan_with_compare_content_compare_flags_same_size_bytes ... ok
+test plan_l2r_copies_newer_and_left_only_and_skips_the_rest ... ok
+test plan_newer_wins_copies_both_directions ... ok
+test mirror_prune_suppresses_nested_orphan_subtree ... ok
+test plan_steps_are_sorted_by_rel_path ... ok
+test plan_with_compare_include_filter_limits_mirror_prune ... ok
+test plan_with_compare_depth_limit_truncates_and_skips_deeper ... ok
+test sync_planner_all_modes_dry_run_and_apply ... ok
+test sync_planner_compare_options_drive_dry_run_and_apply ... ok
+test sync_plan_conflict_navigation_and_reports ... ok
+test toolspec_conflict_nav_and_live_log_cover_plan_and_report ... ok
+test toolspec_gui_verdicts_match_engine_plans_on_orphan_newer_edge ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/table.rs (/tmp/target-final100/debug/deps/table-14ae5825f9b59e99)
+
+running 12 tests
+test directory_input_is_io_error ... ok
+test invalid_utf8_decodes_leniently_into_cells ... ok
+test identical_files_compare_equal_with_equal_only_script ... ok
+test custom_delimiter_via_options ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test missing_file_is_missing_error ... ok
+test different_rows_produce_delete_or_insert ... ok
+test keyed_compare_missing_file_is_missing_error ... ok
+test differing_headers_are_exposed_separately ... ok
+test keyed_compare_honours_numeric_tolerance ... ok
+test keyed_compare_aligns_reordered_rows ... ok
+test quoted_multiline_field_round_trips ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/text.rs (/tmp/target-final100/debug/deps/text-255f9dd10d70b41a)
+
+running 13 tests
+test load_lines_directory_is_io_error ... ok
+test compare_text_files_missing_error_mentions_the_path ... ok
+test load_lines_empty_file_is_zero_lines ... ok
+test compare_text_files_identical_files_report_display_lines ... ok
+test compare_text_files_different_files_do_not_panic ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test compare_text_files_display_lines_keep_original_case ... ok
+test load_lines_invalid_utf8_decodes_leniently ... ok
+test load_lines_missing_file_is_missing ... ok
+test load_lines_lone_newline_is_one_empty_line ... ok
+test load_lines_trailing_newline_has_no_phantom_empty_line ... ok
+test load_lines_splits_lines_and_strips_cr ... ok
+test load_lines_without_trailing_newline_keeps_last_line ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/vfs_compare.rs (/tmp/target-final100/debug/deps/vfs_compare-b067bcc7be96f705)
+
+running 8 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test sync_mirror_dry_run_prunes_then_applies ... ok
+test vfs_jobrunner_completes_and_precancelled_fails ... ok
+test vfs_snapshot_matches_the_captured_tree ... ok
+test vfs_zip_trees_compare_against_each_other_and_local ... ok
+test vfs_localfs_matches_path_walk ... ok
+test sync_update_both_copies_newer_each_way ... ok
+test folder_merge_clean_sides_apply_to_output ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_diff-8e9bdac10ebd8f73)
+
+running 98 tests
+test audio::tests::test_diff_audio_with_tolerance ... ok
+test grammar::tests::test_block_comment_intra_line ... ok
+test grammar::tests::test_comment_hash_and_sql_style ... ok
+test grammar::tests::test_diff_lines_with_grammar_blank_line_insertion ... ok
+test grammar::tests::test_case_insensitivity ... ok
+test grammar::tests::test_ignore_all_whitespace ... ok
+test grammar::tests::test_diff_lines_with_grammar_identical ... ok
+test grammar::tests::test_ignore_blank_lines ... ok
+test grammar::tests::test_grammar_inline_diff_tags_unimportant ... ok
+test grammar::tests::test_diff_lines_with_grammar_unimportant_and_filters ... ok
+test grammar::tests::test_ignore_string_contents_suppression ... ok
+test grammar::tests::test_line_comment_stripping ... ok
+test grammar::tests::test_line_endings_detection_and_normalization ... ok
+test grammar::tests::test_loose_preset ... ok
+test grammar::tests::test_multi_line_comment_normalization ... ok
+test grammar::tests::test_nested_comments ... ok
+test grammar::tests::test_string_literal_comment_protection ... ok
+test grammar::tests::test_whitespace_rules ... ok
+test grammar::tests::test_xml_block_comment ... ok
+test hex::tests::test_64bit_goto_helpers ... ok
+test hex::tests::test_aligned_rows_formatting ... ok
+test hex::tests::test_both_empty ... ok
+test hex::tests::test_byte_edit_buffer_crud_and_undo_redo ... ok
+test hex::tests::test_deletion_alignment ... ok
+test hex::tests::test_identical_bytes ... ok
+test hex::tests::test_hostile_truncated_inputs ... ok
+test hex::tests::test_insertion_alignment ... ok
+test hex::tests::test_single_byte_difference ... ok
+test image::tests::test_bmp_decode_bottom_up ... ok
+test image::tests::test_channel_range_matching ... ok
+test image::tests::test_decode_image_rejects_hostile_input ... ok
+test image::tests::test_diff_with_offset_aligns_nudge ... ok
+test image::tests::test_difference_blend_overlap ... ok
+test image::tests::test_nudge_shifts_and_vacates ... ok
+test image::tests::test_decode_image_sniffs_format ... ok
+test image::tests::test_ppm_decode ... ok
+test image::tests::test_scaled_integer_zoom ... ok
+test image::tests::test_tolerance_matching ... ok
+test image::tests::test_opaque_forces_alpha_leaves_rgb ... ok
+test image::tests::test_viewport_crop_and_reject ... ok
+test media_tags::tests::test_empty_or_garbage_returns_none ... ok
+test media_tags::tests::test_diff_media_tags ... ok
+test media_tags::tests::test_diff_covers_disc_total ... ok
+test media_tags::tests::test_hostile_truncated_tags ... ok
+test media_tags::tests::test_id3_tpos_disc_total ... ok
+test media_tags::tests::test_mp4_disk_and_track_totals ... ok
+test media_tags::tests::test_synthetic_aac_tags ... ok
+test media_tags::tests::test_synthetic_flac_vorbis_comment ... ok
+test media_tags::tests::test_synthetic_id3v1 ... ok
+test media_tags::tests::test_vorbis_slash_track_and_disc_totals ... ok
+test merge::tests::test_conflict_marker_parsing_roundtrip ... ok
+test merge::tests::test_merge2_session ... ok
+test merge::tests::test_merge_session_clean_edits ... ok
+test merge::tests::test_merge_session_bulk_take ... ok
+test merge::tests::test_merge_session_conflict_resolution ... ok
+test merge::tests::test_merge_session_diff3_marker_style ... ok
+test merge::tests::test_merge_take_edge_empty_base_and_chunks ... ok
+test merge::tests::test_merge_session_navigation_and_take_helpers ... ok
+test merge::tests::test_text_buffer_clear_and_append ... ok
+test merge::tests::test_text_buffer_edits_and_undo_redo ... ok
+test merge::tests::test_take_center_alias_and_algorithm_parity ... ok
+test merge::tests::test_text_buffer_find_and_edit_at ... ok
+test merge::tests::test_text_buffer_splice ... ok
+test merge::tests::test_text_buffer_transaction ... ok
+test table::tests::test_cells_equal_with_tolerance_exact_and_numeric ... ok
+test table::tests::test_column_index_lookup ... ok
+test table::tests::test_decode_xlsx_data_descriptor_stops_scan_safely ... ok
+test table::tests::test_decode_xlsx_rejects_garbage_and_truncation ... ok
+test table::tests::test_decode_xlsx_stored_multisheet ... ok
+test table::tests::test_decode_xlsx_skips_bad_entries_without_panic ... ok
+test table::tests::test_diff_cells_with_options_tolerance_and_flags ... ok
+test table::tests::test_detect_key_columns ... ok
+test table::tests::test_diff_table_by_key ... ok
+test table::tests::test_decode_xlsx_deflated_sheet ... ok
+test table::tests::test_key_diff_with_options_positional_fallback ... ok
+test table::tests::test_key_diff_with_options_tolerance ... ok
+test table::tests::test_parse_workbook_sheet_names ... ok
+test table::tests::test_mapped_sorted_key_diff_end_to_end ... ok
+test table::tests::test_select_columns_mapping_and_gaps ... ok
+test table::tests::test_sort_table_rows ... ok
+test table::tests::test_workbook_diff ... ok
+test text_diff::tests::test_apply_diff_replay ... ok
+test text_diff::tests::test_create_refined_hunks ... ok
+test text_diff::tests::test_diff_with_options_whitespace_and_case ... ok
+test text_diff::tests::test_empty_diff_produces_no_hunks ... ok
+test text_diff::tests::test_hunks_byte_offsets ... ok
+test text_diff::tests::test_hunks_multibyte_utf8 ... ok
+test text_diff::tests::test_hunks_with_context ... ok
+test text_diff::tests::test_inline_diff_refined_modes ... ok
+test text_diff::tests::test_myers_diff_simple ... ok
+test text_diff::tests::test_patience_diff_empty_and_single ... ok
+test text_diff::tests::test_myers_patience_replay_and_minimality ... ok
+test text_diff::tests::test_patience_diff_matching ... ok
+test text_diff::tests::test_patience_diff_no_unique_lines ... ok
+test text_diff::tests::test_patience_reordered_blocks ... ok
+test text_diff::tests::test_unified_diff_output ... ok
+test word_diff::tests::test_char_diff ... ok
+test word_diff::tests::test_word_char_diff_refinement ... ok
+
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/api.rs (/tmp/target-final100/debug/deps/api-7d1005125a9c725e)
+
+running 38 tests
+test exhaustive_alphabet2_len7 ... ignored, exhaustive: ~65k pairs, run in release with --ignored
+test exhaustive_alphabet3_len5 ... ignored, exhaustive: ~130k pairs, run in release with --ignored
+test exhaustive_alphabet4_len4 ... ignored, exhaustive: ~116k pairs, run in release with --ignored
+test both_empty ... ok
+test both_equal_non_empty ... ok
+test change_visible_only_through_context ... ok
+test deletion_at_start_middle_end ... ok
+test inline_deletion_mid_line ... ok
+test inline_equal_lines ... ok
+test inline_insertion_mid_line ... ok
+test inline_multiple_separated_changes ... ok
+test inline_offsets_are_character_not_byte_offsets ... ok
+test inline_one_side_empty ... ok
+test inline_one_word_changed_mid_line ... ok
+test inline_prefix_and_suffix_never_highlighted ... ok
+test insertion_at_start_middle_end ... ok
+test interleaved_multiple_changes ... ok
+test left_empty ... ok
+test merge_base_empty ... ok
+test merge_both_sides_identical_files ... ok
+test merge_clean_edits_in_different_regions ... ok
+test merge_context_untouched_between_edits ... ok
+test merge_identical_edit_applied_once ... ok
+test merge_insert_at_same_point_different_conflict ... ok
+test merge_insert_at_same_point_identical_no_conflict ... ok
+test merge_insert_touching_delete_conflicts ... ok
+test merge_overlapping_different_edits_conflict ... ok
+test merge_transitive_overlap_chain_one_conflict_block ... ok
+test random_pairs_deep ... ignored, deep random sweep: 100k pairs up to length 60 (deep split trees)
+test random_pairs_medium ... ignored, broad random sweep: 20k pairs up to length 30
+test repeated_identical_lines ... ok
+test right_empty ... ok
+test single_line_change ... ok
+test minimal_on_pseudo_random_pairs ... ok
+test near_identical_large_inputs_use_trims_only ... ok
+test budget_keeps_prefix_and_suffix_context ... ok
+test budget_just_under_and_at_stay_exact ... ok
+test budget_fallback_far_beyond_budget ... ok
+
+test result: ok. 33 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/audio.rs (/tmp/target-final100/debug/deps/audio-5f97e229e868770c)
+
+running 44 tests
+test a_difference_in_a_trailing_partial_window_shows_only_in_first_diff ... ok
+test a_header_declaring_past_the_cap_is_none ... ok
+test a_stale_riff_size_field_is_ignored ... ok
+test a_frame_may_straddle_a_data_chunk_boundary ... ok
+test a_declaration_exactly_at_the_cap_stays_lenient ... ok
+test a_frame_with_any_differing_channel_counts_once ... ok
+test an_overrunning_data_chunk_consumes_the_remaining_bytes ... ok
+test a_later_invalid_fmt_chunk_is_ignored ... ok
+test data_declaring_less_than_present_uses_the_declaration ... ok
+test data_declaring_more_than_present_decodes_leniently ... ok
+test decode_audio_does_not_retry_riff_as_mp3 ... ok
+test decode_audio_garbage_is_none ... ok
+test decode_audio_sniffs_riff_as_wav ... ok
+test decodes_eight_bit_unsigned_wav ... ok
+test config_mismatch_reports_header_stats_only ... ok
+test decodes_float32_wav ... ok
+test decodes_float64_wav ... ok
+test decodes_sixteen_bit_mono_wav ... ok
+test decodes_thirtytwo_bit_integer_wav ... ok
+test decodes_twentyfour_bit_wav ... ok
+test different_lengths_compare_over_the_common_span ... ok
+test durations_are_counted_in_frames ... ok
+test empty_data_chunk_decodes_to_no_samples ... ok
+test four_channel_wav_decodes ... ok
+test first_difference_is_reported_in_seconds_and_windows ... ok
+test garbage_bytes_are_none ... ok
+test hostile_fmt_chunks_are_none ... ok
+test mp3_garbage_is_none ... ok
+test identical_streams_report_no_difference ... ok
+test mp3_id3_tag_only_is_none ... ok
+test multiple_data_chunks_are_concatenated ... ok
+test riff_without_data_chunk_is_none ... ok
+test every_truncation_of_a_valid_wav_terminates ... ok
+test riff_without_fmt_chunk_is_none ... ok
+test riff_without_wave_magic_is_none ... ok
+test scattered_differences_count_their_windows ... ok
+test stereo_interleave_order_is_preserved ... ok
+test truncated_final_frame_is_dropped ... ok
+test unknown_chunk_with_lying_size_is_none ... ok
+test unknown_chunks_are_skipped_by_declared_size ... ok
+test zero_channels_compare_by_sample_count ... ok
+test zero_sample_rate_reports_zero_duration_and_no_seconds ... ok
+test pseudo_random_bytes_never_panic_the_decoders ... ok
+test ffmpeg_silence_decodes_when_ffmpeg_exists ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running tests/image.rs (/tmp/target-final100/debug/deps/image-0aba3474a25a6849)
+
+running 20 tests
+test diff_alpha_channel_counts_as_difference ... ok
+test diff_equal_overlap_but_different_sizes_is_not_identical ... ok
+test decode_garbage_and_empty_input_is_none ... ok
+test decode_gray_alpha_png_keeps_alpha ... ok
+test decode_oversized_declared_dimensions_is_none ... ok
+test decode_rgb_png_gains_full_alpha ... ok
+test diff_identical_images_reports_no_difference ... ok
+test diff_one_by_one_against_sixty_four_square_does_not_panic ... ok
+test decode_grayscale_png_expands_to_rgb_channels ... ok
+test diff_scattered_pixels_count_and_inclusive_bounds ... ok
+test diff_zero_sized_images_have_empty_overlap ... ok
+test diff_single_changed_pixel_bounding_box_is_exact ... ok
+test encode_refuses_zero_sized_and_inconsistent_images ... ok
+test heatmap_covers_only_the_overlap ... ok
+test heatmap_differing_pixel_is_opaque_red ... ok
+test heatmap_identical_region_is_dimmed_grayscale_of_left ... ok
+test heatmap_of_zero_sized_images_is_empty_not_panicking ... ok
+test encode_decode_round_trips_non_square_image ... ok
+test round_trip_preserves_pixels_and_dimensions ... ok
+test decode_truncated_png_is_none ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/media_depth_round_m1.rs (/tmp/target-final100/debug/deps/media_depth_round_m1-9f1ba5996be07295)
+
+running 4 tests
+test workbook_reports_right_only_sheet ... ok
+test media_tags_diff_covers_extra_tags_and_format ... ok
+test media_tags_extra_one_sided ... ok
+test workbook_reports_left_only_sheet ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/table.rs (/tmp/target-final100/debug/deps/table-9a6f47053ba603bb)
+
+running 40 tests
+test blank_line_only_is_zero_rows ... ok
+test blank_line_between_content_is_an_empty_cell_row ... ok
+test chars_after_closing_quote_stay_in_the_cell ... ok
+test crlf_inside_quotes_is_data ... ok
+test crlf_everywhere_parses_like_lf ... ok
+test bare_cr_is_ordinary_data ... ok
+test custom_delimiters_semicolon_and_tab ... ok
+test detect_key_columns_finds_unique_and_composite ... ok
+test diff_cells_both_empty_is_empty ... ok
+test diff_cells_flags_missing_tail_cells ... ok
+test diff_cells_flags_the_changed_index ... ok
+test diff_cells_identical_rows_are_empty ... ok
+test diff_rows_empty_tables_are_empty_script ... ok
+test diff_rows_identical_tables_are_all_equal ... ok
+test diff_rows_inserted_row_is_one_insert ... ok
+test diff_rows_reordered_rows_replay_and_stay_minimal ... ok
+test empty_text_is_an_empty_table ... ok
+test escaped_quotes_double_to_one ... ok
+test header_with_empty_cells_is_kept ... ok
+test key_alignment_matches_rows_despite_reorder ... ok
+test key_alignment_reports_one_sided_rows ... ok
+test lone_quoted_empty_field_is_one_empty_cell_row ... ok
+test mid_field_quote_is_ordinary_data ... ok
+test multibyte_cells_and_quoted_delimiter ... ok
+test no_header_mode_keeps_header_empty ... ok
+test nul_bytes_are_preserved ... ok
+test parse_then_diff_rows_across_tables ... ok
+test quoted_fields_keep_delimiter_and_embedded_newline ... ok
+test simple_csv_header_and_one_row ... ok
+test sorted_and_diff_cells_with_options_agree ... ok
+test tolerance_key_diff_counts_match ... ok
+test tolerance_matrix ... ok
+test tolerant_options_ignore_case_and_space ... ok
+test trailing_blank_lines_produce_no_rows ... ok
+test trailing_newline_creates_no_phantom_row ... ok
+test uneven_rows_keep_their_widths ... ok
+test unterminated_quote_ends_at_input_end ... ok
+test xlsx_truncated_and_garbage_are_none ... ok
+test xlsx_deflated_workbook_decodes_and_key_diffs ... ok
+test megabyte_cell_survives ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_evidence-180d7336fcfccc93)
+
+running 8 tests
+test tests::test_confidence_strings ... ok
+test tests::test_coverage_report_constructors ... ok
+test tests::test_hypothesis_record_instantiation ... ok
+test tests::test_evidence_record_instantiation ... ok
+test tests::test_schema_version_is_positive ... ok
+test tests::test_limitation_codes ... ok
+test tests::test_tool_error_display ... ok
+test tests::test_knowledge_graph_record_instantiation ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_gui-4ab352f5755b8c6c)
+
+running 1163 tests
+test app::tests::audio_first_diff_text_names_stamp_or_dash ... ok
+test app::tests::audio_play_stub_label_names_stub ... ok
+test app::tests::audio_checklist_carries_windows_for_waveform ... ok
+test app::tests::audio_action_summary_follows_app_state ... ok
+test app::tests::audio_play_stub_request_sets_status_only ... ok
+test app::tests::bridge_derived_tab_empty_is_home ... ok
+test app::tests::audio_waveform_bar_covers_empty_and_shares ... ok
+test app::tests::audio_checklist_rows_cover_configs_and_verdict ... ok
+test app::tests::bridge_cap_keeps_active_and_drops_oldest_inactive ... ok
+test app::tests::chrome10_status_bottom_segments_stay_honest ... ok
+test app::tests::bridge_set_tab_switch_vs_open ... ok
+test app::tests::chrome10_narrow_700_gates_match_fixture ... ok
+test app::tests::bridge_close_neighbour_and_empty ... ok
+test app::tests::chrome2_header_tabs_toolbar_small_status_narrow720 ... ok
+test app::tests::chrome3_header_tabs_toolbar_space_tokens_narrow720 ... ok
+test app::tests::bridge_type_then_switch_preserves_paths_and_cursor ... ok
+test app::tests::chrome5_tabs_plus_toolbar_space_tokens_wide960 ... ok
+test app::tests::chrome9_mode_tabs_hscroll_uses_narrow_breakpoint ... ok
+test app::tests::chrome9_toolbar_hscroll_mirrors_action_bar_floor ... ok
+test app::tests::bridge_open_home_session_creates_live_session ... ok
+test app::tests::chrome_default_label_falls_back_without_new_sizes ... ok
+test app::tests::chrome_diff_step_needs_model ... ok
+test app::tests::apply_reports_clear_on_swap ... ok
+test app::tests::chrome_nav_state_empty_model_is_honest ... ok
+test app::tests::clamp_scroll_offset_keeps_offsets_honest ... ok
+test app::tests::dark_mode_storage_parse_trims_and_defaults_dark ... ok
+test app::tests::exq_app35_live_shell_tabs_wide1200 ... ok
+test app::tests::dark_mode_storage_roundtrip_through_save ... ok
+test app::tests::dropped_paths_populate_active_tab ... ok
+test app::tests::exq_chrome8_toolbar_plus_filebar_wide960 ... ok
+test app::tests::exq_chrome9_round1_chrome_bar_960_fixture ... ok
+test app::tests::exq_chrome9_toolbar_plus_filebar_wide960 ... ok
+test app::tests::exq_chrome7_toolbar_plus_pathbar_wide960 ... ok
+test app::tests::find_bar_geometry_docks_full_width_with_right_badge ... ok
+test app::tests::exq_app35_round1_shell_1200_fixture ... ok
+test app::tests::exq_chrome6_pathbar_plus_info_wide960 ... ok
+test app::tests::folder_counts_line_uses_honest_summary ... ok
+test app::tests::folder_double_click_stages_file_and_routes_to_text ... ok
+test app::tests::folder_dual_default_empty_and_synced_shape ... ok
+test app::tests::folder_dual_reset_clears_stale_stub ... ok
+test app::tests::folder_dir_toggle_expands_and_mirrors_legacy_set ... ok
+test app::tests::folder_dual_resets_on_swap ... ok
+test app::tests::folder_dual_rows_apply_display_filters ... ok
+test app::tests::folder_dual_select_shows_in_both_panes ... ok
+test app::tests::folder_dual_syncs_total_from_results ... ok
+test app::tests::folder_empty_full_rows_routes_identical_vs_pruned ... ok
+test app::tests::folder_empty_hints_separate_no_results_from_no_match ... ok
+test app::tests::folder_filters_narrow_visible_tree ... ok
+test app::tests::folder_merge_checklist_flags_conflicts ... ok
+test app::tests::folder_kind_and_status_filters_narrow_really ... ok
+test app::tests::folder_mirror_apply_defaults_to_dry_run_and_needs_consent ... ok
+test app::tests::folder_name_filter_narrows_tree_and_counts_honestly ... ok
+test app::tests::folder_sync_badges_follow_preview_mode ... ok
+test app::tests::folder_sync_preview_consent_gates_apply ... ok
+test app::tests::folder_pager_syncs_and_find_brings_into_view ... ok
+test app::tests::font_zoom_keys_resolve_and_apply ... ok
+test app::tests::font_zoom_steps_clamp_and_reset ... ok
+test app::tests::folder_sync_selection_holds_only_real_rows ... ok
+test app::tests::hex_byte_snap_none_keeps_old_empty_path ... ok
+test app::tests::hex_byte_snap_slices_feed_nibble_cells ... ok
+test app::tests::hex_find_needle_parses_and_reuses_model_search ... ok
+test app::tests::hex_mode_change_clears_stale_results ... ok
+test app::tests::hex_nav_helpers_move_selection ... ok
+test app::tests::hex_over_cap_view_only_for_big_inputs ... ok
+test app::tests::hex_pager_syncs_and_pages_with_selection ... ok
+test app::tests::hex_status_line_uses_view_counts ... ok
+test app::tests::hex_success_sets_and_resets_clear_byte_snap ... ok
+test app::tests::hex_swap_clears_byte_snap ... ok
+test app::tests::home_session_open_records_recent ... ok
+test app::tests::homerecent_stamped_record_carries_timestamp_and_meta ... ok
+test app::tests::homerecent_unknown_time_hides_timestamp_but_keeps_status ... ok
+test app::tests::icons_exq_icons50_light_accent_reuses_tokens ... ok
+test app::tests::icons_exq_icons50_toolbar_mark_geometry ... ok
+test app::tests::icons_exq_icons50_vector_shapes ... ok
+test app::tests::layout_narrow_breakpoint_is_900 ... ok
+test app::tests::layout_pane_widths_follow_split_with_floor ... ok
+test app::tests::layout_row_min_width_needs_hscroll_when_narrow ... ok
+test app::tests::lightvisual68_pill_rect_for_routes_dark_identical ... ok
+test app::tests::lightvisual68_pill_rect_for_edge_tabs_stay_finite ... ok
+test app::tests::merge_adopt_dedups_and_prunes_unknown ... ok
+test app::tests::merge_apply_enabled_needs_model ... ok
+test app::tests::merge_apply_dry_run_sets_reported_state_and_summary ... ok
+test app::tests::merge_apply_dry_run_default_reports_without_writes ... ok
+test app::tests::merge_apply_missing_output_path_writes_nothing ... ok
+test app::tests::merge_apply_missing_path_sets_needs_path ... ok
+test app::tests::merge_apply_request_take_roundtrip ... ok
+test app::tests::merge_apply_state_clears_on_swap_and_retry ... ok
+test app::tests::merge_apply_io_error_sets_failed_state ... ok
+test app::tests::folder_merge_snapshot_lists_sorted_presence ... ok
+test app::tests::merge_apply_io_error_graceful_on_dir_path ... ok
+test app::tests::merge_apply_state_defaults_idle_without_request ... ok
+test app::tests::merge_apply_real_write_sets_wrote_state_and_summary ... ok
+test app::tests::merge_apply_takes_left_right_base_both ... ok
+test app::tests::merge_apply_undecided_keeps_markers ... ok
+test app::tests::merge_apply_without_model_reports_compare_first ... ok
+test app::tests::merge_decide_persists_last_wins ... ok
+test app::tests::merge_apply_without_model_sets_no_model ... ok
+test app::tests::merge_apply_real_write_end_to_end ... ok
+test app::tests::merge_decide_unknown_hunk_ignored ... ok
+test app::tests::merge_dry_run_summary_honest_counts ... ok
+test app::tests::merge_pick_for_hunk_returns_last_staged ... ok
+test app::tests::merge_pick_summary_reflects_app_picks ... ok
+test app::tests::merge_reconcile_clears_on_lines_change ... ok
+test app::tests::merge_reconcile_keeps_picks_without_change ... ok
+test app::tests::merge_summary_line_counts_real_picks ... ok
+test app::tests::merge_swap_and_recompare_clear_picks ... ok
+test app::tests::mirror_copy_subset_keeps_only_copy_to_right ... ok
+test app::tests::modet7_rename_session_trims_and_rejects_blank_unknown ... ok
+test app::tests::modet7_modetab_click_adopts_session ... ok
+test app::tests::folder_merge_wiring_builds_tree_rows_and_stages_decisions ... ok
+test app::tests::mirror_copy_options_are_left_to_right_without_prune ... ok
+test app::tests::path_labels_are_honest_on_missing_files ... ok
+test app::tests::opener_flag_defaults_rejects_and_help ... ok
+test app::tests::picture_status_line_uses_model_verdict ... ok
+test app::tests::path_history_records_dedupe_and_caps ... ok
+test app::tests::picture_view_setters_report_status ... ok
+test app::tests::picture_view_defaults_clamp_and_describe ... ok
+test app::tests::path_meta_lines_carry_rules_and_flags ... ok
+test app::tests::opener_flag_parses_and_preloads_text_tab ... ok
+test app::tests::picture_model_from_diff_maps_fields_and_verdict ... ok
+test app::tests::prog_cancel_path_without_job_reports_idle ... ok
+test app::tests::prog_cancel_signals_running_job_and_status_notes_it ... ok
+test app::tests::prog_fraction_needs_known_total ... ok
+test app::tests::prog_status_text_reuses_status_field ... ok
+test app::tests::prog_throttle_gate_suppresses_byte_spam ... ok
+test app::tests::scroll_clamp_after_layout_keeps_pager_tops_valid ... ok
+test app::tests::sescaller_apply_close_only_hits_and_neighbours ... ok
+test app::tests::sescaller_apply_switch_loads_paths_and_cursor ... ok
+test app::tests::sescaller_typed_paths_saved_into_active ... ok
+test app::tests::sescaller_cursor_saved_and_restored_across_switch ... ok
+test app::tests::session_restore_reopens_paths_and_cursor_gracefully ... ok
+test app::tests::session_restore_triple_paths_round_trip ... ok
+test app::tests::read_hex_input_capped_round_trips_small_file ... ok
+test app::tests::split_fraction_defaults_centered_and_clamps ... ok
+test app::tests::session_identity_carries_paths_and_tab ... ok
+test app::tests::session_restore_empty_paths_opens_with_hint ... ok
+test app::tests::split_drag_moves_fraction_within_range ... ok
+test app::tests::status7_pane_tops_follow_selection ... ok
+test app::tests::status7_pane_tops_share_cursor_and_default_text ... ok
+test app::tests::status7_load_reflects_job ... ok
+test app::tests::status7_unimportant_follows_filter_and_orphans ... ok
+test app::tests::status7_verdict_is_honest ... ok
+test app::tests::swap_sides_flips_text_paths_and_clears_model ... ok
+test app::tests::status_line_reports_honest_counts ... ok
+test app::tests::swap_sides_on_home_reports_without_swapping ... ok
+test app::tests::swap_sides_resets_hex_and_table_views ... ok
+test app::tests::swap_sides_text_exchanges_paths_and_clears_model ... ok
+test app::tests::switching_tabs_preserves_paths ... ok
+test app::tests::sync_apply_without_confirm_writes_nothing ... ok
+test app::tests::sync_apply_gate_needs_confirm_and_steps ... ok
+test app::tests::sync_checklist_from_plan_rows_glyphs_and_toggles ... ok
+test app::tests::sync_copy_right_plan_keeps_only_checked_copies ... ok
+test app::tests::status7_empty_vs_nonempty_fixture_stays_honest ... ok
+test app::tests::sync_dry_run_default_reports_without_writes ... ok
+test app::tests::sync_status_line_uses_checklist_summary ... ok
+test app::tests::table_find_bar_tracks_matches_and_badge ... ok
+test app::tests::table_option_changes_clear_stale_results ... ok
+test app::tests::table_pager_syncs_and_find_brings_into_view ... ok
+test app::tests::tabsapp_eight_tabs_overflow_and_hscroll_gate ... ok
+test app::tests::tabsapp_close_selected_moves_to_neighbour ... ok
+test app::tests::tabsapp_selected_offset_keeps_tab_visible ... ok
+test app::tests::tabsapp_strip_geometry_reuses_frozen_tokens ... ok
+test app::tests::tabsapp_typo_reuses_chrome_tab_no_new_size ... ok
+test app::tests::text_find_badge_label_matches_app_badge ... ok
+test app::tests::mirror_copy_applies_left_to_right_in_temp_dirs ... ok
+test app::tests::text_find_box_tracks_matches_and_badge ... ok
+test app::tests::text_find_next_prev_wrap_over_many_matches ... ok
+test app::tests::text_find_state_badge_matches_legacy_badge ... ok
+test app::tests::text_find_state_prefs_follow_toggles ... ok
+test app::tests::text_find_state_seeds_from_legacy_needle ... ok
+test app::tests::theme26_screenshot_mode_defaults_light ... ok
+test app::tests::theme26_screenshot_mode_env_dark_ref ... ok
+test app::tests::theme26_screenshot_mode_explicit_flag_wins ... ok
+test app::tests::toolbar74_active_home_off_others_on ... ok
+test app::tests::toolbar74_glyph_ink_active_matches_live_painter ... ok
+test app::tests::toolbar74_glyph_ink_disabled_uses_track ... ok
+test app::tests::toolbar_exq_icons50_tab_pill_rect ... ok
+test app::tests::toolbar_exq_icons52_live_delegation_contract ... ok
+test app::tests::toolbar_gaps_reuse_geo_tokens_with_group_hierarchy ... ok
+test app::tests::view_clone_preserves_selection_and_filter ... ok
+test app::tests::view_toggles_persist_and_note_status ... ok
+test app::tests::typo_exq_typoinst61_chains ... ok
+test app::tests::view_prefs_hide_line_numbers_and_accents ... ok
+test app::tests::sync_checklist_apply_end_to_end_confirmed ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_copy_path_actions_and_labels ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_copy_path_button_geometry_and_hit ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_copy_path_formatting ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_copy_path_status_text ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_middle_truncate_and_ux_badges ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_tokens_geometry_reuse ... ok
+test copy::exq_agyxswarm80_copy_tests::agyxswarm80_tokens_typo_roles_reuse ... ok
+test copy::exq_copy10_tests::copy10_column_width_char_metrics_and_pitch_lock_at_narrow ... ok
+test copy::exq_copy10_tests::copy10_line_action_dy_inside_mono_row_at_narrow ... ok
+test copy::exq_copy10_tests::copy10_hit_rects_symmetric_from_space_scale_at_narrow_720 ... ok
+test copy::exq_copy10_tests::copy10_narrow_fixture ... ok
+test copy::exq_copy12_tests::copy12_hit_bands_centered_at_narrow_720 ... ok
+test copy::exq_copy11_tests::copy11_pitch_locked_over_tall_canvas ... ok
+test copy::exq_copy11_tests::copy11_action_dy_steady_over_long_scroll ... ok
+test copy::exq_copy11_tests::copy11_hit_rects_symmetric_centered_tall ... ok
+test copy::exq_copy11_tests::copy11_tall_fixture ... ok
+test app::tests::sync_apply_copies_new_and_changed_left_to_right ... ok
+test copy::exq_copy12_tests::copy12_pitch_locked_and_action_baseline_narrow ... ok
+test copy::exq_copy12_tests::copy12_narrow_fixture ... ok
+test copy::exq_copy34_tests::copy34_arrows_alignment_reuse_space_tokens ... ok
+test copy::exq_copy34_tests::copy34_button_hitbox_16px_centered ... ok
+test copy::exq_copy34_tests::copy34_inline_preview_row_height_reusing_mono ... ok
+test copy::exq_copy34_tests::copy34_fixtures_parity ... ok
+test copy::exq_copy34_tests::copy34_wide1200_no_hscroll_and_narrow700_edge ... ok
+test copy::exq_copy69_tests::copy69_button_widths_row_heights_gaps_are_tokens ... ok
+test copy::exq_copy69_tests::copy69_fixture_geometry_720 ... ok
+test copy::exq_copy7_tests::copy7_arrow_column_width_from_char_metrics ... ok
+test copy::exq_copy7_tests::copy7_arrow_hit_rects_symmetric_via_space_tokens ... ok
+test copy::exq_copy7_tests::copy7_copy_line_row_height_from_mono_at_960 ... ok
+test copy::exq_copy7_tests::copy7_wide_fixture ... ok
+test copy::exq_copy8_tests::copy8_column_width_from_char_metrics_at_narrow ... ok
+test copy::exq_copy8_tests::copy8_hit_slop_symmetric_at_narrow_720 ... ok
+test copy::exq_copy8_tests::copy8_narrow_fixture ... ok
+test copy::exq_copy8_tests::copy8_line_action_aligned_to_mono_baseline ... ok
+test copy::exq_copy9_tests::copy9_column_width_char_metrics_and_wide_pitch ... ok
+test copy::exq_copy9_tests::copy9_hit_rects_symmetric_from_space_scale_at_wide_960 ... ok
+test copy::exq_copy9_tests::copy9_line_actions_mono_baseline_aligned_at_wide ... ok
+test copy::exq_copy9_tests::copy9_wide_fixture ... ok
+test copy::exq_copytake6_tests::copytake6_narrow_fixture_numbers_hold ... ok
+test copy::exq_copytake6_tests::copytake6_action_text_reuses_small_status_role ... ok
+test copy::exq_copytake6_tests::copytake6_nav_pair_shares_hit_floor_and_tight_gap ... ok
+test copy::exq_copytake6_tests::copytake6_arrows_point_along_copy_direction ... ok
+test copy::exq_copytake6_tests::copytake6_filter_options_and_short_labels ... ok
+test copy::exq_guttercopy8_tests::guttercopy8_arrow_visual_matches_gutter_box_and_pitch_rhythm ... ok
+test copy::exq_merge2_tests::merge2_hit_slop ... ok
+test copy::exq_merge2_tests::merge2_narrow_fixture ... ok
+test copy::exq_merge2_tests::merge2_row_height ... ok
+test app::tests::typo_exq_typo48_live_fonts ... ok
+test copy::exq_merge3_tests::merge3_copy_row_vpad_matches_take_rhythm ... ok
+test copy::exq_merge3_tests::merge3_copy_sym_pad ... ok
+test copy::exq_merge3_tests::merge3_wide_fixture ... ok
+test copy::exq_tree2_tests::tree2_copy_arrows_head_each_hunk_only ... ok
+test copy::tests::apply_copy_left_to_right ... ok
+test copy::tests::apply_copy_out_of_bounds_returns_error ... ok
+test copy::tests::can_copy_row_identifies_diffs_and_bounds ... ok
+test copy::tests::copy_all_copies_every_diff_row_and_preserves_equals ... ok
+test copy::tests::copy_focus_after_moves_past_copied_row ... ok
+test copy::tests::copy_hit_floor_matches_toolbar_rhythm ... ok
+test copy::tests::copy_line_reuses_single_row_mutation ... ok
+test copy::tests::copy_section_copies_whole_hunk_and_reports_count ... ok
+test copy::tests::copy_status_text_counts_honestly_per_direction ... ok
+test gutter::exq_agyxswarm80_gutter_tests::gutter_geometry_canvas_budget_space_reuse ... ok
+test gutter::exq_agyxswarm80_gutter_tests::gutter_geometry_hit_slop_and_merge_tokens_hold ... ok
+test gutter::exq_agyxswarm80_gutter_tests::gutter_geometry_pure_safe_and_frozen_colors ... ok
+test gutter::exq_agyxswarm80_gutter_tests::gutter_geometry_space_scale_tokens_hold ... ok
+test gutter::exq_geo55_tests::geo55_budget_normal_960_parity ... ok
+test gutter::exq_geo55_tests::geo55_budget_narrow_700_parity ... ok
+test gutter::exq_geo55_tests::geo55_budget_wide_1200_parity ... ok
+test gutter::exq_geo55_tests::geo55_omit_marker_and_alignment_parity ... ok
+test gutter::exq_geo55_tests::geo55_single_source_token_delegations ... ok
+test gutter::exq_geo55_tests::geo55_narrow_700_edge_fixture ... ok
+test gutter::exq_gutter10_tests::gutter10_padded_row_at_y_clamps_pad_edges ... ok
+test gutter::exq_gutter10_tests::gutter10_padded_markers_round_trip_and_viewport_stays_inside ... ok
+test gutter::exq_gutter10_tests::gutter10_narrow_720_marker_alignment_from_char_metrics ... ok
+test gutter::exq_gutter10_tests::gutter10_text_x_right_aligns_on_fixed_inset ... ok
+test gutter::exq_gutter11_tests::gutter11_tall_1200_center_column_and_marker_lock ... ok
+test gutter::exq_gutter59_tests::gutter59_canvas_budgets_fixture ... ok
+test gutter::exq_gutter59_tests::gutter59_canvas_widths_ride_single_source_tokens ... ok
+test gutter::exq_gutter59_tests::gutter59_spacing_typo_tokens_unchanged ... ok
+test gutter::exq_gutter59_tests::gutter59_token_layouts_match_literal_budgets ... ok
+test gutter::exq_gutter6_narrow_tests::gutter6_narrow_720_stays_symmetric_with_char_metrics ... ok
+test gutter::exq_gutter6_tests::gutter10_number_trail_pad_matches_lead_beat ... ok
+test gutter::exq_gutter6_tests::gutter6_arrow_hit_rect_expands_box_without_moving_paint ... ok
+test gutter::exq_gutter6_tests::gutter6_linenum_typo_reuses_grid_mono_tabular ... ok
+test gutter::exq_gutter6_tests::gutter6_numbers_column_scales_with_digits_on_scale ... ok
+test gutter::exq_gutter6_tests::gutter6_overview_covers_same_and_diff_with_shared_bands ... ok
+test gutter::exq_gutter6_tests::gutter6_text_row_height_pads_line_height_symmetrically ... ok
+test gutter::exq_gutter6_tests::gutter_number_cell_right_aligns_tabular ... ok
+test gutter::exq_gutter7_tests::gutter7_single_source_frac_maps_all_entry_points ... ok
+test gutter::exq_gutter7_tests::gutter7_viewport_border_is_hairline_and_bands_stay_inside ... ok
+test gutter::exq_gutter8_tests::gutter8_center_width_from_space_tokens_centered_at_960 ... ok
+test gutter::exq_gutter8_tests::gutter8_markers_only_on_changed_rows ... ok
+test gutter::exq_gutter7_tests::gutter7_jump_mapping_hits_diffs_at_tall_heights ... ok
+test gutter::exq_gutter9_tests::gutter9_side_box_from_space_tokens_hit_symmetric_at_960 ... ok
+test gutter::exq_gutter7_tests::gutter7_tall_marker_symmetric_around_row_center ... ok
+test gutter::exq_gutter9_tests::gutter9_side_markers_only_on_changed_rows ... ok
+test gutter::exq_guttercopy8_tests::guttercopy8_arrow_centers_in_column ... ok
+test gutter::exq_guttercopy8_tests::guttercopy8_glyph_box_breathes_inside_hit_box ... ok
+test gutter::exq_guttercopy8_tests::guttercopy8_minimap_track_pads_tiny_heights_out ... ok
+test gutter::exq_guttercopy8_tests::text3_center_row_marker_inset_splits_leftover ... ok
+test gutter::exq_guttercopy8_tests::guttercopy8_padded_overview_sits_inside_track ... ok
+test gutter::exq_text38_tests::text38_center_20px_lane_alignment ... ok
+test gutter::exq_gutter7_tests::gutter7_bands_match_diff_order_and_slop_symmetric_at_720 ... ok
+test gutter::exq_text38_tests::text38_copy_arrows_centered_in_lane ... ok
+test gutter::exq_guttercopy8_tests::guttercopy8_tall_file_bands_stay_inside_track ... ok
+test gutter::exq_text38_tests::text38_row_height_typo_mono_rhythm ... ok
+test gutter::exq_text38_tests::text38_fixtures_parity ... ok
+test gutter::exq_text38_tests::text38_wide1200_no_hscroll_and_narrow700_edge ... ok
+test gutter::exq_text5_tests::text5_center_divider_gaps_are_symmetric_on_space_scale ... ok
+test gutter::exq_text5_tests::text5_gutter_splits_numbers_and_icons_on_space_scale ... ok
+test gutter::exq_text5_tests::text5_hit_slop_expands_symmetrically ... ok
+test gutter::exq_text5_tests::text5_layout_960_is_symmetric_with_equal_panes ... ok
+test gutter::exq_text5_tests::text5_row_center_locks_to_mono_line_height ... ok
+test gutter::exq_tree2_tests::tree2_center_arrows_per_hunk ... ok
+test gutter::tests::bar_width_for_font_scales_from_mono_size ... ok
+test gutter::tests::bar_width_narrows_when_line_numbers_hide ... ok
+test gutter::tests::difference_rows_map_to_coordinates_and_merge ... ok
+test gutter::tests::empty_or_equal_rows_yield_no_segments ... ok
+test gutter::tests::adjacent_diffs_fuse_into_one_clickable_band ... ok
+test gutter::tests::gutter_text_typo_follows_mono_tokens ... ok
+test gutter::tests::gutter_ruler_hit_test_clamps_and_maps ... ok
+test gutter::tests::gutter_tokens_match_spacing_scale ... ok
+test gutter::tests::jump_target_snaps_equal_clicks_to_nearest_diff ... ok
+test gutter::tests::merge_conflict_line_ranges_extracts_hunks ... ok
+test gutter::tests::merge_gutter_geometry_detects_conflict_hunks ... ok
+test gutter::tests::ranges_match_row_wise_geometry_and_virtualize_tall_files ... ok
+test gutter::tests::row_at_y_maps_fraction_to_row_index ... ok
+test gutter::tests::min_segment_height_keeps_tall_file_hunks_visible ... ok
+test gutter::tests::row_at_y_rejects_empty_and_out_of_range ... ok
+test gutter::tests::row_center_y_round_trips_both_directions ... ok
+test gutter::tests::ruler_tokens_match_spacing_scale ... ok
+test gutter::tests::ruler_width_for_font_scales_from_mono_size ... ok
+test gutter::tests::ruler_width_widens_track_but_stays_narrower_without_numbers ... ok
+test gutter::tests::segment_hit_test_finds_containing_segment ... ok
+test gutter::tests::selection_marker_band_covers_one_min_band ... ok
+test gutter::tests::viewport_rect_floors_tiny_windows_and_rejects_bad_input ... ok
+test gutter::tests::viewport_rect_maps_visible_window_to_ruler_band ... ok
+test gutter::tests::slop_hit_test_expands_bands_without_moving_paint ... ok
+test gutter::tests::y_for_row_inverts_row_at_y ... ok
+test home::tests::chrome3_header_tabs_toolbar_space_tokens_narrow720_edge ... ok
+test home::tests::chrome2_header_tabs_equal_toolbar_small_status_narrow720_edge ... ok
+test home::tests::chrome3_toolbar_spacing_space_tokens_and_header_line_height ... ok
+test home::tests::folder2_viewport_fill_wires_tree_chrome ... ok
+test home::tests::chrome4_cards_grid_gaps_symmetric_hit_slop_wide960_edge ... ok
+test home::tests::exq_home65_geometry_tokens_value_identical ... ok
+test home::tests::folder_empty_hint_never_leaves_view_blank ... ok
+test home::tests::home2_cards_search_saved_wide960_edge ... ok
+test home::tests::home3_exq_generous_gap_fullwidth_cta_type_steps_edge ... ok
+test home::tests::home3_search_indent_narrow720_edge ... ok
+test home::tests::home4_card_gaps_grid_height_tabscroll_margins_align_narrow_edge ... ok
+test home::tests::home4_wide960_card_gap_consistency_edge ... ok
+test home::tests::home5_search_indent_narrow720_edge ... ok
+test home::tests::home5_session_tree_cards_margins_empty_8tabs_edge ... ok
+test home::tests::home7_tall1200_card_rows_cta_toolbar_edge ... ok
+test home::tests::home6_narrow720_cards_cta_toolbar_edge ... ok
+test home::tests::home83_canonical_960_card_geometry ... ok
+test home::tests::home_card_min_height_fits_stack ... ok
+test home::tests::home_card_roles_carry_pane_hierarchy ... ok
+test home::tests::home_card_typo_matches_paint_contract ... ok
+test home::tests::home_card_typo_second_layer_reuses_roles ... ok
+test home::tests::home_exq_home32_round1_sessions_8tabs_1200 ... ok
+test home::tests::home_grid_columns_three_rows_ceil ... ok
+test home::tests::home_grid_cell_is_row_major ... ok
+test home::tests::home_model_covers_all_nine_session_types ... ok
+test home::tests::home_exq_home45_live_home_cards ... ok
+test home::tests::home_recent_push_dedupes_and_caps ... ok
+test home::tests::homecta_single_line_budget_fits_all_nine_labels ... ok
+test home::tests::homegeo_card_hit_target_beats_cramped_button ... ok
+test home::tests::homegeo_card_title_desc_contrast_reads_title_first ... ok
+test home::tests::homegeo_home_hides_picker_and_keeps_section_rhythm ... ok
+test home::tests::homegeo_recent_columns_tile_without_clip_lies ... ok
+test home::tests::homegeo_wave9_find_narrow_tabs_edge ... ok
+test home::tests::homegeo_wave_home2_8tabs_narrow_wrap_edge ... ok
+test home::tests::homerecent_age_label_buckets_are_honest ... ok
+test home::tests::homerecent_empty_and_missing_states_stay_honest ... ok
+test home::tests::homerecent_snapshot_stamp_and_age_stay_graceful ... ok
+test home::tests::homerecent_title_meta_typo_reuses_roles ... ok
+test home::tests::homerecent_two_line_geometry_stacks_with_rhythm ... ok
+test home::tests::homerecent_history_push_stamped_dedupes_ignoring_time ... ok
+test home::tests::hometabs_selected_weight_beats_unselected_without_new_size ... ok
+test home::tests::hometabs_strip_geometry_tiles_without_clip ... ok
+test home::tests::recent_list_geometry_stacks_rows_with_pad_and_gap ... ok
+test home::tests::recent_row_typo_reuses_desc_role ... ok
+test home::tests::session_cap_drops_oldest_inactive_never_active ... ok
+test home::tests::session_close_first_active_picks_right_neighbour ... ok
+test home::tests::session_history_push_dedupes_caps_and_skips_home ... ok
+test home::tests::session_close_picks_neighbour_and_unknown_is_noop ... ok
+test home::tests::session_open_activates_and_home_is_never_a_session ... ok
+test home::tests::session_snapshot_trims_and_flags_empty_paths ... ok
+test home::tests::session_stamp_and_age_mirror_snapshot_precedent ... ok
+test home::tests::session_switch_and_close_others_gate_unknown ... ok
+test home::tests::session_title_derives_stem_and_falls_back ... ok
+test home::tests::session_tree_build_empty_and_grouped ... ok
+test home::tests::session_tree_geometry_and_typography_contract ... ok
+test home::tests::session_update_paths_cursor_and_rename_trim ... ok
+test home::tests::staged_file_routes_to_text_otherwise_folder ... ok
+test home::tests::sync_consent_hint_tracks_gate ... ok
+test home::tests::topchrome_toolbar_path_status_narrow_empty_edge ... ok
+test screenshot::tests::allsame_scene_matches_allsame_contract ... ok
+test app::tests::toolbar_exq_icons55_live_vector_wiring ... ok
+test screenshot::tests::draw_string_returns_pen_and_clips_safely ... ok
+test screenshot::tests::filebar24_narrow720_no_overlap ... ok
+test screenshot::tests::fixture_default_mode_is_dark ... ok
+test screenshot::tests::allsame_fixture_renders_valid_png ... ok
+test screenshot::tests::dispatcher_routes_by_file_name ... ok
+test screenshot::tests::folder_empty_scene_matches_hint_contract ... ok
+test screenshot::tests::fixture_default_path_is_byte_stable_dark ... ok
+test screenshot::tests::geometry_shared_tokens_hold ... ok
+test screenshot::tests::gutter28_center_layout_intact ... ok
+test screenshot::tests::gutter28_narrow_intact ... ok
+test screenshot::tests::gutter28_overview_edge_fixture ... ok
+test screenshot::tests::gutter28_overview_row_mapping ... ok
+test screenshot::tests::gutter36_narrow_intact ... ok
+test screenshot::tests::gutter36_overview_alignment ... ok
+test screenshot::tests::gutter36_overview_edge_fixture ... ok
+test screenshot::tests::gutter_matches_live_ruler_contract ... ok
+test screenshot::tests::hatch25_tall_no_banding ... ok
+test screenshot::tests::folder_fixture_renders_valid_png ... ok
+test screenshot::tests::home_cards_fit_canvas ... ok
+test screenshot::tests::home_desc_wrap_stays_in_two_line_budget ... ok
+test screenshot::tests::home_fixture_mirrors_live_paint ... ok
+test screenshot::tests::hex_fixture_renders_valid_png ... ok
+test screenshot::tests::home_matches_live_contract ... ok
+test screenshot::tests::kern_tight_pairs_tuck_one_pixel ... ok
+test screenshot::tests::dispatcher_routes_allsame_scene ... ok
+test screenshot::tests::light56_inline_accent_mode_branch ... ok
+test screenshot::tests::light56_light_accent_ink_on_wash_aa ... ok
+test screenshot::tests::fixture_mode_param_switches_hues ... ok
+test screenshot::tests::merge_panes_share_equal_thirds ... ok
+test screenshot::tests::home_fixture_renders_valid_png ... ok
+test screenshot::tests::merge_fixture_renders_valid_png ... ok
+test screenshot::tests::narrow_fixture_uses_shared_headless_budget ... ok
+test screenshot::tests::narrow_glyphs_use_tighter_advance ... ok
+test screenshot::tests::paint_chrome_clips_long_title_without_oob_write ... ok
+test screenshot::tests::pathmeta_strip_geometry_holds ... ok
+test screenshot::tests::picture_scene_matches_fit_contract ... ok
+test screenshot::tests::punctuation_dots_are_single_stem ... ok
+test screenshot::tests::screenshot72_light_wash_matches_live_light_consts ... ok
+test screenshot::tests::light56_accent_scene_modes_valid_and_distinct ... ok
+test screenshot::tests::shot15_center_gap_markers_use_live_helpers ... ok
+test screenshot::tests::shot18_chrome720_no_overlap ... ok
+test screenshot::tests::shot19_typotall_numbers_aligned ... ok
+test screenshot::tests::shot46_geometry_consts_trace_to_live_tokens ... ok
+test screenshot::tests::shot46_light_palette_meets_aa_on_light_wash ... ok
+test screenshot::tests::shot46_palette_traces_to_live_theme_helpers ... ok
+test screenshot::tests::status20_narrow720_no_overlap ... ok
+test screenshot::tests::narrow_fixture_renders_valid_png ... ok
+test screenshot::tests::table_find_scene_matches_key_find_contract ... ok
+test screenshot::tests::merge_take_scene_proves_live_take_row ... ok
+test screenshot::tests::sync_scene_matches_checklist_gate_contract ... ok
+test screenshot::tests::text_width_respects_kerning_and_fits_panes ... ok
+test screenshot::tests::table_fixture_renders_valid_png ... ok
+test screenshot::tests::toolbar21_narrow720_no_overlap ... ok
+test screenshot::tests::wrap_scene_proves_continuation_find ... ok
+test take::exq_agyxswarm80_take_tests::take_side_handling_indices_opposites_and_conversions ... ok
+test take::exq_agyxswarm80_take_tests::take_snapshot_and_side_inspection ... ok
+test take::exq_agyxswarm80_take_tests::take_snapshot_tmp_only_output_write ... ok
+test take::exq_guttercopy8_tests::guttercopy8_conflict_band_maps_row_fraction_with_floor ... ok
+test take::exq_guttercopy8_tests::guttercopy8_conflict_marks_keep_order_and_skip_bad_rows ... ok
+test take::exq_merge2_tests::merge2_hit_slop ... ok
+test take::exq_merge2_tests::merge2_narrow_fixture ... ok
+test take::exq_merge2_tests::merge2_row_height ... ok
+test take::exq_merge2_tests::merge2_three_pane_widths ... ok
+test take::exq_merge3_tests::merge3_divider_gaps_via_section_gap_at_960 ... ok
+test take::exq_merge3_tests::merge3_take_vertical_rhythm_from_mono ... ok
+test take::exq_merge3_tests::merge3_wide_fixture ... ok
+test take::exq_take33_tests::take33_badge_role_reuses_typo_only ... ok
+test take::exq_take33_tests::take33_buttons_row_reuses_space_tokens ... ok
+test take::exq_take33_tests::take33_center_pane_alignment ... ok
+test take::exq_take33_tests::take33_conflict_badge_placement ... ok
+test take::exq_take33_tests::take33_narrow700_fixture ... ok
+test take::exq_take44_tests::take_exq_take44_live_take_geometry ... ok
+test take::exq_take70_tests::take70_geometry_tokens_are_value_identical ... ok
+test take::exq_take70_tests::take70_remaining_literals_have_no_identical_token ... ok
+test take::exq_take7_tests::take7_tall_fixture ... ok
+test take::exq_take7_tests::take7_tall_hit_lock_over_long_scroll ... ok
+test take::exq_take7_tests::take7_tall_marker_rows_aligned_with_hunk_rows ... ok
+test take::exq_take7_tests::take7_tall_side_hit_and_marker_rhythm ... ok
+test take::tests::copytake6_stepper_counter_follows_session_cursor ... ok
+test take::tests::copytake6_stepper_geometry_and_honest_counter ... ok
+test take::tests::copytake6_take_bar_hscroll_only_when_narrow ... ok
+test take::tests::copytake6_take_bar_uniform_and_total ... ok
+test take::tests::copytake6_take_roles_reuse_body_and_small ... ok
+test take::tests::is_conflict_marker_detects_all_four_markers ... ok
+test take::tests::join_take_output_trailing_newline_parity ... ok
+test take::tests::resolve_take_all_resolves_every_conflict_block ... ok
+test take::tests::resolve_take_left_replaces_conflict_with_left_lines ... ok
+test take::tests::resolve_take_right_and_both ... ok
+test take::tests::take_buttons_share_hit_height_and_fit_labels ... ok
+test take::tests::take_conflict_block_height_stacks_mono_lines ... ok
+test take::tests::take_session_conflict_stepper_and_output ... ok
+test take::tests::take_session_stepper_next_prev_and_take_all ... ok
+test take::tests::take_side_maps_center_to_base_and_labels ... ok
+test theme::tests::black_on_white_has_maximum_contrast ... ok
+test theme::tests::chrome_roles_carry_hierarchy ... ok
+test theme::tests::chrome_sizes_match_typo_scale ... ok
+test theme::tests::content_grid_and_caption_aliases_carry_ramp ... ok
+test theme::tests::contrast_dim_text_carries_weight_not_hue ... ok
+test theme::tests::exq_typo10_empty_vs_nonempty_rhythm_and_density_edge ... ok
+test theme::tests::fixed_diff_pairs_satisfy_aa ... ok
+test theme::tests::fontbundle67_typo_reuse_value_identical ... ok
+test theme::tests::fonts76_bundled_sans_mono_light_polish ... ok
+test theme::tests::geometry_scale_unifies_spacing ... ok
+test theme::tests::glyph_zoomed_line_height_clamps ... ok
+test theme::tests::gutter_text_alias_matches_grid_mono ... ok
+test theme::tests::low_contrast_fails_threshold ... ok
+test theme::tests::palette_selector_matches_mode ... ok
+test theme::tests::palettes_satisfy_aa_per_mode ... ok
+test theme::tests::test_keymap_core_mac_bindings_cmd_f_i_0 ... ok
+test theme::tests::test_keymap_preset_parsing_and_names ... ok
+test theme::tests::test_keymap_resolve_shortcuts_across_presets ... ok
+test theme::tests::test_keymap_shortcut_hints ... ok
+test theme::tests::test_wcag_aa_design_token_contrast_all_palettes ... ok
+test theme::tests::textcenter_geometry_tokens_reuse_scale ... ok
+test theme::tests::theme10_pane_hierarchy_sharp_without_new_sizes ... ok
+test theme::tests::theme26_light_contrast ... ok
+test theme::tests::theme_modes_satisfy_contrast ... ok
+test theme::tests::tokens_keep_frozen_hues ... ok
+test theme::tests::typo54_candidate_chains_system_first ... ok
+test theme::tests::typo89_typography_plus_light_polish ... ok
+test theme::tests::typo8_roles_plus_rhythm_reuses_scale_without_new_sizes ... ok
+test theme::tests::typo_exq_home_scale_has_visible_steps_and_tracking ... ok
+test theme::tests::typo_exquisite_tokens_carry_hierarchy ... ok
+test theme::tests::typo_exquisite_zoom_clamps_every_role ... ok
+test theme::tests::typo_font_id_zoomed_follows_zoom_table ... ok
+test theme::tests::typo_font_ids_carry_exact_px_and_family ... ok
+test theme::tests::typo_home4_steps_carry_hierarchy_without_new_sizes ... ok
+test theme::tests::typo_rank_follows_point_size ... ok
+test theme::tests::typo_resolved_font_id_uses_role_text_style ... ok
+test theme::tests::typo_rich_carries_size_and_weight_per_role ... ok
+test theme::tests::typo_roles_carry_hierarchy_without_tracking ... ok
+test theme::tests::typo_roles_map_to_egui_text_styles ... ok
+test theme::tests::typo_scale_matches_paint_contract ... ok
+test theme::tests::typo_spec_bundles_each_role_single_source ... ok
+test theme::tests::typo_textcenter_steps_carry_hierarchy_without_new_sizes ... ok
+test theme::tests::viewport_tokens_match_canvas_and_fallback ... ok
+test theme::tests::zoom_level_clamps_to_table_edges ... ok
+test theme::tests::zoom_scale_stays_in_factor_band_and_keeps_hierarchy ... ok
+test theme::tests::zoom_steps_cover_min_to_max_in_order ... ok
+test theme::tests::zoomed_rich_carries_zoomed_size_per_role ... ok
+test theme::tests::zoomed_size_steps_one_px_per_level_then_clamps ... ok
+test theme::tests::zoomed_size_zero_level_is_base ... ok
+test tree::dual_tree_tests::dual_row_action_stage_and_clear ... ok
+test tree::dual_tree_tests::dual_row_actions_cover_files_only ... ok
+test tree::dual_tree_tests::dual_side_cells_are_fixed_width ... ok
+test tree::dual_tree_tests::dual_side_cells_keep_missing_sides_as_dash ... ok
+test tree::dual_tree_tests::dual_tree_bring_into_view_moves_shared_top ... ok
+test tree::dual_tree_tests::dual_tree_scroll_syncs_and_clamps ... ok
+test tree::dual_tree_tests::dual_tree_select_syncs_both_panes ... ok
+test tree::exq_foldertable10_tests::exq_foldertable10_edge_deep_nest_and_dimmed_orphans ... ok
+test tree::exq_foldertable10_tests::folder_table_column_xs_and_fixed_trailing_alignment ... ok
+test tree::exq_foldertable10_tests::folder_table_grid_has_section_gap_and_headers ... ok
+test tree::exq_foldertable10_tests::folder_table_orphan_rows_dimmed_without_color_edits ... ok
+test tree::exq_foldertable10_tests::folder_table_row_height_derived_from_typo_mono ... ok
+test tree::exq_tree10_tests::exq_tree10_round1_tall_1200_columns_plus_highlight ... ok
+test tree::exq_tree10_tests::tree10_right_align_tall_lock ... ok
+test tree::exq_tree10_tests::tree10_selected_row_full_width_tall ... ok
+test tree::exq_tree10_tests::tree10_tall_columns_from_char_metrics ... ok
+test tree::exq_tree10_tests::tree10_tall_scroll_over_long_list ... ok
+test tree::exq_tree2_tests::exq_tree2_round2_tree_wide_960_and_orphan_dimming ... ok
+test tree::exq_tree2_tests::tree2_guides_status_and_path_geometry ... ok
+test tree::exq_tree2_tests::tree2_round2_columns_aligned_at_960 ... ok
+test tree::exq_tree2_tests::tree2_round2_indent_from_space_tokens ... ok
+test tree::exq_tree2_tests::tree2_round2_orphan_dimming_via_typo_small ... ok
+test tree::exq_tree2_tests::tree2_status_typo_weight_separates_without_color ... ok
+test tree::exq_tree3_tests::exq_tree3_round1_tree_narrow_720_and_row_rhythm ... ok
+test tree::exq_tree3_tests::tree3_guides_from_space_tokens ... ok
+test tree::exq_tree3_tests::tree3_orphan_ellipsis_char_boundary_at_960 ... ok
+test tree::exq_tree3_tests::tree3_row_height_locked_to_mono_line_height ... ok
+test tree::exq_tree4_tests::tree4_edge_deep_nesting_plus_orphan_newer ... ok
+test tree::exq_tree4_tests::tree4_grid_side_block_right_aligns_at_960 ... ok
+test tree::exq_tree4_tests::tree4_guide_span_covers_full_row_height ... ok
+test tree::exq_tree4_tests::tree4_gutter_arrows_stack_full_row_height ... ok
+test tree::exq_tree4_tests::tree4_narrow_window_stacks_without_crush ... ok
+test tree::exq_tree5_tests::tree5_global_scoped_tree_opens_nested_with_global_set ... ok
+test tree::exq_tree5_tests::tree5_relative_expanded_maps_global_to_scope ... ok
+test tree::exq_tree5_tests::tree5_scoped_chrome_stacks_without_overlap ... ok
+test tree::exq_tree5_tests::tree5_scoped_filter_keeps_orphan_newer_honest ... ok
+test tree::exq_tree5_tests::tree5_scoped_geometry_reuses_tree2_tree4_tokens ... ok
+test tree::exq_tree5_tests::tree_density_row_height_matches_viewmodel_tokens ... ok
+test tree::exq_tree62_tests::tree62_geometry_consts_ride_space_tokens ... ok
+test tree::exq_tree62_tests::tree62_token_layouts_match_literal_budgets ... ok
+test tree::exq_tree62_tests::tree62_typo_consts_ride_typo_tokens ... ok
+test tree::exq_tree6_tests::exq_tree6_round1_tree_wide_960_indent_plus_slop ... ok
+test tree::exq_tree6_tests::tree6_expander_slop_symmetric ... ok
+test tree::exq_tree6_tests::tree6_guides_even_from_space_tokens ... ok
+test tree::exq_tree6_tests::tree6_indent_step_via_space_tokens ... ok
+test tree::exq_tree6_tests::tree6_status_plus_name_widths_from_char_metrics ... ok
+test tree::exq_tree6_tests::tree6_wide_row_locked_to_mono_line_height ... ok
+test tree::exq_tree7_tests::exq_tree7_round1_tree_wide_960_indent_consistency ... ok
+test tree::exq_tree7_tests::tree7_arrows_symmetric_slop ... ok
+test tree::exq_tree7_tests::tree7_indent_deltas_constant_through_depth8 ... ok
+test tree::exq_tree7_tests::tree7_indent_step_from_space_tokens ... ok
+test tree::exq_tree7_tests::tree7_row_height_from_mono_line_height ... ok
+test tree::exq_tree8_tests::exq_tree8_round1_tree_cols_960_size_alignment ... ok
+test tree::exq_tree8_tests::tree8_grid_origins_right_align_size_column_at_960 ... ok
+test tree::exq_tree8_tests::tree8_selected_row_highlight_full_width_at_960 ... ok
+test tree::exq_tree8_tests::tree8_size_and_date_widths_from_char_metrics ... ok
+test tree::exq_tree9_tests::exq_tree9_round1_narrow_720_arrows_plus_ellipsis ... ok
+test tree::exq_tree9_tests::tree9_arrows_symmetric_from_space_scale ... ok
+test tree::exq_tree9_tests::tree9_narrow_columns_from_char_metrics ... ok
+test tree::exq_tree9_tests::tree9_narrow_ellipsis_from_char_metrics ... ok
+test tree::exq_tree9_tests::tree9_selected_row_full_width_at_720 ... ok
+test tree::folder2_tests::dual_pane_widths_fill_row_with_floor ... ok
+test tree::folder2_tests::dual_vertical_fill_chrome_and_rows ... ok
+test tree::folder2_tests::filter_row_geometry_fits_and_wraps ... ok
+test tree::folder2_tests::folder2_narrow_edge_fixture ... ok
+test tree::folderfilter_tests::active_count_and_clear_cover_all_seven ... ok
+test tree::folderfilter_tests::drill_down_detect_tab_and_compare_intent ... ok
+test tree::folderfilter_tests::drill_down_geometry_and_typography_contracts ... ok
+test tree::folderfilter_tests::drill_down_scope_navigation_and_breadcrumbs ... ok
+test tree::folderfilter_tests::drill_down_scoped_folder_tree_filtering ... ok
+test tree::folderfilter_tests::empty_state_full_routes_pruned_vs_never_compared ... ok
+test tree::folderfilter_tests::empty_state_full_rows_routes_identical_vs_pruned_vs_never_compared ... ok
+test tree::folderfilter_tests::empty_states_stay_honest ... ok
+test tree::folderfilter_tests::filter_bar_geo_typo_tokens_stay_on_scale ... ok
+test tree::folderfilter_tests::filter_pruned_wording_differs_from_never_compared ... ok
+test tree::folderfilter_tests::folder_session_state_drill_down_integration ... ok
+test tree::folderfilter_tests::identical_wording_differs_from_pruned_and_never_compared ... ok
+test tree::folderfilter_tests::kind_filter_splits_files_and_dirs ... ok
+test tree::folderfilter_tests::legacy_and_new_filters_narrow_together ... ok
+test tree::folderfilter_tests::name_filter_matches_case_insensitive_and_trims ... ok
+test tree::folderfilter_tests::session_filter_helpers_wire_counts_and_hints ... ok
+test tree::folderfilter_tests::status_filter_covers_every_glyph_honestly ... ok
+test tree::session_tests::session_conflict_cursor_and_live_log ... ok
+test tree::session_tests::session_double_click_stages_files_only ... ok
+test tree::session_tests::session_filter_and_flatten_visible_tree ... ok
+test tree::session_tests::session_filtered_counts_match_filtered_tree ... ok
+test tree::session_tests::session_filtered_rows_keep_order_for_dual_paint ... ok
+test tree::session_tests::session_mirror_preview_prunes_right_only ... ok
+test tree::session_tests::session_mode_switch_resets_consent_and_gates_apply ... ok
+test tree::session_tests::session_toggle_and_counts ... ok
+test tree::sync_direction_tests::badges_are_fixed_short_strings ... ok
+test tree::sync_direction_tests::row_directions_match_preview_rules ... ok
+test tree::sync_direction_tests::scoped_preview_only_covers_selection ... ok
+test tree::sync_direction_tests::selection_toggle_and_retain ... ok
+test tree::sync_direction_tests::summary_counts_are_real ... ok
+test tree::sync_direction_tests::sync_geo_typo_tokens_stay_on_scale ... ok
+test tree::tests::both_newer_filters_together_show_nothing_honestly ... ok
+test tree::tests::cell_text_renders_missing_sides_as_dash ... ok
+test tree::tests::collapsed_tree_shows_only_root_entries ... ok
+test tree::tests::column_defs_keep_path_flex_and_fixed_side_widths ... ok
+test tree::tests::counts_cover_every_glyph_honestly ... ok
+test tree::tests::double_click_file_stages_intent_dir_keeps_old ... ok
+test tree::tests::drill_row_offset_is_indent_plus_fixed_expander ... ok
+test tree::tests::expanded_directory_reveals_children ... ok
+test tree::tests::expander_hit_rect_covers_full_row_height ... ok
+test tree::tests::flatten_ignores_hierarchy_and_expansion ... ok
+test tree::tests::folder_col_geometry_tokens_stay_on_scale ... ok
+test tree::tests::folder_col_typo_mono_sizes_with_header_strong ... ok
+test tree::tests::folder_find_matches_paths_with_wrap_and_case ... ok
+test tree::tests::folder_gutter_jump_wraps_over_changed_rows ... ok
+test tree::tests::folder_lines_keep_side_columns_aligned ... ok
+test tree::tests::folder_merge_resolves_one_row_action ... ok
+test tree::tests::hide_orphans_drops_left_and_right_only ... ok
+test tree::tests::indent_step_matches_spacing_scale ... ok
+test tree::tests::indent_token_stays_on_spacing_scale_with_columns ... ok
+test tree::tests::left_newer_only_keeps_only_greater_glyph ... ok
+test tree::tests::right_newer_only_keeps_only_less_glyph ... ok
+test tree::tests::row_pager_pages_and_brings_nodes_into_view ... ok
+test tree::tests::sync_conflict_nav_walks_preview_conflicts ... ok
+test tree::tests::sync_live_log_lines_cover_plan_and_report ... ok
+test tree::tests::sync_mode_labels_and_options_match_engine ... ok
+test tree::tests::sync_preview_empty_never_applies ... ok
+test tree::tests::sync_preview_four_modes_cover_update_left_right ... ok
+test tree::tests::sync_preview_mirror_prunes_right_only ... ok
+test tree::tests::sync_preview_pruned_dir_hides_children ... ok
+test tree::tests::sync_preview_update_both_copies_newer_and_orphans ... ok
+test tree::tests::toggle_expand_and_collapse_helpers ... ok
+test tree::three_way_tree_tests::three_way_conflict_covers_delete_and_double_add ... ok
+test tree::three_way_tree_tests::three_way_rows_union_sorted_with_presence ... ok
+test tree::three_way_tree_tests::three_way_summary_counts_decisions_honestly ... ok
+test tree::tree31_tests::tree31_deepnest_no_overlap ... ok
+test tree::tree41_tests::tree41_deepnest_no_overlap ... ok
+test viewmodel::tests::audit_viewmodel_density_proves_zero_clipping_at_960_and_720 ... ok
+test viewmodel::tests::changed_run_leftovers_keep_their_own_kind_and_numbers ... ok
+test viewmodel::tests::clip_risk_detector_and_min_safe_height ... ok
+test viewmodel::tests::clip_text_end_ellipsis_and_boundaries ... ok
+test viewmodel::tests::clip_to_width_keeps_longest_fitting_label ... ok
+test viewmodel::tests::coarse_script_sets_the_coarse_flag ... ok
+test viewmodel::tests::delete_then_insert_pairs_into_changed_rows_with_in_bounds_accents ... ok
+test viewmodel::tests::density_enum_methods_and_labels ... ok
+test viewmodel::tests::density_tokens_strictly_greater_than_line_heights ... ok
+test viewmodel::tests::dual_pane_positions_align_with_widths ... ok
+test viewmodel::tests::dual_pane_widths_honor_chrome_budget ... ok
+test viewmodel::tests::empty_heatmap_models_empty_bytes_without_panicking ... ok
+test viewmodel::tests::empty_overlap_reports_zero_percent_not_nan ... ok
+test viewmodel::tests::empty_script_models_nothing ... ok
+test viewmodel::tests::exq_l_zone_roles_keep_label_above_value_and_badge ... ok
+test viewmodel::tests::filters_show_honest_subsets_and_counts ... ok
+test viewmodel::tests::find_count_label_formats_n_of_m ... ok
+test viewmodel::tests::find_match_indices_cased_honors_the_case_flag ... ok
+test viewmodel::tests::find_matches_case_insensitive_over_both_panes ... ok
+test viewmodel::tests::find_state_case_flag_recomputes_with_cursor_on_first_hit ... ok
+test viewmodel::tests::find_state_count_label_tracks_cursor ... ok
+test viewmodel::tests::find_state_cycles_next_prev_with_wrap ... ok
+test viewmodel::tests::find_state_empty_query_has_no_position ... ok
+test screenshot::tests::dispatcher_routes_new_scenes ... ok
+test viewmodel::tests::find_state_refresh_resets_only_on_new_model ... ok
+test viewmodel::tests::folder_rows_cover_every_status_with_glyphs_and_counts ... ok
+test viewmodel::tests::folder_truncation_appends_the_note_to_the_summary ... ok
+test viewmodel::tests::heatmap_of_differing_single_pixel_is_red ... ok
+test viewmodel::tests::heatmap_of_equal_single_pixel_is_dimmed_grayscale ... ok
+test viewmodel::tests::hex_difference_models_offset_and_run ... ok
+test viewmodel::tests::hex_identical_models_no_differences ... ok
+test viewmodel::tests::identical_files_model_all_equal_rows_with_paired_numbers ... ok
+test viewmodel::tests::identical_pictures_summarize_without_overlap_lines ... ok
+test viewmodel::tests::inconsistent_heatmap_models_empty_bytes ... ok
+test viewmodel::tests::known_timestamps_format_exactly_in_utc ... ok
+test viewmodel::tests::lone_insert_run_makes_inserted_rows_with_right_numbers_only ... ok
+test viewmodel::tests::merge_clean_models_lines_without_conflict ... ok
+test viewmodel::tests::merge_conflict_markers_flag_conflicted ... ok
+test viewmodel::tests::merge_hunks_list_well_formed_blocks_in_order ... ok
+test viewmodel::tests::merge_pick_summary_counts_progress_honestly ... ok
+test viewmodel::tests::merge_picks_apply_per_hunk_independently ... ok
+test viewmodel::tests::merge_picks_dedup_and_reject_unknown ... ok
+test viewmodel::tests::model9_cursor_roles_reuse_existing_sizes ... ok
+test viewmodel::tests::model9_empty_model_is_honest ... ok
+test viewmodel::tests::model9_loaded_selection_drives_pane_top_and_badge ... ok
+test viewmodel::tests::next_prev_diff_cycle_with_wrap ... ok
+test viewmodel::tests::page_cursor_load_more_grows_to_total ... ok
+test viewmodel::tests::page_cursor_retarget_tracks_new_models ... ok
+test viewmodel::tests::page_window_clamps_to_model_bounds ... ok
+test viewmodel::tests::pathmeta_history_label_stays_honest_on_empty ... ok
+test viewmodel::tests::pathmeta_roles_reuse_existing_tokens ... ok
+test viewmodel::tests::pathmeta_edge_empty_vs_long_clips_honestly ... ok
+test viewmodel::tests::pathmeta_second_line_joins_nonempty_parts_only ... ok
+test viewmodel::tests::pathmeta_segmented_line_drops_empty_segments ... ok
+test viewmodel::tests::picture_pan_drag_clamps_to_content_bounds ... ok
+test viewmodel::tests::picture_summary_matches_the_cli_wording_exactly ... ok
+test viewmodel::tests::picture_zoom_steps_clamp_quarter_to_8x ... ok
+test viewmodel::tests::pre_epoch_time_formats_as_a_dash ... ok
+test viewmodel::tests::pure_deletion_makes_deleted_rows_with_left_numbers_only ... ok
+test viewmodel::tests::section_bounds_cover_contiguous_hunks ... ok
+test viewmodel::tests::selection_follows_navigation ... ok
+test viewmodel::tests::split_cursor_and_a11y_label_read_honestly ... ok
+test viewmodel::tests::split_drag_delta_fraction_guards_and_scales ... ok
+test viewmodel::tests::split_drag_delta_moves_fraction ... ok
+test viewmodel::tests::split_fraction_clamps_to_drag_range ... ok
+test viewmodel::tests::split_fraction_from_x_clamps_and_guards ... ok
+test viewmodel::tests::split_handle_contains_x_hits_only_strip ... ok
+test viewmodel::tests::split_handle_hit_width_matches_paint_strip ... ok
+test viewmodel::tests::split_handle_x_range_centers_on_fraction ... ok
+test viewmodel::tests::status_cursor_labels_row_col_one_based ... ok
+test viewmodel::tests::status_filter_labels_cover_every_filter ... ok
+test viewmodel::tests::status_focused_kind_is_honest_on_empty_selection ... ok
+test viewmodel::tests::status_kind_labels_match_verdicts ... ok
+test viewmodel::tests::status_preview_covers_number_shapes ... ok
+test viewmodel::tests::status_preview_cuts_long_lines_at_cap ... ok
+test viewmodel::tests::status_zone_roles_keep_verdict_above_sides ... ok
+test viewmodel::tests::status_zones_compose_left_mid_right ... ok
+test viewmodel::tests::table_changed_cells_show_old_new ... ok
+test viewmodel::tests::table_equal_rows_model_plain ... ok
+test viewmodel::tests::text30_wrap700_zero_clip ... ok
+test viewmodel::tests::text_panes_height_edge_guards ... ok
+test viewmodel::tests::text_prefs_default_matches_app_toggles ... ok
+test viewmodel::tests::text_prefs_effective_widths_cap_and_narrow ... ok
+test viewmodel::tests::text_prefs_view_hides_numbers_accents_and_keeps_counts ... ok
+test viewmodel::tests::textcenter_accent_spans_only_changed_rows_carry_them ... ok
+test viewmodel::tests::textcenter_edge_empty_vs_nonempty_is_all_inserted ... ok
+test viewmodel::tests::textcenter_edge_tail_insertion_pairs_numbers_honestly ... ok
+test viewmodel::tests::textcenter_fill_rows_fills_viewport_not_content ... ok
+test viewmodel::tests::textcenter_gutter_reuses_space_scale ... ok
+test viewmodel::tests::textcenter_hunk_head_marks_block_starts_only ... ok
+test viewmodel::tests::textcenter_pane_widths_split_free_budget ... ok
+test viewmodel::tests::textcenter_x_positions_pin_gutter_between_panes ... ok
+test viewmodel::tests::three_pane_hunks_coalesce_runs_and_cover_tails ... ok
+test viewmodel::tests::three_pane_hunks_split_by_change_shape ... ok
+test viewmodel::tests::three_pane_merge_lines_auto_and_decided ... ok
+test viewmodel::tests::three_pane_plan_decide_dedup_and_reject_unknown ... ok
+test viewmodel::tests::three_pane_summary_counts_progress_honestly ... ok
+test viewmodel::tests::unix_epoch_formats_as_1970_01_01_00_00 ... ok
+test viewmodel::tests::viewmodel39_row_rhythm_reuses_typo_and_space ... ok
+test viewmodel::tests::viewmodel_token_parity ... ok
+test viewmodel::tests::viewport_capacity_and_fill_rows ... ok
+test viewmodel::tests::virtual_row_window_clamps_for_show_rows ... ok
+test views::tests::accent_span_splits_the_pane_into_three_segments ... ok
+test views::tests::accents_at_line_start_and_truncation_are_handled ... ok
+test views::tests::action_bar_badge_and_cursor_stay_honest ... ok
+test views::tests::action_bar_geometry_reuses_toolbar_floor ... ok
+test views::tests::action_bar_hits_default_to_none_with_split_rows ... ok
+test views::tests::action_bar_hscroll_only_when_avail_below_floor ... ok
+test views::tests::action_nav_labels_carry_jump_glyphs ... ok
+test views::tests::advance_text_find_moves_only_on_click ... ok
+test views::tests::audio_and_threeway_rich_route_through_typorole ... ok
+test views::tests::audio_row_text_and_colors_follow_verdict ... ok
+test views::tests::changed_row_word_spans_only_changed_rows_carry_accents ... ok
+test views::tests::changed_row_word_spans_paint_only_changed_word_block ... ok
+test views::tests::chrome17_narrow720_no_overlap ... ok
+test views::tests::chrome27_toolbar16_band1200 ... ok
+test views::tests::chrome27_toolbar16_narrow700_wrap ... ok
+test views::tests::chrome_selectors_follow_dark_mode ... ok
+test views::tests::content_lead_gives_shared_left_baseline ... ok
+test views::tests::diff_nav_count_labels_position_over_total ... ok
+test views::tests::diff_nav_position_tracks_selected_among_diffs ... ok
+test views::tests::diff_nav_total_counts_only_diffs ... ok
+test views::tests::dual_grid_headers_match_column_defs ... ok
+test views::tests::dual_grid_roles_reuse_typo_aliases ... ok
+test views::tests::dual_grid_row_cells_carry_name_size_time ... ok
+test views::tests::dual_lines_carry_glyph_name_and_side_cells ... ok
+test views::tests::dual_lines_use_padded_side_cells ... ok
+test views::tests::dual_pending_text_names_stub_without_io ... ok
+test views::tests::dual_tree_panes_share_row_and_floor ... ok
+test views::tests::empty_line_is_only_padding ... ok
+test views::tests::exq_palette73_residual ... ok
+test views::tests::exq_views40_twin_panes_gutter_hunk_1200_and_narrow700 ... ok
+test views::tests::exquisite_geometry_tokens_reuse_scale ... ok
+test views::tests::filler_geometry_widths_and_hatch_step ... ok
+test views::tests::filler_side_paint_contract_transparent_base_with_hatch ... ok
+test views::tests::find_bar_docks_top_with_right_badge_air ... ok
+test views::tests::find_cursor_step_wraps_next_prev ... ok
+test viewmodel::tests::row_cap_stops_the_model_and_notes_truncation ... ok
+test views::tests::find_state_badge_matches_model_label ... ok
+test views::tests::findhl_current_other_formats_differ ... ok
+test views::tests::findhl_line_spans_case_modes ... ok
+test views::tests::findhl_line_spans_empty_needle_gives_no_hits ... ok
+test views::tests::findhl_line_spans_overlapping_ok ... ok
+test views::tests::findhl_pane_segments_mark_current_row ... ok
+test views::tests::findhl_wrap_chunks_keep_match ... ok
+test views::tests::folder_columns_match_the_cli_shape ... ok
+test views::tests::folder_filter_bar_tokens_stay_on_md_scale ... ok
+test views::tests::folder_filter_nodes_hide_name_mismatch ... ok
+test views::tests::folder_filter_nodes_kind_and_status_narrow ... ok
+test views::tests::folder_filter_nodes_legacy_and_new_combine ... ok
+test views::tests::folder_filter_typos_are_body_regular_and_caption_strong ... ok
+test views::tests::folder_filtered_summary_stays_honest ... ok
+test views::tests::folder_grid_columns_counts_glyph_plus_five ... ok
+test views::tests::folder_header_cells_match_defs ... ok
+test views::tests::folder_kind_options_lock_model_variants ... ok
+test views::tests::folder_merge_colors_flag_conflicts ... ok
+test views::tests::folder_paint_empty_hint_full_rows_routes_all_same ... ok
+test views::tests::folder_paint_empty_hint_stays_honest ... ok
+test views::tests::folder_path_rows_keep_paint_order_for_find ... ok
+test views::tests::folder_status_options_lock_model_variants ... ok
+test views::tests::folder_row_cells_keep_sides_fixed_width ... ok
+test views::tests::folder_sync_row_selected_probes_model_set ... ok
+test views::tests::folder_sync_selected_line_counts_only_selection ... ok
+test views::tests::geometry77_space_scale ... ok
+test views::tests::geometry_tokens_match_targets ... ok
+test views::tests::gutter20_tall_gutter_stable ... ok
+test views::tests::gutter_paint_width_reproduces_ruler_track ... ok
+test views::tests::gutter_row_text_parses_only_nonnegative_ints ... ok
+test views::tests::gutter_text_right_aligns_numbers_and_blanks_sides ... ok
+test views::tests::gutter23_live_track_contrast ... ok
+test views::tests::gutter_widths_stay_uniform ... ok
+test views::tests::half_fields_share_equal_width ... ok
+test views::tests::header_bar_tokens_align_with_paging_bars ... ok
+test views::tests::header_helpers_use_shared_tokens ... ok
+test views::tests::heatmap_image_builds_only_from_consistent_bytes ... ok
+test views::tests::hex_find_hunk_hits_search_displayed_hunk_lines ... ok
+test views::tests::hex_grid_cells_split_address_hex_ascii ... ok
+test views::tests::hex_grid_row_marks_covered_bytes_with_midline_gap ... ok
+test views::tests::hex_grid_rows_for_hunk_align_and_cap ... ok
+test views::tests::hex_hunk_line_carries_offset_and_counts ... ok
+test views::tests::hex_minimap_fraction_maps_to_row_and_jumps ... ok
+test views::tests::hex_minimap_strip_wider_than_gutter ... ok
+test views::tests::home_card_width_flexes_with_floor ... ok
+test views::tests::home_paint_adopts_home_contract ... ok
+test views::tests::home_paint_mapping_uses_single_source_sizes ... ok
+test views::tests::icons90_tab_pill_space_tokens ... ok
+test views::tests::icons90_toolbar_vector_chevrons ... ok
+test views::tests::intra_spans_visible_on_real_diff_words ... ok
+test views::tests::legend25_narrow720_no_overlap ... ok
+test views::tests::light_exq_light51_mode_aware ... ok
+test views::tests::merge_apply_chrome_covers_checkbox_and_button ... ok
+test views::tests::merge_apply_path_hint_names_output_path ... ok
+test views::tests::merge_apply_result_dry_run_shows_counts_no_writes ... ok
+test views::tests::merge_apply_result_needs_path_is_honest ... ok
+test views::tests::merge_apply_result_none_when_no_report ... ok
+test views::tests::merge_apply_result_wrote_shows_path_and_counts ... ok
+test views::tests::merge_apply_section_title_is_apply ... ok
+test views::tests::merge_apply_state_labels_cover_all_states ... ok
+test views::tests::merge_hunk_sides_out_of_range_is_empty ... ok
+test views::tests::merge_hunk_sides_splits_left_base_right ... ok
+test views::tests::merge_hunk_sides_without_base_marker_puts_left_before_sep ... ok
+test views::tests::merge_hunk_title_and_decision_labels ... ok
+test views::tests::merge_pane_count_is_three ... ok
+test views::tests::merge_pick_choice_labels_are_take_sides ... ok
+test views::tests::merge_pick_for_hunk_returns_last_staged ... ok
+test views::tests::merge_pick_id_scopes_to_live_lines ... ok
+test views::tests::merge_pick_intent_and_decision_with_pick_labels ... ok
+test views::tests::merge_pick_summary_reflects_staged_picks ... ok
+test views::tests::merge_three_pane_summary_line_counts_pending ... ok
+test views::tests::minimap_click_labels_stay_honest ... ok
+test views::tests::minimap_seg_floors_at_row_pad ... ok
+test views::tests::mirror22_live_gutter_path ... ok
+test views::tests::normalize_intra_spans_clamps_and_drops_empty ... ok
+test views::tests::normalize_intra_spans_sorts_and_merges ... ok
+test views::tests::pager_windows_drive_visible_rows ... ok
+test views::tests::paint13_center_1200_gap_plus_markers_plus_floor ... ok
+test views::tests::paint16_egui_mirror_gap_plus_markers_plus_floor ... ok
+test views::tests::paint1_fill_viewport_blank_alignment_and_pane_status ... ok
+test views::tests::paint_indent_matches_headless_drill_contract ... ok
+test views::tests::pane_segments_refinement_stays_deterministic ... ok
+test views::tests::pane_status_halves_share_avail_evenly ... ok
+test views::tests::path_meta_line_joins_nonempty_parts ... ok
+test views::tests::path_meta_role_is_caption_reuse ... ok
+test views::tests::path_row_chrome_matches_paint_widgets ... ok
+test views::tests::picture_center_offset_halves_leftover ... ok
+test views::tests::picture_columns_split_avail_with_floor ... ok
+test views::tests::picture_display_size_spans_8x_for_both_modes ... ok
+test views::tests::picture_fit_zoom_snaps_down_to_steps ... ok
+test views::tests::picture_sliders_clamp_and_label ... ok
+test views::tests::picture_status_and_display_size_follow_view ... ok
+test views::tests::picture_zoom_steps_live_in_paint_range ... ok
+test views::tests::plain_line_pads_to_the_pane_width ... ok
+test views::tests::prefs_line_numbers_off_blanks_gutter_and_narrows ... ok
+test views::tests::prefs_syntax_off_clears_accents_but_keeps_text ... ok
+test views::tests::prefs_word_wrap_caps_pane_at_80 ... ok
+test views::tests::premultiplied_rgba_is_saturating_per_channel ... ok
+test views::tests::row_height_adds_fixed_pad ... ok
+test views::tests::selective_find_format_current_light_block ... ok
+test views::tests::selective_row_is_plain_changed_and_equal ... ok
+test views::tests::selective_side_palette_filler_empty_side_plain ... ok
+test views::tests::selective_side_palette_light_wash_dark_ink_aa ... ok
+test views::tests::selective_span_format_accent_uses_changed_band ... ok
+test views::tests::session_action_defaults_to_none_and_carries_ids ... ok
+test views::tests::session_strip_empty_gate_and_hint_are_honest ... ok
+test views::tests::session_strip_overflows_at_eight_tabs ... ok
+test views::tests::session_tab_geometry_reuses_tokens ... ok
+test views::tests::session_tab_label_uses_title_and_falls_back ... ok
+test views::tests::session_toolbar_uses_compact_floor ... ok
+test views::tests::side_job_accents_paint_inverted_block_over_strip ... ok
+test views::tests::side_job_intra_spans_keep_mono_size_and_underline ... ok
+test views::tests::side_job_lays_out_gutter_text_and_padding_in_order ... ok
+test views::tests::span_colors_inverts_accent_over_row_strip ... ok
+test views::tests::span_text_format_keeps_mono_size_with_accent_underline ... ok
+test views::tests::split_drag_delta_moves_fraction ... ok
+test views::tests::split_field_widths_follow_fraction ... ok
+test views::tests::split_fraction_clamps_to_drag_range ... ok
+test views::tests::split_handle_cursor_is_resize_column ... ok
+test views::tests::split_handle_drag_uses_delta_and_clamp ... ok
+test views::tests::split_handle_hit_range_centers_on_fraction ... ok
+test views::tests::split_handle_label_reports_percent_and_bounds ... ok
+test views::tests::split_handle_strip_matches_model_hit_width ... ok
+test views::tests::split_hit_centers_one_px_visual ... ok
+test views::tests::split_picture_widths_sum_to_row ... ok
+test views::tests::stage_merge_pick_all_covers_every_hunk ... ok
+test views::tests::stage_merge_pick_upserts_last_wins ... ok
+test views::tests::stage_three_way_decision_upserts_last_wins ... ok
+test views::tests::status12_tall_1200_strips_plus_legend ... ok
+test views::tests::status_roles_carry_verdict_hierarchy ... ok
+test views::tests::sync_badge_column_width_reuses_model_token ... ok
+test views::tests::sync_badge_for_paint_dirs_only_mirror_right_prunes ... ok
+test views::tests::sync_badge_for_paint_matches_model_across_glyphs_and_modes ... ok
+test views::tests::sync_badge_only_delete_is_strong_at_caption_size ... ok
+test views::tests::sync_grid_adds_one_badge_column_with_aligned_header ... ok
+test views::tests::sync_mode_choices_offer_update_both_first_then_mirror ... ok
+test views::tests::sync_rich_routes_through_mono_role ... ok
+test views::tests::sync_row_text_and_colors_map_actions ... ok
+test views::tests::table_cells_split_and_border_with_header ... ok
+test views::tests::table_grid_columns_counts_glyph_plus_cells ... ok
+test views::tests::table_model_text_rows_carry_painted_text_for_find ... ok
+test views::tests::table_row_cells_pad_to_widths_for_grid ... ok
+test views::tests::table_wirefind_matches_painted_text_and_badge ... ok
+test views::tests::tablep234_header_grid_tokens_single_source ... ok
+test views::tests::tablep34_data_index_map_skips_header_rows ... ok
+test views::tests::tabs_exq_views57_live_vector_wiring ... ok
+test views::tests::text10_edge_tail_insertion_balances_orphan_blanks ... ok
+test views::tests::text10_pane_hscroll_gate_guards_viewport ... ok
+test views::tests::text10_panes_split_even_with_section_gap ... ok
+test views::tests::text10_row_height_comes_from_typo_mono ... ok
+test views::tests::text10_tabs_plus_status_960 ... ok
+test views::tests::text11_center_960_gutter_plus_markers ... ok
+test views::tests::text2_narrow720_inline_weight_marker_orphan_balance ... ok
+test views::tests::text3_wide_960_center_wrap_trailing ... ok
+test views::tests::text4_narrow720b_spans_plus_numbers ... ok
+test views::tests::text6_inline_960_spans_plus_filler ... ok
+test views::tests::text7_rows_plus_rhythm_960 ... ok
+test views::tests::text8_wide_960_rows_plus_divider ... ok
+test views::tests::text9_rows_uniform_plus_highlight ... ok
+test views::tests::text9_spans_plus_overunder_960 ... ok
+test views::tests::text_center_gutter_band_fills_on_selection_only ... ok
+test views::tests::text_center_gutter_reuses_tokens_and_gates_copy ... ok
+test views::tests::text_center_hunk_head_groups_contiguous_diffs ... ok
+test views::tests::text_compare_copy_all_action_parity ... ok
+test views::tests::text_cursor_strip_skips_without_preview ... ok
+test views::tests::text_edge_empty_vs_nonempty_stays_honest_and_wraps_long_line ... ok
+test views::tests::text_gutter_click_selects_nearest_diff ... ok
+test views::tests::text_layout_breakpoint_reuses_viewport_min_and_guards ... ok
+test views::tests::text_merge_gutter_geometry_matches_hunks ... ok
+test views::tests::text_merge_marker_detection_covers_all_merge3_markers ... ok
+test views::tests::text_minimap_ruler_geometry_and_row_mapping ... ok
+test views::tests::text_row_height_intent_is_measured_mono ... ok
+test views::tests::text_rows_reuse_mono_hierarchy_line_height_and_spacing ... ok
+test views::tests::text_ruler_adopts_gutter_contract ... ok
+test views::tests::text_status_wiring_zones_use_focused_verdict_and_nav_badge ... ok
+test views::tests::textview9_pane_detail_bottom_density ... ok
+test views::tests::third_fields_share_equal_width ... ok
+test views::tests::three_pane_widths_cover_full_row ... ok
+test views::tests::three_pane_widths_floor_narrow_panes ... ok
+test views::tests::three_pane_widths_split_equal_thirds ... ok
+test views::tests::three_way_decision_for_row_returns_last_staged ... ok
+test views::tests::three_way_header_line_uses_summary ... ok
+test views::tests::three_way_presence_marks_cover_sides ... ok
+test views::tests::three_way_row_decision_text_covers_states ... ok
+test views::tests::three_way_row_line_marks_dirs ... ok
+test views::tests::tolerance_text_parses_like_the_engine ... ok
+test views::tests::toolbar22_live_glyph_slots ... ok
+test views::tests::toolbar37_fits_1200 ... ok
+test views::tests::toolbar37_narrow700_overflow ... ok
+test views::tests::toolbar_action_defaults_to_none_with_swap_and_reload ... ok
+test screenshot::tests::text_fixture_renders_valid_png ... ok
+test views::tests::toolbar_exq_views53_vector_live_paint_wiring ... ok
+test views::tests::toolbar_icon_parity_reuses_chrome_and_glyphs ... ok
+test views::tests::toolbar_narrow_720_buttons_tabs_arrows ... ok
+test views::tests::tree_indent_scales_with_depth ... ok
+test views::tests::typo17_tall1200_numbers_aligned ... ok
+test views::tests::viewfill8_narrow_720_dual_panes_plus_filebar ... ok
+test views::tests::viewfill9_tall_1200_dual_panes_plus_gutter_column ... ok
+test views::tests::wrap_chunk_spans_shift_with_indent_and_clip ... ok
+test views::tests::wrap_continuation_gutter_keeps_column_rhythm ... ok
+test views::tests::wrap_counts_pair_total_stay_honest ... ok
+test views::tests::wrap_jobs_first_numbered_continuations_plain_mono ... ok
+test views::tests::wrap_leading_indent_takes_only_line_start_blanks ... ok
+test views::tests::wrap_reserved_height_stacks_single_rhythm ... ok
+test views::tests::wrap_row_mapping_roundtrips_and_rejects_oob ... ok
+test views::tests::wrap_visual_lines_prefers_word_boundary_with_indent_continuity ... ok
+test views::tests::wrap_visual_lines_short_single_and_zero_width_guard ... ok
+test views::tests::wrap_width_on_caps_at_80_off_passes_through ... ok
+test views::tests::wrapnav_continuation_find_format_stays_mono_size ... ok
+test views::tests::wrapnav_find_sub_rows_tracks_head_and_continuation ... ok
+test views::tests::wrapnav_jump_visual_lands_on_matched_continuation ... ok
+test views::tests::toolbar_exq_toolbar60_nav_chevron_marks ... ok
+test views::tests::wrapnav_row_find_sub_picks_earliest_pane_hit ... ok
+test views::tests::wrapnav_scroll_sub_clamps_to_pair_height ... ok
+test views::tests::wrapnav_sub_indent_matches_chunk_indent ... ok
+test views::tests::wrapnav_viewport_window_clamps_without_panic ... ok
+test views::tests::wrapnav_visual_offset_and_vis_pos_map_jumps ... ok
+test views::tests::zero_length_spans_accent_nothing ... ok
+test views_hex::tests::complete_mode_detects_insertion_shift ... ok
+test views_hex::tests::empty_hunks_clear_selection ... ok
+test views_hex::tests::exq_hex64_geometry_tokens_value_identical ... ok
+test views_hex::tests::from_comparison_chunks_overlong_engine_hunks ... ok
+test views_hex::tests::from_comparison_mirrors_engine_result ... ok
+test views_hex::tests::hex_cursor_moves_over_grid ... ok
+test views_hex::tests::hex_diff_nibble_cells_report_only_changed_bytes ... ok
+test views_hex::tests::hex_exq_hex2_round2_origin_ruler_midline ... ok
+test views_hex::tests::hex_exq_hex31_live_hex_geometry ... ok
+test views_hex::tests::hex_exq_hex3_round3_ruler_ticks_and_grid_wide_960 ... ok
+test views_hex::tests::hex_exq_hex42_live_hex_columns ... ok
+test views_hex::tests::hex_exq_hex4_grid_plus_offset_wide_960 ... ok
+test views_hex::tests::hex_exq_hex5_grid_plus_ascii_wide_960 ... ok
+test views_hex::tests::hex_exq_hex6_nibble_plus_ascii_wide_960 ... ok
+test views_hex::tests::hex_exq_hex7_offset_plus_gap_wide_960 ... ok
+test views_hex::tests::hex_exq_hex8_ruler_plus_tall_1200 ... ok
+test views_hex::tests::hex_exq_hextable10_edge_narrow_gutter_cells ... ok
+test views_hex::tests::hex_exq_hextable2_edge_empty_vs_nonempty ... ok
+test views_hex::tests::hex_exq_hex9_narrow_plus_ruler ... ok
+test views_hex::tests::hex_exq_hextable2_edge_tail_truncate ... ok
+test views_hex::tests::hex_exq_hextable3_edge_empty_vs_nonempty_64bit ... ok
+test views_hex::tests::hex_exq_hextable2_pane_heights_plus_cell_gaps ... ok
+test views_hex::tests::hex_exq_hextable_pane_heights_share_text_budget ... ok
+test views_hex::tests::hex_exq_hexview10_edge_narrow_stacked_tail ... ok
+test views_hex::tests::hex_exq_hexview10_ruler_headers_lock_shapes ... ok
+test views_hex::tests::hex_exq_hextable_gutter_markers_use_ruler_floor ... ok
+test views_hex::tests::hex_find_bar_geometry_reuses_table_precedent ... ok
+test views_hex::tests::hex_find_count_and_label_formats_n_of_m ... ok
+test views_hex::tests::hex_find_label_role_steps_above_hint ... ok
+test views_hex::tests::hex_find_match_offsets_collects_all_hits_in_order ... ok
+test views_hex::tests::hex_find_needle_text_parses_hex_pairs_or_raw_bytes ... ok
+test views_hex::tests::hex_find_positions_report_row_col_with_wrap ... ok
+test views_hex::tests::hex_find_wraps_forward_and_backward ... ok
+test views_hex::tests::hex_goto_clamps_and_edits_bytes_honestly ... ok
+test views_hex::tests::hex_goto_parses_64bit_decimal_and_hex ... ok
+test views_hex::tests::hex_grid_cells_with_bytes_fallback_and_shape_parity ... ok
+test views_hex::tests::hex_grid_cells_with_bytes_show_real_digits ... ok
+test views_hex::tests::hex_grid_ruler_and_row_math ... ok
+test views_hex::tests::hex_gutter_geometry_marks_diff_rows_and_merges ... ok
+test views_hex::tests::hex_gutter_jump_target_snaps_to_covering_hunk ... ok
+test views_hex::tests::hex_gutter_jump_targets_covering_hunks ... ok
+test views_hex::tests::hex_gutter_row_at_y_delegates_to_text_mapping ... ok
+test views_hex::tests::hex_gutter_row_labels_use_offset_ruler ... ok
+test views_hex::tests::hex_gutter_width_and_typo_follow_text_precedent ... ok
+test views_hex::tests::hex_merge_resolves_chosen_side_bytes ... ok
+test views_hex::tests::hex_minimap_alloc_tokens_lock_paint ... ok
+test views_hex::tests::hex_minimap_band_rect_anchors_to_track ... ok
+test views_hex::tests::hex_minimap_band_rects_follow_offset_order ... ok
+test views_hex::tests::hex_minimap_bands_are_offset_proportional ... ok
+test views_hex::tests::hex_minimap_row_at_pos_matches_locked_mapping ... ok
+test views_hex::tests::hex_minimap_strip_width_is_double_gutter_bar ... ok
+test views_hex::tests::hex_minimap_y_for_row_inverts_locked_row_mapping ... ok
+test views_hex::tests::hex_nibble_accent_rects_split_halves_only_for_diffs ... ok
+test views_hex::tests::hex_nibble_cell_rect_splits_row_into_sixteen ... ok
+test views_hex::tests::hex_nibble_text_role_reuses_mono_token ... ok
+test views_hex::tests::hex_nibbles_differ_flags_each_half_byte ... ok
+test views_hex::tests::hex_pager_pages_and_brings_rows_into_view ... ok
+test views_hex::tests::hex_row_diff_flag_follows_hunks ... ok
+test views_hex::tests::hex_row_nibble_accent_rects_collect_in_col_order ... ok
+test views_hex::tests::hex_wave7_canvas_layout_modes_and_chrome_budget ... ok
+test views_hex::tests::hex_wave7_goto_anchors_to_grid_and_clamps_u64 ... ok
+test views_hex::tests::hex_wave7_edge_fixture_tail_insertion_parity ... ok
+test views_hex::tests::hex_wave7_grid_rows_keep_fixed_char_budget ... ok
+test views_hex::tests::hex_wave7_gutter_fast_matches_row_wise_bands ... ok
+test views_hex::tests::hex_wave7_sync_panes_share_one_row_window ... ok
+test views_hex::tests::hex_wave7_sync_typo_reuses_mono_hierarchy ... ok
+test views_hex::tests::hexdense8_narrow_stacked_gutter_markers_stay_visible ... ok
+test views_hex::tests::hunk_budget_clips_long_runs_honestly ... ok
+test views_hex::tests::hunk_selection_wraps_like_a_find_loop ... ok
+test views_hex::tests::identical_slices_report_no_differences ... ok
+test views_hex::tests::mode_labels_round_trip ... ok
+test views_hex::tests::modes_map_to_engine_alignments ... ok
+test views_hex::tests::navigate_to_offset_picks_first_hunk_at_or_after ... ok
+test views_hex::tests::over_cap_skips_compare_and_says_so ... ok
+test views_hex::tests::single_byte_diff_reports_offset_and_hunk ... ok
+test views_hex::tests::stale_selection_reads_as_no_selection ... ok
+test views_hex::tests::zero_hunk_budget_marks_any_difference_truncated ... ok
+test views_table::tests::case_and_trim_flags_fold_text ... ok
+test views_table::tests::cell_cursor_nav_stays_inside_grid ... ok
+test views_table::tests::column_widths_span_header_and_cells_with_cap ... ok
+test views_table::tests::empty_keys_fall_back_to_positional_with_note ... ok
+test views_table::tests::empty_tables_suggest_no_key ... ok
+test views_table::tests::exq_table63_geometry_tokens_value_identical ... ok
+test views_table::tests::invalid_tolerances_sanitize_to_exact_text ... ok
+test views_table::tests::key_options_mirror_compare_options ... ok
+test views_table::tests::key_selector_toggles_columns_sorted ... ok
+test views_table::tests::key_suggestion_finds_unique_id_column ... ok
+test views_table::tests::keyed_diff_counts_match_modify_and_orphans ... ok
+test views_table::tests::nan_cells_never_match_numerically ... ok
+test views_table::tests::options_mapping_carries_all_flags ... ok
+test views_table::tests::pad_table_row_pads_and_marks_missing ... ok
+test views_table::tests::padded_cells_keep_columns_aligned ... ok
+test views_table::tests::table_column_letters_follow_spreadsheet_order ... ok
+test views_table::tests::table_exq_gui10_origin_gaps_rowh_weight_narrow_720 ... ok
+test views_table::tests::table_exq_hextable2_edge_empty_vs_nonempty ... ok
+test views_table::tests::table_exq_hextable10_column_grid_and_cell_padding ... ok
+test views_table::tests::table_exq_hextable2_edge_tail_truncate ... ok
+test views_table::tests::table_exq_hextable2_pane_heights_plus_cell_gaps ... ok
+test views_table::tests::table_exq_hextable3_edge_sort_before_align ... ok
+test views_table::tests::table_exq_hextable_cell_outer_text_widths_round_trip ... ok
+test views_table::tests::table_exq_hextable_cell_padding_reuses_space_scale ... ok
+test views_table::tests::table_exq_hextable_cell_text_rect_insets_by_pad ... ok
+test views_table::tests::table_exq_table2_round2_sym_rows_char_widths_header_underline_wide_960 ... ok
+test views_table::tests::table_exq_table10_round1_tall_plus_rows_1200 ... ok
+test views_table::tests::table_exq_table3_round1_even_rows_char_widths_sort_narrow_720 ... ok
+test views_table::tests::table_exq_table30_round1_wide_cols_1200 ... ok
+test views_table::tests::table_exq_table43_live_table_grid ... ok
+test views_table::tests::table_exq_table4_round1_cols_plus_rows_wide_960 ... ok
+test views_table::tests::table_exq_table5_round1_cols_plus_separators_wide_960 ... ok
+test views_table::tests::table_exq_table6_round2_header_plus_rhythm_wide_960 ... ok
+test views_table::tests::table_exq_table7_round1_sort_plus_align_wide_960 ... ok
+test views_table::tests::table_exq_table8_round1_keys_plus_widths_wide_960 ... ok
+test views_table::tests::table_find_badge_labels_position_over_total ... ok
+test views_table::tests::table_exq_table9_round1_keys_narrow_720 ... ok
+test views_table::tests::table_find_match_rows_collects_all_hits ... ok
+test views_table::tests::table_find_scans_cells_row_major_with_wrap ... ok
+test views_table::tests::table_header_role_reuses_mono_grid_content ... ok
+test views_table::tests::table_key_badge_labels_keyed_vs_positional ... ok
+test views_table::tests::table_key_bar_state_helpers_are_honest ... ok
+test views_table::tests::table_key_marker_distinguishes_selected ... ok
+test views_table::tests::table_merge_picks_chosen_side_with_orphan_fallback ... ok
+test views_table::tests::table_page_label_mirrors_pager_state ... ok
+test views_table::tests::table_pager_pages_and_brings_rows_into_view ... ok
+test views_table::tests::table_row_gutter_labels_are_one_based_and_grids_share_columns ... ok
+test views_table::tests::table_section_label_role_steps_above_hint ... ok
+test screenshot::tests::screenshot_mode_flag_defaults_dark_and_accepts_light ... ok
+test views_table::tests::table_source_kind_and_sheet_helpers_stay_honest ... ok
+test views_table::tests::table_toolbar_defaults_quiet_and_reuses_find_geometry ... ok
+test views_table::tests::tablecell_find_ctx_resolves_current_cell_in_key_grid ... ok
+test views_table::tests::tablecell_geo_cell_rect_maps_col_row_with_gaps ... ok
+test views_table::tests::tablecell_geo_find_underline_clamps_to_cell ... ok
+test views_table::tests::tablecell_geo_key_box_covers_key_cols_only ... ok
+test views_table::tests::tablecell_grid_columns_count_glyph_plus_data ... ok
+test views_table::tests::tablecell_paint_kind_precedence_hit_wins_over_key ... ok
+test views_table::tests::tabledens8_bar_rhythm_stays_even_and_tight ... ok
+test views_table::tests::tablefind_cell_job_marks_current_vs_others ... ok
+test views_table::tests::tablefind_cell_spans_case_modes ... ok
+test views_table::tests::tablefind_cell_spans_empty_needle_gives_no_hits ... ok
+test views_table::tests::tablefind_cell_spans_overlapping_ok ... ok
+test views_table::tests::tablefind_current_cell_tracks_cursor_with_wrap ... ok
+test views_table::tests::tablefind_current_other_formats_differ ... ok
+test views_table::tests::tablefind_grid_spans_map_rows_and_cols ... ok
+test views_table::tests::tablefind_padded_spans_stay_aligned_with_key_cols ... ok
+test views_table::tests::tolerance_bridges_small_numeric_gaps ... ok
+test screenshot::tests::dispatcher_routes_all_tabs ... ok
+test screenshot::tests::three_way_scene_proves_live_tree ... ok
+test screenshot::tests::dispatcher_routes_sync_scene ... ok
+test screenshot::tests::dispatcher_routes_threeway_scene ... ok
+test views::tests::session_strip_scenes_prove_png ... ok
+
+test result: ok. 1163 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.94s
+
+     Running unittests src/main.rs (/tmp/target-final100/debug/deps/autocompare_gui-3e5416f2cb487e53)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/real_egui_shot.rs (/tmp/target-final100/debug/deps/real_egui_shot-848f2e8d18b1db5b)
+
+running 2 tests
+test real_egui_text_compare_shot_light ... ok
+test real_egui_text_compare_shot ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_reports-0523d2ac0deb7c76)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/snapshot_tests.rs (/tmp/target-final100/debug/deps/snapshot_tests-a8553b524f4b6824)
+
+running 31 tests
+test test_edge_empty_hunks_and_pure_unchanged ... ok
+test test_edge_context_filter_boundaries ... ok
+test test_context_patch_snapshot ... ok
+test test_edge_crlf_and_whitespace_preservation ... ok
+test test_edge_multiformat_bundles_parity ... ok
+test test_edge_hunk_boundaries_and_special_paths ... ok
+test test_builder_snapshots ... ok
+test test_edge_patch_builder_timestamps ... ok
+test test_edge_fixture_snapshot_match ... ok
+test test_edge_rtl_bidi_and_zero_width_chars ... ok
+test test_edge_pure_insertions_and_pure_deletions_sbs ... ok
+test test_edge_unicode_cjk_emoji_rtl_rendering ... ok
+test test_generate_sample_artifacts_for_evidence ... ok
+test test_empty_input_never_panics ... ok
+test test_hostile_control_chars_and_null_bytes ... ok
+test test_hostile_input_escaping_never_panics ... ok
+test test_html_parent_navigation_breadcrumb ... ok
+test test_html_mono_snapshot ... ok
+test test_html_rich_child_badges_and_stats ... ok
+test test_hunk_methods_and_diffstats_auto ... ok
+test test_linked_report_bundle ... ok
+test test_html_color_snapshot ... ok
+test test_mono_print_styling_rules ... ok
+test test_html_side_by_side_layout ... ok
+test test_patch_bundle_and_combined_rendering ... ok
+test test_plain_text_with_line_numbers ... ok
+test test_plain_text_snapshot ... ok
+test test_multiformat_breadcrumbs_trail ... ok
+test test_unified_patch_snapshot ... ok
+test test_report_filter_diffs_only ... ok
+test test_xml_snapshot ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_sessions-ffe1b74a80d3d796)
+
+running 34 tests
+test session::tests::test_folder_options_corrupt_values_fall_back ... ok
+test session::tests::test_future_version_unit ... ok
+test session::tests::test_folder_sync_options_roundtrip ... ok
+test session::tests::test_corrupt_unit ... ok
+test session::tests::test_merge_tab_builder_and_options ... ok
+test session::tests::test_session_document_roundtrip_unit ... ok
+test session::tests::test_session_document_tab_management ... ok
+test session::tests::test_session_tab_builder ... ok
+test session::tests::test_text_and_table_compare_options_depth ... ok
+test session::tests::test_v0_dangling_active_index_clamps_to_zero ... ok
+test session::tests::test_v0_migration_unit ... ok
+test session::tests::test_v1_dangling_active_index_clamps_to_zero ... ok
+test settings::tests::test_custom_grammar_preset ... ok
+test session::tests::test_locked_save_guard ... ok
+test settings::tests::test_grammar_preset_comment_helpers ... ok
+test settings::tests::test_keymap_preset_all_canonical_strings ... ok
+test settings::tests::test_grammar_preset_extension_lookup ... ok
+test settings::tests::test_keymap_preset_parsing_and_resolution ... ok
+test session::tests::test_atomic_save_leaves_no_tmp_sibling ... ok
+test settings::tests::test_settings_future_version_unit ... ok
+test settings::tests::test_edge_keymap_settings_fixture_migration ... ok
+test settings::tests::test_settings_schema_migration_keymap_aliases ... ok
+test settings::tests::test_settings_v0_migration_unit ... ok
+test settings::tests::test_settings_theme_mode_helpers ... ok
+test workspace::tests::test_workspace_builder_and_roundtrip_unit ... ok
+test workspace::tests::test_workspace_config_alias_and_helpers_unit ... ok
+test workspace::tests::test_workspace_future_version_unit ... ok
+test workspace::tests::test_locked_workspace_save_guard ... ok
+test workspace::tests::test_workspace_path_manipulation ... ok
+test settings::tests::test_settings_builder_and_roundtrip_unit ... ok
+test workspace::tests::test_workspace_v0_bare_array_unit ... ok
+test workspace::tests::test_workspace_v0_legacy_aliases_unit ... ok
+test workspace::tests::test_workspace_v0_migration_unit ... ok
+test settings::tests::test_settings_locked_guard ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/corrupt_input.rs (/tmp/target-final100/debug/deps/corrupt_input-293a4cce476e5bd1)
+
+running 11 tests
+test test_from_json_corrupt_3way_merge ... ok
+test test_from_json_corrupt_session ... ok
+test test_from_json_corrupt_workspace ... ok
+test test_settings_corrupt_locked_returns_err ... ok
+test test_from_json_corrupt_settings ... ok
+test test_from_json_corrupt_session_config ... ok
+test test_error_display_and_source ... ok
+test test_syntax_corrupt_input_returns_err ... ok
+test test_workspace_corrupt_locked_returns_err ... ok
+test test_type_specific_corrupt_input_returns_err ... ok
+test test_fuzzed_hostile_inputs_never_panic ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/migration.rs (/tmp/target-final100/debug/deps/migration-9aab15ff3a2fe49e)
+
+running 20 tests
+test test_migrate_session_future_version_error ... ok
+test test_migrate_session_v0_bare_array ... ok
+test test_migrate_session_config_helper ... ok
+test test_migrate_session_v0_4way_path_array ... ok
+test test_migrate_session_v0_3way_merge_with_aliases ... ok
+test test_migrate_session_v0_array_of_string_paths ... ok
+test test_migrate_session_current_v1 ... ok
+test test_migrate_session_v0_embedded_options ... ok
+test test_migrate_session_v0_explicit_zero_and_legacy_fields ... ok
+test test_migrate_session_v0_path_pairs_array ... ok
+test test_migrate_session_v0_single_tab_root ... ok
+test test_migrate_session_v0_unversioned ... ok
+test test_migrate_settings_v0_aliases_and_locked ... ok
+test test_migrate_settings_v0_and_aliases_and_future ... ok
+test test_migrate_settings_v0_custom_grammar_presets ... ok
+test test_migrate_workspace_bare_array_of_paths_and_objects ... ok
+test test_migrate_workspace_legacy_aliases_and_config ... ok
+test test_migrate_workspace_v0_and_future ... ok
+test test_migrate_workspace_v0_geometry_alias ... ok
+test test_migrate_workspace_v0_null_and_empty_fields ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/round_trip.rs (/tmp/target-final100/debug/deps/round_trip-89a1e91a72a17792)
+
+running 12 tests
+test test_session_config_round_trip ... ok
+test test_locked_workspace_round_trip_and_guard ... ok
+test test_edge_fixture_merge_3way_round_trip ... ok
+test test_app_settings_custom_grammar_presets_round_trip ... ok
+test test_session_tab_3way_merge_round_trip ... ok
+test test_locked_session_round_trip_and_guard ... ok
+test test_session_tab_options_depth_round_trip ... ok
+test test_session_document_round_trip ... ok
+test test_locked_settings_round_trip_and_guard ... ok
+test test_workspace_config_round_trip ... ok
+test test_workspace_document_round_trip ... ok
+test test_app_settings_round_trip ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/target-final100/debug/deps/autocompare_vfs-92d355054e369712)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/local_test.rs (/tmp/target-final100/debug/deps/local_test-604ade15a8546c30)
+
+running 4 tests
+test test_local_fs_symlink_cycle_refusal ... ok
+test test_local_fs_read_only_mode ... ok
+test test_local_fs_traversal_escaping_refusal ... ok
+test test_local_fs_basic_operations ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/path_test.rs (/tmp/target-final100/debug/deps/path_test-b30be4994c9c6b48)
+
+running 5 tests
+test hostile_null_byte_is_rejected ... ok
+test hostile_parent_traversal_is_rejected ... ok
+test test_path_extensions_and_ancestors ... ok
+test hostile_depth_and_prefix_helpers_stay_total ... ok
+test hostile_join_never_escapes ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/snapshot_test.rs (/tmp/target-final100/debug/deps/snapshot_test-9597ce44868f8d37)
+
+running 10 tests
+test test_remote_vfs_disconnect_reconnect_and_ping ... ok
+test test_remote_vfs_fake_sftp_webdav ... ok
+test test_snapshot_document_diff_summary ... ok
+test test_snapshot_document_entry_helpers ... ok
+test test_create_snapshot_and_browse_snapshot_fs ... ok
+test test_snapshot_document_round_trip ... ok
+test test_create_snapshot_with_options_shallow ... ok
+test test_snapshot_fs_file_io_and_helpers ... ok
+test test_create_deep_and_shallow_snapshot_functions ... ok
+test test_vfs_walk_options_and_cycle_refusal ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/tar_test.rs (/tmp/target-final100/debug/deps/tar_test-bba59bd2b4f08bbf)
+
+running 8 tests
+test test_tar_corrupted_rejection ... ok
+test test_tar_slip_protection ... ok
+test test_tar_plain_reading ... ok
+test test_tar_gz_reading ... ok
+test test_tar_convenience_and_helpers ... ok
+test test_archive_fs_tar_polymorphic ... ok
+test test_tar_vfs_pack_and_roundtrip ... ok
+test test_tar_extract_to ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/vfs3_edges.rs (/tmp/target-final100/debug/deps/vfs3_edges-117696579db7b66d)
+
+running 14 tests
+test bcss_diff_type_change_counts_modified ... ok
+test local_refuse_cycles_false_tolerates_loop ... ok
+test local_self_loop_cycle_is_refused ... ok
+test local_dangling_symlink_is_tolerated ... ok
+test tar_hostile_absolute_path_is_contained ... ok
+test bcss_corrupted_inputs_are_rejected ... ok
+test local_in_root_symlink_read_succeeds ... ok
+test bcss_fixture_round_trip ... ok
+test tar_symlink_entry_is_not_a_file ... ok
+test zip_empty_archive_is_empty ... ok
+test zip_hostile_absolute_path_is_contained ... ok
+test tar_truncated_gzip_is_rejected ... ok
+test zip_truncated_tail_is_rejected ... ok
+test local_delete_symlink_keeps_outside_target ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/zip_test.rs (/tmp/target-final100/debug/deps/zip_test-3d7279501ee97007)
+
+running 7 tests
+test test_zip_corrupted_archive ... ok
+test test_zip_slip_protection ... ok
+test test_archive_fs_zip_polymorphic ... ok
+test test_zip_fs_traversal_and_read ... ok
+test test_zip_archive_convenience_and_helpers ... ok
+test test_zip_creation_and_roundtrip ... ok
+test test_zip_extract_to ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (/tmp/target-final100/debug/deps/xtask-df3c3b1d6302264a)
+
+running 6 tests
+test tests::secrets_shape_fp_bare_names_ignored ... ok
+test tests::secrets_shape_boundary_lengths ... ok
+test tests::test_crate_layer_mapping ... ok
+test tests::secrets_shape_real_tokens_detected ... ok
+test tests::test_extract_package_name ... ok
+test tests::test_extract_dependencies ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_compare
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_diff
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_evidence
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_gui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_reports
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_sessions
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_vfs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit=0

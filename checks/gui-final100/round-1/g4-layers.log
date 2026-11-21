@@ -1,0 +1,5 @@
+   Compiling xtask v0.1.0 (/private/tmp/wt-final100/xtask)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.82s
+     Running `/tmp/target-final100/debug/xtask layers`
+layers: ok
+exit=0
