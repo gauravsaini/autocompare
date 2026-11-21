@@ -1074,3 +1074,11 @@
 ### Verification (2026-11-21) — docs(checks): exq-verify87 verification report
 - Full workspace green 50 suites 1786 passed 0 failed, harness PASS 10946B distinct-256, gui 1162 passed 0 failed.
 - Proof: OWNS-only 4 files checks/gui-exq-verify87/round-1/, crates zero diff, fmt 4 diffs pre-existing crates/sessions report-only, banned 0, NO PUSH from leaf, cherry-picked 579023c.
+
+### Feature (2026-11-21) — feat(gui): exq-realshot88 live capture
+- `crates/gui/tests/real_egui_shot.rs` me live egui_kittest dark/light proof hardening, 2 passed dark 53410B light 54169B, harness PASS 10946B.
+- Proof: leaf fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 40a688f.
+
+### Feature (2026-11-21) — feat(gui): exq-typo89 typography
+- `crates/gui/src/theme.rs` me typography + light Visuals polish, 53 lib passed, harness PASS 10946B.
+- Proof: leaf fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 5b35df7.
