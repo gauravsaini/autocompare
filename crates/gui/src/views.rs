@@ -826,6 +826,76 @@ pub fn chrome17_narrow720_no_overlap_gate() -> bool {
         && text_meta_line_height_px() < HEADER_H
 }
 
+/// Toolbar band height (px): 40 = `SPACE_XL`(24) + `SPACE_LG`(16) — BC-style
+/// roomy single toolbar row (24 button + 16 air). Ponytail reuse, koi naya
+/// scale nahi; pure token.
+pub const TOOLBAR_H: f32 = crate::theme::SPACE_XL + crate::theme::SPACE_LG;
+
+/// Toolbar band height accessor (paint row isi se banta hai).
+/// Pure; unit-tested.
+pub fn toolbar_band_height() -> f32 {
+    TOOLBAR_H
+}
+
+/// Button inter spacing (px): `SPACE_SM`(8) reuse — Swap/Reload aur
+/// Prev/Next ke beech ek beat. [`toolbar_cluster_gap`] wahi token rakhta
+/// hai; ye alias overflow math ka single source hai. Pure; unit-tested.
+pub fn toolbar_button_spacing() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Icon+label alignment gate: 16px glyph slot 24px button me vertically
+/// centered — top lead `(24-16)/2 = 4` == [`toolbar_glyph_lead`]
+/// (`SPACE_XS`). Barabar na ho to glyph label se tairta lagega.
+/// Pure; unit-tested.
+pub fn toolbar_icon_label_aligned() -> bool {
+    let (_, tool_h) = session_toolbar_button_size();
+    ((tool_h - TOOLBAR_GLYPH_H) / 2.0 - toolbar_glyph_lead()).abs() < 0.01
+}
+
+/// Overflow affordance glyph: `>>` — tang row par chhupe actions ka
+/// BC-style sanket, koi naya asset nahi. Pure; unit-tested.
+pub const TOOLBAR_OVERFLOW_GLYPH: &str = ">>";
+
+/// Overflow label accessor (paint `>>` chip isi se banta hai).
+/// Pure; unit-tested.
+pub fn toolbar_overflow_label() -> &'static str {
+    TOOLBAR_OVERFLOW_GLYPH
+}
+
+/// Overflow gate: `avail` `needed` se tang par `>>` dikhao, warna nahi.
+/// Non-finite ya non-positive input par false (paint kabhi NaN branch na le —
+/// [`text_layout_for_width`] precedent). Pure; unit-tested.
+pub fn toolbar_needs_overflow(avail: f32, needed: f32) -> bool {
+    if !avail.is_finite() || !needed.is_finite() || avail <= 0.0 || needed <= 0.0 {
+        return false;
+    }
+    avail < needed
+}
+
+/// 1200px no-h-scroll gate: canonical wide window par toolbar pair (200)
+/// bina scroll ke samae — [`action_bar_needs_hscroll`] false aur side air
+/// non-negative. Pure; unit-tested by `toolbar37_fits_1200`.
+pub fn toolbar37_fits_1200_gate() -> bool {
+    let avail = 1200.0;
+    !action_bar_needs_hscroll(avail) && toolbar_button_row_side_air(avail) >= 0.0
+}
+
+/// Narrow-700 overflow edge gate: 700 par pair (200) abhi bhi bina clip ke
+/// samae (side air >= 0, overflow false), par 1px tang par `>>` lagta hai;
+/// band 40 par rehta hai, spacing `SPACE_SM` par, glyph centered.
+/// Pure; unit-tested by `toolbar37_narrow700_overflow`.
+pub fn toolbar37_narrow700_overflow_gate() -> bool {
+    let avail = 700.0;
+    let needed = toolbar_button_pair_width();
+    toolbar_band_height() == 40.0
+        && toolbar_button_spacing() == crate::theme::SPACE_SM
+        && toolbar_icon_label_aligned()
+        && toolbar_button_row_side_air(avail) >= 0.0
+        && !toolbar_needs_overflow(avail, needed)
+        && toolbar_needs_overflow(needed - 1.0, needed)
+}
+
 /// Session action buttons (row 1): Swap + Reload ek hi `horizontal` me.
 /// [`paint_session_toolbar`] live call-site aur [`paint_session_action_bar`]
 /// row 1 dono isi par hain (ek shape, do caller — dup nahi). Geometry/typo
@@ -14585,6 +14655,45 @@ mod tests {
         assert!((text_meta_line_height_px() - 15.2).abs() < 0.01);
         assert!(text_meta_line_height_px() < HEADER_H);
         assert!(chrome17_narrow720_no_overlap_gate());
+    }
+
+    #[test]
+    fn toolbar37_fits_1200() {
+        // Fixture comparison/toolbar-1200.json: 1200 par pair 200 side air
+        // 500 (center, no h-scroll), band 40, spacing SPACE_SM 8, glyph centered.
+        let raw =
+            include_str!("../../../checks/gui-exq-toolbar37/round-1/comparison/toolbar-1200.json");
+        assert!(raw.contains("\"name\":\"toolbar-1200\""));
+        assert_eq!(toolbar_band_height(), 40.0);
+        assert_eq!(TOOLBAR_H, crate::theme::SPACE_XL + crate::theme::SPACE_LG);
+        assert_eq!(toolbar_button_spacing(), 8.0);
+        assert_eq!(toolbar_button_spacing(), toolbar_cluster_gap());
+        assert!(toolbar_icon_label_aligned());
+        assert_eq!(toolbar_overflow_label(), ">>");
+        assert!(!toolbar_needs_overflow(1200.0, toolbar_button_pair_width()));
+        assert!(!action_bar_needs_hscroll(1200.0));
+        assert_eq!(toolbar_button_row_side_air(1200.0), 500.0);
+        assert!(toolbar37_fits_1200_gate());
+    }
+
+    #[test]
+    fn toolbar37_narrow700_overflow() {
+        // Edge fixture comparison/toolbar-narrow-700.json: 700 par pair 200
+        // side air 250 (no clip, overflow false), 1px tang par >> true.
+        let raw = include_str!(
+            "../../../checks/gui-exq-toolbar37/round-1/comparison/toolbar-narrow-700.json"
+        );
+        assert!(raw.contains("\"name\":\"toolbar-narrow-700\""));
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(toolbar_button_row_side_air(700.0), 250.0);
+        assert!(!toolbar_needs_overflow(700.0, toolbar_button_pair_width()));
+        assert!(toolbar_needs_overflow(
+            toolbar_button_pair_width() - 1.0,
+            toolbar_button_pair_width()
+        ));
+        assert!(!toolbar_needs_overflow(f32::NAN, 200.0));
+        assert!(!toolbar_needs_overflow(0.0, 200.0));
+        assert!(toolbar37_narrow700_overflow_gate());
     }
 
     #[test]
