@@ -1257,24 +1257,92 @@ pub fn paint_home_recent(ui: &mut Ui, history: &SessionHistory, now_secs: u64) {
         });
 }
 
+/// Tab active underline stroke thickness (px): reuses semibold span underline
+/// [`span_underline_for_weight`] (2.0) — zero new size, matches BC5 active tab indicator.
+pub fn tab_active_underline_height() -> f32 {
+    span_underline_for_weight(crate::theme::TYPO_WEIGHT_SEMIBOLD)
+}
+
+/// Computes the active-tab underline indicator rect from the button rect:
+/// uses [`crate::app::exq_icons50_tab_pill_rect`] (insetting horizontally by SPACE_XS / 2)
+/// and sits at the bottom base of the tab pill with [`tab_active_underline_height`] height.
+/// Safe against non-finite dimensions; pure and headless-tested.
+pub fn tab_active_underline_rect(tab: egui::Rect) -> egui::Rect {
+    if !tab.min.x.is_finite()
+        || !tab.min.y.is_finite()
+        || !tab.max.x.is_finite()
+        || !tab.max.y.is_finite()
+    {
+        return tab;
+    }
+    let pill = crate::app::exq_icons50_tab_pill_rect(tab);
+    let h = tab_active_underline_height();
+    egui::Rect::from_min_max(
+        egui::pos2(pill.min.x, (pill.max.y - h).max(pill.min.y)),
+        egui::pos2(pill.max.x, pill.max.y),
+    )
+}
+
+/// Exposes the staged tab pill rect ([`crate::app::exq_icons50_tab_pill_rect`])
+/// for `app.rs` and other callers without re-inventing geometry. Pure and headless-tested.
+pub fn tab_pill_rect(tab: egui::Rect) -> egui::Rect {
+    crate::app::exq_icons50_tab_pill_rect(tab)
+}
+
+/// Paints the active tab indicator at the base of `tab_rect`:
+/// uses [`crate::app::exq_icons50_inline_accent_for`] in current dark/light visuals
+/// and fills [`tab_active_underline_rect`]. Zero new color/size, and never occludes
+/// the label text above it.
+pub fn paint_tab_active_indicator(ui: &mut Ui, tab_rect: egui::Rect) {
+    if tab_rect.width() <= 0.0 || tab_rect.height() <= 0.0 {
+        return;
+    }
+    let ink = crate::app::exq_icons50_inline_accent_for(ui.visuals().dark_mode);
+    let underline = tab_active_underline_rect(tab_rect);
+    ui.painter().rect_filled(underline, 0.0, ink);
+}
+
 /// The ten tabs: Home plus nine comparison session types.
 /// Labels paint at the tab chrome scale ([`chrome_tab_role`]: Body 13
 /// default proportional) so the tab bar reads as chrome, not code.
+/// Paints active tab underline indicator via [`paint_tab_active_indicator`].
 pub fn paint_tabs(ui: &mut Ui, tab: &mut Tab) {
+    let _ = paint_tabs_returning_rects(ui, tab);
+}
+
+/// The ten tabs painter returning the active tab's [`egui::Rect`],
+/// exposing rects for caller inspection / layout without altering hit-rects.
+pub fn paint_tabs_returning_rects(ui: &mut Ui, tab: &mut Tab) -> egui::Rect {
+    let mut active_rect = egui::Rect::NOTHING;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = SECTION_GAP;
-        ui.selectable_value(tab, Tab::Home, chrome_tab_role().rich("Home"));
-        ui.selectable_value(tab, Tab::Text, chrome_tab_role().rich("Text"));
-        ui.selectable_value(tab, Tab::Folder, chrome_tab_role().rich("Folder"));
-        ui.selectable_value(tab, Tab::Hex, chrome_tab_role().rich("Hex"));
-        ui.selectable_value(tab, Tab::Merge, chrome_tab_role().rich("Merge"));
-        ui.selectable_value(tab, Tab::Table, chrome_tab_role().rich("Table"));
-        ui.selectable_value(tab, Tab::Sync, chrome_tab_role().rich("Sync"));
-        ui.selectable_value(tab, Tab::Picture, chrome_tab_role().rich("Picture"));
-        ui.selectable_value(tab, Tab::FolderMerge, chrome_tab_role().rich("FolderMerge"));
-        ui.selectable_value(tab, Tab::Audio, chrome_tab_role().rich("Audio"));
+        let r0 = ui.selectable_value(tab, Tab::Home, chrome_tab_role().rich("Home"));
+        let r1 = ui.selectable_value(tab, Tab::Text, chrome_tab_role().rich("Text"));
+        let r2 = ui.selectable_value(tab, Tab::Folder, chrome_tab_role().rich("Folder"));
+        let r3 = ui.selectable_value(tab, Tab::Hex, chrome_tab_role().rich("Hex"));
+        let r4 = ui.selectable_value(tab, Tab::Merge, chrome_tab_role().rich("Merge"));
+        let r5 = ui.selectable_value(tab, Tab::Table, chrome_tab_role().rich("Table"));
+        let r6 = ui.selectable_value(tab, Tab::Sync, chrome_tab_role().rich("Sync"));
+        let r7 = ui.selectable_value(tab, Tab::Picture, chrome_tab_role().rich("Picture"));
+        let r8 = ui.selectable_value(tab, Tab::FolderMerge, chrome_tab_role().rich("FolderMerge"));
+        let r9 = ui.selectable_value(tab, Tab::Audio, chrome_tab_role().rich("Audio"));
+
+        active_rect = match *tab {
+            Tab::Home => r0.rect,
+            Tab::Text => r1.rect,
+            Tab::Folder => r2.rect,
+            Tab::Hex => r3.rect,
+            Tab::Merge => r4.rect,
+            Tab::Table => r5.rect,
+            Tab::Sync => r6.rect,
+            Tab::Picture => r7.rect,
+            Tab::FolderMerge => r8.rect,
+            Tab::Audio => r9.rect,
+        };
+        paint_tab_active_indicator(ui, active_rect);
     });
     ui.add_space(TAB_BOTTOM_GAP);
+    active_rect
 }
 
 // ----------------------------------------------------------------------------
@@ -1420,15 +1488,15 @@ pub fn paint_session_tab(ui: &mut Ui, session: &Session, is_active: bool) -> Ses
     let mut hit = SessionAction::None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = session_tab_close_gap();
-        if ui
-            .add_sized(
-                egui::vec2(SESSION_TAB_MAX_W, edge),
-                egui::Button::selectable(is_active, chrome_tab_role().rich(label.as_str()))
-                    .truncate(),
-            )
-            .clicked()
-        {
+        let resp = ui.add_sized(
+            egui::vec2(SESSION_TAB_MAX_W, edge),
+            egui::Button::selectable(is_active, chrome_tab_role().rich(label.as_str())).truncate(),
+        );
+        if resp.clicked() {
             hit = SessionAction::Switch(session.id);
+        }
+        if is_active {
+            paint_tab_active_indicator(ui, resp.rect);
         }
         if ui
             .add_sized(egui::vec2(edge, edge), egui::Button::new("x"))
@@ -11110,6 +11178,45 @@ mod tests {
             paint_toolbar_glyph(ui, button, 4);
             // Verify variant 5 (Next) paints chevrons
             paint_toolbar_glyph(ui, button, 5);
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn tabs_exq_views57_live_vector_wiring() {
+        // exq-views57 live-paint wiring: active tab underline indicator
+        // adopts staged vector tab pill geometry without text occlusion.
+        let tab_rect = egui::Rect::from_min_size(egui::pos2(50.0, 20.0), egui::vec2(80.0, 24.0));
+        let pill = tab_pill_rect(tab_rect);
+        assert_eq!(pill, crate::app::exq_icons50_tab_pill_rect(tab_rect));
+        assert_eq!(tab_active_underline_height(), 2.0);
+
+        let underline = tab_active_underline_rect(tab_rect);
+        assert_eq!(underline.min.x, pill.min.x);
+        assert_eq!(underline.max.x, pill.max.x);
+        assert_eq!(underline.max.y, pill.max.y);
+        assert_eq!(underline.height(), 2.0);
+
+        // Non-finite safety:
+        let nan_rect = egui::Rect::from_min_max(egui::pos2(f32::NAN, 0.0), egui::pos2(100.0, 20.0));
+        assert!(tab_active_underline_rect(nan_rect).min.x.is_nan());
+
+        // Headless painter execution:
+        let ctx = egui::Context::default();
+        let mut picked_tab = Tab::Text;
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            // 1. paint_tabs returns active rect and paints active indicator
+            let active = paint_tabs_returning_rects(ui, &mut picked_tab);
+            assert!(active.is_positive());
+            assert_eq!(picked_tab, Tab::Text);
+
+            // 2. Direct paint_tab_active_indicator
+            paint_tab_active_indicator(ui, tab_rect);
+
+            // 3. paint_session_tab with is_active = true
+            let session = Session::new(1, Tab::Text, "l.txt", "r.txt", "Title", 0);
+            let action = paint_session_tab(ui, &session, true);
+            assert_eq!(action, SessionAction::None);
         });
         output.textures_delta.clear();
     }
