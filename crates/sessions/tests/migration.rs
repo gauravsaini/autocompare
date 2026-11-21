@@ -6,9 +6,9 @@
 )]
 
 use autocompare_sessions::{
-    migrate, migrate_session_config, migrate_settings, migrate_workspace, migrate_workspace_config,
-    SessionError, CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
-    CURRENT_WORKSPACE_SCHEMA_VERSION,
+    CURRENT_SESSION_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION,
+    CURRENT_WORKSPACE_SCHEMA_VERSION, SessionError, migrate, migrate_session_config,
+    migrate_settings, migrate_workspace, migrate_workspace_config,
 };
 
 #[test]

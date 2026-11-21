@@ -864,9 +864,11 @@ impl SessionDocument {
     }
 
     /// Saves the session document unconditionally, bypassing any lock check.
+    /// The write is atomic (sibling `.tmp` file + rename): a crash can never
+    /// leave a torn half-written document behind.
     pub fn save_to_file_force<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
         let json = self.to_json_pretty()?;
-        std::fs::write(path, json).map_err(SessionError::Io)
+        crate::atomic_write(path.as_ref(), json.as_bytes())
     }
 
     /// Loads a session document from a file path, automatically migrating if needed.
@@ -878,6 +880,14 @@ impl SessionDocument {
     /// Migrates an older JSON representation (such as v0) to the current schema version.
     pub fn migrate(old_json: &str) -> Result<Self, SessionError> {
         migrate(old_json)
+    }
+}
+
+/// Clamps a dangling `active_tab_index` (past the end of `tabs`) back to 0,
+/// so a hand-edited or migrated document never loads with no active tab.
+fn clamp_active_index(doc: &mut SessionDocument) {
+    if doc.active_tab_index >= doc.tabs.len() {
+        doc.active_tab_index = 0;
     }
 }
 
@@ -926,7 +936,8 @@ pub fn migrate(old_json: &str) -> Result<SessionDocument, SessionError> {
             }
 
             if version == CURRENT_SESSION_SCHEMA_VERSION {
-                let doc: SessionDocument = serde_json::from_value(root)?;
+                let mut doc: SessionDocument = serde_json::from_value(root)?;
+                clamp_active_index(&mut doc);
                 Ok(doc)
             } else {
                 // v0 migration path
@@ -989,6 +1000,12 @@ fn migrate_v0_object(
         .and_then(|v| v.as_u64())
         .map(|v| v as usize)
         .unwrap_or(0);
+
+    let active_tab_index = if active_tab_index >= tabs.len() {
+        0
+    } else {
+        active_tab_index
+    };
 
     let name = map
         .get("name")
@@ -1630,5 +1647,44 @@ mod tests {
         assert_eq!(tab_back.base_path.as_deref(), Some("/base.rs"));
         assert_eq!(tab_back.output_path.as_deref(), Some("/out.rs"));
         assert!(tab_back.merge_auto_merge());
+    }
+
+    #[test]
+    fn test_v1_dangling_active_index_clamps_to_zero() {
+        let empty = r#"{"schema_version": 1, "tabs": [], "active_tab_index": 7}"#;
+        let doc = migrate(empty).expect("migrate empty");
+        assert_eq!(doc.active_tab_index, 0);
+        assert!(doc.active_tab().is_none());
+
+        let one =
+            r#"{"schema_version": 1, "tabs": [{"id": "t1", "title": "T"}], "active_tab_index": 5}"#;
+        let doc = migrate(one).expect("migrate one tab");
+        assert_eq!(doc.active_tab_index, 0);
+        assert_eq!(doc.active_tab().expect("active").id, "t1");
+    }
+
+    #[test]
+    fn test_v0_dangling_active_index_clamps_to_zero() {
+        let v0 = r#"{"tabs": [{"id": "t1", "title": "T"}], "active": 99}"#;
+        let doc = migrate(v0).expect("migrate v0");
+        assert_eq!(doc.active_tab_index, 0);
+        assert_eq!(doc.active_tab().expect("active").id, "t1");
+    }
+
+    #[test]
+    fn test_atomic_save_leaves_no_tmp_sibling() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join(format!("test_sess_atomic_{}.json", std::process::id()));
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(".tmp");
+        let tmp_path = std::path::PathBuf::from(tmp);
+        let _ = std::fs::remove_file(&tmp_path);
+
+        let doc = SessionDocument::with_tabs(vec![SessionTab::new("t1", "T")]);
+        doc.save_to_file_force(&path).expect("atomic save");
+        assert!(!tmp_path.exists(), "no .tmp sibling may remain");
+        let loaded = SessionDocument::load_from_file(&path).expect("reload");
+        assert_eq!(doc, loaded);
+        let _ = std::fs::remove_file(path);
     }
 }

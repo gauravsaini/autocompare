@@ -508,9 +508,11 @@ impl AppSettings {
     }
 
     /// Saves the settings document unconditionally, bypassing any lock check.
+    /// The write is atomic (sibling `.tmp` file + rename): a crash can never
+    /// leave a torn half-written document behind.
     pub fn save_to_file_force<P: AsRef<Path>>(&self, path: P) -> Result<(), SessionError> {
         let json = self.to_json_pretty()?;
-        std::fs::write(path, json).map_err(SessionError::Io)
+        crate::atomic_write(path.as_ref(), json.as_bytes())
     }
 
     /// Loads settings from a file path, automatically migrating if needed.
