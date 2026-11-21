@@ -3844,6 +3844,7 @@ fn paint_text_body(
                                     left_fg,
                                     left_bg,
                                     fr,
+                                    dark,
                                 )
                             } else {
                                 side_jobs_wrapped_with_prefs(
@@ -3853,6 +3854,7 @@ fn paint_text_body(
                                     font_id.clone(),
                                     left_fg,
                                     left_bg,
+                                    dark,
                                 )
                             };
                             let mut right_jobs = if let Some(fr) = find_row {
@@ -3864,6 +3866,7 @@ fn paint_text_body(
                                     right_fg,
                                     right_bg,
                                     fr,
+                                    dark,
                                 )
                             } else {
                                 side_jobs_wrapped_with_prefs(
@@ -3873,6 +3876,7 @@ fn paint_text_body(
                                     font_id.clone(),
                                     right_fg,
                                     right_bg,
+                                    dark,
                                 )
                             };
                             while left_jobs.len() < count {
@@ -4191,6 +4195,7 @@ fn paint_text_body(
                                         font_id.clone(),
                                         base_text,
                                         Color32::TRANSPARENT,
+                                        dark,
                                     );
                                     let left_resp = ui.label(left_job);
                                     paint_filler_hatch(ui.painter(), left_resp.rect, gutter_dim);
@@ -4209,6 +4214,7 @@ fn paint_text_body(
                                         font_id.clone(),
                                         base_text,
                                         Color32::TRANSPARENT,
+                                        dark,
                                     );
                                     let right_resp = ui.label(right_job);
                                     paint_filler_hatch(ui.painter(), right_resp.rect, gutter_dim);
@@ -4261,6 +4267,7 @@ fn paint_text_body(
                                         left_fg,
                                         left_bg,
                                         fr,
+                                        dark,
                                     )
                                 } else {
                                     side_job_with_prefs(
@@ -4270,6 +4277,7 @@ fn paint_text_body(
                                         font_id.clone(),
                                         left_fg,
                                         left_bg,
+                                        dark,
                                     )
                                 };
                                 let left_resp = ui.label(left_job);
@@ -4383,6 +4391,7 @@ fn paint_text_body(
                                         right_fg,
                                         right_bg,
                                         fr,
+                                        dark,
                                     )
                                 } else {
                                     side_job_with_prefs(
@@ -4392,6 +4401,7 @@ fn paint_text_body(
                                         font_id.clone(),
                                         right_fg,
                                         right_bg,
+                                        dark,
                                     )
                                 };
                                 let right_resp = ui.label(right_job);
@@ -4969,7 +4979,8 @@ pub fn find_segment_format(font_id: FontId, fg: Color32, bg: Color32, kind: Find
 /// One pane of one row honoring `layout`: line numbers blank when off,
 /// accent spans cleared when syntax is off, width from the
 /// prefs-effective `pane_chars`/`gutter_chars`. Counts are untouched:
-/// hiding only changes paint, never the model.
+/// hiding only changes paint, never the model. `dark` routes the accent
+/// band via `selective_span_format` (dark byte-identical, light wash).
 fn side_job_with_prefs(
     side: Side,
     row: &TextRow,
@@ -4977,6 +4988,7 @@ fn side_job_with_prefs(
     font_id: FontId,
     fg: Color32,
     bg: Color32,
+    dark: bool,
 ) -> LayoutJob {
     let (raw_no, line) = match side {
         Side::Left => (row.left_no, row.left.as_str()),
@@ -5005,7 +5017,7 @@ fn side_job_with_prefs(
         job.append(
             &segment,
             intra_segment_leading_gap(first_seg),
-            selective_span_format(font_id.clone(), fg, bg, accented),
+            selective_span_format(font_id.clone(), fg, bg, accented, dark),
         );
         first_seg = false;
     }
@@ -5014,7 +5026,8 @@ fn side_job_with_prefs(
 
 /// Find-aware pane job with explicit current flag: current row par
 /// `find.is_current=true` (inverted block), others par false (underline
-/// line). Paint loop `find_is_current_row` se flag nikalta hai.
+/// line). Paint loop `find_is_current_row` se flag nikalta hai. `dark`
+/// routes the accent/find block via `selective_find_format`.
 fn side_job_with_prefs_and_find_current(
     side: Side,
     row: &TextRow,
@@ -5023,9 +5036,10 @@ fn side_job_with_prefs_and_find_current(
     fg: Color32,
     bg: Color32,
     find: FindRowPaint<'_>,
+    dark: bool,
 ) -> LayoutJob {
     if find.needle.is_empty() {
-        return side_job_with_prefs(side, row, layout, font_id, fg, bg);
+        return side_job_with_prefs(side, row, layout, font_id, fg, bg, dark);
     }
     let (raw_no, line) = match side {
         Side::Left => (row.left_no, row.left.as_str()),
@@ -5065,7 +5079,7 @@ fn side_job_with_prefs_and_find_current(
         job.append(
             &segment,
             intra_segment_leading_gap(first_seg),
-            selective_find_format(font_id.clone(), fg, bg, kind),
+            selective_find_format(font_id.clone(), fg, bg, kind, dark),
         );
         first_seg = false;
     }
@@ -5135,20 +5149,25 @@ pub fn selective_side_palette(
 }
 
 /// Selective accent format: plain passes through, accented paints the
-/// frozen changed band plus the heavier accent underline
-/// ([`ACCENT_SPAN_UNDERLINE_W`], double the find line — emphasis by line
-/// weight, same hue, no new color). Same mono `FontId`
-/// (line-height untouched). Pure; unit-tested.
+/// mode-routed changed band ([`changed_bg_for`]/[`changed_fg_for`]: dark
+/// keeps the frozen band, light uses the pale wash + dark ink) plus the
+/// heavier accent underline ([`ACCENT_SPAN_UNDERLINE_W`], double the find
+/// line — emphasis by line weight, same hue, no new color). Same mono
+/// `FontId` (line-height untouched). Pure; unit-tested.
 pub fn selective_span_format(
     font_id: FontId,
     fg: Color32,
     bg: Color32,
     accented: bool,
+    dark: bool,
 ) -> TextFormat {
     if accented {
-        let mut fmt = TextFormat::simple(font_id, CHANGED_FG);
-        fmt.background = CHANGED_BG;
-        fmt.underline = Stroke::new(span_underline_for_weight(TYPO_WEIGHT_SEMIBOLD), CHANGED_FG);
+        let mut fmt = TextFormat::simple(font_id, changed_fg_for(dark));
+        fmt.background = changed_bg_for(dark);
+        fmt.underline = Stroke::new(
+            span_underline_for_weight(TYPO_WEIGHT_SEMIBOLD),
+            changed_fg_for(dark),
+        );
         fmt
     } else {
         span_text_format(font_id, fg, bg, false)
@@ -5156,21 +5175,24 @@ pub fn selective_span_format(
 }
 
 /// Selective find format: Plain/Accent selective reuse, Other plain+line,
-/// Current light block (inverted changed band, no underline) taaki accent
-/// (dark band + line) se alag rahe. Band wale rows par old hit reuse.
-/// Pure; unit-tested.
+/// Current light block (inverted mode-routed changed band, no underline)
+/// taaki accent (band + line) se alag rahe. Band wale rows par old hit
+/// reuse. `dark` routes the accent block via `changed_*_for(dark)` (dark
+/// byte-identical, light wash). Pure; unit-tested.
 pub fn selective_find_format(
     font_id: FontId,
     fg: Color32,
     bg: Color32,
     kind: FindHl,
+    dark: bool,
 ) -> TextFormat {
     match kind {
         FindHl::Plain | FindHl::Other => find_segment_format(font_id, fg, bg, kind),
-        FindHl::Accent => selective_span_format(font_id, fg, bg, true),
+        FindHl::Accent => selective_span_format(font_id, fg, bg, true, dark),
         FindHl::Current => {
             if bg == Color32::TRANSPARENT {
-                let (color, background) = span_colors(CHANGED_FG, CHANGED_BG, true);
+                let (color, background) =
+                    span_colors(changed_fg_for(dark), changed_bg_for(dark), true);
                 let mut fmt = TextFormat::simple(font_id, color);
                 fmt.background = background;
                 fmt
@@ -6909,6 +6931,7 @@ fn side_jobs_wrapped_with_prefs(
     font_id: FontId,
     fg: Color32,
     bg: Color32,
+    dark: bool,
 ) -> Vec<LayoutJob> {
     let (raw_no, line) = match side {
         Side::Left => (row.left_no, row.left.as_str()),
@@ -6951,7 +6974,7 @@ fn side_jobs_wrapped_with_prefs(
             job.append(
                 &segment,
                 intra_segment_leading_gap(first_seg),
-                selective_span_format(font_id.clone(), fg, bg, accented),
+                selective_span_format(font_id.clone(), fg, bg, accented, dark),
             );
             first_seg = false;
         }
@@ -6972,9 +6995,10 @@ fn side_jobs_wrapped_with_find_current(
     fg: Color32,
     bg: Color32,
     find: FindRowPaint<'_>,
+    dark: bool,
 ) -> Vec<LayoutJob> {
     if find.needle.is_empty() {
-        return side_jobs_wrapped_with_prefs(side, row, layout, font_id, fg, bg);
+        return side_jobs_wrapped_with_prefs(side, row, layout, font_id, fg, bg, dark);
     }
     let (raw_no, line) = match side {
         Side::Left => (row.left_no, row.left.as_str()),
@@ -7020,7 +7044,7 @@ fn side_jobs_wrapped_with_find_current(
             job.append(
                 &segment,
                 intra_segment_leading_gap(first_seg),
-                selective_find_format(font_id.clone(), fg, bg, kind),
+                selective_find_format(font_id.clone(), fg, bg, kind, dark),
             );
             first_seg = false;
         }
@@ -10870,6 +10894,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         // Gutter "   1  ", text "ab" with "b" accented, then pane
         // padding: the job text is exactly gutter + padded line.
@@ -10886,6 +10911,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         assert_eq!(blank.text, "          ");
     }
@@ -10920,7 +10946,15 @@ mod tests {
         };
         let fg = Color32::WHITE;
         let bg = Color32::BLACK;
-        let job = side_job_with_prefs(Side::Left, &row, &layout, FontId::monospace(12.0), fg, bg);
+        let job = side_job_with_prefs(
+            Side::Left,
+            &row,
+            &layout,
+            FontId::monospace(12.0),
+            fg,
+            bg,
+            true,
+        );
         // Gutter + plain "a" + accented "b" + padding.
         assert_eq!(job.sections.len(), 4);
         // (text, background, underlined) for body sections past the
@@ -11011,6 +11045,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         assert!(
             left_job
@@ -11026,6 +11061,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         assert!(
             right_job
@@ -11506,6 +11542,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         // Gutter ke baad har body section same mono size par hai —
         // geometry first (line-height se chipke).
@@ -11557,6 +11594,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         // Gutter ke baad plain "hello " phir accented "world": wahi
         // pattern jo `pane_segments` ne diya — paint me beech ka hissa
@@ -11633,6 +11671,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         assert!(with_numbers.text.starts_with("   7 "));
         // Gutter + accented head + plain tail (tail and padding may
@@ -11651,6 +11690,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         // Gutter width 1 blanks to two spaces, no accent sections.
         assert!(without_numbers.text.starts_with("  "));
@@ -11985,9 +12025,12 @@ mod tests {
 
     #[test]
     fn selective_span_format_accent_uses_changed_band() {
+        use crate::theme::{LIGHT_CHANGED_BG, LIGHT_CHANGED_FG};
         let font = FontId::monospace(12.0);
-        let plain = selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, false);
-        let accented = selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true);
+        let plain =
+            selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, false, true);
+        let accented =
+            selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true, true);
         // Same mono size — line-height untouched.
         assert_eq!(plain.font_id.size, 12.0);
         assert_eq!(accented.font_id.size, 12.0);
@@ -12005,10 +12048,24 @@ mod tests {
             accented.underline,
             Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG)
         );
+        // Light arm: same routing via helpers — pale wash + dark ink, no
+        // new color (dark arm above stays byte-identical).
+        let light =
+            selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true, false);
+        assert_eq!(
+            (light.color, light.background),
+            (LIGHT_CHANGED_FG, LIGHT_CHANGED_BG)
+        );
+        assert_eq!(
+            light.underline,
+            Stroke::new(ACCENT_SPAN_UNDERLINE_W, LIGHT_CHANGED_FG)
+        );
+        assert_ne!((light.color, light.background), (CHANGED_FG, CHANGED_BG));
     }
 
     #[test]
     fn selective_find_format_current_light_block() {
+        use crate::theme::{LIGHT_CHANGED_BG, LIGHT_CHANGED_FG};
         let font = FontId::monospace(12.0);
         // Selective base (transparent): current light block no-underline,
         // other plain + line — accent (dark band + line) se dono alag.
@@ -12017,6 +12074,7 @@ mod tests {
             Color32::WHITE,
             Color32::TRANSPARENT,
             FindHl::Current,
+            true,
         );
         let (light_fg, light_bg) = span_colors(CHANGED_FG, CHANGED_BG, true);
         assert_eq!((current.color, current.background), (light_fg, light_bg));
@@ -12026,6 +12084,7 @@ mod tests {
             Color32::WHITE,
             Color32::TRANSPARENT,
             FindHl::Other,
+            true,
         );
         assert_eq!(other.background, Color32::TRANSPARENT);
         assert_ne!(other.underline, Stroke::NONE);
@@ -12034,16 +12093,43 @@ mod tests {
             Color32::WHITE,
             Color32::TRANSPARENT,
             FindHl::Accent,
+            true,
         );
         assert_eq!((accent.color, accent.background), (CHANGED_FG, CHANGED_BG));
         assert_ne!(accent.underline, Stroke::NONE);
         // Band wale rows par old hit reuse (koi naya block nahi).
         let band_current =
-            selective_find_format(font.clone(), DELETED_FG, DELETED_BG, FindHl::Current);
+            selective_find_format(font.clone(), DELETED_FG, DELETED_BG, FindHl::Current, true);
         let old = find_hit_format(font.clone(), DELETED_FG, DELETED_BG, true);
         assert_eq!(
             (band_current.color, band_current.background),
             (old.color, old.background)
+        );
+        // Light arm: current block + accent route via helpers — wash pair,
+        // dark arm above byte-identical.
+        let light_current = selective_find_format(
+            font.clone(),
+            Color32::WHITE,
+            Color32::TRANSPARENT,
+            FindHl::Current,
+            false,
+        );
+        let (want_fg, want_bg) = span_colors(LIGHT_CHANGED_FG, LIGHT_CHANGED_BG, true);
+        assert_eq!(
+            (light_current.color, light_current.background),
+            (want_fg, want_bg)
+        );
+        assert_eq!(light_current.underline, Stroke::NONE);
+        let light_accent = selective_find_format(
+            font.clone(),
+            Color32::WHITE,
+            Color32::TRANSPARENT,
+            FindHl::Accent,
+            false,
+        );
+        assert_eq!(
+            (light_accent.color, light_accent.background),
+            (LIGHT_CHANGED_FG, LIGHT_CHANGED_BG)
         );
     }
 
@@ -12152,7 +12238,8 @@ mod tests {
         // Inline emphasis by line weight (no new color): accent 2px on the
         // frozen hue, find hits keep the 1px line, plain keeps no line.
         let font = FontId::monospace(12.0);
-        let accented = selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true);
+        let accented =
+            selective_span_format(font.clone(), Color32::WHITE, Color32::BLACK, true, true);
         assert_eq!(
             accented.underline,
             Stroke::new(ACCENT_SPAN_UNDERLINE_W, CHANGED_FG)
@@ -14877,6 +14964,7 @@ mod tests {
             FontId::monospace(12.0),
             Color32::WHITE,
             Color32::BLACK,
+            true,
         );
         assert!(jobs.len() > 1);
         let Some(first) = jobs.first() else {
