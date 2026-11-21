@@ -469,6 +469,30 @@ impl JobRunner {
         })
     }
 
+    /// Spawns a background cancellable folder comparison over two
+    /// virtual filesystems (LocalFs, Zip, snapshots).
+    pub fn spawn_vfs_folder_compare(
+        left: std::sync::Arc<dyn autocompare_vfs::Vfs>,
+        right: std::sync::Arc<dyn autocompare_vfs::Vfs>,
+        opts: FolderOptions,
+    ) -> JobHandle<FolderComparison> {
+        Self::spawn(move |cancel, progress| {
+            progress(JobProgress::new(0, None, "Starting folder compare..."));
+            let res = crate::vfs_compare::compare_vfs_folders_cancellable(
+                &*left,
+                &*right,
+                &opts,
+                Some(&cancel),
+            )?;
+            progress(JobProgress::new(
+                res.entries.len(),
+                Some(res.entries.len()),
+                "Folder compare complete",
+            ));
+            Ok(res)
+        })
+    }
+
     /// Spawns a background sync planning job.
     pub fn spawn_sync_plan(
         left: impl AsRef<Path>,

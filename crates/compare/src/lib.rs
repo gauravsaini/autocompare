@@ -15,6 +15,7 @@ mod picture;
 mod sync;
 mod table;
 mod text;
+mod vfs_compare;
 
 pub use autocompare_diff::hex::HexAlignment;
 pub use folder::{FolderCompare, compare_folders_cancellable};
@@ -26,6 +27,7 @@ pub use sync::{
     gui_sync_options, is_sync_conflict_reason, sync_conflict_next, sync_conflict_prev,
 };
 pub use table::{TableKeyFileComparison, TableKeyOptions};
+pub use vfs_compare::{compare_vfs_folders, compare_vfs_folders_cancellable};
 
 use std::fmt;
 use std::path::Path;

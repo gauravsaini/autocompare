@@ -105,6 +105,31 @@ impl FolderCompare {
         )
     }
 
+    /// Runs the comparison over two virtual filesystems (LocalFs, Zip,
+    /// snapshots) with this engine's options, ignoring the stored roots.
+    pub fn run_over_vfs(
+        &self,
+        left: &dyn autocompare_vfs::Vfs,
+        right: &dyn autocompare_vfs::Vfs,
+    ) -> Result<FolderComparison> {
+        crate::vfs_compare::compare_vfs_folders(left, right, &self.options)
+    }
+
+    /// Runs the VFS comparison, checking the `cancel` flag periodically.
+    pub fn run_over_vfs_cancellable(
+        &self,
+        left: &dyn autocompare_vfs::Vfs,
+        right: &dyn autocompare_vfs::Vfs,
+        cancel: &AtomicBool,
+    ) -> Result<FolderComparison> {
+        crate::vfs_compare::compare_vfs_folders_cancellable(
+            left,
+            right,
+            &self.options,
+            Some(cancel),
+        )
+    }
+
     /// Compares two modification times with a duration tolerance (such as FAT 2-second timestamp tolerance).
     pub fn compare_mtimes_with_tolerance(
         left: Option<SystemTime>,
@@ -576,7 +601,7 @@ fn join_rel(parent: &str, name: &str) -> String {
 
 /// Simple case-sensitive glob: `*` matches any run of characters
 /// (including none) and `?` matches exactly one character.
-fn glob_match(name: &str, pattern: &str) -> bool {
+pub(crate) fn glob_match(name: &str, pattern: &str) -> bool {
     let n: Vec<char> = name.chars().collect();
     let p: Vec<char> = pattern.chars().collect();
     let mut ni: usize = 0;

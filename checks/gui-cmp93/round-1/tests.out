@@ -1,0 +1,238 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src/lib.rs (target/debug/deps/autocompare_compare-5b8d8b91a268de97)
+
+running 26 tests
+test folder::tests::test_mtime_tolerance_comparison ... ok
+test jobs::tests::test_cancellation_token_and_status ... ok
+test folder_merge::tests::test_tree_merge_plan_sort_steps ... ok
+test jobs::tests::test_progress_queue_polling_helpers ... ok
+test folder::tests::test_folder_comparison_helpers ... ok
+test jobs::tests::test_job_status_success_and_failure ... ok
+test media::tests::test_config_mismatch_is_not_comparable ... ok
+test picture::tests::test_decode_side_sniffs_png_bmp_ppm ... ok
+test media::tests::test_zero_tolerance_matches_exact_diff ... ok
+test picture::tests::test_offset_aligns_nudged_files ... ok
+test media::tests::test_pcm_wav_kept_identical_through_files ... ok
+test sync::tests::test_apply_progress_callback_sequence ... ok
+test folder_merge::tests::test_conflict_detection_and_policies ... ok
+test sync::tests::test_custom_rules_sync ... ok
+test sync::tests::test_precancelled_plan_and_apply_return_cancelled ... ok
+test sync::tests::test_prune_empty_directories_nested ... ok
+test sync::tests::test_requires_consent_and_apply_with_consent ... ok
+test sync::tests::test_sort_steps_ordering ... ok
+test sync::tests::test_under_path_safety ... ok
+test sync::tests::test_sync_modes_and_planner_options ... ok
+test sync::tests::test_prune_empty_dirs_keeps_symlinks_and_root ... ok
+test sync::tests::test_update_left_apply_parity_and_dry_run_read_only ... ok
+test sync::tests::test_both_and_mirror_exec_parity ... ok
+test jobs::tests::test_precancelled_token_job_reports_cancelled_status ... ok
+test jobs::tests::test_spawn_sync_apply_progress_sequence ... ok
+test jobs::tests::test_spawn_sync_run_parity_and_progress ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/binary.rs (target/debug/deps/binary-c79e7e10cc0bac71)
+
+running 15 tests
+test aligned_missing_file_is_missing_error ... ok
+test compare_binary_directory_is_io_error ... ok
+test compare_binary_hunk_at_end_is_clipped_to_file ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test aligned_identical_and_truncation ... ok
+test aligned_complete_finds_insertion_as_gap ... ok
+test compare_binary_hunks_cap_truncates ... ok
+test aligned_fast_resyncs_on_anchor ... ok
+test compare_binary_missing_file_is_missing_error ... ok
+test compare_binary_hunks_do_not_overlap ... ok
+test aligned_none_matches_positional_scan ... ok
+test compare_binary_single_difference_hunks_64_bytes ... ok
+test compare_binary_prefix_file_reports_shorter_length ... ok
+test compare_binary_zero_max_hunks_still_finds_first_diff ... ok
+test compare_binary_identical_files ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/folder.rs (target/debug/deps/folder-d9445af0a65e412b)
+
+running 21 tests
+test compare_folders_depth_limit_one_skips_grandchildren ... ok
+test compare_folders_content_compare_classifies_by_bytes ... ok
+test compare_folders_does_not_follow_symlinks ... ok
+test compare_folders_case_insensitive_names_pair_up ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test compare_folders_entries_are_sorted_by_rel_path ... ok
+test compare_folders_file_root_reports_missing ... ok
+test compare_folders_dir_symlink_loop_terminates ... ok
+test compare_folders_missing_roots_report_missing ... ok
+test compare_folders_exclude_glob_prunes_subtrees ... ok
+test compare_folders_include_glob_filters_by_name ... ok
+test compare_folders_mixed_kinds_are_different ... ok
+test compare_folders_depth_limit_zero_skips_root_children ... ok
+test compare_folders_one_sided_file_is_left_or_right_only ... ok
+test compare_folders_one_sided_directory_is_walked ... ok
+test compare_folders_same_tree_with_content_compare_is_all_same ... ok
+test compare_folders_size_differ_is_different ... ok
+test compare_folders_same_tree_equal_mtimes_is_all_same ... ok
+test folder_compare_tree_over_local_fs_and_cancellation ... ok
+test folder_tree_expand_collapse_and_visibility ... ok
+test compare_folders_newer_mtime_wins ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/folder_merge.rs (target/debug/deps/folder_merge-0208043fe004f6ab)
+
+running 17 tests
+test apply_refuses_non_empty_output_and_accepts_empty ... ok
+test both_changed_binaries_conflict_without_merged_content ... ok
+test a_vanished_source_fails_one_step_and_the_rest_still_apply ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test directories_on_either_side_become_make_dir_steps ... ok
+test both_new_files_merge_over_an_empty_base ... ok
+test clean_text_merge_takes_edits_from_both_sides ... ok
+test missing_or_non_directory_roots_are_hard_errors ... ok
+test folder_merge_struct_api ... ok
+test deletions_follow_the_delete_rules ... ok
+test symlink_sources_are_never_followed ... ok
+test unsafe_relative_paths_fail_without_escaping ... ok
+test steps_are_sorted_with_directories_before_children ... ok
+test overlapping_text_edits_conflict_with_markers ... ok
+test apply_writes_the_plan_and_the_output_is_a_fixed_point ... ok
+test one_sided_changes_take_the_changed_side ... ok
+test folder_merge_conflict_navigation_and_cancellation ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/jobs.rs (target/debug/deps/jobs-14d5d9e3a93ca57e)
+
+running 11 tests
+test job_progress_bounded_calculations ... ok
+test job_runner_bounded_progress_queue_and_polling ... ok
+test job_runner_basic_spawn_and_join ... ok
+test job_runner_folder_compare_background ... ok
+test job_runner_sync_background ... ok
+test job_runner_cancellation_aborts_job ... ok
+test job_runner_folder_merge_background_cancellation ... ok
+test job_runner_sync_plan_with_compare_respects_filter ... ok
+test job_runner_progress_tracking ... ok
+test job_runner_history_survives_join_via_drain_before_join ... ok
+test job_runner_progress_visible_before_join_and_drained ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/media.rs (target/debug/deps/media-ecfa785642f9188b)
+
+running 7 tests
+test config_mismatch_is_reported_not_errored ... ok
+test missing_file_reports_missing_with_path ... ok
+test identical_wavs_report_identical ... ok
+test non_audio_file_is_unsupported ... ok
+test one_differing_sample_is_reported ... ok
+test tolerance_absorbs_one_lsb_through_files ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/picture.rs (target/debug/deps/picture-ee6bd393ea9f1e0b)
+
+running 10 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test missing_file_reports_missing_with_path ... ok
+test bmp_files_compare_through_format_sniffing ... ok
+test non_png_file_is_unsupported ... ok
+test heatmap_written_for_identical_files_too ... ok
+test heatmap_option_writes_a_decodable_png ... ok
+test identical_png_files_report_identical ... ok
+test heatmap_at_unwritable_path_is_io_error ... ok
+test ppm_and_png_with_same_pixels_compare_identical ... ok
+test one_differing_pixel_is_reported ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/sync.rs (target/debug/deps/sync-d5ccdb9692296ae9)
+
+running 25 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test apply_refuses_to_copy_through_symlinks ... ok
+test apply_refuses_unsafe_rel_paths ... ok
+test apply_prune_removes_a_symlink_without_following_it ... ok
+test apply_records_vanished_sources_and_continues ... ok
+test missing_or_file_roots_are_hard_errors ... ok
+test apply_prune_deletes_right_only_entries ... ok
+test plan_prune_r2l_deletes_left_only_files_and_dirs ... ok
+test apply_l2r_copies_files_and_creates_missing_dirs ... ok
+test plan_l2r_copies_newer_and_left_only_and_skips_the_rest ... ok
+test plan_refuses_to_copy_symlink_sources ... ok
+test plan_prune_l2r_deletes_right_only_files_and_dirs ... ok
+test plan_newer_wins_copies_both_directions ... ok
+test plan_reports_truncated_false_on_shallow_trees ... ok
+test plan_r2l_mirrors_l2r ... ok
+test plan_with_compare_content_compare_flags_same_size_bytes ... ok
+test plan_with_compare_depth_limit_truncates_and_skips_deeper ... ok
+test sync_planner_all_modes_dry_run_and_apply ... ok
+test plan_steps_are_sorted_by_rel_path ... ok
+test plan_with_compare_include_filter_limits_mirror_prune ... ok
+test mirror_prune_suppresses_nested_orphan_subtree ... ok
+test sync_planner_compare_options_drive_dry_run_and_apply ... ok
+test sync_plan_conflict_navigation_and_reports ... ok
+test toolspec_gui_verdicts_match_engine_plans_on_orphan_newer_edge ... ok
+test toolspec_conflict_nav_and_live_log_cover_plan_and_report ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/table.rs (target/debug/deps/table-7409001360f3b2bb)
+
+running 12 tests
+test directory_input_is_io_error ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test identical_files_compare_equal_with_equal_only_script ... ok
+test invalid_utf8_decodes_leniently_into_cells ... ok
+test differing_headers_are_exposed_separately ... ok
+test custom_delimiter_via_options ... ok
+test keyed_compare_aligns_reordered_rows ... ok
+test different_rows_produce_delete_or_insert ... ok
+test missing_file_is_missing_error ... ok
+test keyed_compare_missing_file_is_missing_error ... ok
+test quoted_multiline_field_round_trips ... ok
+test keyed_compare_honours_numeric_tolerance ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/text.rs (target/debug/deps/text-c816696d29882fb2)
+
+running 13 tests
+test compare_text_files_missing_error_mentions_the_path ... ok
+test load_lines_invalid_utf8_decodes_leniently ... ok
+test compare_text_files_identical_files_report_display_lines ... ok
+test load_lines_empty_file_is_zero_lines ... ok
+test compare_text_files_display_lines_keep_original_case ... ok
+test load_lines_directory_is_io_error ... ok
+test load_lines_missing_file_is_missing ... ok
+test common::smoke_exercises_all_shared_helpers ... ok
+test compare_text_files_different_files_do_not_panic ... ok
+test load_lines_lone_newline_is_one_empty_line ... ok
+test load_lines_trailing_newline_has_no_phantom_empty_line ... ok
+test load_lines_splits_lines_and_strips_cr ... ok
+test load_lines_without_trailing_newline_keeps_last_line ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vfs_compare.rs (target/debug/deps/vfs_compare-5f7f1e15b59a5b06)
+
+running 8 tests
+test common::smoke_exercises_all_shared_helpers ... ok
+test vfs_jobrunner_completes_and_precancelled_fails ... ok
+test folder_merge_clean_sides_apply_to_output ... ok
+test sync_mirror_dry_run_prunes_then_applies ... ok
+test vfs_snapshot_matches_the_captured_tree ... ok
+test vfs_zip_trees_compare_against_each_other_and_local ... ok
+test sync_update_both_copies_newer_each_way ... ok
+test vfs_localfs_matches_path_walk ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests autocompare_compare
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
