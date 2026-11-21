@@ -990,3 +990,7 @@
 - `crates/gui/src/home.rs` me 7 value-identical adoptions (SPACE_XL/SPACE_LG), zero new tokens/sizes/colors.
 - Proof: 1129 green + 2 kittest PASS, fmt clean, banned 0, harness PASS after.png size-identical.
 - Strays reverted, OWNS-only commit, orchestrator cherry-pick + push.
+
+### Feature (2026-11-21) — feat(gui): exq-selective66 selective light routing
+- `crates/gui/src/views.rs` me selective formats `changed_*_for(dark)` routing, dark byte-identical + light LIGHT wash.
+- Proof: 1129 green + 2 kittest PASS, fmt clean, banned 0, harness PASS.
