@@ -5405,6 +5405,218 @@ pub fn exq_app35_hierarchy_ok() -> bool {
         && !exq_app35_toolbar_needs_hscroll(exq_app35_wide_w())
 }
 
+/// EXQ-ICONS50 vector toolbar marks + active-tab pill + softer light accent.
+///
+/// Fixture toolbar icons abhi `screenshot.rs` me `fill_rect` blocks hain
+/// (dusre leaf ka OWNS, FROZEN); yahan unka vector replacement layer hai:
+/// pure geometry (headless-tested) + egui painter helpers (circle / line /
+/// path, caller ke existing theme colors — zero naya `Color32`, zero naya
+/// size/token). Paint adoption agle wave me `views`/`screenshot` owner karega.
+/// Pure; headless-tested.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExqIcons50Mark {
+    /// Circle outline (fixture solid-block variant ka vector roop).
+    Ring,
+    /// Do horizontal strokes (fixture twin-bars variant).
+    Bars,
+    /// Do vertical strokes (fixture side-bars variant).
+    Rails,
+    /// Stepped wedge path (fixture stepped-wedge variant).
+    Wedge,
+}
+
+/// EXQ-ICONS50 mark kind: button index se 4 vector variants cycle
+/// (fixture ke 4 `fill_rect` variants ka 1:1 mirror). Pure; headless-tested.
+pub fn exq_icons50_mark_kind(index: usize) -> ExqIcons50Mark {
+    match index % 4 {
+        0 => ExqIcons50Mark::Ring,
+        1 => ExqIcons50Mark::Bars,
+        2 => ExqIcons50Mark::Rails,
+        _ => ExqIcons50Mark::Wedge,
+    }
+}
+
+/// EXQ-ICONS50 mark box px: SPACE_MD (12.0) — fixture 12px slot parity.
+/// Koi naya size nahi. Pure; headless-tested.
+pub fn exq_icons50_mark_box() -> f32 {
+    crate::theme::SPACE_MD
+}
+
+/// EXQ-ICONS50 mark origin: button ke andar label se pehle — leading
+/// inset SPACE_XS (4.0), vertical centered. Non-finite par leading inset
+/// + top edge (NaN paint kabhi nahi). Pure; headless-tested.
+pub fn exq_icons50_mark_xy(bx: f32, by: f32, bh: f32) -> (f32, f32) {
+    if !bx.is_finite() || !by.is_finite() || !bh.is_finite() {
+        return (crate::theme::SPACE_XS, 0.0);
+    }
+    let m = exq_icons50_mark_box();
+    (bx + crate::theme::SPACE_XS, by + ((bh - m) / 2.0).max(0.0))
+}
+
+/// EXQ-ICONS50 ring center (mark-box local): box ka aadha (6.0, 6.0).
+/// Pure; headless-tested.
+pub fn exq_icons50_ring_c() -> (f32, f32) {
+    let half = exq_icons50_mark_box() / 2.0;
+    (half, half)
+}
+
+/// EXQ-ICONS50 ring radius px: (12 - SPACE_XS) / 2 = 4.0 — box ke andar
+/// SPACE_XS/2 air ke saath. Koi naya size nahi. Pure; headless-tested.
+pub fn exq_icons50_ring_r() -> f32 {
+    (exq_icons50_mark_box() - crate::theme::SPACE_XS) / 2.0
+}
+
+/// EXQ-ICONS50 stroke width px: SPACE_XS / 2 = 2.0 — fixture 2px bar
+/// parity. Koi naya size nahi. Pure; headless-tested.
+pub fn exq_icons50_stroke_w() -> f32 {
+    crate::theme::SPACE_XS / 2.0
+}
+
+/// EXQ-ICONS50 bar/rail segments (mark-box local `x0,y0,x1,y1` + count):
+/// Bars = 2 horizontal (fixture twin-bars y0/y+9 parity), Rails = 2
+/// vertical (fixture side-bars x0/x+9 parity), Wedge = 3 stepped
+/// (fixture 12/8/4 widths parity), Ring = 0 (circle paints). Pure;
+/// headless-tested.
+pub fn exq_icons50_mark_segments(kind: ExqIcons50Mark) -> ([(f32, f32, f32, f32); 3], usize) {
+    let m = exq_icons50_mark_box();
+    match kind {
+        ExqIcons50Mark::Bars => (
+            [
+                (0.0, 1.5, m, 1.5),
+                (0.0, m - 1.5, m, m - 1.5),
+                (0.0, 0.0, 0.0, 0.0),
+            ],
+            2,
+        ),
+        ExqIcons50Mark::Rails => (
+            [
+                (1.5, 0.0, 1.5, m),
+                (m - 1.5, 0.0, m - 1.5, m),
+                (0.0, 0.0, 0.0, 0.0),
+            ],
+            2,
+        ),
+        ExqIcons50Mark::Wedge => (
+            [
+                (0.0, 2.0, m, 2.0),
+                (2.0, 6.0, m - 2.0, 6.0),
+                (4.0, 10.0, m - 4.0, 10.0),
+            ],
+            3,
+        ),
+        ExqIcons50Mark::Ring => ([(0.0, 0.0, 0.0, 0.0); 3], 0),
+    }
+}
+
+/// EXQ-ICONS50 wedge path points (mark-box local, closed silhouette):
+/// stepped wedge outline taaki `PathShape` line-join se paint ho.
+/// Pure; headless-tested.
+pub fn exq_icons50_wedge_points() -> [(f32, f32); 8] {
+    let m = exq_icons50_mark_box();
+    [
+        (0.0, 0.0),
+        (m, 0.0),
+        (m, 4.0),
+        (m - 4.0, 4.0),
+        (m - 4.0, 8.0),
+        (4.0, 8.0),
+        (4.0, m),
+        (0.0, m),
+    ]
+}
+
+/// EXQ-ICONS50 active-tab pill rounding px: SPACE_XS (4.0) — koi naya
+/// size nahi. Pure; headless-tested.
+pub fn exq_icons50_tab_pill_rounding() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// EXQ-ICONS50 active-tab pill rect: tab rect se har taraf SPACE_XS/2
+/// (2.0) inset — pill tab ke andar, height/width sirf air se chhoti.
+/// Non-finite par tab wapas (NaN paint kabhi nahi). Pure; headless-tested.
+pub fn exq_icons50_tab_pill_rect(tab: egui::Rect) -> egui::Rect {
+    if !tab.min.x.is_finite()
+        || !tab.min.y.is_finite()
+        || !tab.max.x.is_finite()
+        || !tab.max.y.is_finite()
+    {
+        return tab;
+    }
+    let pad = crate::theme::SPACE_XS / 2.0;
+    egui::Rect::from_min_max(
+        egui::pos2(tab.min.x + pad, tab.min.y + pad),
+        egui::pos2(
+            (tab.max.x - pad).max(tab.min.x + pad),
+            (tab.max.y - pad).max(tab.min.y + pad),
+        ),
+    )
+}
+
+/// EXQ-ICONS50 inline accent: dark par existing span ink
+/// ([`crate::theme::accent_fg_for`]), light par harsh ink ki jagah
+/// existing changed wash ([`crate::theme::changed_bg_for`]) — softer,
+/// zero naya `Color32`. Pure; headless-tested.
+pub fn exq_icons50_inline_accent_for(dark: bool) -> egui::Color32 {
+    if dark {
+        crate::theme::accent_fg_for(true)
+    } else {
+        crate::theme::changed_bg_for(false)
+    }
+}
+
+/// EXQ-ICONS50 mark paint: Ring = circle outline, Bars/Rails/Wedge =
+/// line segments, Wedge silhouette optional closed path — sab caller ke
+/// existing theme color se (dim/glyph tone), zero naya color. Live;
+/// headless harness `Painter` ke bina isko call nahi karta.
+pub fn paint_exq_icons50_mark(
+    painter: &egui::Painter,
+    origin: egui::Pos2,
+    kind: ExqIcons50Mark,
+    color: egui::Color32,
+) {
+    let stroke = egui::Stroke::new(exq_icons50_stroke_w(), color);
+    match kind {
+        ExqIcons50Mark::Ring => {
+            let (cx, cy) = exq_icons50_ring_c();
+            painter.circle_stroke(
+                egui::pos2(origin.x + cx, origin.y + cy),
+                exq_icons50_ring_r(),
+                stroke,
+            );
+        }
+        ExqIcons50Mark::Wedge => {
+            let pts: Vec<egui::Pos2> = exq_icons50_wedge_points()
+                .iter()
+                .map(|(x, y)| egui::pos2(origin.x + x, origin.y + y))
+                .collect();
+            painter.add(egui::Shape::closed_line(pts, stroke));
+        }
+        ExqIcons50Mark::Bars | ExqIcons50Mark::Rails => {
+            let (segs, n) = exq_icons50_mark_segments(kind);
+            for (x0, y0, x1, y1) in segs.iter().take(n) {
+                painter.line_segment(
+                    [
+                        egui::pos2(origin.x + x0, origin.y + y0),
+                        egui::pos2(origin.x + x1, origin.y + y1),
+                    ],
+                    stroke,
+                );
+            }
+        }
+    }
+}
+
+/// EXQ-ICONS50 active-tab pill paint: tab rect ka inset rounded rect,
+/// caller ke existing fill se (session-strip selected tone). Zero naya
+/// color/size. Live; headless harness isko call nahi karta.
+pub fn paint_exq_icons50_tab_pill(painter: &egui::Painter, tab: egui::Rect, fill: egui::Color32) {
+    painter.rect_filled(
+        exq_icons50_tab_pill_rect(tab),
+        exq_icons50_tab_pill_rounding(),
+        fill,
+    );
+}
+
 /// Empty-rules label for the chrome status top row: BC per-pane reads
 /// "1:1 | Default text" jab koi rule nahi; yahan khali rules par wahi
 /// honest default, warna caller ka rules label. Pure; headless-tested.
@@ -12332,5 +12544,112 @@ mod tests {
         assert!(app.fonts_installed);
         app.ensure_typo48_live_fonts(&ctx);
         assert!(app.fonts_installed);
+    }
+
+    #[test]
+    fn icons_exq_icons50_vector_shapes() {
+        // Mark box 12.0 via SPACE_MD (fixture slot parity, koi naya size nahi).
+        assert_eq!(super::exq_icons50_mark_box(), crate::theme::SPACE_MD);
+        assert_eq!(super::exq_icons50_mark_box(), 12.0);
+        // Ring box ke andar: center aadha, radius air ke saath.
+        let (cx, cy) = super::exq_icons50_ring_c();
+        assert!((cx - 6.0).abs() < 0.001 && (cy - 6.0).abs() < 0.001);
+        assert!((super::exq_icons50_ring_r() - 4.0).abs() < 0.001);
+        assert_eq!(super::exq_icons50_stroke_w(), crate::theme::SPACE_XS / 2.0);
+        // Kinds 4-cycle: fixture ke 4 fill_rect variants ka mirror.
+        assert_eq!(super::exq_icons50_mark_kind(0), super::ExqIcons50Mark::Ring);
+        assert_eq!(super::exq_icons50_mark_kind(1), super::ExqIcons50Mark::Bars);
+        assert_eq!(
+            super::exq_icons50_mark_kind(2),
+            super::ExqIcons50Mark::Rails
+        );
+        assert_eq!(
+            super::exq_icons50_mark_kind(3),
+            super::ExqIcons50Mark::Wedge
+        );
+        assert_eq!(
+            super::exq_icons50_mark_kind(7),
+            super::ExqIcons50Mark::Wedge
+        );
+        // Segments box ke andar, sahi count.
+        for kind in [
+            super::ExqIcons50Mark::Ring,
+            super::ExqIcons50Mark::Bars,
+            super::ExqIcons50Mark::Rails,
+            super::ExqIcons50Mark::Wedge,
+        ] {
+            let (segs, n) = super::exq_icons50_mark_segments(kind);
+            let want = match kind {
+                super::ExqIcons50Mark::Ring => 0,
+                super::ExqIcons50Mark::Bars | super::ExqIcons50Mark::Rails => 2,
+                super::ExqIcons50Mark::Wedge => 3,
+            };
+            assert_eq!(n, want);
+            for (x0, y0, x1, y1) in segs.iter().take(n) {
+                for v in [*x0, *y0, *x1, *y1] {
+                    assert!(v >= 0.0 && v <= 12.0);
+                }
+            }
+        }
+        // Wedge path closed silhouette, 8 points, box ke andar.
+        let pts = super::exq_icons50_wedge_points();
+        assert_eq!(pts.len(), 8);
+        for (x, y) in pts {
+            assert!(x >= 0.0 && x <= 12.0 && y >= 0.0 && y <= 12.0);
+        }
+    }
+
+    #[test]
+    fn icons_exq_icons50_toolbar_mark_geometry() {
+        // Leading inset SPACE_XS, vertical centered.
+        let (x, y) = super::exq_icons50_mark_xy(100.0, 50.0, 28.0);
+        assert!((x - (100.0 + crate::theme::SPACE_XS)).abs() < 0.001);
+        assert!((y - (50.0 + (28.0 - 12.0) / 2.0)).abs() < 0.001);
+        // Chhoti height par top edge se chipka, kabhi negative nahi.
+        let (_, y2) = super::exq_icons50_mark_xy(0.0, 0.0, 8.0);
+        assert!((y2 - 0.0).abs() < 0.001);
+        // Non-finite guard: NaN paint kabhi nahi.
+        let (gx, gy) = super::exq_icons50_mark_xy(f32::NAN, 0.0, 28.0);
+        assert!(gx.is_finite() && gy.is_finite());
+    }
+
+    #[test]
+    fn toolbar_exq_icons50_tab_pill_rect() {
+        // Rounding SPACE_XS (koi naya size nahi).
+        assert_eq!(
+            super::exq_icons50_tab_pill_rounding(),
+            crate::theme::SPACE_XS
+        );
+        // Pill = tab har taraf SPACE_XS/2 inset, tab ke andar.
+        let tab = eframe::egui::Rect::from_min_max(
+            eframe::egui::pos2(10.0, 20.0),
+            eframe::egui::pos2(110.0, 48.0),
+        );
+        let pill = super::exq_icons50_tab_pill_rect(tab);
+        assert!((pill.min.x - 12.0).abs() < 0.001);
+        assert!((pill.min.y - 22.0).abs() < 0.001);
+        assert!((pill.max.x - 108.0).abs() < 0.001);
+        assert!((pill.max.y - 46.0).abs() < 0.001);
+        assert!(tab.contains_rect(pill));
+        // Height sirf air se chhoti (28 -> 24), width intact rhythm.
+        assert!((pill.height() - 24.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn icons_exq_icons50_light_accent_reuses_tokens() {
+        // Light arm harsh ink nahi — existing changed wash reuse.
+        assert_eq!(
+            super::exq_icons50_inline_accent_for(false),
+            crate::theme::changed_bg_for(false)
+        );
+        assert_eq!(
+            super::exq_icons50_inline_accent_for(false),
+            crate::theme::LIGHT_CHANGED_BG
+        );
+        // Dark arm existing span ink reuse (koi naya Color32 nahi).
+        assert_eq!(
+            super::exq_icons50_inline_accent_for(true),
+            crate::theme::accent_fg_for(true)
+        );
     }
 }
