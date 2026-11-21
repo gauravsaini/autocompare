@@ -794,3 +794,9 @@
 1. **Reports parity evidence**: ac-loop round-rep37 CLI parity RESULT: PASS 10/10, GUI geo-typo PASS, no reports source changes required this round, edge fixtures own-help.txt + bc-process.txt added.
 2. **Tests**: autocompare-cli parity green, gui tests green, harness side-effect sessionpaint PNGs reverted in worktree, none landed.
 3. **Files changed**: checks/ac-loop/round-rep37/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-toolbar37 live toolbar spacing (opencode default)
+
+1. **Toolbar geometry**: TOOLBAR_H 40px SPACE_XL+SPACE_LG, button spacing SPACE_SM, 16px glyph centered in 24px button, overflow >> affordance, 1200px no h-scroll + narrow700 edge.
+2. **Tests**: 1082 green (+2 toolbar), exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Leaf self-cleaned harness side-effect PNGs, OWNS-only landed.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-toolbar37/**, TIMELINE.md.
