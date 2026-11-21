@@ -1022,3 +1022,11 @@
 ### Feature (2026-11-21) — feat(gui): exq-palette73 residual palette wiring
 - views.rs residual hardcodes routed via changed/inserted/deleted_bg_for, dark byte-identical, light AA washes.
 - Proof: 1139+2 green, fmt clean, banned 0, harness PASS + kittest 2 passed.
+
+### Feature (2026-11-21) — feat(gui): exq-toolbar74 toolbar wiring
+- `crates/gui/src/app.rs` me toolbar call-site views.rs paint_session_toolbar glyph painter se wired, active/disabled via *_for(dark), colors/geometry frozen.
+- Proof: 1143 passed + 2 kittest passed, fmt clean, banned 0, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-realpolish75 real shot polish
+- `crates/gui/tests/real_egui_shot.rs` me Visuals + font + icon gates, tmp-only + EXQ_KEEP_PNG flow intact, dark mean 32.7 vs light 242.8.
+- Proof: 1140 lib + 2 shot passed, fmt clean, banned 0, clippy 0 new warnings.
