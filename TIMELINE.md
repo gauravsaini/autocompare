@@ -1046,3 +1046,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-agyxswarm80 take/copy/gutter
 - agyx `/swarm` trial: 3 parallel sub-tasks in `/tmp/wt-agyxswarm80`, each OWNS one file only (`take.rs` 327 lines, `copy.rs` 523 lines, `gutter.rs` 219 lines), colors FROZEN.
 - Proof: 1159 lib green on main (worktree 1154 + main delta), fmt clean, banned 0 non-test (panic only inside #[test]), harness untouched, NO PUSH from leaf, cherry-picked 9fa203e/510c2ee/32b3bf4.
+
+### Feature (2026-11-21) — feat(build): exq-binary81 release packaging
+- `tools/release/` only: build-release.sh + smoke-test.sh + INSTALL.md + GATES.md, 11.6MB release binary, smoke --help + PNG PASS.
+- Proof: 1143 lib + 2 shot green in worktree, OWNS clean, NO PUSH from leaf, cherry-picked 41a8b2c.
