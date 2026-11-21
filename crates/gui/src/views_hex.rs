@@ -2511,15 +2511,25 @@ pub fn hex_stacked_row_y(grid_row: usize, is_ascii_line: bool) -> f32 {
     (visual_idx as f32) * hex_grid_row_h()
 }
 
+/// Stacked hex line chars: ruler address (10) + 2 pad + hex pane (49) = 61.
+/// Single source over [`HEX_RULER_CHARS`] + [`HEX_HEX_PANE_CHARS`] so the
+/// stacked fit budget never drifts from the body Grid columns. Pure.
+pub const HEX_STACKED_HEX_LINE_CHARS: usize = HEX_RULER_CHARS + 2 + HEX_HEX_PANE_CHARS;
+
+/// Stacked ASCII line chars: ruler address (10) + 2 pad + pipes + ASCII (16) = 30.
+/// Same single source; the hex line dominates the fit check. Pure.
+pub const HEX_STACKED_ASCII_LINE_CHARS: usize = HEX_RULER_CHARS + 2 + HEX_ASCII_PANE_CHARS + 2;
+
 /// Checks whether stacked lines fit within available width at a given `char_w`.
-/// Hex line is 61 chars (`10 addr + 2 pad + 49 hex`), ASCII line is 30 chars.
+/// Hex line is [`HEX_STACKED_HEX_LINE_CHARS`] chars, ASCII line is
+/// [`HEX_STACKED_ASCII_LINE_CHARS`] chars.
 /// Must fit inside `hex_grid_avail_w(avail_w, false)`. Pure; unit-tested.
 pub fn hex_stacked_panes_fit(avail_w: f32, char_w: f32) -> bool {
     if !avail_w.is_finite() || !char_w.is_finite() || avail_w <= 0.0 || char_w <= 0.0 {
         return false;
     }
     let avail = hex_grid_avail_w(avail_w, false);
-    let needed = 61.0 * char_w;
+    let needed = (HEX_STACKED_HEX_LINE_CHARS as f32) * char_w;
     needed <= avail
 }
 
@@ -5274,6 +5284,20 @@ mod tests {
         assert_eq!(HEX_RULER_CHARS, 10);
         assert_eq!(HEX_HEX_PANE_CHARS, 49);
         assert_eq!(HEX_ASCII_PANE_CHARS, 16);
+        // Stacked lines single-source from the same pane budgets:
+        // hex 10 + 2 + 49 = 61, ascii 10 + 2 + 16 + 2 pipes = 30.
+        assert_eq!(HEX_STACKED_HEX_LINE_CHARS, 61);
+        assert_eq!(HEX_STACKED_ASCII_LINE_CHARS, 30);
+        assert_eq!(
+            HEX_STACKED_HEX_LINE_CHARS,
+            HEX_RULER_CHARS + 2 + HEX_HEX_PANE_CHARS
+        );
+        assert_eq!(
+            HEX_STACKED_ASCII_LINE_CHARS,
+            HEX_RULER_CHARS + 2 + HEX_ASCII_PANE_CHARS + 2
+        );
+        // Hex line dominates: checking it covers the ASCII line too.
+        assert!(HEX_STACKED_HEX_LINE_CHARS > HEX_STACKED_ASCII_LINE_CHARS);
         assert_eq!(hex_ascii_gutter_w(), crate::theme::SPACE_SM);
         // Row height is the Mono line-height, no new size.
         assert!((hex_grid_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
