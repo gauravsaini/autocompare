@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-hygiene52 test-output hygiene
+
+1. **Hygiene**: RgbaImage::opaque() forces alpha 255 (RGB untouched, unit + PNG roundtrip tested); real_egui_shot writes to target tmp by default, EXQ_KEEP_PNG=1 refreshes tracked copy. Machine proof: tmp PNG alpha-0 px 0/576000 (was 568630); default cargo test leaves tracked real-egui.png untouched.
+2. **Tests**: diff 40+4+33+44+20+98 + gui 1105 + 1 real green; rustfmt clean; banned 0; harness PASS.
+3. **Files changed**: crates/diff/src/image.rs, crates/gui/tests/real_egui_shot.rs, checks/gui-exq-hygiene52/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-icons52 wiring audit (UNWIRED, honest)
 
 1. **Negative result with evidence**: staged icons50 paint fns have no live call site in app.rs (rects owned by FROZEN views.rs which already paints glyphs; TOPCHROME-10 toolbar is fixture-only, live bar is 4 buttons). No fake wiring added; 0-byte PNG delta documented with sha256 in report.md. Key methodology fix: --screenshot bypasses App paint entirely, so future paint waves must prove via kittest real-egui.png, not harness after.png.
