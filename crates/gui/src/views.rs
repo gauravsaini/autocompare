@@ -37,10 +37,11 @@ use crate::home::{
 };
 use crate::theme::{
     CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
-    ERROR_BG, INSERTED_BG, INSERTED_FG, TYPO_HEADING_SIZE, TYPO_LETTER_SPACING,
-    TYPO_LINE_HEIGHT_CHROME, TYPO_LINE_HEIGHT_MONO, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE,
-    TYPO_SMALL_SIZE, TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole,
-    blue_for, dim_for, green_for, red_for, track_for,
+    ERROR_BG, INSERTED_BG, TYPO_HEADING_SIZE, TYPO_LETTER_SPACING, TYPO_LINE_HEIGHT_CHROME,
+    TYPO_LINE_HEIGHT_MONO, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TYPO_SMALL_SIZE,
+    TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole, blue_for,
+    changed_bg_for, changed_fg_for, deleted_bg_for, deleted_fg_for, dim_for, green_for,
+    inserted_bg_for, inserted_fg_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -3682,11 +3683,12 @@ fn paint_text_body(
                                 );
                             }
                             let is_selected = model.selected == Some(orig);
-                            let (left_fg, left_bg0) = selective_side_palette(true, row, base_text);
+                            let (left_fg, left_bg0) =
+                                selective_side_palette(true, row, base_text, dark);
                             let (right_fg, right_bg0) =
-                                selective_side_palette(false, row, base_text);
+                                selective_side_palette(false, row, base_text, dark);
                             let (left_bg, right_bg) = if is_selected {
-                                (CHANGED_BG, CHANGED_BG)
+                                (changed_bg_for(dark), changed_bg_for(dark))
                             } else {
                                 (left_bg0, right_bg0)
                             };
@@ -4086,11 +4088,11 @@ fn paint_text_body(
                                 // fixed width (unchanged shape).
                                 ui.spacing_mut().item_spacing.x = SECTION_GAP;
                                 let (left_fg, left_bg0) =
-                                    selective_side_palette(true, row, base_text);
+                                    selective_side_palette(true, row, base_text, dark);
                                 let (right_fg, right_bg0) =
-                                    selective_side_palette(false, row, base_text);
+                                    selective_side_palette(false, row, base_text, dark);
                                 let (left_bg, right_bg) = if is_selected {
-                                    (CHANGED_BG, CHANGED_BG)
+                                    (changed_bg_for(dark), changed_bg_for(dark))
                                 } else {
                                     (left_bg0, right_bg0)
                                 };
@@ -4935,13 +4937,16 @@ pub fn prefs_pane_segments(
 }
 
 /// (text color, row background) for one row kind. Equal rows keep the
-/// theme's text color on a transparent background.
-fn kind_palette(kind: TextRowKind, base_text: Color32) -> (Color32, Color32) {
+/// theme's text color on a transparent background. Deleted/Inserted/Changed
+/// route via `theme::*_for(dark)`: dark keeps the byte-identical saturated
+/// pairs, light uses the pale washes with dark ink (WCAG AA per
+/// `theme_contrast_ok`). Pure; unit-tested.
+fn kind_palette(kind: TextRowKind, base_text: Color32, dark: bool) -> (Color32, Color32) {
     match kind {
         TextRowKind::Equal => (base_text, Color32::TRANSPARENT),
-        TextRowKind::Deleted => (DELETED_FG, DELETED_BG),
-        TextRowKind::Inserted => (INSERTED_FG, INSERTED_BG),
-        TextRowKind::Changed => (CHANGED_FG, CHANGED_BG),
+        TextRowKind::Deleted => (deleted_fg_for(dark), deleted_bg_for(dark)),
+        TextRowKind::Inserted => (inserted_fg_for(dark), inserted_bg_for(dark)),
+        TextRowKind::Changed => (changed_fg_for(dark), changed_bg_for(dark)),
     }
 }
 
@@ -4955,11 +4960,13 @@ pub fn selective_row_is_plain(kind: TextRowKind) -> bool {
 /// Per-side paint pair: an empty side is filler (plain base, hatch comes
 /// from geometry), Changed/Equal text sides stay plain, Deleted/Inserted
 /// text sides keep their band. Selection override caller me rehta hai.
-/// Pure; unit-tested.
+/// `dark` routes the band via `theme::*_for(dark)` (dark byte-identical,
+/// light wash + dark ink). Pure; unit-tested.
 pub fn selective_side_palette(
     is_left: bool,
     row: &TextRow,
     base_text: Color32,
+    dark: bool,
 ) -> (Color32, Color32) {
     let empty = if is_left {
         text_side_is_filler(row.left.as_str())
@@ -4972,7 +4979,7 @@ pub fn selective_side_palette(
     if selective_row_is_plain(row.kind) {
         return (base_text, Color32::TRANSPARENT);
     }
-    kind_palette(row.kind, base_text)
+    kind_palette(row.kind, base_text, dark)
 }
 
 /// Selective accent format: plain passes through, accented paints the
@@ -9006,6 +9013,7 @@ pub fn paint_text_with_find(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::INSERTED_FG;
 
     #[test]
     fn plain_line_pads_to_the_pane_width() {
@@ -11391,11 +11399,11 @@ mod tests {
             accent_b: Vec::new(),
         };
         assert_eq!(
-            selective_side_palette(true, &deleted, base),
+            selective_side_palette(true, &deleted, base, true),
             (DELETED_FG, DELETED_BG)
         );
         assert_eq!(
-            selective_side_palette(false, &deleted, base),
+            selective_side_palette(false, &deleted, base, true),
             (base, Color32::TRANSPARENT)
         );
         // Inserted: left empty filler plain, right text side band.
@@ -11409,11 +11417,11 @@ mod tests {
             accent_b: Vec::new(),
         };
         assert_eq!(
-            selective_side_palette(false, &inserted, base),
+            selective_side_palette(false, &inserted, base, true),
             (INSERTED_FG, INSERTED_BG)
         );
         assert_eq!(
-            selective_side_palette(true, &inserted, base),
+            selective_side_palette(true, &inserted, base, true),
             (base, Color32::TRANSPARENT)
         );
         // Changed: dono text sides plain (sirf word span band rakhta hai).
@@ -11427,11 +11435,11 @@ mod tests {
             accent_b: vec![(18, 27)],
         };
         assert_eq!(
-            selective_side_palette(true, &changed, base),
+            selective_side_palette(true, &changed, base, true),
             (base, Color32::TRANSPARENT)
         );
         assert_eq!(
-            selective_side_palette(false, &changed, base),
+            selective_side_palette(false, &changed, base, true),
             (base, Color32::TRANSPARENT)
         );
         // Equal: plain rehta hai.
@@ -11445,9 +11453,86 @@ mod tests {
             accent_b: Vec::new(),
         };
         assert_eq!(
-            selective_side_palette(true, &equal, base),
+            selective_side_palette(true, &equal, base, true),
             (base, Color32::TRANSPARENT)
         );
+    }
+
+    #[test]
+    fn selective_side_palette_light_wash_dark_ink_aa() {
+        // Light mode: dark-on-dark ka ant — pale wash + dark ink, har pair
+        // WCAG AA (`theme::light_diff_accents_aa` contract). Dark arm
+        // byte-identical purane pairs se (helpers `*_for(true)`).
+        use crate::theme::{
+            changed_bg_for, changed_fg_for, deleted_bg_for, deleted_fg_for, inserted_bg_for,
+            inserted_fg_for, light_diff_accents_aa, theme_contrast_ok_color32,
+        };
+        let base = Color32::WHITE;
+        let deleted = TextRow {
+            kind: TextRowKind::Deleted,
+            left_no: Some(4),
+            right_no: None,
+            left: "    let legacy_flag = true;".to_string(),
+            right: String::new(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        assert_eq!(
+            selective_side_palette(true, &deleted, base, false),
+            (deleted_fg_for(false), deleted_bg_for(false))
+        );
+        assert_ne!(
+            selective_side_palette(true, &deleted, base, false),
+            (DELETED_FG, DELETED_BG)
+        );
+        let inserted = TextRow {
+            kind: TextRowKind::Inserted,
+            left_no: None,
+            right_no: Some(4),
+            left: String::new(),
+            right: "    validate_safe_path(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: Vec::new(),
+        };
+        assert_eq!(
+            selective_side_palette(false, &inserted, base, false),
+            (inserted_fg_for(false), inserted_bg_for(false))
+        );
+        let changed = TextRow {
+            kind: TextRowKind::Changed,
+            left_no: Some(3),
+            right_no: Some(3),
+            left: "    let content = read_to_string(path)?;".to_string(),
+            right: "    let content = std::fs::read_to_string(path)?;".to_string(),
+            accent_a: Vec::new(),
+            accent_b: vec![(18, 27)],
+        };
+        // Changed text sides plain rehte hain dono modes me (sirf word span
+        // band rakhta hai).
+        assert_eq!(
+            selective_side_palette(true, &changed, base, false),
+            (base, Color32::TRANSPARENT)
+        );
+        // Har light wash/ink pair AA; dark pairs frozen (byte-identical).
+        assert!(light_diff_accents_aa());
+        assert!(theme_contrast_ok_color32(
+            deleted_fg_for(false),
+            deleted_bg_for(false)
+        ));
+        assert!(theme_contrast_ok_color32(
+            inserted_fg_for(false),
+            inserted_bg_for(false)
+        ));
+        assert!(theme_contrast_ok_color32(
+            changed_fg_for(false),
+            changed_bg_for(false)
+        ));
+        assert_eq!(deleted_fg_for(true), DELETED_FG);
+        assert_eq!(deleted_bg_for(true), DELETED_BG);
+        assert_eq!(inserted_fg_for(true), INSERTED_FG);
+        assert_eq!(inserted_bg_for(true), INSERTED_BG);
+        assert_eq!(changed_fg_for(true), CHANGED_FG);
+        assert_eq!(changed_bg_for(true), CHANGED_BG);
     }
 
     #[test]
@@ -11547,7 +11632,7 @@ mod tests {
         };
         assert!(text_side_is_filler(deleted.right.as_str()));
         assert!(!text_side_is_filler(deleted.left.as_str()));
-        let (_, right_bg) = selective_side_palette(false, &deleted, Color32::WHITE);
+        let (_, right_bg) = selective_side_palette(false, &deleted, Color32::WHITE, true);
         assert_eq!(right_bg, base);
         assert!(filler_hatch_count(460.0) > 0);
         assert_eq!(filler_hatch_count(0.0), 0);
