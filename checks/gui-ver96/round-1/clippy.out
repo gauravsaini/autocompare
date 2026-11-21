@@ -1,0 +1,1098 @@
+   Compiling unicode-ident v1.0.27
+    Checking bitflags v2.13.2
+    Checking cfg-if v1.0.5
+    Checking foldhash v0.2.0
+    Checking log v0.4.35
+    Checking libc v0.2.191
+    Checking simd-adler32 v0.3.10
+    Checking libm v0.2.16
+    Checking smallvec v1.16.6
+   Compiling proc-macro2 v1.0.107
+    Checking adler2 v2.0.1
+    Checking crc32fast v1.5.5
+    Checking hashbrown v0.17.1
+    Checking equivalent v1.0.3
+    Checking memchr v2.8.3
+    Checking miniz_oxide v0.9.1
+    Checking miniz_oxide v0.8.9
+   Compiling quote v1.0.47
+    Checking fdeflate v0.3.7
+    Checking serde_core v1.0.229
+    Checking indexmap v2.14.2
+    Checking once_cell v1.21.4
+    Checking bumpalo v3.20.4
+    Checking num-traits v0.2.19
+   Compiling syn v3.0.10
+    Checking zmij v1.0.23
+    Checking itoa v1.0.19
+    Checking errno v0.3.15
+    Checking objc2-encode v4.1.0
+    Checking rustix v1.1.6
+    Checking filetime v0.2.30
+    Checking flate2 v1.1.11
+    Checking zopfli v0.8.4
+    Checking lazy_static v1.5.1
+    Checking autocompare-evidence v0.5.0 (/private/tmp/wt-ver96/crates/evidence)
+    Checking objc2 v0.6.5
+    Checking num-complex v0.4.6
+   Compiling syn v2.0.119
+    Checking png v0.18.1
+    Checking zip v2.6.1
+    Checking arrayvec v0.7.8
+    Checking stable_deref_trait v1.2.1
+    Checking xattr v1.7.0
+    Checking getrandom v0.4.3
+    Checking tar v0.4.46
+    Checking fastrand v2.5.0
+    Checking scopeguard v1.2.0
+    Checking raw-window-handle v0.6.2
+    Checking lock_api v0.4.14
+    Checking tempfile v3.27.0
+    Checking objc2-core-foundation v0.3.2
+    Checking block2 v0.6.2
+    Checking parking_lot_core v0.9.12
+    Checking polycool v0.4.0
+    Checking linebender_resource_handle v0.1.1
+    Checking serde_json v1.0.154
+    Checking objc-sys v0.3.5
+    Checking parking_lot v0.12.5
+    Checking kurbo v0.13.1
+    Checking euclid v0.22.14
+    Checking utf_types v1.0.0
+    Checking litemap v0.8.3
+    Checking profiling v1.0.18
+    Checking static_assertions v1.1.0
+    Checking rustc-hash v1.1.0
+    Checking writeable v0.6.4
+    Checking utf8_iter v1.1.0
+    Checking objc2 v0.5.3
+    Checking guillotiere v0.7.0
+    Checking unicode-width v0.2.3
+    Checking fearless_simd v0.4.1
+    Checking uuid v1.29.3
+    Checking bit-vec v0.9.1
+    Checking codespan-reporting v0.13.1
+    Checking bit-set v0.10.0
+    Checking objc2-foundation v0.3.2
+    Checking objc2-core-graphics v0.3.2
+    Checking accesskit v0.25.2
+    Checking utf8parse v0.2.2
+    Checking core-foundation-sys v0.8.7
+    Checking dispatch v0.2.0
+    Checking block2 v0.5.1
+    Checking anstyle-parse v1.0.0
+    Checking core-foundation v0.9.4
+    Checking objc2-foundation v0.2.2
+   Compiling synstructure v0.14.0
+    Checking icu_normalizer_data v2.4.0
+    Checking icu_properties_data v2.4.0
+    Checking is_terminal_polyfill v1.70.2
+    Checking foreign-types-shared v0.3.1
+    Checking bitflags v1.3.2
+    Checking colorchoice v1.0.5
+    Checking anstyle v1.0.14
+    Checking anstyle-query v1.1.5
+    Checking core-graphics-types v0.1.3
+    Checking anstream v1.0.0
+    Checking unicode-general-category v1.1.0
+    Checking libloading v0.8.9
+    Checking self_cell v1.3.0
+    Checking strsim v0.11.1
+   Compiling zerocopy-derive v0.8.63
+    Checking unicode-segmentation v1.13.3
+    Checking clap_lex v1.1.2
+    Checking zune-core v0.5.3
+    Checking tracing-core v0.1.36
+    Checking unicode-properties v0.1.5
+    Checking nohash-hasher v0.2.0
+    Checking epaint_default_fonts v0.37.0
+   Compiling bytemuck_derive v1.12.1
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+    Checking bytemuck v1.25.2
+    Checking zerocopy v0.8.63
+    Checking zerofrom v0.1.8
+    Checking thiserror v2.0.21
+   Compiling zerovec-derive v0.11.7
+   Compiling displaydoc v0.2.7
+    Checking objc2-metal v0.3.2
+    Checking symphonia-core v0.6.1
+    Checking font-types v0.12.7
+    Checking yoke v0.8.4
+    Checking read-fonts v0.41.0
+    Checking color v0.3.3
+    Checking zerotrie v0.2.5
+    Checking zerovec v0.11.9
+    Checking peniko v0.6.1
+    Checking naga-types v30.0.2
+    Checking serde v1.0.229
+    Checking vello_common v0.2.0
+    Checking wgpu-types v30.0.2
+    Checking symphonia-bundle-mp3 v0.6.1
+    Checking tinystr v0.8.5
+    Checking icu_locale_core v2.4.0
+    Checking autocompare-diff v0.5.0 (/private/tmp/wt-ver96/crates/diff)
+    Checking autocompare-vfs v0.5.0 (/private/tmp/wt-ver96/crates/vfs)
+    Checking potential_utf v0.1.6
+    Checking icu_collections v2.4.0
+    Checking autocompare-sessions v0.5.0 (/private/tmp/wt-ver96/crates/sessions)
+    Checking icu_provider v2.4.0
+    Checking emath v0.37.0
+   Compiling foreign-types-macros v0.2.4
+    Checking autocompare-compare v0.5.0 (/private/tmp/wt-ver96/crates/compare)
+    Checking ecolor v0.37.0
+    Checking objc2-quartz-core v0.3.2
+    Checking icu_properties v2.4.0
+    Checking icu_normalizer v2.4.0
+    Checking foreign-types v0.5.0
+    Checking objc2-app-kit v0.2.2
+    Checking raw-window-metal v1.1.0
+    Checking objc2-uniform-type-identifiers v0.3.2
+    Checking pin-project-lite v0.2.17
+    Checking core-graphics v0.23.2
+    Checking objc2-app-kit v0.3.2
+    Checking tracing v0.1.44
+    Checking half v2.7.1
+    Checking ahash v0.8.12
+   Compiling clap_derive v4.6.8
+    Checking naga v30.0.2
+    Checking zune-jpeg v0.5.15
+    Checking idna_adapter v1.2.2
+    Checking clap_builder v4.6.7
+    Checking accesskit_consumer v0.39.2
+    Checking quick-error v2.0.1
+    Checking smol_str v0.2.2
+    Checking dpi v0.1.2
+    Checking either v1.19.0
+    Checking fax v0.2.7
+    Checking cursor-icon v1.2.0
+    Checking percent-encoding v2.3.2
+    Checking autocompare-reports v0.5.0 (/private/tmp/wt-ver96/crates/reports)
+    Checking weezl v0.1.12
+    Checking pxfm v0.1.30
+    Checking tiff v0.11.3
+    Checking form_urlencoded v1.2.2
+    Checking skrifa v0.44.0
+    Checking harfrust v0.12.0
+    Checking clap v4.6.8
+    Checking itertools v0.15.0
+    Checking idna v1.1.0
+    Checking byteorder-lite v0.1.0
+    Checking url v2.5.8
+    Checking objc2-core-text v0.3.2
+    Checking winit v0.30.13
+    Checking accesskit_macos v0.27.2
+    Checking moxcms v0.8.1
+    Checking memmap2 v0.9.12
+    Checking glifo v0.3.0
+    Checking web-time v1.1.0
+    Checking parlance v0.1.1
+    Checking rustc-hash v2.1.3
+    Checking type-map v0.5.1
+    Checking webbrowser v1.2.7
+    Checking autocompare-cli v0.5.0 (/private/tmp/wt-ver96/crates/cli)
+    Checking fontique v0.11.1
+    Checking vello_cpu v0.2.0
+    Checking poll-promise v0.3.0
+    Checking unicode-script v0.5.9
+    Checking sys-locale v0.3.2
+    Checking pollster v1.0.2
+    Checking dispatch2 v0.3.1
+    Checking winnow v1.0.5
+    Checking toml_datetime v1.1.3+spec-1.1.0
+    Checking accesskit_winit v0.34.2
+    Checking serde_spanned v1.1.3
+    Checking kittest v0.5.0
+    Checking toml_parser v1.1.5+spec-1.1.0
+    Checking rfd v0.18.0
+    Checking epaint v0.37.0
+    Checking toml v1.2.1+spec-1.1.0
+    Checking wgpu-naga-bridge v30.0.2
+    Checking egui v0.37.0
+    Checking egui_system_font_provider v0.37.0
+    Checking wgpu-hal v30.0.2
+    Checking image v0.25.10
+    Checking xtask v0.1.0 (/private/tmp/wt-ver96/xtask)
+    Checking wgpu-core-deps-apple v30.0.2
+    Checking wgpu-core v30.0.2
+    Checking arboard v3.7.0
+    Checking egui-winit v0.37.0
+    Checking wgpu v30.0.2
+    Checking egui-wgpu v0.37.0
+    Checking eframe v0.37.0
+    Checking autocompare-gui v0.5.0 (/private/tmp/wt-ver96/crates/gui)
+    Checking egui_kittest v0.37.0
+error: match can be simplified with `.unwrap_or_default()`
+    --> crates/gui/src/copy.rs:2280:22
+     |
+2280 |           Some(pos) => match trimmed.get(pos.saturating_add(1)..) {
+     |  ______________________^
+2281 | |             Some(s) => s,
+2282 | |             None => "",
+2283 | |         },
+     | |_________^ help: ascribe the type &str and replace your expression with: `trimmed.get(pos.saturating_add(1)..).unwrap_or_default()`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_unwrap_or_default
+     = note: `-D clippy::manual-unwrap-or-default` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::manual_unwrap_or_default)]`
+
+error: match can be simplified with `.unwrap_or_default()`
+    --> crates/gui/src/copy.rs:2287:22
+     |
+2287 |           Some(pos) => match after_slash.get(pos.saturating_add(1)..) {
+     |  ______________________^
+2288 | |             Some(s) => s,
+2289 | |             None => "",
+2290 | |         },
+     | |_________^ help: ascribe the type &str and replace your expression with: `after_slash.get(pos.saturating_add(1)..).unwrap_or_default()`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_unwrap_or_default
+
+error: this function has too many arguments (10/7)
+   --> crates/gui/src/screenshot.rs:126:1
+    |
+126 | / fn paint_inline_accent(
+127 | |     pixels: &mut [u8],
+128 | |     dims: (u32, u32),
+129 | |     x: u32,
+...   |
+136 | |     baseline_dy: u32,
+137 | | ) {
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_arguments
+    = note: `-D clippy::too-many-arguments` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_arguments)]`
+
+error: manual implementation of `.is_multiple_of()`
+   --> crates/gui/src/screenshot.rs:474:16
+    |
+474 |             if shown % 4 == 0 {
+    |                ^^^^^^^^^^^^^^ help: replace with: `shown.is_multiple_of(4)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_is_multiple_of
+    = note: `-D clippy::manual-is-multiple-of` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::manual_is_multiple_of)]`
+
+error: this `if` branch is empty
+    --> crates/gui/src/screenshot.rs:4037:9
+     |
+4037 |         if selected {}
+     |         ^^^^^^^^^^^^^^ help: you can remove it
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_ifs
+     = note: `-D clippy::needless-ifs` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::needless_ifs)]`
+
+error: this function has too many arguments (8/7)
+    --> crates/gui/src/views.rs:5149:1
+     |
+5149 | / fn side_job_with_prefs_and_find_current(
+5150 | |     side: Side,
+5151 | |     row: &TextRow,
+5152 | |     layout: &TextPaneLayout<'_>,
+...    |
+5157 | |     dark: bool,
+5158 | | ) -> LayoutJob {
+     | |______________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_arguments
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6184:5
+     |
+6184 | /// beech [`TIGHT_GAP`], truncate clip taaki lambi line bar ko lamba na
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+     = note: `-D clippy::doc-lazy-continuation` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::doc_lazy_continuation)]`
+help: indent this line
+     |
+6184 | ///   beech [`TIGHT_GAP`], truncate clip taaki lambi line bar ko lamba na
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6185:5
+     |
+6185 | /// kare — single-row lock); typo Mono (koi naya size nahi); colors
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6185 | ///   kare — single-row lock); typo Mono (koi naya size nahi); colors
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6186:5
+     |
+6186 | /// untouched.
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6186 | ///   untouched.
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6456:5
+     |
+6456 | /// 1px dim dividers (status20 fixture 4-zone rhythm). Geometry thin bar
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6456 | ///   1px dim dividers (status20 fixture 4-zone rhythm). Geometry thin bar
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6457:5
+     |
+6457 | /// ([`text_legend_strip_height_px`]); typo [`text_legend_role`]; fixed
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6457 | ///   ([`text_legend_strip_height_px`]); typo [`text_legend_role`]; fixed
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6458:5
+     |
+6458 | /// short labels kabhi bar ko lamba nahi karte — single-row lock. Koi
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6458 | ///   short labels kabhi bar ko lamba nahi karte — single-row lock. Koi
+     |     ++
+
+error: doc list item without indentation
+    --> crates/gui/src/views.rs:6459:5
+     |
+6459 | /// state mutate nahi, koi naya size/color nahi.
+     |     ^
+     |
+     = help: if this is supposed to be its own paragraph, add a blank line
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_lazy_continuation
+help: indent this line
+     |
+6459 | ///   state mutate nahi, koi naya size/color nahi.
+     |     ++
+
+error: this function has too many arguments (8/7)
+    --> crates/gui/src/views.rs:7108:1
+     |
+7108 | / fn side_jobs_wrapped_with_find_current(
+7109 | |     side: Side,
+7110 | |     row: &TextRow,
+7111 | |     layout: &TextPaneLayout<'_>,
+...    |
+7116 | |     dark: bool,
+7117 | | ) -> Vec<LayoutJob> {
+     | |___________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_arguments
+
+error: could not compile `autocompare-gui` (lib) due to 14 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: indexing may panic
+     --> crates/gui/src/app.rs:12683:31
+      |
+12683 |         assert!(line.contains(TYPO54_SANS_CHAIN[0]));
+      |                               ^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: consider using `.get(n)` or `.get_mut(n)` instead
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#indexing_slicing
+      = note: requested on the command line with `-D clippy::indexing-slicing`
+
+error: indexing may panic
+     --> crates/gui/src/app.rs:12684:31
+      |
+12684 |         assert!(line.contains(TYPO54_MONO_CHAIN[0]));
+      |                               ^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: consider using `.get(n)` or `.get_mut(n)` instead
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#indexing_slicing
+
+error: manual `RangeInclusive::contains` implementation
+     --> crates/gui/src/app.rs:12730:29
+      |
+12730 |                     assert!(v >= 0.0 && v <= 12.0);
+      |                             ^^^^^^^^^^^^^^^^^^^^^ help: use: `(0.0..=12.0).contains(&v)`
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_range_contains
+      = note: `-D clippy::manual-range-contains` implied by `-D warnings`
+      = help: to override `-D warnings` add `#[allow(clippy::manual_range_contains)]`
+
+error: manual `RangeInclusive::contains` implementation
+     --> crates/gui/src/app.rs:12738:46
+      |
+12738 |             assert!(x >= 0.0 && x <= 12.0 && y >= 0.0 && y <= 12.0);
+      |                                              ^^^^^^^^^^^^^^^^^^^^^ help: use: `(0.0..=12.0).contains(&y)`
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_range_contains
+
+error: manual `RangeInclusive::contains` implementation
+     --> crates/gui/src/app.rs:12738:21
+      |
+12738 |             assert!(x >= 0.0 && x <= 12.0 && y >= 0.0 && y <= 12.0);
+      |                     ^^^^^^^^^^^^^^^^^^^^^ help: use: `(0.0..=12.0).contains(&x)`
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_range_contains
+
+error: used `assert_eq!` with a literal bool
+     --> crates/gui/src/app.rs:12850:9
+      |
+12850 | /         assert_eq!(
+12851 | |             super::exq_lightvisual68_tab_pill_rect_for(nan, true)
+12852 | |                 .min
+12853 | |                 .x
+12854 | |                 .is_finite(),
+12855 | |             false
+12856 | |         );
+      | |_________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#bool_assert_comparison
+      = note: `-D clippy::bool-assert-comparison` implied by `-D warnings`
+      = help: to override `-D warnings` add `#[allow(clippy::bool_assert_comparison)]`
+help: replace it with `assert!(..)`
+      |
+12850 ~         assert!(
+12851 ~             !super::exq_lightvisual68_tab_pill_rect_for(nan, true)
+12852 |                 .min
+12853 |                 .x
+12854 ~                 .is_finite()
+      |
+
+error: used `assert_eq!` with a literal bool
+     --> crates/gui/src/app.rs:12857:9
+      |
+12857 | /         assert_eq!(
+12858 | |             super::exq_lightvisual68_tab_pill_rect_for(nan, false)
+12859 | |                 .min
+12860 | |                 .x
+12861 | |                 .is_finite(),
+12862 | |             false
+12863 | |         );
+      | |_________^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#bool_assert_comparison
+help: replace it with `assert!(..)`
+      |
+12857 ~         assert!(
+12858 ~             !super::exq_lightvisual68_tab_pill_rect_for(nan, false)
+12859 |                 .min
+12860 |                 .x
+12861 ~                 .is_finite()
+      |
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:1234:13
+     |
+1234 |             panic!("band must exist");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+     = note: requested on the command line with `-D clippy::panic`
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:2798:13
+     |
+2798 |             panic!("band must exist");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: this `if` statement can be collapsed
+    --> crates/gui/src/gutter.rs:3148:13
+     |
+3148 | /             if let Some(row) = rows.get(idx) {
+3149 | |                 if row.kind == TextRowKind::Equal {
+3150 | |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3151 | |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+...    |
+3154 | |             }
+     | |_____________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+     = note: `-D clippy::collapsible-if` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+     |
+3148 ~             if let Some(row) = rows.get(idx)
+3149 ~                 && row.kind == TextRowKind::Equal {
+3150 |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3151 |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3152 |                     }
+3153 ~                 }
+     |
+
+error: this `if` statement can be collapsed
+    --> crates/gui/src/gutter.rs:3149:17
+     |
+3149 | /                 if row.kind == TextRowKind::Equal {
+3150 | |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3151 | |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3152 | |                     }
+3153 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+     |
+3149 ~                 if row.kind == TextRowKind::Equal
+3150 ~                     && let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3151 |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3152 ~                     }
+     |
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:3256:13
+     |
+3256 |             panic!("marker y must exist");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:3282:13
+     |
+3282 |             panic!("viewport band must exist");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: this `if` statement can be collapsed
+    --> crates/gui/src/gutter.rs:3574:13
+     |
+3574 | /             if let Some(row) = rows.get(idx) {
+3575 | |                 if row.kind == TextRowKind::Equal {
+3576 | |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3577 | |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+...    |
+3580 | |             }
+     | |_____________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+     |
+3574 ~             if let Some(row) = rows.get(idx)
+3575 ~                 && row.kind == TextRowKind::Equal {
+3576 |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3577 |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3578 |                     }
+3579 ~                 }
+     |
+
+error: this `if` statement can be collapsed
+    --> crates/gui/src/gutter.rs:3575:17
+     |
+3575 | /                 if row.kind == TextRowKind::Equal {
+3576 | |                     if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3577 | |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3578 | |                     }
+3579 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+     |
+3575 ~                 if row.kind == TextRowKind::Equal
+3576 ~                     && let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
+3577 |                         assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
+3578 ~                     }
+     |
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4457:13
+     |
+4457 |             assert!(false, "narrow budget with lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+     = note: `-D clippy::assertions-on-constants` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::assertions_on_constants)]`
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4478:13
+     |
+4478 |             assert!(false, "cx");
+     |             ^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4487:13
+     |
+4487 |             assert!(false, "narrow budget no lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4503:13
+     |
+4503 |             assert!(false, "normal budget with lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4516:13
+     |
+4516 |             assert!(false, "cx");
+     |             ^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4525:13
+     |
+4525 |             assert!(false, "normal budget no lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4538:13
+     |
+4538 |             assert!(false, "wide budget with lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4551:13
+     |
+4551 |             assert!(false, "cx");
+     |             ^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4560:13
+     |
+4560 |             assert!(false, "wide budget no lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4640:13
+     |
+4640 |             assert!(false, "live budget with lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion is always `false`
+    --> crates/gui/src/gutter.rs:4650:13
+     |
+4650 |             assert!(false, "live budget no lines");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: replace this with `panic!()` or `unreachable!()`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/gutter.rs:4806:9
+     |
+4806 |         assert!(SPACE_XS < SPACE_SM);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/gutter.rs:4807:9
+     |
+4807 |         assert!(SPACE_SM < SPACE_MD);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/gutter.rs:4808:9
+     |
+4808 |         assert!(SPACE_MD < SPACE_LG);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/gutter.rs:4809:9
+     |
+4809 |         assert!(SPACE_LG < SPACE_XL);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:4821:13
+     |
+4821 |             panic!("b700 must be valid");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:4832:13
+     |
+4832 |             panic!("b960 must be valid");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: `panic` should not be present in production code
+    --> crates/gui/src/gutter.rs:4843:13
+     |
+4843 |             panic!("b1200 must be valid");
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: used `unwrap()` on an `Option` value
+    --> crates/gui/src/home.rs:6190:36
+     |
+6190 |             let (x0, y0, x1, y1) = rect.unwrap();
+     |                                    ^^^^^^^^^^^^^
+     |
+     = note: if this value is `None`, it will panic
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+     = note: requested on the command line with `-D clippy::unwrap-used`
+
+error: used `unwrap()` on an `Option` value
+    --> crates/gui/src/home.rs:6198:40
+     |
+6198 |             let (cx0, cy0, cx1, cy1) = cta.unwrap();
+     |                                        ^^^^^^^^^^^^
+     |
+     = note: if this value is `None`, it will panic
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+error: used `unwrap()` on an `Option` value
+    --> crates/gui/src/home.rs:6207:40
+     |
+6207 |             let (ax0, ay0, ax1, ay1) = super::home45_card_rect(i, 1200.0).unwrap();
+     |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: if this value is `None`, it will panic
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+error: used `unwrap()` on an `Option` value
+    --> crates/gui/src/home.rs:6209:44
+     |
+6209 |                 let (bx0, by0, bx1, by1) = super::home45_card_rect(j, 1200.0).unwrap();
+     |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: if this value is `None`, it will panic
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unwrap_used
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1469:25
+     |
+1469 |         assert!((left - 314.666656).abs() < 0.01);
+     |                         ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+     = note: `-D clippy::excessive-precision` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::excessive_precision)]`
+help: consider changing the type or truncating it to
+     |
+1469 -         assert!((left - 314.666656).abs() < 0.01);
+1469 +         assert!((left - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1470:25
+     |
+1470 |         assert!((base - 314.666656).abs() < 0.01);
+     |                         ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1470 -         assert!((base - 314.666656).abs() < 0.01);
+1470 +         assert!((base - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1615:23
+     |
+1615 |         assert!((lw - 314.666656).abs() < 0.001);
+     |                       ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1615 -         assert!((lw - 314.666656).abs() < 0.001);
+1615 +         assert!((lw - 314.666_66).abs() < 0.001);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1644:23
+     |
+1644 |         assert!((x0 - 314.666656).abs() < 0.01);
+     |                       ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1644 -         assert!((x0 - 314.666656).abs() < 0.01);
+1644 +         assert!((x0 - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1645:23
+     |
+1645 |         assert!((x1 - 637.333313).abs() < 0.05);
+     |                       ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1645 -         assert!((x1 - 637.333313).abs() < 0.05);
+1645 +         assert!((x1 - 637.333_3).abs() < 0.05);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1646:31
+     |
+1646 |         assert!(((x1 - x0) - (314.666656 + 8.0)).abs() < 0.05);
+     |                               ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1646 -         assert!(((x1 - x0) - (314.666656 + 8.0)).abs() < 0.05);
+1646 +         assert!(((x1 - x0) - (314.666_66 + 8.0)).abs() < 0.05);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1665:22
+     |
+1665 |         assert!((l - 314.666656).abs() < 0.01);
+     |                      ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1665 -         assert!((l - 314.666656).abs() < 0.01);
+1665 +         assert!((l - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1666:22
+     |
+1666 |         assert!((b - 314.666656).abs() < 0.01);
+     |                      ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1666 -         assert!((b - 314.666656).abs() < 0.01);
+1666 +         assert!((b - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1667:22
+     |
+1667 |         assert!((r - 314.666656).abs() < 0.01);
+     |                      ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1667 -         assert!((r - 314.666656).abs() < 0.01);
+1667 +         assert!((r - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1799:26
+     |
+1799 |         assert!((l1200 - 394.666656).abs() < 0.01);
+     |                          ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1799 -         assert!((l1200 - 394.666656).abs() < 0.01);
+1799 +         assert!((l1200 - 394.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1800:26
+     |
+1800 |         assert!((b1200 - 394.666656).abs() < 0.01);
+     |                          ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1800 -         assert!((b1200 - 394.666656).abs() < 0.01);
+1800 +         assert!((b1200 - 394.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1801:48
+     |
+1801 |         assert!((merge_center_pane_x(1200.0) - 402.666656).abs() < 0.05);
+     |                                                ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1801 -         assert!((merge_center_pane_x(1200.0) - 402.666656).abs() < 0.05);
+1801 +         assert!((merge_center_pane_x(1200.0) - 402.666_66).abs() < 0.05);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1979:25
+     |
+1979 |         assert!((l960 - 314.666656).abs() < 0.01);
+     |                         ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1979 -         assert!((l960 - 314.666656).abs() < 0.01);
+1979 +         assert!((l960 - 314.666_66).abs() < 0.01);
+     |
+
+error: float has excessive precision
+    --> crates/gui/src/take.rs:1980:47
+     |
+1980 |         assert!((merge_center_pane_x(960.0) - 322.666656).abs() < 0.05);
+     |                                               ^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#excessive_precision
+help: consider changing the type or truncating it to
+     |
+1980 -         assert!((merge_center_pane_x(960.0) - 322.666656).abs() < 0.05);
+1980 +         assert!((merge_center_pane_x(960.0) - 322.666_66).abs() < 0.05);
+     |
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5313:9
+     |
+5313 |         assert!(TEXT_ROW_HEIGHT_COMFORTABLE > TEXT_ROW_HEIGHT_COMPACT);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5314:9
+     |
+5314 |         assert!(TEXT_ROW_HEIGHT_SPACIOUS > TEXT_ROW_HEIGHT_COMFORTABLE);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5319:9
+     |
+5319 |         assert!(FOLDER_ROW_HEIGHT_COMFORTABLE > FOLDER_ROW_HEIGHT_COMPACT);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5320:9
+     |
+5320 |         assert!(FOLDER_ROW_HEIGHT_SPACIOUS > FOLDER_ROW_HEIGHT_COMFORTABLE);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5518:9
+     |
+5518 |         assert!(700 < VIEWPORT_MIN_W);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: this assertion has a constant value
+    --> crates/gui/src/viewmodel.rs:5580:9
+     |
+5580 |         assert!(SPACE_XS < SPACE_SM);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: `panic` should not be present in production code
+     --> crates/gui/src/views.rs:12447:13
+      |
+12447 |             panic!("marker band must exist");
+      |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#panic
+
+error: this assertion has a constant value
+    --> crates/gui/src/views_hex.rs:5300:9
+     |
+5300 |         assert!(HEX_STACKED_HEX_LINE_CHARS > HEX_STACKED_ASCII_LINE_CHARS);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: consider moving this into a const block: `const { assert!(..) }`
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#assertions_on_constants
+
+error: the loop variable `col` is used to index `expected_xs`
+    --> crates/gui/src/views_hex.rs:6025:20
+     |
+6025 |         for col in 0..16 {
+     |                    ^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_range_loop
+     = note: `-D clippy::needless-range-loop` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::needless_range_loop)]`
+help: consider using an iterator and enumerate()
+     |
+6025 -         for col in 0..16 {
+6025 +         for (col, <item>) in expected_xs.iter().enumerate() {
+     |
+
+error: indexing may panic
+    --> crates/gui/src/views_hex.rs:6029:34
+     |
+6029 |             assert_eq!(r_x, Some(expected_xs[col]));
+     |                                  ^^^^^^^^^^^^^^^^
+     |
+     = help: consider using `.get(n)` or `.get_mut(n)` instead
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#indexing_slicing
+
+error: could not compile `autocompare-gui` (lib test) due to 75 previous errors
+exit=101

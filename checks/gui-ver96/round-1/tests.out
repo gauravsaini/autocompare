@@ -1,0 +1,544 @@
+
+running 37 tests
+.....................................
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+   1 alpha                             |    1 alpha                            
+   1 alpha                             |    1 alpha                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   1 alpha                             |    1 alpha                            
+   3 gamma                             |    3 gamma                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+R          -         11                 - 2026-11-21 05:33  extra.txt
+   2 beta                              |    2 BETA                             
+autocompare: the merge has conflicts
+   2 beta                              |    2 BETA                             
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   3 gamma                             |    3 gamma                            
+   3 gamma                             |    3 gamma                            
+autocompare: the merge has conflicts
+<          5          5  2026-11-21 05:33 2026-11-21 05:33  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+.autocompare: read-only mode: cannot apply sync in read-only mode
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+.   1 alpha                             |    1 alpha                            
+.   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+..autocompare: read-only mode: cannot write merge in read-only mode
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+.   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+.left:  11 bytes
+right: 11 bytes
+no differences
+autocompare: the merge has conflicts
+.
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+
+running 5 tests
+autocompare: invalid argument: no comparison command or input files specified
+Compare text, folders and bytes, and merge three ways
+
+Usage: autocompare [OPTIONS] [COMMAND]
+
+Commands:
+  text          Compare two text files line by line, side by side
+  folder        Compare two folder trees recursively by size and modified time
+  hex           Compare two files byte by byte
+  merge         Merge two files that share a common base version
+  table         Compare two delimited (CSV-style) tables cell by cell
+  sync          Plan (and optionally apply) a folder sync
+  picture       Compare two PNG images pixel by pixel
+  folder-merge  Plan (and optionally apply) a three-way folder merge
+  audio         Compare two audio files (WAV, MP3) sample by sample
+  session       Load and run a saved comparison session
+
+Options:
+      --color <COLOR>
+          When to color output
+
+          Possible values:
+          - auto:   Detect terminal capability automatically
+          - always: Force ANSI color sequences on
+          - never:  Suppress all ANSI color sequences
+          
+          [default: auto]
+
+      --report <REPORT>
+          Generate comparison report: format:path (html, text, xml, patch)
+
+      --ro
+          Read-only mode for VCS tools and sessions
+
+      --ro1
+          Read-only mode for left input
+
+      --ro2
+          Read-only mode for right input
+
+autocompare: path not found: nonexistent_left.txt
+.      --ro3
+          Read-only mode for base / ancestor / center input
+
+      --ro4
+          Read-only mode for output input
+
+      --automerge
+          Automatically merge when there are no conflicts
+
+      --mergeoutput <MERGEOUTPUT>
+          Output destination path for 3-way merge results
+
+      --vcs1 <VCS1>
+          VCS input 1 alias (typically left/local)
+
+      --vcs2 <VCS2>
+          VCS input 2 alias (typically right/remote)
+
+      --vcs3 <VCS3>
+          VCS input 3 alias (typically base/ancestor)
+
+autocompare: invalid argument: --report argument cannot be empty
+      --vcs4 <VCS4>
+          VCS input 4 alias (typically output/merged)
+
+      --title1 <TITLE1>
+          VCS title/label for left / first input
+
+      --title2 <TITLE2>
+          VCS title/label for right / second input
+
+      --title3 <TITLE3>
+          VCS title/label for center / base input
+
+      --title4 <TITLE4>
+          VCS title/label for output input
+
+      --session <SESSION>
+          Path to a session document to load and execute
+
+      --save-session <SAVE_SESSION>
+          Save the current comparison session configuration to path
+
+      --exit-code-mode <EXIT_CODE_MODE>
+          Exit code convention mode: diff (0/1/2) or bc (Beyond Compare return codes)
+
+          Possible values:
+          - diff: Standard diff(1) exit codes: 0 = same, 1 = different / conflicts, 2 = error
+          - bc:   Beyond Compare exit codes: 0 = success, 11 = binary diff, 13 = rules diff, 14 = conflicts
+          
+          [default: diff]
+
+      --bc-exit-code
+          Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts)
+
+      --report-title <REPORT_TITLE>
+          Title override for comparison reports
+
+      --solo
+          Run in a separate solo process without reusing background instances
+
+      --nobackups
+          Suppress backup file creation during merge/save operations
+
+error:      --reviewconflicts
+          Automatically review conflicts in interactive mode if present
+
+. unexpected argument '  -h, --help
+          Print help (see a summary with '-h')
+
+--completely-invalid-flag  -V, --version
+          Print version
+' found
+
+  .tip: to pass '--completely-invalid-flag' as a value, use '-- --completely-invalid-flag'
+
+Usage: autocompare text [OPTIONS] <LEFT> <RIGHT>
+
+For more information, try '--help'.
+..
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 4 tests
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+R          -         11                 - 2026-11-21 05:33  extra.txt
+<          5          5  2026-11-21 05:33 2026-11-21 05:33  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+.left:  11 bytes
+right: 11 bytes
+no differences
+autocompare: read-only mode: cannot write merge in read-only mode
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+..=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)
+left:  4x4
+right: 4x4
+no differences
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+.
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 1 test
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 5 tests
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing written (pass --apply and --output to run)
+dry run: nothing changed (pass --apply to run)
+left:  4x4
+right: 4x4
+overlap: 4x4 (16 pixels)
+differing pixels: 1 (6.25%)
+difference bounds: (1,1)..(1,1)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+...left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+.left:  4x4
+right: 4x4
+no differences
+.
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 4 tests
+left:  11 bytes
+R          -         11                 - 2026-11-21 05:33  extra.txt
+right: 11 bytes
+<          5          5  2026-11-21 05:33 2026-11-21 05:33  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+first difference at offset 0x00000001
+   1 alpha                             |    1 alpha                            
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+   2 beta                              |    2 BETA                             
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+   3 gamma                             |    3 gamma                            
+autocompare: the merge has conflicts
+.left:  11 bytes
+right: 11 bytes
+no differences
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+base
+..   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+.
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 26 tests
+..........................
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+
+running 15 tests
+...............
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 21 tests
+.....................
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+
+running 17 tests
+.................
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 11 tests
+...........
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+
+running 7 tests
+.......
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 10 tests
+..........
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 25 tests
+.........................
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+
+running 12 tests
+............
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 13 tests
+.............
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 8 tests
+........
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 98 tests
+....................................................................................... 87/98
+...........
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 38 tests
+iii.........................ii........
+test result: ok. 33 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+
+running 44 tests
+............................................
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+
+running 20 tests
+....................
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 4 tests
+....
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 40 tests
+........................................
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+
+running 8 tests
+........
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1163 tests
+....................................................................................... 87/1163
+....................................................................................... 174/1163
+....................................................................................... 261/1163
+....................................................................................... 348/1163
+....................................................................................... 435/1163
+....................................................................................... 522/1163
+....................................................................................... 609/1163
+....................................................................................... 696/1163
+....................................................................................... 783/1163
+....................................................................................... 870/1163
+....................................................................................... 957/1163
+....................................................................................... 1044/1163
+....................................................................................... 1131/1163
+................................
+test result: ok. 1163 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.57s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+..
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 31 tests
+...............................
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 34 tests
+..................................
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+...........
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 20 tests
+....................
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 12 tests
+............
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+....
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 5 tests
+.....
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 10 tests
+..........
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 8 tests
+........
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 14 tests
+..............
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 7 tests
+.......
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 3 tests
+...
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit=0
