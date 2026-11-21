@@ -1066,3 +1066,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-lib86 module registry
 - `crates/gui/src/lib.rs` me module registry docs + decl order, zero logic change, geometry/colors/typography frozen.
 - Proof: leaf 1160 lib + 2 shot green, fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 8f8fc73.
+
+### Feature (2026-11-21) — feat(gui): exq-table85 table geometry
+- `crates/gui/src/views_table.rs` me table geometry polish, SPACE tokens, harness PASS byte-identical 10946B.
+- Proof: leaf 1159 lib + 2 shot green, fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 1d9aa2b.
