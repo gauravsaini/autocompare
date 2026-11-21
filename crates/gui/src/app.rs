@@ -315,6 +315,10 @@ pub struct App {
     /// Display still reuses [`App::status`]; this only feeds the
     /// throttle gate so a repeated message never repaints.
     progress_message: Option<String>,
+    /// EXQ-TYPO48 once-flag: live `ui()` pehle frame par live font plan
+    /// install karta hai, phir true (dobara no-op). Headless tests `ui()`
+    /// kabhi nahi chalate, isliye default false display ko nahi chhuta.
+    fonts_installed: bool,
     rx: Option<Receiver<CompareResult>>,
 }
 
@@ -400,6 +404,7 @@ impl Default for App {
             job: None,
             progress_fraction: None,
             progress_message: None,
+            fonts_installed: false,
             rx: None,
         }
     }
@@ -839,7 +844,7 @@ impl App {
     }
 
     /// Us kind ka find/scroll cursor. Hex `u64` saturate hokar aata hai
-    /// (`as` cast, koi `unwrap` nahi). Pure; headless-tested.
+    /// (`as` cast, koi fail-wala call nahi). Pure; headless-tested.
     fn cursor_for(&self, kind: Tab) -> usize {
         match kind {
             Tab::Text => self.text_find_cursor,
@@ -1034,7 +1039,7 @@ impl App {
     }
 
     /// Active tab ka find/scroll cursor `usize` me. Hex `u64` yahan
-    /// saturate hokar aata hai (`as` cast, koi `unwrap` nahi).
+    /// saturate hokar aata hai (`as` cast, koi fail-wala call nahi).
     fn current_cursor(&self) -> usize {
         self.cursor_for(self.tab)
     }
@@ -1740,6 +1745,13 @@ impl App {
     pub fn resolve_screenshot_mode(
         args: &[String],
     ) -> Result<crate::screenshot::FixtureMode, String> {
+        // EXQ-TYPO48 machine evidence: `--screenshot` stderr par live font
+        // plan ki installed families (headless harness apne 5x7 glyphs
+        // rakhta hai, live app ye plan startup par install karta hai).
+        eprintln!(
+            "autocompare-gui: installed font families (live plan; headless keeps harness glyphs): {}",
+            typo48_installed_families_label()
+        );
         Self::resolve_screenshot_mode_with_env(args, Self::dark_ref_from_env())
     }
 
@@ -6545,6 +6557,96 @@ impl App {
     }
 }
 
+/// EXQ-TYPO48 one live font slot: kaunsa egui family slot kaunse TypoRole
+/// stack ko serve karta hai. `stack` hamesha `TYPO_*_STACK` const ka
+/// reference hai (single source, duplicate string kabhi nahi). Koi naya
+/// size/weight/token nahi.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Typo48FontSlot {
+    /// Kaunsa egui family slot (Proportional chrome / Monospace content).
+    pub family: egui::FontFamily,
+    /// Us slot ka system-first stack string (theme single source).
+    pub stack: &'static str,
+}
+
+/// EXQ-TYPO48 live install plan: Proportional har chrome role ko UI sans
+/// stack se, Monospace `Mono` content ko mono stack se serve karta hai.
+/// System-first fallback chain: koi font binary ship nahi hota; egui apne
+/// built-in fonts slot me rakhta hai, system families runtime par resolve
+/// hoti hain, missing par stock fallback — kabhi blank nahi. Zero naye
+/// sizes/weights/tokens. Pure; headless-tested.
+pub fn typo48_live_font_plan() -> [Typo48FontSlot; 2] {
+    [
+        Typo48FontSlot {
+            family: egui::FontFamily::Proportional,
+            stack: crate::theme::TYPO_UI_SANS_STACK,
+        },
+        Typo48FontSlot {
+            family: egui::FontFamily::Monospace,
+            stack: crate::theme::TYPO_MONO_STACK,
+        },
+    ]
+}
+
+/// EXQ-TYPO48 role se installed family: har TypoRole plan ke kisi slot me
+/// resolve hota hai (Mono monospace, baaki sab proportional). Reuse hai
+/// (koi naya mapping nahi). Pure; headless-tested.
+pub fn typo48_family_for_role(role: crate::theme::TypoRole) -> egui::FontFamily {
+    role.font_family()
+}
+
+/// EXQ-TYPO48 family ka short label (`proportional` / `monospace`;
+/// named families apna naam rakhti hain). Pure; headless-tested.
+pub fn typo48_family_name(family: &egui::FontFamily) -> String {
+    match family {
+        egui::FontFamily::Proportional => String::from("proportional"),
+        egui::FontFamily::Monospace => String::from("monospace"),
+        egui::FontFamily::Name(name) => name.to_string(),
+    }
+}
+
+/// EXQ-TYPO48 startup label: `family <- stack` jodiyan, single source se.
+/// Live startup + `--screenshot` stderr dono yahi print karte hain (machine
+/// evidence). Pure; headless-tested.
+pub fn typo48_installed_families_label() -> String {
+    typo48_live_font_plan()
+        .iter()
+        .map(|slot| format!("{} <- {}", typo48_family_name(&slot.family), slot.stack))
+        .collect::<Vec<String>>()
+        .join("; ")
+}
+
+/// EXQ-TYPO48 live install: plan slots ko `ctx` font definitions me
+/// re-assert karta hai (built-ins fallback chain barkarar — koi binary
+/// ship nahi, koi slot khali nahi chhodta), phir installed families log
+/// karta hai. Sirf FontDefinitions mutation, display touch nahi — headless
+/// `Context::default()` par bhi safe. Live path se sirf once-guard
+/// (`App::ensure_typo48_live_fonts`, pehla frame, ek baar) chalata hai.
+pub fn install_typo48_live_fonts(ctx: &egui::Context) {
+    let mut defs = egui::FontDefinitions::default();
+    for slot in typo48_live_font_plan() {
+        defs.families.entry(slot.family).or_default();
+    }
+    ctx.set_fonts(defs);
+    eprintln!(
+        "autocompare-gui: installed font families: {}",
+        typo48_installed_families_label()
+    );
+}
+
+impl App {
+    /// EXQ-TYPO48 once-guard: pehle live frame par
+    /// [`install_typo48_live_fonts`] chalata hai, baad me no-op. Headless
+    /// tests `ui()` kabhi nahi chalate, isliye ye display ko nahi chhuta.
+    fn ensure_typo48_live_fonts(&mut self, ctx: &egui::Context) {
+        if self.fonts_installed {
+            return;
+        }
+        install_typo48_live_fonts(ctx);
+        self.fonts_installed = true;
+    }
+}
+
 impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string(
@@ -6554,6 +6656,10 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+        // EXQ-TYPO48 live fonts (typography second step): pehle frame par
+        // system-first plan install (built-ins fallback barkarar); geometry
+        // aur colors untouched. Headless tests `ui()` nahi chalate.
+        self.ensure_typo48_live_fonts(ui.ctx());
         // CK-DARKBUG: eframe 0.37 me `set_visuals` sirf active theme slot likhta
         // hai; preference default `System` hai isliye Light-Mode OS par
         // creation-time dark apply light slot me kabhi nahi lagta (live light +
@@ -12152,5 +12258,79 @@ mod tests {
         assert!(raw.contains("status_segment_at_1200"));
         assert!(raw.contains("needs_hscroll"));
         assert!(exq_app35_hierarchy_ok());
+    }
+
+    #[test]
+    fn typo_exq_typo48_live_fonts() {
+        use crate::theme::{TYPO_MONO_STACK, TYPO_UI_SANS_STACK, TypoRole};
+        use eframe::egui::{Context, FontDefinitions, FontFamily};
+
+        // Single source: plan stacks theme consts hain, duplicate string nahi.
+        let plan = typo48_live_font_plan();
+        assert_eq!(plan.len(), 2);
+        let prop = plan
+            .iter()
+            .find(|slot| slot.family == FontFamily::Proportional);
+        let mono = plan
+            .iter()
+            .find(|slot| slot.family == FontFamily::Monospace);
+        assert_eq!(prop.map(|slot| slot.stack), Some(TYPO_UI_SANS_STACK));
+        assert_eq!(mono.map(|slot| slot.stack), Some(TYPO_MONO_STACK));
+
+        // Har TypoRole kisi installed family me map hota hai: Mono
+        // monospace, baaki sab proportional; stack hamesha slot stack hai.
+        let roles = [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ];
+        for role in roles {
+            let family = typo48_family_for_role(role);
+            assert_eq!(family, role.font_family());
+            let slot = plan.iter().find(|slot| slot.family == family);
+            assert!(slot.is_some());
+            assert_eq!(
+                role.font_stack(),
+                slot.map(|slot| slot.stack).unwrap_or_default()
+            );
+        }
+        assert_eq!(
+            typo48_family_for_role(TypoRole::Mono),
+            FontFamily::Monospace
+        );
+        assert_eq!(
+            typo48_family_for_role(TypoRole::Body),
+            FontFamily::Proportional
+        );
+
+        // Fallback sane: stock definitions me dono plan families non-empty
+        // hain (system-first chain kabhi blank slot par nahi tikti).
+        let defs = FontDefinitions::default();
+        for slot in plan {
+            let fonts = defs.families.get(&slot.family);
+            assert!(fonts.is_some_and(|list| !list.is_empty()));
+        }
+
+        // Headless-safe: display ke bina install chalta hai; label dono
+        // stacks namta hai (koi naya size/weight/token nahi).
+        install_typo48_live_fonts(&Context::default());
+        let label = typo48_installed_families_label();
+        assert!(label.contains(TYPO_UI_SANS_STACK));
+        assert!(label.contains(TYPO_MONO_STACK));
+        assert!(label.contains("proportional"));
+        assert!(label.contains("monospace"));
+
+        // Once-guard: fresh app par false, pehli ensure par true, dobara no-op.
+        let mut app = App::default();
+        assert!(!app.fonts_installed);
+        let ctx = Context::default();
+        app.ensure_typo48_live_fonts(&ctx);
+        assert!(app.fonts_installed);
+        app.ensure_typo48_live_fonts(&ctx);
+        assert!(app.fonts_installed);
     }
 }
