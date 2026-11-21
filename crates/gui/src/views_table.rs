@@ -558,12 +558,13 @@ pub fn table_find_prev(
     None
 }
 
-/// Table find bar ki geometry (text/folder precedent reuse, koi naya
-/// token nahi): bar `28.0` px uncha, needle field `120.0` px chauda,
-/// badge right-end se `4.0` px pad par.
+/// Table find bar ki geometry (text/folder precedent reuse): bar `28.0` px
+/// uncha, needle field `120.0` px chauda (`SPACE_XL * 5.0` — text precedent
+/// wahi chaudai, koi naya rhythm nahi), badge right-end se `4.0` px pad par.
 pub const TABLE_FIND_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
-/// Table find needle field ki chaudai (text precedent reuse).
-pub const TABLE_FIND_NEEDLE_W: f32 = 120.0;
+/// Table find needle field ki chaudai (text precedent reuse): `SPACE_XL * 5.0`
+/// = 120.0 — `views::FIND_NEEDLE_W` wahi chaudai, SPACE token single source.
+pub const TABLE_FIND_NEEDLE_W: f32 = crate::theme::SPACE_XL * 5.0;
 /// Table find badge ka right-end pad (text precedent reuse).
 pub const TABLE_FIND_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
 
@@ -3730,8 +3731,9 @@ pub fn table10_key_box_rects(
 // judvaan test sath me hai.
 // ----------------------------------------------------------------------------
 
-/// Table30 wide canvas width (px): 1200.0 — wide fixture fit lock bina h-scroll. Pure.
-pub const TABLE30_CANVAS_W: f32 = 1200.0;
+/// Table30 wide canvas width (px): `SPACE_XL * 50.0` = 1200.0 — wide fixture
+/// fit lock bina h-scroll, koi naya rhythm nahi. Pure.
+pub const TABLE30_CANVAS_W: f32 = crate::theme::SPACE_XL * 50.0;
 
 /// Table30 canvas reference height (px): [`TABLE_CANVAS_H`] reuse (600.0). Pure.
 pub const TABLE30_CANVAS_H: f32 = TABLE_CANVAS_H;
@@ -5254,8 +5256,10 @@ mod tests {
         assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
         assert_eq!(TABLE_FIND_BADGE_PAD, GEO_TIGHT_GAP);
         assert_eq!(TABLE_FIND_BADGE_PAD, 4.0);
-        // Needle width ka koi identical token nahi (repo-wide grep) — literal rehta hai.
+        // Needle width SPACE token se hai (`SPACE_XL * 5.0` = 120.0, text
+        // precedent wahi chaudai) — literal nahi, drift-proof.
         assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_NEEDLE_W, crate::theme::SPACE_XL * 5.0);
     }
 
     #[test]
@@ -6241,6 +6245,7 @@ mod tests {
 
         // 1. 1200px Canvas geometry & avail width
         assert_eq!(TABLE30_CANVAS_W, 1200.0);
+        assert_eq!(TABLE30_CANVAS_W, crate::theme::SPACE_XL * 50.0);
         assert_eq!(TABLE30_CANVAS_H, 600.0);
         assert_eq!(table30_avail_w(), 1176.0);
         assert_eq!(table30_grid_origin(), (12.0, 12.0));
