@@ -806,3 +806,9 @@
 1. **Center gutter geometry**: 20px lane at canvas midpoint, 16px arrows centered with 2px margins, TypoRole Mono 15.6 rhythm, 1200px no h-scroll + narrow700 edge.
 2. **Tests**: 1080 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned clean non-test, colors 38 frozen. Agyx committed cleanly itself this time, no recovery needed.
 3. **Files changed**: crates/gui/src/gutter.rs, checks/gui-exq-text38/**, TIMELINE.md.
+
+### Chore (2026-11-21) — chore(localrun): exq-localrun6 early feedback bundle (opencode default)
+
+1. **Early feedback**: CLI 10/10 PASS, 3 PNGs default 11040B / dark 11236B / light 11040B magic ok, dist tarball 5816820B + sha, REPORT RESULT: PASS, exquisite PASS colors 38 frozen.
+2. **Tests**: owned scope no Rust files, harness side-effect PNGs reverted, no contamination.
+3. **Files changed**: checks/ac-loop/round-lr6/**, dist/**, TIMELINE.md.
