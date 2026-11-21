@@ -3602,6 +3602,74 @@ pub fn hex31_live_hex_geometry_ok(char_w: f32) -> bool {
         && hex31_typo_roles_ok()
 }
 
+// ----------------------------------------------------------------------------
+// Hex exquisite geometry wave hex42 round-2: live hex columns.
+// Round-1 (hex31) locked the full live geometry; round-2 keeps that lock
+// live at the reference char width with zero new tokens. Every helper
+// below delegates to the hex31 single source so ruler-vs-grid columns,
+// the SPACE-token ASCII gap, the offset gutter, the 1200px no-scroll
+// budget and the narrow700 stacked edge cannot drift apart.
+// Geometry FIRST: offset gutter from SPACE tokens, even 3-char column
+// step with one shared midline char, ASCII pane exactly one SPACE_SM
+// past the hex outer, 1200px SideBySide with panes inside grid avail.
+// Typography SECOND: Mono grid/ruler/offset/ASCII, Body labels.
+// Colors FROZEN: no Color32 or Visuals. No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Reference char width for the hex42 column lock (px): 7.0.
+pub const HEX42_REF_CHAR_W: f32 = 7.0;
+
+/// Offset gutter reuses SPACE tokens only (delegates to hex31).
+/// Pure; unit-tested.
+pub fn hex42_offset_gutter_space_ok() -> bool {
+    hex31_offset_gutter_space_ok()
+}
+
+/// Hex dump columns align ruler-vs-grid at `char_w` (delegates to hex31).
+/// Pure; unit-tested.
+pub fn hex42_columns_align_ok(char_w: f32) -> bool {
+    hex31_columns_align_ok(char_w)
+}
+
+/// ASCII pane gap from SPACE tokens at `char_w` (delegates to hex31).
+/// Pure; unit-tested.
+pub fn hex42_ascii_gap_ok(char_w: f32) -> bool {
+    hex31_ascii_gap_ok(char_w)
+}
+
+/// 1200px wide canvas shows all panes with no h-scroll at `char_w`
+/// (delegates to hex31). Pure; unit-tested.
+pub fn hex42_wide1200_no_hscroll_ok(char_w: f32) -> bool {
+    hex31_wide1200_no_hscroll_ok(char_w)
+}
+
+/// Narrow700 edge stays stacked at `char_w` (delegates to hex31).
+/// Pure; unit-tested.
+pub fn hex42_narrow700_stacked_ok(char_w: f32) -> bool {
+    hex31_narrow700_stacked_ok(char_w)
+}
+
+/// Typography roles reuse only: Mono grid, Body labels (delegates).
+/// Pure; unit-tested.
+pub fn hex42_typo_roles_ok() -> bool {
+    hex31_typo_roles_ok()
+}
+
+/// Combined live hex column lock at `char_w`: gutter plus columns plus
+/// ASCII gap plus wide-1200 no-scroll plus narrow700 stacked plus typo
+/// roles. Bad `char_w` returns false. Pure; unit-tested.
+pub fn hex42_live_hex_columns_ok(char_w: f32) -> bool {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return false;
+    }
+    hex42_offset_gutter_space_ok()
+        && hex42_columns_align_ok(char_w)
+        && hex42_ascii_gap_ok(char_w)
+        && hex42_wide1200_no_hscroll_ok(char_w)
+        && hex42_narrow700_stacked_ok(char_w)
+        && hex42_typo_roles_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5993,5 +6061,49 @@ mod tests {
         assert!(hex31_live_hex_geometry_ok(char_w));
         assert!(!hex31_live_hex_geometry_ok(0.0));
         assert!(!hex31_live_hex_geometry_ok(f32::NAN));
+    }
+
+    #[test]
+    fn hex_exq_hex42_live_hex_columns() {
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-hex42/comparison/hex-narrow-700.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-hex42/round-1/comparison/hex-narrow-700.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"hex-narrow-700\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 700.0"));
+        assert!(fixture_raw.contains("\"layout_mode\": \"Stacked\""));
+        assert!(fixture_raw.contains("\"visible_rows\": 36"));
+        let wide_raw = include_str!("../../../checks/gui-exq-hex42/comparison/hex-wide-1200.json");
+        let wide_r1 =
+            include_str!("../../../checks/gui-exq-hex42/round-1/comparison/hex-wide-1200.json");
+        assert_eq!(wide_raw, wide_r1);
+        assert!(wide_raw.contains("\"name\": \"hex-wide-1200\""));
+        assert!(wide_raw.contains("\"needs_hscroll\": false"));
+
+        let char_w = HEX42_REF_CHAR_W;
+        assert_eq!(char_w, 7.0);
+        assert!(hex42_offset_gutter_space_ok());
+        assert!(hex42_columns_align_ok(char_w));
+        assert!(!hex42_columns_align_ok(0.0));
+        assert!(!hex42_columns_align_ok(f32::NAN));
+        assert!(hex42_ascii_gap_ok(char_w));
+        assert!(!hex42_ascii_gap_ok(0.0));
+        assert_eq!(HEX_WIDE1200_CANVAS_W, 1200.0);
+        assert_eq!(hex_wide1200_grid_avail_w(), 1148.0);
+        assert!(hex42_wide1200_no_hscroll_ok(char_w));
+        assert!(!hex42_wide1200_no_hscroll_ok(0.0));
+        assert_eq!(HEX_NARROW700_CANVAS_W, 700.0);
+        assert_eq!(
+            hex_layout_mode(HEX_NARROW700_CANVAS_W),
+            HexLayoutMode::Stacked
+        );
+        assert_eq!(hex31_narrow700_visible_rows(), 36);
+        assert!(hex42_narrow700_stacked_ok(char_w));
+        assert!(!hex42_narrow700_stacked_ok(0.0));
+        assert!(hex42_typo_roles_ok());
+        assert!(hex42_live_hex_columns_ok(char_w));
+        assert!(!hex42_live_hex_columns_ok(0.0));
+        assert!(!hex42_live_hex_columns_ok(f32::NAN));
     }
 }
