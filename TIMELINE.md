@@ -1106,3 +1106,7 @@
 ### Feature (2026-11-21) — feat(gui): gui95 verification
 - `crates/gui/**` verify checks-only, 1163 lib + 2 shots passed, fmt clean, banned 0 prod, clippy debt pre-existing R1.
 - Proof: leaf OWNS clean, NO PUSH, cherry-picked 87829a4.
+
+### Verify (2026-11-21) — docs(checks): ver96 verification round-1 baseline
+- Root-4 baseline: G1 CRAFT_JSON_OK PASS, G2 workspace tests PASS 1800 passed 0 failed, G3 clippy FAIL honestly (75 errors all crates/gui pre-existing, non-gui clean, src untouched checks-only), G4 OWNS PASS.
+- Proof: leaf tree clean, NO PUSH, cherry-picked 03110b2.
