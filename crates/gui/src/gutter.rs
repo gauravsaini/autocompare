@@ -2029,7 +2029,7 @@ pub fn gutter_side_layout_720() -> (f32, f32, f32, f32, f32) {
     gutter_text_layout(
         crate::theme::GEO_OUTER_MARGIN,
         GUTTER_SIDE_MARKER_COL_W,
-        720.0,
+        crate::theme::VIEWPORT_MIN_W as f32,
     )
 }
 
@@ -2354,7 +2354,7 @@ pub fn gutter_side_layout_1200() -> (f32, f32, f32, f32, f32) {
     gutter_text_layout(
         crate::theme::GEO_OUTER_MARGIN,
         GUTTER_SIDE_MARKER_COL_W,
-        1200.0,
+        GUTTER_CANVAS_WIDE_1200,
     )
 }
 
@@ -2402,7 +2402,11 @@ pub fn gutter_side_hit_band_1200() -> (f32, f32) {
 /// me symmetric insets samet. Single source over [`gutter_text_layout`].
 /// Pure; unit-tested.
 pub fn gutter_text_layout_1200() -> (f32, f32, f32, f32, f32) {
-    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 1200.0)
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_CENTER_W,
+        GUTTER_CANVAS_WIDE_1200,
+    )
 }
 
 /// 1200px tall canvas center-column x px: `margin + pane` from the symmetric
@@ -2460,7 +2464,7 @@ pub fn gutter_viewport_tall_floor_1200(
     top_row: usize,
     visible_rows: usize,
 ) -> Option<(f32, f32)> {
-    gutter_viewport_rect_padded(total_rows, 1200.0, top_row, visible_rows)
+    gutter_viewport_rect_padded(total_rows, GUTTER_CANVAS_WIDE_1200, top_row, visible_rows)
 }
 
 #[cfg(test)]
@@ -2693,7 +2697,11 @@ pub fn gutter_slop_band(seg: &GutterSegment, slop: f32) -> Option<(f32, f32)> {
 /// (960 - 2*12 - 24) / 2 = 456. Panes divider se chipakte nahi (side
 /// gaps center ke andar symmetric). Pure; unit-tested.
 pub fn gutter_text5_layout_960() -> (f32, f32, f32, f32, f32) {
-    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 960.0)
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_CENTER_W,
+        GUTTER_CANVAS_NORMAL_960,
+    )
 }
 
 /// Kisi bhi canvas width par symmetric text layout: margins bahar barabar,
@@ -2845,7 +2853,11 @@ mod exq_text5_tests {
 /// right, margin)` px: 12 + 336 + 24 + 336 + 12 = 720. Panes barabar,
 /// divider symmetric gaps samet. Pure; unit-tested.
 pub fn gutter_text_layout_720() -> (f32, f32, f32, f32, f32) {
-    gutter_text_layout(crate::theme::GEO_OUTER_MARGIN, GUTTER_CENTER_W, 720.0)
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        GUTTER_CENTER_W,
+        crate::theme::VIEWPORT_MIN_W as f32,
+    )
 }
 
 /// Number-cell char width (chars): digit count + trailing pad.
@@ -3429,7 +3441,7 @@ pub fn gutter_side_layout_960() -> (f32, f32, f32, f32, f32) {
     gutter_text_layout(
         crate::theme::GEO_OUTER_MARGIN,
         GUTTER_SIDE_MARKER_COL_W,
-        960.0,
+        GUTTER_CANVAS_NORMAL_960,
     )
 }
 
@@ -4585,5 +4597,86 @@ mod exq_geo55_tests {
         assert_eq!(gutter_omit_marker_box(), 12.0);
         assert_eq!(gutter_omit_marker_pad(), 2.0);
         assert!(gutter_mark_is_canvas_midpoint_aligned(700.0, 350.0));
+    }
+}
+
+#[cfg(test)]
+mod exq_gutter59_tests {
+    use super::*;
+
+    #[test]
+    fn gutter59_canvas_widths_ride_single_source_tokens() {
+        // Gutter-owned canvas consts stay on the canonical budgets...
+        assert_eq!(GUTTER_CANVAS_NORMAL_960, crate::theme::VIEWPORT_W as f32);
+        assert_eq!(GUTTER_CANVAS_NORMAL_960, 960.0);
+        assert_eq!(GUTTER_CANVAS_WIDE_1200, 1200.0);
+        assert_eq!(GUTTER_CANVAS_NARROW_700, 700.0);
+        // ...and the narrow layouts ride the viewport-min token (720).
+        let narrow_min = crate::theme::VIEWPORT_MIN_W as f32;
+        assert_eq!(narrow_min, 720.0);
+        for layout in [gutter_side_layout_720(), gutter_text_layout_720()] {
+            let (m0, left, center, right, m1) = layout;
+            assert!((m0 + left + center + right + m1 - narrow_min).abs() < 0.001);
+        }
+        for layout in [gutter_side_layout_960(), gutter_text5_layout_960()] {
+            let (m0, left, center, right, m1) = layout;
+            assert!((m0 + left + center + right + m1 - GUTTER_CANVAS_NORMAL_960).abs() < 0.001);
+        }
+        for layout in [gutter_side_layout_1200(), gutter_text_layout_1200()] {
+            let (m0, left, center, right, m1) = layout;
+            assert!((m0 + left + center + right + m1 - GUTTER_CANVAS_WIDE_1200).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn gutter59_token_layouts_match_literal_budgets() {
+        // Byte-identical budgets: token adoption moves no pixel.
+        assert_eq!(gutter_side_layout_720(), (12.0, 338.0, 20.0, 338.0, 12.0));
+        assert_eq!(gutter_text_layout_720(), (12.0, 336.0, 24.0, 336.0, 12.0));
+        assert_eq!(gutter_side_layout_960(), (12.0, 458.0, 20.0, 458.0, 12.0));
+        assert_eq!(gutter_text5_layout_960(), (12.0, 456.0, 24.0, 456.0, 12.0));
+        assert_eq!(gutter_side_layout_1200(), (12.0, 578.0, 20.0, 578.0, 12.0));
+        assert_eq!(gutter_text_layout_1200(), (12.0, 576.0, 24.0, 576.0, 12.0));
+        // Tall floor still pins the 1200 track: top band at pad, full file fills inner track.
+        assert_eq!(
+            gutter_viewport_tall_floor_1200(1200, 0, 1),
+            Some((4.0, 8.0))
+        );
+        assert_eq!(
+            gutter_viewport_tall_floor_1200(1200, 0, 1200),
+            Some((4.0, 1196.0))
+        );
+    }
+
+    #[test]
+    fn gutter59_spacing_typo_tokens_unchanged() {
+        // Zero new sizes: every width still rides SPACE / merge-gap / grid tokens.
+        assert_eq!(GUTTER_CENTER_W, crate::theme::SPACE_XL);
+        assert_eq!(
+            GUTTER_SIDE_MARKER_COL_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(GUTTER_SIDE_HIT_SLOP, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(gutter_text_role(), crate::theme::TypoRole::content_grid());
+        assert_eq!(gutter_text_size(), crate::theme::TYPO_MONO_SIZE);
+    }
+
+    #[test]
+    fn gutter59_canvas_budgets_fixture() {
+        // Mirrors checks/gui-exq-gutter59/round-1/comparison/gutter-canvas-budgets.json.
+        let fixture_raw = include_str!(
+            "../../../checks/gui-exq-gutter59/round-1/comparison/gutter-canvas-budgets.json"
+        );
+        assert!(fixture_raw.contains("\"name\": \"gutter-canvas-budgets\""));
+        assert!(fixture_raw.contains("\"canvas_960\": 960.0"));
+        assert!(fixture_raw.contains("\"canvas_720\": 720.0"));
+        assert!(fixture_raw.contains("\"canvas_1200\": 1200.0"));
+        // Live helpers reproduce the fixture budgets exactly.
+        assert_eq!(gutter_side_layout_720(), (12.0, 338.0, 20.0, 338.0, 12.0));
+        assert_eq!(gutter_text_layout_720(), (12.0, 336.0, 24.0, 336.0, 12.0));
+        assert_eq!(gutter_side_layout_960(), (12.0, 458.0, 20.0, 458.0, 12.0));
+        assert_eq!(gutter_text5_layout_960(), (12.0, 456.0, 24.0, 456.0, 12.0));
+        assert_eq!(gutter_side_layout_1200(), (12.0, 578.0, 20.0, 578.0, 12.0));
+        assert_eq!(gutter_text_layout_1200(), (12.0, 576.0, 24.0, 576.0, 12.0));
     }
 }
