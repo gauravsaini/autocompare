@@ -1,0 +1,19 @@
+{
+  "name": "text38-narrow-700",
+  "intent": "Text38 narrow700 edge (<720 breakpoint): center 20px lane alignment (cx=350.0), copy arrows centered with 2px side pad, row height TypoRole Mono rhythm (15.6px pitch, 20px compact row), zero horizontal scroll.",
+  "canvas_w": 700.0,
+  "avail_w": 676.0,
+  "outer_margin": 12.0,
+  "center_lane_w": 20.0,
+  "center_col_x": 340.0,
+  "center_cx": 350.0,
+  "left_pane_w": 328.0,
+  "right_pane_w": 328.0,
+  "copy_arrow_box": 16.0,
+  "copy_arrow_pad_x": 2.0,
+  "mono_line_height": 1.30,
+  "mono_line_height_px": 15.6,
+  "row_height_compact": 20.0,
+  "row_height_padded": 19.6,
+  "needs_hscroll": false
+}

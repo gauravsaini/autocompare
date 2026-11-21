@@ -3631,3 +3631,409 @@ mod exq_gutter9_tests {
         assert_eq!(gutter_side_hit_rect(480.0, f32::INFINITY), None);
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQUISITE TEXT38: Center gutter geometry (center 20px lane alignment,
+// copy arrows centered, row height TypoRole Mono rhythm, 1200px no h-scroll +
+// narrow700 edge).
+//
+// In twin-pane comparative editing, the center gutter forms a focused vertical
+// boundary dividing left and right panes. Visual parity with Beyond Compare
+// requires this center lane to maintain an exact 20px width (`SPACE_LG + SPACE_XS`),
+// centered at the canvas midpoint (`cx = avail_w / 2.0`). Directional copy
+// arrows sit centered within the 20px lane with 2px side margins (`GUTTER_MERGE_GAP`),
+// matching editor row line pitch via `TypoRole::Mono` (15.6px line height, 1.30
+// line-height multiplier, 20.0px compact row height). Symmetrical panes on 1200px
+// canvas (578px each) and 700px narrow canvas (328px each) fit with zero
+// horizontal scroll.
+// ----------------------------------------------------------------------------
+
+/// Center gutter lane width px: one LG step + one XS step (16.0 + 4.0 = 20.0).
+/// Single source matching `GUTTER_SIDE_MARKER_COL_W`.
+pub const TEXT38_CENTER_LANE_W: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
+
+/// Center gutter copy arrow box size px: one LG step (16.0).
+pub const TEXT38_COPY_ARROW_BOX: f32 = crate::theme::SPACE_LG;
+
+/// Center gutter copy arrow side padding px: `(20.0 - 16.0) / 2.0 = 2.0` (`GUTTER_MERGE_GAP`).
+pub const TEXT38_COPY_ARROW_PAD_X: f32 = crate::theme::GUTTER_MERGE_GAP;
+
+/// Canvas width for wide comparison view (px): 1200.0.
+pub const TEXT38_CANVAS_WIDE_W: f32 = 1200.0;
+
+/// Canvas width for narrow comparison view edge (<720 breakpoint, px): 700.0.
+pub const TEXT38_CANVAS_NARROW_W: f32 = 700.0;
+
+/// Center gutter lane width px (single source). Pure; unit-tested.
+pub fn text38_center_lane_w() -> f32 {
+    TEXT38_CENTER_LANE_W
+}
+
+/// Computes symmetric dual-pane layout with 20px center lane:
+/// `(margin, left_pane, center_lane, right_pane, margin)`.
+/// Delegates to [`gutter_text_layout`]. Pure; unit-tested.
+pub fn text38_center_lane_layout(avail_w: f32) -> (f32, f32, f32, f32, f32) {
+    gutter_text_layout(
+        crate::theme::GEO_OUTER_MARGIN,
+        TEXT38_CENTER_LANE_W,
+        avail_w,
+    )
+}
+
+/// Column start x for 20px center lane: `margin + left_pane`.
+/// `None` for non-finite or invalid widths. Pure; unit-tested.
+pub fn text38_center_lane_col_x(avail_w: f32) -> Option<f32> {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return None;
+    }
+    let (margin, pane, center, _, _) = text38_center_lane_layout(avail_w);
+    if center <= 0.0 || pane <= 0.0 {
+        return None;
+    }
+    let col_x = margin + pane;
+    if col_x.is_finite() { Some(col_x) } else { None }
+}
+
+/// Center midpoint cx for 20px center lane: `col_x + 20.0 / 2.0`.
+/// Always aligns at `avail_w / 2.0`. Pure; unit-tested.
+pub fn text38_center_lane_cx(avail_w: f32) -> Option<f32> {
+    let col_x = text38_center_lane_col_x(avail_w)?;
+    let cx = col_x + TEXT38_CENTER_LANE_W / 2.0;
+    if cx.is_finite() { Some(cx) } else { None }
+}
+
+/// Verifies whether the 20px center lane is exactly aligned to the canvas midpoint (`avail_w / 2.0`).
+/// Pure; unit-tested.
+pub fn text38_center_lane_is_aligned(avail_w: f32) -> bool {
+    let Some(cx) = text38_center_lane_cx(avail_w) else {
+        return false;
+    };
+    (cx - avail_w / 2.0).abs() < 0.001
+}
+
+/// Copy arrow box size px (16.0). Pure; unit-tested.
+pub fn text38_copy_arrow_box() -> f32 {
+    TEXT38_COPY_ARROW_BOX
+}
+
+/// Copy arrow horizontal padding within 20px center lane (2.0). Pure; unit-tested.
+pub fn text38_copy_arrow_pad_x() -> f32 {
+    TEXT38_COPY_ARROW_PAD_X
+}
+
+/// Copy arrow bounding rect `(x0, y0, x1, y1)` centered at `(center_x, center_y)`.
+/// Pure; unit-tested.
+pub fn text38_copy_arrow_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    if !center_x.is_finite() || !center_y.is_finite() {
+        return None;
+    }
+    let half = TEXT38_COPY_ARROW_BOX / 2.0;
+    Some((
+        center_x - half,
+        center_y - half,
+        center_x + half,
+        center_y + half,
+    ))
+}
+
+/// Places a 16x16 copy arrow centered vertically within `(row_top, row_top + row_h)`
+/// and horizontally within `(col_x, col_x + col_w)`.
+/// Pure; unit-tested.
+pub fn text38_copy_arrow_in_row(
+    row_top: f32,
+    row_h: f32,
+    col_x: f32,
+    col_w: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    if !row_top.is_finite() || !row_h.is_finite() || !col_x.is_finite() || !col_w.is_finite() {
+        return None;
+    }
+    if row_h <= 0.0 || col_w <= 0.0 {
+        return None;
+    }
+    let cx = col_x + col_w / 2.0;
+    let cy = row_top + row_h / 2.0;
+    text38_copy_arrow_rect(cx, cy)
+}
+
+/// Tests whether point `(x, y)` falls within the copy arrow hitbox centered at `(center_x, center_y)`.
+/// Includes symmetric 2.0px hit-slop so 16px box maps to 20px hit target. Pure; unit-tested.
+pub fn text38_copy_arrow_hit_contains(center_x: f32, center_y: f32, x: f32, y: f32) -> bool {
+    if !center_x.is_finite() || !center_y.is_finite() || !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let half = (TEXT38_COPY_ARROW_BOX + 2.0 * crate::theme::GUTTER_MERGE_GAP) / 2.0;
+    let x0 = center_x - half;
+    let x1 = center_x + half;
+    let y0 = center_y - half;
+    let y1 = center_y + half;
+    x >= x0 && x <= x1 && y >= y0 && y <= y1
+}
+
+/// Monospace typographic role for text rows. Reuses [`crate::theme::TypoRole::Mono`].
+pub const fn text38_mono_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Line-height multiplier for monospace text rows (1.30).
+pub const fn text38_mono_line_height() -> f32 {
+    crate::theme::TYPO_LINE_HEIGHT_MONO
+}
+
+/// Measured monospace line-height px (12.0 * 1.30 = 15.6). Pure; unit-tested.
+pub fn text38_mono_line_height_px() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// Compact text row height px: `SPACE_LG + SPACE_XS` = 20.0. Pure; unit-tested.
+pub fn text38_row_height_compact() -> f32 {
+    crate::theme::SPACE_LG + crate::theme::SPACE_XS
+}
+
+/// Padded text row height px: `15.6 + 2 * GUTTER_TEXT_ROW_PAD` = 19.6. Pure; unit-tested.
+pub fn text38_row_height_padded() -> Option<f32> {
+    gutter_text_row_height(text38_mono_line_height_px())
+}
+
+/// Maps row index to vertical center y px under given row height rhythm: `(row + 0.5) * row_h`.
+/// Pure; unit-tested.
+pub fn text38_row_center_y(row: usize, total_rows: usize, row_h: f32) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows || !row_h.is_finite() || row_h <= 0.0 {
+        return None;
+    }
+    let cy = (row as f32 + 0.5) * row_h;
+    if cy.is_finite() { Some(cy) } else { None }
+}
+
+/// Maps row index to row top y px under given row height rhythm: `row * row_h`.
+/// Pure; unit-tested.
+pub fn text38_row_top_y(row: usize, total_rows: usize, row_h: f32) -> Option<f32> {
+    if total_rows == 0 || row >= total_rows || !row_h.is_finite() || row_h <= 0.0 {
+        return None;
+    }
+    let y = row as f32 * row_h;
+    if y.is_finite() { Some(y) } else { None }
+}
+
+/// Total vertical height for `total_rows` at `row_h` rhythm. Pure; unit-tested.
+pub fn text38_total_height(total_rows: usize, row_h: f32) -> f32 {
+    if total_rows == 0 || !row_h.is_finite() || row_h <= 0.0 {
+        0.0
+    } else {
+        total_rows as f32 * row_h
+    }
+}
+
+/// Total canvas width for 1200px wide layout (px). Pure.
+pub fn text38_canvas_w() -> f32 {
+    TEXT38_CANVAS_WIDE_W
+}
+
+/// Total canvas width for 700px narrow layout edge (px). Pure.
+pub fn text38_narrow_w() -> f32 {
+    TEXT38_CANVAS_NARROW_W
+}
+
+/// Available width at 1200px after outer margins: `1200.0 - 2 * 12.0 = 1176.0`. Pure.
+pub fn text38_avail_w() -> f32 {
+    TEXT38_CANVAS_WIDE_W - 2.0 * crate::theme::GEO_OUTER_MARGIN
+}
+
+/// Available width at 700px after outer margins: `700.0 - 2 * 12.0 = 676.0`. Pure.
+pub fn text38_narrow_avail_w() -> f32 {
+    TEXT38_CANVAS_NARROW_W - 2.0 * crate::theme::GEO_OUTER_MARGIN
+}
+
+/// Determines whether content width exceeds available width, requiring horizontal scrolling.
+/// Non-finite inputs return false. Pure; unit-tested.
+pub fn text38_needs_hscroll(avail_w: f32, content_w: f32) -> bool {
+    if !avail_w.is_finite() || !content_w.is_finite() {
+        return false;
+    }
+    content_w > avail_w
+}
+
+/// Returns true if content fits within 1200px wide available width without horizontal scroll.
+pub fn text38_wide1200_fits(content_w: f32) -> bool {
+    !text38_needs_hscroll(text38_avail_w(), content_w)
+}
+
+/// Returns true if content fits within 700px narrow available width without horizontal scroll.
+pub fn text38_narrow700_fits(content_w: f32) -> bool {
+    !text38_needs_hscroll(text38_narrow_avail_w(), content_w)
+}
+
+#[cfg(test)]
+mod exq_text38_tests {
+    use super::*;
+
+    #[test]
+    fn text38_center_20px_lane_alignment() {
+        // Center lane width is 20.0px (SPACE_LG + SPACE_XS)
+        assert_eq!(
+            TEXT38_CENTER_LANE_W,
+            crate::theme::SPACE_LG + crate::theme::SPACE_XS
+        );
+        assert_eq!(text38_center_lane_w(), 20.0);
+
+        // Wide 1200px layout: 12 + 578 + 20 + 578 + 12 = 1200
+        let (m0, l, c, r, m1) = text38_center_lane_layout(1200.0);
+        assert_eq!(m0, 12.0);
+        assert_eq!(m1, 12.0);
+        assert_eq!(l, 578.0);
+        assert_eq!(r, 578.0);
+        assert_eq!(c, 20.0);
+        assert!((m0 + l + c + r + m1 - 1200.0).abs() < 0.001);
+        assert_eq!(text38_center_lane_col_x(1200.0), Some(590.0));
+        assert_eq!(text38_center_lane_cx(1200.0), Some(600.0));
+        assert!(text38_center_lane_is_aligned(1200.0));
+
+        // Canonical 960px layout: 12 + 458 + 20 + 458 + 12 = 960
+        let (m0, l, c, r, m1) = text38_center_lane_layout(960.0);
+        assert_eq!(l, 458.0);
+        assert_eq!(r, 458.0);
+        assert_eq!(c, 20.0);
+        assert!((m0 + l + c + r + m1 - 960.0).abs() < 0.001);
+        assert_eq!(text38_center_lane_col_x(960.0), Some(470.0));
+        assert_eq!(text38_center_lane_cx(960.0), Some(480.0));
+        assert!(text38_center_lane_is_aligned(960.0));
+
+        // Narrow 700px layout: 12 + 328 + 20 + 328 + 12 = 700
+        let (m0, l, c, r, m1) = text38_center_lane_layout(700.0);
+        assert_eq!(l, 328.0);
+        assert_eq!(r, 328.0);
+        assert_eq!(c, 20.0);
+        assert!((m0 + l + c + r + m1 - 700.0).abs() < 0.001);
+        assert_eq!(text38_center_lane_col_x(700.0), Some(340.0));
+        assert_eq!(text38_center_lane_cx(700.0), Some(350.0));
+        assert!(text38_center_lane_is_aligned(700.0));
+
+        // Invalid or non-finite inputs
+        assert_eq!(text38_center_lane_col_x(f32::NAN), None);
+        assert_eq!(text38_center_lane_cx(f32::NAN), None);
+        assert!(!text38_center_lane_is_aligned(f32::NAN));
+        assert_eq!(text38_center_lane_col_x(-100.0), None);
+        assert_eq!(text38_center_lane_cx(0.0), None);
+    }
+
+    #[test]
+    fn text38_copy_arrows_centered_in_lane() {
+        assert_eq!(TEXT38_COPY_ARROW_BOX, crate::theme::SPACE_LG);
+        assert_eq!(text38_copy_arrow_box(), 16.0);
+        assert_eq!(TEXT38_COPY_ARROW_PAD_X, crate::theme::GUTTER_MERGE_GAP);
+        assert_eq!(text38_copy_arrow_pad_x(), 2.0);
+
+        // Arrow rect centered at (cx, cy)
+        assert_eq!(
+            text38_copy_arrow_rect(600.0, 100.0),
+            Some((592.0, 92.0, 608.0, 108.0))
+        );
+        assert_eq!(text38_copy_arrow_rect(f32::NAN, 100.0), None);
+
+        // Arrow placed in row: col 590..610, row 40..60 (20px high)
+        let in_row = text38_copy_arrow_in_row(40.0, 20.0, 590.0, 20.0);
+        assert_eq!(in_row, Some((592.0, 42.0, 608.0, 58.0)));
+        assert_eq!(text38_copy_arrow_in_row(0.0, 0.0, 590.0, 20.0), None);
+
+        // Hit testing with 2px slop: box is 592..608, 2px slop gives 590..610
+        assert!(text38_copy_arrow_hit_contains(600.0, 100.0, 600.0, 100.0));
+        assert!(text38_copy_arrow_hit_contains(600.0, 100.0, 590.0, 90.0));
+        assert!(text38_copy_arrow_hit_contains(600.0, 100.0, 610.0, 110.0));
+        assert!(!text38_copy_arrow_hit_contains(600.0, 100.0, 589.0, 100.0));
+        assert!(!text38_copy_arrow_hit_contains(600.0, 100.0, 611.0, 100.0));
+        assert!(!text38_copy_arrow_hit_contains(
+            f32::NAN,
+            100.0,
+            600.0,
+            100.0
+        ));
+    }
+
+    #[test]
+    fn text38_row_height_typo_mono_rhythm() {
+        use crate::theme::TypoRole;
+        assert_eq!(text38_mono_role(), TypoRole::Mono);
+        assert_eq!(text38_mono_line_height(), 1.30);
+        assert!((text38_mono_line_height_px() - 15.6).abs() < 0.01);
+
+        assert_eq!(text38_row_height_compact(), 20.0);
+        assert!((text38_row_height_padded().unwrap_or(0.0) - 19.6).abs() < 0.01);
+
+        // Mapping row indices
+        assert_eq!(text38_row_top_y(0, 10, 20.0), Some(0.0));
+        assert_eq!(text38_row_top_y(1, 10, 20.0), Some(20.0));
+        assert_eq!(text38_row_top_y(9, 10, 20.0), Some(180.0));
+        assert_eq!(text38_row_top_y(10, 10, 20.0), None);
+
+        assert_eq!(text38_row_center_y(0, 10, 20.0), Some(10.0));
+        assert_eq!(text38_row_center_y(1, 10, 20.0), Some(30.0));
+        assert_eq!(text38_row_center_y(9, 10, 20.0), Some(190.0));
+        assert_eq!(text38_row_center_y(10, 10, 20.0), None);
+
+        assert_eq!(text38_total_height(10, 20.0), 200.0);
+        assert_eq!(text38_total_height(0, 20.0), 0.0);
+        assert_eq!(text38_total_height(10, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn text38_wide1200_no_hscroll_and_narrow700_edge() {
+        assert_eq!(text38_canvas_w(), 1200.0);
+        assert_eq!(text38_narrow_w(), 700.0);
+        assert_eq!(text38_avail_w(), 1176.0);
+        assert_eq!(text38_narrow_avail_w(), 676.0);
+
+        // Center lane fits easily
+        assert!(text38_wide1200_fits(text38_center_lane_w()));
+        assert!(text38_narrow700_fits(text38_center_lane_w()));
+
+        // Content fitting within available width
+        assert!(!text38_needs_hscroll(text38_avail_w(), 1176.0));
+        assert!(text38_needs_hscroll(text38_avail_w(), 1177.0));
+        assert!(!text38_needs_hscroll(text38_narrow_avail_w(), 676.0));
+        assert!(text38_needs_hscroll(text38_narrow_avail_w(), 677.0));
+
+        // Non-finite
+        assert!(!text38_needs_hscroll(f32::NAN, 100.0));
+        assert!(!text38_needs_hscroll(100.0, f32::NAN));
+    }
+
+    #[test]
+    fn text38_fixtures_parity() {
+        let wide =
+            include_str!("../../../checks/gui-exq-text38/round-1/comparison/text38-wide-1200.json");
+        assert!(wide.contains("\"name\": \"text38-wide-1200\""));
+        assert!(wide.contains("\"canvas_w\": 1200.0"));
+        assert!(wide.contains("\"avail_w\": 1176.0"));
+        assert!(wide.contains("\"center_lane_w\": 20.0"));
+        assert!(wide.contains("\"center_col_x\": 590.0"));
+        assert!(wide.contains("\"center_cx\": 600.0"));
+        assert!(wide.contains("\"left_pane_w\": 578.0"));
+        assert!(wide.contains("\"right_pane_w\": 578.0"));
+        assert!(wide.contains("\"copy_arrow_box\": 16.0"));
+        assert!(wide.contains("\"copy_arrow_pad_x\": 2.0"));
+        assert!(wide.contains("\"mono_line_height\": 1.3"));
+        assert!(wide.contains("\"mono_line_height_px\": 15.6"));
+        assert!(wide.contains("\"row_height_compact\": 20.0"));
+        assert!(wide.contains("\"row_height_padded\": 19.6"));
+        assert!(wide.contains("\"needs_hscroll\": false"));
+
+        let narrow = include_str!(
+            "../../../checks/gui-exq-text38/round-1/comparison/text38-narrow-700.json"
+        );
+        assert!(narrow.contains("\"name\": \"text38-narrow-700\""));
+        assert!(narrow.contains("\"canvas_w\": 700.0"));
+        assert!(narrow.contains("\"avail_w\": 676.0"));
+        assert!(narrow.contains("\"center_lane_w\": 20.0"));
+        assert!(narrow.contains("\"center_col_x\": 340.0"));
+        assert!(narrow.contains("\"center_cx\": 350.0"));
+        assert!(narrow.contains("\"left_pane_w\": 328.0"));
+        assert!(narrow.contains("\"right_pane_w\": 328.0"));
+        assert!(narrow.contains("\"copy_arrow_box\": 16.0"));
+        assert!(narrow.contains("\"copy_arrow_pad_x\": 2.0"));
+        assert!(narrow.contains("\"mono_line_height\": 1.3"));
+        assert!(narrow.contains("\"mono_line_height_px\": 15.6"));
+        assert!(narrow.contains("\"row_height_compact\": 20.0"));
+        assert!(narrow.contains("\"row_height_padded\": 19.6"));
+        assert!(narrow.contains("\"needs_hscroll\": false"));
+    }
+}
