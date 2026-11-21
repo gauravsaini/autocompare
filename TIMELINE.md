@@ -800,3 +800,9 @@
 1. **Toolbar geometry**: TOOLBAR_H 40px SPACE_XL+SPACE_LG, button spacing SPACE_SM, 16px glyph centered in 24px button, overflow >> affordance, 1200px no h-scroll + narrow700 edge.
 2. **Tests**: 1082 green (+2 toolbar), exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Leaf self-cleaned harness side-effect PNGs, OWNS-only landed.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-toolbar37/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-text38 live center gutter (agyx swarm, clean commit)
+
+1. **Center gutter geometry**: 20px lane at canvas midpoint, 16px arrows centered with 2px margins, TypoRole Mono 15.6 rhythm, 1200px no h-scroll + narrow700 edge.
+2. **Tests**: 1080 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned clean non-test, colors 38 frozen. Agyx committed cleanly itself this time, no recovery needed.
+3. **Files changed**: crates/gui/src/gutter.rs, checks/gui-exq-text38/**, TIMELINE.md.
