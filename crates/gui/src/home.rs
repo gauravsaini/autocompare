@@ -3644,6 +3644,192 @@ pub fn home32_contract_ok() -> bool {
         && home_card_hierarchy_ok()
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME45 round-1 exquisite: live home cards geometry lock.
+// BC pattern, outside observation only:
+// 1200px wide canvas par session cards grid 3 cols me stable rehta hai (1176 avail,
+// 24px GEO_CARD_GAP, 376px flexed cards) with zero horizontal scrolling.
+// Margins aur gaps OUTER_MARGIN (12px) aur SECTION_GAP (8px) se strictly derive
+// hote hain. Card stack minimum height 99.6px (Title line-height + 2-line desc
+// + 28px CTA button + inner gaps + padding) par locked hai.
+// Deterministic card cell coordinates aur bounding box rect calculations
+// har card aur uske internal bottom-aligned CTA button ke layout ko lock karte hain.
+// Naye pure helpers single-source home32 aur base card helpers par delegate karte
+// hain taaki views drift na hon.
+// Geometry first: sab tokens theme SPACE/GEO constants se derive, zero magic numbers.
+// Typography second: existing TypoRole hierarchy reuse. Colors frozen: zero color edits.
+// Edge fixture: `checks/gui-exq-home45/comparison/home45-live-cards-1200.json`.
+// ----------------------------------------------------------------------------
+
+/// Home45 canvas reference width px (1200.0).
+pub const HOME45_CANVAS_W: f32 = HOME32_CANVAS_W;
+/// Home45 content horizontal outer margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME45_CONTENT_MARGIN_X: f32 = HOME32_CONTENT_MARGIN_X;
+/// Home45 content vertical outer margin px: outer margin ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME45_CONTENT_MARGIN_Y: f32 = HOME32_CONTENT_MARGIN_Y;
+/// Home45 section gap px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME45_SECTION_GAP: f32 = HOME32_SECTION_GAP;
+/// Home45 card outer pad px: section rhythm ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME45_CARD_PAD: f32 = HOME32_CARD_PAD;
+/// Home45 card inner gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4.0).
+pub const HOME45_CARD_INNER_GAP: f32 = HOME_CARD_INNER_GAP;
+/// Home45 card min width px: SPACE scale (10 * [`crate::theme::SPACE_XL`] = 240.0).
+pub const HOME45_CARD_MIN_W: f32 = HOME32_CARD_MIN_W;
+/// Home45 card grid generous gap px: card rhythm ([`crate::theme::GEO_CARD_GAP`] = 24.0).
+pub const HOME45_CARD_GRID_GAP: f32 = HOME32_CARD_GRID_GAP;
+/// Home45 card button min hit height px: standard hit row ([`crate::theme::CHROME_HEADER_BAR_H`] = 28.0).
+pub const HOME45_CARD_BUTTON_MIN_H: f32 = HOME_CARD_BUTTON_MIN_H;
+/// Home45 CTA min width px: card inner width at min card width (240 − 2*8 = 224.0).
+pub const HOME45_CARD_CTA_MIN_W: f32 = HOME32_CARD_CTA_MIN_W;
+
+/// Home45 content available width px: canvas minus do taraf outer margin.
+/// Delegates directly to [`home32_content_avail_width`]. Pure; headless-tested.
+pub fn home45_content_avail_width(total_w: f32) -> f32 {
+    home32_content_avail_width(total_w)
+}
+
+/// Home45 card grid columns at total width:
+/// Delegates directly to [`home32_grid_columns`]. Pure; headless-tested.
+pub fn home45_grid_columns(total_w: f32) -> usize {
+    home32_grid_columns(total_w)
+}
+
+/// Home45 card grid rows for item count at total width.
+/// Delegates directly to [`home32_grid_rows`]. Pure; headless-tested.
+pub fn home45_grid_rows(item_count: usize, total_w: f32) -> usize {
+    home32_grid_rows(item_count, total_w)
+}
+
+/// Home45 flexed card width px for available width at generous gap.
+/// Delegates directly to [`home32_grid_card_width`]. Pure; headless-tested.
+pub fn home45_grid_card_width(avail: f32) -> f32 {
+    home32_grid_card_width(avail)
+}
+
+/// Home45 card inner width px: card width minus do taraf pad.
+/// Delegates directly to [`home32_card_inner_width`]. Pure; headless-tested.
+pub fn home45_card_inner_width(card_w: f32) -> f32 {
+    home32_card_inner_width(card_w)
+}
+
+/// Home45 card CTA width px: card inner width se lock.
+/// Delegates directly to [`home32_card_cta_width`]. Pure; headless-tested.
+pub fn home45_card_cta_width(card_w: f32) -> f32 {
+    home32_card_cta_width(card_w)
+}
+
+/// Home45 card CTA hit area px²: CTA width * button hit height.
+/// Pure; headless-tested.
+pub fn home45_card_cta_hit_area(card_w: f32) -> f32 {
+    home45_card_cta_width(card_w) * HOME45_CARD_BUTTON_MIN_H
+}
+
+/// Home45 card min height px: title + 2-line desc + CTA button + gaps + padding = 99.6.
+/// Delegates directly to [`home_card_min_height`]. Pure; headless-tested.
+pub fn home45_card_min_height() -> f32 {
+    home_card_min_height()
+}
+
+/// Home45 grid content height px: rows * card min height + beech gaps.
+/// Delegates directly to [`home32_grid_content_height`]. Pure; headless-tested.
+pub fn home45_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    home32_grid_content_height(item_count, total_w)
+}
+
+/// Home45 card cell coordinates in grid: `(row, col)` for card `index` at `total_w`.
+/// Columns total_w se responsive derive hote hain. Pure; headless-tested.
+pub fn home45_card_cell(index: usize, total_w: f32) -> (usize, usize) {
+    let cols = home45_grid_columns(total_w).max(1);
+    (index / cols, index % cols)
+}
+
+/// Home45 card bounding box rect `(x0, y0, x1, y1)` at `total_w`:
+/// content outer margin se shuru, responsive columns and generous grid gap.
+/// Non-finite ya negative width par `None`. Pure; headless-tested.
+pub fn home45_card_rect(index: usize, total_w: f32) -> Option<(f32, f32, f32, f32)> {
+    if !total_w.is_finite() || total_w <= 0.0 {
+        return None;
+    }
+    let avail = home45_content_avail_width(total_w);
+    let card_w = home45_grid_card_width(avail);
+    let card_h = home45_card_min_height();
+    let (row, col) = home45_card_cell(index, total_w);
+    let x0 = HOME45_CONTENT_MARGIN_X + col as f32 * (card_w + HOME45_CARD_GRID_GAP);
+    let y0 = HOME45_CONTENT_MARGIN_Y + row as f32 * (card_h + HOME45_CARD_GRID_GAP);
+    let x1 = x0 + card_w;
+    let y1 = y0 + card_h;
+    Some((x0, y0, x1, y1))
+}
+
+/// Home45 CTA button bounding box rect `(x0, y0, x1, y1)` within `card_rect`:
+/// card ke andar 8px outer padding ke sath bottom-aligned 28px CTA button.
+/// Non-finite ya invalid card rect par `None`. Pure; headless-tested.
+pub fn home45_card_cta_rect(card_rect: (f32, f32, f32, f32)) -> Option<(f32, f32, f32, f32)> {
+    let (cx0, cy0, cx1, cy1) = card_rect;
+    if !cx0.is_finite()
+        || !cy0.is_finite()
+        || !cx1.is_finite()
+        || !cy1.is_finite()
+        || cx0 >= cx1
+        || cy0 >= cy1
+    {
+        return None;
+    }
+    let x0 = cx0 + HOME45_CARD_PAD;
+    let x1 = cx1 - HOME45_CARD_PAD;
+    if x0 >= x1 {
+        return None;
+    }
+    let y1 = cy1 - HOME45_CARD_PAD;
+    let y0 = y1 - HOME45_CARD_BUTTON_MIN_H;
+    if y0 < cy0 {
+        return None;
+    }
+    Some((x0, y0, x1, y1))
+}
+
+/// Home45 cards grid needs horizontal scroll check:
+/// Delegates directly to [`home32_grid_needs_hscroll`]. Pure; headless-tested.
+pub fn home45_grid_needs_hscroll(total_w: f32) -> bool {
+    home32_grid_needs_hscroll(total_w)
+}
+
+/// Home45 contract verification helper:
+/// proves live home cards geometry derived strictly from SPACE/GEO tokens,
+/// single-source delegation to home32 and base card helpers, CTA button geometry,
+/// card hierarchy and single-line fit, and zero horizontal scroll at 1200px canvas.
+/// Pure; headless-tested.
+pub fn home45_contract_ok() -> bool {
+    HOME45_CANVAS_W == 1200.0
+        && HOME45_CANVAS_W == HOME32_CANVAS_W
+        && HOME45_CARD_MIN_W == crate::theme::SPACE_XL * 10.0
+        && HOME45_CARD_MIN_W == HOME_CARD_MIN_W
+        && HOME45_CARD_MIN_W == HOME32_CARD_MIN_W
+        && HOME45_CARD_PAD == crate::theme::GEO_SECTION_GAP
+        && HOME45_CARD_PAD == HOME32_CARD_PAD
+        && HOME45_CARD_INNER_GAP == crate::theme::GEO_TIGHT_GAP
+        && HOME45_CARD_INNER_GAP == HOME_CARD_INNER_GAP
+        && HOME45_SECTION_GAP == crate::theme::GEO_SECTION_GAP
+        && HOME45_SECTION_GAP == HOME32_SECTION_GAP
+        && HOME45_CONTENT_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME45_CONTENT_MARGIN_X == HOME32_CONTENT_MARGIN_X
+        && HOME45_CONTENT_MARGIN_Y == crate::theme::GEO_OUTER_MARGIN
+        && HOME45_CONTENT_MARGIN_Y == HOME32_CONTENT_MARGIN_Y
+        && HOME45_CARD_GRID_GAP == crate::theme::GEO_CARD_GAP
+        && HOME45_CARD_GRID_GAP == HOME32_CARD_GRID_GAP
+        && HOME45_CARD_BUTTON_MIN_H == 28.0
+        && HOME45_CARD_BUTTON_MIN_H == crate::theme::SPACE_XL + crate::theme::SPACE_XS
+        && HOME45_CARD_BUTTON_MIN_H == crate::theme::CHROME_HEADER_BAR_H
+        && HOME45_CARD_CTA_MIN_W == 224.0
+        && HOME45_CARD_CTA_MIN_W == HOME_CARD_CTA_W
+        && HOME45_CARD_CTA_MIN_W == HOME32_CARD_CTA_MIN_W
+        && (home45_card_min_height() - 99.6).abs() < 0.01
+        && !home45_grid_needs_hscroll(HOME45_CANVAS_W)
+        && home_card_hierarchy_ok()
+        && home_card_cta_single_line_ok()
+        && home32_contract_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5774,5 +5960,150 @@ mod tests {
         assert!(super::home32_workspace_layout_needs_hscroll(960.0));
 
         assert!(super::home32_contract_ok());
+    }
+
+    #[test]
+    fn home_exq_home45_live_home_cards() {
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-home45/comparison/home45-live-cards-1200.json");
+        assert!(fixture_raw.contains("\"canvas_w\":1200.0"));
+        assert!(fixture_raw.contains("\"card_min_w\":240.0"));
+        assert!(fixture_raw.contains("\"card_pad\":8.0"));
+        assert!(fixture_raw.contains("\"card_inner_gap\":4.0"));
+        assert!(fixture_raw.contains("\"content_margin_x\":12.0"));
+        assert!(fixture_raw.contains("\"content_margin_y\":12.0"));
+        assert!(fixture_raw.contains("\"section_gap\":8.0"));
+        assert!(fixture_raw.contains("\"card_grid_gap\":24.0"));
+        assert!(fixture_raw.contains("\"content_avail_w_at_1200\":1176.0"));
+        assert!(fixture_raw.contains("\"grid_cols_at_1200\":3"));
+        assert!(fixture_raw.contains("\"grid_rows_at_1200\":3"));
+        assert!(fixture_raw.contains("\"grid_card_w_at_1200\":376.0"));
+        assert!(fixture_raw.contains("\"card_inner_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"card_cta_w_at_1200\":360.0"));
+        assert!(fixture_raw.contains("\"card_cta_min_w\":224.0"));
+        assert!(fixture_raw.contains("\"card_min_h\":99.6"));
+        assert!(fixture_raw.contains("\"card_button_min_h\":28.0"));
+        assert!(fixture_raw.contains("\"card_cta_hit_area_min\":6272.0"));
+        assert!(fixture_raw.contains("\"grid_content_h_at_1200\":346.8"));
+        assert!(fixture_raw.contains("\"grid_needs_hscroll_1200\":false"));
+
+        // 1. Live home cards tokens reuse
+        assert_eq!(super::HOME45_CANVAS_W, 1200.0);
+        assert_eq!(super::HOME45_CANVAS_W, super::HOME32_CANVAS_W);
+        assert_eq!(
+            super::HOME45_CONTENT_MARGIN_X,
+            crate::theme::GEO_OUTER_MARGIN
+        );
+        assert_eq!(super::HOME45_CONTENT_MARGIN_X, 12.0);
+        assert_eq!(
+            super::HOME45_CONTENT_MARGIN_Y,
+            crate::theme::GEO_OUTER_MARGIN
+        );
+        assert_eq!(super::HOME45_CONTENT_MARGIN_Y, 12.0);
+        assert_eq!(super::HOME45_SECTION_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(super::HOME45_SECTION_GAP, 8.0);
+        assert_eq!(super::HOME45_CARD_PAD, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(super::HOME45_CARD_PAD, 8.0);
+        assert_eq!(super::HOME45_CARD_INNER_GAP, crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(super::HOME45_CARD_INNER_GAP, 4.0);
+        assert_eq!(super::HOME45_CARD_MIN_W, 240.0);
+        assert_eq!(super::HOME45_CARD_MIN_W, super::HOME_CARD_MIN_W);
+        assert_eq!(super::HOME45_CARD_MIN_W, super::HOME32_CARD_MIN_W);
+        assert_eq!(super::HOME45_CARD_GRID_GAP, crate::theme::GEO_CARD_GAP);
+        assert_eq!(super::HOME45_CARD_GRID_GAP, 24.0);
+        assert_eq!(super::HOME45_CARD_BUTTON_MIN_H, 28.0);
+        assert_eq!(
+            super::HOME45_CARD_BUTTON_MIN_H,
+            crate::theme::CHROME_HEADER_BAR_H
+        );
+        assert_eq!(super::HOME45_CARD_CTA_MIN_W, 224.0);
+        assert_eq!(super::HOME45_CARD_CTA_MIN_W, super::HOME_CARD_CTA_W);
+
+        // 2. Pure helper functions delegation and values
+        assert_eq!(super::home45_content_avail_width(1200.0), 1176.0);
+        assert_eq!(super::home45_content_avail_width(960.0), 936.0);
+        assert_eq!(super::home45_content_avail_width(720.0), 696.0);
+        assert_eq!(super::home45_content_avail_width(20.0), 0.0);
+        assert!(super::home45_content_avail_width(f32::NAN).is_nan());
+
+        assert_eq!(super::home45_grid_columns(1200.0), 3);
+        assert_eq!(super::home45_grid_columns(960.0), 3);
+        assert_eq!(super::home45_grid_columns(720.0), 2);
+        assert_eq!(super::home45_grid_columns(500.0), 1);
+        assert_eq!(
+            super::home45_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+
+        assert_eq!(super::home45_grid_rows(9, 1200.0), 3);
+        assert_eq!(super::home45_grid_rows(9, 720.0), 5);
+        assert_eq!(super::home45_grid_rows(0, 1200.0), 0);
+
+        assert_eq!(super::home45_grid_card_width(1176.0), 376.0);
+        assert_eq!(super::home45_grid_card_width(936.0), 296.0);
+        assert_eq!(super::home45_grid_card_width(696.0), 336.0);
+        assert_eq!(super::home45_grid_card_width(f32::NAN), 240.0);
+        assert_eq!(super::home45_grid_card_width(0.0), 240.0);
+
+        assert_eq!(super::home45_card_inner_width(376.0), 360.0);
+        assert_eq!(super::home45_card_inner_width(240.0), 224.0);
+        assert_eq!(super::home45_card_inner_width(10.0), 0.0);
+        assert_eq!(super::home45_card_inner_width(f32::NAN), 224.0);
+
+        assert_eq!(super::home45_card_cta_width(376.0), 360.0);
+        assert_eq!(super::home45_card_cta_width(240.0), 224.0);
+        assert_eq!(super::home45_card_cta_hit_area(240.0), 6272.0);
+        assert_eq!(super::home45_card_cta_hit_area(376.0), 10080.0);
+
+        assert!((super::home45_card_min_height() - 99.6).abs() < 0.01);
+        assert!((super::home45_grid_content_height(9, 1200.0) - 346.8).abs() < 0.05);
+        assert_eq!(super::home45_grid_content_height(0, 1200.0), 0.0);
+
+        // 3. Grid cell coordinates and bounding box containment
+        for i in 0..9 {
+            let (r, c) = super::home45_card_cell(i, 1200.0);
+            assert_eq!(r, i / 3);
+            assert_eq!(c, i % 3);
+
+            let rect = super::home45_card_rect(i, 1200.0);
+            assert!(rect.is_some());
+            let (x0, y0, x1, y1) = rect.unwrap();
+            assert_eq!(x1 - x0, 376.0);
+            assert!((y1 - y0 - 99.6).abs() < 0.01);
+            assert!(x0 >= 12.0);
+            assert!(x1 <= 1200.0 - 12.0);
+
+            let cta = super::home45_card_cta_rect((x0, y0, x1, y1));
+            assert!(cta.is_some());
+            let (cx0, cy0, cx1, cy1) = cta.unwrap();
+            assert_eq!(cx0, x0 + 8.0);
+            assert_eq!(cx1, x1 - 8.0);
+            assert_eq!(cy1, y1 - 8.0);
+            assert_eq!(cy1 - cy0, 28.0);
+        }
+
+        // 4. Non-overlapping checks across all pairs of cards
+        for i in 0..9 {
+            let (ax0, ay0, ax1, ay1) = super::home45_card_rect(i, 1200.0).unwrap();
+            for j in (i + 1)..9 {
+                let (bx0, by0, bx1, by1) = super::home45_card_rect(j, 1200.0).unwrap();
+                let disjoint = ax1 <= bx0 || bx1 <= ax0 || ay1 <= by0 || by1 <= ay0;
+                assert!(disjoint, "Cards {i} and {j} overlap in grid!");
+            }
+        }
+
+        // 5. Edge condition handling
+        assert_eq!(super::home45_card_rect(0, f32::NAN), None);
+        assert_eq!(super::home45_card_rect(0, 0.0), None);
+        assert_eq!(super::home45_card_cta_rect((0.0, 0.0, 0.0, 0.0)), None);
+        assert_eq!(super::home45_card_cta_rect((10.0, 20.0, 5.0, 10.0)), None);
+        assert_eq!(super::home45_card_cta_rect((0.0, 0.0, 10.0, 20.0)), None);
+
+        // 6. Zero horizontal scroll & contract verification
+        assert!(!super::home45_grid_needs_hscroll(1200.0));
+        assert!(!super::home45_grid_needs_hscroll(960.0));
+        assert!(super::home45_grid_needs_hscroll(720.0));
+
+        assert!(super::home45_contract_ok());
     }
 }
