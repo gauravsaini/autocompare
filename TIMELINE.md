@@ -980,3 +980,8 @@
 1. **Live vector delegation**: `App::paint_session_action_bar_live` in `app.rs` delegates to `views::paint_session_action_bar`, executing staged Ring/Bars vector marks, hit-targets byte-identical.
 2. **Tests**: 1113 green (+1 toolbar_exq_icons55_live_vector_wiring), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0 non-test, colors 35 frozen. Strays self-reverted, OWNS-only landed.
 3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-icons55/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-hex64 hex geometry
+- `crates/gui/src/views_hex.rs` me 13 value-identical consts token-adopted, zero new sizes/colors, behavior unchanged.
+- Proof: 1128 green + 2 kittest PASS, fmt clean, banned 0, harness PASS after.png byte-identical.
+- Leaves pattern (gutter59/tree62/table63) continue, 1070/590/570 + 7.0 ref untouched documented.
