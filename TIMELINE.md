@@ -788,3 +788,9 @@
 1. **Copy geometry**: left/right arrows SPACE_XL column + XS pad, 16px hitbox centered, inline preview TypoRole Mono 15.6 rhythm, 1200px no h-scroll + 700px narrow edge.
 2. **Tests**: 1070 green, exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen. Agyx did full work, orchestrator verified OWNS and committed (same timeout-recovery pattern as table30/home32).
 3. **Files changed**: crates/gui/src/copy.rs, checks/gui-exq-copy34/**, TIMELINE.md.
+
+### Reports (2026-11-21) — feat(reports): rep37 html text patch (opencode default)
+
+1. **Reports parity evidence**: ac-loop round-rep37 CLI parity RESULT: PASS 10/10, GUI geo-typo PASS, no reports source changes required this round, edge fixtures own-help.txt + bc-process.txt added.
+2. **Tests**: autocompare-cli parity green, gui tests green, harness side-effect sessionpaint PNGs reverted in worktree, none landed.
+3. **Files changed**: checks/ac-loop/round-rep37/**, TIMELINE.md.
