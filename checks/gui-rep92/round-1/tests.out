@@ -1,0 +1,50 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running unittests src/lib.rs (target/debug/deps/autocompare_reports-0523d2ac0deb7c76)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/snapshot_tests.rs (target/debug/deps/snapshot_tests-a8553b524f4b6824)
+
+running 31 tests
+test test_context_patch_snapshot ... ok
+test test_edge_empty_hunks_and_pure_unchanged ... ok
+test test_edge_context_filter_boundaries ... ok
+test test_edge_crlf_and_whitespace_preservation ... ok
+test test_edge_hunk_boundaries_and_special_paths ... ok
+test test_edge_patch_builder_timestamps ... ok
+test test_edge_fixture_snapshot_match ... ok
+test test_edge_multiformat_bundles_parity ... ok
+test test_edge_unicode_cjk_emoji_rtl_rendering ... ok
+test test_generate_sample_artifacts_for_evidence ... ok
+test test_builder_snapshots ... ok
+test test_empty_input_never_panics ... ok
+test test_hostile_control_chars_and_null_bytes ... ok
+test test_edge_rtl_bidi_and_zero_width_chars ... ok
+test test_edge_pure_insertions_and_pure_deletions_sbs ... ok
+test test_html_parent_navigation_breadcrumb ... ok
+test test_html_mono_snapshot ... ok
+test test_html_rich_child_badges_and_stats ... ok
+test test_hostile_input_escaping_never_panics ... ok
+test test_html_color_snapshot ... ok
+test test_hunk_methods_and_diffstats_auto ... ok
+test test_html_side_by_side_layout ... ok
+test test_linked_report_bundle ... ok
+test test_plain_text_snapshot ... ok
+test test_plain_text_with_line_numbers ... ok
+test test_patch_bundle_and_combined_rendering ... ok
+test test_mono_print_styling_rules ... ok
+test test_multiformat_breadcrumbs_trail ... ok
+test test_report_filter_diffs_only ... ok
+test test_unified_patch_snapshot ... ok
+test test_xml_snapshot ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests autocompare_reports
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
