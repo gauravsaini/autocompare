@@ -1583,26 +1583,26 @@ pub fn text_panes_height(avail_h: f32) -> f32 {
 /// ensuring zero vertical glyph clipping.
 pub const TEXT_ROW_HEIGHT_COMPACT: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
 
-/// Comfortable text row height (px): 24.0.
-/// Parity with screenshot fixtures (`screenshot.rs` 24px row_h) and [`crate::theme::SPACE_XL`].
-pub const TEXT_ROW_HEIGHT_COMFORTABLE: f32 = 24.0;
+/// Comfortable text row height (px): 24.0 via [`crate::theme::SPACE_XL`].
+/// Parity with screenshot fixtures (`screenshot.rs` 24px row_h).
+pub const TEXT_ROW_HEIGHT_COMFORTABLE: f32 = crate::theme::SPACE_XL;
 
-/// Spacious text row height (px): 28.0.
-/// Relaxed vertical rhythm matching [`crate::theme::CHROME_HEADER_BAR_H`].
-pub const TEXT_ROW_HEIGHT_SPACIOUS: f32 = 28.0;
+/// Spacious text row height (px): 28.0 via [`crate::theme::CHROME_HEADER_BAR_H`].
+/// Relaxed vertical rhythm matching the header bar.
+pub const TEXT_ROW_HEIGHT_SPACIOUS: f32 = crate::theme::CHROME_HEADER_BAR_H;
 
 /// Compact folder row height (px): 20.0 (`SPACE_LG` 16.0 + `SPACE_XS` 4.0).
 /// Minimum safe height for folder paths (`TypoRole::Body` 18.2px line-height)
 /// with 1.8px padding, preventing any descender/ascender clipping.
-pub const FOLDER_ROW_HEIGHT_COMPACT: f32 = 20.0;
+pub const FOLDER_ROW_HEIGHT_COMPACT: f32 = crate::theme::SPACE_LG + crate::theme::SPACE_XS;
 
-/// Comfortable folder row height (px): 24.0.
-/// Parity with [`crate::tree::FOLDER_ROW_HEIGHT`] and [`crate::theme::SPACE_XL`].
-pub const FOLDER_ROW_HEIGHT_COMFORTABLE: f32 = 24.0;
+/// Comfortable folder row height (px): 24.0 via [`crate::theme::SPACE_XL`].
+/// Parity with [`crate::tree::FOLDER_ROW_HEIGHT`].
+pub const FOLDER_ROW_HEIGHT_COMFORTABLE: f32 = crate::theme::SPACE_XL;
 
-/// Spacious folder row height (px): 28.0.
-/// Relaxed folder tree rhythm matching [`crate::theme::CHROME_HEADER_BAR_H`].
-pub const FOLDER_ROW_HEIGHT_SPACIOUS: f32 = 28.0;
+/// Spacious folder row height (px): 28.0 via [`crate::theme::CHROME_HEADER_BAR_H`].
+/// Relaxed folder tree rhythm matching the header bar.
+pub const FOLDER_ROW_HEIGHT_SPACIOUS: f32 = crate::theme::CHROME_HEADER_BAR_H;
 
 /// Viewmodel density mode governing row heights and vertical rhythm across
 /// text diff and folder tree views.
@@ -1905,6 +1905,99 @@ pub const fn live_text_wrap_chars() -> usize {
 /// yield 0 so headless callers never divide by zero. Pure; unit-tested.
 pub fn live_text_wrap_chars_for_width(pane_w: u32, advance_px: f32) -> usize {
     text_pane_char_capacity(pane_w, advance_px).min(live_text_wrap_chars())
+}
+
+// ----------------------------------------------------------------------------
+// Live text row rhythm round-2 (viewmodel39 headless): line box plus pad.
+// Paint-neutral this wave — `views.rs` adopts in a later wave; these lock
+// the headless contract so live rows read as one mono rhythm: every text
+// row clears the Mono line box (15.6px) with a SPACE-scale pad, every
+// folder row clears the Body line box (18.2px), the 1200px canvas holds
+// both panes plus chrome with no sideways scroll, and the narrow 700
+// window wraps inside its smaller panes with no clipped glyphs. Every
+// value delegates to an existing TypoRole accessor, SPACE token, or
+// width helper; no new size, no new token, no color. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Live text line box (px): Mono 12.0 * 1.30 = 15.6.
+/// Alias over [`crate::theme::TypoRole::line_height_px`].
+pub fn viewmodel39_text_line_h() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// Live folder line box (px): Body 13.0 * 1.40 = 18.2.
+/// Alias over [`crate::theme::TypoRole::line_height_px`].
+pub fn viewmodel39_folder_line_h() -> f32 {
+    crate::theme::TypoRole::Body.line_height_px()
+}
+
+/// Per-side vertical pad (px) for a text row: half the slack between the
+/// density row height and the Mono line box. Reuses [`RowDensity::text_row_pad`].
+pub fn viewmodel39_text_pad_for(density: RowDensity) -> f32 {
+    density.text_row_pad()
+}
+
+/// Per-side vertical pad (px) for a folder row: half the slack between the
+/// density row height and the Body line box. Reuses [`RowDensity::folder_row_pad`].
+pub fn viewmodel39_folder_pad_for(density: RowDensity) -> f32 {
+    density.folder_row_pad()
+}
+
+/// Text row height (px) for `density`: delegates to [`RowDensity::text_row_height`].
+pub fn viewmodel39_text_row_h(density: RowDensity) -> f32 {
+    density.text_row_height()
+}
+
+/// Folder row height (px) for `density`: delegates to [`RowDensity::folder_row_height`].
+pub fn viewmodel39_folder_row_h(density: RowDensity) -> f32 {
+    density.folder_row_height()
+}
+
+/// Rhythm check for one density: both row boxes clear their line boxes
+/// with non-negative pads, so no ascender or descender clips.
+pub fn viewmodel39_row_rhythm_ok(density: RowDensity) -> bool {
+    let text_ok =
+        !row_height_has_clip_risk(viewmodel39_text_row_h(density), viewmodel39_text_line_h())
+            && viewmodel39_text_pad_for(density) >= 0.0;
+    let folder_ok = !row_height_has_clip_risk(
+        viewmodel39_folder_row_h(density),
+        viewmodel39_folder_line_h(),
+    ) && viewmodel39_folder_pad_for(density) >= 0.0;
+    text_ok && folder_ok
+}
+
+/// Wide 1200px canvas holds both textcenter panes plus chrome with no
+/// sideways scroll: panes split 556/556 after the 88px chrome and every
+/// density rhythm stays clip-free.
+pub fn viewmodel39_wide1200_no_hscroll() -> bool {
+    let (left_w, right_w) = textcenter_pane_widths(1200, 0.5);
+    if left_w != 556 || right_w != 556 {
+        return false;
+    }
+    if 1200 < textcenter_chrome_w().saturating_add(left_w.saturating_add(right_w)) {
+        return false;
+    }
+    viewmodel39_row_rhythm_ok(RowDensity::Compact)
+        && viewmodel39_row_rhythm_ok(RowDensity::Comfortable)
+        && viewmodel39_row_rhythm_ok(RowDensity::Spacious)
+}
+
+/// Narrow 700px window wraps inside its smaller panes with no clipped
+/// glyphs: panes split 306/306 after the 88px chrome, the 7.2px mono
+/// advance wraps to 42 chars (well under the 80 cap), and every density
+/// rhythm stays clip-free.
+pub fn viewmodel39_narrow700_wrap_zero_clip() -> bool {
+    let (left_w, right_w) = textcenter_pane_widths(700, 0.5);
+    if left_w != 306 || right_w != 306 {
+        return false;
+    }
+    let wrap = live_text_wrap_chars_for_width(left_w, 7.2);
+    if wrap != 42 || wrap >= live_text_wrap_chars() {
+        return false;
+    }
+    viewmodel39_row_rhythm_ok(RowDensity::Compact)
+        && viewmodel39_row_rhythm_ok(RowDensity::Comfortable)
+        && viewmodel39_row_rhythm_ok(RowDensity::Spacious)
 }
 
 // ----------------------------------------------------------------------------
@@ -5418,5 +5511,71 @@ mod tests {
             ));
         }
         assert_eq!(RowDensity::Compact.text_row_height(), 20.0);
+    }
+
+    #[test]
+    fn viewmodel39_row_rhythm_reuses_typo_and_space() {
+        use crate::theme::{
+            CHROME_HEADER_BAR_H, SPACE_SM, SPACE_XL, SPACE_XS, TYPO_WRAP_PANE_CHARS, TypoRole,
+        };
+        let wide_raw = include_str!(
+            "../../../checks/gui-exq-viewmodel39/round-1/comparison/viewmodel39-wide-1200.json"
+        );
+        assert!(wide_raw.contains("\"name\": \"viewmodel39-wide-1200\""));
+        let narrow_raw = include_str!(
+            "../../../checks/gui-exq-viewmodel39/round-1/comparison/viewmodel39-narrow-700.json"
+        );
+        assert!(narrow_raw.contains("\"name\": \"viewmodel39-narrow-700\""));
+
+        // Row heights reuse SPACE tokens with unchanged values.
+        assert_eq!(TEXT_ROW_HEIGHT_COMPACT, 20.0);
+        assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, SPACE_XL);
+        assert_eq!(TEXT_ROW_HEIGHT_COMFORTABLE, 24.0);
+        assert_eq!(TEXT_ROW_HEIGHT_SPACIOUS, CHROME_HEADER_BAR_H);
+        assert_eq!(TEXT_ROW_HEIGHT_SPACIOUS, 28.0);
+        assert_eq!(FOLDER_ROW_HEIGHT_COMPACT, 20.0);
+        assert_eq!(FOLDER_ROW_HEIGHT_COMFORTABLE, SPACE_XL);
+        assert_eq!(FOLDER_ROW_HEIGHT_SPACIOUS, CHROME_HEADER_BAR_H);
+
+        // Line boxes reuse TypoRole Mono/Body; pads reuse the density math.
+        assert!((viewmodel39_text_line_h() - 15.6).abs() < 0.01);
+        assert_eq!(viewmodel39_text_line_h(), TypoRole::Mono.line_height_px());
+        assert!((viewmodel39_folder_line_h() - 18.2).abs() < 0.01);
+        assert_eq!(viewmodel39_folder_line_h(), TypoRole::Body.line_height_px());
+        assert_eq!(
+            viewmodel39_text_row_h(RowDensity::Compact),
+            TEXT_ROW_HEIGHT_COMPACT
+        );
+        assert_eq!(
+            viewmodel39_folder_row_h(RowDensity::Comfortable),
+            FOLDER_ROW_HEIGHT_COMFORTABLE
+        );
+        assert!((viewmodel39_text_pad_for(RowDensity::Compact) - 2.2).abs() < 0.01);
+        assert!((viewmodel39_folder_pad_for(RowDensity::Compact) - 0.9).abs() < 0.01);
+        assert!(SPACE_XS < SPACE_SM);
+
+        // Rhythm holds at every density: rows clear their line boxes.
+        for density in [
+            RowDensity::Compact,
+            RowDensity::Comfortable,
+            RowDensity::Spacious,
+        ] {
+            assert!(viewmodel39_row_rhythm_ok(density));
+        }
+
+        // Wide 1200 edge: 556/556 after 88 chrome, wrap 77 under cap 80.
+        assert_eq!(textcenter_chrome_w(), 88);
+        assert_eq!(textcenter_pane_widths(1200, 0.5), (556, 556));
+        let (wide_l, _) = textcenter_pane_widths(1200, 0.5);
+        assert_eq!(live_text_wrap_chars_for_width(wide_l, 7.2), 77);
+        assert_eq!(live_text_wrap_chars(), TYPO_WRAP_PANE_CHARS);
+        assert!(live_text_wrap_chars_for_width(wide_l, 7.2) < live_text_wrap_chars());
+        assert!(viewmodel39_wide1200_no_hscroll());
+
+        // Narrow 700 edge: 306/306 after 88 chrome, wrap 42 under cap 80.
+        assert_eq!(textcenter_pane_widths(700, 0.5), (306, 306));
+        let (narrow_l, _) = textcenter_pane_widths(700, 0.5);
+        assert_eq!(live_text_wrap_chars_for_width(narrow_l, 7.2), 42);
+        assert!(viewmodel39_narrow700_wrap_zero_clip());
     }
 }

@@ -1,0 +1,27 @@
+{
+  "name": "viewmodel39-narrow-700",
+  "intent": "viewmodel39 round-2 narrow edge: at 700px avail (below the 720 fallback) the textcenter panes shrink to 306/306 after the 88px chrome, wrap stays well under the 80-char cap, and every density row stays above the Mono/Body line boxes so no clipped glyphs.",
+  "canvas_w": 700,
+  "canvas_h": 900,
+  "inputs": {
+    "avail_w": 700,
+    "fraction": 0.5,
+    "mono_advance_px": 7.2
+  },
+  "assertions": {
+    "textcenter_chrome_w": 88,
+    "left_pane_w": 306,
+    "right_pane_w": 306,
+    "wrap_chars": 42,
+    "wrap_cap": 80,
+    "wrap_under_cap": true,
+    "compact_text_row_h": 20.0,
+    "comfortable_text_row_h": 24.0,
+    "spacious_text_row_h": 28.0,
+    "compact_folder_row_h": 20.0,
+    "mono_line_h": 15.6,
+    "body_line_h": 18.2,
+    "needs_hscroll": false,
+    "zero_clip": true
+  }
+}
