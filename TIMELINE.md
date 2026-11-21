@@ -919,3 +919,9 @@
 1. **Gutter geometry parity**: single-source canvas budget (`GutterCanvasBudget`) across narrow (<720px / 700px), normal (960px), and wide (1200px) canvases delegating to `SPACE_*` and `GEO_OUTER_MARGIN`; right-aligned numbers, midpoint-aligned centered marks, omit marker box/hit bounds, zero double-padding or clipping.
 2. **Tests**: 1112 green (+6 geo55 tests), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0, colors 35 frozen. Gutter signal moved 1823 -> 1942, margin/gap moved 706 -> 717.
 3. **Files changed**: crates/gui/src/gutter.rs, checks/gui-exq-geo55/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-light56 light contrast (opencode default)
+
+1. **Light underline-only accent**: `paint_inline_accent` in `screenshot.rs`, dark keeps byte-identical inverted block, light paints dark-ink text + 1px fg underline, zero geometry shift, zero new colors.
+2. **Tests**: 1115 green (+3 light56), exquisite harness RESULT: PASS 10946B, fmt clean, banned 0 non-test, colors 35 frozen. Dark after == baseline byte-identical 10928B, light 10973 -> 10946 27B delta. Sessionpaint strays reverted, none landed.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-light56/**, TIMELINE.md.
