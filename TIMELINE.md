@@ -1050,3 +1050,7 @@
 ### Feature (2026-11-21) — feat(build): exq-binary81 release packaging
 - `tools/release/` only: build-release.sh + smoke-test.sh + INSTALL.md + GATES.md, 11.6MB release binary, smoke --help + PNG PASS.
 - Proof: 1143 lib + 2 shot green in worktree, OWNS clean, NO PUSH from leaf, cherry-picked 41a8b2c.
+
+### Feature (2026-11-21) — feat(gui): exq-home83 home geometry
+- `crates/gui/src/home.rs` me home card geometry, OWNS clean, colors/typography frozen.
+- Proof: leaf 1160 lib + 2 shot green, fmt clean, banned 0 non-test (unwrap only inside #[test] after is_some assert), NO PUSH, cherry-picked da7b2a1.
