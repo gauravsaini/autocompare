@@ -998,3 +998,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-fontbundle67 typo consolidation
 - `crates/gui/src/theme.rs` me 14x 0.0 -> TYPO_LETTER_SPACING reuse, chain docs tight, zero new sizes/colors.
 - Proof: 1130 green + 2 kittest PASS (dark 53663B/503c light 54289B/549c), fmt clean, banned 0, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-lightvisual68 light polish
+- `crates/gui/src/app.rs` me light polish, dark sha identical e75216dc, colors 35 unchanged.
+- Proof: 1132 green + kittest dual PASS (dark 53798B/503c light 54408B/549c), fmt clean, banned 0, harness PASS.
