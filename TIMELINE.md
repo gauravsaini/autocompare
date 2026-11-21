@@ -1030,3 +1030,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-realpolish75 real shot polish
 - `crates/gui/tests/real_egui_shot.rs` me Visuals + font + icon gates, tmp-only + EXQ_KEEP_PNG flow intact, dark mean 32.7 vs light 242.8.
 - Proof: 1140 lib + 2 shot passed, fmt clean, banned 0, clippy 0 new warnings.
+
+### Feature (2026-11-21) — feat(gui): exq-localrun78 local entry
+- `crates/gui/src/main.rs` me boot hint stderr pe, persist_window=false + tmp persistence, --help/--screenshot unchanged, 11 lines.
+- Proof: 1140+2 green, fmt clean, banned 0, smoke --help + --screenshot PASS tmp-only, RUN.md docs.
