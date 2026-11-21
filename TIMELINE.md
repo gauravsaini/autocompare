@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-home45 live home cards
+
+1. **Live home cards lock**: pure helpers in home.rs (card rect/grid geometry vs 1200px canvas, home45-live-cards-1200.json edge fixture); colors frozen.
+2. **Tests**: 1092 green; rustfmt clean on OWNS; banned non-test tokens 0 (unwraps test-mod only); exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/home.rs, checks/gui-exq-home45/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-table43 live table compare grid
 
 1. **Live table grid lock**: delegation-only pure helpers in views_table.rs (live-table-grid.json edge fixture); 65 views_table tests green; colors frozen at 38.
