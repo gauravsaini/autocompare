@@ -36,12 +36,11 @@ use crate::home::{
     recent_row_title_role, recent_row_two_line_height,
 };
 use crate::theme::{
-    CHANGED_BG, CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_BG, DELETED_FG,
-    ERROR_BG, INSERTED_BG, TYPO_HEADING_SIZE, TYPO_LETTER_SPACING, TYPO_LINE_HEIGHT_CHROME,
-    TYPO_LINE_HEIGHT_MONO, TYPO_LINE_HEIGHT_SOURCE, TYPO_MONO_SIZE, TYPO_SMALL_SIZE,
-    TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD, TYPO_WRAP_PANE_CHARS, TypoRole, blue_for,
-    changed_bg_for, changed_fg_for, deleted_bg_for, deleted_fg_for, dim_for, green_for,
-    inserted_bg_for, inserted_fg_for, red_for, track_for,
+    CHANGED_FG, CHROME_HEADER_BAR_H, CHROME_HEADER_LEAD, DELETED_FG, ERROR_BG, TYPO_HEADING_SIZE,
+    TYPO_LETTER_SPACING, TYPO_LINE_HEIGHT_CHROME, TYPO_LINE_HEIGHT_MONO, TYPO_LINE_HEIGHT_SOURCE,
+    TYPO_MONO_SIZE, TYPO_SMALL_SIZE, TYPO_WEIGHT_REGULAR, TYPO_WEIGHT_SEMIBOLD,
+    TYPO_WRAP_PANE_CHARS, TypoRole, blue_for, changed_bg_for, changed_fg_for, deleted_bg_for,
+    deleted_fg_for, dim_for, green_for, inserted_bg_for, inserted_fg_for, red_for, track_for,
 };
 use crate::viewmodel::{self, FindState, TextViewPrefs, view_text_with_prefs};
 use crate::viewmodel::{FolderRow, MergeSummary, TableModel, TextRow, TextRowKind, TextRows};
@@ -2377,7 +2376,7 @@ pub fn paint_hex(
             // Byte-grid minimap: hunk rows ka thumbnail; click/drag
             // fraction se grid row nikal kar covering hunk par jump
             // karta hai (wahi `hex_row_to_hunk` path). Sirf existing
-            // palette/tokens: track + CHANGED_BG, double-wide strip.
+            // palette/tokens: track + changed_bg_for, double-wide strip.
             let total = views_hex::hex_row_count(view.left_size.max(view.right_size));
             if total > 0 {
                 let dark = ui.visuals().dark_mode;
@@ -2404,7 +2403,7 @@ pub fn paint_hex(
                     view.left_size.max(view.right_size),
                     &view.hunks,
                 ) {
-                    ui.painter().rect_filled(seg, 0.0, CHANGED_BG);
+                    ui.painter().rect_filled(seg, 0.0, changed_bg_for(dark));
                 }
                 let minimap_pressed = resp.clicked() || resp.dragged();
                 if minimap_pressed
@@ -2458,7 +2457,11 @@ pub fn paint_hex(
                     };
                     let cells = views_hex::hex_diff_nibble_cells(row, left_slice, right_slice);
                     for accent in views_hex::hex_row_nibble_accent_rects(ui.min_rect(), &cells) {
-                        ui.painter().rect_filled(accent, 0.0, CHANGED_BG);
+                        ui.painter().rect_filled(
+                            accent,
+                            0.0,
+                            changed_bg_for(ui.visuals().dark_mode),
+                        );
                     }
                     ui.end_row();
                 }
@@ -2999,7 +3002,8 @@ pub fn paint_merge(ui: &mut Ui, model: &mut MergeSummary) {
                 egui::pos2(rect.min.x, rect.min.y + seg.y_start),
                 egui::pos2(rect.max.x, (rect.min.y + seg.y_end).min(rect.max.y)),
             );
-            ui.painter().rect_filled(seg_rect, 0.0, CHANGED_BG);
+            ui.painter()
+                .rect_filled(seg_rect, 0.0, changed_bg_for(dark));
         }
     });
 }
@@ -5284,7 +5288,7 @@ pub fn text_center_hunk_marker(kind: TextRowKind) -> bool {
 /// panes jaisi patti dikhata hai taaki band beech me na toote (BC
 /// continuous selection precedent). Head/blank dono par same gate —
 /// copy arrows band ke upar rehte hain, blank click-to-select band ke
-/// upar. Caller existing [`CHANGED_BG`] reuse karta hai (koi naya
+/// upar. Caller existing [`crate::theme::CHANGED_BG`] reuse karta hai (koi naya
 /// hue/token nahi). Pure; unit-tested.
 pub fn text_center_gutter_band_fill(selected: bool) -> bool {
     selected
@@ -5332,7 +5336,7 @@ pub fn text_center_marker_label(kind: TextRowKind) -> Option<&'static str> {
 /// Center-gutter marker ink: frozen [`CHANGED_FG`] reuse (fixture
 /// `TEXT_CENTER_MARK` bhi isi hue me hai) — koi naya hue nahi.
 /// Paint marker text isi par rangta hai taaki `=>` changed-row
-/// band ([`CHANGED_BG`]) par yellow padhe. Pure; unit-tested.
+/// band ([`crate::theme::CHANGED_BG`]) par yellow padhe. Pure; unit-tested.
 pub fn text_center_marker_fg() -> Color32 {
     CHANGED_FG
 }
@@ -6261,16 +6265,16 @@ pub fn text_legend_marker_px() -> f32 {
 }
 
 /// Legend marker ink per cell: frozen palette reuse — differences par
-/// [`CHANGED_BG`], same par per-mode track ([`track_for`]), insert par
-/// [`INSERTED_BG`], overview par [`DELETED_BG`]. Har cell ka namuna bar
+/// [`changed_bg_for`], same par per-mode track ([`track_for`]), insert par
+/// [`inserted_bg_for`], overview par [`deleted_bg_for`]. Har cell ka namuna bar
 /// face se alag dikhta hai (live-pixel gate isi par hai). Koi naya hue
 /// nahi. Pure; unit-tested.
 pub fn text_legend_marker_ink(index: usize, dark: bool) -> Color32 {
     match index % 4 {
-        0 => CHANGED_BG,
+        0 => changed_bg_for(dark),
         1 => track_for(dark),
-        2 => INSERTED_BG,
-        _ => DELETED_BG,
+        2 => inserted_bg_for(dark),
+        _ => deleted_bg_for(dark),
     }
 }
 
@@ -9189,7 +9193,7 @@ pub fn paint_text_with_find(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::INSERTED_FG;
+    use crate::theme::{CHANGED_BG, DELETED_BG, INSERTED_BG, INSERTED_FG};
 
     #[test]
     fn plain_line_pads_to_the_pane_width() {
@@ -15950,6 +15954,54 @@ mod tests {
             return;
         };
         assert_eq!(seg.kind, TextRowKind::Changed);
+    }
+
+    #[test]
+    fn exq_palette73_residual() {
+        // exq-palette73: gutter/overview/minimap + legend route via *_for(dark).
+        // Dark arm byte-identical; light arm pale wash + dark ink, AA.
+        use crate::theme::{
+            LIGHT_CHANGED_BG, LIGHT_DELETED_BG, LIGHT_INSERTED_BG, changed_bg_for, changed_fg_for,
+            deleted_bg_for, deleted_fg_for, inserted_bg_for, inserted_fg_for,
+            light_diff_accents_aa, theme_contrast_ok_color32, track_for,
+        };
+        // 1. Dark arm: byte-identical to frozen dark washes.
+        assert_eq!(text_legend_marker_ink(0, true), CHANGED_BG);
+        assert_eq!(text_legend_marker_ink(0, true), changed_bg_for(true));
+        assert_eq!(text_legend_marker_ink(1, true), track_for(true));
+        assert_eq!(text_legend_marker_ink(2, true), INSERTED_BG);
+        assert_eq!(text_legend_marker_ink(2, true), inserted_bg_for(true));
+        assert_eq!(text_legend_marker_ink(3, true), DELETED_BG);
+        assert_eq!(text_legend_marker_ink(3, true), deleted_bg_for(true));
+        assert_eq!(
+            text_legend_marker_ink(4, true),
+            text_legend_marker_ink(0, true)
+        );
+        // 2. Light arm: pale washes, never the dark saturations.
+        assert_eq!(text_legend_marker_ink(0, false), changed_bg_for(false));
+        assert_eq!(text_legend_marker_ink(0, false), LIGHT_CHANGED_BG);
+        assert_eq!(text_legend_marker_ink(1, false), track_for(false));
+        assert_eq!(text_legend_marker_ink(2, false), inserted_bg_for(false));
+        assert_eq!(text_legend_marker_ink(2, false), LIGHT_INSERTED_BG);
+        assert_eq!(text_legend_marker_ink(3, false), deleted_bg_for(false));
+        assert_eq!(text_legend_marker_ink(3, false), LIGHT_DELETED_BG);
+        assert_ne!(text_legend_marker_ink(0, false), CHANGED_BG);
+        assert_ne!(text_legend_marker_ink(2, false), INSERTED_BG);
+        assert_ne!(text_legend_marker_ink(3, false), DELETED_BG);
+        // 3. Light wash + dark ink AA (same pairs the paint sites use).
+        assert!(light_diff_accents_aa());
+        assert!(theme_contrast_ok_color32(
+            deleted_fg_for(false),
+            deleted_bg_for(false)
+        ));
+        assert!(theme_contrast_ok_color32(
+            inserted_fg_for(false),
+            inserted_bg_for(false)
+        ));
+        assert!(theme_contrast_ok_color32(
+            changed_fg_for(false),
+            changed_bg_for(false)
+        ));
     }
 
     #[test]
