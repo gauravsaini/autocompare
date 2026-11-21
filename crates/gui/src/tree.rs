@@ -8207,3 +8207,207 @@ mod tree31_tests {
         assert_eq!(tree31_dim_role().size(), crate::theme::TYPO_SMALL_SIZE);
     }
 }
+
+// ----------------------------------------------------------------------------
+// TREE41 (round-2): folder tree geometry — indent rhythm reusing SPACE_SM,
+// centered 16px expander hitbox, guide lines alignment, 1200px no h-scroll +
+// deepnest edge. Typography: TypoRole reuse only, no new sizes. Colors frozen.
+// Paint stays with the orchestrator (`views.rs`); this section is the
+// headless spec + edge math. Frozen predecessors untouched: tree41 is the
+// round-2 additive folder tree successor locking the geometry contract.
+// ----------------------------------------------------------------------------
+
+/// TREE41 wide canvas width px: deep-nest rows fit without h-scroll.
+pub const TREE41_CANVAS_W: f32 = 1200.0;
+/// TREE41 narrow edge width px: guides stay distinct, rows stay apart.
+pub const TREE41_NARROW_W: f32 = 700.0;
+
+/// TREE41 indent step: one SM spacing step (8.0). Pure; unit-tested.
+pub fn tree41_indent_step() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// TREE41 indent px for a depth: `depth * step`. Pure; unit-tested.
+pub fn tree41_indent_for_depth(depth: usize) -> f32 {
+    (depth as f32) * tree41_indent_step()
+}
+
+/// TREE41 text line-height px: `TypoRole::Mono` line box (15.6).
+/// Pure; unit-tested.
+pub fn tree41_row_line_height_px() -> f32 {
+    crate::theme::TypoRole::Mono.line_height_px()
+}
+
+/// TREE41 row height px: mono line box + one SM step breathing room
+/// (15.6 + 8.0 = 23.6). Pure; unit-tested.
+pub fn tree41_row_h() -> f32 {
+    tree41_row_line_height_px() + crate::theme::SPACE_SM
+}
+
+/// TREE41 expander cell width px: `FOLDER_EXPANDER_W` parity (16.0).
+/// Pure; unit-tested.
+pub fn tree41_expander_w() -> f32 {
+    FOLDER_EXPANDER_W
+}
+
+/// TREE41 expander hit box `(x0, y0, x1, y1)` px: 16x16 square, x from
+/// indent, y centered in the row. Non-finite `row_top` yields an empty
+/// box at origin so paint never feeds NaN into layout. Pure.
+pub fn tree41_expander_box(depth: usize, row_top: f32) -> (f32, f32, f32, f32) {
+    if !row_top.is_finite() {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let x0 = tree41_indent_for_depth(depth);
+    let y0 = row_top + (tree41_row_h() - tree41_expander_w()) / 2.0;
+    (x0, y0, x0 + tree41_expander_w(), y0 + tree41_expander_w())
+}
+
+/// TREE41 expander hit test: inside the centered 16x16 box only.
+/// Non-finite input never hits. Pure; unit-tested.
+pub fn tree41_expander_contains(depth: usize, row_top: f32, x: f32, y: f32) -> bool {
+    if !x.is_finite() || !y.is_finite() || !row_top.is_finite() {
+        return false;
+    }
+    let hit = tree41_expander_box(depth, row_top);
+    x >= hit.0 && x <= hit.2 && y >= hit.1 && y <= hit.3
+}
+
+/// TREE41 ancestor guide x px: that level's expander center
+/// (`level * step + 16/2`). Pure; unit-tested.
+pub fn tree41_guide_x(level: usize) -> f32 {
+    (level as f32) * tree41_indent_step() + tree41_expander_w() / 2.0
+}
+
+/// TREE41 ancestor guides (`0..depth`): depth 0 empty. Pure.
+pub fn tree41_guide_xs(depth: usize) -> Vec<f32> {
+    let mut xs = Vec::new();
+    let mut level = 0usize;
+    while level < depth {
+        xs.push(tree41_guide_x(level));
+        level = level.saturating_add(1);
+    }
+    xs
+}
+
+/// TREE41 path-column origin px: indent + expander cell + one SM gap,
+/// so labels never collide with guides/icons. Pure; unit-tested.
+pub fn tree41_path_x(depth: usize) -> f32 {
+    tree41_indent_for_depth(depth) + tree41_expander_w() + crate::theme::SPACE_SM
+}
+
+/// TREE41 body role: Mono (content). Pure; unit-tested.
+pub fn tree41_body_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// TREE41 dim role: Small (missing-side dashes, weak by rank).
+/// Pure; unit-tested.
+pub fn tree41_dim_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Small
+}
+
+/// TREE41 wide available width px: canvas minus two outer margins
+/// (1200 - 2 * 12 = 1176). Pure; unit-tested.
+pub fn tree41_avail_w() -> f32 {
+    TREE41_CANVAS_W - crate::theme::GEO_OUTER_MARGIN * 2.0
+}
+
+/// TREE41 narrow available width px (700 - 2 * 12 = 676).
+/// Pure; unit-tested.
+pub fn tree41_narrow_avail_w() -> f32 {
+    TREE41_NARROW_W - crate::theme::GEO_OUTER_MARGIN * 2.0
+}
+
+/// TREE41 row text extent px: path origin + mono advance per char.
+/// Non-finite risk none: all inputs finite-checked by caller via
+/// `tree41_needs_hscroll`. Pure; unit-tested.
+pub fn tree41_text_w(depth: usize, name_len: usize) -> f32 {
+    tree41_path_x(depth) + name_len as f32 * FOLDER_MONO_ADVANCE
+}
+
+/// TREE41 horizontal-scroll gate: true only when finite text width
+/// exceeds finite available width. Pure; unit-tested.
+pub fn tree41_needs_hscroll(avail_w: f32, text_w: f32) -> bool {
+    if !avail_w.is_finite() || !text_w.is_finite() {
+        return false;
+    }
+    text_w > avail_w
+}
+
+#[cfg(test)]
+mod tree41_tests {
+    use super::*;
+
+    #[test]
+    fn tree41_deepnest_no_overlap() {
+        // Headless proof for comparison/deepnest-edge.json: depth-5 chain
+        // fits 1200px without h-scroll, guides/labels never overlap,
+        // narrow 700 keeps guides distinct, TypoRole reuse, no new sizes.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-tree41/round-1/comparison/deepnest-edge.json");
+        assert!(fixture_raw.contains("\"name\": \"deepnest-edge\""));
+        assert!(fixture_raw.contains("\"width_px\": 1200.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\": false"));
+        let mirror_raw =
+            include_str!("../../../checks/gui-exq-tree41/comparison/deepnest-edge.json");
+        assert!(mirror_raw.contains("\"name\": \"deepnest-edge\""));
+        assert!(mirror_raw.contains("\"needs_hscroll\": false"));
+
+        // Indent rhythm: one SM step per depth.
+        assert_eq!(tree41_indent_step(), crate::theme::SPACE_SM);
+        assert_eq!(tree41_indent_step(), 8.0);
+        assert_eq!(tree41_indent_for_depth(0), 0.0);
+        assert_eq!(tree41_indent_for_depth(1), 8.0);
+        assert_eq!(tree41_indent_for_depth(5), 40.0);
+
+        // Row rhythm: Mono line box + SM breathing room.
+        assert_eq!(
+            tree41_row_line_height_px(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((tree41_row_line_height_px() - 15.6).abs() < 0.01);
+        assert!((tree41_row_h() - 23.6).abs() < 0.01);
+
+        // Expander: 16px box centered in the row.
+        assert_eq!(tree41_expander_w(), 16.0);
+        assert_eq!(tree41_expander_w(), FOLDER_EXPANDER_W);
+        let hit = tree41_expander_box(1, 100.0);
+        assert_eq!((hit.2 - hit.0, hit.3 - hit.1), (16.0, 16.0));
+        assert_eq!(hit.0, 8.0);
+        assert!((hit.1 - 103.8).abs() < 0.01);
+        assert!(tree41_expander_contains(1, 100.0, 16.0, 111.0));
+        assert!(!tree41_expander_contains(1, 100.0, 25.0, 111.0));
+        assert!(!tree41_expander_contains(0, 0.0, f32::NAN, 8.0));
+        assert!(!tree41_expander_contains(0, f32::NAN, 8.0, 8.0));
+
+        // Alignment: guides strictly increasing, labels clear of guides.
+        let guides = tree41_guide_xs(5);
+        assert_eq!(guides.len(), 5);
+        assert_eq!(guides, vec![8.0, 16.0, 24.0, 32.0, 40.0]);
+        assert!(tree41_guide_xs(0).is_empty());
+        let path_x = tree41_path_x(5);
+        assert_eq!(path_x, 64.0);
+        let Some(last) = guides.last() else {
+            return;
+        };
+        assert!(path_x > *last + crate::theme::SPACE_SM - 0.01);
+
+        // 1200px: deepest row fits, no h-scroll.
+        assert_eq!(tree41_avail_w(), 1176.0);
+        let deepest = tree41_text_w(5, 35);
+        assert!((deepest - 309.0).abs() < 0.01);
+        assert!(!tree41_needs_hscroll(tree41_avail_w(), deepest));
+        assert!(!tree41_needs_hscroll(tree41_avail_w(), f32::NAN));
+
+        // Narrow 700: still fits, guides still 8px apart.
+        assert_eq!(tree41_narrow_avail_w(), 676.0);
+        assert!(!tree41_needs_hscroll(tree41_narrow_avail_w(), deepest));
+        assert!(tree41_guide_x(1) - tree41_guide_x(0) >= 8.0);
+
+        // Typography: roles only, sizes match existing tokens.
+        assert_eq!(tree41_body_role(), crate::theme::TypoRole::Mono);
+        assert_eq!(tree41_dim_role(), crate::theme::TypoRole::Small);
+        assert_eq!(tree41_body_role().size(), crate::theme::TYPO_MONO_SIZE);
+        assert_eq!(tree41_dim_role().size(), crate::theme::TYPO_SMALL_SIZE);
+    }
+}
