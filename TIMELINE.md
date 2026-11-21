@@ -818,3 +818,9 @@
 1. **Text row rhythm round-2**: TypoRole line-height reuse, padding XS/SM, narrow700 zero-clip, 1200px no h-scroll.
 2. **Tests**: 1088 green (+1 viewmodel), exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Sessions + sessionpaint strays reverted in worktree, none landed.
 3. **Files changed**: crates/gui/src/viewmodel.rs, checks/gui-exq-viewmodel39/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-views40 live text panes (opencode default)
+
+1. **Text panes round-2**: twin panes padding SPACE_*, line-number gutter alignment, hunk header spacing, 1200px no h-scroll + narrow700 edge.
+2. **Tests**: 1089 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Leaf self-cleaned side-effect PNGs, OWNS-only landed.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-views40/**, TIMELINE.md.
