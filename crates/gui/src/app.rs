@@ -5565,6 +5565,21 @@ pub fn exq_icons50_inline_accent_for(dark: bool) -> egui::Color32 {
     crate::theme::accent_fg_for(dark)
 }
 
+/// Toolbar glyph ink, EXQ-TOOLBAR74 app half: active par existing dim
+/// ink ([`crate::theme::dim_for`] — live `views::paint_toolbar_glyph`
+/// ink byte-identical), disabled par frozen track tone
+/// ([`crate::theme::track_for`]). Mode flag seedha theme `*_for`
+/// helper me route hota hai (koi hardcoded bool/Color32 nahi).
+/// Views consumption agle wave (lightvisual68 unwired-readiness
+/// precedent); behavior unchanged. Pure; headless-tested.
+pub fn toolbar_glyph_ink_for(active: bool, dark: bool) -> egui::Color32 {
+    if active {
+        crate::theme::dim_for(dark)
+    } else {
+        crate::theme::track_for(dark)
+    }
+}
+
 /// EXQ-LIGHTVISUAL68 active-tab pill rect (mode-routed readiness): dark
 /// arm legacy [`exq_icons50_tab_pill_rect`] EXACT (dark byte-identical,
 /// test-locked), light arm horizontal inset wahi SPACE_XS/2 rakhkar
@@ -5667,12 +5682,20 @@ pub fn chrome_default_text_label(rules: &str) -> &str {
 /// size ya color nahi. Paint [`views::paint_session_tab_strip`] me hai
 /// (FROZEN), yahan sirf caller contracts hain.
 impl App {
+    /// Toolbar enabled state (TOOLBAR74 caller half): Home par off
+    /// (koi session nahi), baaki har tab par on.
+    /// [`App::paint_session_action_bar_live`] isi se `enabled`
+    /// banata hai. Pure; headless-tested.
+    pub fn toolbar_active(&self) -> bool {
+        self.tab != Tab::Home
+    }
+
     /// Session action bar live paint delegator (exq-icons55 App half).
     /// Calls [`views::paint_session_action_bar`] using App's active toolbar state
     /// and chrome nav state, executing the wired vector mark path in live paint.
     /// Pure paint caller; hit-targets and interactions remain byte-identical.
     pub fn paint_session_action_bar_live(&self, ui: &mut egui::Ui) -> views::ActionBarHits {
-        let toolbar_active = self.tab != Tab::Home;
+        let toolbar_active = self.toolbar_active();
         let nav = self.chrome_nav_state();
         views::paint_session_action_bar(ui, toolbar_active, &nav)
     }
@@ -12837,6 +12860,57 @@ mod tests {
                 .x
                 .is_finite(),
             false
+        );
+    }
+
+    #[test]
+    fn toolbar74_active_home_off_others_on() {
+        let home = App {
+            tab: Tab::Home,
+            ..App::default()
+        };
+        assert!(!home.toolbar_active());
+        for tab in [
+            Tab::Text,
+            Tab::Folder,
+            Tab::Hex,
+            Tab::Merge,
+            Tab::Table,
+            Tab::Sync,
+            Tab::Picture,
+            Tab::FolderMerge,
+            Tab::Audio,
+        ] {
+            let app = App {
+                tab,
+                ..App::default()
+            };
+            assert!(app.toolbar_active());
+        }
+    }
+
+    #[test]
+    fn toolbar74_glyph_ink_active_matches_live_painter() {
+        // Live views::paint_toolbar_glyph ink = dim_for(dark) dono modes me.
+        assert_eq!(
+            super::toolbar_glyph_ink_for(true, true),
+            crate::theme::dim_for(true)
+        );
+        assert_eq!(
+            super::toolbar_glyph_ink_for(true, false),
+            crate::theme::dim_for(false)
+        );
+    }
+
+    #[test]
+    fn toolbar74_glyph_ink_disabled_uses_track() {
+        assert_eq!(
+            super::toolbar_glyph_ink_for(false, true),
+            crate::theme::track_for(true)
+        );
+        assert_eq!(
+            super::toolbar_glyph_ink_for(false, false),
+            crate::theme::track_for(false)
         );
     }
 
