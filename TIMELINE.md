@@ -770,3 +770,21 @@
 1. **Merge geometry**: Take buttons SPACE_* reuse, 3-way center alignment, conflict badge, 1200px no h-scroll + narrow700 edge.
 2. **Tests**: 1070 green (+5 take), exquisite harness RESULT: PASS, fmt clean, banned 0, colors 38 frozen. Sessions edits left uncommitted and reverted, no contamination.
 3. **Files changed**: crates/gui/src/take.rs, checks/gui-exq-take33/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-gutter36 live overview polish (opencode default)
+
+1. **Overview strip geometry**: paint_overview_strip rounding fix matching overview_row_y, 1px drift gone, MIN_H floor + frozen hues unchanged, wide 960 + narrow 720 share single source.
+2. **Tests**: 1068 green (+3 gutter36 alignment/narrow/edge), exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors +0 frozen, pixel gate 32px bbox exactly overview strip.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-gutter36/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-app35 live shell tabs (opencode default)
+
+1. **Shell tabs geometry**: app shell tab bar SPACE_* reuse, session tabs alignment, 1200px no h-scroll + shell-1200 edge fixture, TypoRole reuse.
+2. **Tests**: 1067 green, exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen. Sessions edits left uncommitted and reverted in worktree, no contamination landed.
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-app35/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-copy34 live copy arrows (agyx swarm, orchestrator recovery)
+
+1. **Copy geometry**: left/right arrows SPACE_XL column + XS pad, 16px hitbox centered, inline preview TypoRole Mono 15.6 rhythm, 1200px no h-scroll + 700px narrow edge.
+2. **Tests**: 1070 green, exquisite harness RESULT: PASS 11059B, fmt clean, banned 0, colors 38 frozen. Agyx did full work, orchestrator verified OWNS and committed (same timeout-recovery pattern as table30/home32).
+3. **Files changed**: crates/gui/src/copy.rs, checks/gui-exq-copy34/**, TIMELINE.md.
