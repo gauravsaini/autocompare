@@ -89,6 +89,32 @@ pub const TYPO_LINE_HEIGHT_SOURCE: &str = "ui.text_style_height(Monospace)";
 pub const TYPO_UI_SANS_STACK: &str = "system-ui, sans-serif";
 /// Monospace stack for hex/text-cells/table-cells/gutter (system mono first).
 pub const TYPO_MONO_STACK: &str = "ui-monospace, monospace";
+
+/// EXQ-TYPO54 system-first candidate chain for proportional/chrome roles
+/// (headless, pure): runtime lookup order, no binaries shipped. Head is the
+/// macOS system sans, middle reuses [`TYPO_UI_SANS_STACK`] by reference
+/// (single source, no duplicated stack string), tail is the egui-safe
+/// generic so the chain never resolves blank. Install itself stays in
+/// `app.rs` (`typo48_live_font_plan`); this only supplies the order.
+pub const TYPO54_SANS_CHAIN: &[&str] = &["SF Pro", TYPO_UI_SANS_STACK, "proportional"];
+/// EXQ-TYPO54 system-first candidate chain for [`TypoRole::Mono`] content
+/// (headless, pure): macOS system mono head, `Menlo` next, then the single
+/// source [`TYPO_MONO_STACK`], tail egui-safe `monospace`. No binaries
+/// shipped; install stays in `app.rs`.
+pub const TYPO54_MONO_CHAIN: &[&str] = &["SF Mono", "Menlo", TYPO_MONO_STACK, "monospace"];
+
+/// EXQ-TYPO54 ordered runtime family chain for `role` (headless, pure):
+/// system names first, egui-safe generic last. Mono content gets
+/// [`TYPO54_MONO_CHAIN`], every chrome role [`TYPO54_SANS_CHAIN`]. No new
+/// sizes/weights/tokens, no colors, no display calls — `app.rs` install
+/// consumes this without duplicating stack names.
+pub const fn typo54_candidate_stack(role: TypoRole) -> &'static [&'static str] {
+    if role.is_mono() {
+        TYPO54_MONO_CHAIN
+    } else {
+        TYPO54_SANS_CHAIN
+    }
+}
 /// Regular body weight (400).
 pub const TYPO_WEIGHT_REGULAR: u16 = 400;
 /// Medium headers/chrome weight (500).
@@ -509,6 +535,14 @@ impl TypoRole {
             Self::Mono => TYPO_MONO_STACK,
             _ => TYPO_UI_SANS_STACK,
         }
+    }
+
+    /// EXQ-TYPO54 ordered runtime family chain for this role (see
+    /// [`typo54_candidate_stack`]): system-first head, egui-safe generic
+    /// tail. Delegates to the free function so `app.rs` install has one
+    /// source per role and never duplicates stack names.
+    pub const fn candidate_stack(self) -> &'static [&'static str] {
+        typo54_candidate_stack(self)
     }
 
     /// egui font family for this role: monospace diff cells, proportional
@@ -1961,6 +1995,49 @@ mod tests {
         assert!(!TypoRole::Body.is_tabular());
         assert!(!TypoRole::Heading.is_tabular());
         assert!(!TypoRole::HomeTitle.is_tabular());
+    }
+
+    #[test]
+    fn typo54_candidate_chains_system_first() {
+        let roles = [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ];
+        // Har role ki chain non-empty; method free function se milti hai.
+        for role in roles {
+            assert!(!typo54_candidate_stack(role).is_empty());
+            assert_eq!(role.candidate_stack(), typo54_candidate_stack(role));
+        }
+        // Mono chain proportional chain se alag hai.
+        assert_ne!(
+            typo54_candidate_stack(TypoRole::Mono),
+            typo54_candidate_stack(TypoRole::Body)
+        );
+        // Chrome roles ek hi sans chain, Mono apni mono chain.
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert_eq!(typo54_candidate_stack(role), TYPO54_SANS_CHAIN);
+        }
+        assert_eq!(typo54_candidate_stack(TypoRole::Mono), TYPO54_MONO_CHAIN);
+        // Single source: stacks duplicate nahi, const reference se reuse.
+        assert!(TYPO54_SANS_CHAIN.contains(&TYPO_UI_SANS_STACK));
+        assert!(TYPO54_MONO_CHAIN.contains(&TYPO_MONO_STACK));
+        // System-first head, egui-safe generic tail (kabhi blank nahi).
+        assert_eq!(TYPO54_SANS_CHAIN.first(), Some(&"SF Pro"));
+        assert_eq!(TYPO54_SANS_CHAIN.last(), Some(&"proportional"));
+        assert_eq!(TYPO54_MONO_CHAIN.first(), Some(&"SF Mono"));
+        assert_eq!(TYPO54_MONO_CHAIN.last(), Some(&"monospace"));
     }
 
     #[test]
