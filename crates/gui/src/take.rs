@@ -267,6 +267,71 @@ pub fn take_side_label(side: TakeSide) -> &'static str {
 }
 
 impl TakeSide {
+    /// All 3-way take sides in left-to-right order.
+    pub const ALL: [Self; 3] = [Self::Left, Self::Center, Self::Right];
+
+    /// Slice of all take sides in left-to-right order.
+    pub fn sides() -> &'static [Self; 3] {
+        &Self::ALL
+    }
+
+    /// Zero-based index for pane ordering: Left = 0, Center = 1, Right = 2.
+    pub fn index(self) -> usize {
+        match self {
+            Self::Left => 0,
+            Self::Center => 1,
+            Self::Right => 2,
+        }
+    }
+
+    /// Converts a zero-based index (0, 1, 2) back to a `TakeSide`.
+    pub fn from_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(Self::Left),
+            1 => Some(Self::Center),
+            2 => Some(Self::Right),
+            _ => None,
+        }
+    }
+
+    /// Maps from GUI [`TakeChoice`] to [`TakeSide`] (Both returns None).
+    pub fn from_gui_choice(choice: TakeChoice) -> Option<Self> {
+        match choice {
+            TakeChoice::Left => Some(Self::Left),
+            TakeChoice::Base => Some(Self::Center),
+            TakeChoice::Right => Some(Self::Right),
+            TakeChoice::Both => None,
+        }
+    }
+
+    /// Maps from diff engine [`DiffTakeChoice`] to [`TakeSide`].
+    pub fn from_diff_choice(choice: DiffTakeChoice) -> Option<Self> {
+        match choice {
+            DiffTakeChoice::Left => Some(Self::Left),
+            DiffTakeChoice::Base => Some(Self::Center),
+            DiffTakeChoice::Right => Some(Self::Right),
+            DiffTakeChoice::BothLeftFirst | DiffTakeChoice::BothRightFirst => None,
+        }
+    }
+
+    /// Returns the opposite side (Left <-> Right, Center stays Center).
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Center => Self::Center,
+            Self::Right => Self::Left,
+        }
+    }
+
+    /// Short single-letter representation for gutter/badges ("L", "C", "R").
+    pub fn short_code(self) -> &'static str {
+        match self {
+            Self::Left => "L",
+            Self::Center => "C",
+            Self::Right => "R",
+        }
+    }
+
     /// Maps to this crate's marker-level [`TakeChoice`] (Center == Base).
     pub fn to_gui_choice(self) -> TakeChoice {
         match self {
@@ -284,6 +349,21 @@ impl TakeSide {
             Self::Right => DiffTakeChoice::Right,
         }
     }
+}
+
+/// Take side gap px: tight rhythm ([`crate::theme::GEO_TIGHT_GAP`] = 4.0).
+pub fn take_side_gap() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Take side bar button height px: hit floor ([`crate::theme::SPACE_XL`] = 24.0).
+pub fn take_side_bar_h() -> f32 {
+    TAKE_BUTTON_H
+}
+
+/// Take side button padding px: side pad ([`crate::theme::SPACE_SM`] = 8.0).
+pub fn take_side_button_pad() -> f32 {
+    TAKE_BUTTON_PAD_X
 }
 
 /// Joins output lines into save-to-output text (BC parity): `"\n"` join
@@ -457,6 +537,103 @@ impl TakeSession {
     /// Re-syncs the editable buffer from the session render.
     pub fn sync_buffer(&mut self) {
         self.buffer = DiffTextBuffer::from_lines(self.session.render_lines());
+    }
+
+    /// Returns the chosen take side for conflict `id`, or `None` if unresolved or not a single side choice.
+    pub fn side_at(&self, id: usize) -> Option<TakeSide> {
+        let block = self.session.conflict_by_id(id)?;
+        match block {
+            autocompare_diff::merge::MergeBlock::Conflict { resolution, .. } => match resolution {
+                Some(DiffTakeResolution::Choice(DiffTakeChoice::Left)) => Some(TakeSide::Left),
+                Some(DiffTakeResolution::Choice(DiffTakeChoice::Base)) => Some(TakeSide::Center),
+                Some(DiffTakeResolution::Choice(DiffTakeChoice::Right)) => Some(TakeSide::Right),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns a list of all conflict resolution choices in order (0..conflict_count).
+    pub fn resolved_sides(&self) -> Vec<Option<TakeSide>> {
+        let count = self.conflict_count();
+        let mut out = Vec::with_capacity(count);
+        for id in 0..count {
+            out.push(self.side_at(id));
+        }
+        out
+    }
+
+    /// Captures a read-only snapshot of this session's state.
+    pub fn snapshot(&self) -> TakeSessionSnapshot {
+        TakeSessionSnapshot {
+            cursor: self.cursor,
+            conflict_count: self.conflict_count(),
+            unresolved_count: self.unresolved_count(),
+            is_fully_resolved: self.is_fully_resolved(),
+            resolutions: self.resolved_sides(),
+            output_lines: self.output_lines(),
+            output_text: self.output_text(),
+        }
+    }
+
+    /// Restores conflict resolutions and cursor from a snapshot.
+    pub fn restore_snapshot(&mut self, snapshot: &TakeSessionSnapshot) {
+        for (id, opt_side) in snapshot.resolutions.iter().enumerate() {
+            if id < self.conflict_count() {
+                match opt_side {
+                    Some(side) => {
+                        let _ = self.take(id, *side);
+                    }
+                    None => {
+                        let _ = self.clear(id);
+                    }
+                }
+            }
+        }
+        self.cursor = snapshot.cursor;
+        self.sync_buffer();
+    }
+
+    /// Writes the current resolved output text to the specified filesystem path.
+    /// Returns the number of bytes written.
+    pub fn save_output_to_path(&self, path: &std::path::Path) -> Result<usize, std::io::Error> {
+        let text = self.output_text();
+        std::fs::write(path, text.as_bytes())?;
+        Ok(text.len())
+    }
+}
+
+/// Read-only snapshot of a 3-way merge Take session state at a point in time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TakeSessionSnapshot {
+    pub cursor: Option<usize>,
+    pub conflict_count: usize,
+    pub unresolved_count: usize,
+    pub is_fully_resolved: bool,
+    pub resolutions: Vec<Option<TakeSide>>,
+    pub output_lines: Vec<String>,
+    pub output_text: String,
+}
+
+impl TakeSessionSnapshot {
+    /// Number of resolved conflicts in this snapshot.
+    pub fn resolved_count(&self) -> usize {
+        self.conflict_count.saturating_sub(self.unresolved_count)
+    }
+
+    /// Resolution progress fraction (0.0 to 1.0).
+    pub fn resolution_fraction(&self) -> f32 {
+        take_resolution_fraction(self.resolved_count(), self.conflict_count)
+    }
+
+    /// Resolution progress bar fill width at `avail_w`.
+    pub fn resolution_bar_width(&self, avail_w: f32) -> f32 {
+        take_resolution_bar_width(avail_w, self.resolved_count(), self.conflict_count)
+    }
+
+    /// Formatted stepper counter text ("Conflict N of M", "M conflicts", etc.).
+    pub fn stepper_text(&self) -> String {
+        take_stepper_counter_text(self.cursor, self.conflict_count)
     }
 }
 
@@ -1867,5 +2044,155 @@ mod exq_take70_tests {
         assert_eq!(take_choice_button_width(TakeChoice::Right), 86.0);
         assert_eq!(take_side_button_width(TakeSide::Center), 93.0);
         assert_eq!(take_bar_total_width(), 287.0);
+    }
+}
+
+#[cfg(test)]
+mod exq_agyxswarm80_take_tests {
+    use super::*;
+
+    #[test]
+    fn take_side_handling_indices_opposites_and_conversions() {
+        assert_eq!(
+            TakeSide::ALL,
+            [TakeSide::Left, TakeSide::Center, TakeSide::Right]
+        );
+        assert_eq!(
+            TakeSide::sides(),
+            &[TakeSide::Left, TakeSide::Center, TakeSide::Right]
+        );
+
+        assert_eq!(TakeSide::Left.index(), 0);
+        assert_eq!(TakeSide::Center.index(), 1);
+        assert_eq!(TakeSide::Right.index(), 2);
+
+        assert_eq!(TakeSide::from_index(0), Some(TakeSide::Left));
+        assert_eq!(TakeSide::from_index(1), Some(TakeSide::Center));
+        assert_eq!(TakeSide::from_index(2), Some(TakeSide::Right));
+        assert_eq!(TakeSide::from_index(3), None);
+
+        assert_eq!(TakeSide::Left.opposite(), TakeSide::Right);
+        assert_eq!(TakeSide::Right.opposite(), TakeSide::Left);
+        assert_eq!(TakeSide::Center.opposite(), TakeSide::Center);
+
+        assert_eq!(TakeSide::Left.short_code(), "L");
+        assert_eq!(TakeSide::Center.short_code(), "C");
+        assert_eq!(TakeSide::Right.short_code(), "R");
+
+        assert_eq!(
+            TakeSide::from_gui_choice(TakeChoice::Left),
+            Some(TakeSide::Left)
+        );
+        assert_eq!(
+            TakeSide::from_gui_choice(TakeChoice::Base),
+            Some(TakeSide::Center)
+        );
+        assert_eq!(
+            TakeSide::from_gui_choice(TakeChoice::Right),
+            Some(TakeSide::Right)
+        );
+        assert_eq!(TakeSide::from_gui_choice(TakeChoice::Both), None);
+
+        assert_eq!(
+            TakeSide::from_diff_choice(DiffTakeChoice::Left),
+            Some(TakeSide::Left)
+        );
+        assert_eq!(
+            TakeSide::from_diff_choice(DiffTakeChoice::Base),
+            Some(TakeSide::Center)
+        );
+        assert_eq!(
+            TakeSide::from_diff_choice(DiffTakeChoice::Right),
+            Some(TakeSide::Right)
+        );
+        assert_eq!(
+            TakeSide::from_diff_choice(DiffTakeChoice::BothLeftFirst),
+            None
+        );
+        assert_eq!(
+            TakeSide::from_diff_choice(DiffTakeChoice::BothRightFirst),
+            None
+        );
+
+        assert_eq!(take_side_gap(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(take_side_gap(), 4.0);
+        assert_eq!(take_side_bar_h(), TAKE_BUTTON_H);
+        assert_eq!(take_side_bar_h(), 24.0);
+        assert_eq!(take_side_button_pad(), TAKE_BUTTON_PAD_X);
+        assert_eq!(take_side_button_pad(), 8.0);
+    }
+
+    #[test]
+    fn take_snapshot_and_side_inspection() {
+        let base = ["common_header", "base1", "mid", "base2", "tail"];
+        let left = ["common_header", "left1", "mid", "left2", "tail"];
+        let right = ["common_header", "right1", "mid", "right2", "tail"];
+        let mut sess = TakeSession::new(&base, &left, &right);
+
+        assert_eq!(sess.conflict_count(), 2);
+        assert_eq!(sess.unresolved_count(), 2);
+        assert_eq!(sess.side_at(0), None);
+        assert_eq!(sess.side_at(1), None);
+        assert_eq!(sess.side_at(2), None);
+        assert_eq!(sess.resolved_sides(), vec![None, None]);
+
+        assert!(sess.take_left(0));
+        assert_eq!(sess.side_at(0), Some(TakeSide::Left));
+        assert_eq!(sess.side_at(1), None);
+        assert_eq!(sess.unresolved_count(), 1);
+
+        assert!(sess.take_right(1));
+        assert_eq!(sess.side_at(1), Some(TakeSide::Right));
+        assert!(sess.is_fully_resolved());
+        assert_eq!(
+            sess.resolved_sides(),
+            vec![Some(TakeSide::Left), Some(TakeSide::Right)]
+        );
+
+        let snap = sess.snapshot();
+        assert_eq!(snap.conflict_count, 2);
+        assert_eq!(snap.unresolved_count, 0);
+        assert_eq!(snap.resolved_count(), 2);
+        assert!(snap.is_fully_resolved);
+        assert!((snap.resolution_fraction() - 1.0).abs() < 0.001);
+        assert!((snap.resolution_bar_width(960.0) - 960.0).abs() < 0.01);
+        assert_eq!(snap.stepper_text(), "Conflict 2 of 2");
+        assert_eq!(
+            snap.output_lines,
+            vec!["common_header", "left1", "mid", "right2", "tail"]
+        );
+
+        assert!(sess.clear(0));
+        assert!(sess.take_center(1));
+        assert_eq!(sess.side_at(0), None);
+        assert_eq!(sess.side_at(1), Some(TakeSide::Center));
+
+        sess.restore_snapshot(&snap);
+        assert_eq!(sess.side_at(0), Some(TakeSide::Left));
+        assert_eq!(sess.side_at(1), Some(TakeSide::Right));
+        assert!(sess.is_fully_resolved());
+        assert_eq!(sess.output_lines(), snap.output_lines);
+    }
+
+    #[test]
+    fn take_snapshot_tmp_only_output_write() {
+        let base = ["head", "base_val", "foot"];
+        let left = ["head", "chosen_left", "foot"];
+        let right = ["head", "right_val", "foot"];
+        let mut sess = TakeSession::new(&base, &left, &right);
+        assert!(sess.take_left(0));
+
+        let tmp_path =
+            std::env::temp_dir().join(format!("exq-take-test-{}.txt", std::process::id()));
+        let write_res = sess.save_output_to_path(&tmp_path);
+        assert!(write_res.is_ok());
+        let bytes_written = write_res.unwrap_or(0);
+        assert!(bytes_written > 0);
+
+        let read_back = std::fs::read_to_string(&tmp_path).unwrap_or_default();
+        assert_eq!(read_back, sess.output_text());
+        assert_eq!(read_back, "head\nchosen_left\nfoot\n");
+
+        let _ = std::fs::remove_file(&tmp_path);
     }
 }
