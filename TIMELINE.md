@@ -907,3 +907,9 @@
 1. **Folder tree round-2**: indent rhythm SPACE_SM, 16px expander centered, guide alignment, 1200px no h-scroll + deepnest edge.
 2. **Tests**: 1088 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Agyx committed cleanly itself, no recovery.
 3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree41/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-views53 live paint rects (agyx)
+
+1. **Live vector wiring**: `paint_toolbar_glyph` adopts staged `paint_exq_icons50_mark` Ring/Bars for Swap/Reload, chevrons preserved for Prev/Next; tabs/session-strip honestly unwired (text occlusion risk).
+2. **Tests**: 1106 green (+1 wiring), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0 non-test, 332px delta in real-egui.png x=[16,135] y=[113,128] zero collateral.
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-views53/**, TIMELINE.md.
