@@ -1122,3 +1122,7 @@
 ### Feature (2026-11-21) — feat(xtask): sec99 secrets false-positive fix
 - Root-4 G1 secrets gate: shape-based detection, REPORT.md:7 FP gone, real ghp_/github_pat_/AKIA/banner still caught, xtask tests 6 passed, clippy/fmt/banned clean.
 - Proof: leaf OWNS xtask + checks/gui-sec99 clean, NO PUSH, cherry-picked 228da2e.
+
+### Verify (2026-11-21) — docs(checks): final100 root-4 verification
+- Root-4 G1 all green on main: fmt exit 0, clippy exit 0, workspace tests 1803 passed 0 failed (51 suites), layers ok, secrets ok, craft CRAFT_JSON_OK.
+- Proof: leaf checks-only, OWNS clean, NO PUSH, cherry-picked e169809.
