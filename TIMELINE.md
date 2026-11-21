@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-kittest58 dual-theme real shots
+
+1. **Real pipeline**: real_egui_shot.rs shared capture_shot(Theme) adds light-theme second shot, same fixtures/size/floors, tmp-only writes; dark 51926B/503c, light 52669B/549c.
+2. **Tests**: 1121 green + 2 kittest PASS; rustfmt clean; banned 0; harness PASS.
+3. **Files changed**: crates/gui/tests/real_egui_shot.rs, checks/gui-exq-kittest58/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-gutter59 gutter geometry
 
 1. **Geometry-first**: gutter.rs 7 call-sites adopt GUTTER_CANVAS_NORMAL_960/WIDE_1200 + theme VIEWPORT_MIN_W, value-identical, hit behavior unchanged, zero new colors/tokens/sizes.
