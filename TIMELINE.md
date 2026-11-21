@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-gutter59 gutter geometry
+
+1. **Geometry-first**: gutter.rs 7 call-sites adopt GUTTER_CANVAS_NORMAL_960/WIDE_1200 + theme VIEWPORT_MIN_W, value-identical, hit behavior unchanged, zero new colors/tokens/sizes.
+2. **Tests**: 1121 green + 1 kittest real_egui_shot PASS (rows=3 ratio=50); rustfmt clean; banned 0; harness PASS (10946B size-identical).
+3. **Files changed**: crates/gui/src/gutter.rs, checks/gui-exq-gutter59/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-views57 live tabs strip
 
 1. **Live wiring**: mode tabs + session strip active indicator adopts staged vector geometry natively in views.rs via paint_tab_active_indicator (underline-only accent in bottom padding, no text occlusion); hit-rects + interactions byte-identical; 16px delta in real-egui.png [x=0..140, y=67..98]. Toolbar Swap/Reload vector marks preserved.
