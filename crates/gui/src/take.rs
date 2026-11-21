@@ -1682,3 +1682,128 @@ mod exq_take33_tests {
         assert!((take_buttons_row_x(1).unwrap_or(-1.0) - 97.0).abs() < 0.01);
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQ-TAKE44: live merge take resolution geometry (headless).
+// BC parity: live resolved output wahi Mono row rhythm par baithta hai;
+// resolution progress avail width ka fraction hai; narrow par panes floor
+// par scroll karte hain. Geometry first (take_marker_row_y /
+// take_conflict_block_height_px / merge_three_pane_widths reuse, no new
+// literals), typography second (counter Small single source), colors frozen.
+// WIRING (paint): resolved rows `take_resolved_row_y` se y; live output
+// height `take_live_output_height_px` se; progress fill
+// `take_resolution_bar_width(avail_w, resolved, total)` se.
+// ----------------------------------------------------------------------------
+
+/// Live resolved row top y px: marker rhythm single source ([`take_marker_row_y`]).
+/// Pure; headless-tested.
+pub fn take_resolved_row_y(row: usize) -> f32 {
+    take_marker_row_y(row)
+}
+
+/// Live resolved output height px: Mono stack single source
+/// ([`take_conflict_block_height_px`]). Pure; headless-tested.
+pub fn take_live_output_height_px(line_count: usize) -> f32 {
+    take_conflict_block_height_px(line_count)
+}
+
+/// Live resolution fraction 0..1: total 0 par 1.0 (kuch resolve nahi karna);
+/// resolved >= total par 1.0. Pure; headless-tested.
+pub fn take_resolution_fraction(resolved: usize, total: usize) -> f32 {
+    if total == 0 {
+        return 1.0;
+    }
+    if resolved >= total {
+        return 1.0;
+    }
+    resolved as f32 / total as f32
+}
+
+/// Live resolution bar fill width px: `avail_w * fraction`; non-finite ya
+/// non-positive avail par 0.0. Pure; headless-tested.
+pub fn take_resolution_bar_width(avail_w: f32, resolved: usize, total: usize) -> f32 {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return 0.0;
+    }
+    let frac = take_resolution_fraction(resolved, total);
+    if !frac.is_finite() {
+        return 0.0;
+    }
+    avail_w * frac
+}
+
+/// Live resolution text role: Small status precedent
+/// ([`take_counter_text_role`] single source). Pure.
+pub const fn take_resolution_text_role() -> crate::theme::TypoRole {
+    take_counter_text_role()
+}
+
+/// Live resolution text size px (single source: Small, 11.0). Pure.
+pub fn take_resolution_text_size() -> f32 {
+    take_resolution_text_role().size()
+}
+
+#[cfg(test)]
+mod exq_take44_tests {
+    use super::*;
+
+    #[test]
+    fn take_exq_take44_live_take_geometry() {
+        // Resolved rows marker rhythm se, koi naya literal nahi.
+        assert_eq!(take_resolved_row_y(0), take_marker_row_y(0));
+        assert!((take_resolved_row_y(10) - 156.0).abs() < 0.05);
+        assert!((take_resolved_row_y(10) - take_marker_row_y(10)).abs() < 0.0001);
+        assert!((take_resolved_row_y(76) - 1185.6).abs() < 0.5);
+        // Live output height wahi Mono stack hai.
+        assert_eq!(
+            take_live_output_height_px(0),
+            take_conflict_block_height_px(0)
+        );
+        assert!((take_live_output_height_px(1) - 15.6).abs() < 0.01);
+        assert!((take_live_output_height_px(4) - 62.4).abs() < 0.05);
+        assert_eq!(
+            take_live_output_height_px(4),
+            take_conflict_block_height_px(4)
+        );
+        // Resolution fraction + bar fill.
+        assert_eq!(take_resolution_fraction(0, 0), 1.0);
+        assert!((take_resolution_fraction(0, 2) - 0.0).abs() < 0.0001);
+        assert!((take_resolution_fraction(1, 2) - 0.5).abs() < 0.0001);
+        assert_eq!(take_resolution_fraction(2, 2), 1.0);
+        assert_eq!(take_resolution_fraction(5, 2), 1.0);
+        assert!((take_resolution_bar_width(960.0, 1, 2) - 480.0).abs() < 0.01);
+        assert_eq!(take_resolution_bar_width(960.0, 0, 2), 0.0);
+        assert!((take_resolution_bar_width(960.0, 2, 2) - 960.0).abs() < 0.01);
+        assert_eq!(take_resolution_bar_width(f32::NAN, 1, 2), 0.0);
+        assert_eq!(take_resolution_bar_width(0.0, 1, 2), 0.0);
+        assert_eq!(take_resolution_bar_width(-10.0, 1, 2), 0.0);
+        // Typo reuse: counter Small single source.
+        assert_eq!(take_resolution_text_role(), take_counter_text_role());
+        assert_eq!(take_resolution_text_role(), crate::theme::TypoRole::Small);
+        assert_eq!(take_resolution_text_size(), 11.0);
+        assert_eq!(take_resolution_text_size(), take_counter_text_size());
+        // Fixture recompute: wide 960 live + narrow 360 edge.
+        let raw =
+            include_str!("../../../checks/gui-exq-take44/round-1/comparison/take-live-960.json");
+        assert!(raw.contains("\"name\":\"take-live-960\""));
+        assert!(raw.contains("\"wide_avail_w\":960.0"));
+        assert!(raw.contains("\"pane_w_960\":314.666656"));
+        assert!(raw.contains("\"center_x_960\":322.666656"));
+        assert!(raw.contains("\"take_bar_total\":287.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"live_output_h_4\":62.4"));
+        assert!(raw.contains("\"resolved_row_y_10\":156.0"));
+        assert!(raw.contains("\"resolution_half_960\":480.0"));
+        assert!(raw.contains("\"narrow_avail_w\":360.0"));
+        assert!(raw.contains("\"narrow_needs_hscroll\":true"));
+        assert!(raw.contains("\"wide_needs_hscroll\":false"));
+        let (l960, _, _) = merge_three_pane_widths(960.0);
+        assert!((l960 - 314.666656).abs() < 0.01);
+        assert!((merge_center_pane_x(960.0) - 322.666656).abs() < 0.05);
+        assert_eq!(take_bar_total_width(), 287.0);
+        assert!(!merge_three_pane_needs_hscroll(960.0));
+        let (nl, _, _) = merge_three_pane_widths(360.0);
+        assert_eq!(nl, 130.0);
+        assert!(merge_three_pane_needs_hscroll(360.0));
+    }
+}
