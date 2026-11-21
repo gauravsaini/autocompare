@@ -1110,3 +1110,7 @@
 ### Verify (2026-11-21) — docs(checks): ver96 verification round-1 baseline
 - Root-4 baseline: G1 CRAFT_JSON_OK PASS, G2 workspace tests PASS 1800 passed 0 failed, G3 clippy FAIL honestly (75 errors all crates/gui pre-existing, non-gui clean, src untouched checks-only), G4 OWNS PASS.
 - Proof: leaf tree clean, NO PUSH, cherry-picked 03110b2.
+
+### Verify (2026-11-21) — docs(checks): rel98 release smoke
+- Root-4 G2/G3: cargo build --release --workspace PASS exit 0 (2m27s), autocompare-diff release ignored 5/5 PASS, checks-only zero src touch.
+- Proof: leaf tree clean, NO PUSH, cherry-picked 1857cd1.
