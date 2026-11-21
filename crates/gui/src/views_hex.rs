@@ -786,13 +786,13 @@ pub fn hex_find_count_label(position: Option<usize>, total: usize) -> String {
 
 /// Hex find bar ki height (table precedent reuse, koi naya token nahi).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-pub const HEX_FIND_BAR_H: f32 = 28.0;
+pub const HEX_FIND_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
 /// Hex find needle field ki chaudai (table precedent reuse).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-pub const HEX_FIND_NEEDLE_W: f32 = 120.0;
+pub const HEX_FIND_NEEDLE_W: f32 = crate::views::FIND_NEEDLE_W;
 /// Hex find badge ka right-end pad (table precedent reuse).
 /// Test-only until paint wiring lands (orchestrator owns paint).
-pub const HEX_FIND_BADGE_PAD: f32 = 4.0;
+pub const HEX_FIND_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
 
 /// Hex find-bar section-label role: Body (13 default proportional).
 /// Paint-side `.strong()` composition (table header Mono+strong precedent):
@@ -1382,7 +1382,7 @@ pub const fn hex_nibble_text_role() -> crate::theme::TypoRole {
 /// equality lock karta hai. Pure; unit-tested.
 /// Test-only until paint wiring lands (orchestrator owns paint).
 pub fn hex_minimap_alloc_height() -> f32 {
-    220.0
+    crate::views::HEX_MINIMAP_H
 }
 
 /// Minimap allocate size: `(strip_width, alloc_height)` — paint ka
@@ -1859,17 +1859,17 @@ pub fn paint_hex_goto_bar(ui: &mut egui::Ui, goto_text: &mut String, badge: &str
 /// Hex canvas reference width (px): the 960px budget the gutter docs
 /// lock (`12 + 460 + 4 + 460 + 16 + 8`). Grid + chrome never exceed it
 /// side-by-side; narrower windows stack instead of clipping.
-pub const HEX_CANVAS_W: f32 = 960.0;
+pub const HEX_CANVAS_W: f32 = crate::theme::VIEWPORT_W as f32;
 
 /// Hex canvas reference height (px): rows + find/goto bars + status fit
 /// without scrolling the chrome at this height on the reference window.
-pub const HEX_CANVAS_H: f32 = 600.0;
+pub const HEX_CANVAS_H: f32 = crate::theme::VIEWPORT_H as f32;
 
 /// Narrow stacking breakpoint (px): below this the hex+ASCII panes stack
 /// (ASCII under hex, shared scroll) instead of crushing side-by-side.
 /// Reuses the documented 720px paint fallback precedent (views.rs
 /// merge-apply row), koi naya magic rhythm nahi.
-pub const HEX_STACK_BREAKPOINT_W: f32 = 720.0;
+pub const HEX_STACK_BREAKPOINT_W: f32 = crate::theme::VIEWPORT_MIN_W as f32;
 
 /// Hex pane arrangement for the available width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -3250,7 +3250,7 @@ pub fn hex_offset_plus_gap_sync_ok(char_w: f32) -> bool {
 // ----------------------------------------------------------------------------
 
 /// Canvas height for tall-file display (px): 1200.0. Pure.
-pub const HEX_TALL_CANVAS_H: f32 = 1200.0;
+pub const HEX_TALL_CANVAS_H: f32 = crate::gutter::GUTTER_CANVAS_WIDE_1200;
 
 /// Panes height for tall-file 1200px canvas (px): 1070.0 (`1200.0 - 130.0` chrome reserve). Pure.
 pub const HEX_TALL_PANES_H: f32 = 1070.0;
@@ -3348,10 +3348,10 @@ pub fn hex_ruler_rhythm_sync_ok(char_w: f32) -> bool {
 // ----------------------------------------------------------------------------
 
 /// Canvas width for narrow 720px display (px): 720.0. Pure.
-pub const HEX_NARROW_CANVAS_W: f32 = 720.0;
+pub const HEX_NARROW_CANVAS_W: f32 = crate::theme::VIEWPORT_MIN_W as f32;
 
 /// Canvas height for narrow 720px display (px): 720.0. Pure.
-pub const HEX_NARROW_CANVAS_H: f32 = 720.0;
+pub const HEX_NARROW_CANVAS_H: f32 = crate::theme::VIEWPORT_MIN_W as f32;
 
 /// Panes height for narrow 720px canvas (px): 590.0 (`720.0 - 130.0` chrome reserve). Pure.
 pub const HEX_NARROW_PANES_H: f32 = 590.0;
@@ -3449,18 +3449,18 @@ pub fn hex_narrow_ruler_sync_ok(char_w: f32) -> bool {
 // ----------------------------------------------------------------------------
 
 /// Wide canvas width for the no-h-scroll lock (px): 1200.0. Pure.
-pub const HEX_WIDE1200_CANVAS_W: f32 = 1200.0;
+pub const HEX_WIDE1200_CANVAS_W: f32 = crate::gutter::GUTTER_CANVAS_WIDE_1200;
 
 /// Wide canvas height for the no-h-scroll lock (px): reference 600.0
 /// (`HEX_CANVAS_H` reuse value, no new rhythm). Pure.
-pub const HEX_WIDE1200_CANVAS_H: f32 = 600.0;
+pub const HEX_WIDE1200_CANVAS_H: f32 = crate::theme::VIEWPORT_H as f32;
 
 /// Narrow700 canvas width edge (px): 700.0, just under the 720.0
 /// stacking breakpoint so layout must be `Stacked`. Pure.
-pub const HEX_NARROW700_CANVAS_W: f32 = 700.0;
+pub const HEX_NARROW700_CANVAS_W: f32 = crate::gutter::GUTTER_CANVAS_NARROW_700;
 
 /// Narrow700 canvas height (px): 700.0 (narrow720 precedent). Pure.
-pub const HEX_NARROW700_CANVAS_H: f32 = 700.0;
+pub const HEX_NARROW700_CANVAS_H: f32 = crate::gutter::GUTTER_CANVAS_NARROW_700;
 
 /// Narrow700 panes height (px): 570.0 (`700.0 - 130.0` chrome reserve,
 /// narrow precedent reuse). Pure.
@@ -4180,6 +4180,53 @@ mod tests {
         assert!(hex_find_match_offsets(&[], &needle).is_empty());
         assert!(hex_find_match_offsets(&hay, &[99u8]).is_empty());
         assert!(hex_find_match_offsets(&[1u8], &[1u8, 2u8]).is_empty());
+    }
+
+    #[test]
+    fn exq_hex64_geometry_tokens_value_identical() {
+        // Find-bar geometry rides existing tokens (tree62/views precedent).
+        assert_eq!(HEX_FIND_BAR_H, crate::theme::CHROME_HEADER_BAR_H);
+        assert_eq!(HEX_FIND_BAR_H, 28.0);
+        assert_eq!(HEX_FIND_NEEDLE_W, crate::views::FIND_NEEDLE_W);
+        assert_eq!(HEX_FIND_NEEDLE_W, 120.0);
+        assert_eq!(HEX_FIND_BADGE_PAD, crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(HEX_FIND_BADGE_PAD, 4.0);
+        // Goto bar transitively rides the find-bar tokens (no new rhythm).
+        assert_eq!(HEX_GOTO_BAR_H, HEX_FIND_BAR_H);
+        assert_eq!(HEX_GOTO_FIELD_W, HEX_FIND_NEEDLE_W);
+        assert_eq!(HEX_GOTO_BADGE_PAD, HEX_FIND_BADGE_PAD);
+        // Minimap strip height rides the paint token (views.rs single source).
+        assert_eq!(hex_minimap_alloc_height(), crate::views::HEX_MINIMAP_H);
+        assert_eq!(hex_minimap_alloc_height(), 220.0);
+        // Canvas budgets ride viewport/gutter tokens (gutter59 precedent).
+        assert_eq!(HEX_CANVAS_W, crate::theme::VIEWPORT_W as f32);
+        assert_eq!(HEX_CANVAS_W, 960.0);
+        assert_eq!(HEX_CANVAS_H, crate::theme::VIEWPORT_H as f32);
+        assert_eq!(HEX_CANVAS_H, 600.0);
+        assert_eq!(HEX_STACK_BREAKPOINT_W, crate::theme::VIEWPORT_MIN_W as f32);
+        assert_eq!(HEX_STACK_BREAKPOINT_W, 720.0);
+        assert_eq!(HEX_TALL_CANVAS_H, crate::gutter::GUTTER_CANVAS_WIDE_1200);
+        assert_eq!(HEX_TALL_CANVAS_H, 1200.0);
+        assert_eq!(HEX_NARROW_CANVAS_W, crate::theme::VIEWPORT_MIN_W as f32);
+        assert_eq!(HEX_NARROW_CANVAS_H, crate::theme::VIEWPORT_MIN_W as f32);
+        assert_eq!(
+            HEX_WIDE1200_CANVAS_W,
+            crate::gutter::GUTTER_CANVAS_WIDE_1200
+        );
+        assert_eq!(HEX_WIDE1200_CANVAS_H, crate::theme::VIEWPORT_H as f32);
+        assert_eq!(
+            HEX_NARROW700_CANVAS_W,
+            crate::gutter::GUTTER_CANVAS_NARROW_700
+        );
+        assert_eq!(
+            HEX_NARROW700_CANVAS_H,
+            crate::gutter::GUTTER_CANVAS_NARROW_700
+        );
+        // Already-tokenized geometry stays pinned (no drift).
+        assert_eq!(HEX_PANES_MIN_H, crate::viewmodel::TEXT_PANES_MIN_H);
+        assert_eq!(HEX_CELL_PAD_X, crate::theme::SPACE_SM);
+        assert_eq!(hex_offset_gutter_pad(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(hex_offset_gutter_gap(), crate::theme::GEO_SECTION_GAP);
     }
 
     #[test]
