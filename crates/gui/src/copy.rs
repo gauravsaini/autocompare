@@ -549,9 +549,11 @@ mod exq_copytake6_tests {
 /// Stacked hunk arrows ke beech gap px: tight rhythm (4).
 pub const COPY_HUNK_ARROW_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
 
-/// Copy arrow visual size px: 24 hit me 16 chevron (gutter arrow-box parity).
+/// Copy arrow visual size px: gutter arrow-box single source (16).
+/// Value-identical: `SPACE_XL - 2 * GEO_TIGHT_GAP` (24 - 8) == `SPACE_LG`.
+/// Pure; headless-tested.
 pub fn copy_arrow_visual_size() -> f32 {
-    COPY_HIT_MIN - 2.0 * COPY_HUNK_ARROW_GAP
+    crate::gutter::GUTTER_ARROW_BOX
 }
 
 /// Paas-paas hunks ke arrows ka vertical pitch px: `row_h + gap`.
@@ -2124,5 +2126,84 @@ mod exq_copy34_tests {
         assert!(narrow.contains("\"button_hitbox\": 16.0"));
         assert!(narrow.contains("\"preview_row_h\": 15.6"));
         assert!(narrow.contains("\"needs_hscroll\": false"));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// EXQ-COPY69 round-1: copy geometry token adoption (headless).
+// Button widths / row heights / gaps already flow from SPACE/GEO/TYPO
+// tokens; this wave locks the last computed site (`copy_arrow_visual_size`
+// ab `GUTTER_ARROW_BOX` single source, value-identical 16) aur har copy
+// geometry value ko uske token se bandhta hai. Zero new tokens/sizes,
+// colors frozen, hit behavior unchanged.
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod exq_copy69_tests {
+    use super::*;
+    use crate::theme::{
+        GEO_SECTION_GAP, GEO_TIGHT_GAP, SPACE_LG, SPACE_SM, SPACE_XL, SPACE_XS, TYPO_SMALL_SIZE,
+        TypoRole,
+    };
+
+    #[test]
+    fn copy69_button_widths_row_heights_gaps_are_tokens() {
+        // Button widths: hit floor XL, nav pair 2*XL + tight gap.
+        assert_eq!(copy_hit_size(), SPACE_XL);
+        assert_eq!(COPY_HIT_MIN, SPACE_XL);
+        assert_eq!(SPACE_XL, 24.0);
+        assert_eq!(copy_nav_button_h(), SPACE_XL);
+        assert_eq!(copy_nav_gap(), GEO_TIGHT_GAP);
+        assert_eq!(GEO_TIGHT_GAP, SPACE_XS);
+        assert_eq!(copy_nav_pair_width(), 2.0 * SPACE_XL + GEO_TIGHT_GAP);
+        assert_eq!(copy_nav_pair_width(), 52.0);
+        // Row heights: Mono line-height single source.
+        assert_eq!(copy_row_height(), TypoRole::Mono.line_height_px());
+        assert_eq!(copy_line_row_height(), copy_row_height());
+        // Gaps: tight + section tokens, side bearings section-gap.
+        assert_eq!(COPY_HUNK_ARROW_GAP, GEO_TIGHT_GAP);
+        assert_eq!(COPY_BUTTON_HIT_SLOP, SPACE_XS);
+        assert_eq!(copy_button_sym_pad(), SPACE_XS);
+        assert_eq!(GEO_SECTION_GAP, SPACE_SM);
+        assert_eq!(
+            copy_arrow_column_width(),
+            COPY_ARROW_GLYPH_CHARS as f32 * copy_arrow_advance_px() + 2.0 * GEO_SECTION_GAP
+        );
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        // Visual size: gutter arrow-box single source, value-identical 16.
+        assert_eq!(copy_arrow_visual_size(), crate::gutter::GUTTER_ARROW_BOX);
+        assert_eq!(crate::gutter::GUTTER_ARROW_BOX, SPACE_LG);
+        assert_eq!(copy_arrow_visual_size(), 16.0);
+        // Typo: action text Small single source; slop target 32.
+        assert_eq!(copy_action_text_role(), TypoRole::chrome_status());
+        assert_eq!(copy_action_text_size(), TYPO_SMALL_SIZE);
+        assert_eq!(copy_hit_size_with_slop(), SPACE_XL + 2.0 * SPACE_XS);
+        assert_eq!(copy_hit_size_with_slop(), 32.0);
+        // Hit behavior unchanged: symmetric 32px rect at (100,50).
+        assert_eq!(
+            copy_button_hit_rect(100.0, 50.0),
+            Some((84.0, 34.0, 116.0, 66.0))
+        );
+        assert!(copy_hit_rect_is_symmetric(10.0, 20.0, 34.0, 44.0));
+    }
+
+    #[test]
+    fn copy69_fixture_geometry_720() {
+        // Mirrors checks/gui-exq-copy69/round-1/comparison/copy-geometry-720.json.
+        let raw = include_str!(
+            "../../../checks/gui-exq-copy69/round-1/comparison/copy-geometry-720.json"
+        );
+        assert!(raw.contains("\"name\":\"copy-geometry-720\""));
+        assert!(raw.contains("\"avail_w\":720.0"));
+        assert!(raw.contains("\"arrow_column_width\":23.0"));
+        assert!(raw.contains("\"arrow_hit_size\":32.0"));
+        assert!(raw.contains("\"row_height\":15.6"));
+        assert!(raw.contains("\"action_dy\":1.2"));
+        assert_eq!(copy_center_x_for(720.0), Some(360.0));
+        assert!((copy_arrow_column_width() - 23.0).abs() < 0.0001);
+        assert!((copy_hit_size_with_slop() - 32.0).abs() < 0.0001);
+        assert!((copy_line_action_dy() - 1.2).abs() < 0.01);
+        assert!(copy_arrow_hit_is_symmetric(360.0, 300.0));
+        assert!(copy_narrow_column_fits(720.0));
     }
 }
