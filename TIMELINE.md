@@ -1010,3 +1010,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-viewmodel71 viewmodel geometry
 - `crates/gui/src/viewmodel.rs` me 5 magic literals -> existing tokens, 0 new tokens.
 - Proof: 1134+2 green, fmt clean, banned CLEAN, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-copy69 copy geometry
+- `crates/gui/src/copy.rs` me copy_arrow_visual_size GUTTER_ARROW_BOX reuse (16.0 value-identical), zero new tokens.
+- Proof: 1132 green + 2 copy tests PASS, fmt clean, banned 0, harness PASS byte-identical.
