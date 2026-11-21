@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-take44 live merge take resolution
+
+1. **Live take geometry lock**: delegation-only pure helpers in take.rs (take_buttons_row_x, take geometry vs 960px budget); new test take_exq_take44_live_take_geometry; colors frozen at 38.
+2. **Tests**: 1092 green (1090 + 2 new); rustfmt clean on OWNS; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/take.rs, checks/gui-exq-take44/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-hex42 live hex columns
 
 1. **Live hex columns lock**: round-2 on hex31 geometry lock, zero new tokens; HEX42_REF_CHAR_W 7.0; offset gutter, ruler-vs-grid columns, SPACE-token ASCII gap, 1200px no-scroll budget, narrow-700 stacked edge all delegate to hex31 single source so views cannot drift.
