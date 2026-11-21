@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-shot46 honest screenshot harness
+
+1. **Honest harness**: screenshot.rs colors/layout now single-sourced from theme.rs mode-aware helpers + live pure geometry fns; Light mode paints dark-ink-on-light-wash (dark-on-dark gone); fake-chrome divergence documented; parity/ holds before/after dark+light PNGs. Verdict TOKEN-SOURCED-LIMITED (sandbox live-capture unavailable, machine-checked single-source tests instead).
+2. **Tests**: 1094 green; rustfmt clean on OWNS; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/screenshot.rs, checks/gui-exq-shot46/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-home45 live home cards
 
 1. **Live home cards lock**: pure helpers in home.rs (card rect/grid geometry vs 1200px canvas, home45-live-cards-1200.json edge fixture); colors frozen.
