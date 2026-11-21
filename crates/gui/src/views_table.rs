@@ -236,11 +236,11 @@ pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
 // ----------------------------------------------------------------------------
 
 /// Key-col header bar ki unchai (find-bar precedent reuse).
-pub const TABLE_KEY_BAR_H: f32 = 28.0;
+pub const TABLE_KEY_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
 /// Per-column key toggle ke beech ka gap (default item-spacing scale).
-pub const TABLE_KEY_COL_GAP: f32 = 8.0;
+pub const TABLE_KEY_COL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
 /// Key badge ka right-end pad (find-bar badge precedent reuse).
-pub const TABLE_KEY_BADGE_PAD: f32 = 4.0;
+pub const TABLE_KEY_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
 
 /// Key toggle ka fixed 1-char indicator: selected vs deselected hamesha
 /// alag dikhta hai aur hamesha button text ke start me rehta hai, isliye
@@ -561,11 +561,11 @@ pub fn table_find_prev(
 /// Table find bar ki geometry (text/folder precedent reuse, koi naya
 /// token nahi): bar `28.0` px uncha, needle field `120.0` px chauda,
 /// badge right-end se `4.0` px pad par.
-pub const TABLE_FIND_BAR_H: f32 = 28.0;
+pub const TABLE_FIND_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
 /// Table find needle field ki chaudai (text precedent reuse).
 pub const TABLE_FIND_NEEDLE_W: f32 = 120.0;
 /// Table find badge ka right-end pad (text precedent reuse).
-pub const TABLE_FIND_BADGE_PAD: f32 = 4.0;
+pub const TABLE_FIND_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
 
 /// Sab matching cells row-major order me: har `(row, col)` jisme
 /// needle hai. Khali needle par khali vec. `table_find_next` ka
@@ -5238,6 +5238,24 @@ mod tests {
         assert_eq!(table_section_label_text_role(), TypoRole::Body);
         assert_eq!(table_header_text_role(), TypoRole::Mono);
         assert_eq!(table_cell_text_role(), TypoRole::Mono);
+    }
+
+    #[test]
+    fn exq_table63_geometry_tokens_value_identical() {
+        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        // Bar heights chrome bar precedent (28.0), gaps section/tight scale.
+        assert_eq!(TABLE_KEY_BAR_H, CHROME_HEADER_BAR_H);
+        assert_eq!(TABLE_KEY_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_BAR_H, CHROME_HEADER_BAR_H);
+        assert_eq!(TABLE_FIND_BAR_H, 28.0);
+        assert_eq!(TABLE_KEY_COL_GAP, GEO_SECTION_GAP);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+        assert_eq!(TABLE_KEY_BADGE_PAD, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_FIND_BADGE_PAD, 4.0);
+        // Needle width ka koi identical token nahi (repo-wide grep) — literal rehta hai.
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
     }
 
     #[test]
