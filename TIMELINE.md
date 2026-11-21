@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-toolbar60 nav chevrons
+
+1. **Vector chevrons**: views.rs NavChevronDir + nav_chevron_segments (staged mark-box fractions, zero new sizes) + paint_nav_chevron_mark (paint-after overlay, hit-rects caller-side, dim_for ink); Prev/Next text labels intact.
+2. **Tests**: 1122 green (1121 + 1 nav) + 2 kittest PASS; rustfmt clean; banned 0; harness PASS (after.png byte-identical, kittest 960x600 documented).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-toolbar60/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-typo54 real font chains
 
 1. **System-first chains**: theme.rs TYPO54_SANS_CHAIN (SF Pro head, single-source sans, proportional tail) + TYPO54_MONO_CHAIN (SF Mono, Menlo, single-source mono, monospace tail); const fn resolver + TypoRole::candidate_stack, no new colors/sizes, headless pure.
