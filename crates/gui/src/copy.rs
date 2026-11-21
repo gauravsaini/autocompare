@@ -2207,3 +2207,526 @@ mod exq_copy69_tests {
         assert!(copy_narrow_column_fits(720.0));
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQ-AGYXSWARM80: Copy path UX polish (headless; pure safe Rust).
+// Provides copy path actions, target resolution, clipboard formatting,
+// middle-truncation, honest status feedback, and geometry/typography
+// reusing existing SPACE_* tokens and TypoRole.
+// Geometry first: COPY_PATH_BUTTON_H (SPACE_XL = 24), pad (SPACE_SM = 8),
+// icon (SPACE_LG = 16), slop/gap (SPACE_XS = 4).
+// Typography second: TypoRole::chrome_status / TypoRole::Mono, zero magic sizes.
+// Colors frozen: no color touches.
+// ----------------------------------------------------------------------------
+
+/// Target selection for copying file paths in diff/editor panes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyPathTarget {
+    Left,
+    Right,
+    Both,
+    RelativeLeft,
+    RelativeRight,
+    FilenameLeft,
+    FilenameRight,
+}
+
+/// Action label for copy path buttons/menu items.
+pub fn copy_path_action_label(target: CopyPathTarget) -> &'static str {
+    match target {
+        CopyPathTarget::Left => "Copy Left Path",
+        CopyPathTarget::Right => "Copy Right Path",
+        CopyPathTarget::Both => "Copy Both Paths",
+        CopyPathTarget::RelativeLeft => "Copy Relative Left Path",
+        CopyPathTarget::RelativeRight => "Copy Relative Right Path",
+        CopyPathTarget::FilenameLeft => "Copy Left Filename",
+        CopyPathTarget::FilenameRight => "Copy Right Filename",
+    }
+}
+
+/// Short label for compact copy path buttons in tight chrome.
+pub fn copy_path_short_label(target: CopyPathTarget) -> &'static str {
+    match target {
+        CopyPathTarget::Left => "Copy Left",
+        CopyPathTarget::Right => "Copy Right",
+        CopyPathTarget::Both => "Copy Both",
+        CopyPathTarget::RelativeLeft => "Copy Rel L",
+        CopyPathTarget::RelativeRight => "Copy Rel R",
+        CopyPathTarget::FilenameLeft => "Copy Name L",
+        CopyPathTarget::FilenameRight => "Copy Name R",
+    }
+}
+
+/// Tooltip explaining what path is copied to clipboard.
+pub fn copy_path_tooltip(target: CopyPathTarget) -> &'static str {
+    match target {
+        CopyPathTarget::Left => "Copy full path of left file to clipboard",
+        CopyPathTarget::Right => "Copy full path of right file to clipboard",
+        CopyPathTarget::Both => "Copy both left and right file paths to clipboard",
+        CopyPathTarget::RelativeLeft => "Copy relative path of left file to clipboard",
+        CopyPathTarget::RelativeRight => "Copy relative path of right file to clipboard",
+        CopyPathTarget::FilenameLeft => "Copy filename of left file to clipboard",
+        CopyPathTarget::FilenameRight => "Copy filename of right file to clipboard",
+    }
+}
+
+/// Helper to safely extract filename from a path string without panicking.
+pub fn copy_path_filename(path: &str) -> &str {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return "";
+    }
+    let after_slash = match trimmed.rfind('/') {
+        Some(pos) => match trimmed.get(pos.saturating_add(1)..) {
+            Some(s) => s,
+            None => "",
+        },
+        None => trimmed,
+    };
+    match after_slash.rfind('\\') {
+        Some(pos) => match after_slash.get(pos.saturating_add(1)..) {
+            Some(s) => s,
+            None => "",
+        },
+        None => after_slash,
+    }
+}
+
+/// Formats clipboard text for the selected copy path target.
+/// Pure safe Rust: no unwrap, no panic.
+pub fn format_copy_path(target: CopyPathTarget, left_path: &str, right_path: &str) -> String {
+    let left = left_path.trim();
+    let right = right_path.trim();
+    match target {
+        CopyPathTarget::Left | CopyPathTarget::RelativeLeft => left.to_string(),
+        CopyPathTarget::Right | CopyPathTarget::RelativeRight => right.to_string(),
+        CopyPathTarget::Both => {
+            if !left.is_empty() && !right.is_empty() {
+                format!("{left}\n{right}")
+            } else if !left.is_empty() {
+                left.to_string()
+            } else {
+                right.to_string()
+            }
+        }
+        CopyPathTarget::FilenameLeft => copy_path_filename(left).to_string(),
+        CopyPathTarget::FilenameRight => copy_path_filename(right).to_string(),
+    }
+}
+
+/// Honest status message after a copy path action.
+pub fn copy_path_status_text(target: CopyPathTarget, success: bool) -> String {
+    if !success {
+        return String::from("no path to copy");
+    }
+    match target {
+        CopyPathTarget::Left => String::from("copied left path to clipboard"),
+        CopyPathTarget::Right => String::from("copied right path to clipboard"),
+        CopyPathTarget::Both => String::from("copied both paths to clipboard"),
+        CopyPathTarget::RelativeLeft => String::from("copied relative left path to clipboard"),
+        CopyPathTarget::RelativeRight => String::from("copied relative right path to clipboard"),
+        CopyPathTarget::FilenameLeft => String::from("copied left filename to clipboard"),
+        CopyPathTarget::FilenameRight => String::from("copied right filename to clipboard"),
+    }
+}
+
+/// Middle-truncates a long path for display in path bar / UX without panic/unwrap.
+pub fn copy_path_middle_truncate(path: &str, max_chars: usize) -> String {
+    let trimmed = path.trim();
+    let char_count = trimmed.chars().count();
+    if char_count <= max_chars || max_chars < 5 {
+        return trimmed.to_string();
+    }
+    let ellipsis = "...";
+    let keep = max_chars.saturating_sub(ellipsis.len());
+    let lead = keep / 2;
+    let trail = keep.saturating_sub(lead);
+
+    let prefix: String = trimmed.chars().take(lead).collect();
+    let suffix: String = trimmed
+        .chars()
+        .skip(char_count.saturating_sub(trail))
+        .collect();
+    format!("{prefix}{ellipsis}{suffix}")
+}
+
+/// Direction badge label for copy direction indicators in UI.
+pub fn copy_direction_badge_label(dir: CopyDirection) -> &'static str {
+    match dir {
+        CopyDirection::LeftToRight => "L\u{2192}R",
+        CopyDirection::RightToLeft => "R\u{2192}L",
+    }
+}
+
+/// Keyboard shortcut hint for copy operations in diff view.
+pub fn copy_shortcut_hint(dir: CopyDirection) -> &'static str {
+    match dir {
+        CopyDirection::LeftToRight => "Ctrl+Alt+Right",
+        CopyDirection::RightToLeft => "Ctrl+Alt+Left",
+    }
+}
+
+/// Accessible description for copy direction actions.
+pub fn copy_direction_accessible_description(dir: CopyDirection, row_idx: Option<usize>) -> String {
+    let arrow_desc = match dir {
+        CopyDirection::LeftToRight => "from left to right",
+        CopyDirection::RightToLeft => "from right to left",
+    };
+    match row_idx {
+        Some(idx) => format!("copy line {} {arrow_desc}", idx.saturating_add(1)),
+        None => format!("copy diff hunk {arrow_desc}"),
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Copy path UI geometry & typography (reusing SPACE_* tokens & TypoRole).
+// ----------------------------------------------------------------------------
+
+/// Copy path button height px: standard hit floor parity (24.0, `SPACE_XL`).
+pub const COPY_PATH_BUTTON_H: f32 = crate::theme::SPACE_XL;
+
+/// Copy path button horizontal padding px: standard small step (8.0, `SPACE_SM`).
+pub const COPY_PATH_BUTTON_PAD_X: f32 = crate::theme::SPACE_SM;
+
+/// Copy path icon box size px: standard icon box (16.0, `SPACE_LG`).
+pub const COPY_PATH_ICON_SIZE: f32 = crate::theme::SPACE_LG;
+
+/// Copy path inter-element gap px: tight rhythm (4.0, `GEO_TIGHT_GAP` == `SPACE_XS`).
+pub const COPY_PATH_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+
+/// Copy path button hit slop px: one XS step (4.0, `SPACE_XS`).
+pub const COPY_PATH_HIT_SLOP: f32 = crate::theme::SPACE_XS;
+
+/// Returns copy path button height px (24.0). Pure; unit-tested.
+pub fn copy_path_button_h() -> f32 {
+    COPY_PATH_BUTTON_H
+}
+
+/// Returns copy path button horizontal padding px (8.0). Pure; unit-tested.
+pub fn copy_path_button_pad_x() -> f32 {
+    COPY_PATH_BUTTON_PAD_X
+}
+
+/// Returns copy path icon size px (16.0). Pure; unit-tested.
+pub fn copy_path_icon_size() -> f32 {
+    COPY_PATH_ICON_SIZE
+}
+
+/// Returns copy path gap px (4.0). Pure; unit-tested.
+pub fn copy_path_gap() -> f32 {
+    COPY_PATH_GAP
+}
+
+/// Returns copy path hit slop px (4.0). Pure; unit-tested.
+pub fn copy_path_hit_slop() -> f32 {
+    COPY_PATH_HIT_SLOP
+}
+
+/// Copy path button effective hit height with hit slop: 24 + 2 * 4 = 32.0.
+pub fn copy_path_hit_height_with_slop() -> f32 {
+    COPY_PATH_BUTTON_H + 2.0 * COPY_PATH_HIT_SLOP
+}
+
+/// Typographic role for copy path labels & status text.
+pub const fn copy_path_text_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::chrome_status()
+}
+
+/// Typographic role for displaying monospace file paths in copy path affordances.
+pub const fn copy_path_mono_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Text font size px for copy path labels (Small role se: 11.0).
+pub fn copy_path_text_size() -> f32 {
+    copy_path_text_role().size()
+}
+
+/// Text line height px for copy path labels (Small role se: 13.2).
+pub fn copy_path_line_height_px() -> f32 {
+    copy_path_text_role().line_height_px()
+}
+
+/// Calculates button width px for a copy path button with label width `content_w`:
+/// `content_w + 2 * COPY_PATH_BUTTON_PAD_X`. Returns 0.0 on invalid input.
+pub fn copy_path_button_width(content_w: f32) -> f32 {
+    if !content_w.is_finite() || content_w <= 0.0 {
+        return 2.0 * COPY_PATH_BUTTON_PAD_X;
+    }
+    content_w + 2.0 * COPY_PATH_BUTTON_PAD_X
+}
+
+/// Calculates pair width px for two copy path buttons:
+/// `btn_w1 + btn_w2 + COPY_PATH_GAP`.
+pub fn copy_path_pair_width(btn_w1: f32, btn_w2: f32) -> f32 {
+    if !btn_w1.is_finite() || !btn_w2.is_finite() {
+        return 0.0;
+    }
+    btn_w1.max(0.0) + btn_w2.max(0.0) + COPY_PATH_GAP
+}
+
+/// Hit rect `(x0, y0, x1, y1)` for a copy path button of width `width` centered at `(cx, cy)`,
+/// expanded by `COPY_PATH_HIT_SLOP` (4px). Returns `None` on non-finite input.
+pub fn copy_path_button_hit_rect(cx: f32, cy: f32, width: f32) -> Option<(f32, f32, f32, f32)> {
+    if !cx.is_finite() || !cy.is_finite() || !width.is_finite() || width <= 0.0 {
+        return None;
+    }
+    let half_w = (width / 2.0) + COPY_PATH_HIT_SLOP;
+    let half_h = (COPY_PATH_BUTTON_H / 2.0) + COPY_PATH_HIT_SLOP;
+    let (x0, y0, x1, y1) = (cx - half_w, cy - half_h, cx + half_w, cy + half_h);
+    if x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite() {
+        Some((x0, y0, x1, y1))
+    } else {
+        None
+    }
+}
+
+/// Point-in-rect hit test for copy path button: checks if `(x, y)` falls within the
+/// slop-expanded hit rect centered at `(cx, cy)` with width `width` (edges inclusive).
+pub fn copy_path_button_hit_contains(cx: f32, cy: f32, width: f32, x: f32, y: f32) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    match copy_path_button_hit_rect(cx, cy, width) {
+        Some((x0, y0, x1, y1)) => x >= x0 && x <= x1 && y >= y0 && y <= y1,
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod exq_agyxswarm80_copy_tests {
+    use super::*;
+    use crate::theme::{GEO_TIGHT_GAP, SPACE_LG, SPACE_SM, SPACE_XL, SPACE_XS, TypoRole};
+
+    #[test]
+    fn agyxswarm80_tokens_geometry_reuse() {
+        assert_eq!(copy_path_button_h(), SPACE_XL);
+        assert_eq!(copy_path_button_h(), 24.0);
+        assert_eq!(copy_path_button_pad_x(), SPACE_SM);
+        assert_eq!(copy_path_button_pad_x(), 8.0);
+        assert_eq!(copy_path_icon_size(), SPACE_LG);
+        assert_eq!(copy_path_icon_size(), 16.0);
+        assert_eq!(copy_path_gap(), GEO_TIGHT_GAP);
+        assert_eq!(copy_path_gap(), SPACE_XS);
+        assert_eq!(copy_path_gap(), 4.0);
+        assert_eq!(copy_path_hit_slop(), SPACE_XS);
+        assert_eq!(copy_path_hit_slop(), 4.0);
+        assert_eq!(copy_path_hit_height_with_slop(), 32.0);
+        assert_eq!(
+            copy_path_hit_height_with_slop(),
+            copy_path_button_h() + 2.0 * copy_path_hit_slop()
+        );
+    }
+
+    #[test]
+    fn agyxswarm80_tokens_typo_roles_reuse() {
+        assert_eq!(copy_path_text_role(), TypoRole::chrome_status());
+        assert_eq!(copy_path_text_role(), TypoRole::Small);
+        assert_eq!(copy_path_text_size(), TypoRole::Small.size());
+        assert_eq!(copy_path_text_size(), 11.0);
+        assert_eq!(copy_path_line_height_px(), TypoRole::Small.line_height_px());
+        assert_eq!(copy_path_mono_role(), TypoRole::Mono);
+        assert_eq!(copy_path_mono_role().size(), 12.0);
+    }
+
+    #[test]
+    fn agyxswarm80_copy_path_actions_and_labels() {
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::Left),
+            "Copy Left Path"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::Right),
+            "Copy Right Path"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::Both),
+            "Copy Both Paths"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::RelativeLeft),
+            "Copy Relative Left Path"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::RelativeRight),
+            "Copy Relative Right Path"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::FilenameLeft),
+            "Copy Left Filename"
+        );
+        assert_eq!(
+            copy_path_action_label(CopyPathTarget::FilenameRight),
+            "Copy Right Filename"
+        );
+
+        assert_eq!(copy_path_short_label(CopyPathTarget::Left), "Copy Left");
+        assert_eq!(copy_path_short_label(CopyPathTarget::Right), "Copy Right");
+        assert_eq!(copy_path_short_label(CopyPathTarget::Both), "Copy Both");
+        assert_eq!(
+            copy_path_short_label(CopyPathTarget::FilenameLeft),
+            "Copy Name L"
+        );
+        assert_eq!(
+            copy_path_short_label(CopyPathTarget::FilenameRight),
+            "Copy Name R"
+        );
+
+        assert!(copy_path_tooltip(CopyPathTarget::Left).contains("left file"));
+        assert!(copy_path_tooltip(CopyPathTarget::Right).contains("right file"));
+        assert!(copy_path_tooltip(CopyPathTarget::Both).contains("both"));
+    }
+
+    #[test]
+    fn agyxswarm80_copy_path_formatting() {
+        let left = "/repo/src/copy.rs";
+        let right = "C:\\repo\\target\\copy.rs";
+
+        assert_eq!(format_copy_path(CopyPathTarget::Left, left, right), left);
+        assert_eq!(format_copy_path(CopyPathTarget::Right, left, right), right);
+        assert_eq!(
+            format_copy_path(CopyPathTarget::Both, left, right),
+            format!("{left}\n{right}")
+        );
+        assert_eq!(
+            format_copy_path(CopyPathTarget::FilenameLeft, left, right),
+            "copy.rs"
+        );
+        assert_eq!(
+            format_copy_path(CopyPathTarget::FilenameRight, left, right),
+            "copy.rs"
+        );
+
+        // Empty handling
+        assert_eq!(format_copy_path(CopyPathTarget::Left, "", ""), "");
+        assert_eq!(format_copy_path(CopyPathTarget::Both, left, ""), left);
+        assert_eq!(format_copy_path(CopyPathTarget::Both, "", right), right);
+        assert_eq!(format_copy_path(CopyPathTarget::FilenameLeft, "", ""), "");
+        assert_eq!(copy_path_filename(""), "");
+        assert_eq!(copy_path_filename("   "), "");
+    }
+
+    #[test]
+    fn agyxswarm80_copy_path_status_text() {
+        assert_eq!(
+            copy_path_status_text(CopyPathTarget::Left, false),
+            "no path to copy"
+        );
+        assert_eq!(
+            copy_path_status_text(CopyPathTarget::Left, true),
+            "copied left path to clipboard"
+        );
+        assert_eq!(
+            copy_path_status_text(CopyPathTarget::Right, true),
+            "copied right path to clipboard"
+        );
+        assert_eq!(
+            copy_path_status_text(CopyPathTarget::Both, true),
+            "copied both paths to clipboard"
+        );
+        assert_eq!(
+            copy_path_status_text(CopyPathTarget::FilenameLeft, true),
+            "copied left filename to clipboard"
+        );
+    }
+
+    #[test]
+    fn agyxswarm80_middle_truncate_and_ux_badges() {
+        let short_path = "src/copy.rs";
+        assert_eq!(copy_path_middle_truncate(short_path, 20), short_path);
+
+        let long_path = "crates/gui/src/components/views/diff_editor_copy_pane.rs";
+        let truncated = copy_path_middle_truncate(long_path, 25);
+        assert!(truncated.contains("..."));
+        assert!(truncated.len() <= 25);
+        assert_eq!(copy_path_middle_truncate("abc", 2), "abc");
+
+        // Direction badges and hints
+        assert_eq!(
+            copy_direction_badge_label(CopyDirection::LeftToRight),
+            "L\u{2192}R"
+        );
+        assert_eq!(
+            copy_direction_badge_label(CopyDirection::RightToLeft),
+            "R\u{2192}L"
+        );
+        assert_eq!(
+            copy_shortcut_hint(CopyDirection::LeftToRight),
+            "Ctrl+Alt+Right"
+        );
+        assert_eq!(
+            copy_shortcut_hint(CopyDirection::RightToLeft),
+            "Ctrl+Alt+Left"
+        );
+
+        // Accessible description
+        assert_eq!(
+            copy_direction_accessible_description(CopyDirection::LeftToRight, Some(4)),
+            "copy line 5 from left to right"
+        );
+        assert_eq!(
+            copy_direction_accessible_description(CopyDirection::RightToLeft, None),
+            "copy diff hunk from right to left"
+        );
+    }
+
+    #[test]
+    fn agyxswarm80_copy_path_button_geometry_and_hit() {
+        let w = copy_path_button_width(60.0);
+        assert_eq!(w, 60.0 + 2.0 * SPACE_SM);
+        assert_eq!(w, 76.0);
+
+        let pair_w = copy_path_pair_width(76.0, 76.0);
+        assert_eq!(pair_w, 76.0 + 76.0 + 4.0);
+        assert_eq!(pair_w, 156.0);
+
+        // Hit rect with slop
+        // width = 80.0, H = 24.0, slop = 4.0
+        // half_w = 40.0 + 4.0 = 44.0; half_h = 12.0 + 4.0 = 16.0
+        // centered at (100.0, 50.0) -> (56.0, 34.0, 144.0, 66.0)
+        let rect = copy_path_button_hit_rect(100.0, 50.0, 80.0);
+        assert_eq!(rect, Some((56.0, 34.0, 144.0, 66.0)));
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 88.0);
+            assert_eq!(y1 - y0, 32.0);
+        }
+
+        assert!(copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 100.0, 50.0
+        ));
+        assert!(copy_path_button_hit_contains(100.0, 50.0, 80.0, 56.0, 34.0));
+        assert!(copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 144.0, 66.0
+        ));
+        assert!(!copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 55.9, 50.0
+        ));
+        assert!(!copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 144.1, 50.0
+        ));
+        assert!(!copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 100.0, 33.9
+        ));
+        assert!(!copy_path_button_hit_contains(
+            100.0, 50.0, 80.0, 100.0, 66.1
+        ));
+
+        // Invalid inputs
+        assert_eq!(copy_path_button_hit_rect(f32::NAN, 50.0, 80.0), None);
+        assert_eq!(copy_path_button_hit_rect(100.0, 50.0, -10.0), None);
+        assert!(!copy_path_button_hit_contains(
+            f32::NAN,
+            50.0,
+            80.0,
+            100.0,
+            50.0
+        ));
+        assert!(!copy_path_button_hit_contains(
+            100.0,
+            50.0,
+            80.0,
+            f32::NAN,
+            50.0
+        ));
+    }
+}
