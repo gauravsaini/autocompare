@@ -5582,6 +5582,108 @@ pub fn text8_divider_hit_band_960() -> (f32, f32) {
     (gutter_lo - slop, gutter_hi + slop)
 }
 
+// ----------------------------------------------------------------------------
+// EXQUISITE VIEWS40: twin text pane rhythm round-2.
+//
+// Geometry first: symmetric inner padding, tabular line-number column,
+// hunk header air, and width budgets at 1200 and narrow 700.
+// Typography second: Mono rhythm reuse only. Colors frozen.
+// ----------------------------------------------------------------------------
+
+/// Inner padding inside each twin pane (px): one XS step.
+/// Symmetric on both sides of the number column and code.
+/// Pure; unit-tested.
+pub fn text40_twin_pad_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Air between pane edge and center gutter (px): one SM step.
+/// Same beat as the section gap so the connector breathes.
+/// Pure; unit-tested.
+pub fn text40_pane_gap_px() -> f32 {
+    text_center_divider_gap_px()
+}
+
+/// Line-number column inner pad (px): one XS step, twin pad parity.
+/// Numbers stay off the code by the same beat on both sides.
+/// Pure; unit-tested.
+pub fn text40_linenum_pad_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Line-number column width (px) from char metrics: digits advances
+/// plus symmetric pad on both sides. Reuses the row metric single
+/// source so paint and headless math never drift.
+/// Pure; unit-tested.
+pub fn text40_linenum_col_width(digits: usize, char_w: f32) -> f32 {
+    text_linenum_column_width_from_metrics(digits, char_w)
+}
+
+/// Line-number column alignment gate: tabular figures stay enabled
+/// so digits share one advance and rows never drift.
+/// Pure; unit-tested.
+pub fn text40_gutter_tabular() -> bool {
+    text_gutter_numbers_tabular()
+}
+
+/// Hunk header outer gap (px): one SM step above and below the header
+/// so groups scan as units. Section gap parity, no new token.
+/// Pure; unit-tested.
+pub fn text40_hunk_header_gap_px() -> f32 {
+    crate::theme::SPACE_SM
+}
+
+/// Hunk header inner pad (px): one XS step on each side of the label.
+/// Twin pad parity, no new token. Pure; unit-tested.
+pub fn text40_hunk_header_pad_px() -> f32 {
+    crate::theme::SPACE_XS
+}
+
+/// Hunk header bar height (px): thin toolbar band reuse so the header
+/// sits on the same grid as the nav bar. No new token.
+/// Pure; unit-tested.
+pub fn text40_hunk_header_height_px() -> f32 {
+    HEADER_H
+}
+
+/// Twin pane pair at 1200px wide (px): center gutter plus one gap per
+/// side removed, remainder split even. Single source pair reuse.
+/// Pure; unit-tested.
+pub fn text40_wide1200_pane_pair() -> (f32, f32) {
+    text_pane_pair_widths(1200.0)
+}
+
+/// Row total at 1200px wide (px): panes plus gutter plus air both sides.
+/// Locks the no-scroll budget. Pure; unit-tested.
+pub fn text40_wide1200_total_w() -> f32 {
+    let (left, right) = text40_wide1200_pane_pair();
+    left + right + text_center_gutter_width() + 2.0 * text40_pane_gap_px()
+}
+
+/// No horizontal scroll at 1200px wide: total fits the canvas.
+/// Pure; unit-tested.
+pub fn text40_wide1200_no_hscroll() -> bool {
+    !text_pane_needs_hscroll(text40_wide1200_total_w(), 1200.0)
+}
+
+/// Narrow 700px layout: below the 720 breakpoint panes stack.
+/// Pure; unit-tested.
+pub fn text40_narrow700_layout() -> TextLayout {
+    text_layout_for_width(700.0)
+}
+
+/// Narrow 700px stacked pane width (px): full width minus one gap.
+/// Stacked single source reuse. Pure; unit-tested.
+pub fn text40_narrow700_stacked_width() -> f32 {
+    text_stacked_pane_width(700.0)
+}
+
+/// No horizontal scroll at narrow 700px: stacked pane fits the canvas.
+/// Pure; unit-tested.
+pub fn text40_narrow700_no_hscroll() -> bool {
+    !text_pane_needs_hscroll(text40_narrow700_stacked_width(), 700.0)
+}
+
 /// Text10 tab stop width (chars): fixed 8-column stops (BC mono round-2 —
 /// tab rendering aligned to stops, not a single space). Ponytail: plain 8
 /// (standard code stop), koi naya token nahi. Pure; unit-tested.
@@ -9624,6 +9726,68 @@ mod tests {
             viewmodel::TEXT_PANES_MIN_H
         );
         assert_eq!(text_tall_canvas_center_y(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn exq_views40_twin_panes_gutter_hunk_1200_and_narrow700() {
+        // Mirrors checks/gui-exq-views40/round-1/comparison/views40-wide-1200.json
+        // and views40-narrow-700.json: twin pane padding from SPACE_XS,
+        // tabular line-number gutter, hunk header air, 1200 no-scroll
+        // plus stacked narrow 700 edge. Geometry FIRST, typo SECOND,
+        // colors FROZEN.
+        let wide_raw = include_str!(
+            "../../../checks/gui-exq-views40/round-1/comparison/views40-wide-1200.json"
+        );
+        let narrow_raw = include_str!(
+            "../../../checks/gui-exq-views40/round-1/comparison/views40-narrow-700.json"
+        );
+        assert!(wide_raw.contains("\"name\": \"views40-wide-1200\""));
+        assert!(wide_raw.contains("\"pane_left\": 582.0"));
+        assert!(wide_raw.contains("\"needs_hscroll\": false"));
+        assert!(narrow_raw.contains("\"name\": \"views40-narrow-700\""));
+        assert!(narrow_raw.contains("\"stacked_w\": 692.0"));
+        assert!(narrow_raw.contains("\"needs_hscroll\": false"));
+        // Twin padding reuses SPACE scale, no new literal.
+        assert_eq!(text40_twin_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(text40_twin_pad_px(), TIGHT_GAP);
+        assert_eq!(text40_twin_pad_px(), 4.0);
+        assert_eq!(text40_pane_gap_px(), crate::theme::SPACE_SM);
+        assert_eq!(text40_pane_gap_px(), SECTION_GAP);
+        assert_eq!(text40_pane_gap_px(), text_center_divider_gap_px());
+        assert_eq!(text40_pane_gap_px(), 8.0);
+        // Gutter alignment: tabular, pad parity, widths grow by digit.
+        assert!(text40_gutter_tabular());
+        assert_eq!(text40_linenum_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(text40_linenum_pad_px(), text40_twin_pad_px());
+        let char_w = text_char_metric_width();
+        assert!((text40_linenum_col_width(1, char_w) - (char_w + 8.0)).abs() < 0.001);
+        assert!(text40_linenum_col_width(3, char_w) > text40_linenum_col_width(1, char_w));
+        assert_eq!(
+            gutter_text(Some(7), 4).chars().count(),
+            gutter_text(None, 4).chars().count()
+        );
+        // Hunk header spacing: gap SM, pad XS, height HEADER_H.
+        assert_eq!(text40_hunk_header_gap_px(), crate::theme::SPACE_SM);
+        assert_eq!(text40_hunk_header_gap_px(), 8.0);
+        assert_eq!(text40_hunk_header_pad_px(), crate::theme::SPACE_XS);
+        assert_eq!(text40_hunk_header_pad_px(), 4.0);
+        assert_eq!(text40_hunk_header_height_px(), HEADER_H);
+        assert_eq!(text40_hunk_header_height_px(), 28.0);
+        // Wide 1200: 582 + 582 + 20 + 2 * 8 = 1200, no scroll.
+        assert_eq!(text40_wide1200_pane_pair(), (582.0, 582.0));
+        assert_eq!(text40_wide1200_pane_pair(), text_pane_pair_widths(1200.0));
+        assert!((text40_wide1200_total_w() - 1200.0).abs() < 0.001);
+        assert!(text40_wide1200_no_hscroll());
+        assert!(!text_pane_needs_hscroll(text40_wide1200_total_w(), 1200.0));
+        // Narrow 700 edge: stacked 692, no scroll.
+        assert_eq!(text40_narrow700_layout(), TextLayout::Stacked);
+        assert_eq!(text40_narrow700_layout(), text_layout_for_width(700.0));
+        assert!((text40_narrow700_stacked_width() - 692.0).abs() < 0.001);
+        assert_eq!(
+            text40_narrow700_stacked_width(),
+            text_stacked_pane_width(700.0)
+        );
+        assert!(text40_narrow700_no_hscroll());
     }
 
     #[test]
