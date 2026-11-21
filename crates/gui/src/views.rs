@@ -58,8 +58,8 @@ use crate::{views_hex, views_table};
 pub const OUTER_MARGIN: i8 = 12;
 pub const SECTION_GAP: f32 = 8.0;
 pub const TIGHT_GAP: f32 = 4.0;
-pub const FOOTER_GAP: f32 = 6.0;
-pub const TAB_BOTTOM_GAP: f32 = 6.0;
+pub const FOOTER_GAP: f32 = crate::theme::GUTTER_BAR_NARROW;
+pub const TAB_BOTTOM_GAP: f32 = crate::theme::GUTTER_BAR_NARROW;
 pub const TREE_INDENT: f32 = crate::theme::GEO_TREE_INDENT_STEP;
 pub const CARD_W: f32 = 240.0;
 pub const CARD_H: f32 = 75.0;
@@ -98,15 +98,16 @@ const SPLIT_HANDLE_W: f32 = crate::viewmodel::SPLIT_HANDLE_HIT_W;
 
 // Exquisite geometry tokens (px): every magic offset lives here so
 // text/table/folder painters share one rhythm. Colors out of scope.
-// Values reuse existing consts first (ponytail): wide gutter, tight
-// gap and handle width alias their single sources below; only the
-// genuinely new bars (header/find/visual/needle/minimap/lead) carry
-// fresh literals, each locked by a headless test.
+// Values reuse existing consts first (ponytail): wide gutter, header
+// bar, 1px visual, tight gap and handle width alias their single
+// sources below; only the genuinely new bars
+// (find-needle/minimap/lead) carry fresh literals, each locked by a
+// headless test.
 pub const GUTTER_W: f32 = crate::theme::GUTTER_BAR_WIDE;
-pub const HEADER_H: f32 = 28.0;
+pub const HEADER_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
 pub const ROW_PAD: f32 = crate::theme::GUTTER_MIN_SEGMENT_H;
 pub const SPLIT_HIT_W: f32 = SPLIT_HANDLE_W;
-pub const SPLIT_VISUAL_W: f32 = 1.0;
+pub const SPLIT_VISUAL_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
 pub const FIND_BAR_H: f32 = HEADER_H;
 pub const BADGE_PAD: f32 = TIGHT_GAP;
 pub const FIND_NEEDLE_W: f32 = 120.0;
@@ -525,12 +526,12 @@ pub fn toolbar_reload_label() -> String {
 
 /// Toolbar glyph slot width (px): fixed 16px left of the label (fixture
 /// `icon_box` = 16 parity). Pure; unit-tested.
-pub const TOOLBAR_GLYPH_W: f32 = 16.0;
+pub const TOOLBAR_GLYPH_W: f32 = crate::theme::SPACE_LG;
 
 /// Toolbar glyph slot height (px): 16px square slot, vertically centered
 /// in the 24px button (fixture `(24 - 16) / 2 = 4` lead parity). Pure;
 /// unit-tested.
-pub const TOOLBAR_GLYPH_H: f32 = 16.0;
+pub const TOOLBAR_GLYPH_H: f32 = crate::theme::SPACE_LG;
 
 /// Toolbar glyph slot width accessor (paint slot isi se banta hai).
 /// Pure; unit-tested.
@@ -543,6 +544,20 @@ pub fn toolbar_glyph_width() -> f32 {
 /// nahi; pure; unit-tested.
 pub fn toolbar_glyph_lead() -> f32 {
     TIGHT_GAP
+}
+
+/// Geometry77 SPACE-scale parity: har geometry77 token maujooda scale
+/// token ka alias hai, zero value move ke saath (footer/tab 6 narrow,
+/// glyph 16 LG, 1px visual underline, header 28 chrome bar, gutter MD).
+/// Geometry first, colors/typo untouched. Pure; unit-tested.
+pub fn geometry77_space_scale_parity() -> bool {
+    FOOTER_GAP == crate::theme::GUTTER_BAR_NARROW
+        && TAB_BOTTOM_GAP == crate::theme::GUTTER_BAR_NARROW
+        && TOOLBAR_GLYPH_W == crate::theme::SPACE_LG
+        && TOOLBAR_GLYPH_H == crate::theme::SPACE_LG
+        && SPLIT_VISUAL_W == crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        && HEADER_H == crate::theme::CHROME_HEADER_BAR_H
+        && GUTTER_W == crate::theme::GUTTER_BAR_WIDE
 }
 
 /// Toolbar glyph variant: fixture `shown % 4` rhythm — solid block / twin
@@ -12339,6 +12354,23 @@ mod tests {
         assert_eq!(TAB_BOTTOM_GAP, 6.0);
         assert_eq!(TREE_INDENT, 12.0);
         assert_eq!((CARD_W, CARD_H), (240.0, 75.0));
+    }
+
+    #[test]
+    fn geometry77_space_scale() {
+        // Aliases, zero value move: fixture parity values intact.
+        assert_eq!(FOOTER_GAP, crate::theme::GUTTER_BAR_NARROW);
+        assert_eq!(TAB_BOTTOM_GAP, crate::theme::GUTTER_BAR_NARROW);
+        assert_eq!(TOOLBAR_GLYPH_W, crate::theme::SPACE_LG);
+        assert_eq!(TOOLBAR_GLYPH_H, crate::theme::SPACE_LG);
+        assert_eq!(SPLIT_VISUAL_W, crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W);
+        assert_eq!(HEADER_H, crate::theme::CHROME_HEADER_BAR_H);
+        assert_eq!(HEADER_H, 28.0);
+        assert_eq!(FIND_BAR_H, HEADER_H);
+        assert!(geometry77_space_scale_parity());
+        // Centered insets bit-identical: split + glyph slot math unchanged.
+        assert_eq!(split_visual_inset(), (8.0 - 1.0) / 2.0);
+        assert!(toolbar_icon_label_aligned());
     }
 
     #[test]
