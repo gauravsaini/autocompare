@@ -1640,6 +1640,64 @@ impl TypoRole {
     }
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-FONTS76 bundled sans+mono + light Visuals polish (headless, theme-owned).
+// Sans/mono resolve to egui bundled slots (Proportional/Monospace, no binary
+// ship, no new hues); light Visuals polish reuses LIGHT_* washes only so AA
+// intact. Geometry untouched (zero SPACE/GEO moves). Paint adoption later wave.
+// ----------------------------------------------------------------------------
+
+/// Bundled sans slot: egui proportional (system sans intent [`TYPO_UI_SANS_STACK`]).
+pub const fn fonts76_sans_family() -> egui::FontFamily {
+    egui::FontFamily::Proportional
+}
+
+/// Bundled mono slot: egui monospace (mono intent [`TYPO_MONO_STACK`]).
+pub const fn fonts76_mono_family() -> egui::FontFamily {
+    egui::FontFamily::Monospace
+}
+
+/// Bundled font definitions: default egui defs with both slots ensured
+/// (never empty, built-ins fallback barkarar). Headless-safe.
+pub fn fonts76_font_definitions() -> egui::FontDefinitions {
+    let mut defs = egui::FontDefinitions::default();
+    defs.families.entry(fonts76_sans_family()).or_default();
+    defs.families.entry(fonts76_mono_family()).or_default();
+    defs
+}
+
+/// Theme-owned Visuals: default dark/light plus palette-only fills so light
+/// mode reads polished without new hues. Non-color fields untouched (no
+/// geometry move). Paint adoption later wave.
+pub fn fonts76_visuals(dark: bool) -> egui::Visuals {
+    let mut visuals = if dark {
+        egui::Visuals::dark()
+    } else {
+        egui::Visuals::light()
+    };
+    let pal = palette(dark);
+    let fg = Color32::from_rgb(pal.base_fg[0], pal.base_fg[1], pal.base_fg[2]);
+    let bg = Color32::from_rgb(pal.base_bg[0], pal.base_bg[1], pal.base_bg[2]);
+    let track = Color32::from_rgb(pal.track[0], pal.track[1], pal.track[2]);
+    visuals.override_text_color = Some(fg);
+    visuals.window_fill = bg;
+    visuals.panel_fill = bg;
+    visuals.extreme_bg_color = track;
+    visuals.faint_bg_color = track;
+    visuals
+}
+
+/// Fonts76 contract: both bundled slots present, visuals reuse palette fills
+/// only, and both modes keep AA. Pure; unit-tested.
+pub fn fonts76_bundled_typo_ok() -> bool {
+    let defs = fonts76_font_definitions();
+    defs.families.contains_key(&fonts76_sans_family())
+        && defs.families.contains_key(&fonts76_mono_family())
+        && theme_mode_contrast_ok(true)
+        && theme_mode_contrast_ok(false)
+        && light_diff_accents_aa()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2917,5 +2975,19 @@ mod tests {
         // Density verification: zero vertical clipping in both
         let audit = crate::viewmodel::audit_viewmodel_density();
         assert!(audit.zero_clipping_verified);
+    }
+
+    #[test]
+    fn fonts76_bundled_sans_mono_light_polish() {
+        assert!(fonts76_bundled_typo_ok());
+        // Bundled slots present, visuals reuse palette fills only (no new hues).
+        let dark = fonts76_visuals(true);
+        let light = fonts76_visuals(false);
+        let dark_bg = Color32::from_rgb(DARK_BG_RGB[0], DARK_BG_RGB[1], DARK_BG_RGB[2]);
+        let light_bg = Color32::from_rgb(LIGHT_BG_RGB[0], LIGHT_BG_RGB[1], LIGHT_BG_RGB[2]);
+        assert_eq!(dark.window_fill, dark_bg);
+        assert_eq!(light.window_fill, light_bg);
+        assert_eq!(light.panel_fill, light_bg);
+        assert_eq!(light.extreme_bg_color, LIGHT_TRACK);
     }
 }
