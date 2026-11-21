@@ -1,12 +1,12 @@
-//! Real-egui screenshots of the text-compare view (exq-kittest49 round-1,
-//! exq-kittest58 round-1 adds the light-theme second shot).
+//! Real-egui screenshots of the text-compare view (exq-realshot88 round-1:
+//! live egui_kittest capture hardening, dark + light).
 //!
 //! Boots the REAL [`App`] text-compare view on the parity fixtures via
 //! `egui_kittest` (same egui 0.37 the shipped app uses), waits for the
 //! background compare, renders headless with wgpu, and writes each shot to
 //! target tmp (`CARGO_TARGET_TMPDIR`, else the OS temp dir) — never to the
 //! repo tree. Pass `EXQ_KEEP_PNG=1` (explicit harness step) to also refresh
-//! the tracked `checks/gui-exq-kittest58/round-1/real-egui*.png` copies
+//! the tracked `checks/gui-exq-realshot88/round-1/real-egui*.png` copies
 //! (dark `real-egui.png`, light `real-egui-light.png`). The kittest49
 //! baseline `after.png` is read-only input, never rewritten.
 //!
@@ -338,9 +338,9 @@ fn capture_shot(theme: Theme, tmp_name: &str, keep_name: &str) -> Result<String,
 
     // Baseline comparison: real render variance far above the flat rasterizer.
     // The kittest49 after.png is read-only input; kept copies land in the
-    // owned kittest58 round dir (disjoint OWNS, never touch other rounds).
+    // owned realshot88 round dir (disjoint OWNS, never touch other rounds).
     let baseline_round = root.join("checks/gui-exq-kittest49/round-1");
-    let keep_round = root.join("checks/gui-exq-kittest58/round-1");
+    let keep_round = root.join("checks/gui-exq-realshot88/round-1");
     let baseline_bytes = std::fs::read(baseline_round.join("after.png"))
         .map_err(|why| format!("read after.png: {why}"))?;
     let baseline = decode_png(&baseline_bytes).ok_or_else(|| err("decode after.png failed"))?;
