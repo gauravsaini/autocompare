@@ -3835,6 +3835,95 @@ pub fn home45_contract_ok() -> bool {
         && home32_contract_ok()
 }
 
+// ----------------------------------------------------------------------------
+// Wave HOME83 round-1 exquisite (leaf): canonical 960 card geometry lock.
+// BC pattern, outside observation only: 960px canonical viewport par card
+// grid 3 cols me stable rehta hai (936 avail, 8px SECTION_GAP, ~306.67px
+// flexed cards), CTA card inner width se lock (min 224, single-line fit),
+// koi horizontal scroll nahi. Geometry first: sab SPACE/GEO tokens se derive,
+// koi naya number nahi — chrome4 helpers (wahi margin 12 + gap 8 rhythm)
+// par delegate taaki paint-lock green rahe. Typography second: maujooda
+// `home_card_hierarchy_ok` reuse, koi naya size nahi. Colors frozen: zero
+// Color32/Visuals.
+// ----------------------------------------------------------------------------
+
+/// Home83 canvas reference width px: canonical viewport
+/// ([`crate::theme::VIEWPORT_W`] single-source, 960.0).
+pub const HOME83_CANVAS_W: f32 = crate::theme::VIEWPORT_W as f32;
+/// Home83 content side margin px: outer margin
+/// ([`crate::theme::GEO_OUTER_MARGIN`] = 12.0).
+pub const HOME83_CONTENT_MARGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Home83 card grid gap px: section rhythm
+/// ([`crate::theme::GEO_SECTION_GAP`] = 8.0).
+pub const HOME83_CARD_GRID_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Home83 card min width px: SPACE scale
+/// (10 * [`crate::theme::SPACE_XL`] = 240.0).
+pub const HOME83_CARD_MIN_W: f32 = crate::theme::SPACE_XL * 10.0;
+
+/// Home83 content avail width px: window minus do taraf margin.
+/// Wahi margin 12 + gap 8 rhythm — [`chrome4_content_avail_width`] par
+/// delegate. Tang par 0, non-finite passthrough. Pure; headless-tested.
+pub fn home83_content_avail_width(total_w: f32) -> f32 {
+    chrome4_content_avail_width(total_w)
+}
+
+/// Home83 card grid columns at `total_w`: 960 par 3, 720 par 2, tang par 1.
+/// Wahi gap 8 rhythm — [`chrome4_grid_columns`] par delegate.
+/// Non-finite par canonical. Pure; headless-tested.
+pub fn home83_grid_columns(total_w: f32) -> usize {
+    chrome4_grid_columns(total_w)
+}
+
+/// Home83 card grid rows for `item_count` at `total_w`.
+/// [`chrome4_grid_rows`] par delegate. Khali par 0. Pure; headless-tested.
+pub fn home83_grid_rows(item_count: usize, total_w: f32) -> usize {
+    chrome4_grid_rows(item_count, total_w)
+}
+
+/// Home83 flexed card width px: (avail − gaps) / 3, floor at min.
+/// 960 par (936 − 16) / 3 = 306.666... [`chrome4_grid_card_width`] par
+/// delegate. Pure; headless-tested.
+pub fn home83_grid_card_width(avail: f32) -> f32 {
+    chrome4_grid_card_width(avail)
+}
+
+/// Home83 card min height px: title + 2-line desc + CTA + gaps + pad.
+/// [`home_card_min_height`] single-source (99.6). Pure; headless-tested.
+pub fn home83_card_min_height() -> f32 {
+    home_card_min_height()
+}
+
+/// Home83 grid content height px: rows * card min + beech section gaps.
+/// [`chrome4_grid_content_height`] par delegate. Khali par 0.
+/// Pure; headless-tested.
+pub fn home83_grid_content_height(item_count: usize, total_w: f32) -> f32 {
+    chrome4_grid_content_height(item_count, total_w)
+}
+
+/// Home83 grid ko horizontal scroll chahiye ya nahi: 3-col min width
+/// (3 * 240 + 2 * 8 = 736) avail se bahar ho to true. 960 par false.
+/// Koi magic number nahi — consts se derive. Pure; headless-tested.
+pub fn home83_grid_needs_hscroll(total_w: f32) -> bool {
+    home83_content_avail_width(total_w) < 3.0 * HOME83_CARD_MIN_W + 2.0 * HOME83_CARD_GRID_GAP
+}
+
+/// Home83 contract: SPACE-token geometry, chrome4 delegation parity,
+/// CTA single-line fit, hierarchy barkarar, 960 par zero hscroll.
+/// Pure; headless-tested.
+pub fn home83_contract_ok() -> bool {
+    HOME83_CANVAS_W == crate::theme::VIEWPORT_W as f32
+        && HOME83_CANVAS_W == 960.0
+        && HOME83_CONTENT_MARGIN_X == crate::theme::GEO_OUTER_MARGIN
+        && HOME83_CARD_GRID_GAP == crate::theme::GEO_SECTION_GAP
+        && HOME83_CARD_MIN_W == crate::theme::SPACE_XL * 10.0
+        && HOME83_CARD_MIN_W == HOME_CARD_MIN_W
+        && (home83_content_avail_width(HOME83_CANVAS_W) - 936.0).abs() < 0.001
+        && home83_grid_columns(HOME83_CANVAS_W) == HOME_GRID_COLUMNS
+        && !home83_grid_needs_hscroll(HOME83_CANVAS_W)
+        && home_card_cta_single_line_ok()
+        && home_card_hierarchy_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6136,5 +6225,31 @@ mod tests {
         assert!(super::home45_grid_needs_hscroll(720.0));
 
         assert!(super::home45_contract_ok());
+    }
+
+    #[test]
+    fn home83_canonical_960_card_geometry() {
+        // 960 canonical: 936 avail, 3 cols, flexed (936 − 16) / 3.
+        assert!((super::home83_content_avail_width(960.0) - 936.0).abs() < 0.001);
+        assert_eq!(super::home83_grid_columns(960.0), 3);
+        assert_eq!(super::home83_grid_columns(720.0), 2);
+        assert_eq!(super::home83_grid_columns(500.0), 1);
+        assert_eq!(
+            super::home83_grid_columns(f32::NAN),
+            super::HOME_GRID_COLUMNS
+        );
+        let card_w = super::home83_grid_card_width(936.0);
+        assert!((card_w - 920.0 / 3.0).abs() < 0.001);
+        assert!(card_w >= super::HOME83_CARD_MIN_W);
+        // 9 cards → 3 rows; content = 3 * 99.6 + 2 * 8.
+        assert_eq!(super::home83_grid_rows(9, 960.0), 3);
+        assert_eq!(super::home83_grid_rows(0, 960.0), 0);
+        let content = super::home83_grid_content_height(9, 960.0);
+        assert!((content - (3.0 * super::home83_card_min_height() + 16.0)).abs() < 0.05);
+        assert_eq!(super::home83_grid_content_height(0, 960.0), 0.0);
+        // Zero hscroll at 960, contract green.
+        assert!(!super::home83_grid_needs_hscroll(960.0));
+        assert!(super::home83_grid_needs_hscroll(500.0));
+        assert!(super::home83_contract_ok());
     }
 }
