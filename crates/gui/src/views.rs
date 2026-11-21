@@ -599,21 +599,34 @@ pub fn toolbar_glyph_slot(button: egui::Rect) -> egui::Rect {
     )
 }
 
-/// Toolbar glyph overlay: paints [`toolbar_glyph_rects`] via
-/// `painter.rect_filled` in `dim_for` ink AFTER the button response is
-/// created, so Button styling never overrides the ink (gutter23 marker
-/// precedent: frameless allocate+paint / paint-after). Caller passes the
-/// button [`Response`](egui::Response) rect; geometry callee tokens me,
-/// colors existing palette reuse, koi naya hue nahi.
-fn paint_toolbar_glyph(ui: &mut Ui, button_rect: egui::Rect, variant: usize) {
-    let slot = toolbar_glyph_slot(button_rect);
+/// Toolbar glyph overlay: paints vector marks via
+/// [`crate::app::paint_exq_icons50_mark`] for variants 0..=3 (Swap/Reload
+/// and cycle marks, circle/bars/rails/wedge) and chevron cells via
+/// `painter.rect_filled` for variants 4/5 (Prev/Next chevrons), in `dim_for`
+/// ink AFTER the button response is created, so Button styling never
+/// overrides the ink (gutter23 marker precedent: frameless allocate+paint /
+/// paint-after). Caller passes the button [`Response`](egui::Response)
+/// rect; geometry callee tokens me, colors existing palette reuse, koi naya
+/// hue nahi.
+pub fn paint_toolbar_glyph(ui: &mut Ui, button_rect: egui::Rect, variant: usize) {
     let ink = dim_for(ui.visuals().dark_mode);
-    for (dx, dy, w, h) in toolbar_glyph_rects(variant) {
-        ui.painter().rect_filled(
-            egui::Rect::from_min_size(slot.min + egui::vec2(dx, dy), egui::vec2(w, h)),
-            0.0,
-            ink,
+    if variant < 4 {
+        let kind = crate::app::exq_icons50_mark_kind(variant);
+        let (ox, oy) = crate::app::exq_icons50_mark_xy(
+            button_rect.left(),
+            button_rect.top(),
+            button_rect.height(),
         );
+        crate::app::paint_exq_icons50_mark(ui.painter(), egui::pos2(ox, oy), kind, ink);
+    } else {
+        let slot = toolbar_glyph_slot(button_rect);
+        for (dx, dy, w, h) in toolbar_glyph_rects(variant) {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(slot.min + egui::vec2(dx, dy), egui::vec2(w, h)),
+                0.0,
+                ink,
+            );
+        }
     }
 }
 
@@ -11057,6 +11070,48 @@ mod tests {
         assert!(!action_bar_needs_hscroll(1200.0));
         assert_eq!(toolbar_button_pair_width(), 200.0);
         assert_eq!(toolbar_button_row_side_air(1200.0), 500.0);
+    }
+
+    #[test]
+    fn toolbar_exq_views53_vector_live_paint_wiring() {
+        // exq-views53 live-paint wiring: toolbar variants 0..4 route to
+        // staged vector marks (Ring, Bars, Rails, Wedge), while variants 4/5
+        // retain chevron cells for Prev/Next navigation.
+        let button = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(96.0, 24.0));
+        let (ox, oy) =
+            crate::app::exq_icons50_mark_xy(button.left(), button.top(), button.height());
+        assert_eq!(ox, 104.0);
+        assert_eq!(oy, 56.0); // 50.0 + (24 - 12) / 2
+        assert_eq!(
+            crate::app::exq_icons50_mark_kind(0),
+            crate::app::ExqIcons50Mark::Ring
+        );
+        assert_eq!(
+            crate::app::exq_icons50_mark_kind(1),
+            crate::app::ExqIcons50Mark::Bars
+        );
+        assert_eq!(
+            crate::app::exq_icons50_mark_kind(2),
+            crate::app::ExqIcons50Mark::Rails
+        );
+        assert_eq!(
+            crate::app::exq_icons50_mark_kind(3),
+            crate::app::ExqIcons50Mark::Wedge
+        );
+
+        // Headless egui Context painter execution:
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            // Verify variant 0 (Swap) paints vector Ring
+            paint_toolbar_glyph(ui, button, 0);
+            // Verify variant 1 (Reload) paints vector Bars
+            paint_toolbar_glyph(ui, button, 1);
+            // Verify variant 4 (Prev) paints chevrons
+            paint_toolbar_glyph(ui, button, 4);
+            // Verify variant 5 (Next) paints chevrons
+            paint_toolbar_glyph(ui, button, 5);
+        });
+        output.textures_delta.clear();
     }
 
     #[test]
