@@ -1090,3 +1090,7 @@
 ### Feature (2026-11-21) — feat(sessions): sess91 persistence hardening
 - `crates/sessions/**` me schema_version + migration, active_tab clamp, atomic tmp+rename saves, JSON round-trip, 77 passed 0 failed.
 - Proof: leaf fmt clean, clippy clean, banned 0 prod, OWNS clean, NO PUSH, cherry-picked ee2c539.
+
+### Feature (2026-11-21) — feat(reports): rep92 builders
+- `crates/reports/**` me HTML color/mono + linked child, Text, XML, Patch builders verify, 31 passed 0 failed.
+- Proof: leaf fmt clean, clippy clean, banned 0 prod, OWNS clean, NO PUSH, cherry-picked 2088a75.
