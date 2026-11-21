@@ -14,15 +14,27 @@
 
 #![forbid(unsafe_code)]
 
+/// Session state + engine wiring (tabs, compare runs, screenshot modes).
 pub mod app;
+/// Live editor copy mutations (left/right row transfer).
 pub mod copy;
+/// Thumbnail gutter geometry (diff ranges to bar segments).
 pub mod gutter;
+/// Home launcher model (session types matching CLI commands).
 pub mod home;
+/// Offscreen PNG screenshot generation (headless verification).
 pub mod screenshot;
+/// Three-way merge Take resolution (Left/Right/Base/Both).
 pub mod take;
+/// Frozen design tokens (palette, spacing, typography roles).
 pub mod theme;
+/// Folder tree drill-down (filtering, indentation, sync preview).
 pub mod tree;
+/// Pure row models over engine results (headless test surface).
 pub mod viewmodel;
+/// egui painting of the view models (text compare + chrome).
 pub mod views;
+/// Hex compare view model (byte-level aligned binary sessions).
 pub mod views_hex;
+/// Table key-compare view model (delimited key-aligned sessions).
 pub mod views_table;
