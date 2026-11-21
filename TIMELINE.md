@@ -1038,3 +1038,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-geometry77 geometry polish
 - `crates/gui/src/views.rs` me geometry polish SPACE_* reuse, colors/typography frozen, 52 lines.
 - Proof: 1141+2+1 green, fmt clean, banned 0, harness PASS 10946B.
+
+### Feature (2026-11-21) — feat(gui): exq-fonts76 typography
+- `crates/gui/src/theme.rs` me typography polish bundled sans/mono + light Visuals, geometry frozen, 72 lines.
+- Proof: 1141+2 green, fmt clean, banned 0, harness PASS.
