@@ -531,6 +531,25 @@ pub fn picture_heatmap_with_options(
 /// differing count), never a panic; allocation failure degrades to an
 /// empty image or `None`.
 impl RgbaImage {
+    /// Copy with every pixel alpha forced to 255 (opaque).
+    ///
+    /// Headless wgpu readback leaves alpha 0 on fully-covered windows;
+    /// viewers tolerate it but an honest opaque screenshot stores 255.
+    /// RGB bytes are untouched; short buffers pass through as-is.
+    pub fn opaque(&self) -> RgbaImage {
+        let mut pixels = self.pixels.clone();
+        let mut i = 3usize;
+        while let Some(a) = pixels.get_mut(i) {
+            *a = 255;
+            i = i.saturating_add(4);
+        }
+        RgbaImage {
+            width: self.width,
+            height: self.height,
+            pixels,
+        }
+    }
+
     /// New image with content shifted by `(dx, dy)` (pan/offset-nudge).
     ///
     /// Same dimensions; pixels pushed outside are dropped and vacated
@@ -979,6 +998,29 @@ mod tests {
             assert_eq!(min.pixels, vec![10, 0, 0, 255]);
         } else {
             assert_eq!(a.width, 0, "overlap blend must succeed");
+        }
+    }
+
+    #[test]
+    fn test_opaque_forces_alpha_leaves_rgb() {
+        let img = RgbaImage {
+            width: 2,
+            height: 1,
+            pixels: vec![10, 20, 30, 0, 40, 50, 60, 0],
+        };
+        let op = img.opaque();
+        assert_eq!(op.width, 2);
+        assert_eq!(op.height, 1);
+        assert_eq!(op.pixels, vec![10, 20, 30, 255, 40, 50, 60, 255]);
+        // Honest opaque bytes survive the PNG round-trip.
+        if let Some(bytes) = encode_png(&op) {
+            if let Some(back) = decode_png(&bytes) {
+                assert_eq!(back.pixels, op.pixels);
+            } else {
+                assert_eq!(op.width, 0, "opaque PNG must decode");
+            }
+        } else {
+            assert_eq!(op.width, 0, "opaque image must encode");
         }
     }
 

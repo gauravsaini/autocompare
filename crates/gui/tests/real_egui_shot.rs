@@ -2,8 +2,10 @@
 //!
 //! Boots the REAL [`App`] text-compare view on the parity fixtures via
 //! `egui_kittest` (same egui 0.37 the shipped app uses), waits for the
-//! background compare, renders headless with wgpu, and writes
-//! `checks/gui-exq-kittest49/round-1/real-egui.png`.
+//! background compare, renders headless with wgpu, and writes the shot to
+//! target tmp (`CARGO_TARGET_TMPDIR`, else the OS temp dir) — never to the
+//! repo tree. Pass `EXQ_KEEP_PNG=1` (explicit harness step) to also refresh
+//! the tracked `checks/gui-exq-kittest49/round-1/real-egui.png` copy.
 //!
 //! Machine-checked: PNG magic + size + dims + non-blank + pixel color
 //! variance far above the flat software-rasterizer baseline (anti-aliased
@@ -118,11 +120,14 @@ fn real_egui_text_compare_shot() -> Result<(), String> {
             shot.height()
         ));
     }
+    // Wgpu readback leaves alpha 0 on this fully-covered opaque window;
+    // force honest opaque alpha (RGB untouched, colors frozen).
     let frame = autocompare_diff::RgbaImage {
         width: shot.width(),
         height: shot.height(),
         pixels: shot.into_raw(),
-    };
+    }
+    .opaque();
     let png = encode_png(&frame).ok_or_else(|| err("encode_png failed"))?;
 
     // PNG magic (machine-checked, no indexing).
@@ -163,9 +168,20 @@ fn real_egui_text_compare_shot() -> Result<(), String> {
         ));
     }
 
-    std::fs::create_dir_all(&round).map_err(|why| format!("mkdir round: {why}"))?;
-    std::fs::write(round.join("real-egui.png"), &png)
-        .map_err(|why| format!("write real-egui.png: {why}"))?;
+    // Hygiene: the shot lives in target tmp by default, so `cargo test`
+    // never rewrites the tracked checks/ copy (non-deterministic bytes).
+    // Pass EXQ_KEEP_PNG=1 (explicit harness step) to refresh that copy.
+    let tmp = match std::env::var("CARGO_TARGET_TMPDIR") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => std::env::temp_dir(),
+    };
+    std::fs::write(tmp.join("real-egui.png"), &png)
+        .map_err(|why| format!("write tmp real-egui.png: {why}"))?;
+    if std::env::var("EXQ_KEEP_PNG").as_deref() == Ok("1") {
+        std::fs::create_dir_all(&round).map_err(|why| format!("mkdir round: {why}"))?;
+        std::fs::write(round.join("real-egui.png"), &png)
+            .map_err(|why| format!("write real-egui.png: {why}"))?;
+    }
     println!(
         "real-egui: rows={rows} bytes={} colors={} base={} ratio={}",
         png.len(),
