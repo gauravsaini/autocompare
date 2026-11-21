@@ -994,3 +994,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-selective66 selective light routing
 - `crates/gui/src/views.rs` me selective formats `changed_*_for(dark)` routing, dark byte-identical + light LIGHT wash.
 - Proof: 1129 green + 2 kittest PASS, fmt clean, banned 0, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-fontbundle67 typo consolidation
+- `crates/gui/src/theme.rs` me 14x 0.0 -> TYPO_LETTER_SPACING reuse, chain docs tight, zero new sizes/colors.
+- Proof: 1130 green + 2 kittest PASS (dark 53663B/503c light 54289B/549c), fmt clean, banned 0, harness PASS.
