@@ -1098,3 +1098,7 @@
 ### Feature (2026-11-21) — feat(compare): cmp93 orchestration
 - `crates/compare/**` me Vfs folder tree + Sync Both/Mirror + Merge + JobRunner, 165 passed 0 failed.
 - Proof: leaf fmt clean, clippy clean, banned 0 prod delta, OWNS clean, NO PUSH, cherry-picked 378e466.
+
+### Feature (2026-11-21) — feat(cli): cli94 commands
+- `crates/cli/**` me 9 subcommands + report + bcomp VCS verify, 64 passed, E2E OK.
+- Proof: leaf fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 22aa69e.
