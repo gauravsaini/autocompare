@@ -238,38 +238,56 @@ fn scan_file_for_secrets(path: &Path, findings: &mut Vec<(PathBuf, usize, String
         Err(_) => return, // binary file or non-utf8
     };
 
+    for (idx, line) in content.lines().enumerate() {
+        let line_num = idx + 1;
+        if let Some(reason) = classify_secret_line(line) {
+            findings.push((path.to_path_buf(), line_num, reason.to_string()));
+        }
+    }
+}
+
+/// Classifies a single line; shape-based so docs mentioning bare
+/// pattern names (e.g. backticked `ghp_`) are not flagged, while real
+/// long token shapes still are.
+fn classify_secret_line(line: &str) -> Option<&'static str> {
     let priv_needle = concat!("BEGIN ", "PRIVATE ", "KEY");
     let ghp_needle = concat!("gh", "p_");
     let pat_needle = concat!("github_", "pat_");
     let akia_needle = concat!("AK", "IA");
 
-    for (idx, line) in content.lines().enumerate() {
-        let line_num = idx + 1;
-        if line.contains(priv_needle) {
-            findings.push((
-                path.to_path_buf(),
-                line_num,
-                "private key banner detected".to_string(),
-            ));
-        } else if line.contains(ghp_needle) || line.contains(pat_needle) {
-            findings.push((
-                path.to_path_buf(),
-                line_num,
-                "GitHub personal access token detected".to_string(),
-            ));
-        } else if line.contains(akia_needle)
-            && line.len() >= 20
-            && let Some(pos) = line.find(akia_needle)
-            && let Some(sub) = line.get(pos..pos + 20)
-            && sub.chars().all(|c| c.is_ascii_alphanumeric())
-        {
-            findings.push((
-                path.to_path_buf(),
-                line_num,
-                "AWS Access Key ID detected".to_string(),
-            ));
-        }
+    if line.contains(priv_needle) {
+        Some("private key banner detected")
+    } else if has_long_prefixed_token(line, ghp_needle) || has_long_prefixed_token(line, pat_needle)
+    {
+        Some("GitHub personal access token detected")
+    } else if line.len() >= 20
+        && let Some(pos) = line.find(akia_needle)
+        && let Some(sub) = line.get(pos..pos + 20)
+        && sub.chars().all(|c| c.is_ascii_alphanumeric())
+    {
+        Some("AWS Access Key ID detected")
+    } else {
+        None
     }
+}
+
+/// True when `prefix` occurs with a trailing run of >= 20 token chars,
+/// so bare pattern names in docs do not match but real tokens do.
+fn has_long_prefixed_token(line: &str, prefix: &str) -> bool {
+    const MIN_TAIL: usize = 20;
+    let mut search = line;
+    while let Some(pos) = search.find(prefix) {
+        let tail = &search[pos + prefix.len()..];
+        let run = tail
+            .bytes()
+            .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            .count();
+        if run >= MIN_TAIL {
+            return true;
+        }
+        search = &search[pos + 1..];
+    }
+    false
 }
 
 fn cmd_wasm() -> ExitCode {
@@ -363,6 +381,53 @@ version = "0.1.0"
         assert_eq!(
             extract_package_name(manifest),
             Some("autocompare-test".to_string())
+        );
+    }
+
+    #[test]
+    fn secrets_shape_fp_bare_names_ignored() {
+        // docs mention bare pattern names (e.g. checks/release-w1/REPORT.md:7)
+        let doc =
+            "secrets (private-key/`ghp_`/`github_pat_`/`AKIA` scan, `.png` skip, khud ko skip)";
+        assert_eq!(classify_secret_line(doc), None);
+        assert_eq!(classify_secret_line("use `ghp_` prefix here"), None);
+        assert_eq!(classify_secret_line("see `github_pat_` docs"), None);
+        assert_eq!(classify_secret_line("short ghp_abc still fine"), None);
+    }
+
+    #[test]
+    fn secrets_shape_boundary_lengths() {
+        let tail19: String = "a".repeat(19);
+        let tail20: String = "a".repeat(20);
+        assert_eq!(classify_secret_line(&format!("x ghp_{tail19} y")), None);
+        assert_eq!(
+            classify_secret_line(&format!("x ghp_{tail20} y")),
+            Some("GitHub personal access token detected")
+        );
+    }
+
+    #[test]
+    fn secrets_shape_real_tokens_detected() {
+        let classic = "ghp_".to_string() + &"a".repeat(36);
+        assert_eq!(
+            classify_secret_line(&format!("token = \"{classic}\"")),
+            Some("GitHub personal access token detected")
+        );
+        let fine = "github_pat_".to_string() + &"B".repeat(30);
+        assert_eq!(
+            classify_secret_line(&format!("token = \"{fine}\"")),
+            Some("GitHub personal access token detected")
+        );
+        // canonical shapes built via concat so this file holds no literal secret
+        let akia_test = concat!("AK", "IA").to_string() + &"B".repeat(16);
+        assert_eq!(
+            classify_secret_line(&format!("key = \"{akia_test}\"")),
+            Some("AWS Access Key ID detected")
+        );
+        let banner = format!("-----{}-----", concat!("BEGIN ", "PRIVATE ", "KEY"));
+        assert_eq!(
+            classify_secret_line(&banner),
+            Some("private key banner detected")
         );
     }
 

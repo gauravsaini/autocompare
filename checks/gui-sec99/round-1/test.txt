@@ -1,0 +1,14 @@
+   Compiling xtask v0.1.0 (/private/tmp/wt-sec99/xtask)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.09s
+     Running unittests src/main.rs (/tmp/target-sec99/debug/deps/xtask-df3c3b1d6302264a)
+
+running 6 tests
+test tests::secrets_shape_boundary_lengths ... ok
+test tests::secrets_shape_fp_bare_names_ignored ... ok
+test tests::test_crate_layer_mapping ... ok
+test tests::secrets_shape_real_tokens_detected ... ok
+test tests::test_extract_dependencies ... ok
+test tests::test_extract_package_name ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
