@@ -1114,3 +1114,7 @@
 ### Verify (2026-11-21) — docs(checks): rel98 release smoke
 - Root-4 G2/G3: cargo build --release --workspace PASS exit 0 (2m27s), autocompare-diff release ignored 5/5 PASS, checks-only zero src touch.
 - Proof: leaf tree clean, NO PUSH, cherry-picked 1857cd1.
+
+### Feature (2026-11-21) — feat(gui): gui97 clippy clean
+- Root-4 G1 unblocked: workspace clippy exit 0, fmt exit 0, gui tests 1163 passed + 2 shots passed, added banned 0, OWNS crates/gui + checks/gui-clip97 clean.
+- Proof: leaf tree clean, NO PUSH, cherry-picked 5a5a776.
