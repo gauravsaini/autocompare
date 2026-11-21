@@ -729,6 +729,57 @@ pub fn action_nav_next_label() -> &'static str {
     "Next ▶"
 }
 
+/// Nav chevron mark direction: Prev `<` vs Next `>`. Pure; unit-tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavChevronDir {
+    /// Pichhla difference (`<`).
+    Prev,
+    /// Agla difference (`>`).
+    Next,
+}
+
+/// Nav chevron segments (mark-box local `x0,y0,x1,y1`): two strokes forming
+/// `<` (Prev) / `>` (Next) inside the staged 12px mark box
+/// ([`crate::app::exq_icons50_mark_box`]), mirrored on the vertical center
+/// axis. Endpoints box fractions reuse karte hain — koi naya size nahi.
+/// Pure; unit-tested.
+pub fn nav_chevron_segments(dir: NavChevronDir) -> [(f32, f32, f32, f32); 2] {
+    let m = crate::app::exq_icons50_mark_box();
+    let (tip_x, end_x) = match dir {
+        NavChevronDir::Prev => (m * 0.25, m * 0.75),
+        NavChevronDir::Next => (m * 0.75, m * 0.25),
+    };
+    [
+        (end_x, m * 0.2, tip_x, m * 0.5),
+        (tip_x, m * 0.5, end_x, m * 0.8),
+    ]
+}
+
+/// Nav chevron vector paint: [`nav_chevron_segments`] strokes at the staged
+/// mark origin ([`crate::app::exq_icons50_mark_xy`]) in `dim_for` ink with
+/// the staged stroke ([`crate::app::exq_icons50_stroke_w`]), AFTER the button
+/// response is created (row-1 paint-after precedent — Button styling never
+/// overrides the ink, label text occlude nahi hota). Caller button
+/// [`Response`](egui::Response) rect deta hai; hit-rect/click caller ke paas
+/// rehte hain (overlay, zero layout shift). Geometry callee tokens me,
+/// colors existing palette reuse. Live; headless harness painter ke bina
+/// isko call nahi karta (views53 precedent).
+pub fn paint_nav_chevron_mark(ui: &mut Ui, button_rect: egui::Rect, dir: NavChevronDir) {
+    let ink = dim_for(ui.visuals().dark_mode);
+    let (ox, oy) = crate::app::exq_icons50_mark_xy(
+        button_rect.left(),
+        button_rect.top(),
+        button_rect.height(),
+    );
+    let stroke = egui::Stroke::new(crate::app::exq_icons50_stroke_w(), ink);
+    for (x0, y0, x1, y1) in nav_chevron_segments(dir) {
+        ui.painter().line_segment(
+            [egui::pos2(ox + x0, oy + y0), egui::pos2(ox + x1, oy + y1)],
+            stroke,
+        );
+    }
+}
+
 /// Two-row stack gap (px): row 1 aur row 2 ke beech [`SECTION_GAP`] (8) —
 /// BC-style roomy toolbar band (24 + 8 + 24 = 56) taaki dono rows ek
 /// saans me padhen; intra-row rhythm [`TIGHT_GAP`] par hi rehta hai.
@@ -962,7 +1013,7 @@ pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavStat
                     .min_size(egui::vec2(tool_w, tool_h)),
             )
             .on_hover_text("Previous difference");
-        paint_toolbar_glyph(ui, prev.rect, 4);
+        paint_nav_chevron_mark(ui, prev.rect, NavChevronDir::Prev);
         if prev.clicked() {
             hit = ActionBarNav::Prev;
         }
@@ -973,7 +1024,7 @@ pub fn paint_action_nav_row(ui: &mut Ui, enabled: bool, state: &ActionBarNavStat
                     .min_size(egui::vec2(tool_w, tool_h)),
             )
             .on_hover_text("Next difference");
-        paint_toolbar_glyph(ui, next.rect, 5);
+        paint_nav_chevron_mark(ui, next.rect, NavChevronDir::Next);
         if next.clicked() {
             hit = ActionBarNav::Next;
         }
@@ -11177,6 +11228,61 @@ mod tests {
             // Verify variant 4 (Prev) paints chevrons
             paint_toolbar_glyph(ui, button, 4);
             // Verify variant 5 (Next) paints chevrons
+            paint_toolbar_glyph(ui, button, 5);
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn toolbar_exq_toolbar60_nav_chevron_marks() {
+        // exq-toolbar60 round-1: row-2 Prev/Next paint stroke-vector chevrons
+        // (`<`/`>`) reusing staged tokens only — mark origin/box/stroke from
+        // `app::exq_icons50_*`, `dim_for` ink — same paint-after pattern as
+        // row-1 Ring/Bars. Hit-rects + clicks byte-identical: buttons keep
+        // the 96x24 floor + labels, paint is overlay-only (zero layout shift).
+        let button = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(96.0, 24.0));
+        // 1. Mark origin == row-1 staged origin (left lead + vertical center).
+        let (ox, oy) =
+            crate::app::exq_icons50_mark_xy(button.left(), button.top(), button.height());
+        assert_eq!((ox, oy), (104.0, 56.0));
+        assert_eq!(crate::app::exq_icons50_mark_box(), 12.0);
+        assert_eq!(crate::app::exq_icons50_stroke_w(), 2.0);
+        // 2. Segments stay inside the 12px box, Prev/Next x-mirrored.
+        let prev = nav_chevron_segments(NavChevronDir::Prev);
+        let next = nav_chevron_segments(NavChevronDir::Next);
+        assert_eq!(prev.len(), 2);
+        assert_eq!(next.len(), 2);
+        let m = crate::app::exq_icons50_mark_box();
+        for (p, n) in prev.iter().zip(next.iter()) {
+            for (x0, y0, x1, y1) in [p, n] {
+                for v in [x0, y0, x1, y1] {
+                    assert!(*v >= 0.0 && *v <= m);
+                }
+            }
+            assert_eq!((n.0, n.2), (m - p.0, m - p.2));
+            assert_eq!((n.1, n.3), (p.1, p.3));
+        }
+        // Tip points at the travel direction: Prev tip left, Next tip right.
+        assert!(prev[0].2 < prev[0].0);
+        assert!(next[0].2 > next[0].0);
+        // 3. Hit-rect inputs byte-identical: floor + pair width + labels stay.
+        assert_eq!(session_toolbar_button_size(), (96.0, 24.0));
+        assert_eq!(toolbar_button_pair_width(), 200.0);
+        assert_eq!(action_nav_prev_label(), "◀ Prev");
+        assert_eq!(action_nav_next_label(), "Next ▶");
+        // 4. Headless execution: nav row paints + no hit at rest; find-bar
+        // cell path (variants 4/5) intact.
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let state = ActionBarNavState {
+                position: Some(2),
+                total: 5,
+                cursor: String::from("3:1"),
+            };
+            assert_eq!(paint_action_nav_row(ui, true, &state), ActionBarNav::None);
+            paint_nav_chevron_mark(ui, button, NavChevronDir::Prev);
+            paint_nav_chevron_mark(ui, button, NavChevronDir::Next);
+            paint_toolbar_glyph(ui, button, 4);
             paint_toolbar_glyph(ui, button, 5);
         });
         output.textures_delta.clear();
