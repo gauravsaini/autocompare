@@ -7410,4 +7410,29 @@ mod tests {
         assert!(light_bytes.len() >= 8192);
         assert_ne!(dark_bytes, light_bytes);
     }
+
+    /// exq-screenshot72: light fixture washes are value-identical to the
+    /// live `LIGHT_*` consts — not just self-consistent with the helpers
+    /// the impl routes through (shot46 pins helper-to-helper, this pins
+    /// helper-output-to-const, so either side drifting fails loudly).
+    /// Zero new colors/sizes; routing stays via existing `*_for()` + `palette()`.
+    #[test]
+    fn screenshot72_light_wash_matches_live_light_consts() {
+        use crate::theme::{
+            LIGHT_BG_RGB, LIGHT_CHANGED_BG, LIGHT_CHANGED_FG, LIGHT_DELETED_BG, LIGHT_DIM,
+            LIGHT_FG_RGB, LIGHT_GREEN, LIGHT_INSERTED_BG, LIGHT_RED, LIGHT_TRACK,
+        };
+        let light = FixturePalette::of(FixtureMode::Light);
+        assert_eq!(light.bg, rgb3(LIGHT_BG_RGB));
+        assert_eq!(light.text, rgb3(LIGHT_FG_RGB));
+        assert_eq!(light.dim, rgba(LIGHT_DIM));
+        assert_eq!(light.track, rgba(LIGHT_TRACK));
+        assert_eq!(light.deleted_bg, rgba(LIGHT_DELETED_BG));
+        assert_eq!(light.deleted_fg, rgba(LIGHT_RED));
+        assert_eq!(light.inserted_bg, rgba(LIGHT_INSERTED_BG));
+        assert_eq!(light.inserted_fg, rgba(LIGHT_GREEN));
+        assert_eq!(light.changed_bg, rgba(LIGHT_CHANGED_BG));
+        assert_eq!(light.changed_fg, rgba(LIGHT_CHANGED_FG));
+        assert_eq!(light.field, rgb3(LIGHT_BG_RGB));
+    }
 }
