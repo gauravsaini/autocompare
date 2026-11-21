@@ -12652,4 +12652,29 @@ mod tests {
             crate::theme::accent_fg_for(true)
         );
     }
+
+    #[test]
+    fn toolbar_exq_icons52_live_delegation_contract() {
+        // icons52 wiring-readiness contract (live-wiring proof NAHI):
+        // live action bar ke 4 buttons (Swap/Reload/Prev/Next) ke liye
+        // staged vector chain — index -> kind -> origin -> segments — har
+        // button par finite geometry deti hai. Live call sites (views.rs
+        // FROZEN) app.rs ko button rects nahi dete, isliye ye test sirf
+        // delegation taiyari pin karta hai, wiring ka daava nahi.
+        let bh = crate::home::HOME_TOOLBAR_BUTTON_H;
+        for index in 0..4 {
+            let kind = super::exq_icons50_mark_kind(index);
+            let (ox, oy) = super::exq_icons50_mark_xy(0.0, 0.0, bh);
+            assert!(ox.is_finite() && oy.is_finite());
+            // Mark box button height ke andar (24 me 12 + centering air).
+            assert!(oy >= 0.0 && oy + super::exq_icons50_mark_box() <= bh);
+            let (segs, n) = super::exq_icons50_mark_segments(kind);
+            assert!(n <= 3);
+            for (x0, y0, x1, y1) in segs.iter().take(n) {
+                for v in [*x0, *y0, *x1, *y1] {
+                    assert!(v.is_finite());
+                }
+            }
+        }
+    }
 }
