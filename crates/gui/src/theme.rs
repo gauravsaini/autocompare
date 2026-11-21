@@ -90,24 +90,24 @@ pub const TYPO_UI_SANS_STACK: &str = "system-ui, sans-serif";
 /// Monospace stack for hex/text-cells/table-cells/gutter (system mono first).
 pub const TYPO_MONO_STACK: &str = "ui-monospace, monospace";
 
-/// EXQ-TYPO54 system-first candidate chain for proportional/chrome roles
-/// (headless, pure): runtime lookup order, no binaries shipped. Head is the
-/// macOS system sans, middle reuses [`TYPO_UI_SANS_STACK`] by reference
-/// (single source, no duplicated stack string), tail is the egui-safe
-/// generic so the chain never resolves blank. Install itself stays in
-/// `app.rs` (`typo48_live_font_plan`); this only supplies the order.
+/// EXQ-TYPO54 candidate chain for proportional/chrome roles (headless,
+/// pure): ordered fallback head -> mid -> tail. Head `SF Pro` (system
+/// first), mid reuses [`TYPO_UI_SANS_STACK`] by reference (single source,
+/// no duplicated string), tail `proportional` (egui-safe generic, never
+/// blank). Order only — install stays in `app.rs`; no binaries shipped.
 pub const TYPO54_SANS_CHAIN: &[&str] = &["SF Pro", TYPO_UI_SANS_STACK, "proportional"];
-/// EXQ-TYPO54 system-first candidate chain for [`TypoRole::Mono`] content
-/// (headless, pure): macOS system mono head, `Menlo` next, then the single
-/// source [`TYPO_MONO_STACK`], tail egui-safe `monospace`. No binaries
-/// shipped; install stays in `app.rs`.
+/// EXQ-TYPO54 candidate chain for [`TypoRole::Mono`] content (headless,
+/// pure): ordered fallback head -> mid -> tail. Head `SF Mono` (system
+/// first), next `Menlo` (bundled-macOS fallback), then single-source
+/// [`TYPO_MONO_STACK`], tail `monospace` (egui-safe generic, never blank).
+/// Order only — install stays in `app.rs`; no binaries shipped.
 pub const TYPO54_MONO_CHAIN: &[&str] = &["SF Mono", "Menlo", TYPO_MONO_STACK, "monospace"];
 
 /// EXQ-TYPO54 ordered runtime family chain for `role` (headless, pure):
-/// system names first, egui-safe generic last. Mono content gets
-/// [`TYPO54_MONO_CHAIN`], every chrome role [`TYPO54_SANS_CHAIN`]. No new
-/// sizes/weights/tokens, no colors, no display calls — `app.rs` install
-/// consumes this without duplicating stack names.
+/// Mono content gets [`TYPO54_MONO_CHAIN`], every chrome role
+/// [`TYPO54_SANS_CHAIN`] — system head first, egui-safe generic tail last.
+/// Single source per role: `app.rs` install consumes this without
+/// duplicating stack names. No new sizes/weights/tokens, no colors.
 pub const fn typo54_candidate_stack(role: TypoRole) -> &'static [&'static str] {
     if role.is_mono() {
         TYPO54_MONO_CHAIN
@@ -142,11 +142,11 @@ pub fn typo_exq_home_scale_ok() -> bool {
         && TYPO_HOME_TITLE_SIZE > TYPO_BODY_SIZE
         && TYPO_BODY_SIZE > TYPO_MONO_SIZE
         && TYPO_MONO_SIZE > TYPO_SMALL_SIZE
-        && TYPO_TRACKING_HEADING_EM > 0.0
-        && TYPO_LETTER_SPACING == 0.0
-        && TypoRole::HomeTitle.letter_spacing_em() > 0.0
-        && TypoRole::HomeButton.letter_spacing_em() == 0.0
-        && TypoRole::HomeDesc.letter_spacing_em() == 0.0
+        && TYPO_TRACKING_HEADING_EM > TYPO_LETTER_SPACING
+        && TYPO_LETTER_SPACING == TypoRole::Body.letter_spacing_em()
+        && TypoRole::HomeTitle.letter_spacing_em() > TYPO_LETTER_SPACING
+        && TypoRole::HomeButton.letter_spacing_em() == TYPO_LETTER_SPACING
+        && TypoRole::HomeDesc.letter_spacing_em() == TYPO_LETTER_SPACING
 }
 
 // ----------------------------------------------------------------------------
@@ -596,12 +596,14 @@ impl TypoRole {
         self.size() * self.line_height()
     }
 
-    /// Letter-tracking as em ratio: slight for headers, zero elsewhere.
-    /// Headless intent (egui `extra_letter_spacing` stays 0.0 in paint).
+    /// Letter-tracking as em ratio: headers reuse
+    /// [`TYPO_TRACKING_HEADING_EM`], rest reuse the paint no-op
+    /// [`TYPO_LETTER_SPACING`]. Headless intent (egui `extra_letter_spacing`
+    /// stays [`TYPO_LETTER_SPACING`] in paint).
     pub const fn letter_spacing_em(self) -> f32 {
         match self {
             Self::Heading | Self::HomeTitle => TYPO_TRACKING_HEADING_EM,
-            _ => 0.0,
+            _ => TYPO_LETTER_SPACING,
         }
     }
 
@@ -1450,9 +1452,9 @@ pub fn typo_textcenter_steps_ok() -> bool {
         && mono.weight_value() == TYPO_WEIGHT_REGULAR
         && body.weight_value() == TYPO_WEIGHT_REGULAR
         && small.weight_value() == TYPO_WEIGHT_SEMIBOLD
-        && mono.letter_spacing_em() == 0.0
-        && body.letter_spacing_em() == 0.0
-        && small.letter_spacing_em() == 0.0
+        && mono.letter_spacing_em() == TYPO_LETTER_SPACING
+        && body.letter_spacing_em() == TYPO_LETTER_SPACING
+        && small.letter_spacing_em() == TYPO_LETTER_SPACING
         && TypoRole::Heading.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
         && mono.is_tabular()
         && small.is_tabular()
@@ -1479,9 +1481,9 @@ pub fn typo_home4_steps_ok() -> bool {
     title.size() > button.size()
         && button.size() > desc.size()
         && title.weight_value() > desc.weight_value()
-        && title.letter_spacing_em() > 0.0
-        && button.letter_spacing_em() == 0.0
-        && desc.letter_spacing_em() == 0.0
+        && title.letter_spacing_em() > TYPO_LETTER_SPACING
+        && button.letter_spacing_em() == TYPO_LETTER_SPACING
+        && desc.letter_spacing_em() == TYPO_LETTER_SPACING
         && title.is_chrome()
         && button.is_chrome()
         && desc.is_chrome()
@@ -1606,9 +1608,9 @@ pub fn exq_typo10_roles_plus_rhythm_ok() -> bool {
         && TypoRole::Body.is_chrome()
         && TypoRole::Small.is_chrome()
         && TypoRole::Heading.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
-        && TypoRole::Body.letter_spacing_em() == 0.0
-        && TypoRole::Mono.letter_spacing_em() == 0.0
-        && TypoRole::Small.letter_spacing_em() == 0.0
+        && TypoRole::Body.letter_spacing_em() == TYPO_LETTER_SPACING
+        && TypoRole::Mono.letter_spacing_em() == TYPO_LETTER_SPACING
+        && TypoRole::Small.letter_spacing_em() == TYPO_LETTER_SPACING
         && TypoRole::Small.line_height_px() < TypoRole::Mono.line_height_px()
         && TypoRole::Mono.line_height_px() < TypoRole::Body.line_height_px()
         && TypoRole::Body.line_height_px() < TypoRole::Heading.line_height_px()
@@ -2038,6 +2040,30 @@ mod tests {
         assert_eq!(TYPO54_SANS_CHAIN.last(), Some(&"proportional"));
         assert_eq!(TYPO54_MONO_CHAIN.first(), Some(&"SF Mono"));
         assert_eq!(TYPO54_MONO_CHAIN.last(), Some(&"monospace"));
+    }
+
+    #[test]
+    fn fontbundle67_typo_reuse_value_identical() {
+        // Non-header roles reuse the paint no-op tracking token, not a literal.
+        for role in [
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::Mono,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert_eq!(role.letter_spacing_em(), TYPO_LETTER_SPACING);
+        }
+        // Headers reuse the headed tracking token, above the no-op floor.
+        for role in [TypoRole::Heading, TypoRole::HomeTitle] {
+            assert_eq!(role.letter_spacing_em(), TYPO_TRACKING_HEADING_EM);
+            assert!(role.letter_spacing_em() > TYPO_LETTER_SPACING);
+        }
+        // Scale gates hold unchanged after the literal -> token swap.
+        assert!(typo_exq_home_scale_ok());
+        assert!(typo_textcenter_steps_ok());
+        assert!(typo_home4_steps_ok());
+        assert!(exq_typo10_roles_plus_rhythm_ok());
     }
 
     #[test]
