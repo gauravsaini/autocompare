@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-icons50 vector icons + tab pill (STAGED)
+
+1. **Staged vector layer**: ExqIcons50Mark geometry (ring/bars/rails/wedge), tab-pill rect, softer light inline accent reusing LIGHT_* helpers; paint_exq_icons50_mark/tab_pill fns defined + unit-tested, zero new colors/sizes. Honest limit: paint fns NOT yet called from live toolbar (live path uses egui Button widgets, fixture fill_rect blocks are harness-only) - PNG byte-identical, wiring is round-2.
+2. **Tests**: 1103 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-icons50/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-kittest49 real egui screenshot pipeline
 
 1. **Real render pipeline**: dev-only egui_kittest =0.37.0 (eframe+wgpu, zero runtime change) + tests/real_egui_shot.rs boots real App text-compare view on t_left/t_right fixtures, writes real-egui.png 960x600 52KB; pxvar AA-PROVEN 502 vs 10 baseline ratio 50.2; pxdiff delta honestly documented in GATES.md (layout matches, font rasterization + widget chrome differ - the egui ceiling).
