@@ -1102,3 +1102,7 @@
 ### Feature (2026-11-21) — feat(cli): cli94 commands
 - `crates/cli/**` me 9 subcommands + report + bcomp VCS verify, 64 passed, E2E OK.
 - Proof: leaf fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 22aa69e.
+
+### Feature (2026-11-21) — feat(gui): gui95 verification
+- `crates/gui/**` verify checks-only, 1163 lib + 2 shots passed, fmt clean, banned 0 prod, clippy debt pre-existing R1.
+- Proof: leaf OWNS clean, NO PUSH, cherry-picked 87829a4.
