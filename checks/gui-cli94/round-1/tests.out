@@ -1,0 +1,393 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running unittests src/lib.rs (target/debug/deps/autocompare_cli-2c1a95051aa9f791)
+
+running 37 tests
+test bcomp::tests::test_normalize_read_only_flags ... ok
+test bcomp::tests::test_normalize_automerge_and_mergeoutput ... ok
+test bcomp::tests::test_normalize_subcommand_aliases ... ok
+test bcomp::tests::test_normalize_vcs_inputs_and_titles ... ok
+test bcomp::tests::test_resolve_git_mergetool_four_way_dirs ... ok
+test bcomp::tests::test_resolve_git_mergetool_four_way_files ... ok
+test bcomp::tests::test_resolve_three_positionals_files_vs_dirs ... ok
+test bcomp::tests::test_resolve_vcs_flags_space_syntax_and_output ... ok
+test bcomp::tests::test_resolve_vcs_dirs_two_way ... ok
+test bcomp::tests::test_resolve_two_way_with_vcs3_ancestor ... ok
+test bcomp::tests::test_resolve_two_positionals_files_vs_dirs ... ok
+test render_sync::tests::test_format_plan_empty_reports_nothing_to_do ... ok
+test render_sync::tests::test_format_plan_truncated_flag_stays_on_stderr ... ok
+test report::tests::test_report_format_infer_from_path ... ok
+test render_sync::tests::test_format_plan_steps_skipped_and_summary ... ok
+test render_sync::tests::test_format_report_counts_failures_and_color ... ok
+test report::tests::test_report_format_parse_str ... ok
+test report_adapter::tests::test_hex_report_input_identical_and_differing ... ok
+test report_adapter::tests::test_merge_report_input_clean_and_conflict ... ok
+test report_adapter::tests::test_table_report_input_operations ... ok
+test report::tests::test_report_spec_display_and_parse ... ok
+test report_adapter::tests::test_folder_report_input_all_statuses ... ok
+test report_adapter::tests::test_text_report_input_operations ... ok
+test report_adapter_media::tests::test_audio_report_input_identical_and_differing ... ok
+test report_adapter_media::tests::test_foldermerge_report_input_all_actions ... ok
+test report_adapter_media::tests::test_picture_report_input_identical_and_differing ... ok
+test report_adapter_media::tests::test_sync_report_input_steps_and_skipped ... ok
+test args::tests::test_cli_read_only_flags ... ok
+test args::tests::test_cli_effective_exit_code_mode ... ok
+test runner::tests::test_runner_hex_exit_codes_both_modes ... ok
+test runner::tests::test_runner_report_wiring_with_title_override_and_vcs_titles ... ok
+test runner::tests::test_runner_text_exit_codes_both_modes ... ok
+test session_cmd::tests::test_session_report_generation_with_tab_title ... ok
+test runner::tests::test_runner_merge_clean_conflicted_and_readonly_guard ... ok
+test report::tests::test_render_and_write_all_report_formats ... ok
+test session_cmd::tests::test_session_save_and_reload_all_types ... ok
+test args::tests::test_cli_subcommands_clap_parse ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (target/debug/deps/autocompare-234912a7724451b2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bcomp_test.rs (target/debug/deps/bcomp_test-f8eedc1cee54949e)
+
+running 8 tests
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   1 alpha                             |    1 alpha                            
+   3 gamma                             |    3 gamma                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+R          -         11                 - 2026-11-21 05:24  extra.txt
+<          5          5  2026-11-21 05:24 2026-11-21 05:24  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+autocompare: the merge has conflicts
+autocompare: the merge has conflicts
+test test_bcomp_direct_invocation_two_folders ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+test test_bcomp_direct_invocation_two_files ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+test test_bcomp_vcs_alias_flags ... ok
+autocompare: read-only mode: cannot apply sync in read-only mode
+test test_bcomp_four_way_git_mergetool ... ok
+test test_bcomp_automerge_and_mergeoutput ... ok
+autocompare: read-only mode: cannot write merge in read-only mode
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+test test_bcomp_ro_read_only_flags ... ok
+test test_bcomp_vcs_titles_and_at_session_syntax ... ok
+left:  11 bytes
+right: 11 bytes
+no differences
+autocompare: the merge has conflicts
+test test_bcomp_exit_codes_bc_mode ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/errors_test.rs (target/debug/deps/errors_test-e53d5767bb04ac3f)
+
+running 5 tests
+autocompare: invalid argument: no comparison command or input files specified
+Compare text, folders and bytes, and merge three ways
+
+Usage: autocompare [OPTIONS] [COMMAND]
+
+Commands:
+  text          Compare two text files line by line, side by side
+  folder        Compare two folder trees recursively by size and modified time
+  hex           Compare two files byte by byte
+  merge         Merge two files that share a common base version
+  table         Compare two delimited (CSV-style) tables cell by cell
+  sync          Plan (and optionally apply) a folder sync
+  picture       Compare two PNG images pixel by pixel
+  folder-merge  Plan (and optionally apply) a three-way folder merge
+  audio         Compare two audio files (WAV, MP3) sample by sample
+  session       Load and run a saved comparison session
+
+Options:
+      --color <COLOR>
+          When to color output
+
+          Possible values:
+          - auto:   Detect terminal capability automatically
+          - always: Force ANSI color sequences on
+          - never:  Suppress all ANSI color sequences
+          
+          [default: auto]
+
+      --report <REPORT>
+          Generate comparison report: format:path (html, text, xml, patch)
+
+      --ro
+          Read-only mode for VCS tools and sessions
+
+      --ro1
+          Read-only mode for left input
+
+      --ro2
+          Read-only mode for right input
+
+      --ro3
+          Read-only mode for base / ancestor / center input
+
+      --ro4
+          Read-only mode for output input
+
+      --automerge
+          Automatically merge when there are no conflicts
+
+autocompare: invalid argument: --report argument cannot be empty
+      --mergeoutput <MERGEOUTPUT>
+          Output destination path for 3-way merge results
+
+      --vcs1 <VCS1>
+          VCS input 1 alias (typically left/local)
+
+      --vcs2 <VCS2>
+          VCS input 2 alias (typically right/remote)
+
+      --vcs3 <VCS3>
+          VCS input 3 alias (typically base/ancestor)
+
+error: unexpected argument '--completely-invalid-flag      --vcs4 <VCS4>
+          VCS input 4 alias (typically output/merged)
+
+' found
+
+  tip: to pass '--completely-invalid-flag      --title1 <TITLE1>
+          VCS title/label for left / first input
+
+' as a value, use '-- --completely-invalid-flag'
+
+      --title2 <TITLE2>
+          VCS title/label for right / second input
+
+Usage: autocompare text      --title3 <TITLE3>
+          VCS title/label for center / base input
+
+ [OPTIONS] <LEFT> <RIGHT>
+
+For more information, try '--help'.
+      --title4 <TITLE4>
+          VCS title/label for output input
+
+      --session <SESSION>
+          Path to a session document to load and execute
+
+      --save-session <SAVE_SESSION>
+          Save the current comparison session configuration to path
+
+      --exit-code-mode <EXIT_CODE_MODE>
+          Exit code convention mode: diff (0/1/2) or bc (Beyond Compare return codes)
+
+          Possible values:
+          - diff: Standard diff(1) exit codes: 0 = same, 1 = different / conflicts, 2 = error
+          - bc:   Beyond Compare exit codes: 0 = success, 11 = binary diff, 13 = rules diff, 14 = conflicts
+          
+          [default: diff]
+
+      --bc-exit-code
+          Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts)
+
+      --report-title <REPORT_TITLE>
+          Title override for comparison reports
+
+      --solo
+          Run in a separate solo process without reusing background instances
+
+      --nobackups
+          Suppress backup file creation during merge/save operations
+
+      --reviewconflicts
+          Automatically review conflicts in interactive mode if present
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+test test_invalid_flag_exits_with_code_2 ... ok
+test test_empty_report_spec_exits_with_code_2 ... ok
+test test_no_arguments_exits_with_code_2 ... ok
+test test_help_flag_exits_with_code_0 ... ok
+autocompare: path not found: nonexistent_left.txt
+test test_missing_file_exits_with_code_2 ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/parity_hardening_test.rs (target/debug/deps/parity_hardening_test-f47826e7074a4c67)
+
+running 4 tests
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+R          -         11                 - 2026-11-21 05:24  extra.txt
+<          5          5  2026-11-21 05:24 2026-11-21 05:24  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+test test_audio_and_sync_session_execution ... ok
+autocompare: read-only mode: cannot write merge in read-only mode
+left:  11 bytes
+right: 11 bytes
+no differences
+test test_four_way_git_mergetool_folder_and_slash_flags ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_all_report_formats_xml_patch_html_text ... ok
+=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)
+left:  4x4
+right: 4x4
+no differences
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+test test_ten_subcommands_direct_execution ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/session_test.rs (target/debug/deps/session_test-c33004e1c5493d8e)
+
+running 1 test
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_session_save_and_reload ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/subcommands_media_test.rs (target/debug/deps/subcommands_media_test-fafb0e2c86453f34)
+
+running 5 tests
+=  hdr | id | name | role
+=    1 | 1 | amy | dev
+!    2 | 2 | bob | [ops => lead]
+→ extra.txt
+~ common.txt (destination is newer)
+1 step(s) planned, 1 skipped
+dry run: nothing changed (pass --apply to run)
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+first difference at 0.000s
+differing 10ms windows: 25/25 (100.00%)
+test test_sync_subcommand_exit_code_and_report ... ok
+test test_table_subcommand_exit_code_and_report ... ok
+left:  4x4
+right: 4x4
+overlap: 4x4 (16 pixels)
+differing pixels: 1 (6.25%)
+difference bounds: (1,1)..(1,1)
+C doc.txt
+! doc.txt (conflict)
+1 step(s) planned, 0 omitted, 1 conflict(s)
+dry run: nothing written (pass --apply and --output to run)
+test test_folder_merge_subcommand_exit_code_and_report ... ok
+left:  0.250s, 8000 Hz, 1 channel(s)
+right: 0.250s, 8000 Hz, 1 channel(s)
+no differences
+left:  4x4
+right: 4x4
+no differences
+test test_audio_subcommand_exit_code_and_report ... ok
+test test_picture_subcommand_exit_code_and_report ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/subcommands_text_test.rs (target/debug/deps/subcommands_text_test-c6ce3b82d0a24232)
+
+running 4 tests
+R          -         11                 - 2026-11-21 05:24  extra.txt
+<          5          5  2026-11-21 05:24 2026-11-21 05:24  f.txt
+2 entries: 0 same, 0 different, 0 newer left, 1 newer right, 0 left-only, 1 right-only
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+autocompare: the merge has conflicts
+test test_folder_subcommand_exit_code_and_report ... ok
+left:  11 bytes
+right: 11 bytes
+first difference at offset 0x00000001
+0x00000001   65 6c 6c 6f 20 77 6f 72 ello wor |  61 6c 6c 6f 20 77 6f 72 allo wor
+0x00000009   6c 64                   ld       |  6c 64                   ld      
+base
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_merge_subcommand_exit_code_and_report ... ok
+left:  11 bytes
+right: 11 bytes
+no differences
+test test_hex_subcommand_exit_code_and_report ... ok
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 beta                             
+   3 gamma                             |    3 gamma                            
+   1 alpha                             |    1 alpha                            
+   2 beta                              |    2 BETA                             
+   3 gamma                             |    3 gamma                            
+test test_text_subcommand_exit_codes_and_reports ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests autocompare_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
