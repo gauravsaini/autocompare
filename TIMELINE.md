@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-light51 live mode-aware palette wiring
+
+1. **Live wiring**: kind_palette + selective_side_palette dark-flagged via theme *_for helpers; minimap segments + gutter selection bands mode-aware; dark byte-identical, light wash + dark ink with contrast checks; zero new colors, geometry/typo untouched. agyx-delivered, verified same as opencode waves.
+2. **Tests**: 1104 green (1103 + light_exq_light51_mode_aware); rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (dark 10928B byte-identical, light 10973B).
+3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-light51/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-icons50 vector icons + tab pill (STAGED)
 
 1. **Staged vector layer**: ExqIcons50Mark geometry (ring/bars/rails/wedge), tab-pill rect, softer light inline accent reusing LIGHT_* helpers; paint_exq_icons50_mark/tab_pill fns defined + unit-tested, zero new colors/sizes. Honest limit: paint fns NOT yet called from live toolbar (live path uses egui Button widgets, fixture fill_rect blocks are harness-only) - PNG byte-identical, wiring is round-2.
