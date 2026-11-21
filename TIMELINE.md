@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-hex42 live hex columns
+
+1. **Live hex columns lock**: round-2 on hex31 geometry lock, zero new tokens; HEX42_REF_CHAR_W 7.0; offset gutter, ruler-vs-grid columns, SPACE-token ASCII gap, 1200px no-scroll budget, narrow-700 stacked edge all delegate to hex31 single source so views cannot drift.
+2. **Tests**: 1090 green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS (PNG 11040 bytes, magic ok, distinct 256).
+3. **Files changed**: crates/gui/src/views_hex.rs, checks/gui-exq-hex42/**, TIMELINE.md.
+
 ### Chore (2026-11-21) — chore(localrun): exq-localrun3 early feedback bundle
 
 1. **Early feedback bundle**: CLI 10 cmds PASS, 3 PNGs default/dark/light, dist tarball + sha refreshed (VERSION 0.5.0 7bdf2ea), tail-insertion edge fixture, GAPS-TOP10. Low-disk fallback: CARGO_PROFILE_RELEASE_LTO=false + CODEGEN_UNITS=16 via env only.
