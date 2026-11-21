@@ -1,5 +1,12 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-kittest49 real egui screenshot pipeline
+
+1. **Real render pipeline**: dev-only egui_kittest =0.37.0 (eframe+wgpu, zero runtime change) + tests/real_egui_shot.rs boots real App text-compare view on t_left/t_right fixtures, writes real-egui.png 960x600 52KB; pxvar AA-PROVEN 502 vs 10 baseline ratio 50.2; pxdiff delta honestly documented in GATES.md (layout matches, font rasterization + widget chrome differ - the egui ceiling).
+2. **Tests**: 1099 lib + 1 real_egui_shot green; rustfmt clean; banned non-test tokens 0; exquisite harness RESULT: PASS. Note: real-egui.png bytes vary slightly run to run (non-deterministic render), tests assert magic/size/AA not hash.
+3. **Files changed**: crates/gui/Cargo.toml, Cargo.lock, crates/gui/tests/real_egui_shot.rs, checks/gui-exq-kittest49/**, TIMELINE.md.
+
+
 ### Feature (2026-11-21) — feat(gui): exq-typo48 live font wiring
 
 1. **Live font plan**: typo48_live_font_plan() maps Proportional to TYPO_UI_SANS_STACK + Monospace to TYPO_MONO_STACK (single source, zero new sizes/weights/tokens); guarded once-install on first live ui() frame, headless tests untouched; startup stderr logs installed families as machine evidence.
