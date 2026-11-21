@@ -567,8 +567,10 @@ pub fn toolbar_glyph_variant(index: usize) -> usize {
     index % 4
 }
 
-/// Toolbar glyph mark rects (px, slot-local 16x16 origin): the same
-/// geometric marks the fixture paints (`fill_rect` only, dim hue reuse):
+/// Toolbar glyph mark rects (px, slot-local 16x16 origin): legacy fixture
+/// parity table (`fill_rect` cells, dim hue reuse) — paint ab isko use
+/// nahi karta ([`paint_toolbar_glyph`] sab variants vector path se paint
+/// karta hai: 0..=3 staged marks, 4/5 [`paint_toolbar_chevron`] strokes).
 /// 0 solid block, 1 twin horizontal bars, 2 side bars, 3 stepped wedge,
 /// 4 Prev `<` chevron triple, 5 Next `>` chevron triple. Chevron cells
 /// are 2x2 bars on a 6x10 rhythm centered in the slot (fixture
@@ -613,15 +615,78 @@ pub fn toolbar_glyph_slot(button: egui::Rect) -> egui::Rect {
     )
 }
 
+/// Toolbar chevron slot offset (px): 12px staged mark box ko 16px slot
+/// me center karne ka inset ((16 − 12) / 2 = 2). Dono numbers SPACE
+/// tokens se ([`TOOLBAR_GLYPH_W`] = SPACE_LG, mark box = SPACE_MD),
+/// koi naya size nahi. Pure; unit-tested.
+pub fn toolbar_chevron_slot_offset() -> f32 {
+    (TOOLBAR_GLYPH_W - crate::app::exq_icons50_mark_box()) / 2.0
+}
+
+/// Toolbar chevron vector segments (slot-local `x0,y0,x1,y1`): variants
+/// 4/5 (Prev `<` / Next `>`) ke liye 2 stroke segments, baaki variants
+/// par khali (unke vector marks [`crate::app::paint_exq_icons50_mark`]
+/// se paint hote hain). Geometry [`nav_chevron_segments`] reuse + slot
+/// offset — koi naya size nahi, `fill_rect` block cells ki jagah vector
+/// path. Pure; unit-tested.
+pub fn toolbar_chevron_segments(variant: usize) -> [(f32, f32, f32, f32); 2] {
+    let dir = match variant {
+        4 => NavChevronDir::Prev,
+        5 => NavChevronDir::Next,
+        _ => return [(0.0, 0.0, 0.0, 0.0); 2],
+    };
+    let off = toolbar_chevron_slot_offset();
+    let segs = nav_chevron_segments(dir);
+    [
+        (
+            segs[0].0 + off,
+            segs[0].1 + off,
+            segs[0].2 + off,
+            segs[0].3 + off,
+        ),
+        (
+            segs[1].0 + off,
+            segs[1].1 + off,
+            segs[1].2 + off,
+            segs[1].3 + off,
+        ),
+    ]
+}
+
+/// Toolbar chevron vector paint: [`toolbar_chevron_segments`] strokes ko
+/// slot origin par staged stroke ([`crate::app::exq_icons50_stroke_w`])
+/// se `dim_for` ink me paint karta hai — `rect_filled` block cells ki
+/// jagah vector path (row-2 [`paint_nav_chevron_mark`] precedent, slot
+/// centered). Hit-rect/click caller ke paas, overlay zero layout shift.
+/// Pure paint; headless harness painter ke bina isko call nahi karta.
+pub fn paint_toolbar_chevron(ui: &mut Ui, button_rect: egui::Rect, variant: usize) {
+    if variant != 4 && variant != 5 {
+        return;
+    }
+    let ink = dim_for(ui.visuals().dark_mode);
+    let slot = toolbar_glyph_slot(button_rect);
+    let stroke = egui::Stroke::new(crate::app::exq_icons50_stroke_w(), ink);
+    for (x0, y0, x1, y1) in toolbar_chevron_segments(variant) {
+        ui.painter().line_segment(
+            [
+                egui::pos2(slot.min.x + x0, slot.min.y + y0),
+                egui::pos2(slot.min.x + x1, slot.min.y + y1),
+            ],
+            stroke,
+        );
+    }
+}
+
 /// Toolbar glyph overlay: paints vector marks via
 /// [`crate::app::paint_exq_icons50_mark`] for variants 0..=3 (Swap/Reload
-/// and cycle marks, circle/bars/rails/wedge) and chevron cells via
-/// `painter.rect_filled` for variants 4/5 (Prev/Next chevrons), in `dim_for`
-/// ink AFTER the button response is created, so Button styling never
-/// overrides the ink (gutter23 marker precedent: frameless allocate+paint /
-/// paint-after). Caller passes the button [`Response`](egui::Response)
-/// rect; geometry callee tokens me, colors existing palette reuse, koi naya
-/// hue nahi.
+/// and cycle marks, circle/bars/rails/wedge) and vector chevron strokes
+/// via [`paint_toolbar_chevron`] for variants 4/5 (Prev/Next chevrons),
+/// in `dim_for` ink AFTER the button response is created, so Button
+/// styling never overrides the ink (gutter23 marker precedent:
+/// frameless allocate+paint / paint-after). Caller passes the button
+/// [`Response`](egui::Response) rect; geometry callee tokens me, colors
+/// existing palette reuse, koi naya hue nahi. Zero `fill_rect` — sab
+/// vector path geometry.
 pub fn paint_toolbar_glyph(ui: &mut Ui, button_rect: egui::Rect, variant: usize) {
     let ink = dim_for(ui.visuals().dark_mode);
     if variant < 4 {
@@ -633,14 +698,7 @@ pub fn paint_toolbar_glyph(ui: &mut Ui, button_rect: egui::Rect, variant: usize)
         );
         crate::app::paint_exq_icons50_mark(ui.painter(), egui::pos2(ox, oy), kind, ink);
     } else {
-        let slot = toolbar_glyph_slot(button_rect);
-        for (dx, dy, w, h) in toolbar_glyph_rects(variant) {
-            ui.painter().rect_filled(
-                egui::Rect::from_min_size(slot.min + egui::vec2(dx, dy), egui::vec2(w, h)),
-                0.0,
-                ink,
-            );
-        }
+        paint_toolbar_chevron(ui, button_rect, variant);
     }
 }
 
@@ -1328,8 +1386,22 @@ pub fn tab_active_underline_height() -> f32 {
     span_underline_for_weight(crate::theme::TYPO_WEIGHT_SEMIBOLD)
 }
 
+/// Active-tab pill inset (px): SPACE_XS / 2 (2.0) har taraf — pill
+/// tab ke andar, height/width sirf air se chhoti. Views-owned geometry
+/// (staged `app::exq_icons50_tab_pill_rect` math parity, zero naya size).
+/// Pure; unit-tested.
+pub fn tab_pill_pad() -> f32 {
+    crate::theme::SPACE_XS / 2.0
+}
+
+/// Active-tab pill rounding (px): SPACE_XS (4.0) — staged rounding
+/// parity. Koi naya size nahi. Pure; unit-tested.
+pub fn tab_pill_rounding() -> f32 {
+    crate::theme::SPACE_XS
+}
+
 /// Computes the active-tab underline indicator rect from the button rect:
-/// uses [`crate::app::exq_icons50_tab_pill_rect`] (insetting horizontally by SPACE_XS / 2)
+/// uses views-owned [`tab_pill_rect`] (insetting horizontally by SPACE_XS / 2)
 /// and sits at the bottom base of the tab pill with [`tab_active_underline_height`] height.
 /// Safe against non-finite dimensions; pure and headless-tested.
 pub fn tab_active_underline_rect(tab: egui::Rect) -> egui::Rect {
@@ -1340,7 +1412,7 @@ pub fn tab_active_underline_rect(tab: egui::Rect) -> egui::Rect {
     {
         return tab;
     }
-    let pill = crate::app::exq_icons50_tab_pill_rect(tab);
+    let pill = tab_pill_rect(tab);
     let h = tab_active_underline_height();
     egui::Rect::from_min_max(
         egui::pos2(pill.min.x, (pill.max.y - h).max(pill.min.y)),
@@ -1348,21 +1420,48 @@ pub fn tab_active_underline_rect(tab: egui::Rect) -> egui::Rect {
     )
 }
 
-/// Exposes the staged tab pill rect ([`crate::app::exq_icons50_tab_pill_rect`])
-/// for `app.rs` and other callers without re-inventing geometry. Pure and headless-tested.
+/// Active-tab pill rect (views-owned): tab rect se har taraf
+/// [`tab_pill_pad`] (SPACE_XS / 2 = 2.0) inset — geometry existing
+/// SPACE_* tokens se, staged `app::exq_icons50_tab_pill_rect` parity
+/// (dark byte-identical). Non-finite par tab wapas. Pure; headless-tested.
 pub fn tab_pill_rect(tab: egui::Rect) -> egui::Rect {
-    crate::app::exq_icons50_tab_pill_rect(tab)
+    if !tab.min.x.is_finite()
+        || !tab.min.y.is_finite()
+        || !tab.max.x.is_finite()
+        || !tab.max.y.is_finite()
+    {
+        return tab;
+    }
+    let pad = tab_pill_pad();
+    egui::Rect::from_min_max(
+        egui::pos2(tab.min.x + pad, tab.min.y + pad),
+        egui::pos2(
+            (tab.max.x - pad).max(tab.min.x + pad),
+            (tab.max.y - pad).max(tab.min.y + pad),
+        ),
+    )
 }
 
-/// Paints the active tab indicator at the base of `tab_rect`:
-/// uses [`crate::app::exq_icons50_inline_accent_for`] in current dark/light visuals
-/// and fills [`tab_active_underline_rect`]. Zero new color/size, and never occludes
-/// the label text above it.
+/// Paints the active tab pill + indicator at the base of `tab_rect`:
+/// pill [`tab_pill_rect`] ka rounded outline ([`tab_pill_rounding`]
+/// rounding, 1px [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`] stroke,
+/// frozen [`track_for`] tone) plus [`tab_active_underline_rect`] staged
+/// accent ([`crate::app::exq_icons50_inline_accent_for`]) — geometry
+/// SPACE_* tokens me, colors existing palette reuse. Outline fill nahi:
+/// label text button paint ke andar rehta hai, pill usko kabhi occlude
+/// nahi karta (fill text ke AA pixels dhak kar shot color-count girata).
 pub fn paint_tab_active_indicator(ui: &mut Ui, tab_rect: egui::Rect) {
     if tab_rect.width() <= 0.0 || tab_rect.height() <= 0.0 {
         return;
     }
-    let ink = crate::app::exq_icons50_inline_accent_for(ui.visuals().dark_mode);
+    let dark = ui.visuals().dark_mode;
+    ui.painter().rect_stroke(
+        tab_pill_rect(tab_rect),
+        egui::CornerRadius::same(tab_pill_rounding() as u8),
+        egui::Stroke::new(crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W, track_for(dark)),
+        egui::StrokeKind::Middle,
+    );
+    let ink = crate::app::exq_icons50_inline_accent_for(dark);
     let underline = tab_active_underline_rect(tab_rect);
     ui.painter().rect_filled(underline, 0.0, ink);
 }
@@ -11461,6 +11560,80 @@ mod tests {
         assert_eq!(ActionBarHits::default().action, ToolbarAction::None);
         assert_eq!(ActionBarHits::default().nav, ActionBarNav::None);
         assert_ne!(ActionBarNav::Prev, ActionBarNav::Next);
+    }
+
+    #[test]
+    fn icons90_toolbar_vector_chevrons() {
+        // exq-icons90 round-1: variants 4/5 vector strokes hain, fill_rect
+        // block cells nahi — geometry nav_chevron reuse + slot offset,
+        // ink dim existing, stroke staged. Pure + headless paint.
+        assert_eq!(toolbar_chevron_slot_offset(), 2.0);
+        for variant in [4, 5] {
+            let segs = toolbar_chevron_segments(variant);
+            assert_eq!(segs.len(), 2);
+            for (x0, y0, x1, y1) in segs {
+                assert!(x0 >= 0.0 && y0 >= 0.0);
+                assert!(x1 >= 0.0 && y1 >= 0.0);
+                assert!(x0 <= TOOLBAR_GLYPH_W && x1 <= TOOLBAR_GLYPH_W);
+                assert!(y0 <= TOOLBAR_GLYPH_H && y1 <= TOOLBAR_GLYPH_H);
+                assert!((x0 - x1).abs() + (y0 - y1).abs() > 0.0);
+            }
+        }
+        // Prev/Next x-mirrored around slot center, y same.
+        let prev = toolbar_chevron_segments(4);
+        let next = toolbar_chevron_segments(5);
+        for (p, n) in prev.iter().zip(next.iter()) {
+            assert_eq!((n.0, n.2), (TOOLBAR_GLYPH_W - p.0, TOOLBAR_GLYPH_W - p.2));
+            assert_eq!((n.1, n.3), (p.1, p.3));
+        }
+        // Non-chevron variants khali (staged marks se paint hote hain).
+        assert_eq!(toolbar_chevron_segments(0), [(0.0, 0.0, 0.0, 0.0); 2]);
+        assert_eq!(toolbar_chevron_segments(1), [(0.0, 0.0, 0.0, 0.0); 2]);
+        // Headless paint: sab variants bina panic ke chalte hain.
+        let ctx = egui::Context::default();
+        let button = egui::Rect::from_min_size(egui::pos2(100.0, 50.0), egui::vec2(96.0, 24.0));
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            for v in [0, 1, 2, 3, 4, 5] {
+                paint_toolbar_glyph(ui, button, v);
+            }
+            paint_toolbar_chevron(ui, button, 4);
+            paint_toolbar_chevron(ui, button, 5);
+            paint_toolbar_chevron(ui, button, 0);
+        });
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn icons90_tab_pill_space_tokens() {
+        // exq-icons90 round-1: active tab pill geometry SPACE_* tokens se —
+        // pad SPACE_XS/2, rounding SPACE_XS, pill tab ke andar, staged
+        // app pill parity. Paint: track fill + accent underline.
+        assert_eq!(tab_pill_pad(), crate::theme::SPACE_XS / 2.0);
+        assert_eq!(tab_pill_pad(), 2.0);
+        assert_eq!(tab_pill_rounding(), crate::theme::SPACE_XS);
+        assert_eq!(tab_pill_rounding(), 4.0);
+        let tab = egui::Rect::from_min_size(egui::pos2(50.0, 20.0), egui::vec2(80.0, 24.0));
+        let pill = tab_pill_rect(tab);
+        assert_eq!(pill, crate::app::exq_icons50_tab_pill_rect(tab));
+        assert_eq!(pill.min.x, 52.0);
+        assert_eq!(pill.min.y, 22.0);
+        assert_eq!(pill.max.x, 128.0);
+        assert_eq!(pill.max.y, 42.0);
+        assert!(pill.width() < tab.width());
+        assert!(pill.height() < tab.height());
+        let underline = tab_active_underline_rect(tab);
+        assert_eq!(underline.min.x, pill.min.x);
+        assert_eq!(underline.max.x, pill.max.x);
+        assert_eq!(underline.max.y, pill.max.y);
+        // Non-finite safety.
+        let nan_rect = egui::Rect::from_min_max(egui::pos2(f32::NAN, 0.0), egui::pos2(100.0, 20.0));
+        assert!(tab_pill_rect(nan_rect).min.x.is_nan());
+        // Headless paint: pill + underline bina panic ke.
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            paint_tab_active_indicator(ui, tab);
+        });
+        output.textures_delta.clear();
     }
 
     #[test]
