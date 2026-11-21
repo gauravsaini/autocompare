@@ -1054,3 +1054,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-home83 home geometry
 - `crates/gui/src/home.rs` me home card geometry, OWNS clean, colors/typography frozen.
 - Proof: leaf 1160 lib + 2 shot green, fmt clean, banned 0 non-test (unwrap only inside #[test] after is_some assert), NO PUSH, cherry-picked da7b2a1.
+
+### Feature (2026-11-21) — feat(gui): exq-hex84 hex geometry
+- `crates/gui/src/views_hex.rs` me stacked line char budgets single-source (HEX_STACKED_HEX_LINE_CHARS=61, HEX_STACKED_ASCII_LINE_CHARS=30), inline 61.0 removed.
+- Proof: leaf 1159 green, fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 1692969.
