@@ -1227,11 +1227,11 @@ mod tests {
             Some((148.0, 152.0))
         );
         // Band height is exactly one min segment, never two rows.
-        if let Some((y0, y1)) = gutter_selection_marker_band(2, 4, 400.0) {
+        let marker_opt = gutter_selection_marker_band(2, 4, 400.0);
+        assert!(marker_opt.is_some(), "band must exist");
+        if let Some((y0, y1)) = marker_opt {
             assert!((y1 - y0 - GUTTER_SEGMENT_MIN_H).abs() < 0.001);
             assert_eq!(gutter_row_center_y(2, 4, 400.0), Some((y0 + y1) / 2.0));
-        } else {
-            panic!("band must exist");
         }
         // Edge rows clamp inside the track instead of spilling out.
         assert_eq!(
@@ -2794,8 +2794,10 @@ mod exq_text5_tests {
             gutter_slop_band(&seg, crate::theme::GUTTER_MERGE_GAP),
             Some((198.0, 206.0))
         );
-        let Some((lo, hi)) = gutter_slop_band(&seg, GUTTER_HIT_SLOP) else {
-            panic!("band must exist");
+        let slop_opt = gutter_slop_band(&seg, GUTTER_HIT_SLOP);
+        assert!(slop_opt.is_some(), "band must exist");
+        let Some((lo, hi)) = slop_opt else {
+            return;
         };
         assert!(((seg.y_start - lo) - (hi - seg.y_end)).abs() < 0.001);
         assert_eq!(GUTTER_HIT_SLOP, 2.0);
@@ -3145,12 +3147,11 @@ mod exq_gutter8_tests {
         // Every Equal row maps to no segment: markers never land there.
         let mut idx = 0usize;
         while idx < rows.len() {
-            if let Some(row) = rows.get(idx) {
-                if row.kind == TextRowKind::Equal {
-                    if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
-                        assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
-                    }
-                }
+            if let Some(row) = rows.get(idx)
+                && row.kind == TextRowKind::Equal
+                && let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0)
+            {
+                assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
             }
             idx = idx.saturating_add(1);
         }
@@ -3250,10 +3251,10 @@ mod exq_gutter7_tests {
         // Aakhri band par click aakhri diff par girta hai.
         assert_eq!(gutter_jump_target(&rows, 1200, 400.0, 399.9), Some(1199));
         // Ruler hit-test single source se round-trip karta hai.
-        if let Some(y) = gutter_y_for_row(600, 1200, 400.0) {
+        let marker_y_opt = gutter_y_for_row(600, 1200, 400.0);
+        assert!(marker_y_opt.is_some(), "marker y must exist");
+        if let Some(y) = marker_y_opt {
             assert_eq!(gutter_row_at_y(y + 0.1, 1200, 400.0), Some(600));
-        } else {
-            panic!("marker y must exist");
         }
     }
 
@@ -3275,11 +3276,11 @@ mod exq_gutter7_tests {
             gutter_viewport_rect_padded(1200, 400.0, 600, 12),
             Some((200.0, 204.0))
         );
-        if let Some((y0, y1)) = gutter_viewport_rect(1200, 400.0, 600, 12) {
+        let viewport_opt = gutter_viewport_rect(1200, 400.0, 600, 12);
+        assert!(viewport_opt.is_some(), "viewport band must exist");
+        if let Some((y0, y1)) = viewport_opt {
             assert!((y1 - y0 - GUTTER_VIEWPORT_MIN_H).abs() < 0.01);
             assert!(y0 >= 0.0 && y1 <= 400.0);
-        } else {
-            panic!("viewport band must exist");
         }
     }
 
@@ -3571,12 +3572,11 @@ mod exq_gutter9_tests {
         // Every Equal row maps to no segment: side markers never land there.
         let mut idx = 0usize;
         while idx < rows.len() {
-            if let Some(row) = rows.get(idx) {
-                if row.kind == TextRowKind::Equal {
-                    if let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0) {
-                        assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
-                    }
-                }
+            if let Some(row) = rows.get(idx)
+                && row.kind == TextRowKind::Equal
+                && let Some(cy) = gutter_row_center_y(idx, rows.len(), 800.0)
+            {
+                assert_eq!(gutter_segment_at_y(&geom.segments, cy), None);
             }
             idx = idx.saturating_add(1);
         }
@@ -4453,8 +4453,9 @@ mod exq_geo55_tests {
     fn geo55_budget_narrow_700_parity() {
         // Narrow 700px canvas budget with 1-digit line numbers:
         // 12 margin + 16 linenum + 312 pane + 20 center + 312 pane + 16 linenum + 12 margin = 700.
-        let Some(budget_lines) = gutter_budget_narrow_700(7, true) else {
-            assert!(false, "narrow budget with lines");
+        let narrow_opt = gutter_budget_narrow_700(7, true);
+        assert!(narrow_opt.is_some(), "narrow budget with lines");
+        let Some(budget_lines) = narrow_opt else {
             return;
         };
         assert_eq!(budget_lines.canvas_w, 700.0);
@@ -4473,9 +4474,9 @@ mod exq_geo55_tests {
         let center_col_x =
             budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
         assert_eq!(center_col_x, 340.0);
-        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
-        else {
-            assert!(false, "cx");
+        let narrow_cx_opt = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w);
+        assert!(narrow_cx_opt.is_some(), "cx");
+        let Some(center_cx) = narrow_cx_opt else {
             return;
         };
         assert_eq!(center_cx, 350.0);
@@ -4483,8 +4484,9 @@ mod exq_geo55_tests {
 
         // Narrow 700px canvas without line numbers:
         // 12 margin + 328 pane + 20 center + 328 pane + 12 margin = 700.
-        let Some(budget_no_lines) = gutter_budget_narrow_700(7, false) else {
-            assert!(false, "narrow budget no lines");
+        let narrow_no_lines_opt = gutter_budget_narrow_700(7, false);
+        assert!(narrow_no_lines_opt.is_some(), "narrow budget no lines");
+        let Some(budget_no_lines) = narrow_no_lines_opt else {
             return;
         };
         assert_eq!(budget_no_lines.left_linenum_w, 0.0);
@@ -4499,8 +4501,9 @@ mod exq_geo55_tests {
     fn geo55_budget_normal_960_parity() {
         // Normal 960px canvas budget with 1-digit line numbers:
         // 12 margin + 16 linenum + 442 pane + 20 center + 442 pane + 16 linenum + 12 margin = 960.
-        let Some(budget_lines) = gutter_budget_normal_960(5, true) else {
-            assert!(false, "normal budget with lines");
+        let normal_opt = gutter_budget_normal_960(5, true);
+        assert!(normal_opt.is_some(), "normal budget with lines");
+        let Some(budget_lines) = normal_opt else {
             return;
         };
         assert_eq!(budget_lines.canvas_w, 960.0);
@@ -4511,9 +4514,9 @@ mod exq_geo55_tests {
         let center_col_x =
             budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
         assert_eq!(center_col_x, 470.0);
-        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
-        else {
-            assert!(false, "cx");
+        let normal_cx_opt = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w);
+        assert!(normal_cx_opt.is_some(), "cx");
+        let Some(center_cx) = normal_cx_opt else {
             return;
         };
         assert_eq!(center_cx, 480.0);
@@ -4521,8 +4524,9 @@ mod exq_geo55_tests {
 
         // Normal 960px canvas without line numbers:
         // 12 margin + 458 pane + 20 center + 458 pane + 12 margin = 960.
-        let Some(budget_no_lines) = gutter_budget_normal_960(5, false) else {
-            assert!(false, "normal budget no lines");
+        let normal_no_lines_opt = gutter_budget_normal_960(5, false);
+        assert!(normal_no_lines_opt.is_some(), "normal budget no lines");
+        let Some(budget_no_lines) = normal_no_lines_opt else {
             return;
         };
         assert_eq!(budget_no_lines.pane_w, 458.0);
@@ -4534,8 +4538,9 @@ mod exq_geo55_tests {
     fn geo55_budget_wide_1200_parity() {
         // Wide 1200px canvas budget with 1-digit line numbers:
         // 12 margin + 16 linenum + 562 pane + 20 center + 562 pane + 16 linenum + 12 margin = 1200.
-        let Some(budget_lines) = gutter_budget_wide_1200(9, true) else {
-            assert!(false, "wide budget with lines");
+        let wide_opt = gutter_budget_wide_1200(9, true);
+        assert!(wide_opt.is_some(), "wide budget with lines");
+        let Some(budget_lines) = wide_opt else {
             return;
         };
         assert_eq!(budget_lines.canvas_w, 1200.0);
@@ -4546,9 +4551,9 @@ mod exq_geo55_tests {
         let center_col_x =
             budget_lines.outer_margin + budget_lines.left_linenum_w + budget_lines.pane_w;
         assert_eq!(center_col_x, 590.0);
-        let Some(center_cx) = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w)
-        else {
-            assert!(false, "cx");
+        let wide_cx_opt = gutter_mark_centered_cx(center_col_x, budget_lines.center_lane_w);
+        assert!(wide_cx_opt.is_some(), "cx");
+        let Some(center_cx) = wide_cx_opt else {
             return;
         };
         assert_eq!(center_cx, 600.0);
@@ -4556,8 +4561,9 @@ mod exq_geo55_tests {
 
         // Wide 1200px canvas without line numbers:
         // 12 margin + 578 pane + 20 center + 578 pane + 12 margin = 1200.
-        let Some(budget_no_lines) = gutter_budget_wide_1200(9, false) else {
-            assert!(false, "wide budget no lines");
+        let wide_no_lines_opt = gutter_budget_wide_1200(9, false);
+        assert!(wide_no_lines_opt.is_some(), "wide budget no lines");
+        let Some(budget_no_lines) = wide_no_lines_opt else {
             return;
         };
         assert_eq!(budget_no_lines.pane_w, 578.0);
@@ -4636,8 +4642,9 @@ mod exq_geo55_tests {
         assert!(fixture_raw.contains("\"has_double_padding\": false"));
 
         // Match against live helpers
-        let Some(budget_with_lines) = gutter_budget_narrow_700(7, true) else {
-            assert!(false, "live budget with lines");
+        let live_lines_opt = gutter_budget_narrow_700(7, true);
+        assert!(live_lines_opt.is_some(), "live budget with lines");
+        let Some(budget_with_lines) = live_lines_opt else {
             return;
         };
         assert_eq!(budget_with_lines.canvas_w, 700.0);
@@ -4646,8 +4653,9 @@ mod exq_geo55_tests {
         assert_eq!(budget_with_lines.pane_w, 312.0);
         assert_eq!(budget_with_lines.total_allocated_w, 700.0);
 
-        let Some(budget_no_lines) = gutter_budget_narrow_700(7, false) else {
-            assert!(false, "live budget no lines");
+        let live_no_lines_opt = gutter_budget_narrow_700(7, false);
+        assert!(live_no_lines_opt.is_some(), "live budget no lines");
+        let Some(budget_no_lines) = live_no_lines_opt else {
             return;
         };
         assert_eq!(budget_no_lines.pane_w, 328.0);
@@ -4803,10 +4811,10 @@ mod exq_agyxswarm80_gutter_tests {
         assert_eq!(gutter_geo_side_marker_col_w(), SPACE_LG + SPACE_XS);
 
         // Strict monotonic spacing scale
-        assert!(SPACE_XS < SPACE_SM);
-        assert!(SPACE_SM < SPACE_MD);
-        assert!(SPACE_MD < SPACE_LG);
-        assert!(SPACE_LG < SPACE_XL);
+        const { assert!(SPACE_XS < SPACE_SM) };
+        const { assert!(SPACE_SM < SPACE_MD) };
+        const { assert!(SPACE_MD < SPACE_LG) };
+        const { assert!(SPACE_LG < SPACE_XL) };
     }
 
     #[test]
@@ -4817,8 +4825,10 @@ mod exq_agyxswarm80_gutter_tests {
         assert_eq!(GUTTER_CENTER_W, SPACE_XL);
 
         // Narrow 700 budget: 12 outer margin + twin 312 panes + 20 center lane + twin 16 line numbers = 700
-        let Some(b700) = gutter_budget_narrow_700(7, true) else {
-            panic!("b700 must be valid");
+        let b700_opt = gutter_budget_narrow_700(7, true);
+        assert!(b700_opt.is_some(), "b700 must be valid");
+        let Some(b700) = b700_opt else {
+            return;
         };
         assert_eq!(b700.canvas_w, GUTTER_CANVAS_NARROW_700);
         assert_eq!(b700.outer_margin, GEO_OUTER_MARGIN);
@@ -4828,8 +4838,10 @@ mod exq_agyxswarm80_gutter_tests {
         assert_eq!(b700.total_allocated_w, GUTTER_CANVAS_NARROW_700);
 
         // Normal 960 budget: 12 outer margin + twin 442 panes + 20 center lane + twin 16 line numbers = 960
-        let Some(b960) = gutter_budget_normal_960(5, true) else {
-            panic!("b960 must be valid");
+        let b960_opt = gutter_budget_normal_960(5, true);
+        assert!(b960_opt.is_some(), "b960 must be valid");
+        let Some(b960) = b960_opt else {
+            return;
         };
         assert_eq!(b960.canvas_w, GUTTER_CANVAS_NORMAL_960);
         assert_eq!(b960.outer_margin, GEO_OUTER_MARGIN);
@@ -4839,8 +4851,10 @@ mod exq_agyxswarm80_gutter_tests {
         assert_eq!(b960.total_allocated_w, GUTTER_CANVAS_NORMAL_960);
 
         // Wide 1200 budget: 12 outer margin + twin 562 panes + 20 center lane + twin 16 line numbers = 1200
-        let Some(b1200) = gutter_budget_wide_1200(9, true) else {
-            panic!("b1200 must be valid");
+        let b1200_opt = gutter_budget_wide_1200(9, true);
+        assert!(b1200_opt.is_some(), "b1200 must be valid");
+        let Some(b1200) = b1200_opt else {
+            return;
         };
         assert_eq!(b1200.canvas_w, GUTTER_CANVAS_WIDE_1200);
         assert_eq!(b1200.outer_margin, GEO_OUTER_MARGIN);

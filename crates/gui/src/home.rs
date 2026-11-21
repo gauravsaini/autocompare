@@ -6187,7 +6187,9 @@ mod tests {
 
             let rect = super::home45_card_rect(i, 1200.0);
             assert!(rect.is_some());
-            let (x0, y0, x1, y1) = rect.unwrap();
+            let Some((x0, y0, x1, y1)) = rect else {
+                return;
+            };
             assert_eq!(x1 - x0, 376.0);
             assert!((y1 - y0 - 99.6).abs() < 0.01);
             assert!(x0 >= 12.0);
@@ -6195,7 +6197,9 @@ mod tests {
 
             let cta = super::home45_card_cta_rect((x0, y0, x1, y1));
             assert!(cta.is_some());
-            let (cx0, cy0, cx1, cy1) = cta.unwrap();
+            let Some((cx0, cy0, cx1, cy1)) = cta else {
+                return;
+            };
             assert_eq!(cx0, x0 + 8.0);
             assert_eq!(cx1, x1 - 8.0);
             assert_eq!(cy1, y1 - 8.0);
@@ -6204,9 +6208,17 @@ mod tests {
 
         // 4. Non-overlapping checks across all pairs of cards
         for i in 0..9 {
-            let (ax0, ay0, ax1, ay1) = super::home45_card_rect(i, 1200.0).unwrap();
+            let card_a_opt = super::home45_card_rect(i, 1200.0);
+            assert!(card_a_opt.is_some());
+            let Some((ax0, ay0, ax1, ay1)) = card_a_opt else {
+                return;
+            };
             for j in (i + 1)..9 {
-                let (bx0, by0, bx1, by1) = super::home45_card_rect(j, 1200.0).unwrap();
+                let card_b_opt = super::home45_card_rect(j, 1200.0);
+                assert!(card_b_opt.is_some());
+                let Some((bx0, by0, bx1, by1)) = card_b_opt else {
+                    return;
+                };
                 let disjoint = ax1 <= bx0 || bx1 <= ax0 || ay1 <= by0 || by1 <= ay0;
                 assert!(disjoint, "Cards {i} and {j} overlap in grid!");
             }

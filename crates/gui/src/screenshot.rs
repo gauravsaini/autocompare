@@ -123,18 +123,30 @@ fn inline_accent_inverted() -> bool {
 /// Light: softer underline-only (`fg` text overdraw + 1px `fg` line at the
 /// row base, no fill) so the span reads dark-ink-on-light-wash with zero
 /// geometry shift (`row_h` untouched, line sits inside the row). Pure.
-fn paint_inline_accent(
-    pixels: &mut [u8],
-    dims: (u32, u32),
+/// Bundled word-accent paint input so the painter stays under the
+/// argument-count lint ([`TextPaneLayout`]-style precedent in views).
+struct InlineAccent<'a> {
     x: u32,
     y: u32,
     w: u32,
     row_h: u32,
     fg: [u8; 4],
     bg: [u8; 4],
-    span: &str,
+    span: &'a str,
     baseline_dy: u32,
-) {
+}
+
+fn paint_inline_accent(pixels: &mut [u8], dims: (u32, u32), accent: InlineAccent<'_>) {
+    let InlineAccent {
+        x,
+        y,
+        w,
+        row_h,
+        fg,
+        bg,
+        span,
+        baseline_dy,
+    } = accent;
     if inline_accent_inverted() {
         fill_rect(pixels, dims, (x, y, w, row_h), fg);
         draw_string(pixels, dims, x, y.saturating_add(baseline_dy), span, bg);
@@ -471,7 +483,7 @@ fn paint_topchrome_toolbar(pixels: &mut [u8], dims: (u32, u32)) {
             let icon_x = x.saturating_add(4);
             let icon_y = PATH_TOOLBAR_Y.saturating_add(row_h.saturating_sub(12) / 2);
             let mark = fixture_palette().dim;
-            if shown % 4 == 0 {
+            if shown.is_multiple_of(4) {
                 fill_rect(pixels, dims, (icon_x, icon_y, 12, 12), mark);
             } else if shown % 4 == 1 {
                 fill_rect(pixels, dims, (icon_x, icon_y, 12, 3), mark);
@@ -1196,14 +1208,16 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             paint_inline_accent(
                 &mut pixels,
                 dims,
-                ax,
-                y,
-                aw,
-                row_h,
-                left_fg,
-                left_bg,
-                &span,
-                base_dy,
+                InlineAccent {
+                    x: ax,
+                    y,
+                    w: aw,
+                    row_h,
+                    fg: left_fg,
+                    bg: left_bg,
+                    span: &span,
+                    baseline_dy: base_dy,
+                },
             );
         }
 
@@ -1245,14 +1259,16 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             paint_inline_accent(
                 &mut pixels,
                 dims,
-                ax,
-                y,
-                aw,
-                row_h,
-                right_fg,
-                right_bg,
-                &span,
-                base_dy,
+                InlineAccent {
+                    x: ax,
+                    y,
+                    w: aw,
+                    row_h,
+                    fg: right_fg,
+                    bg: right_bg,
+                    span: &span,
+                    baseline_dy: base_dy,
+                },
             );
         }
         // Center-gap marker: yellow `=>` on changed-row hunk heads only;
@@ -1646,14 +1662,16 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 paint_inline_accent(
                     &mut pixels,
                     dims,
-                    ax,
-                    y,
-                    clamped_aw,
-                    row_h,
-                    left_fg,
-                    left_bg,
-                    &clipped_span,
-                    6,
+                    InlineAccent {
+                        x: ax,
+                        y,
+                        w: clamped_aw,
+                        row_h,
+                        fg: left_fg,
+                        bg: left_bg,
+                        span: &clipped_span,
+                        baseline_dy: 6,
+                    },
                 );
             }
         }
@@ -1700,14 +1718,16 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 paint_inline_accent(
                     &mut pixels,
                     dims,
-                    ax,
-                    y,
-                    clamped_aw,
-                    row_h,
-                    right_fg,
-                    right_bg,
-                    &clipped_span,
-                    6,
+                    InlineAccent {
+                        x: ax,
+                        y,
+                        w: clamped_aw,
+                        row_h,
+                        fg: right_fg,
+                        bg: right_bg,
+                        span: &clipped_span,
+                        baseline_dy: 6,
+                    },
                 );
             }
         }
@@ -1902,14 +1922,16 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
             paint_inline_accent(
                 &mut pixels,
                 dims,
-                ax,
-                y,
-                aw,
-                row_h,
-                left_fg,
-                left_bg,
-                &span,
-                6,
+                InlineAccent {
+                    x: ax,
+                    y,
+                    w: aw,
+                    row_h,
+                    fg: left_fg,
+                    bg: left_bg,
+                    span: &span,
+                    baseline_dy: 6,
+                },
             );
         }
         fill_rect(
@@ -1954,14 +1976,16 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
             paint_inline_accent(
                 &mut pixels,
                 dims,
-                ax,
-                y,
-                aw,
-                row_h,
-                right_fg,
-                right_bg,
-                &span,
-                6,
+                InlineAccent {
+                    x: ax,
+                    y,
+                    w: aw,
+                    row_h,
+                    fg: right_fg,
+                    bg: right_bg,
+                    span: &span,
+                    baseline_dy: 6,
+                },
             );
         }
     }
@@ -4034,7 +4058,6 @@ pub fn render_picture_fixture_png(out_path: &Path) -> Result<(), String> {
     for step in PICTURE_ZOOM_STEPS {
         let label = format!("{step}%");
         let selected = step == fit;
-        if selected {}
         draw_string(
             &mut pixels,
             dims,

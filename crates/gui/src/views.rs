@@ -3954,16 +3954,16 @@ fn paint_text_body(
                                 is_current: find_is_current_row(orig, ctx.current),
                             });
                             let mut left_jobs = if let Some(fr) = find_row {
-                                side_jobs_wrapped_with_find_current(
-                                    Side::Left,
+                                side_jobs_wrapped_with_find_current(SideFindJob {
+                                    side: Side::Left,
                                     row,
-                                    &layout,
-                                    font_id.clone(),
-                                    left_fg,
-                                    left_bg,
-                                    fr,
+                                    layout: &layout,
+                                    font_id: font_id.clone(),
+                                    fg: left_fg,
+                                    bg: left_bg,
+                                    find: fr,
                                     dark,
-                                )
+                                })
                             } else {
                                 side_jobs_wrapped_with_prefs(
                                     Side::Left,
@@ -3976,16 +3976,16 @@ fn paint_text_body(
                                 )
                             };
                             let mut right_jobs = if let Some(fr) = find_row {
-                                side_jobs_wrapped_with_find_current(
-                                    Side::Right,
+                                side_jobs_wrapped_with_find_current(SideFindJob {
+                                    side: Side::Right,
                                     row,
-                                    &layout,
-                                    font_id.clone(),
-                                    right_fg,
-                                    right_bg,
-                                    fr,
+                                    layout: &layout,
+                                    font_id: font_id.clone(),
+                                    fg: right_fg,
+                                    bg: right_bg,
+                                    find: fr,
                                     dark,
-                                )
+                                })
                             } else {
                                 side_jobs_wrapped_with_prefs(
                                     Side::Right,
@@ -4377,16 +4377,16 @@ fn paint_text_body(
                                     is_current: find_is_current_row(orig, ctx.current),
                                 });
                                 let left_job = if let Some(fr) = find_row {
-                                    side_job_with_prefs_and_find_current(
-                                        Side::Left,
+                                    side_job_with_prefs_and_find_current(SideFindJob {
+                                        side: Side::Left,
                                         row,
-                                        &layout,
-                                        font_id.clone(),
-                                        left_fg,
-                                        left_bg,
-                                        fr,
+                                        layout: &layout,
+                                        font_id: font_id.clone(),
+                                        fg: left_fg,
+                                        bg: left_bg,
+                                        find: fr,
                                         dark,
-                                    )
+                                    })
                                 } else {
                                     side_job_with_prefs(
                                         Side::Left,
@@ -4501,16 +4501,16 @@ fn paint_text_body(
                                 });
 
                                 let right_job = if let Some(fr) = find_row {
-                                    side_job_with_prefs_and_find_current(
-                                        Side::Right,
+                                    side_job_with_prefs_and_find_current(SideFindJob {
+                                        side: Side::Right,
                                         row,
-                                        &layout,
-                                        font_id.clone(),
-                                        right_fg,
-                                        right_bg,
-                                        fr,
+                                        layout: &layout,
+                                        font_id: font_id.clone(),
+                                        fg: right_fg,
+                                        bg: right_bg,
+                                        find: fr,
                                         dark,
-                                    )
+                                    })
                                 } else {
                                     side_job_with_prefs(
                                         Side::Right,
@@ -5142,20 +5142,35 @@ fn side_job_with_prefs(
     job
 }
 
+/// Find-aware pane job input bundled so find painters stay under the
+/// argument-count lint ([`TextPaneLayout`] precedent: widths + prefs +
+/// tone already ride one struct, needle + flags ride [`FindRowPaint`]).
+struct SideFindJob<'a> {
+    side: Side,
+    row: &'a TextRow,
+    layout: &'a TextPaneLayout<'a>,
+    font_id: FontId,
+    fg: Color32,
+    bg: Color32,
+    find: FindRowPaint<'a>,
+    dark: bool,
+}
+
 /// Find-aware pane job with explicit current flag: current row par
 /// `find.is_current=true` (inverted block), others par false (underline
 /// line). Paint loop `find_is_current_row` se flag nikalta hai. `dark`
 /// routes the accent/find block via `selective_find_format`.
-fn side_job_with_prefs_and_find_current(
-    side: Side,
-    row: &TextRow,
-    layout: &TextPaneLayout<'_>,
-    font_id: FontId,
-    fg: Color32,
-    bg: Color32,
-    find: FindRowPaint<'_>,
-    dark: bool,
-) -> LayoutJob {
+fn side_job_with_prefs_and_find_current(job: SideFindJob<'_>) -> LayoutJob {
+    let SideFindJob {
+        side,
+        row,
+        layout,
+        font_id,
+        fg,
+        bg,
+        find,
+        dark,
+    } = job;
     if find.needle.is_empty() {
         return side_job_with_prefs(side, row, layout, font_id, fg, bg, dark);
     }
@@ -6181,9 +6196,9 @@ pub fn text_pane_needs_hscroll(content_w: f32, avail_w: f32) -> bool {
 /// rows ya no-selection par `- | Text: exact`, koi fake preview nahi).
 /// Geometry thin chrome bar ([`text_pane_status_height_px`]: Small 13.2
 /// + [`ROW_PAD`] = 15.2, not the 28px toolbar [`HEADER_H`]), halves
-/// beech [`TIGHT_GAP`], truncate clip taaki lambi line bar ko lamba na
-/// kare — single-row lock); typo Mono (koi naya size nahi); colors
-/// untouched.
+///   beech [`TIGHT_GAP`], truncate clip taaki lambi line bar ko lamba na
+///   kare — single-row lock); typo Mono (koi naya size nahi); colors
+///   untouched.
 pub fn paint_text_pane_status(ui: &mut Ui, rows: &[TextRow], selected: Option<usize>) {
     let left = text_pane_status_side_line(rows, selected, true);
     let right = text_pane_status_side_line(rows, selected, false);
@@ -6453,10 +6468,10 @@ pub fn text_legend_role() -> TypoRole {
 /// Insert | Load) in 4 equal cells ([`text_legend_cell_width`]), har cell
 /// me marker swatch ([`text_legend_marker_px`], [`text_legend_marker_ink`])
 /// + label ([`text_legend_cell_label`] budget clip) aur cell bounds par
-/// 1px dim dividers (status20 fixture 4-zone rhythm). Geometry thin bar
-/// ([`text_legend_strip_height_px`]); typo [`text_legend_role`]; fixed
-/// short labels kabhi bar ko lamba nahi karte — single-row lock. Koi
-/// state mutate nahi, koi naya size/color nahi.
+///   1px dim dividers (status20 fixture 4-zone rhythm). Geometry thin bar
+///   ([`text_legend_strip_height_px`]); typo [`text_legend_role`]; fixed
+///   short labels kabhi bar ko lamba nahi karte — single-row lock. Koi
+///   state mutate nahi, koi naya size/color nahi.
 pub fn paint_text_legend_bar(ui: &mut Ui) {
     let avail = ui.available_width();
     let bar_h = text_legend_strip_height_px();
@@ -7105,16 +7120,17 @@ fn side_jobs_wrapped_with_prefs(
 /// (chunk-local find mapping) + highlight format. Khali needle par plain
 /// [`side_jobs_wrapped_with_prefs`] jaisa. Continuation gutter/geometry
 /// wahi, koi naya size/color nahi.
-fn side_jobs_wrapped_with_find_current(
-    side: Side,
-    row: &TextRow,
-    layout: &TextPaneLayout<'_>,
-    font_id: FontId,
-    fg: Color32,
-    bg: Color32,
-    find: FindRowPaint<'_>,
-    dark: bool,
-) -> Vec<LayoutJob> {
+fn side_jobs_wrapped_with_find_current(job: SideFindJob<'_>) -> Vec<LayoutJob> {
+    let SideFindJob {
+        side,
+        row,
+        layout,
+        font_id,
+        fg,
+        bg,
+        find,
+        dark,
+    } = job;
     if find.needle.is_empty() {
         return side_jobs_wrapped_with_prefs(side, row, layout, font_id, fg, bg, dark);
     }
@@ -12441,10 +12457,10 @@ mod tests {
         assert_eq!(other.underline.width, INTRA_SPAN_UNDERLINE_W);
         // Marker aligns to one min band on the row center, never two rows.
         assert_eq!(text_minimap_marker_band(1, 4, 400.0), Some((148.0, 152.0)));
-        if let Some((y0, y1)) = text_minimap_marker_band(0, 1000, 400.0) {
+        let marker_opt = text_minimap_marker_band(0, 1000, 400.0);
+        assert!(marker_opt.is_some(), "marker band must exist");
+        if let Some((y0, y1)) = marker_opt {
             assert!((y1 - y0 - crate::gutter::GUTTER_SEGMENT_MIN_H).abs() < 0.001);
-        } else {
-            panic!("marker band must exist");
         }
         assert_eq!(text_minimap_marker_band(4, 4, 400.0), None);
         // Orphan blank balance at narrow: 7 visible rows in a 300px budget

@@ -12680,8 +12680,8 @@ mod tests {
         let line = typoinst61_startup_log_line();
         assert!(line.contains("proportional"));
         assert!(line.contains("monospace"));
-        assert!(line.contains(TYPO54_SANS_CHAIN[0]));
-        assert!(line.contains(TYPO54_MONO_CHAIN[0]));
+        assert!(TYPO54_SANS_CHAIN.first().is_some_and(|s| line.contains(s)));
+        assert!(TYPO54_MONO_CHAIN.first().is_some_and(|s| line.contains(s)));
         assert!(line.contains(crate::theme::TYPO_UI_SANS_STACK));
         assert!(line.contains(crate::theme::TYPO_MONO_STACK));
     }
@@ -12727,7 +12727,7 @@ mod tests {
             assert_eq!(n, want);
             for (x0, y0, x1, y1) in segs.iter().take(n) {
                 for v in [*x0, *y0, *x1, *y1] {
-                    assert!(v >= 0.0 && v <= 12.0);
+                    assert!((0.0..=12.0).contains(&v));
                 }
             }
         }
@@ -12735,7 +12735,7 @@ mod tests {
         let pts = super::exq_icons50_wedge_points();
         assert_eq!(pts.len(), 8);
         for (x, y) in pts {
-            assert!(x >= 0.0 && x <= 12.0 && y >= 0.0 && y <= 12.0);
+            assert!((0.0..=12.0).contains(&x) && (0.0..=12.0).contains(&y));
         }
     }
 
@@ -12847,19 +12847,17 @@ mod tests {
             eframe::egui::pos2(f32::NAN, 20.0),
             eframe::egui::pos2(110.0, 48.0),
         );
-        assert_eq!(
-            super::exq_lightvisual68_tab_pill_rect_for(nan, true)
+        assert!(
+            !super::exq_lightvisual68_tab_pill_rect_for(nan, true)
                 .min
                 .x
-                .is_finite(),
-            false
+                .is_finite()
         );
-        assert_eq!(
-            super::exq_lightvisual68_tab_pill_rect_for(nan, false)
+        assert!(
+            !super::exq_lightvisual68_tab_pill_rect_for(nan, false)
                 .min
                 .x
-                .is_finite(),
-            false
+                .is_finite()
         );
     }
 

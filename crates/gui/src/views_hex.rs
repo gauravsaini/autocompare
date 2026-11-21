@@ -5297,7 +5297,7 @@ mod tests {
             HEX_RULER_CHARS + 2 + HEX_ASCII_PANE_CHARS + 2
         );
         // Hex line dominates: checking it covers the ASCII line too.
-        assert!(HEX_STACKED_HEX_LINE_CHARS > HEX_STACKED_ASCII_LINE_CHARS);
+        const { assert!(HEX_STACKED_HEX_LINE_CHARS > HEX_STACKED_ASCII_LINE_CHARS) };
         assert_eq!(hex_ascii_gutter_w(), crate::theme::SPACE_SM);
         // Row height is the Mono line-height, no new size.
         assert!((hex_grid_row_h() - crate::theme::TypoRole::Mono.line_height_px()).abs() < 0.001);
@@ -6022,11 +6022,11 @@ mod tests {
         assert_eq!(ticks, expected_xs);
         assert_eq!(ticks.len(), 16);
 
-        for col in 0..16 {
+        for (col, expected) in expected_xs.iter().enumerate() {
             let r_x = hex_ruler_col_x(col, char_w);
             let g_x = hex_grid_byte_col_x(col, char_w);
             assert_eq!(r_x, g_x);
-            assert_eq!(r_x, Some(expected_xs[col]));
+            assert_eq!(r_x, Some(*expected));
         }
         assert_eq!(hex_ruler_col_x(16, char_w), None);
         assert_eq!(hex_grid_byte_col_x(16, char_w), None);

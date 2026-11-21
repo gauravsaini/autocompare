@@ -63,13 +63,10 @@ fn err(msg: &str) -> String {
 fn distinct_rgb(pixels: &[u8]) -> HashSet<(u8, u8, u8)> {
     let mut seen = HashSet::new();
     let mut iter = pixels.iter();
-    loop {
-        match (iter.next(), iter.next(), iter.next(), iter.next()) {
-            (Some(r), Some(g), Some(b), Some(_)) => {
-                seen.insert((*r, *g, *b));
-            }
-            _ => break,
-        }
+    while let (Some(r), Some(g), Some(b), Some(_)) =
+        (iter.next(), iter.next(), iter.next(), iter.next())
+    {
+        seen.insert((*r, *g, *b));
     }
     seen
 }

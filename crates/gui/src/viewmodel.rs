@@ -5310,14 +5310,14 @@ mod tests {
         let mono_max_line_h = TYPO_MONO_SIZE_MAX * TypoRole::Mono.line_height(); // 16.9
         assert!(TEXT_ROW_HEIGHT_COMPACT > mono_line_h);
         assert!(TEXT_ROW_HEIGHT_COMPACT > mono_max_line_h);
-        assert!(TEXT_ROW_HEIGHT_COMFORTABLE > TEXT_ROW_HEIGHT_COMPACT);
-        assert!(TEXT_ROW_HEIGHT_SPACIOUS > TEXT_ROW_HEIGHT_COMFORTABLE);
+        const { assert!(TEXT_ROW_HEIGHT_COMFORTABLE > TEXT_ROW_HEIGHT_COMPACT) };
+        const { assert!(TEXT_ROW_HEIGHT_SPACIOUS > TEXT_ROW_HEIGHT_COMFORTABLE) };
 
         // Folder row heights strictly exceed body line height (no vertical clip)
         let body_line_h = TypoRole::Body.line_height_px(); // 18.2
         assert!(FOLDER_ROW_HEIGHT_COMPACT > body_line_h);
-        assert!(FOLDER_ROW_HEIGHT_COMFORTABLE > FOLDER_ROW_HEIGHT_COMPACT);
-        assert!(FOLDER_ROW_HEIGHT_SPACIOUS > FOLDER_ROW_HEIGHT_COMFORTABLE);
+        const { assert!(FOLDER_ROW_HEIGHT_COMFORTABLE > FOLDER_ROW_HEIGHT_COMPACT) };
+        const { assert!(FOLDER_ROW_HEIGHT_SPACIOUS > FOLDER_ROW_HEIGHT_COMFORTABLE) };
 
         // Parity with existing design tokens
         assert_eq!(TEXT_ROW_HEIGHT_COMPACT, SPACE_LG + SPACE_XS);
@@ -5515,7 +5515,7 @@ mod tests {
         // Narrow700 edge: avail 700 (below 720 fallback), 88 chrome -> 306/306.
         assert_eq!(textcenter_chrome_w(), 88);
         assert_eq!(textcenter_pane_widths(700, 0.5), (306, 306));
-        assert!(700 < VIEWPORT_MIN_W);
+        const { assert!(700 < VIEWPORT_MIN_W) };
         let (left_w, _) = textcenter_pane_widths(700, 0.5);
         let wrap = live_text_wrap_chars_for_width(left_w, 7.2);
         assert_eq!(wrap, 42); // 306 / 7.2 = 42.5 -> 42, well under the 80 cap
@@ -5577,7 +5577,7 @@ mod tests {
         );
         assert!((viewmodel39_text_pad_for(RowDensity::Compact) - 2.2).abs() < 0.01);
         assert!((viewmodel39_folder_pad_for(RowDensity::Compact) - 0.9).abs() < 0.01);
-        assert!(SPACE_XS < SPACE_SM);
+        const { assert!(SPACE_XS < SPACE_SM) };
 
         // Rhythm holds at every density: rows clear their line boxes.
         for density in [

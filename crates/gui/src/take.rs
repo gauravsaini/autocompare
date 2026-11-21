@@ -1466,8 +1466,8 @@ pub mod exq_merge2_tests {
 
         // Wide 960px: equal thirds minus two section gaps (944 / 3 = 314.66666...)
         let (left, base, right) = merge_three_pane_widths(960.0);
-        assert!((left - 314.666656).abs() < 0.01);
-        assert!((base - 314.666656).abs() < 0.01);
+        assert!((left - 314.666_66).abs() < 0.01);
+        assert!((base - 314.666_66).abs() < 0.01);
         assert!((left + base + right + 2.0 * MERGE_SECTION_GAP - 960.0).abs() < 0.01);
         assert!(!merge_three_pane_needs_hscroll(960.0));
 
@@ -1612,7 +1612,7 @@ pub mod exq_merge2_tests {
         // Wide 960.0 from fixture
         assert!(!merge_three_pane_needs_hscroll(960.0));
         let (lw, _, _) = merge_three_pane_widths(960.0);
-        assert!((lw - 314.666656).abs() < 0.001);
+        assert!((lw - 314.666_66).abs() < 0.001);
     }
 }
 
@@ -1641,9 +1641,9 @@ mod exq_merge3_tests {
         assert_eq!(merge_divider_gap(), 8.0);
         assert_eq!(merge_divider_gap(), MERGE_SECTION_GAP);
         let (x0, x1) = merge_three_divider_x(960.0);
-        assert!((x0 - 314.666656).abs() < 0.01);
-        assert!((x1 - 637.333313).abs() < 0.05);
-        assert!(((x1 - x0) - (314.666656 + 8.0)).abs() < 0.05);
+        assert!((x0 - 314.666_66).abs() < 0.01);
+        assert!((x1 - 637.333_3).abs() < 0.05);
+        assert!(((x1 - x0) - (314.666_66 + 8.0)).abs() < 0.05);
         assert!(merge_three_panes_fill_exact(960.0));
         assert!(!merge_three_pane_needs_hscroll(960.0));
     }
@@ -1662,9 +1662,9 @@ mod exq_merge3_tests {
         assert!((take_button_vpad() - 4.2).abs() < 0.01);
         assert!((merge_row_height() - 15.6).abs() < 0.01);
         let (l, b, r) = merge_three_pane_widths(960.0);
-        assert!((l - 314.666656).abs() < 0.01);
-        assert!((b - 314.666656).abs() < 0.01);
-        assert!((r - 314.666656).abs() < 0.01);
+        assert!((l - 314.666_66).abs() < 0.01);
+        assert!((b - 314.666_66).abs() < 0.01);
+        assert!((r - 314.666_66).abs() < 0.01);
         assert!(merge_three_panes_fill_exact(960.0));
     }
 }
@@ -1796,9 +1796,9 @@ mod exq_take33_tests {
         assert!(merge_center_pane_aligned(700.0));
         // 1200 wide: equal thirds, centered, exact fill, no scroll.
         let (l1200, b1200, _) = merge_three_pane_widths(1200.0);
-        assert!((l1200 - 394.666656).abs() < 0.01);
-        assert!((b1200 - 394.666656).abs() < 0.01);
-        assert!((merge_center_pane_x(1200.0) - 402.666656).abs() < 0.05);
+        assert!((l1200 - 394.666_66).abs() < 0.01);
+        assert!((b1200 - 394.666_66).abs() < 0.01);
+        assert!((merge_center_pane_x(1200.0) - 402.666_66).abs() < 0.05);
         assert!(merge_center_pane_aligned(1200.0));
         assert!(merge_three_panes_fill_exact(1200.0));
         assert!(!merge_three_pane_needs_hscroll(1200.0));
@@ -1976,8 +1976,8 @@ mod exq_take44_tests {
         assert!(raw.contains("\"narrow_needs_hscroll\":true"));
         assert!(raw.contains("\"wide_needs_hscroll\":false"));
         let (l960, _, _) = merge_three_pane_widths(960.0);
-        assert!((l960 - 314.666656).abs() < 0.01);
-        assert!((merge_center_pane_x(960.0) - 322.666656).abs() < 0.05);
+        assert!((l960 - 314.666_66).abs() < 0.01);
+        assert!((merge_center_pane_x(960.0) - 322.666_66).abs() < 0.05);
         assert_eq!(take_bar_total_width(), 287.0);
         assert!(!merge_three_pane_needs_hscroll(960.0));
         let (nl, _, _) = merge_three_pane_widths(360.0);

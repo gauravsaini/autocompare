@@ -2277,17 +2277,11 @@ pub fn copy_path_filename(path: &str) -> &str {
         return "";
     }
     let after_slash = match trimmed.rfind('/') {
-        Some(pos) => match trimmed.get(pos.saturating_add(1)..) {
-            Some(s) => s,
-            None => "",
-        },
+        Some(pos) => trimmed.get(pos.saturating_add(1)..).unwrap_or_default(),
         None => trimmed,
     };
     match after_slash.rfind('\\') {
-        Some(pos) => match after_slash.get(pos.saturating_add(1)..) {
-            Some(s) => s,
-            None => "",
-        },
+        Some(pos) => after_slash.get(pos.saturating_add(1)..).unwrap_or_default(),
         None => after_slash,
     }
 }
