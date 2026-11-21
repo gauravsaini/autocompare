@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-typo54 real font chains
+
+1. **System-first chains**: theme.rs TYPO54_SANS_CHAIN (SF Pro head, single-source sans, proportional tail) + TYPO54_MONO_CHAIN (SF Mono, Menlo, single-source mono, monospace tail); const fn resolver + TypoRole::candidate_stack, no new colors/sizes, headless pure.
+2. **Tests**: 1122 green + 2 kittest PASS (dark 52824B/503c, light 53512B/549c); rustfmt clean; banned 0; harness PASS (after.png byte-identical).
+3. **Files changed**: crates/gui/src/theme.rs, checks/gui-exq-typo54/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-kittest58 dual-theme real shots
 
 1. **Real pipeline**: real_egui_shot.rs shared capture_shot(Theme) adds light-theme second shot, same fixtures/size/floors, tmp-only writes; dark 51926B/503c, light 52669B/549c.
