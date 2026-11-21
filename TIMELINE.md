@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-typoinst61 consume font chains
+
+1. **Chain consumption**: app.rs typo48 plan har TypoRole ko uski typo54 candidate_stack se resolve karta hai (Mono->MONO, 6 chrome->SANS, zero duplicated strings) + startup log line per slot; headless pure, paint-neutral.
+2. **Tests**: 1123 green + 2 kittest PASS; rustfmt clean; banned 0; harness PASS (after.png byte-identical).
+3. **Files changed**: crates/gui/src/app.rs, checks/gui-exq-typoinst61/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-toolbar60 nav chevrons
 
 1. **Vector chevrons**: views.rs NavChevronDir + nav_chevron_segments (staged mark-box fractions, zero new sizes) + paint_nav_chevron_mark (paint-after overlay, hit-rects caller-side, dim_for ink); Prev/Next text labels intact.
