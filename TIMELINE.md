@@ -1058,3 +1058,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-hex84 hex geometry
 - `crates/gui/src/views_hex.rs` me stacked line char budgets single-source (HEX_STACKED_HEX_LINE_CHARS=61, HEX_STACKED_ASCII_LINE_CHARS=30), inline 61.0 removed.
 - Proof: leaf 1159 green, fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 1692969.
+
+### Feature (2026-11-21) — feat(gui): exq-tree82 tree geometry
+- `crates/gui/src/tree.rs` me FOLDER_FILTER_COMBO_PAD 24.0 -> SPACE_XL value-identical, home CTA frame parity + wrap asserts.
+- Proof: leaf 1159 lib + 2 shot green, harness PASS 10946B, fmt clean, banned 0, NO PUSH, cherry-picked 473f31c.
