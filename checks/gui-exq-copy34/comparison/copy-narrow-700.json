@@ -1,0 +1,18 @@
+{
+  "name": "copy-narrow-700",
+  "intent": "Copy-side copy34 narrow700 edge (<720 breakpoint): left/right copy arrows stay aligned via SPACE_* tokens, centered 16px hitbox, inline preview row height TypoRole::Mono, no h-scroll.",
+  "canvas_w": 700.0,
+  "avail_w": 676.0,
+  "arrow_column_w": 24.0,
+  "arrow_pad_x": 4.0,
+  "arrow_gap": 4.0,
+  "arrow_pair_w": 36.0,
+  "button_hitbox": 16.0,
+  "button_hitbox_w": 16.0,
+  "button_hitbox_h": 16.0,
+  "preview_row_h": 15.6,
+  "preview_role": "Mono",
+  "mono_line_height": 15.6,
+  "outer_margin": 12.0,
+  "needs_hscroll": false
+}

@@ -1769,3 +1769,360 @@ mod exq_copy12_tests {
         assert!(tall.contains("\"arrow_pitch\":19.6"));
     }
 }
+
+// ----------------------------------------------------------------------------
+// EXQ-COPY34: live copy arrows geometry — left/right arrow alignment,
+// 16px centered copy button hitbox, inline preview row height from TypoRole::Mono,
+// 1200px wide no horizontal scroll + narrow 700 edge (headless).
+// Geometry FIRST:
+// - Left/right arrows alignment reusing SPACE_* tokens: column width one XL step
+//   (24.0, `SPACE_XL`), side padding `SPACE_XS` (4.0 = (24 - 16)/2), arrow gap
+//   `SPACE_XS` (4.0).
+// - Copy button hitbox 16px (`SPACE_LG` parity) centered: 16x16 square target
+//   centered at (cx, cy) or within row/column bounds with exact 8px symmetric half.
+// - Inline preview row height from `TypoRole::Mono.line_height_px()` (15.6px).
+// - 1200px wide canvas with no h-scroll + narrow 700 edge (<720 breakpoint).
+// Typography SECOND: TypoRole::Mono for preview text, TypoRole::Small for status;
+// no new font size literals. Colors FROZEN: palette and theme untouched.
+// ----------------------------------------------------------------------------
+
+/// COPY34 wide canvas width px (1200.0): displays both panes and copy arrows without h-scroll.
+pub const COPY34_CANVAS_W: f32 = 1200.0;
+
+/// COPY34 narrow edge width px (700.0): edge breakpoint under 720.0.
+pub const COPY34_NARROW_W: f32 = 700.0;
+
+/// COPY34 arrow column width px: one XL step (24.0, single-source).
+pub const COPY34_ARROW_COLUMN_W: f32 = crate::theme::SPACE_XL;
+
+/// COPY34 copy button hitbox size px: standard 16.0 square (one LG step, `SPACE_LG`).
+pub const COPY34_BUTTON_HITBOX: f32 = crate::theme::SPACE_LG;
+
+/// COPY34 arrow horizontal padding px: one XS step (4.0 = (24 - 16) / 2).
+pub const COPY34_ARROW_PAD_X: f32 = crate::theme::SPACE_XS;
+
+/// COPY34 inter-arrow gap px: one XS step (4.0, `SPACE_XS`).
+pub const COPY34_ARROW_GAP: f32 = crate::theme::SPACE_XS;
+
+/// Returns the wide canvas width px (1200.0). Pure; unit-tested.
+pub fn copy34_canvas_w() -> f32 {
+    COPY34_CANVAS_W
+}
+
+/// Returns the narrow canvas width px (700.0). Pure; unit-tested.
+pub fn copy34_narrow_w() -> f32 {
+    COPY34_NARROW_W
+}
+
+/// Returns the copy arrow column width px (24.0). Pure; unit-tested.
+pub fn copy34_arrow_column_w() -> f32 {
+    COPY34_ARROW_COLUMN_W
+}
+
+/// Returns the copy button 16px hitbox size px (16.0). Pure; unit-tested.
+pub fn copy34_button_hitbox_size() -> f32 {
+    COPY34_BUTTON_HITBOX
+}
+
+/// Returns the arrow side padding px (4.0). Pure; unit-tested.
+pub fn copy34_arrow_pad_x() -> f32 {
+    COPY34_ARROW_PAD_X
+}
+
+/// Returns the arrow gap px (4.0). Pure; unit-tested.
+pub fn copy34_arrow_gap() -> f32 {
+    COPY34_ARROW_GAP
+}
+
+/// Total width px for a paired left and right arrow set: two 16px buttons + one XS gap (16 + 4 + 16 = 36.0).
+pub fn copy34_arrow_pair_w() -> f32 {
+    COPY34_BUTTON_HITBOX + COPY34_BUTTON_HITBOX + COPY34_ARROW_GAP
+}
+
+/// Centered 16px square hitbox `(x0, y0, x1, y1)` px centered at `(center_x, center_y)`.
+/// Returns `None` if any coordinate is non-finite. Pure; unit-tested.
+pub fn copy34_button_hitbox_rect(center_x: f32, center_y: f32) -> Option<(f32, f32, f32, f32)> {
+    if !center_x.is_finite() || !center_y.is_finite() {
+        return None;
+    }
+    let half = COPY34_BUTTON_HITBOX / 2.0;
+    let (x0, y0, x1, y1) = (
+        center_x - half,
+        center_y - half,
+        center_x + half,
+        center_y + half,
+    );
+    if x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite() {
+        Some((x0, y0, x1, y1))
+    } else {
+        None
+    }
+}
+
+/// Point-in-hitbox test: checks whether `(x, y)` is within the centered 16px hitbox
+/// centered at `(center_x, center_y)` (edges inclusive).
+/// Non-finite inputs return `false`. Pure; unit-tested.
+pub fn copy34_button_hitbox_contains(center_x: f32, center_y: f32, x: f32, y: f32) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    match copy34_button_hitbox_rect(center_x, center_y) {
+        Some((x0, y0, x1, y1)) => x >= x0 && x <= x1 && y >= y0 && y <= y1,
+        None => false,
+    }
+}
+
+/// Centered 16px copy button hitbox positioned within a column and row cell.
+/// Centers the 16x16 hitbox in `(col_x .. col_x + col_w)` and `(row_top .. row_top + row_h)`.
+/// Returns `None` if any input is non-finite or dimensions are non-positive. Pure; unit-tested.
+pub fn copy34_button_hitbox_in_row(
+    row_top: f32,
+    row_h: f32,
+    col_x: f32,
+    col_w: f32,
+) -> Option<(f32, f32, f32, f32)> {
+    if !row_top.is_finite() || !row_h.is_finite() || !col_x.is_finite() || !col_w.is_finite() {
+        return None;
+    }
+    if row_h <= 0.0 || col_w <= 0.0 {
+        return None;
+    }
+    let cx = col_x + col_w / 2.0;
+    let cy = row_top + row_h / 2.0;
+    copy34_button_hitbox_rect(cx, cy)
+}
+
+/// Returns whether a copy button hitbox rect is perfectly symmetric 16x16 around `(cx, cy)`.
+pub fn copy34_hitbox_is_symmetric(cx: f32, cy: f32) -> bool {
+    match copy34_button_hitbox_rect(cx, cy) {
+        Some((x0, y0, x1, y1)) => {
+            let w = x1 - x0;
+            let h = y1 - y0;
+            (w - COPY34_BUTTON_HITBOX).abs() < 0.0001
+                && (h - COPY34_BUTTON_HITBOX).abs() < 0.0001
+                && ((cx - x0) - 8.0).abs() < 0.0001
+                && ((x1 - cx) - 8.0).abs() < 0.0001
+                && ((cy - y0) - 8.0).abs() < 0.0001
+                && ((y1 - cy) - 8.0).abs() < 0.0001
+        }
+        None => false,
+    }
+}
+
+/// Left/right arrow x position within a column `col_x` of width `col_w`:
+/// Centers the 16px arrow button in the column.
+pub fn copy34_arrow_x(col_x: f32, col_w: f32) -> Option<f32> {
+    if !col_x.is_finite() || !col_w.is_finite() || col_w < COPY34_BUTTON_HITBOX {
+        return None;
+    }
+    let x = col_x + (col_w - COPY34_BUTTON_HITBOX) / 2.0;
+    if x.is_finite() { Some(x) } else { None }
+}
+
+/// Typographic role for inline preview rows: `TypoRole::Mono` (12 regular monospace, tabular).
+pub const fn copy34_inline_preview_role() -> crate::theme::TypoRole {
+    crate::theme::TypoRole::Mono
+}
+
+/// Inline preview row height px derived directly from `TypoRole::Mono.line_height_px()`.
+/// Parity with Beyond Compare monospace line height (15.6px). Pure; unit-tested.
+pub fn copy34_inline_preview_row_height() -> f32 {
+    copy34_inline_preview_role().line_height_px()
+}
+
+/// Total vertical height px for a block of `line_count` preview rows:
+/// `line_count * copy34_inline_preview_row_height()`. Pure; unit-tested.
+pub fn copy34_inline_preview_block_height(line_count: usize) -> f32 {
+    line_count as f32 * copy34_inline_preview_row_height()
+}
+
+/// Calculates how many full inline preview rows fit in `available_h`.
+/// Non-finite or non-positive input returns 0. Pure; unit-tested.
+pub fn copy34_inline_preview_rows_fit(available_h: f32) -> usize {
+    if !available_h.is_finite() || available_h <= 0.0 {
+        return 0;
+    }
+    let rh = copy34_inline_preview_row_height();
+    if rh <= 0.0 {
+        return 0;
+    }
+    (available_h / rh).floor() as usize
+}
+
+/// Wide available width px: 1200 canvas minus two outer margins (1200 - 2 * 12 = 1176).
+pub fn copy34_avail_w() -> f32 {
+    COPY34_CANVAS_W - crate::theme::GEO_OUTER_MARGIN * 2.0
+}
+
+/// Narrow available width px: 700 canvas minus two outer margins (700 - 2 * 12 = 676).
+pub fn copy34_narrow_avail_w() -> f32 {
+    COPY34_NARROW_W - crate::theme::GEO_OUTER_MARGIN * 2.0
+}
+
+/// Horizontal scroll check: returns true only when content width exceeds available width.
+pub fn copy34_needs_hscroll(avail_w: f32, content_w: f32) -> bool {
+    if !avail_w.is_finite() || !content_w.is_finite() {
+        return false;
+    }
+    content_w > avail_w
+}
+
+/// Verifies whether `content_w` fits comfortably in the 1200px wide canvas without h-scroll.
+pub fn copy34_wide1200_fits(content_w: f32) -> bool {
+    !copy34_needs_hscroll(copy34_avail_w(), content_w)
+}
+
+/// Verifies whether `content_w` fits in the 700px narrow edge without h-scroll.
+pub fn copy34_narrow700_fits(content_w: f32) -> bool {
+    !copy34_needs_hscroll(copy34_narrow_avail_w(), content_w)
+}
+
+#[cfg(test)]
+mod exq_copy34_tests {
+    use super::*;
+    use crate::theme::{GEO_OUTER_MARGIN, SPACE_LG, SPACE_XL, SPACE_XS, TypoRole};
+
+    #[test]
+    fn copy34_arrows_alignment_reuse_space_tokens() {
+        assert_eq!(copy34_arrow_column_w(), SPACE_XL);
+        assert_eq!(copy34_arrow_column_w(), 24.0);
+        assert_eq!(copy34_arrow_pad_x(), SPACE_XS);
+        assert_eq!(copy34_arrow_pad_x(), 4.0);
+        assert_eq!(copy34_arrow_gap(), SPACE_XS);
+        assert_eq!(copy34_arrow_gap(), 4.0);
+        assert_eq!(
+            copy34_arrow_column_w(),
+            copy34_button_hitbox_size() + 2.0 * copy34_arrow_pad_x()
+        );
+        assert_eq!(copy34_arrow_pair_w(), 36.0);
+        assert_eq!(
+            copy34_arrow_pair_w(),
+            2.0 * copy34_button_hitbox_size() + copy34_arrow_gap()
+        );
+
+        // Arrow x centering inside 24px column: (24 - 16) / 2 = 4.0
+        assert_eq!(copy34_arrow_x(10.0, 24.0), Some(14.0));
+        assert_eq!(copy34_arrow_x(0.0, 24.0), Some(4.0));
+        assert_eq!(copy34_arrow_x(f32::NAN, 24.0), None);
+        assert_eq!(copy34_arrow_x(10.0, 10.0), None); // col_w < hitbox
+    }
+
+    #[test]
+    fn copy34_button_hitbox_16px_centered() {
+        assert_eq!(copy34_button_hitbox_size(), SPACE_LG);
+        assert_eq!(copy34_button_hitbox_size(), 16.0);
+
+        // Centered at (100.0, 200.0): 92..108 x 192..208
+        let rect = copy34_button_hitbox_rect(100.0, 200.0);
+        assert_eq!(rect, Some((92.0, 192.0, 108.0, 208.0)));
+        assert!(copy34_hitbox_is_symmetric(100.0, 200.0));
+
+        if let Some((x0, y0, x1, y1)) = rect {
+            assert_eq!(x1 - x0, 16.0);
+            assert_eq!(y1 - y0, 16.0);
+            assert!(((100.0 - x0) - 8.0).abs() < 0.0001);
+            assert!(((x1 - 100.0) - 8.0).abs() < 0.0001);
+            assert!(((200.0 - y0) - 8.0).abs() < 0.0001);
+            assert!(((y1 - 200.0) - 8.0).abs() < 0.0001);
+        }
+
+        // Inclusion checks
+        assert!(copy34_button_hitbox_contains(100.0, 200.0, 100.0, 200.0));
+        assert!(copy34_button_hitbox_contains(100.0, 200.0, 92.0, 192.0));
+        assert!(copy34_button_hitbox_contains(100.0, 200.0, 108.0, 208.0));
+        assert!(!copy34_button_hitbox_contains(100.0, 200.0, 91.9, 200.0));
+        assert!(!copy34_button_hitbox_contains(100.0, 200.0, 108.1, 200.0));
+        assert!(!copy34_button_hitbox_contains(100.0, 200.0, 100.0, 191.9));
+        assert!(!copy34_button_hitbox_contains(100.0, 200.0, 100.0, 208.1));
+        assert!(!copy34_button_hitbox_contains(
+            f32::NAN,
+            200.0,
+            100.0,
+            200.0
+        ));
+
+        // In-row centering: col at 50..74 (w=24), row at 100..124 (h=24)
+        // cx = 62.0, cy = 112.0 -> hitbox: 54..70 x 104..120
+        let in_row = copy34_button_hitbox_in_row(100.0, 24.0, 50.0, 24.0);
+        assert_eq!(in_row, Some((54.0, 104.0, 70.0, 120.0)));
+        assert_eq!(
+            copy34_button_hitbox_in_row(f32::NAN, 24.0, 50.0, 24.0),
+            None
+        );
+        assert_eq!(copy34_button_hitbox_in_row(100.0, 0.0, 50.0, 24.0), None);
+    }
+
+    #[test]
+    fn copy34_inline_preview_row_height_reusing_mono() {
+        assert_eq!(copy34_inline_preview_role(), TypoRole::Mono);
+        assert_eq!(
+            copy34_inline_preview_row_height(),
+            TypoRole::Mono.line_height_px()
+        );
+        assert!((copy34_inline_preview_row_height() - 15.6).abs() < 0.01);
+
+        // Block height
+        assert_eq!(copy34_inline_preview_block_height(0), 0.0);
+        assert!((copy34_inline_preview_block_height(1) - 15.6).abs() < 0.01);
+        assert!((copy34_inline_preview_block_height(10) - 156.0).abs() < 0.01);
+
+        // Rows fit
+        assert_eq!(copy34_inline_preview_rows_fit(0.0), 0);
+        assert_eq!(copy34_inline_preview_rows_fit(-5.0), 0);
+        assert_eq!(copy34_inline_preview_rows_fit(f32::NAN), 0);
+        assert_eq!(copy34_inline_preview_rows_fit(15.5), 0);
+        assert_eq!(copy34_inline_preview_rows_fit(15.6), 1);
+        assert_eq!(copy34_inline_preview_rows_fit(31.2), 2);
+    }
+
+    #[test]
+    fn copy34_wide1200_no_hscroll_and_narrow700_edge() {
+        assert_eq!(copy34_canvas_w(), 1200.0);
+        assert_eq!(copy34_narrow_w(), 700.0);
+        assert_eq!(copy34_avail_w(), 1200.0 - 2.0 * GEO_OUTER_MARGIN);
+        assert_eq!(copy34_avail_w(), 1176.0);
+        assert_eq!(copy34_narrow_avail_w(), 700.0 - 2.0 * GEO_OUTER_MARGIN);
+        assert_eq!(copy34_narrow_avail_w(), 676.0);
+
+        // Pair width 36px and arrow col 24px both fit easily
+        assert!(copy34_wide1200_fits(copy34_arrow_column_w()));
+        assert!(copy34_wide1200_fits(copy34_arrow_pair_w()));
+        assert!(copy34_wide1200_fits(600.0));
+        assert!(!copy34_needs_hscroll(copy34_avail_w(), 600.0));
+        assert!(copy34_needs_hscroll(copy34_avail_w(), 1200.0));
+
+        // Narrow 700 fits
+        assert!(copy34_narrow700_fits(copy34_arrow_column_w()));
+        assert!(copy34_narrow700_fits(copy34_arrow_pair_w()));
+        assert!(copy34_narrow700_fits(500.0));
+        assert!(!copy34_needs_hscroll(copy34_narrow_avail_w(), 500.0));
+
+        // Non-finite handling
+        assert!(!copy34_needs_hscroll(f32::NAN, 100.0));
+        assert!(!copy34_needs_hscroll(100.0, f32::NAN));
+    }
+
+    #[test]
+    fn copy34_fixtures_parity() {
+        let wide =
+            include_str!("../../../checks/gui-exq-copy34/round-1/comparison/copy-wide-1200.json");
+        assert!(wide.contains("\"name\": \"copy-wide-1200\""));
+        assert!(wide.contains("\"canvas_w\": 1200.0"));
+        assert!(wide.contains("\"avail_w\": 1176.0"));
+        assert!(wide.contains("\"arrow_column_w\": 24.0"));
+        assert!(wide.contains("\"arrow_pad_x\": 4.0"));
+        assert!(wide.contains("\"button_hitbox\": 16.0"));
+        assert!(wide.contains("\"preview_row_h\": 15.6"));
+        assert!(wide.contains("\"needs_hscroll\": false"));
+
+        let narrow =
+            include_str!("../../../checks/gui-exq-copy34/round-1/comparison/copy-narrow-700.json");
+        assert!(narrow.contains("\"name\": \"copy-narrow-700\""));
+        assert!(narrow.contains("\"canvas_w\": 700.0"));
+        assert!(narrow.contains("\"avail_w\": 676.0"));
+        assert!(narrow.contains("\"arrow_column_w\": 24.0"));
+        assert!(narrow.contains("\"button_hitbox\": 16.0"));
+        assert!(narrow.contains("\"preview_row_h\": 15.6"));
+        assert!(narrow.contains("\"needs_hscroll\": false"));
+    }
+}
