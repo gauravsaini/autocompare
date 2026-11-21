@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-table43 live table compare grid
+
+1. **Live table grid lock**: delegation-only pure helpers in views_table.rs (live-table-grid.json edge fixture); 65 views_table tests green; colors frozen at 38.
+2. **Tests**: 1092 green; rustfmt clean on OWNS; banned non-test tokens 0; exquisite harness RESULT: PASS.
+3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table43/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-take44 live merge take resolution
 
 1. **Live take geometry lock**: delegation-only pure helpers in take.rs (take_buttons_row_x, take geometry vs 960px budget); new test take_exq_take44_live_take_geometry; colors frozen at 38.
