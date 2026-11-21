@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-table63 table geometry tokens
+
+1. **Token adoption**: views_table.rs magic-number paddings/heights adopt SPACE/GEO tokens value-identical; zero new tokens/sizes/colors, hit behavior unchanged.
+2. **Tests**: 1125 green + 2 kittest PASS; rustfmt clean; banned 0; harness PASS (after.png md5-identical 3ea634d1).
+3. **Files changed**: crates/gui/src/views_table.rs, checks/gui-exq-table63/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-tree62 tree geometry
 
 1. **Token adoption**: tree.rs 11 value-identical consts adopt SPACE/TYPO tokens (EXPANDER_W->SPACE_LG, ROW/HEADER/FILTER heights->SPACE_XL, paddings/gaps->SPACE_SM); zero new tokens/sizes/colors, raster-identical by construction.
