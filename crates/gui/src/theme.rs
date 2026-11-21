@@ -1698,6 +1698,50 @@ pub fn fonts76_bundled_typo_ok() -> bool {
         && light_diff_accents_aa()
 }
 
+// ----------------------------------------------------------------------------
+// EXQ-TYPO89 typography + light Visuals polish (headless, theme-owned).
+// Bundled sans/mono reuse, TypoRole sizes, line-height, letter-spacing;
+// light Visuals soft wash reuses LIGHT_* helpers only (zero new tokens);
+// geometry frozen (zero SPACE/GEO moves). Paint adoption later wave.
+// ----------------------------------------------------------------------------
+
+/// Typo89 polish contract: bundled slots present, stacks single-sourced,
+/// size ladder intact, line-height px ordered, header-only tracking, light
+/// Visuals fills reuse LIGHT_* palette fills only, AA intact, canonical
+/// geometry scale untouched. Pure; `typo89_typography_plus_light_polish`
+/// proves it.
+pub fn typo89_polish_ok() -> bool {
+    let defs = fonts76_font_definitions();
+    let light = fonts76_visuals(false);
+    let light_bg = Color32::from_rgb(LIGHT_BG_RGB[0], LIGHT_BG_RGB[1], LIGHT_BG_RGB[2]);
+    defs.families.contains_key(&fonts76_sans_family())
+        && defs.families.contains_key(&fonts76_mono_family())
+        && TypoRole::Mono.font_stack() == TYPO_MONO_STACK
+        && TypoRole::Body.font_stack() == TYPO_UI_SANS_STACK
+        && TYPO_SMALL_SIZE < TYPO_MONO_SIZE
+        && TYPO_MONO_SIZE < TYPO_BODY_SIZE
+        && TYPO_BODY_SIZE < TYPO_HOME_TITLE_SIZE
+        && TYPO_HOME_TITLE_SIZE < TYPO_HEADING_SIZE
+        && TypoRole::Small.line_height_px() < TypoRole::Mono.line_height_px()
+        && TypoRole::Mono.line_height_px() < TypoRole::Body.line_height_px()
+        && TypoRole::Body.line_height_px() < TypoRole::Heading.line_height_px()
+        && TypoRole::Heading.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
+        && TypoRole::HomeTitle.letter_spacing_em() == TYPO_TRACKING_HEADING_EM
+        && TypoRole::Body.letter_spacing_em() == TYPO_LETTER_SPACING
+        && TypoRole::Mono.letter_spacing_em() == TYPO_LETTER_SPACING
+        && TypoRole::Small.letter_spacing_em() == TYPO_LETTER_SPACING
+        && light.window_fill == light_bg
+        && light.panel_fill == light_bg
+        && light.extreme_bg_color == LIGHT_TRACK
+        && light.faint_bg_color == LIGHT_TRACK
+        && light_diff_accents_aa()
+        && SPACE_XS == 4.0
+        && SPACE_SM == 8.0
+        && SPACE_MD == 12.0
+        && SPACE_LG == 16.0
+        && SPACE_XL == 24.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2975,6 +3019,39 @@ mod tests {
         // Density verification: zero vertical clipping in both
         let audit = crate::viewmodel::audit_viewmodel_density();
         assert!(audit.zero_clipping_verified);
+    }
+
+    #[test]
+    fn typo89_typography_plus_light_polish() {
+        assert!(typo89_polish_ok());
+        // Bundled slots: sans + mono present, stacks single-sourced.
+        assert!(fonts76_bundled_typo_ok());
+        assert_eq!(TypoRole::Mono.font_stack(), TYPO_MONO_STACK);
+        assert_eq!(TypoRole::Body.font_stack(), TYPO_UI_SANS_STACK);
+        // Sizes: existing ladder, koi naya point size nahi.
+        assert_eq!(TYPO_HEADING_SIZE, 18.0);
+        assert_eq!(TYPO_HOME_TITLE_SIZE, 14.0);
+        assert_eq!(TYPO_BODY_SIZE, 13.0);
+        assert_eq!(TYPO_MONO_SIZE, 12.0);
+        assert_eq!(TYPO_SMALL_SIZE, 11.0);
+        // Line-height px order: small 13.2 < mono 15.6 < body 18.2 < heading 21.6.
+        assert!(TypoRole::Small.line_height_px() < TypoRole::Mono.line_height_px());
+        assert!(TypoRole::Mono.line_height_px() < TypoRole::Body.line_height_px());
+        assert!(TypoRole::Body.line_height_px() < TypoRole::Heading.line_height_px());
+        // Tracking: headers 0.02em, baaki paint no-op 0.0.
+        assert_eq!(TYPO_LETTER_SPACING, 0.0);
+        assert_eq!(TypoRole::Heading.letter_spacing_em(), 0.02);
+        assert_eq!(TypoRole::Mono.letter_spacing_em(), 0.0);
+        // Light soft wash: LIGHT_* fills only, koi naya hue nahi.
+        let light = fonts76_visuals(false);
+        assert_eq!(light.window_fill, light.panel_fill);
+        assert_eq!(light.extreme_bg_color, LIGHT_TRACK);
+        assert_eq!(light.faint_bg_color, LIGHT_TRACK);
+        assert!(light_diff_accents_aa());
+        // Geometry frozen: canonical scale untouched.
+        assert_eq!(GEO_TIGHT_GAP, SPACE_XS);
+        assert_eq!(GEO_SECTION_GAP, SPACE_SM);
+        assert_eq!(GEO_OUTER_MARGIN, SPACE_MD);
     }
 
     #[test]
