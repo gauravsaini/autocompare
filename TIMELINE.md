@@ -1070,3 +1070,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-table85 table geometry
 - `crates/gui/src/views_table.rs` me table geometry polish, SPACE tokens, harness PASS byte-identical 10946B.
 - Proof: leaf 1159 lib + 2 shot green, fmt clean, banned 0, OWNS clean, NO PUSH, cherry-picked 1d9aa2b.
+
+### Verification (2026-11-21) — docs(checks): exq-verify87 verification report
+- Full workspace green 50 suites 1786 passed 0 failed, harness PASS 10946B distinct-256, gui 1162 passed 0 failed.
+- Proof: OWNS-only 4 files checks/gui-exq-verify87/round-1/, crates zero diff, fmt 4 diffs pre-existing crates/sessions report-only, banned 0, NO PUSH from leaf, cherry-picked 579023c.
