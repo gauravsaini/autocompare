@@ -1,5 +1,11 @@
 # TIMELINE
 
+### Feature (2026-11-21) — feat(gui): exq-tree62 tree geometry
+
+1. **Token adoption**: tree.rs 11 value-identical consts adopt SPACE/TYPO tokens (EXPANDER_W->SPACE_LG, ROW/HEADER/FILTER heights->SPACE_XL, paddings/gaps->SPACE_SM); zero new tokens/sizes/colors, raster-identical by construction.
+2. **Tests**: 1126 green + 2 kittest PASS; rustfmt clean; banned 0; harness PASS (after.png md5-identical).
+3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree62/**, TIMELINE.md.
+
 ### Feature (2026-11-21) — feat(gui): exq-typoinst61 consume font chains
 
 1. **Chain consumption**: app.rs typo48 plan har TypoRole ko uski typo54 candidate_stack se resolve karta hai (Mono->MONO, 6 chrome->SANS, zero duplicated strings) + startup log line per slot; headless pure, paint-neutral.
