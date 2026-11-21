@@ -6838,6 +6838,40 @@ pub fn typo48_installed_families_label() -> String {
         .join("; ")
 }
 
+/// EXQ-TYPOINST61 role -> typo54 chain (single source): sirf
+/// [`TypoRole::candidate_stack`](crate::theme::TypoRole::candidate_stack)
+/// par delegate, koi stack string duplicate nahi. Pure; headless-tested.
+pub fn typoinst61_chain_for_role(role: crate::theme::TypoRole) -> &'static [&'static str] {
+    role.candidate_stack()
+}
+
+/// EXQ-TYPOINST61 plan slot -> typo54 chain: Proportional har chrome role ka
+/// SANS chain, Monospace `Mono` content ka MONO chain (representative role
+/// se, mapping duplicate nahi). Pure; headless-tested.
+pub fn typoinst61_chain_for_slot(slot: &Typo48FontSlot) -> &'static [&'static str] {
+    match slot.family {
+        egui::FontFamily::Monospace => typoinst61_chain_for_role(crate::theme::TypoRole::Mono),
+        _ => typoinst61_chain_for_role(crate::theme::TypoRole::Body),
+    }
+}
+
+/// EXQ-TYPOINST61 startup log line: har plan slot `family <- chain | ...`
+/// (pure string builder; actual eprintln [`install_typo48_live_fonts`] me,
+/// maujooda pattern). Koi naya size/weight/token nahi. Pure; headless-tested.
+pub fn typoinst61_startup_log_line() -> String {
+    typo48_live_font_plan()
+        .iter()
+        .map(|slot| {
+            format!(
+                "{} <- {}",
+                typo48_family_name(&slot.family),
+                typoinst61_chain_for_slot(slot).join(" | ")
+            )
+        })
+        .collect::<Vec<String>>()
+        .join("; ")
+}
+
 /// EXQ-TYPO48 live install: plan slots ko `ctx` font definitions me
 /// re-assert karta hai (built-ins fallback chain barkarar — koi binary
 /// ship nahi, koi slot khali nahi chhodta), phir installed families log
@@ -6853,6 +6887,10 @@ pub fn install_typo48_live_fonts(ctx: &egui::Context) {
     eprintln!(
         "autocompare-gui: installed font families: {}",
         typo48_installed_families_label()
+    );
+    eprintln!(
+        "autocompare-gui: live font chains: {}",
+        typoinst61_startup_log_line()
     );
 }
 
@@ -12552,6 +12590,44 @@ mod tests {
         assert!(app.fonts_installed);
         app.ensure_typo48_live_fonts(&ctx);
         assert!(app.fonts_installed);
+    }
+
+    #[test]
+    fn typo_exq_typoinst61_chains() {
+        use crate::theme::{TYPO54_MONO_CHAIN, TYPO54_SANS_CHAIN, TypoRole};
+        use eframe::egui::FontFamily;
+
+        // Har TypoRole apne typo54 chain par: Mono MONO, baaki sab SANS.
+        assert_eq!(typoinst61_chain_for_role(TypoRole::Mono), TYPO54_MONO_CHAIN);
+        for role in [
+            TypoRole::Heading,
+            TypoRole::Body,
+            TypoRole::Small,
+            TypoRole::HomeTitle,
+            TypoRole::HomeDesc,
+            TypoRole::HomeButton,
+        ] {
+            assert_eq!(typoinst61_chain_for_role(role), TYPO54_SANS_CHAIN);
+        }
+
+        // Slot chains: proportional SANS, monospace MONO (single source).
+        for slot in typo48_live_font_plan() {
+            let expected = if slot.family == FontFamily::Monospace {
+                TYPO54_MONO_CHAIN
+            } else {
+                TYPO54_SANS_CHAIN
+            };
+            assert_eq!(typoinst61_chain_for_slot(&slot), expected);
+        }
+
+        // Log line dono slots + chain heads namti hai, single source se.
+        let line = typoinst61_startup_log_line();
+        assert!(line.contains("proportional"));
+        assert!(line.contains("monospace"));
+        assert!(line.contains(TYPO54_SANS_CHAIN[0]));
+        assert!(line.contains(TYPO54_MONO_CHAIN[0]));
+        assert!(line.contains(crate::theme::TYPO_UI_SANS_STACK));
+        assert!(line.contains(crate::theme::TYPO_MONO_STACK));
     }
 
     #[test]
