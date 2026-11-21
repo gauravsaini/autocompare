@@ -1094,3 +1094,7 @@
 ### Feature (2026-11-21) — feat(reports): rep92 builders
 - `crates/reports/**` me HTML color/mono + linked child, Text, XML, Patch builders verify, 31 passed 0 failed.
 - Proof: leaf fmt clean, clippy clean, banned 0 prod, OWNS clean, NO PUSH, cherry-picked 2088a75.
+
+### Feature (2026-11-21) — feat(compare): cmp93 orchestration
+- `crates/compare/**` me Vfs folder tree + Sync Both/Mirror + Merge + JobRunner, 165 passed 0 failed.
+- Proof: leaf fmt clean, clippy clean, banned 0 prod delta, OWNS clean, NO PUSH, cherry-picked 378e466.
