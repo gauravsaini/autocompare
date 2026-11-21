@@ -144,7 +144,7 @@ pub fn tree_indent_for_depth(depth: usize) -> f32 {
 /// Folder drill-down expander cell width px: standard 16px glyph cell
 /// (`home::SESSION_TREE_EXPANDER_W` parity) — `▶/▼` button ya blank
 /// jagah, har row me fixed taaki glyph/path columns align rahen.
-pub const FOLDER_EXPANDER_W: f32 = 16.0;
+pub const FOLDER_EXPANDER_W: f32 = crate::theme::SPACE_LG;
 
 /// Folder drill-down expander cell width px (single source).
 /// Pure; unit-tested.
@@ -656,11 +656,11 @@ pub fn filtered_folder_rows(rows: &[FolderRow], display: &FolderDisplay) -> Vec<
 // line `filtered_counts_summary` wahi rehti hai (filtered rows par).
 
 /// Filter bar ki height (px): 24.0, MD spacing scale par (row jaisi).
-pub const FOLDER_FILTER_BAR_HEIGHT: f32 = 24.0;
+pub const FOLDER_FILTER_BAR_HEIGHT: f32 = crate::theme::SPACE_XL;
 /// Filter bar ka ek taraf ka horizontal padding (px): 8.0, MD scale par.
-pub const FOLDER_FILTER_BAR_PAD_X: f32 = 8.0;
+pub const FOLDER_FILTER_BAR_PAD_X: f32 = crate::theme::SPACE_SM;
 /// Filter bar controls ke beech ka gap (px): 8.0, MD scale par.
-pub const FOLDER_FILTER_BAR_GAP: f32 = 8.0;
+pub const FOLDER_FILTER_BAR_GAP: f32 = crate::theme::SPACE_SM;
 
 /// Filter bar ki height (px). Header/row se alag function taaki paint
 /// teeno ko ek saath na badle.
@@ -1138,23 +1138,23 @@ pub enum FolderCellAlign {
 }
 
 /// Folder row ki height (px): 24.0, MD spacing scale par.
-pub const FOLDER_ROW_HEIGHT: f32 = 24.0;
+pub const FOLDER_ROW_HEIGHT: f32 = crate::theme::SPACE_XL;
 /// Folder header ki height (px): rows jaisi, ek baseline.
-pub const FOLDER_HEADER_HEIGHT: f32 = 24.0;
+pub const FOLDER_HEADER_HEIGHT: f32 = crate::theme::SPACE_XL;
 /// Cell ka ek taraf ka horizontal padding (px): 8.0, MD scale par.
-pub const FOLDER_CELL_PAD_X: f32 = 8.0;
+pub const FOLDER_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
 /// Fixed columns ke beech ka gap (px): 8.0, MD scale par.
-pub const FOLDER_COL_GAP: f32 = 8.0;
+pub const FOLDER_COL_GAP: f32 = crate::theme::SPACE_SM;
 /// Nominal mono advance (px per char): min-px math ke liye.
 pub const FOLDER_MONO_ADVANCE: f32 = 7.0;
 /// Path flex column ki min readable width (chars me).
 pub const FOLDER_PATH_MIN_CHARS: usize = 24;
 /// Path/body text size (pt): `TypoRole::Body` precedent.
-pub const FOLDER_BODY_SIZE: f32 = 13.0;
+pub const FOLDER_BODY_SIZE: f32 = crate::theme::TYPO_BODY_SIZE;
 /// Side columns text size (pt): `TypoRole::Caption` precedent.
-pub const FOLDER_SIDE_SIZE: f32 = 12.0;
+pub const FOLDER_SIDE_SIZE: f32 = crate::theme::TYPO_MONO_SIZE;
 /// Header text size (pt): caption-strong precedent.
-pub const FOLDER_HEADER_SIZE: f32 = 12.0;
+pub const FOLDER_HEADER_SIZE: f32 = crate::theme::TYPO_MONO_SIZE;
 
 /// Paint row height (px). Header se alag function taaki paint dono ko
 /// ek saath na badle.
@@ -8409,5 +8409,59 @@ mod tree41_tests {
         assert_eq!(tree41_dim_role(), crate::theme::TypoRole::Small);
         assert_eq!(tree41_body_role().size(), crate::theme::TYPO_MONO_SIZE);
         assert_eq!(tree41_dim_role().size(), crate::theme::TYPO_SMALL_SIZE);
+    }
+}
+
+#[cfg(test)]
+mod exq_tree62_tests {
+    use super::*;
+
+    #[test]
+    fn tree62_geometry_consts_ride_space_tokens() {
+        assert_eq!(FOLDER_EXPANDER_W, crate::theme::SPACE_LG);
+        assert_eq!(FOLDER_EXPANDER_W, 16.0);
+        assert_eq!(FOLDER_ROW_HEIGHT, crate::theme::SPACE_XL);
+        assert_eq!(FOLDER_ROW_HEIGHT, 24.0);
+        assert_eq!(FOLDER_HEADER_HEIGHT, crate::theme::SPACE_XL);
+        assert_eq!(FOLDER_HEADER_HEIGHT, 24.0);
+        assert_eq!(FOLDER_CELL_PAD_X, crate::theme::SPACE_SM);
+        assert_eq!(FOLDER_CELL_PAD_X, 8.0);
+        assert_eq!(FOLDER_COL_GAP, crate::theme::SPACE_SM);
+        assert_eq!(FOLDER_COL_GAP, 8.0);
+        assert_eq!(FOLDER_FILTER_BAR_HEIGHT, crate::theme::SPACE_XL);
+        assert_eq!(FOLDER_FILTER_BAR_HEIGHT, 24.0);
+        assert_eq!(FOLDER_FILTER_BAR_PAD_X, crate::theme::SPACE_SM);
+        assert_eq!(FOLDER_FILTER_BAR_PAD_X, 8.0);
+        assert_eq!(FOLDER_FILTER_BAR_GAP, crate::theme::SPACE_SM);
+        assert_eq!(FOLDER_FILTER_BAR_GAP, 8.0);
+    }
+
+    #[test]
+    fn tree62_typo_consts_ride_typo_tokens() {
+        assert_eq!(FOLDER_BODY_SIZE, crate::theme::TYPO_BODY_SIZE);
+        assert_eq!(FOLDER_BODY_SIZE, 13.0);
+        assert_eq!(FOLDER_SIDE_SIZE, crate::theme::TYPO_MONO_SIZE);
+        assert_eq!(FOLDER_SIDE_SIZE, 12.0);
+        assert_eq!(FOLDER_HEADER_SIZE, crate::theme::TYPO_MONO_SIZE);
+        assert_eq!(FOLDER_HEADER_SIZE, 12.0);
+    }
+
+    #[test]
+    fn tree62_token_layouts_match_literal_budgets() {
+        assert_eq!(folder_expander_width(), 16.0);
+        assert_eq!(folder_row_height(), 24.0);
+        assert_eq!(folder_header_height(), 24.0);
+        assert_eq!(folder_cell_pad_x(), 8.0);
+        assert_eq!(folder_col_gap(), 8.0);
+        assert_eq!(folder_filter_bar_height(), 24.0);
+        assert_eq!(folder_filter_bar_pad_x(), 8.0);
+        assert_eq!(folder_filter_bar_gap(), 8.0);
+        assert_eq!(folder_row_x_offset(0), 16.0);
+        assert_eq!(folder_row_x_offset(1), 28.0);
+        assert_eq!(folder_row_x_offset(2), 40.0);
+        assert_eq!(folder_expander_hit_rect(0, 0.0), (0.0, 0.0, 16.0, 24.0));
+        assert_eq!(folder_expander_hit_rect(1, 24.0), (12.0, 24.0, 28.0, 48.0));
+        assert_eq!(folder_tree_content_height(3), 72.0);
+        assert_eq!(FOLDER_EXPANDER_HIT_H, FOLDER_ROW_HEIGHT);
     }
 }
