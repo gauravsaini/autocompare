@@ -1014,3 +1014,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-copy69 copy geometry
 - `crates/gui/src/copy.rs` me copy_arrow_visual_size GUTTER_ARROW_BOX reuse (16.0 value-identical), zero new tokens.
 - Proof: 1132 green + 2 copy tests PASS, fmt clean, banned 0, harness PASS byte-identical.
+
+### Feature (2026-11-21) — feat(gui): exq-screenshot72 fixture parity
+- light fixture LIGHT helpers value-identical, dark byte-identical, zero new colors/sizes.
+- Proof: 1137 green, fmt clean, banned 0, harness PASS 10946B.
