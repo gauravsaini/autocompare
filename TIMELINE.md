@@ -824,3 +824,9 @@
 1. **Text panes round-2**: twin panes padding SPACE_*, line-number gutter alignment, hunk header spacing, 1200px no h-scroll + narrow700 edge.
 2. **Tests**: 1089 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Leaf self-cleaned side-effect PNGs, OWNS-only landed.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-views40/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-tree41 live folder tree (agyx swarm, clean commit)
+
+1. **Folder tree round-2**: indent rhythm SPACE_SM, 16px expander centered, guide alignment, 1200px no h-scroll + deepnest edge.
+2. **Tests**: 1088 green, exquisite harness RESULT: PASS 11040B, fmt clean, banned 0, colors 38 frozen. Agyx committed cleanly itself, no recovery.
+3. **Files changed**: crates/gui/src/tree.rs, checks/gui-exq-tree41/**, TIMELINE.md.
