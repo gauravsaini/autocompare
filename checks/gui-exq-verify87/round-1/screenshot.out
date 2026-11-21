@@ -1,0 +1,2 @@
+autocompare-gui: local run (cargo run -p autocompare-gui) — state memory/tmp only, no network; --help for flags
+autocompare-gui: installed font families (live plan; headless keeps harness glyphs): proportional <- system-ui, sans-serif; monospace <- ui-monospace, monospace
