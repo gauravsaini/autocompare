@@ -913,3 +913,9 @@
 1. **Live vector wiring**: `paint_toolbar_glyph` adopts staged `paint_exq_icons50_mark` Ring/Bars for Swap/Reload, chevrons preserved for Prev/Next; tabs/session-strip honestly unwired (text occlusion risk).
 2. **Tests**: 1106 green (+1 wiring), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0 non-test, 332px delta in real-egui.png x=[16,135] y=[113,128] zero collateral.
 3. **Files changed**: crates/gui/src/views.rs, checks/gui-exq-views53/**, TIMELINE.md.
+
+### Feature (2026-11-21) — feat(gui): exq-geo55 gutter geometry
+
+1. **Gutter geometry parity**: single-source canvas budget (`GutterCanvasBudget`) across narrow (<720px / 700px), normal (960px), and wide (1200px) canvases delegating to `SPACE_*` and `GEO_OUTER_MARGIN`; right-aligned numbers, midpoint-aligned centered marks, omit marker box/hit bounds, zero double-padding or clipping.
+2. **Tests**: 1112 green (+6 geo55 tests), exquisite harness RESULT: PASS 10973B, fmt clean, banned 0, colors 35 frozen. Gutter signal moved 1823 -> 1942, margin/gap moved 706 -> 717.
+3. **Files changed**: crates/gui/src/gutter.rs, checks/gui-exq-geo55/**, TIMELINE.md.
