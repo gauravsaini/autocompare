@@ -110,6 +110,41 @@ fn fixture_palette() -> FixturePalette {
     FIXTURE_MODE.with(|mode| FixturePalette::of(mode.get()))
 }
 
+/// Inline accent style: Dark keeps the byte-stable inverted block,
+/// Light paints a softer underline-only accent (dark-ink text stays on
+/// the light wash, 1px fg line at the row base). No new colors — the
+/// existing row `fg` token is reused either way. Pure.
+fn inline_accent_inverted() -> bool {
+    FIXTURE_MODE.with(|mode| matches!(mode.get(), FixtureMode::Dark))
+}
+
+/// Paints one word-level inline accent span inside an already-painted row.
+/// Dark: full-row-height inverted block (`fg` fill + `bg` text, legacy).
+/// Light: softer underline-only (`fg` text overdraw + 1px `fg` line at the
+/// row base, no fill) so the span reads dark-ink-on-light-wash with zero
+/// geometry shift (`row_h` untouched, line sits inside the row). Pure.
+fn paint_inline_accent(
+    pixels: &mut [u8],
+    dims: (u32, u32),
+    x: u32,
+    y: u32,
+    w: u32,
+    row_h: u32,
+    fg: [u8; 4],
+    bg: [u8; 4],
+    span: &str,
+    baseline_dy: u32,
+) {
+    if inline_accent_inverted() {
+        fill_rect(pixels, dims, (x, y, w, row_h), fg);
+        draw_string(pixels, dims, x, y.saturating_add(baseline_dy), span, bg);
+    } else {
+        draw_string(pixels, dims, x, y.saturating_add(baseline_dy), span, fg);
+        let line_y = y.saturating_add(row_h).saturating_sub(1);
+        fill_rect(pixels, dims, (x, line_y, w, 1), fg);
+    }
+}
+
 /// Mode guard: set karke purana mode drop par wapas (nested-safe).
 struct FixtureModeGuard {
     prev: FixtureMode,
@@ -1141,8 +1176,8 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &row.left,
             left_fg,
         );
-        // Word-level accent blocks: changed row ke `accent_a` spans
-        // inverted (block) me — poore-row band par kaun sa shabd badla.
+        // Word-level accents (`paint_inline_accent`): dark me inverted
+        // block, light me underline-only (dark-ink-on-light-wash).
         for (start, end) in row.accent_a.iter() {
             let prefix: String = row.left.chars().take(*start).collect();
             let span: String = row
@@ -1158,14 +1193,17 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 .saturating_add(text_x_off)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
-            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
-            draw_string(
+            paint_inline_accent(
                 &mut pixels,
                 dims,
                 ax,
-                y.saturating_add(base_dy),
-                &span,
+                y,
+                aw,
+                row_h,
+                left_fg,
                 left_bg,
+                &span,
+                base_dy,
             );
         }
 
@@ -1204,14 +1242,17 @@ pub fn render_text_fixture_png(out_path: &Path) -> Result<(), String> {
                 .saturating_add(text_x_off)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
-            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
-            draw_string(
+            paint_inline_accent(
                 &mut pixels,
                 dims,
                 ax,
-                y.saturating_add(base_dy),
-                &span,
+                y,
+                aw,
+                row_h,
+                right_fg,
                 right_bg,
+                &span,
+                base_dy,
             );
         }
         // Center-gap marker: yellow `=>` on changed-row hunk heads only;
@@ -1582,7 +1623,7 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &left_shown,
             left_fg,
         );
-        // Word-level accent blocks: changed row ke `accent_a` spans
+        // Word-level accents (`paint_inline_accent`): dark block, light underline
         for (start, end) in row.accent_a.iter() {
             let prefix: String = row.left.chars().take(*start).collect();
             let span: String = row
@@ -1601,15 +1642,18 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             let pane_right_bound = left_x.saturating_add(left_w);
             if ax < pane_right_bound {
                 let clamped_aw = aw.min(pane_right_bound.saturating_sub(ax));
-                fill_rect(&mut pixels, dims, (ax, y, clamped_aw, row_h), left_fg);
                 let clipped_span = crate::viewmodel::clip_to_width(&span, clamped_aw, text_width);
-                draw_string(
+                paint_inline_accent(
                     &mut pixels,
                     dims,
                     ax,
-                    y.saturating_add(6),
-                    &clipped_span,
+                    y,
+                    clamped_aw,
+                    row_h,
+                    left_fg,
                     left_bg,
+                    &clipped_span,
+                    6,
                 );
             }
         }
@@ -1633,7 +1677,7 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             &right_shown,
             right_fg,
         );
-        // Word-level accent blocks: changed row ke `accent_b` spans
+        // Word-level accents (`paint_inline_accent`): dark block, light underline
         for (start, end) in row.accent_b.iter() {
             let prefix: String = row.right.chars().take(*start).collect();
             let span: String = row
@@ -1652,15 +1696,18 @@ pub fn render_narrow_text_fixture_png(out_path: &Path) -> Result<(), String> {
             let pane_right_bound = right_x.saturating_add(right_w);
             if ax < pane_right_bound {
                 let clamped_aw = aw.min(pane_right_bound.saturating_sub(ax));
-                fill_rect(&mut pixels, dims, (ax, y, clamped_aw, row_h), right_fg);
                 let clipped_span = crate::viewmodel::clip_to_width(&span, clamped_aw, text_width);
-                draw_string(
+                paint_inline_accent(
                     &mut pixels,
                     dims,
                     ax,
-                    y.saturating_add(6),
-                    &clipped_span,
+                    y,
+                    clamped_aw,
+                    row_h,
+                    right_fg,
                     right_bg,
+                    &clipped_span,
+                    6,
                 );
             }
         }
@@ -1852,8 +1899,18 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
                 .saturating_add(32)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
-            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), left_fg);
-            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, left_bg);
+            paint_inline_accent(
+                &mut pixels,
+                dims,
+                ax,
+                y,
+                aw,
+                row_h,
+                left_fg,
+                left_bg,
+                &span,
+                6,
+            );
         }
         fill_rect(
             &mut pixels,
@@ -1894,8 +1951,18 @@ pub fn render_text_accent_fixture_png(out_path: &Path) -> Result<(), String> {
                 .saturating_add(32)
                 .saturating_add(text_width(&prefix));
             let aw = text_width(&span).max(4);
-            fill_rect(&mut pixels, dims, (ax, y, aw, row_h), right_fg);
-            draw_string(&mut pixels, dims, ax, y.saturating_add(6), &span, right_bg);
+            paint_inline_accent(
+                &mut pixels,
+                dims,
+                ax,
+                y,
+                aw,
+                row_h,
+                right_fg,
+                right_bg,
+                &span,
+                6,
+            );
         }
     }
 
@@ -7283,5 +7350,64 @@ mod tests {
         );
         assert_eq!(HOME_CTA_W, crate::home::home_card_cta_width() as u32);
         assert_eq!(HOME_CTA_H, crate::home::HOME_CARD_BUTTON_MIN_H as u32);
+    }
+
+    /// exq-light56: inline accent branches by mode — dark inverts (legacy
+    /// byte-stable block), light paints softer underline-only so the span
+    /// stays dark-ink-on-light-wash. Zero new colors (row fg reuse).
+    #[test]
+    fn light56_inline_accent_mode_branch() {
+        {
+            let _guard = FixtureModeGuard::set(FixtureMode::Dark);
+            assert!(inline_accent_inverted());
+        }
+        {
+            let _guard = FixtureModeGuard::set(FixtureMode::Light);
+            assert!(!inline_accent_inverted());
+        }
+        // Guard restores dark (structural default).
+        assert!(inline_accent_inverted());
+    }
+
+    /// exq-light56: light underline ink reads dark-ink-on-light-wash (AA),
+    /// never dark-on-dark — underline reuses the row fg on the row wash.
+    #[test]
+    fn light56_light_accent_ink_on_wash_aa() {
+        fn rgb3of(c: [u8; 4]) -> [u8; 3] {
+            [c[0], c[1], c[2]]
+        }
+        let light = FixturePalette::of(FixtureMode::Light);
+        // Row ink darker than the wash it sits on (dark-on-light, not dark-on-dark).
+        assert!(
+            crate::theme::relative_luminance(rgb3of(light.changed_fg))
+                < crate::theme::relative_luminance(rgb3of(light.changed_bg))
+        );
+        assert!(crate::theme::theme_contrast_ok(
+            rgb3of(light.changed_fg),
+            rgb3of(light.changed_bg)
+        ));
+        assert!(crate::theme::theme_contrast_ok(
+            rgb3of(light.changed_fg),
+            rgb3of(light.bg)
+        ));
+    }
+
+    /// exq-light56: accent scene renders valid PNGs in both modes and the
+    /// light arm differs from dark (underline vs block) — dark keeps the
+    /// legacy bytes shape, light is the softer wash.
+    #[test]
+    fn light56_accent_scene_modes_valid_and_distinct() {
+        let dir = std::env::temp_dir();
+        let dark_out = dir.join("vis-light56-accent-dark.png");
+        let light_out = dir.join("vis-light56-accent-light.png");
+        assert!(render_fixture_png_with_mode(&dark_out, FixtureMode::Dark).is_ok());
+        assert!(render_fixture_png_with_mode(&light_out, FixtureMode::Light).is_ok());
+        let dark_bytes = std::fs::read(&dark_out).unwrap_or_default();
+        let light_bytes = std::fs::read(&light_out).unwrap_or_default();
+        assert!(png_magic_ok(&dark_bytes));
+        assert!(png_magic_ok(&light_bytes));
+        assert!(dark_bytes.len() >= 8192);
+        assert!(light_bytes.len() >= 8192);
+        assert_ne!(dark_bytes, light_bytes);
     }
 }
