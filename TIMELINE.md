@@ -1018,3 +1018,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-screenshot72 fixture parity
 - light fixture LIGHT helpers value-identical, dark byte-identical, zero new colors/sizes.
 - Proof: 1137 green, fmt clean, banned 0, harness PASS 10946B.
+
+### Feature (2026-11-21) — feat(gui): exq-palette73 residual palette wiring
+- views.rs residual hardcodes routed via changed/inserted/deleted_bg_for, dark byte-identical, light AA washes.
+- Proof: 1139+2 green, fmt clean, banned 0, harness PASS + kittest 2 passed.
