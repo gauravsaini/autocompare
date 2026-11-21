@@ -985,3 +985,8 @@
 - `crates/gui/src/views_hex.rs` me 13 value-identical consts token-adopted, zero new sizes/colors, behavior unchanged.
 - Proof: 1128 green + 2 kittest PASS, fmt clean, banned 0, harness PASS after.png byte-identical.
 - Leaves pattern (gutter59/tree62/table63) continue, 1070/590/570 + 7.0 ref untouched documented.
+
+### Feature (2026-11-21) — feat(gui): exq-home65 home geometry
+- `crates/gui/src/home.rs` me 7 value-identical adoptions (SPACE_XL/SPACE_LG), zero new tokens/sizes/colors.
+- Proof: 1129 green + 2 kittest PASS, fmt clean, banned 0, harness PASS after.png size-identical.
+- Strays reverted, OWNS-only commit, orchestrator cherry-pick + push.
