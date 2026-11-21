@@ -1086,3 +1086,7 @@
 ### Feature (2026-11-21) — feat(gui): exq-icons90 toolbar icons
 - `crates/gui/src/views.rs` me toolbar vector-icon geometry + active tab pill, 227 lines, views 397 passed full lib 1162 harness PASS.
 - Proof: leaf fmt clean, banned 0 colors_new 0, OWNS clean, NO PUSH, cherry-picked d470779.
+
+### Feature (2026-11-21) — feat(sessions): sess91 persistence hardening
+- `crates/sessions/**` me schema_version + migration, active_tab clamp, atomic tmp+rename saves, JSON round-trip, 77 passed 0 failed.
+- Proof: leaf fmt clean, clippy clean, banned 0 prod, OWNS clean, NO PUSH, cherry-picked ee2c539.
