@@ -1,0 +1,11 @@
+autocompare-gui: local run (cargo run -p autocompare-gui) — state memory/tmp only, no network; --help for flags
+autocompare-gui: desktop client over the comparison engine.
+
+usage:
+  autocompare-gui [--open <left> <right> [--tab <name>]] [--screenshot <png>]
+
+flags:
+  --open <left> <right>  preload both paths and open the tab
+  --tab <name>           text/folder/hex/merge/table/sync/picture/foldermerge/audio (default: text)
+  --screenshot <png>     render the fixture PNG headlessly and exit
+  --help, -h             print this help and exit

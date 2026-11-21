@@ -15,6 +15,12 @@ use autocompare_gui::theme::{VIEWPORT_H, VIEWPORT_MIN_H, VIEWPORT_MIN_W, VIEWPOR
 use autocompare_gui::{app, screenshot};
 
 fn main() {
+    // Local-run hint: har boot par console me ek line, taaki
+    // `cargo run -p autocompare-gui` ka entry point obvious rahe.
+    // Stderr isliye taaki --help/--screenshot ka stdout clean rahe.
+    eprintln!(
+        "autocompare-gui: local run (cargo run -p autocompare-gui) — state memory/tmp only, no network; --help for flags"
+    );
     let args: Vec<String> = std::env::args().collect();
     // CN-OPENER: `--help` GUI khole bina usage dekar exit (help-safe).
     if app::App::help_requested(&args) {
@@ -62,6 +68,11 @@ fn main() {
             .with_title("Home - autocompare")
             .with_inner_size([VIEWPORT_W as f32, VIEWPORT_H as f32])
             .with_min_inner_size([VIEWPORT_MIN_W as f32, VIEWPORT_MIN_H as f32]),
+        // Tmp-only writes: window/persistence state kabhi HOME me na jaye,
+        // chahe `persistence` feature aage on ho. Screenshot path user ka
+        // diya hua rehta hai (harness checks/ me likhta hai), use mat roko.
+        persist_window: false,
+        persistence_path: Some(std::env::temp_dir().join("autocompare-gui")),
         ..Default::default()
     };
     if let Err(err) = eframe::run_native(
