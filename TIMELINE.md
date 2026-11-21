@@ -1002,3 +1002,11 @@
 ### Feature (2026-11-21) — feat(gui): exq-lightvisual68 light polish
 - `crates/gui/src/app.rs` me light polish, dark sha identical e75216dc, colors 35 unchanged.
 - Proof: 1132 green + kittest dual PASS (dark 53798B/503c light 54408B/549c), fmt clean, banned 0, harness PASS.
+
+### Feature (2026-11-21) — feat(gui): exq-take70 take geometry
+- `crates/gui/src/take.rs` me TAKE_TALL_CANVAS_H token adoption + 2 headless tests, 1133 green.
+- Proof: fmt clean, banned 0, harness PASS 10946B.
+
+### Feature (2026-11-21) — feat(gui): exq-viewmodel71 viewmodel geometry
+- `crates/gui/src/viewmodel.rs` me 5 magic literals -> existing tokens, 0 new tokens.
+- Proof: 1134+2 green, fmt clean, banned CLEAN, harness PASS.
