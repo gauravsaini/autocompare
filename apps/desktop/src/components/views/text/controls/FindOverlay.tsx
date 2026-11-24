@@ -1,11 +1,14 @@
 /**
- * Wave-66R: collapsible find bar (Beyond Compare style Ctrl+F overlay).
+ * Wave-199c: find rides the chrome overlay stack (Beyond Compare
+ * style Ctrl+F popover).
  *
- * In-flow collapsible (never `position: absolute`, so the wave-7
- * overlap gate in textfind-61 / findshortcut-62 keeps passing):
- * open by default for backward compat, toggled from the toolbar,
- * Ctrl+F, or Esc. Purely presentational: query state, hit math and
- * activation live in `TextView` (wave-61 logic byte-identical).
+ * Absolute popover (never in-flow): the `tv-chrome` wrapper in
+ * `TextView` is relative and hosts an absolute overlay column, so an
+ * open find panel floats over the rows instead of pushing
+ * `textview/row-0` down (firstRowTop<=140 holds open AND closed).
+ * Purely presentational: query state, hit math and activation live
+ * in `TextView` (wave-61 logic byte-identical). All testids/aria
+ * unchanged.
  */
 import { X } from "lucide-react";
 import { Button, Input, ToolbarButton } from "../../../ui";
@@ -25,7 +28,10 @@ export interface FindOverlayProps {
 export default function FindOverlay(props: FindOverlayProps): React.JSX.Element {
   const { query, onQueryChange, prevDisabled, nextDisabled, onPrev, onNext, onRun, onClose, statusText } = props;
   return (
-    <section data-testid="textview/find-panel" className="tv-controls-panel">
+    <section
+      data-testid="textview/find-panel"
+      className="tv-controls-panel rounded-md border border-[var(--ac-border-subtle)] shadow-lg"
+    >
       <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="find in text">
         <label htmlFor="textview-find-box" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
           Find

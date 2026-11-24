@@ -2513,15 +2513,21 @@ export default function TextView({
           </span>
         </div>
       )}
-      {/* Wave-66R: controls collapse (Beyond Compare style). One
-          toolbar row (find / goto / ignore toggles, prev-next
-          difference nav + position, wrap / line-numbers /
-          differences-only / context, save overflow) plus collapsible
-          ignore, find and goto panels below. All legacy testids ride
-          the same inputs; logic (recompare/find/goto/save) untouched.
-          Wave-89: save lives in the toolbar overflow, counts live in
-          the bottom status bar. */}
-      <TextToolbar
+      {/* Wave-199c: chrome collapse (Beyond Compare single-row +
+          overlay truth). One toolbar row (find / goto / ignore /
+          format toggles, prev-next nav, wrap / line-numbers /
+          differences-only / context, save overflow) inside a relative
+          `tv-chrome` wrapper; Find/Goto/Ignore/Format float in an
+          absolute overlay column over the rows (never in-flow), so
+          open panels never push `textview/row-0` down
+          (firstRowTop<=140 open AND closed). Counts live in the
+          bottom status bar (`textview/toolbar-hunks` +
+          `textview/diffnav-note` render there, BC "N difference
+          sections" truth). All legacy testids ride the same inputs;
+          logic (recompare/find/goto/save) untouched. Rows/RowLine/
+          OverviewStrip below untouched (W196/W198 own those). */}
+      <div className="tv-chrome relative">
+        <TextToolbar
         findOpen={findOpen}
         gotoOpen={gotoOpen}
         ignoreOpen={ignoreOpen}
@@ -2556,20 +2562,64 @@ export default function TextView({
           }
         }}
       />
-      <IgnoreMenu
-        open={ignoreOpen}
-        ws={ignoreWs}
-        ignoreCase={ignoreCase}
-        busy={ignoreBusy}
-        onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
-      />
-      <FormatMenu
-        open={formatOpen}
-        encoding={encoding}
-        eol={eol}
-        busy={ignoreBusy}
-        onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
-      />
+      {/* Wave-199c: Find/Goto/Ignore/Format float in one absolute
+          overlay column (BC popover truth). The `tv-chrome` wrapper
+          above is relative; this stack is absolute so open panels
+          cover rows instead of pushing `textview/row-0` down
+          (firstRowTop<=140 open AND closed). Panels keep their own
+          open flags/testids/logic byte-identical; the column only
+          mounts while at least one panel is open, so closed chrome
+          is exactly one toolbar row. */}
+      {(findOpen || gotoOpen || ignoreOpen || formatOpen) && (
+        <div className="absolute left-[var(--ac-space-4)] top-full z-30 flex w-[min(480px,calc(100%-2rem))] flex-col gap-[var(--ac-space-2)] pt-[var(--ac-space-1)]">
+          {findOpen ? (
+            <FindOverlay
+              query={findQuery}
+              onQueryChange={(q) => {
+                setFindQuery(q);
+                setFindActive(-1);
+                setFindNote(null);
+              }}
+              prevDisabled={findHits.length === 0}
+              nextDisabled={findQuery.trim() === ""}
+              onPrev={() => activateHit(findActive - 1)}
+              onNext={() => (findActive < 0 ? runFind() : activateHit(findActive + 1))}
+              onRun={runFind}
+              onClose={() => setFindOpen(false)}
+              statusText={findStatusText}
+            />
+          ) : null}
+          {gotoOpen ? (
+            <GotoOverlay
+              value={gotoInput}
+              placeholder={total > 0 ? `1-${total}` : "row"}
+              onValueChange={(v) => {
+                setGotoInput(v);
+                setGotoNote(null);
+              }}
+              busy={gotoBusy}
+              onGo={() => void gotoRow()}
+              onClose={() => setGotoOpen(false)}
+              statusText={gotoStatusText}
+            />
+          ) : null}
+          <IgnoreMenu
+            open={ignoreOpen}
+            ws={ignoreWs}
+            ignoreCase={ignoreCase}
+            busy={ignoreBusy}
+            onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
+          />
+          <FormatMenu
+            open={formatOpen}
+            encoding={encoding}
+            eol={eol}
+            busy={ignoreBusy}
+            onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
+          />
+        </div>
+      )}
+      </div>
       {/* Wave-112: undo docks into the bottom status bar (was its own
           row above the list even while disabled). Same testid/behavior,
           owned by `TextView`; the standalone row is gone so the idle
@@ -2617,41 +2667,9 @@ export default function TextView({
           {contextClause} — toggle off to restore.
         </p>
       ) : null}
-      {/* Wave-66R: find lives in the collapsible overlay above
-          (wave-61 logic untouched, same testids/aria). */}
-      {findOpen ? (
-        <FindOverlay
-          query={findQuery}
-          onQueryChange={(q) => {
-            setFindQuery(q);
-            setFindActive(-1);
-            setFindNote(null);
-          }}
-          prevDisabled={findHits.length === 0}
-          nextDisabled={findQuery.trim() === ""}
-          onPrev={() => activateHit(findActive - 1)}
-          onNext={() => (findActive < 0 ? runFind() : activateHit(findActive + 1))}
-          onRun={runFind}
-          onClose={() => setFindOpen(false)}
-          statusText={findStatusText}
-        />
-      ) : null}
-      {/* Wave-66R: goto lives in the collapsible overlay above
-          (wave-43 logic untouched, same testids/aria). */}
-      {gotoOpen ? (
-        <GotoOverlay
-          value={gotoInput}
-          placeholder={total > 0 ? `1-${total}` : "row"}
-          onValueChange={(v) => {
-            setGotoInput(v);
-            setGotoNote(null);
-          }}
-          busy={gotoBusy}
-          onGo={() => void gotoRow()}
-          onClose={() => setGotoOpen(false)}
-          statusText={gotoStatusText}
-        />
-      ) : null}
+      {/* Wave-199c: find/goto now ride the `tv-chrome` overlay stack
+          above (same testids/logic, absolute popovers). Old in-flow
+          slots removed so open panels never push rows. */}
       {/* Wave-79: far-left overview strip (BC-style section markers).
           Mounts FIRST in the row flex so it paints at the far left; the
           rows list keeps its testids/selection/scroll behavior untouched.
@@ -2702,8 +2720,12 @@ export default function TextView({
       )}
       {/* Wave-89: counts merge into the bottom status bar (BC truth:
           counts in the status bar, like FolderView). Same testid/text
-          as the old top line so every legacy spec keeps passing. */}
-      <div className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-t border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] flex items-center">
+          as the old top line so every legacy spec keeps passing.
+          Wave-199c: difference position joins them (BC "N difference
+          sections" truth). `textview/toolbar-hunks` +
+          `textview/diffnav-note` render here with byte-identical
+          testids/text — the toolbar stays one compact row. */}
+      <div className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-t border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] flex flex-wrap items-center gap-x-[var(--ac-space-3)] gap-y-[var(--ac-space-1)]">
         {/* Wave-112B: one-level undo docked in the status bar (was its
             own row above the list even while disabled). Sibling of the
             counts so `textview/status` keeps its exact legacy text and
@@ -2728,6 +2750,14 @@ export default function TextView({
             : ` · left ${leftLines} lines · right ${rightLines} lines`}
           {pair === null || demo !== null ? "" : ` · ${pair.left} vs ${pair.right}`}
         </p>
+        <span data-testid="textview/toolbar-hunks" className="ac-meta text-[var(--ac-fg-muted)]">
+          {hunksLabel}
+        </span>
+        {diffNote === null ? null : (
+          <span data-testid="textview/diffnav-note" role="note" className="ac-meta text-[var(--ac-fg-muted)]">
+            {diffNote}
+          </span>
+        )}
       </div>
     </section>
   );

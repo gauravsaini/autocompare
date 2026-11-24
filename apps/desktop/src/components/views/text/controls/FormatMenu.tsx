@@ -1,15 +1,14 @@
 /**
- * Wave-164: format options live in the toolbar menu (Beyond Compare
- * style Format button). Collapsible fieldset, closed by default (BC
- * shows one toolbar row + status bar, no stacked panels); the toolbar
- * Format button toggles it. Purely presentational: encoding/eol state
+ * Wave-199c: format options ride the chrome overlay stack (Beyond
+ * Compare style Format popover).
+ *
+ * Absolute popover (never in-flow): floats over the rows via the
+ * `tv-chrome` relative wrapper, so an open format panel never pushes
+ * `textview/row-0` down. Purely presentational: encoding/eol state
  * and the re-compare probe live in `TextView` (wave-30 ignore logic
  * pattern); the typed `textCompare` wrapper already sends both
  * spellings and the W163c backend honors them, echoed as
- * `appliedOptions`.
- *
- * In-flow collapsible (never `position: absolute`, so the chrome
- * budget holds with the panel open).
+ * `appliedOptions`. All testids unchanged.
  */
 import { Select } from "../../../ui";
 
@@ -38,7 +37,7 @@ export default function FormatMenu(props: FormatMenuProps): React.JSX.Element | 
   return (
     <fieldset
       data-testid="textview/format-options"
-      className="tv-controls-panel flex flex-wrap items-center gap-x-[var(--ac-space-4)] gap-y-[var(--ac-space-1)] rounded-md border border-[var(--ac-border-subtle)] px-[var(--ac-space-3)] py-[var(--ac-space-2)]"
+      className="tv-controls-panel flex flex-wrap items-center gap-x-[var(--ac-space-4)] gap-y-[var(--ac-space-1)] rounded-md border border-[var(--ac-border-subtle)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] shadow-lg"
     >
       <legend className="px-1 ac-chrome-label font-medium text-[var(--ac-fg-muted)]">
         Format options
