@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use autocompare_vfs::{Vfs, VfsPath};
 
-use crate::folder::glob_match;
+use crate::folder::{FileMasks, glob_match, masks_allow, parse_file_masks};
 use crate::{Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, NodeInfo, Result};
 
 /// Streaming chunk size for VFS byte equality.
@@ -45,6 +45,7 @@ pub fn compare_vfs_folders_cancellable(
 
     let mut entries: Vec<FolderEntry> = Vec::new();
     let mut truncated = false;
+    let masks = parse_file_masks(opts.masks.as_deref());
     let mut stack: Vec<WalkNode> = Vec::new();
     stack.push(WalkNode {
         rel: VfsPath::root(),
@@ -91,6 +92,7 @@ pub fn compare_vfs_folders_cancellable(
                         rel,
                         child_depth,
                         opts,
+                        &masks,
                         &mut entries,
                         &mut stack,
                         cancel,
@@ -98,23 +100,23 @@ pub fn compare_vfs_folders_cancellable(
                 }
                 for child in left_only {
                     let rel = join_child(&node.rel, &child.name);
-                    one_sided_vfs(child, true, rel, child_depth, &mut entries, &mut stack);
+                    one_sided_vfs(child, true, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
                 for child in right_only {
                     let rel = join_child(&node.rel, &child.name);
-                    one_sided_vfs(child, false, rel, child_depth, &mut entries, &mut stack);
+                    one_sided_vfs(child, false, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (Some(lc), None) => {
                 for child in &lc {
                     let rel = join_child(&node.rel, &child.name);
-                    one_sided_vfs(child, true, rel, child_depth, &mut entries, &mut stack);
+                    one_sided_vfs(child, true, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (None, Some(rc)) => {
                 for child in &rc {
                     let rel = join_child(&node.rel, &child.name);
-                    one_sided_vfs(child, false, rel, child_depth, &mut entries, &mut stack);
+                    one_sided_vfs(child, false, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (None, None) => {}
@@ -297,7 +299,9 @@ fn pair_vfs_children<'a>(
 
 /// Classifies a paired node: both directories walk children, both
 /// non-directories follow the file rules (size, then content or
-/// mtime), mixed kinds are `Different`.
+/// mtime), mixed kinds are `Different`. File masks apply before any
+/// verdict: a masked file pair is dropped, while a directory on either
+/// side still descends so nested matches are not lost.
 #[allow(clippy::too_many_arguments)]
 fn classify_vfs_pair(
     left: &dyn Vfs,
@@ -307,11 +311,35 @@ fn classify_vfs_pair(
     rel: VfsPath,
     child_depth: usize,
     opts: &FolderOptions,
+    masks: &FileMasks,
     entries: &mut Vec<FolderEntry>,
     stack: &mut Vec<WalkNode>,
     cancel: Option<&AtomicBool>,
 ) -> Result<()> {
     let rel_path = rel.as_str().to_owned();
+    // A masked file pair is dropped; a directory on either side still
+    // descends so nested matches are not lost.
+    let masked_out = (!lc.is_dir || !rc.is_dir)
+        && !masks_allow(masks, &lc.name, &rel_path, opts.case_insensitive);
+    if masked_out {
+        if lc.is_dir {
+            stack.push(WalkNode {
+                rel: rel.clone(),
+                left: true,
+                right: false,
+                depth: child_depth,
+            });
+        }
+        if rc.is_dir {
+            stack.push(WalkNode {
+                rel,
+                left: false,
+                right: true,
+                depth: child_depth,
+            });
+        }
+        return Ok(());
+    }
     let mut walk: Option<WalkNode> = None;
     let status;
 
@@ -353,14 +381,23 @@ fn classify_vfs_pair(
 }
 
 /// Records a one-sided node and walks it when it is a directory.
+/// File masks apply before the entry is recorded: masked files are
+/// dropped, while directories always pass so their matching children
+/// still surface.
+#[allow(clippy::too_many_arguments)]
 fn one_sided_vfs(
     child: &VfsChild,
     on_left: bool,
     rel: VfsPath,
     child_depth: usize,
+    opts: &FolderOptions,
+    masks: &FileMasks,
     entries: &mut Vec<FolderEntry>,
     stack: &mut Vec<WalkNode>,
 ) {
+    if !child.is_dir && !masks_allow(masks, &child.name, rel.as_str(), opts.case_insensitive) {
+        return;
+    }
     let rel_path = rel.as_str().to_owned();
     let (left_info, right_info, status) = if on_left {
         (Some(child.info), None, FolderStatus::LeftOnly)

@@ -26,6 +26,13 @@ fn content_opts() -> FolderOptions {
     }
 }
 
+fn masks_opts(masks: Option<&str>) -> FolderOptions {
+    FolderOptions {
+        masks: masks.map(|s| s.to_string()),
+        ..content_opts()
+    }
+}
+
 fn statuses_of(entries: &[autocompare_compare::FolderEntry]) -> HashMap<String, FolderStatus> {
     entries
         .iter()
@@ -225,6 +232,120 @@ fn folder_merge_clean_sides_apply_to_output() {
         std::fs::read_to_string(out.join("g.txt")).unwrap(),
         "right adds\n"
     );
+    cleanup(&base);
+}
+
+#[test]
+fn vfs_masks_match_path_walk_include_and_exclude() {
+    let base = temp_root();
+    let left = base.join("left");
+    let right = base.join("right");
+    for side in [&left, &right] {
+        write(&side.join("a.ts"), "ts\n");
+        write(&side.join("b.js"), "js\n");
+        write(&side.join("sub/c.ts"), "cts\n");
+        write(&side.join("sub/d.js"), "djs\n");
+        write(&side.join("app.min.js"), "min\n");
+    }
+    // One differing file proves verdicts survive masking.
+    write(&right.join("sub/c.ts"), "cts changed\n");
+
+    for masks in [
+        Some("*.ts;*.tsx"),
+        Some("-*.min.js"),
+        Some("*.js;-*.min.js"),
+        None,
+        Some(""),
+        Some("  ; "),
+    ] {
+        let opts = masks_opts(masks);
+        let path_cmp = compare_folders(&left, &right, &opts).expect("path walk compares");
+        let lfs = LocalFs::new(&left).expect("left local fs");
+        let rfs = LocalFs::new(&right).expect("right local fs");
+        let vfs_cmp = compare_vfs_folders(&lfs, &rfs, &opts).expect("vfs walk compares");
+        assert_eq!(
+            statuses_of(&vfs_cmp.entries),
+            statuses_of(&path_cmp.entries),
+            "masks {masks:?} must keep vfs/path parity"
+        );
+    }
+
+    // Spot-check include-only shape: files drop out, dirs stay walkable.
+    let opts = masks_opts(Some("*.ts"));
+    let lfs = LocalFs::new(&left).expect("left local fs");
+    let rfs = LocalFs::new(&right).expect("right local fs");
+    let cmp = compare_vfs_folders(&lfs, &rfs, &opts).expect("masked vfs compares");
+    let paths: Vec<&str> = cmp.entries.iter().map(|e| e.rel_path.as_str()).collect();
+    assert!(paths.contains(&"a.ts"), "include keeps a.ts: {paths:?}");
+    assert!(paths.contains(&"sub"), "dirs always pass: {paths:?}");
+    assert!(paths.contains(&"sub/c.ts"), "nested match walks: {paths:?}");
+    assert!(!paths.contains(&"b.js"), "non-match drops: {paths:?}");
+    assert!(
+        !paths.contains(&"sub/d.js"),
+        "nested non-match drops: {paths:?}"
+    );
+    assert!(
+        !paths.contains(&"app.min.js"),
+        "unmatched root file drops: {paths:?}"
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn vfs_masks_filter_zip_trees() {
+    let a_path = VfsPath::new("same.txt").unwrap();
+    let b_path = VfsPath::new("changed.txt").unwrap();
+    let mk = || {
+        let left_bytes = create_zip_archive(&[
+            (&a_path, b"same\n".as_slice()),
+            (&b_path, b"left bytes\n".as_slice()),
+        ])
+        .unwrap();
+        let right_bytes = create_zip_archive(&[
+            (&a_path, b"same\n".as_slice()),
+            (&b_path, b"right bytes\n".as_slice()),
+        ])
+        .unwrap();
+        (
+            ZipFs::from_bytes(left_bytes).unwrap(),
+            ZipFs::from_bytes(right_bytes).unwrap(),
+        )
+    };
+
+    let (left_zip, right_zip) = mk();
+    let full =
+        compare_vfs_folders(&left_zip, &right_zip, &content_opts()).expect("unmasked zip compares");
+    assert_eq!(full.entries.len(), 2);
+
+    let (left_zip, right_zip) = mk();
+    let opts = masks_opts(Some("*.txt;-changed.*"));
+    let cmp = compare_vfs_folders(&left_zip, &right_zip, &opts).expect("masked zip compares");
+    assert_eq!(cmp.entries.len(), 1);
+    let only = cmp.entries.first().expect("one masked entry");
+    assert_eq!(only.rel_path, "same.txt");
+    assert_eq!(only.status, FolderStatus::Same);
+}
+
+#[test]
+fn vfs_masks_flow_through_spawn_vfs_job() {
+    let base = temp_root();
+    let left = base.join("left");
+    let right = base.join("right");
+    write(&left.join("a.ts"), "ts\n");
+    write(&right.join("a.ts"), "ts\n");
+    write(&left.join("b.js"), "js\n");
+    write(&right.join("b.js"), "js\n");
+    let lfs: Arc<dyn Vfs> = Arc::new(LocalFs::new(&left).expect("left local fs"));
+    let rfs: Arc<dyn Vfs> = Arc::new(LocalFs::new(&right).expect("right local fs"));
+
+    let handle = JobRunner::spawn_vfs_folder_compare(lfs, rfs, masks_opts(Some("*.ts")));
+    let compared = handle.join().expect("vfs job completes");
+    let paths: Vec<&str> = compared
+        .entries
+        .iter()
+        .map(|e| e.rel_path.as_str())
+        .collect();
+    assert_eq!(paths, vec!["a.ts"], "job carries masks: {paths:?}");
     cleanup(&base);
 }
 
