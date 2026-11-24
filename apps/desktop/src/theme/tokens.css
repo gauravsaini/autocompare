@@ -1185,6 +1185,19 @@ samp {
 }
 
 /*
+ * Wave-193 drop-highlight affordance (BC path-drop parity, affordance ONLY).
+ * PathBar strip + Left/Right field wrappers toggle this on dragover so the
+ * drop target reads as droppable before the drop lands. `outline` never
+ * shifts layout (HOLD: pathbar <= 36px intact); negative offset keeps the
+ * dashes inside the 32px strip. Unlayered rule wins over the Tailwind
+ * utility layer without touching chrome structure.
+ */
+.ac-drop-highlight {
+  outline: 2px dashed var(--ac-accent);
+  outline-offset: -1px;
+}
+
+/*
  * Wave-189 pill polish (radius ONLY, no layout/color/type change).
  * typo-100 pins the active tab as a pill (radius >= 6px, medium
  * weight, tight tracking); the chip rides rounded-[5px] from the

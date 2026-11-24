@@ -228,7 +228,7 @@ function PathField({
     <div
       ref={wrapRef}
       data-pathfield-side={side}
-      className="relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]"
+      className={`relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]${dropActive ? " ac-drop-highlight" : ""}`}
       onKeyDown={(event) => {
         if (event.key === "Escape") setOpen(false);
       }}
@@ -756,7 +756,7 @@ export function PathBar({
           ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-1px" }
           : undefined
       }
-      className="flex h-[var(--ac-pathbar-h)] items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]"
+      className={`flex h-[var(--ac-pathbar-h)] items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]${stripDropActive ? " ac-drop-highlight" : ""}`}
     >
       <PathField
         testId="pathbar/left"
