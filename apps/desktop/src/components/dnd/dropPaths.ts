@@ -263,6 +263,50 @@ export function isTauriDropOnPathBar(position: { readonly x?: unknown; readonly 
 }
 
 /**
+ * Wave-173: native-dialog pick result -> single path (BC Browse parity).
+ *
+ * `pickOpenDialog` resolves `string | string[] | null` (cancel -> null);
+ * this coerces to the first non-blank path or `null`. Pure, never throws.
+ */
+export function coercePickedPath(
+  picked: string | readonly string[] | null | undefined,
+): string | null {
+  try {
+    if (typeof picked === "string") {
+      const t = picked.trim();
+      return t === "" ? null : t;
+    }
+    if (Array.isArray(picked)) {
+      for (const p of picked) {
+        if (typeof p === "string" && p.trim() !== "") return p.trim();
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Wave-173: is a folder-kind view mounted (BC Browse parity)?
+ *
+ * PathBar / PaneDropZone click-to-browse must open the matching native
+ * dialog (folders for folder/sync compares, files otherwise). The chrome
+ * layer owns no session-kind prop (App wiring untouched), so this reads
+ * the mounted view testid — same DOM-sniff precedent as
+ * `hoveredPaneHalf`. `null`-document / missing view -> file mode.
+ */
+export function isFolderViewActive(): boolean {
+  try {
+    if (typeof document === "undefined") return false;
+    return (
+      document.querySelector('[data-testid="view-folder"],[data-testid="view-sync"]') !== null
+    );
+  } catch {
+    return false;
+  }
+}
+/**
  * Wave-120 + Wave-126: archive-as-folder (BC `SPECSAREARCHIVES` parity).
  *
  * Beyond Compare treats `public.archive` drops as folders (`NSServices`

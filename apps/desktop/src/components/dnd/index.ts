@@ -1,4 +1,5 @@
 export {
+  coercePickedPath,
   compareWithActiveIgnores,
   dedupTauriDropPaths,
   extractDroppedPath,
@@ -9,6 +10,7 @@ export {
   hoveredPaneHalf,
   isArchivePath,
   isFolderishPath,
+  isFolderViewActive,
   isTauriDropOnPathBar,
   markDropRecompare,
   preserveActiveIgnoreFlags,
