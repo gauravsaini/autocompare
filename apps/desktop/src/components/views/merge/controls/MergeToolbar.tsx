@@ -12,7 +12,7 @@
  * text-arrow glyphs); labels and testids unchanged.
  */
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
-import { Button, ToolbarButton } from "../../../ui";
+import { Button, DotButton, ToolbarButton } from "../../../ui";
 
 export interface MergeToolbarProps {
   readonly position: string;
@@ -70,7 +70,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       </span>
       {/* Wave-147: toolbar-embedded overview ruler (BC right-edge ruler
           folded into the single toolbar row: same row, no new stacked
-          rows, chrome budget holds). One 12px dot per conflict in
+          rows, chrome budget holds). One 12px DotButton dot per conflict in
           conflict order; click jumps via the same selectConflict path
           as prev/next. Reuses existing accent/border tokens only. */}
       {(conflictIds ?? []).length > 0 && (
@@ -83,18 +83,15 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           {(conflictIds ?? []).map((id) => {
             const active = selectedId === id;
             return (
-              <Button
+              <DotButton
                 key={id}
+                active={active}
                 data-testid={`merge-overview-dot-${id}`}
                 aria-label={`go to conflict ${id}`}
                 aria-current={active ? "true" : undefined}
                 title={`go to conflict ${id}`}
                 onClick={() => onSelectId?.(id)}
-                className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-[var(--ac-border)] bg-[var(--ac-bg)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-                style={active ? { backgroundColor: "var(--ac-accent)", borderColor: "var(--ac-accent)" } : undefined}
-              >
-                <span aria-hidden="true" className="block h-1 w-1 rounded-full" style={{ backgroundColor: active ? "var(--ac-bg)" : "var(--ac-fg-muted)" }} />
-              </Button>
+              />
             );
           })}
         </span>

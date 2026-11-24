@@ -6,6 +6,8 @@ export type ButtonSize = "sm" | "md";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
   readonly size?: ButtonSize;
+  /** Wave-158: full-width menu/option row (PathBar history): w-full + h-auto, no ! overrides. */
+  readonly fullWidth?: boolean;
   readonly children: ReactNode;
 }
 
@@ -37,9 +39,12 @@ const variants: Record<ButtonVariant, string> = {
 };
 
 /** Shared desktop button: 4 variants, 2 macOS sizes (22px/26px), hairline border + bevel. Testids pass through untouched. */
-export default function Button({ variant = "secondary", size = "sm", className = "", children, ...rest }: ButtonProps): React.JSX.Element {
+export default function Button({ variant = "secondary", size = "sm", fullWidth = false, className = "", children, ...rest }: ButtonProps): React.JSX.Element {
+  const sizeClass = fullWidth
+    ? "h-auto w-full justify-start px-2 py-[var(--ac-space-2)] text-[12px]"
+    : sizes[size];
   return (
-    <button type="button" className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...rest}>
+    <button type="button" className={`${base} ${sizeClass} ${variants[variant]} ${className}`} {...rest}>
       {children}
     </button>
   );

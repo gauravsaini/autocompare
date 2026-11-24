@@ -156,8 +156,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
             tabIndex={0}
             className={
               active
-                ? "ac-chrome-label flex h-[var(--ac-space-8)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] px-[var(--ac-space-2)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-                : "ac-chrome-label flex h-[var(--ac-space-8)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md px-[var(--ac-space-2)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] px-[var(--ac-space-2)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md px-[var(--ac-space-2)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
             }
           >
             <span className="truncate">{tab.title}</span>
@@ -187,40 +187,40 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
                     data-testid={`tab-close-confirm-${tab.id}`}
                     label={`Discard changes and close ${tab.title}`}
                     title={`Discard changes and close ${tab.title}`}
+                    size="sm"
+                    icon={Check}
                     onClick={(e) => {
                       e.stopPropagation();
                       confirmDiscard(tab);
                     }}
-                    className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
-                  >
-                    <Check size={14} strokeWidth={1.75} aria-hidden="true" />
-                  </ToolbarButton>
+                    className="shrink-0"
+                  />
                   <ToolbarButton
                     data-testid={`tab-close-cancel-${tab.id}`}
                     label={`Keep ${tab.title} open`}
                     title={`Keep ${tab.title} open`}
+                    size="sm"
+                    icon={X}
                     onClick={(e) => {
                       e.stopPropagation();
                       cancelClose();
                     }}
-                    className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
-                  >
-                    <X size={14} strokeWidth={1.75} aria-hidden="true" />
-                  </ToolbarButton>
+                    className="shrink-0"
+                  />
                 </span>
               ) : (
                 <ToolbarButton
                   data-testid={`tab-close-${tab.id}`}
                   label={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
                   title={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
+                  size="sm"
+                  icon={X}
                   onClick={(e) => {
                     e.stopPropagation();
                     requestClose(tab);
                   }}
-                  className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
-                >
-                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
-                </ToolbarButton>
+                  className="shrink-0"
+                />
               )
             ) : null}
           </div>
@@ -230,6 +230,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
         data-testid="tab-new"
         label="New tab"
         title="New tab"
+        size="md"
+        icon={Plus}
         onClick={() => {
           try {
             onNewTab("home");
@@ -237,12 +239,11 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
             setCloseError(err instanceof Error ? err.message : String(err));
           }
         }}
-        // Wave-122: 32px hit-area (was 28) — meets the --ac-hit-min floor,
-        // still fits the 40px tabbar row. Testid/aria/wiring untouched.
-        className="!h-8 !w-8 flex size-8 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-      >
-        <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
-      </ToolbarButton>
+        // Wave-158: token size md (26px) via ToolbarButton; the 32px
+        // hit-area exception is retired (tab-chip --ac-tab-chip-h documents
+        // the only 32px chrome left). Testid/aria/wiring untouched.
+        className="shrink-0"
+      />
       {closeError && (
         <span
           role="alert"
@@ -255,7 +256,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
             size="sm"
             aria-label="Dismiss tab error"
             onClick={() => setCloseError(null)}
-            className="!h-auto !px-0 !py-0 shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+            className="shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
           >
             Dismiss
           </Button>

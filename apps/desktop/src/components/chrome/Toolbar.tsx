@@ -212,8 +212,8 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
     setInternalNote(COMPARE_NO_ABORT_NOTE);
   }, [busyProp, internalBusy]);
 
-  // Wave-116: slimmer shared bar (h-11) with tighter side padding. Testids,
-  // labels, and wiring untouched — heights/padding only.
+  // Wave-116: slimmer shared bar (token --ac-toolbar-h, 44px) with tighter
+  // side padding. Testids, labels, and wiring untouched — heights/padding only.
   // Wave-L2: the unified BC bar holds more actions (filters + Minor/
   // Rules/Format stubs); it stays ONE row with horizontal scroll instead
   // of stacking a second row (chrome budget).
@@ -223,7 +223,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
     <div
       role="toolbar"
       aria-label="Compare actions"
-      className="flex h-11 items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]"
+      className="flex h-[var(--ac-toolbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]"
     >
       {actions.map((action) => {
         const isCompare = action.id === "compare";

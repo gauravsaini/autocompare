@@ -592,10 +592,14 @@ samp {
   --ac-space-7: 28px;
   --ac-hit-min: 32px;
 
-  /* Chrome geometry: toolbar/tabbar/pathbar/statusbar ride the same 4px scale */
+  /* Chrome geometry: toolbar/tabbar/pathbar/statusbar ride the same 4px scale.
+     Wave-158: pathbar is the compact 32px strip (shellchrome-116: token-h 40
+     -> compact h-8 32, pathbar <= 36 ceiling holds); tab-chip is the 32px
+     tab-row affordance (TabBar chips), distinct from the 22-26px controls. */
   --ac-toolbar-h: 44px;
   --ac-tabbar-h: 40px;
-  --ac-pathbar-h: 40px;
+  --ac-pathbar-h: 32px;
+  --ac-tab-chip-h: 32px;
   --ac-statusbar-h: 28px;
 
   /* Row geometry: every diff row in every view measures the same (Wave-88 unified 22px) */
