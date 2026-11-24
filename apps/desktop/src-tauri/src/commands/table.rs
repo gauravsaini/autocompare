@@ -322,17 +322,51 @@ fn detect_key_column(rows: &[Vec<String>]) -> Option<usize> {
     None
 }
 
+/// Normalises one cell for tolerant comparison: trims and collapses
+/// whitespace runs when `ignore_space`, case-folds when `ignore_case`.
+/// Displayed cells are untouched; only equality goes through here.
+fn norm_cell(cell: &str, ignore_case: bool, ignore_space: bool) -> String {
+    let mut s = if ignore_space {
+        cell.split_whitespace().collect::<Vec<&str>>().join(" ")
+    } else {
+        cell.to_owned()
+    };
+    if ignore_case {
+        s = s.to_lowercase();
+    }
+    s
+}
+
+fn cells_equal(a: &str, b: &str, ignore_case: bool, ignore_space: bool) -> bool {
+    norm_cell(a, ignore_case, ignore_space) == norm_cell(b, ignore_case, ignore_space)
+}
+
+fn rows_equal(a: &[String], b: &[String], ignore_case: bool, ignore_space: bool) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(x, y)| cells_equal(x, y, ignore_case, ignore_space))
+}
+
 /// Aligns rows by key column and counts `(matching, modified,
 /// left_only, right_only)`. Rows with empty/missing keys count as
 /// one-sided; duplicate right keys attach to their first row.
-fn align_counts(left: &[Vec<String>], right: &[Vec<String>], key: usize) -> (u64, u64, u64, u64) {
-    let mut right_index: HashMap<&str, usize> = HashMap::new();
+/// Key lookup and row equality honour `ignore_case` / `ignore_space`.
+fn align_counts(
+    left: &[Vec<String>],
+    right: &[Vec<String>],
+    key: usize,
+    ignore_case: bool,
+    ignore_space: bool,
+) -> (u64, u64, u64, u64) {
+    let mut right_index: HashMap<String, usize> = HashMap::new();
     let mut right_no_key: u64 = 0;
     for (i, row) in right.iter().enumerate() {
         match row.get(key) {
             Some(cell) if !cell.trim().is_empty() => {
-                if !right_index.contains_key(cell.as_str()) {
-                    right_index.insert(cell.as_str(), i);
+                let norm = norm_cell(cell, ignore_case, ignore_space);
+                if !right_index.contains_key(&norm) {
+                    right_index.insert(norm, i);
                 }
             }
             _ => {
@@ -345,16 +379,18 @@ fn align_counts(left: &[Vec<String>], right: &[Vec<String>], key: usize) -> (u64
     let mut modified: u64 = 0;
     let mut left_only: u64 = 0;
     for row in left {
-        let key_text: Option<&str> = match row.get(key) {
-            Some(cell) if !cell.trim().is_empty() => Some(cell.as_str()),
+        let key_text: Option<String> = match row.get(key) {
+            Some(cell) if !cell.trim().is_empty() => {
+                Some(norm_cell(cell, ignore_case, ignore_space))
+            }
             _ => None,
         };
         match key_text {
-            Some(k) => match right_index.get(k) {
+            Some(k) => match right_index.get(&k) {
                 Some(pos) => {
                     used.insert(*pos);
                     let same = match right.get(*pos) {
-                        Some(rrow) => rrow == row,
+                        Some(rrow) => rows_equal(rrow, row, ignore_case, ignore_space),
                         None => false,
                     };
                     if same {
@@ -431,13 +467,26 @@ fn page_cells(cells: &[String], start_col: u64, col_limit: u64) -> Vec<String> {
 /// Compare parity). A non-empty list wins when EVERY index is in-range
 /// for BOTH tables; otherwise (empty list, or any index out of range)
 /// the call falls back to the pre-66M auto-detect path byte-identically.
+///
+/// Wave-163c: optional `ignoreCase`/`ignore_case` and
+/// `ignoreSpace`/`ignore_space` tolerate case and whitespace in cell
+/// comparison (positional and key mode alike). Either spelling wins;
+/// omitted flags mean byte-identical cells. Old callers sending only
+/// `{left, right, by_key, key_columns}` are unaffected.
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn table_compare(
     left: String,
     right: String,
     by_key: bool,
     key_columns: Vec<u64>,
+    ignoreCase: Option<bool>,
+    ignore_case: Option<bool>,
+    ignoreSpace: Option<bool>,
+    ignore_space: Option<bool>,
 ) -> Result<TableSummary, String> {
+    let ignore_cs = ignoreCase.or(ignore_case).unwrap_or(false);
+    let ignore_ws = ignoreSpace.or(ignore_space).unwrap_or(false);
     let left_path = Path::new(left.as_str());
     let right_path = Path::new(right.as_str());
     let (header_l, rows_l) = load_table(left_path)?;
@@ -465,17 +514,19 @@ pub fn table_compare(
     }
     let (equal, diff_rows) = if keys.is_empty() {
         // Positional (requested or fallback): zipped full-row
-        // mismatches plus the length delta.
+        // mismatches plus the length delta. Cell equality honours the
+        // wave-163c ignore flags.
         let mut mismatches: u64 = 0;
         for (row_l, row_r) in rows_l.iter().zip(rows_r.iter()) {
-            if row_l != row_r {
+            if !rows_equal(row_l, row_r, ignore_cs, ignore_ws) {
                 mismatches = mismatches.saturating_add(1);
             }
         }
         let delta = rows_l.len().abs_diff(rows_r.len()) as u64;
         let diff_rows = mismatches.saturating_add(delta);
-        let equal =
-            header_l == header_r && rows_l == rows_r && diff_rows == 0;
+        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws)
+            && rows_l.len() == rows_r.len()
+            && diff_rows == 0;
         (equal, diff_rows)
     } else {
         let key = match keys.first() {
@@ -483,12 +534,14 @@ pub fn table_compare(
             None => 0,
         };
         let (_, modified, left_only, right_only) =
-            align_counts(rows_l.as_slice(), rows_r.as_slice(), key);
+            align_counts(rows_l.as_slice(), rows_r.as_slice(), key, ignore_cs, ignore_ws);
         let diff_rows = modified
             .saturating_add(left_only)
             .saturating_add(right_only);
-        let equal =
-            header_l == header_r && modified == 0 && left_only == 0 && right_only == 0;
+        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws)
+            && modified == 0
+            && left_only == 0
+            && right_only == 0;
         (equal, diff_rows)
     };
 
@@ -649,6 +702,17 @@ mod tests {
         by_key: bool,
         key_columns: Vec<u64>,
     ) -> Result<TableSummary, String> {
+        open_session_with_flags(left, right, by_key, key_columns, None, None)
+    }
+
+    fn open_session_with_flags(
+        left: &str,
+        right: &str,
+        by_key: bool,
+        key_columns: Vec<u64>,
+        ignore_case: Option<bool>,
+        ignore_space: Option<bool>,
+    ) -> Result<TableSummary, String> {
         let l = temp_path("l");
         let r = temp_path("r");
         if !write_text(&l, left) || !write_text(&r, right) {
@@ -661,6 +725,10 @@ mod tests {
             r.display().to_string(),
             by_key,
             key_columns,
+            ignore_case,
+            None,
+            ignore_space,
+            None,
         );
         remove_quiet(&l);
         remove_quiet(&r);
@@ -697,6 +765,64 @@ mod tests {
     }
 
     #[test]
+    fn ignore_case_flag_tolerates_cell_case_positional() {
+        let left = "id,name\n1,Amy\n";
+        let right = "id,name\n1,amy\n";
+        let strict = open_session_with_flags(left, right, false, Vec::new(), None, None);
+        let strict_summary = match strict {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!strict_summary.equal);
+        let folded = open_session_with_flags(left, right, false, Vec::new(), Some(true), None);
+        let summary = match folded {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!(summary.diff_rows, 0);
+    }
+
+    #[test]
+    fn ignore_space_flag_tolerates_cell_whitespace_positional() {
+        let left = "id,name\n1,  amy   jones \n";
+        let right = "id,name\n1,amy jones\n";
+        let strict = open_session_with_flags(left, right, false, Vec::new(), None, None);
+        let strict_summary = match strict {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!strict_summary.equal);
+        let trimmed = open_session_with_flags(left, right, false, Vec::new(), None, Some(true));
+        let summary = match trimmed {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!(summary.diff_rows, 0);
+    }
+
+    #[test]
+    fn ignore_flags_apply_in_key_mode() {
+        let left = "id,name\nA1,Amy\n";
+        let right = "id,name\na1,amy\n";
+        let strict = open_session_with_flags(left, right, true, vec![0], None, None);
+        let strict_summary = match strict {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!strict_summary.equal);
+        // Case-folded keys align and case-folded cells match.
+        let folded = open_session_with_flags(left, right, true, vec![0], Some(true), None);
+        let summary = match folded {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!(summary.diff_rows, 0);
+    }
+
+    #[test]
     fn empty_files_have_zero_counts() {
         let res = open_session("", "", false, Vec::new());
         assert!(res.is_ok());
@@ -717,6 +843,10 @@ mod tests {
             "/tmp/wave1b-definitely-missing-right.csv".to_string(),
             false,
             Vec::new(),
+            None,
+            None,
+            None,
+            None,
         );
         assert!(res.is_err());
         let msg = match res {
@@ -1067,7 +1197,7 @@ mod tests {
         }
         let ls = left.display().to_string();
         let rs = right.display().to_string();
-        let res = table_compare(ls.clone(), rs.clone(), false, Vec::new())
+        let res = table_compare(ls.clone(), rs.clone(), false, Vec::new(), None, None, None, None)
             .expect("table_compare must succeed");
 
         let left_meta = res.left_meta.expect("left_meta should be populated");
