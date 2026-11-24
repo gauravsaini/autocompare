@@ -844,7 +844,13 @@ export default function FolderView({
               },
             })}
       >
-      <div data-testid={`folderview/node-${i}`} className={isSelected ? "fv-node is-selected font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]" : "fv-node font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]"} style={sidePlace === undefined && compactNode === undefined ? undefined : { ...sidePlace, ...compactNode }}>
+      <div
+        data-testid={`folderview/node-${i}`}
+        data-pane={entry.status === "leftOnly" ? "left" : entry.status === "rightOnly" ? "right" : undefined}
+        data-side={entry.status === "leftOnly" ? "left" : entry.status === "rightOnly" ? "right" : undefined}
+        className={isSelected ? "fv-node is-selected font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]" : "fv-node font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]"}
+        style={sidePlace === undefined && compactNode === undefined ? undefined : { ...sidePlace, ...compactNode }}
+      >
         <span className="inline-flex items-center gap-[var(--ac-space-2)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-normal" style={compactLabel}>
           {entry.isDir ? (
             <Button
@@ -1039,6 +1045,8 @@ export default function FolderView({
           variant="ghost"
           size="sm"
           data-testid="folder-browse-left"
+          data-pane="left"
+          data-side="left"
           onClick={() => void browseSide("left")}
           disabled={!canBrowse}
           title={canBrowse ? "Browse for the left folder" : browseReason ?? undefined}
@@ -1052,6 +1060,8 @@ export default function FolderView({
           variant="ghost"
           size="sm"
           data-testid="folder-browse-right"
+          data-pane="right"
+          data-side="right"
           onClick={() => void browseSide("right")}
           disabled={!canBrowse}
           title={canBrowse ? "Browse for the right folder" : browseReason ?? undefined}
