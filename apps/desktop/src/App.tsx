@@ -945,8 +945,15 @@ export default function App(): React.JSX.Element {
       setRulerRows((prev) => applyStoredCopiesToDiffRows(prev, copies));
     };
 
+    // FIXRACE: save-to-disk never bumps compareTick. The save receipt
+    // (`textview/save-note`) lives in TextView local state under the
+    // `key={activeTabId:compareTick}` ViewRouter, so a tick bump here
+    // (or on any save-click below) remounts the view ~60ms after Save
+    // and wipes the receipt before the dark-tail assertion. Save changes
+    // no compare inputs, so only the ruler journal refreshes (staged
+    // copies cleared on save); no re-compare, no remount.
     const handleSaveEvent = () => {
-      setCompareTick((t) => t + 1);
+      refreshRulerCopies();
     };
 
     window.addEventListener("storage", refreshRulerCopies);
