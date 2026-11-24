@@ -921,7 +921,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // to 28px and fought the ROW_PX virtualizer estimate.
   // Wave-Table-Density: `table-fixed` keeps left/right grids
   // column-aligned razor-sharp (auto layout sized each side by its own
-  // content, so the same column drifted between panes).
+  // content, so the same column drifted between panes). Wave-160: an
+  // explicit `<colgroup>` (gutter + one col per visible column, no
+  // widths on data cols) pins the equal split per pane so both grids
+  // divide the row identically even when cell content differs.
   const CELL_BASE =
     "tc-cell px-[var(--ac-space-2)] py-0 ac-mono font-normal tabular-nums whitespace-nowrap overflow-hidden text-ellipsis";
   const TABLE_CLASS =
@@ -1007,6 +1010,26 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   const ROW_NUM_CLASS =
     "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)] overflow-hidden px-[var(--ac-space-2)] py-0 text-right ac-mono tabular-nums whitespace-nowrap text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]";
   const ROW_NUM_HEAD_CLASS = "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)]";
+
+  /**
+   * Wave-160: explicit column widths for the `table-fixed` grids. The
+   * gutter column pins to `--ac-gutter-w` (same token as the
+   * row-number cells); data columns carry no width so fixed layout
+   * splits the remainder equally. Both panes mount the identical
+   * group (same `visibleCols`), so left/right columns align
+   * razor-sharp regardless of per-side content. No testids, no DOM
+   * contract change — pure `<colgroup>` geometry.
+   */
+  function renderColGroup(): React.JSX.Element {
+    return (
+      <colgroup>
+        <col style={{ width: "var(--ac-gutter-w)" }} />
+        {visibleCols.map((c) => (
+          <col key={c} />
+        ))}
+      </colgroup>
+    );
+  }
 
   function renderLeftRow(r: number, style?: React.CSSProperties): React.JSX.Element {
     return (
@@ -1387,7 +1410,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           data-testid={sortId}
           onClick={() => cycleSort(c)}
           aria-label={`sort by ${name}${right ? " (right)" : ""}${active ? (sortDir === 1 ? " (ascending, activate for descending)" : " (descending, activate to clear)") : ""}`}
-          className="rounded-sm font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
         >
           {name}
           {active ? (
@@ -1406,7 +1429,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           aria-label={pickedKey === c ? `remove key column ${name}` : `use ${name} as key column`}
           title={pickedKey === c ? "key column (activate to clear)" : "use as key column"}
           onClick={() => toggleKeyColumn(c)}
-          className="tb-key-btn rounded-sm font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="tb-key-btn rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
         >
           key
         </Button>
@@ -1499,7 +1522,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                       value={mapR(c)}
                       onChange={(e) => toggleMapPair(c, Number(e.target.value))}
                       aria-label={`map left column ${leftName} to right column`}
-                      className="ac-mono rounded-[5px] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
+                      className="ac-mono rounded-[var(--ac-control-radius)] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
                     >
                       {options.map((i) => (
                         <option key={i} value={i}>
@@ -1520,7 +1543,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                   value={pickedKey === null ? "" : String(pickedKey)}
                   onChange={(e) => selectMapKey(e.target.value)}
                   aria-label="key column"
-                  className="ac-mono rounded-[5px] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
+                  className="ac-mono rounded-[var(--ac-control-radius)] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
                 >
                   <option value="">auto</option>
                   {cols.map((c) => (
@@ -1709,6 +1732,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           >
             <div data-testid="tableview/grid-left" className="min-w-0">
               <table className={TABLE_CLASS}>
+                {renderColGroup()}
                 <thead className="sticky top-0">
                   <tr>
                     <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
@@ -1735,6 +1759,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
             <span aria-hidden="true" data-testid="tableview/grid-splitter" className="tv-splitter" />
             <div data-testid="tableview/grid-right" className="min-w-0">
               <table className={TABLE_CLASS}>
+                {renderColGroup()}
                 <thead className="sticky top-0">
                   <tr>
                     <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
@@ -1765,6 +1790,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         >
           <div data-testid="tableview/grid-left" className="min-w-0 overflow-x-auto">
             <table className={TABLE_CLASS}>
+              {renderColGroup()}
               <thead>
                 <tr>
                   <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
@@ -1777,6 +1803,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           <span aria-hidden="true" data-testid="tableview/grid-splitter" className="tv-splitter" />
           <div data-testid="tableview/grid-right" className="min-w-0 overflow-x-auto">
             <table className={TABLE_CLASS}>
+              {renderColGroup()}
               <thead>
                 <tr>
                   <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
