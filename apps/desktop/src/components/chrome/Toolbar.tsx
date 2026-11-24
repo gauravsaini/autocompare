@@ -29,6 +29,13 @@ export interface ToolbarAction {
 export interface ToolbarProps {
   actions: readonly ToolbarAction[];
   /**
+   * Wave-174: optional band-siting hook. `ChromeShell` renders Toolbar +
+   * TabBar side-by-side in ONE 44px chrome band (BC parity); the caller
+   * passes flex sizing (`min-w-0 flex-1` + internal `overflow-x-auto`
+   * keeps the single-row guarantee). Heights/testids/wiring untouched.
+   */
+  className?: string;
+  /**
    * Wave-29: external busy override for the compare lifecycle.
    * Absent (the `App` case) = the toolbar's internal run state.
    */
@@ -157,7 +164,7 @@ function waitForViewSettle(timeoutMs: number): Promise<void> {
  *   own blocked reason (or `comparing…` while busy).
  * - Empty sessions: all three disable honestly with titled reasons.
  */
-export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProps): React.JSX.Element {
+export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: ToolbarProps): React.JSX.Element {
   const [internalBusy, setInternalBusy] = useState(false);
   const [internalNote, setInternalNote] = useState<string | null>(null);
   const [runs, setRuns] = useState(0);
@@ -225,7 +232,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
     <div
       role="toolbar"
       aria-label="Compare actions"
-      className="flex h-[var(--ac-toolbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]"
+      className={`flex h-[var(--ac-toolbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]${className ? ` ${className}` : ""}`}
     >
       {actions.map((action) => {
         const isCompare = action.id === "compare";

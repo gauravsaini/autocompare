@@ -15,6 +15,14 @@ export interface TabBarProps {
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewTab: (kind: string) => void;
+  /**
+   * Wave-174: optional band-siting hook. `ChromeShell` renders TabBar +
+   * Toolbar side-by-side in ONE 44px chrome band (BC parity: tabs share
+   * the toolbar band instead of stacking a third shell row); the band
+   * owns the bottom divider, so the caller passes sizing + `border-b-0`.
+   * Absent = legacy standalone look. Heights/testids/wiring untouched.
+   */
+  className?: string;
 }
 
 /**
@@ -46,7 +54,7 @@ export function isTabClosable(tab: ChromeTab): boolean {
   }
 }
 
-export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: TabBarProps): React.JSX.Element {
+export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, className }: TabBarProps): React.JSX.Element {
   // Wave-5A: defensive first-wins dedup by id so a duplicated store row can
   // never multiply the tab row, even if a parent passes dupes.
   const seen = new Set<string>();
@@ -127,7 +135,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
       data-testid="tabbar"
       role="tablist"
       aria-label="Open tabs"
-      className="flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]"
+      className={`flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]${className ? ` ${className}` : ""}`}
     >
       {visibleTabs.map((tab) => {
         const active = tab.id === activeTabId;
