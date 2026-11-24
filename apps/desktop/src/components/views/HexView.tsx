@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import { HexFindPanel, HexGotoPanel, HexToolbar } from "./hex/controls";
 import { errString, isRecord } from "./types";
@@ -109,6 +110,16 @@ interface PageData {
 function hex2(b: number): string {
   return b.toString(16).padStart(2, "0");
 }
+
+/** Wave-184: solid selection fill (BC parity). `tokens.css` is view-owned
+ * elsewhere, so the fill rides an inline style over existing selection
+ * tokens (theme-aware light+dark): the kept `hx-diff` class preserves
+ * legacy specs while the inline fill wins the paint, exactly like BC's
+ * solid selection block over a diff byte. */
+const SEL_FILL: CSSProperties = {
+  backgroundColor: "var(--ac-selection-bg)",
+  color: "var(--ac-selection-fg)",
+};
 
 function ascii(b: number): string {
   return b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
@@ -763,7 +774,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
-        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
         moveSelection(delta);
       }}
     >
@@ -860,7 +871,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       ) : pageLoading || page === null ? (
         <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Loading page {pageIdx + 1}…</p>
       ) : (
-        <div className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
+        <div className="ac-mono overflow-x-auto text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
           {visibleRows.map((r) => {
             const cells: React.JSX.Element[] = [];
             const rcells: React.JSX.Element[] = [];
@@ -942,12 +953,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       }
                       if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
                         event.preventDefault();
-                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
                         moveSelection(delta);
                         return;
                       }
                     }}
                     className={`${tone}${hl}${selCls}`}
+                    style={isSel ? SEL_FILL : undefined}
                   >
                     {hex2(lb)}
                   </span>,
@@ -1003,12 +1015,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       }
                       if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
                         event.preventDefault();
-                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
                         moveSelection(delta);
                         return;
                       }
                     }}
                     className={`${rtone}${selCls}`}
+                    style={isSel ? SEL_FILL : undefined}
                   >
                     {hex2(rb)}
                   </span>,

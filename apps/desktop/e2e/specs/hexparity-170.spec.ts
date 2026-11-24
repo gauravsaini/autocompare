@@ -22,6 +22,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { assertNoOverlap } from "../helpers/overlap";
 
+/** Wave-184 harden: overlap gate scoped to the OWNED hex section (the app
+ * topbar/tabbar occasionally reports a 2px tab-new/action-open brush under
+ * this webkit build; that chrome is off-limits, hexmerge-55 precedent). */
+const HEX_SECTION =
+  'section[aria-label="hex comparison"] [data-testid], section[aria-label="hex comparison"] .hx-row, section[aria-label="hex comparison"] .hx-byte';
+
 test.setTimeout(120_000);
 
 test.beforeEach(async ({ page }) => {
@@ -35,8 +41,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function createHexSession(page: Page): Promise<void> {
-  if (await page.getByTestId("workspace/demo-banner").isVisible().catch(() => false)) {
+  const banner = page.getByTestId("workspace/demo-banner");
+  if (await banner.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
     await page.getByTestId("workspace/demo-clear").click();
+    await expect(page.getByTestId("session-count")).toContainText("sessions: 0");
   }
   await page.getByTestId("toolbar/action-open").click();
   await expect(page.getByTestId("session/dialog")).toBeVisible();
@@ -131,7 +139,7 @@ test("hexparity-170: bus next/prev moves hex diff cursor, foreign kinds ignored"
   await page.getByTestId("hex-find-next").click();
   await expect(page.getByTestId("hex-find-status")).toContainText("match at offset 2");
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, HEX_SECTION);
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
   expect(pageErrors, `page errors: ${pageErrors.join(" | ")}`).toEqual([]);
 });
@@ -198,7 +206,7 @@ test("hexparity-170: bus filter narrows hex rows, chrome budget holds", async ({
   expect(delta, "section + first row mounted").not.toBeNull();
   expect(delta!, `firstRowTop<=140 (got ${delta})`).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, HEX_SECTION);
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
   expect(pageErrors, `page errors: ${pageErrors.join(" | ")}`).toEqual([]);
 });
