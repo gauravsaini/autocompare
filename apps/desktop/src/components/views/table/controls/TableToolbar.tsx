@@ -139,6 +139,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-cols-toggle"
+        size="sm"
         aria-expanded={colsOpen}
         aria-controls="table-cols-menu"
         onClick={onToggleCols}
@@ -147,6 +148,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       </Button>
       <Button
         data-testid="table-cols-show-all"
+        size="sm"
         onClick={onShowAll}
         disabled={showAllDisabled}
       >
@@ -160,7 +162,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         {hiddenCount === 0 ? "all columns shown" : `${hiddenCount} hidden`}
       </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
-      <Button data-testid="table-export" onClick={onExport}>
+      <Button data-testid="table-export" size="sm" onClick={onExport}>
         Export CSV
       </Button>
       {/* Wave-TBL: column mapping (Beyond Compare style left <-> right).
@@ -170,6 +172,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-map-toggle"
+        size="sm"
         aria-expanded={mapOpen}
         aria-controls="table-map-panel"
         onClick={onToggleMap}
@@ -191,6 +194,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-copy-cell"
+        size="sm"
         onClick={onCopyCell}
         disabled={copyCellDisabled}
         title={copyCellDisabled ? "select a cell first" : "Copy selected cell to clipboard"}
@@ -199,6 +203,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       </Button>
       <Button
         data-testid="table-copy-row"
+        size="sm"
         onClick={onCopyRow}
         disabled={copyRowDisabled}
         title={copyRowDisabled ? "select a cell first" : "Copy selected row to clipboard"}
@@ -220,29 +225,29 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in table (Ctrl+F)"
         expanded={findOpen}
+        icon={Search}
         onClick={onToggleFind}
       >
-        <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Find</span>
       </ToolbarButton>
       <ToolbarButton
         data-testid="tableview/toolbar-prev-diff"
         label="Previous difference row"
         title="Previous difference row"
+        icon={ChevronUp}
         onClick={onPrevDiff}
         disabled={diffCount === 0}
       >
-        <ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Prev</span>
       </ToolbarButton>
       <ToolbarButton
         data-testid="tableview/toolbar-next-diff"
         label="Next difference row"
         title="Next difference row"
+        icon={ChevronDown}
         onClick={onNextDiff}
         disabled={diffCount === 0}
       >
-        <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Next</span>
       </ToolbarButton>
       <StatusText data-testid="tableview/toolbar-diffs" variant="meta">

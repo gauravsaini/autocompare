@@ -423,7 +423,7 @@ function PathField({
           role="listbox"
           aria-label={`${label} history`}
           data-testid={`${testId}-history`}
-          className="absolute top-full right-0 left-0 z-30 mt-[var(--ac-space-1)] max-h-56 overflow-y-auto rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] py-[var(--ac-space-1)] shadow-md"
+          className="absolute top-full right-0 left-0 z-30 mt-[var(--ac-space-1)] max-h-56 overflow-y-auto rounded-[5px] border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] py-[var(--ac-space-1)] shadow-md"
         >
           {history.length === 0 ? (
             <p data-testid={`${testId}-history-empty`} className="px-[var(--ac-space-2)] py-[var(--ac-space-2)] text-xs text-[var(--ac-fg-muted)]">
@@ -791,7 +791,7 @@ export function PathBar({
           data-testid="pathbar/note"
           role="status"
           aria-live="polite"
-          className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--ac-alert-fg,#e06c75)]"
+          className="shrink-0 rounded-[5px] px-1.5 py-0.5 text-[11px] font-medium text-[var(--ac-alert-fg,#e06c75)]"
         >
           {note}
         </span>

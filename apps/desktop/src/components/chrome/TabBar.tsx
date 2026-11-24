@@ -164,8 +164,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
             tabIndex={0}
             className={
               active
-                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] px-[var(--ac-space-2)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-md px-[var(--ac-space-2)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] px-[var(--ac-space-2)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] px-[var(--ac-space-2)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
             }
           >
             <span className="truncate">{tab.title}</span>
@@ -264,7 +264,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
             size="sm"
             aria-label="Dismiss tab error"
             onClick={() => setCloseError(null)}
-            className="shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+            className="shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
           >
             Dismiss
           </Button>

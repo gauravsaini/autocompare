@@ -16,7 +16,7 @@ export default function Input({ controlSize, className = "", ...rest }: InputPro
         : "h-[var(--ac-control-h-input,24px)] text-[12px]";
   return (
     <input
-      className={`${h} rounded-[5px] border border-[var(--ac-input-border)] bg-[var(--ac-input-bg)] px-2 ac-chrome-label text-[var(--ac-fg)] placeholder:text-[var(--ac-fg-muted)] shadow-[var(--ac-input-shadow,inset_0_0.5px_1px_rgba(0,0,0,0.06))] focus-visible:outline-hidden focus-visible:border-[var(--ac-focus-ring)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring-subtle)] ${className}`}
+      className={`${h} rounded-[5px] border border-[var(--ac-input-border)] bg-[var(--ac-input-bg)] px-2 ac-chrome-label text-[var(--ac-fg)] placeholder:text-[var(--ac-fg-muted)] shadow-[var(--ac-input-shadow,inset_0_0.5px_1px_rgba(0,0,0,0.06))] focus-visible:outline-hidden focus-visible:border-[var(--ac-focus)] focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)] ${className}`}
       {...rest}
     />
   );

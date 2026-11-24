@@ -79,7 +79,8 @@
 
   /* Accent & Focus */
   --ac-accent: #0a84ff;
-  --ac-focus-ring: #0a84ff;
+  --ac-focus: #0a84ff;
+  --ac-focus-ring: var(--ac-focus);
   --ac-focus-ring-subtle: rgba(10, 132, 255, 0.25);
 
   /* Selection & Hover */
@@ -153,16 +154,17 @@
   --ac-badge-bg: #e5e5ea;
   --ac-badge-fg: #636366;
 
-  /* Wave-A / Wave-U2: shared desktop control kit (macOS density 22/26px, hairline border + bevel, accent #0a84ff).
+  /* Wave-A / Wave-U2 / Wave-179: shared desktop control kit (macOS density 22-24px, hairline border + bevel, accent #0a84ff).
      Geometry + hierarchy only; colors ride existing accent/focus tokens. */
   --ac-control-h-sm: 22px;
-  --ac-control-h-md: 26px;
+  --ac-control-h-md: 24px;
   --ac-control-h-input: 24px;
   --ac-control-h-input-sm: 22px;
-  --ac-control-h-input-md: 26px;
+  --ac-control-h-input-md: 24px;
   --ac-control-radius: 5px;
   --ac-control-radius-sm: 4px;
-  --ac-control-radius-md: 6px;
+  --ac-control-radius-md: 5px;
+  --ac-control-border: var(--ac-border-subtle);
 
   /* Button Tokens (Light) */
   --ac-btn-bg: var(--ac-bg-raised);
@@ -250,7 +252,8 @@
     --ac-surface: #242426;
     --ac-surface-secondary: #1e1e20;
     --ac-border-subtle: #38383a;
-    --ac-focus-ring: #0a84ff;
+    --ac-focus: #0a84ff;
+    --ac-focus-ring: var(--ac-focus);
     --ac-focus-ring-subtle: rgba(10, 132, 255, 0.35);
     --ac-selection-bg: #1a4f8b;
     --ac-selection-fg: #ffffff;
@@ -276,15 +279,16 @@
     --ac-badge-bg: #3a3a3c;
     --ac-badge-fg: #aeaeb2;
 
-    /* Wave-A / Wave-U2 dark mirrors: same control geometry, dark surfaces + bevels. */
+    /* Wave-A / Wave-U2 / Wave-179 dark mirrors: same control geometry, dark surfaces + bevels. */
     --ac-control-h-sm: 22px;
-    --ac-control-h-md: 26px;
+    --ac-control-h-md: 24px;
     --ac-control-h-input: 24px;
     --ac-control-h-input-sm: 22px;
-    --ac-control-h-input-md: 26px;
+    --ac-control-h-input-md: 24px;
     --ac-control-radius: 5px;
     --ac-control-radius-sm: 4px;
-    --ac-control-radius-md: 6px;
+    --ac-control-radius-md: 5px;
+    --ac-control-border: var(--ac-border-subtle);
 
     /* Button Tokens (Dark) */
     --ac-btn-bg: var(--ac-bg-raised);
@@ -416,7 +420,7 @@ samp {
 
 /* Focus Visible Rings Standard */
 :focus-visible {
-  outline: 2px solid var(--ac-focus-ring);
+  outline: 2px solid var(--ac-focus);
   outline-offset: 1px;
 }
 
@@ -1010,7 +1014,7 @@ samp {
   display: inline-flex;
   align-items: center;
   gap: var(--ac-space-1);
-  border-radius: 6px;
+  border-radius: 5px;
   border: 1px solid transparent;
   padding: var(--ac-space-1) var(--ac-space-2);
   font-family: var(--ac-font-ui);

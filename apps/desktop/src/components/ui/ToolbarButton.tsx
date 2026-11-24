@@ -33,10 +33,10 @@ export default function ToolbarButton({
         (vertical
           ? "inline-flex min-h-[38px] min-w-[44px] flex-col items-center justify-center gap-[var(--ac-space-1)] rounded-[5px] px-[var(--ac-space-2)] py-1 "
           : `inline-flex ${h} items-center gap-1 rounded-[5px] `) +
-        "ac-chrome-label font-medium text-[var(--ac-fg)] hover:bg-[var(--ac-btn-hover-bg)] " +
-        "active:bg-[var(--ac-btn-active-bg)] focus-visible:outline-hidden focus-visible:ring-2 " +
-        "focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 select-none " +
-        (expanded === true ? "bg-[var(--ac-btn-hover-bg)] " : "") +
+        "ac-chrome-label font-medium text-[var(--ac-fg)] border border-transparent hover:border-[var(--ac-border-subtle)] hover:bg-[var(--ac-btn-hover-bg)] " +
+        "active:bg-[var(--ac-btn-active-bg)] focus-visible:outline-hidden focus-visible:ring-1 " +
+        "focus-visible:ring-[var(--ac-focus)] disabled:cursor-not-allowed disabled:opacity-45 select-none " +
+        (expanded === true ? "bg-[var(--ac-btn-hover-bg)] border-[var(--ac-border-subtle)] " : "") +
         className
       }
       {...rest}

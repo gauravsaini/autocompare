@@ -68,6 +68,7 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="syncview/apply-dry"
+        size="sm"
         onClick={onDry}
         disabled={applying || !canApply}
         data-disabled-reason={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : undefined}
@@ -78,6 +79,7 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
       <Button
         data-testid="syncview/apply-real"
         variant="primary"
+        size="sm"
         onClick={onReal}
         disabled={applying || !canApply}
         data-disabled-reason={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : undefined}

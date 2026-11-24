@@ -13,8 +13,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const base =
   "inline-flex items-center justify-center gap-1 rounded-[5px] font-medium ac-chrome-label " +
-  "border transition focus-visible:outline-hidden focus-visible:ring-2 " +
-  "focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 select-none";
+  "border transition focus-visible:outline-hidden focus-visible:ring-1 " +
+  "focus-visible:ring-[var(--ac-focus)] disabled:cursor-not-allowed disabled:opacity-45 select-none";
 
 const sizes: Record<ButtonSize, string> = {
   sm: "h-[var(--ac-control-h-sm)] px-2 text-[12px]",

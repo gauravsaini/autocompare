@@ -12,7 +12,7 @@ export default function Checkbox({ label, className = "", ...rest }: CheckboxPro
         type="checkbox"
         aria-label={label}
         title={label}
-        className="h-[var(--ac-checkbox-size)] w-[var(--ac-checkbox-size)] shrink-0 cursor-pointer rounded-[3px] accent-[var(--ac-accent)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+        className="h-[var(--ac-checkbox-size)] w-[var(--ac-checkbox-size)] shrink-0 cursor-pointer rounded-[3px] accent-[var(--ac-accent)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
         {...rest}
       />
       <span>{label}</span>
