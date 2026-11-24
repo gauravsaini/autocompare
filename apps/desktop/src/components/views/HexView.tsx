@@ -822,9 +822,9 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         </div>
       </div>
       {total === 0 ? (
-        <p className="ac-meta p-4 text-[var(--ac-fg-muted)]">Both files are empty.</p>
+        <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Both files are empty.</p>
       ) : pageLoading || page === null ? (
-        <p className="ac-meta p-4 text-[var(--ac-fg-muted)]">Loading page {pageIdx + 1}…</p>
+        <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Loading page {pageIdx + 1}…</p>
       ) : (
         <div className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
           {visibleRows.map((r) => {
@@ -982,13 +982,18 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                 textR.push({ ch: ascii(rb), diff });
               }
             }
+            // Wave-160: exact 22px density pin (table parity, the
+            // `--ac-row-h` contract). `py-0` keeps the 12px*1.55 =
+            // 18.6px line box inside the token `.hx-row` 22px
+            // min-height; the old `py-0.5` measured ~22.6px and
+            // drifted off the unified contract.
             return (
-              <div key={r} className="hx-row flex items-center gap-[var(--ac-space-2)] whitespace-pre px-[var(--ac-space-2)] py-0.5 hover:bg-[var(--ac-row-hover-bg)] rounded-xs">
+              <div key={r} className="hx-row flex items-center gap-[var(--ac-space-2)] whitespace-pre px-[var(--ac-space-2)] py-0 hover:bg-[var(--ac-row-hover-bg)] rounded-xs">
                 <span className="hx-offset w-[var(--ac-gutter-w-hex)] shrink-0 tabular-nums text-[var(--ac-fg-muted)] select-none">
                   {(base + r * bytesPerRow).toString(16).padStart(8, "0")}
                 </span>
                 <span className="hx-hex">{cells}</span>
-                <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-2">{text.map((c, i) => (
+                <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-[var(--ac-space-2)]">{text.map((c, i) => (
                   <span key={i} className={c.diff ? "hx-diff" : undefined}>{c.ch}</span>
                 ))}</span>
                 {/* Wave-101: right-pane offset gutter (BC prints offsets
@@ -996,12 +1001,12 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                     value as the left gutter; aria-hidden (redundant). */}
                 <span
                   aria-hidden="true"
-                  className="hx-offset w-[var(--ac-gutter-w-hex)] shrink-0 tabular-nums text-[var(--ac-fg-muted)] select-none border-l border-[var(--ac-border-subtle)] pl-2"
+                  className="hx-offset w-[var(--ac-gutter-w-hex)] shrink-0 tabular-nums text-[var(--ac-fg-muted)] select-none border-l border-[var(--ac-border-subtle)] pl-[var(--ac-space-2)]"
                 >
                   {(base + r * bytesPerRow).toString(16).padStart(8, "0")}
                 </span>
                 <span className="hx-hex">{rcells}</span>
-                <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-2">{textR.map((c, i) => (
+                <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-[var(--ac-space-2)]">{textR.map((c, i) => (
                   <span key={i} className={c.diff ? "hx-diff" : undefined}>{c.ch}</span>
                 ))}</span>
               </div>
