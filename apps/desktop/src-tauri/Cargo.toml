@@ -1,0 +1,31 @@
+[package]
+name = "autocompare-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tauri v2 desktop shell over the autocompare engine (thin client; Wave 0 scaffold)"
+
+[lib]
+name = "autocompare_desktop_lib"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "autocompare-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+autocompare-compare = { version = "0.5.0", path = "../../../crates/compare" }
+autocompare-diff = { version = "0.5.0", path = "../../../crates/diff" }
+autocompare-reports = { version = "0.5.0", path = "../../../crates/reports" }
+autocompare-sessions = { version = "0.5.0", path = "../../../crates/sessions" }
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+
+[lints]
+workspace = true

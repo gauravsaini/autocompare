@@ -1,0 +1,19 @@
+[package]
+name = "autocompare-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pure diff algorithms: line diff, inline spans, three-way merge"
+
+[lints]
+workspace = true
+
+[dependencies]
+png = "0.18.1"
+# The MP3 bundle exposes only MpaReader/MpaDecoder; driving them requires
+# naming core types (MediaSourceStream, FormatOptions, CodecParameters),
+# which are already compiled transitively at this exact version.
+symphonia-bundle-mp3 = "0.6.1"
+symphonia-core = "0.6.1"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+flate2 = "1.0"

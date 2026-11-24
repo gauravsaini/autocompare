@@ -1,0 +1,27 @@
+[package]
+name = "autocompare-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Command-line comparison: text, folders, bytes, merges"
+
+[[bin]]
+name = "autocompare"
+path = "src/main.rs"
+
+[lib]
+name = "autocompare_cli"
+path = "src/lib.rs"
+
+[dependencies]
+autocompare-diff = { path = "../diff" }
+autocompare-compare = { path = "../compare" }
+autocompare-reports = { path = "../reports" }
+autocompare-sessions = { path = "../sessions" }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

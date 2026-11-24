@@ -1,0 +1,6454 @@
+//! Table key-compare view model: headless-first pure state over
+//! the key-aligned tolerant table engine.
+//!
+//! Observed behavior parity (clean-room, no copied strings): a table
+//! session parses two delimited files, suggests key columns whose
+//! cells are non-empty and unique, aligns rows by the selected key,
+//! and compares data cells with numeric tolerance, case folding and
+//! space trimming. With no key columns the rows compare positionally
+//! and the view says so honestly. This module holds that state without
+//! egui or I/O so it stays unit-testable; painting and engine driving
+//! stay the orchestrator's wiring job.
+//!
+//! Engine mapping: [`TableKeyView::to_compare_options`] builds the
+//! [`autocompare_diff::TableCompareOptions`] that
+//! `diff_table_by_key_with_options` consumes, and
+//! [`TableKeyView::to_key_options`] builds the
+//! [`autocompare_compare::TableKeyOptions`] that
+//! `compare_table_files_by_key` consumes.
+
+#![forbid(unsafe_code)]
+
+use autocompare_compare::TableKeyOptions;
+use autocompare_diff::{
+    Table, TableCompareOptions, TableKeyDiff, cells_equal_with_options, detect_key_columns,
+    diff_table_by_key_with_options,
+};
+use eframe::egui;
+
+use crate::theme::TypoRole;
+
+/// Note shown when no key columns are selected: rows compare
+/// positionally, so reordered rows read as deletes plus inserts.
+pub const POSITIONAL_NOTE: &str = "no key columns: rows compare positionally";
+
+/// Honest summary counts of one key-aligned table diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableKeySummary {
+    /// Rows whose key matched and every data cell matched.
+    pub matching: usize,
+    /// Rows whose key matched but at least one data cell differed.
+    pub modified: usize,
+    /// Rows present only on the left.
+    pub left_only: usize,
+    /// Rows present only on the right.
+    pub right_only: usize,
+    /// Whether rows aligned by key (false when positional fallback).
+    pub keyed: bool,
+    /// Whether the positional fallback note applies.
+    pub positional_note: bool,
+}
+
+impl TableKeySummary {
+    /// Total aligned rows behind this summary.
+    pub fn total(&self) -> usize {
+        self.matching
+            .saturating_add(self.modified)
+            .saturating_add(self.left_only)
+            .saturating_add(self.right_only)
+    }
+
+    /// One-line counts mirroring the CLI's honest wording.
+    pub fn line(&self) -> String {
+        format!(
+            "{} matching, {} modified, {} left-only, {} right-only{}",
+            self.matching,
+            self.modified,
+            self.left_only,
+            self.right_only,
+            if self.keyed {
+                " (keyed)"
+            } else {
+                " (positional)"
+            }
+        )
+    }
+}
+
+/// Headless table key-compare state: selector plus tolerant options.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TableKeyView {
+    /// Selected alignment key columns (empty = positional compare).
+    pub key_columns: Vec<usize>,
+    /// Numeric tolerance; invalid values sanitize to [`None`].
+    pub numeric_tolerance: Option<f64>,
+    /// Fold case before comparing text and keys.
+    pub ignore_case: bool,
+    /// Trim surrounding space before comparing text and keys.
+    pub trim_space: bool,
+    /// Last key suggestion from [`detect_key_columns`].
+    pub suggested_keys: Vec<usize>,
+    /// Summary of the last diff run.
+    pub summary: TableKeySummary,
+}
+
+impl TableKeyView {
+    /// Fresh view: positional compare with exact text equality.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sanitizes a tolerance the way the engine does: only finite
+    /// values `>= 0` compare numerically, anything else (including
+    /// `NaN`, infinite and negative) means exact text equality.
+    pub fn sanitize_tolerance(tolerance: Option<f64>) -> Option<f64> {
+        match tolerance {
+            Some(t) if t.is_finite() && t >= 0.0 => Some(t),
+            _ => None,
+        }
+    }
+
+    /// Sets the numeric tolerance after sanitizing it.
+    pub fn set_tolerance(&mut self, tolerance: Option<f64>) {
+        self.numeric_tolerance = Self::sanitize_tolerance(tolerance);
+    }
+
+    /// Toggles one column in the key selector, keeping it sorted.
+    pub fn toggle_key_column(&mut self, column: usize) {
+        let mut next: Vec<usize> = Vec::new();
+        let mut removed = false;
+        for existing in self.key_columns.iter() {
+            if *existing == column {
+                removed = true;
+            } else {
+                next.push(*existing);
+            }
+        }
+        if !removed {
+            next.push(column);
+            next.sort();
+        }
+        self.key_columns = next;
+    }
+
+    /// Refreshes [`Self::suggested_keys`] from the left table. Test-only:
+    /// the file-driven wiring never holds parsed tables (engine consumes
+    /// paths), so only unit tests drive the headless suggestion path.
+    pub fn suggest_for(&mut self, left: &Table) {
+        self.suggested_keys = detect_key_columns(left);
+    }
+
+    /// Adopts the last suggestion as the selected key. Test-only: see
+    /// [`Self::suggest_for`]; the file-driven wiring toggles key columns
+    /// manually via [`Self::toggle_key_column`].
+    pub fn apply_suggestion(&mut self) {
+        self.key_columns = self.suggested_keys.clone();
+    }
+
+    /// Whether rows align positionally (no key selected).
+    pub fn is_positional(&self) -> bool {
+        self.key_columns.is_empty()
+    }
+
+    /// Positional note for the view, if it applies.
+    pub fn positional_note(&self) -> Option<&'static str> {
+        if self.is_positional() {
+            Some(POSITIONAL_NOTE)
+        } else {
+            None
+        }
+    }
+
+    /// Engine-tolerant options behind this view. Single source for
+    /// [`Self::to_key_options`], so both mappings stay in sync.
+    pub fn to_compare_options(&self) -> TableCompareOptions {
+        TableCompareOptions {
+            key_columns: self.key_columns.clone(),
+            numeric_tolerance: Self::sanitize_tolerance(self.numeric_tolerance),
+            ignore_case: self.ignore_case,
+            trim_space: self.trim_space,
+        }
+    }
+
+    /// File-compare key options behind this view. Built from
+    /// [`Self::to_compare_options`] so the two mappings never drift.
+    pub fn to_key_options(&self) -> TableKeyOptions {
+        let opts = self.to_compare_options();
+        TableKeyOptions {
+            key_columns: opts.key_columns,
+            numeric_tolerance: opts.numeric_tolerance,
+            ignore_case: opts.ignore_case,
+            trim_space: opts.trim_space,
+        }
+    }
+
+    /// Compares two cells under this view's tolerant options. Test-only:
+    /// runtime cell comparison runs inside the engine diff; unit tests
+    /// probe the view's tolerance folding through this wrapper.
+    pub fn cells_equal(&self, left: &str, right: &str) -> bool {
+        cells_equal_with_options(left, right, &self.to_compare_options())
+    }
+
+    /// Runs the key-aligned diff over two parsed tables and records
+    /// the summary. Pure and total. Test-only: see [`Self::suggest_for`];
+    /// the file-driven wiring summarizes via [`summarize`] on engine output.
+    pub fn refresh(&mut self, left: &Table, right: &Table) {
+        let opts = self.to_compare_options();
+        let diff = diff_table_by_key_with_options(left, right, &opts);
+        self.summary = summarize(&diff, self.is_positional());
+    }
+
+    /// Honest one-line status for the status bar.
+    pub fn status_line(&self) -> String {
+        let mut line = format!("table keyed: {}", self.summary.line());
+        if let Some(note) = self.positional_note() {
+            line.push_str(&format!(" | note: {note}"));
+        }
+        line
+    }
+}
+
+/// Builds a [`TableKeySummary`] from an engine diff. `positional` is
+/// true when the diff ran without key columns.
+pub fn summarize(diff: &TableKeyDiff, positional: bool) -> TableKeySummary {
+    TableKeySummary {
+        matching: diff.matching_rows,
+        modified: diff.modified_rows,
+        left_only: diff.left_only_rows,
+        right_only: diff.right_only_rows,
+        keyed: !positional,
+        positional_note: positional,
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Key-column affordance (pure state queries + thin paint; wiring stays with
+// the orchestrator). Existing `TableKeyView` reuse: toggle/select state,
+// `POSITIONAL_NOTE`, `positional_note()` same rahte hain. Geometry first:
+// fixed 1-char marker har toggle ke start me (indicator column align),
+// `TABLE_KEY_BAR_H` uncha bar, `TABLE_KEY_COL_GAP` gap, badge right-end par
+// `TABLE_KEY_BADGE_PAD` ke saath (find-bar badge geometry reuse).
+// Typography second: section labels Body-strong (helper +
+// paint-side `.strong()`), header/selected key cells mono-strong,
+// plain cells mono, hint/badge `(suggested)` Small-role, positional
+// note + empty note Body-role (weak hata — weight se contrast, color
+// frozen); koi size-override/color add nahi. No I/O.
+// ----------------------------------------------------------------------------
+
+/// Key-col header bar ki unchai (find-bar precedent reuse).
+pub const TABLE_KEY_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Per-column key toggle ke beech ka gap (default item-spacing scale).
+pub const TABLE_KEY_COL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Key badge ka right-end pad (find-bar badge precedent reuse).
+pub const TABLE_KEY_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
+
+/// Key toggle ka fixed 1-char indicator: selected vs deselected hamesha
+/// alag dikhta hai aur hamesha button text ke start me rehta hai, isliye
+/// indicator column align rehta hai. Pure; unit-tested.
+pub fn key_column_marker(selected: bool) -> &'static str {
+    if selected { "●" } else { "○" }
+}
+
+/// Kya `col` is waqt key me selected hai. Pure; unit-tested.
+pub fn is_key_column(view: &TableKeyView, col: usize) -> bool {
+    view.key_columns.contains(&col)
+}
+
+/// Kya `col` aakhri suggestion me tha. Pure; unit-tested.
+pub fn is_suggested_key(view: &TableKeyView, col: usize) -> bool {
+    view.suggested_keys.contains(&col)
+}
+
+/// Key badge text: keyed par `key: 0,2`, positional par `positional`.
+/// Khali header par bhi safe (sirf view state par). Pure; unit-tested.
+pub fn table_key_badge_label(view: &TableKeyView) -> String {
+    if view.is_positional() {
+        String::from("positional")
+    } else {
+        let mut out = String::from("key:");
+        for (pos, col) in view.key_columns.iter().enumerate() {
+            if pos == 0 {
+                out.push(' ');
+            } else {
+                out.push(',');
+            }
+            out.push_str(&col.to_string());
+        }
+        out
+    }
+}
+
+/// Key-col header affordance row: har header column ek
+/// `selectable_label(marker + name)` toggle hai (selected par
+/// `.strong().monospace()`, deselected par `.monospace()`), click par
+/// `toggle_key_column(col)`; suggested-par-Small-role
+/// `(suggested)` hint; right-end me `table_key_badge_label` badge
+/// Small-role me (find-bar badge geometry reuse); positional hone
+/// par `POSITIONAL_NOTE` note line me Body-role (honest,
+/// `positional_note()` reuse, koi naya wording nahi). Caller signature
+/// stable rehti hai (table tab wiring isi ko chalati hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_key_bar(ui: &mut egui::Ui, view: &mut TableKeyView, header: &[String]) {
+    let avail = ui.available_width();
+    let mut clicked: Option<usize> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_KEY_BAR_H));
+        // Even rhythm: ek hi gap source (`item_spacing.x`) har toggle ke
+        // beech — per-column `add_space` double gap banata tha (16px vs
+        // Grid `TABLE_GRID_COL_GAP` 8px), isliye hata diya.
+        ui.spacing_mut().item_spacing.x = TABLE_KEY_COL_GAP;
+        ui.label(table_section_label_text_role().rich("Key:").strong());
+        for (col, name) in header.iter().enumerate() {
+            let selected = is_key_column(view, col);
+            let suggested = is_suggested_key(view, col);
+            let marker = key_column_marker(selected);
+            let text = format!("{marker} {name}");
+            let rich = if selected {
+                egui::RichText::new(text).monospace().strong()
+            } else {
+                egui::RichText::new(text).monospace()
+            };
+            if ui.selectable_label(selected, rich).clicked() {
+                clicked = Some(col);
+            }
+            if suggested && !selected {
+                ui.label(TypoRole::Small.rich("(suggested)"));
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_KEY_BADGE_PAD);
+            ui.label(TypoRole::Small.rich(table_key_badge_label(view)));
+        });
+    });
+    if let Some(col) = clicked {
+        view.toggle_key_column(col);
+    }
+    // `positional_note()` khud sirf positional par `Some` deta hai,
+    // isliye ek `if let` hi honest-note gate hai (outer check redundant).
+    if let Some(note) = view.positional_note() {
+        ui.label(TypoRole::Body.rich(note));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Table grid (headless; paint wiring stays with the orchestrator).
+// Gap 3: the table tab paints har row ko ek hi monospace string me.
+// Ye section pure grid spec hai: header labels, char-width se column
+// widths, padded cell text, aur per-cell cursor. No egui, no I/O;
+// paint har visible row ko `table_column_widths` + `pad_table_cell`
+// se columns me lay out kare aur `TableCellCursor` se nav kare.
+// ----------------------------------------------------------------------------
+
+/// Upper bound for ek column ki char width, taaki ek lambi cell poori
+/// grid ko faila na de. Paint isse aage ka text kaat kar dikhaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_MAX_COL_CHARS: usize = 32;
+
+/// Minimum column width taaki header kabhi dab na jaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_MIN_COL_CHARS: usize = 3;
+
+/// Ek cell ka grid position: data-row index plus column index.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableCellCursor {
+    /// Data row (header ko count nahi karta).
+    pub row: usize,
+    /// Column index.
+    pub col: usize,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+impl TableCellCursor {
+    /// Grid dimensions ke andar cursor, warna `None`.
+    pub fn clamp(self, row_count: usize, col_count: usize) -> Option<Self> {
+        if self.row < row_count && self.col < col_count {
+            Some(self)
+        } else {
+            None
+        }
+    }
+
+    /// Ek row upar, top par clamp.
+    pub fn move_up(self) -> Self {
+        Self {
+            row: self.row.saturating_sub(1),
+            col: self.col,
+        }
+    }
+
+    /// Ek row neeche, caller `clamp` se bound kare.
+    pub fn move_down(self) -> Self {
+        Self {
+            row: self.row.saturating_add(1),
+            col: self.col,
+        }
+    }
+
+    /// Ek column left, first par clamp.
+    pub fn move_left(self) -> Self {
+        Self {
+            row: self.row,
+            col: self.col.saturating_sub(1),
+        }
+    }
+
+    /// Ek column right, caller `clamp` se bound kare.
+    pub fn move_right(self) -> Self {
+        Self {
+            row: self.row,
+            col: self.col.saturating_add(1),
+        }
+    }
+}
+
+/// Column widths chars me: har column ka max(header, cells), min par
+/// floor aur max par cap. Kabhi khali nahi jab header khali nahi.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_column_widths(header: &[String], rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths: Vec<usize> = Vec::new();
+    for cell in header.iter() {
+        widths.push(
+            cell.chars()
+                .count()
+                .clamp(TABLE_MIN_COL_CHARS, TABLE_MAX_COL_CHARS),
+        );
+    }
+    for row in rows.iter() {
+        for (idx, cell) in row.iter().enumerate() {
+            let Some(slot) = widths.get_mut(idx) else {
+                continue;
+            };
+            let want = cell
+                .chars()
+                .count()
+                .clamp(TABLE_MIN_COL_CHARS, TABLE_MAX_COL_CHARS);
+            if want > *slot {
+                *slot = want;
+            }
+        }
+    }
+    widths
+}
+
+/// Ek cell ko width tak spaces se pad karta hai. Lamba text cap par
+/// kat-ta hai taaki columns align rahen. Char-based hai taaki
+/// multibyte text par bhi column na tute.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn pad_table_cell(text: &str, width: usize) -> String {
+    let capped: String = text.chars().take(width.max(1)).collect();
+    let len = capped.chars().count();
+    if len >= width {
+        capped
+    } else {
+        let mut out = capped;
+        for _ in len..width {
+            out.push(' ');
+        }
+        out
+    }
+}
+
+/// Ek row ki padded cells Grid paint ke liye: har width tak
+/// `pad_table_cell`, missing cell `-` taaki ragged rows me bhi
+/// columns align rahen. `table_column_widths` ke saath jodta hai.
+/// Pure; unit-tested.
+pub fn pad_table_row(cells: &[String], widths: &[usize]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (idx, width) in widths.iter().enumerate() {
+        let cell = cells.get(idx).map(String::as_str).unwrap_or("-");
+        out.push(pad_table_cell(cell, *width));
+    }
+    out
+}
+
+/// Header row ka display text, widths ke hisab se padded.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn format_table_header(header: &[String], widths: &[usize]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (idx, cell) in header.iter().enumerate() {
+        let width = widths.get(idx).copied().unwrap_or(TABLE_MIN_COL_CHARS);
+        out.push(pad_table_cell(cell, width));
+    }
+    out
+}
+
+/// Data cell ka display text: missing cell `-` dikhta hai taaki ragged
+/// rows me bhi columns align rahen.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_cell_display(rows: &[Vec<String>], pos: TableCellCursor) -> Option<String> {
+    let row = rows.get(pos.row)?;
+    let width_hint = row.len().max(1);
+    let _ = width_hint;
+    match row.get(pos.col) {
+        Some(cell) => Some(cell.clone()),
+        None => Some(String::from("-")),
+    }
+}
+
+/// Cell text ka find matcher: khali needle kabhi match nahi karta.
+fn table_cell_contains(cell: &str, needle: &str, ignore_case: bool) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if ignore_case {
+        cell.to_lowercase().contains(&needle.to_lowercase())
+    } else {
+        cell.contains(needle)
+    }
+}
+
+/// Agli cell `(row, col)` jisme needle hai, `from_row` se (inclusive),
+/// row-major order me, wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_next(
+    rows: &[Vec<String>],
+    needle: &str,
+    from_row: usize,
+    ignore_case: bool,
+) -> Option<(usize, usize)> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut row = from_row % total.max(1);
+    for _ in 0..total {
+        let cells = rows.get(row)?;
+        for (col, cell) in cells.iter().enumerate() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                return Some((row, col));
+            }
+        }
+        row = row.saturating_add(1) % total.max(1);
+    }
+    None
+}
+
+/// Pichhli cell `(row, col)` jisme needle hai, `from_row` se peeche
+/// (exclusive), wrap ke saath. Khali needle/rows par `None`.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_prev(
+    rows: &[Vec<String>],
+    needle: &str,
+    from_row: usize,
+    ignore_case: bool,
+) -> Option<(usize, usize)> {
+    if needle.is_empty() || rows.is_empty() {
+        return None;
+    }
+    let total = rows.len();
+    let mut row = if from_row == 0 {
+        total.saturating_sub(1)
+    } else {
+        (from_row.saturating_sub(1)) % total.max(1)
+    };
+    for _ in 0..total {
+        let cells = rows.get(row)?;
+        for (col, cell) in cells.iter().enumerate().rev() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                return Some((row, col));
+            }
+        }
+        row = if row == 0 {
+            total.saturating_sub(1)
+        } else {
+            row.saturating_sub(1)
+        };
+    }
+    None
+}
+
+/// Table find bar ki geometry (text/folder precedent reuse): bar `28.0` px
+/// uncha, needle field `120.0` px chauda (`SPACE_XL * 5.0` — text precedent
+/// wahi chaudai, koi naya rhythm nahi), badge right-end se `4.0` px pad par.
+pub const TABLE_FIND_BAR_H: f32 = crate::theme::CHROME_HEADER_BAR_H;
+/// Table find needle field ki chaudai (text precedent reuse): `SPACE_XL * 5.0`
+/// = 120.0 — `views::FIND_NEEDLE_W` wahi chaudai, SPACE token single source.
+pub const TABLE_FIND_NEEDLE_W: f32 = crate::theme::SPACE_XL * 5.0;
+/// Table find badge ka right-end pad (text precedent reuse).
+pub const TABLE_FIND_BADGE_PAD: f32 = crate::theme::GEO_TIGHT_GAP;
+
+/// Sab matching cells row-major order me: har `(row, col)` jisme
+/// needle hai. Khali needle par khali vec. `table_find_next` ka
+/// poora-hit judvaan (N/M count `len()` se aata hai). Pure; unit-tested.
+pub fn table_find_match_rows(
+    rows: &[Vec<String>],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (row_idx, cells) in rows.iter().enumerate() {
+        for (col_idx, cell) in cells.iter().enumerate() {
+            if table_cell_contains(cell, needle, ignore_case) {
+                out.push((row_idx, col_idx));
+            }
+        }
+    }
+    out
+}
+
+/// N/M badge text table find bar ke liye: `Some(2), 5 -> "2/5"`,
+/// koi hit nahi par `"0/0"`. Text precedent mirror. Pure; unit-tested.
+pub fn table_find_badge_label(position: Option<usize>, total: usize) -> String {
+    match position {
+        Some(pos) => format!("{pos}/{total}"),
+        None => format!("0/{total}"),
+    }
+}
+
+/// Table window ke andar Find controls ka single source: needle field +
+/// Prev/Next + N/M badge (text find-bar precedent ka geometry/typo reuse:
+/// wahi bar height, wahi needle chaudai, wahi button labels, badge right me
+/// ek pad ke saath Small-role me; label Body-strong, needle Mono family).
+/// `paint_table_find_bar` aur
+/// `paint_table_toolbar` dono isi ko chalate hain taaki do Find
+/// implementations kabhi drift na karen (G-B2 dedup). Returns
+/// `(prev_clicked, next_clicked)`; cursor/badge advance caller App state
+/// (`table_find_next_row` / `table_find_prev_row`) me hota hai. Private:
+/// callers stable signatures rakhte hain (`views.rs` caller untouched).
+fn paint_table_find_controls(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
+    let mut prev = false;
+    let mut next = false;
+    // Dense action-row rhythm: hunk-nav row precedent (`TIGHT_GAP` 4px) —
+    // Find buttons compact rehte hain, toggle gaps (`TABLE_KEY_COL_GAP`)
+    // se alag taaki action vs toggle rhythm confuse na ho.
+    ui.spacing_mut().item_spacing.x = crate::theme::GEO_TIGHT_GAP;
+    ui.label(table_section_label_text_role().rich("Find:").strong());
+    ui.add(
+        egui::TextEdit::singleline(needle)
+            .desired_width(TABLE_FIND_NEEDLE_W)
+            .font(egui::TextStyle::Monospace)
+            .hint_text("needle"),
+    );
+    if ui.small_button("◀ Prev").clicked() {
+        prev = true;
+    }
+    if ui.small_button("Next ▶").clicked() {
+        next = true;
+    }
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.add_space(TABLE_FIND_BADGE_PAD);
+        ui.label(TypoRole::Small.rich(badge));
+    });
+    (prev, next)
+}
+
+/// Table window ke andar find row: single-source Find controls
+/// (`paint_table_find_controls` — toolbar wahi body chalata hai).
+/// Caller signature same rehti hai (table tab wiring isi ko chalati
+/// hai, `views.rs` caller untouched).
+pub fn paint_table_find_bar(ui: &mut egui::Ui, needle: &mut String, badge: &str) -> (bool, bool) {
+    let avail = ui.available_width();
+    let mut out = (false, false);
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
+        out = paint_table_find_controls(ui, needle, badge);
+    });
+    out
+}
+
+// ----------------------------------------------------------------------------
+// Table find match highlight (AU-TABLEFIND): current-vs-other distinction +
+// grid geometry. Gap: find bar sirf cursor/badge chalata hai
+// (`table_find_match_rows` + `table_find_badge_label`), per-match highlight
+// nahi dikhta — current-vs-other farak nahi hai. Ye section pure
+// span/format helpers hai; Grid paint wiring orchestrator ke paas rehti hai
+// (caller signature stable, `views.rs` untouched).
+// Geometry first: match spans char indices me hain (unpadded cell text par),
+// row mapping grid order me hai (`table_find_match_rows` wahi row-major
+// order), key-col ke saath alignment grid se aati hai (`pad_table_row`
+// trailing pad se span indices nahi hilte — `table_find_span_in_padded`
+// sirf cap par clamp karta hai). Typography second: same mono `FontId`
+// (koi naya size nahi), emphasis sirf block-vs-line se: current = inverted
+// block (no underline), other = underline-only line (no block). Colors
+// frozen: caller ke apne `fg/bg` reuse + `TABLE_FIND_UNDERLINE_W`
+// underline, koi naya hue/token nahi. No egui ctx, no I/O. Pure;
+// unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Table find underline width (px): [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`]
+/// precedent reuse (same 1px value — koi naya size/token nahi).
+pub const TABLE_FIND_UNDERLINE_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+
+/// Ek cell me needle ke char-index spans: `(start, end)` char offsets,
+/// natural order me (sorted, clamped). Khali needle par empty; overlapping
+/// matches allowed (har char offset se ek window). Case-fold ascii-only hai
+/// taaki indices multibyte text par bhi sahi rahen. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_cell_spans(cell: &str, needle: &str, ignore_case: bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    let cell_chars: Vec<char> = cell.chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    if needle_chars.is_empty() || needle_chars.len() > cell_chars.len() {
+        return out;
+    }
+    let last = cell_chars.len().saturating_sub(needle_chars.len());
+    for start in 0..=last {
+        let mut hit = true;
+        for (off, nch) in needle_chars.iter().enumerate() {
+            let same = match cell_chars.get(start.saturating_add(off)) {
+                Some(cch) if ignore_case => cch.eq_ignore_ascii_case(nch),
+                Some(cch) => cch == nch,
+                None => false,
+            };
+            if !same {
+                hit = false;
+                break;
+            }
+        }
+        if hit {
+            out.push((start, start.saturating_add(needle_chars.len())));
+        }
+    }
+    out
+}
+
+/// Ek row ki sab hits `(col, start, end)` me, column order me.
+/// `table_find_match_rows` ka span judvaan. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_row_spans(
+    cells: &[String],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (col_idx, cell) in cells.iter().enumerate() {
+        for (start, end) in table_find_cell_spans(cell, needle, ignore_case) {
+            out.push((col_idx, start, end));
+        }
+    }
+    out
+}
+
+/// Poore grid ki sab hits `(row, col, start, end)` me, row-major order me —
+/// row mapping Grid paint order jaisi hai (data row index + column index).
+/// Key-col ke saath alignment: spans unpadded cell text par hain aur Grid
+/// `pad_table_row` se trailing pad karta hai, isliye span indices padded
+/// cells me nahi hilte (`table_find_span_in_padded` sirf cap par clamp
+/// karta hai). Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_grid_spans(
+    rows: &[Vec<String>],
+    needle: &str,
+    ignore_case: bool,
+) -> Vec<(usize, usize, usize, usize)> {
+    let mut out = Vec::new();
+    if needle.is_empty() {
+        return out;
+    }
+    for (row_idx, cells) in rows.iter().enumerate() {
+        for (col_idx, start, end) in table_find_row_spans(cells, needle, ignore_case) {
+            out.push((row_idx, col_idx, start, end));
+        }
+    }
+    out
+}
+
+/// Kya `(row, col)` hit current match hai. Current N/M cursor se aata hai
+/// (`table_find_current_cell`); `None` par koi current nahi (sab other).
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_is_current(found: (usize, usize), current: Option<(usize, usize)>) -> bool {
+    match current {
+        Some(at) => at == found,
+        None => false,
+    }
+}
+
+/// N/M cursor se current match cell: `table_find_match_rows` list me index.
+/// Khali list par `None`; bada cursor wrap hota hai (modulo, saturating).
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_current_cell(
+    matches: &[(usize, usize)],
+    cursor: usize,
+) -> Option<(usize, usize)> {
+    if matches.is_empty() {
+        return None;
+    }
+    matches.get(cursor % matches.len().max(1)).copied()
+}
+
+/// Padded cell me span clamp: padding trailing-only hai isliye andar ke
+/// spans nahi hilte; cap (`TABLE_MAX_COL_CHARS`) ke bahar ka hissa kat-ta
+/// hai, poora bahar ho to `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_span_in_padded(start: usize, end: usize, width: usize) -> Option<(usize, usize)> {
+    if start >= end || start >= width {
+        return None;
+    }
+    Some((start, end.min(width)))
+}
+
+/// Kya hit key column me hai — `is_key_column` reuse. Key hits ko bhi wahi
+/// underline/block highlight milta hai (koi alag color nahi); alignment
+/// grid se aati hai, isliye key-col highlight kabhi column se bahar nahi
+/// jata. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_hit_in_key_col(view: &TableKeyView, col: usize) -> bool {
+    is_key_column(view, col)
+}
+
+/// Ek cell-hit ka paint format: same mono `FontId` (size untouched),
+/// caller ke apne `fg/bg` reuse. Current = inverted block (no underline),
+/// other = underline-only line (no block) — block-vs-line se clearly
+/// distinct. `TABLE_FIND_UNDERLINE_W` reuse, koi naya token/color nahi.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_hit_format(
+    font_id: egui::FontId,
+    fg: egui::Color32,
+    bg: egui::Color32,
+    is_current: bool,
+) -> egui::TextFormat {
+    if is_current {
+        let mut fmt = egui::TextFormat::simple(font_id, bg);
+        fmt.background = fg;
+        fmt
+    } else {
+        let mut fmt = egui::TextFormat::simple(font_id, fg);
+        fmt.background = bg;
+        fmt.underline = egui::Stroke::new(TABLE_FIND_UNDERLINE_W, fg);
+        fmt
+    }
+}
+
+/// Ek cell ka find-aware layout: non-hit hissa plain mono, har hit
+/// `table_find_hit_format` se (current block, others line). Khali needle ya
+/// zero spans par single plain section. Overlapping spans me pehla hit
+/// jeetta hai (consumed range dobara paint nahi hota) taaki job text cell
+/// ke barabar rahe. Headless-first: `LayoutJob` ctx ke bina banta hai,
+/// isliye unit-test me sections inspect hote hain. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_cell_job(
+    cell: &str,
+    needle: &str,
+    ignore_case: bool,
+    is_current: bool,
+    font_id: egui::FontId,
+    fg: egui::Color32,
+    bg: egui::Color32,
+) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let plain = egui::TextFormat::simple(font_id.clone(), fg);
+    let spans = table_find_cell_spans(cell, needle, ignore_case);
+    if spans.is_empty() {
+        job.append(cell, 0.0, plain);
+        return job;
+    }
+    let chars: Vec<char> = cell.chars().collect();
+    let mut cursor = 0usize;
+    for (start, end) in spans {
+        if start < cursor {
+            continue;
+        }
+        if start > cursor
+            && let Some(gap) = chars.get(cursor..start)
+        {
+            let text: String = gap.iter().collect();
+            job.append(&text, 0.0, plain.clone());
+        }
+        if let Some(hit) = chars.get(start..end) {
+            let text: String = hit.iter().collect();
+            job.append(
+                &text,
+                0.0,
+                table_find_hit_format(font_id.clone(), fg, bg, is_current),
+            );
+        }
+        if end > cursor {
+            cursor = end;
+        }
+    }
+    if let Some(tail) = chars.get(cursor..)
+        && !tail.is_empty()
+    {
+        let text: String = tail.iter().collect();
+        job.append(&text, 0.0, plain);
+    }
+    job
+}
+
+// ----------------------------------------------------------------------------
+// Table cell grid (cell boxes + key highlight + find underline).
+// Gap AX2 §10.3: table tab pipe-string rows paint karta hai — `views.rs`
+// `paint_table` data grid `table_row_cells` se cell boxes me baant-ta hai,
+// par key-col highlight + find underline nahi dikhta. Ye section cell-level
+// paint adoption hai: key-col cells strong typo me, find hits
+// `table_find_cell_job` LayoutJob me (`TABLE_FIND_UNDERLINE_W` underline),
+// key bar `paint_table_key_bar` se live. Find bar caller ke paas rehta hai
+// (`paint_table_find_bar` pehle se live hai) — grid `TableCellFindCtx` se
+// needle/current leta hai. Geometry first: Grid columns glyph + ek per data
+// col (`table_cell_grid_columns`), spacing `SECTION_GAP`/`TIGHT_GAP` mirror
+// (`TABLE_GRID_COL_GAP`/`TABLE_GRID_ROW_GAP`, same values), glyph placeholder
+// `CONTENT_LEAD` mirror. Typography second: header `.monospace().strong()`
+// (existing header precedent), key data cells `.monospace().strong()`, plain
+// `.monospace()`, find hits job sections (same mono `FontId`, koi naya size
+// nahi). Colors frozen: caller ke `fg/bg` reuse, koi naya hue/token nahi;
+// key emphasis sirf `.strong()` role hai (header/key-bar precedent), hit
+// emphasis block-vs-line (`table_find_hit_format` reuse). Row-status glyph /
+// changed tint caller-side rehta hai (views.rs paint ownership) — grid me
+// glyph placeholder hai. No I/O. Paint fns test-only until wiring lands
+// (orchestrator owns paint); pure helpers unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Cell grid ka data Grid id (header grid alag id rakhta hai taaki dono
+/// Grids ek Compose me takrayen nahi).
+pub const TABLE_CELL_GRID_ID: &str = "table_cell_grid";
+/// Cell grid ka header Grid id.
+pub const TABLE_CELL_HEADER_GRID_ID: &str = "table_cell_header_grid";
+/// Grid column gap: `SECTION_GAP` mirror (same value, koi naya rhythm nahi).
+pub const TABLE_GRID_COL_GAP: f32 = crate::theme::GEO_SECTION_GAP;
+/// Grid row gap: `TIGHT_GAP` mirror (same value, koi naya rhythm nahi).
+pub const TABLE_GRID_ROW_GAP: f32 = crate::theme::GEO_TIGHT_GAP;
+/// Glyph placeholder: `CONTENT_LEAD` mirror (same two spaces, koi naya text
+/// nahi) — header grid precedent jaisa neutral first column.
+pub const TABLE_CELL_GLYPH_PAD: &str = "  ";
+/// Cell ka ek taraf ka horizontal padding (px): `SPACE_SM` reuse (8.0,
+/// folder `FOLDER_CELL_PAD_X` precedent — wahi value, koi naya rhythm nahi).
+/// Grid `TABLE_GRID_COL_GAP` columns ke beech hai; ye pad har cell box ke
+/// andar hai (text saans leta hai, columns align rehte hain). Pure.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_CELL_PAD_X: f32 = crate::theme::SPACE_SM;
+
+/// Table sync panes min height (px): text/hex panes floor reuse
+/// (`viewmodel::TEXT_PANES_MIN_H` = 100.0) taaki table + hex + text panes
+/// ek hi budget par fill karen. Koi naya token nahi. Pure.
+pub const TABLE_PANES_MIN_H: f32 = crate::viewmodel::TEXT_PANES_MIN_H;
+
+/// Remaining-height budget table grid ke liye: `viewmodel::text_panes_height`
+/// delegation — hex `hex_panes_height` ke saath kabhi drift nahi.
+/// Pure; unit-tested.
+pub fn table_panes_height(avail_h: f32) -> f32 {
+    crate::viewmodel::text_panes_height(avail_h)
+}
+
+/// Char widths se px outer widths: har char width `char_w` px chaudi,
+/// outer `table_cell_outer_w(chars * char_w)` se. Kharab `char_w` par khali
+/// vec (paint honest fallback dikhata hai); kharab char width skip hoti hai.
+/// Grid columns px me — paint Grid isi list par boxes banata hai.
+/// Pure; unit-tested.
+pub fn table_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for width in widths_chars.iter() {
+        let text_w = (*width as f32) * char_w;
+        if !text_w.is_finite() || text_w < 0.0 {
+            continue;
+        }
+        out.push(table_cell_outer_w(text_w));
+    }
+    out
+}
+
+/// Grid ki kul px chaudai: outer widths + beech ke `TABLE_GRID_COL_GAP`.
+/// Kharab widths par 0. Paint horizontal scroll isi se decide karta hai.
+/// Pure; unit-tested.
+pub fn table_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    if col_widths_px.is_empty() {
+        return 0.0;
+    }
+    let mut total = 0.0f32;
+    for (idx, w) in col_widths_px.iter().enumerate() {
+        if !w.is_finite() || *w <= 0.0 {
+            return 0.0;
+        }
+        total += *w;
+        if idx + 1 < col_widths_px.len() {
+            total += TABLE_GRID_COL_GAP;
+        }
+    }
+    if !total.is_finite() || total < 0.0 {
+        return 0.0;
+    }
+    total
+}
+
+/// Cell text role: Mono grid content (header `table_header_text_role`
+/// precedent). Key/find emphasis `.strong()`/underline se aata hai, role
+/// wahi rehta hai — koi naya size/token nahi. Pure.
+pub const fn table_cell_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Cell ka ek taraf ka horizontal padding (px).
+/// Pure; unit-tested.
+pub fn table_cell_pad_x() -> f32 {
+    TABLE_CELL_PAD_X
+}
+
+/// Text chaudai se outer cell box chaudai (px): `text + 2 * pad`.
+/// Non-finite ya negative text par pad floor (khali cell bhi click-target
+/// rehta hai). Paint `col_widths_px` outer widths isi se banata hai.
+/// Pure; unit-tested.
+pub fn table_cell_outer_w(text_w: f32) -> f32 {
+    if !text_w.is_finite() || text_w < 0.0 {
+        return TABLE_CELL_PAD_X * 2.0;
+    }
+    text_w + TABLE_CELL_PAD_X * 2.0
+}
+
+/// Outer cell box se text chaudai (px): `(outer - 2 * pad)` floor 0 par.
+/// `table_cell_outer_w` ka inverse (round-trip); kharab outer par 0.
+/// Pure; unit-tested.
+pub fn table_cell_text_w(outer_w: f32) -> f32 {
+    if !outer_w.is_finite() {
+        return 0.0;
+    }
+    (outer_w - TABLE_CELL_PAD_X * 2.0).max(0.0)
+}
+
+/// Outer cell box se inset text box: x me ek pad andar, w me do pad kam;
+/// y/h same rehte hain (vertical rhythm `TABLE_GRID_ROW_GAP` se aata hai).
+/// Bahut tang box (w <= 2*pad) ya kharab input par `None` — paint aise
+/// cell par pad ke bina plain box dikhata hai. Char-span indices nahi
+/// hilte (pad box ke bahar hai, `pad_table_row` trailing pad precedent
+/// jaisa). Pure; unit-tested.
+pub fn table_cell_text_rect(cell: TableCellRect) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.y.is_finite() || !cell.w.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= TABLE_CELL_PAD_X * 2.0 || cell.h <= 0.0 {
+        return None;
+    }
+    let w = cell.w - TABLE_CELL_PAD_X * 2.0;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    let x = cell.x + TABLE_CELL_PAD_X;
+    if !x.is_finite() {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: cell.y,
+        w,
+        h: cell.h,
+    })
+}
+
+/// Grid columns: glyph column plus ek per data column. Khali widths par
+/// sirf glyph (views.rs `table_grid_columns` wahi shape — owned contract
+/// taaki cell-grid geometry cell paint ke saath rahe). Pure; unit-tested.
+pub fn table_cell_grid_columns(widths: &[usize]) -> usize {
+    widths.len().saturating_add(1)
+}
+
+/// Ek data cell ka paint faisla: key-col identity + find-hit state se ek
+/// format. Hit format jeetta hai taaki block/line signal saaf rahe (key
+/// identity key bar + badge se barkarar rehti hai). Pure; unit-tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableCellPaint {
+    /// Plain mono cell (na key, na hit).
+    Plain,
+    /// Key-col cell: mono + strong (header/key-bar precedent).
+    KeyStrong,
+    /// Current find hit: inverted block (no underline).
+    FindCurrent,
+    /// Other find hit: underline-only line (no block).
+    FindOther,
+}
+
+/// `TableCellPaint` ka pure faisla: hit ho to current/other, warna key ho
+/// to strong, warna plain. Pure; unit-tested.
+pub fn table_cell_paint_kind(is_key: bool, has_hit: bool, is_current: bool) -> TableCellPaint {
+    if has_hit {
+        if is_current {
+            TableCellPaint::FindCurrent
+        } else {
+            TableCellPaint::FindOther
+        }
+    } else if is_key {
+        TableCellPaint::KeyStrong
+    } else {
+        TableCellPaint::Plain
+    }
+}
+
+/// Cell grid ka find input: needle + case flag + resolved current cell.
+/// `views.rs FindPaintCtx` precedent (Copy taaki grid loop me cheap reuse
+/// ho). Caller find bar chalata hai; grid sirf highlight karta hai.
+#[derive(Debug, Clone, Copy)]
+pub struct TableCellFindCtx<'a> {
+    /// Needle text (khali par koi hit nahi).
+    pub needle: &'a str,
+    /// Case-insensitive match ho ya nahi.
+    pub ignore_case: bool,
+    /// Current match cell (`table_find_current_cell` se).
+    pub current: Option<(usize, usize)>,
+}
+
+/// Cell grid ka caller palette: same mono `FontId` + caller ke `fg/bg`
+/// (`table_find_hit_format` precedent — views_table.rs me koi naya hue
+/// nahi). Pure data; unit-tested decides nahi, paint use karta hai.
+#[derive(Debug, Clone)]
+pub struct TableCellStyle {
+    /// Same mono font (koi naya size nahi).
+    pub font: egui::FontId,
+    /// Caller ka text color.
+    pub fg: egui::Color32,
+    /// Caller ka cell background.
+    pub bg: egui::Color32,
+}
+
+/// Ek key-aware grid cell: mono hamesha, key col par strong (header +
+/// key-bar selected precedent, koi naya color nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_key_cell(ui: &mut egui::Ui, view: &TableKeyView, cell: &str, col: usize) {
+    let mut rich = egui::RichText::new(cell).monospace();
+    if is_key_column(view, col) {
+        rich = rich.strong();
+    }
+    ui.label(rich);
+}
+
+/// Ek find-aware grid cell: khali needle par plain mono, warna
+/// `table_find_cell_job` LayoutJob (current block, others
+/// `TABLE_FIND_UNDERLINE_W` line).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_find_cell(
+    ui: &mut egui::Ui,
+    cell: &str,
+    needle: &str,
+    ignore_case: bool,
+    is_current: bool,
+    style: &TableCellStyle,
+) {
+    if needle.is_empty() {
+        ui.label(egui::RichText::new(cell).monospace());
+    } else {
+        ui.label(table_find_cell_job(
+            cell,
+            needle,
+            ignore_case,
+            is_current,
+            style.font.clone(),
+            style.fg,
+            style.bg,
+        ));
+    }
+}
+
+/// Ek data cell box: key + find dono se (`table_cell_paint_kind`
+/// precedence — hit jeetta hai, key bar/badge identity rakhte hain).
+/// `row`/`col` grid coords hain (data-row index + column index).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_data_cell(
+    ui: &mut egui::Ui,
+    view: &TableKeyView,
+    cell: &str,
+    row: usize,
+    col: usize,
+    find: TableCellFindCtx<'_>,
+    style: &TableCellStyle,
+) {
+    let has_hit = !table_find_cell_spans(cell, find.needle, find.ignore_case).is_empty();
+    let is_current = table_find_is_current((row, col), find.current);
+    match table_cell_paint_kind(is_key_column(view, col), has_hit, is_current) {
+        TableCellPaint::Plain => {
+            ui.label(egui::RichText::new(cell).monospace());
+        }
+        TableCellPaint::KeyStrong => {
+            paint_table_key_cell(ui, view, cell, col);
+        }
+        TableCellPaint::FindCurrent => {
+            paint_table_find_cell(ui, cell, find.needle, find.ignore_case, true, style);
+        }
+        TableCellPaint::FindOther => {
+            paint_table_find_cell(ui, cell, find.needle, find.ignore_case, false, style);
+        }
+    }
+}
+
+/// Cell-level table grid: key bar (live `paint_table_key_bar`) + header
+/// Grid (strong mono cells) + data Grid (har cell box
+/// `paint_table_data_cell` se — key strong, find underline/block). Widths
+/// `table_column_widths` se, padding `pad_table_row` se (spans padded text
+/// par nahi hilte — trailing pad only). Khali grid par honest note
+/// (views.rs wording reuse, koi naya wording nahi); header-less widths par
+/// single-string fallback (views.rs fallback precedent — column geometry
+/// header ke bina undefined hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_cell_grid(
+    ui: &mut egui::Ui,
+    view: &mut TableKeyView,
+    header: &[String],
+    rows: &[Vec<String>],
+    find: TableCellFindCtx<'_>,
+    style: &TableCellStyle,
+) {
+    paint_table_key_bar(ui, view, header);
+    let widths = table_column_widths(header, rows);
+    if header.is_empty() && rows.is_empty() {
+        ui.label(TypoRole::Body.rich("(both tables are empty)"));
+        return;
+    }
+    if widths.is_empty() {
+        for cells in rows.iter() {
+            ui.label(egui::RichText::new(cells.join(" | ")).monospace());
+        }
+        return;
+    }
+    let cols = table_cell_grid_columns(&widths);
+    // Single Grid me header + data: ek hi Grid column widths share karta
+    // hai, isliye header cells data columns se align rehte hain (do alag
+    // Grids me column widths alag compute hote — BC parity column align).
+    // Header row standalone `paint_table_header_row` jaisa hi hai (glyph +
+    // strong mono), par isi Grid me taaki geometry drift na ho.
+    egui::Grid::new(TABLE_CELL_GRID_ID)
+        .num_columns(cols)
+        .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
+        .show(ui, |ui| {
+            if !header.is_empty() {
+                ui.label(table_header_text_role().rich(TABLE_CELL_GLYPH_PAD));
+                for cell in format_table_header(header, &widths) {
+                    ui.label(table_header_text_role().rich(cell).strong());
+                }
+                ui.end_row();
+            }
+            for (row_idx, cells) in rows.iter().enumerate() {
+                ui.label(egui::RichText::new(TABLE_CELL_GLYPH_PAD).monospace());
+                let padded = pad_table_row(cells, &widths);
+                for (col_idx, cell) in padded.iter().enumerate() {
+                    paint_table_data_cell(ui, view, cell, row_idx, col_idx, find, style);
+                }
+                ui.end_row();
+            }
+        });
+}
+
+// ----------------------------------------------------------------------------
+// Table header row + compact toolbar (BQ wave: G-B1 + G-B2 + G-B3).
+// Gap livecomp-BM TABLE G-B1/G-B2/G-B3: header data row ki tarah paint hota
+// hai (`=` marker + dashed `----` rule, `views.rs` paint_table), Find + nav
+// duplicate rows hain (app.rs Table branch + paint_table dono me Find +
+// Prev/Next), cells Grid ke bajay flow me hain. Ye section paint pieces hai
+// (caller wiring orchestrator ke paas rehti hai — signatures stable,
+// `views.rs` untouched): header Grid me real header row (strong,
+// small-caps intent — egui me small-caps nahi, isliye Mono strong stand-in;
+// TypoRole alias reuse, koi naya size), Find + page nav ek compact toolbar
+// row me (geometry find-bar precedent reuse), data Grid `TABLE_CELL_GRID_ID`
+// reuse (header ka apna `TABLE_CELL_HEADER_GRID_ID`, dono kabhi takrate
+// nahi). Colors frozen: koi Color32/Visuals yahan nahi. No I/O. Paint fns
+// test-only until wiring lands (orchestrator owns paint); pure helpers
+// unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Header text role: grid-content Mono (gutter/hex `*_text_role`
+/// precedent). Small-caps intent paint-side `.strong()` composition hai
+/// (folder caption-strong precedent — naya size/token nahi; egui me
+/// small-caps/letter-tracking nahi, `TYPO_LETTER_SPACING` 0.0). Pure;
+/// unit-tested.
+pub const fn table_header_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Section-label role: key/find row labels (`Key:`, `Find:`) Body me
+/// (13 default proportional), paint-side `.strong()` composition
+/// (header Mono+strong precedent). Labels hint/badge (Small 11-weak) se
+/// ek step upar taaki flat hierarchy tute; input values Mono family me
+/// (needle field `.font(Monospace)`) taaki label-vs-input confuse na ho.
+/// Koi naya size/token/color nahi. Pure; unit-tested.
+pub const fn table_section_label_text_role() -> TypoRole {
+    TypoRole::Body
+}
+
+/// Real header row Grid me: glyph placeholder + har header cell
+/// [`table_header_text_role`] strong me. Koi `=` marker nahi, koi dashed
+/// separator row nahi (G-B1: header data row nahi). Khali header par no-op
+/// (honest — data grid khud empty note dikhata hai). `TABLE_CELL_GRID_ID`
+/// ko chhoota nahi (header ka apna id, compose me takrao nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_header_row(ui: &mut egui::Ui, header: &[String], widths: &[usize]) {
+    if header.is_empty() {
+        return;
+    }
+    // Column count data Grid wala single source hai (`widths` hamesha
+    // `table_column_widths(header, rows)` se banta hai, jo har header cell
+    // ke liye ek slot rakhta hai — isliye ye `header.len() + 1` ke barabar
+    // hai, drift-proof).
+    let cols = table_cell_grid_columns(widths);
+    egui::Grid::new(TABLE_CELL_HEADER_GRID_ID)
+        .num_columns(cols)
+        .spacing([TABLE_GRID_COL_GAP, TABLE_GRID_ROW_GAP])
+        .show(ui, |ui| {
+            ui.label(table_header_text_role().rich(TABLE_CELL_GLYPH_PAD));
+            for cell in format_table_header(header, widths) {
+                ui.label(table_header_text_role().rich(cell).strong());
+            }
+            ui.end_row();
+        });
+}
+
+/// Column letters (G-B4 groundwork): 0->A ... 25->Z, 26->AA, 27->AB —
+/// spreadsheet order. Header-letter row ka label text hai; paint-side
+/// [`table_header_text_role`] strong me (BR wave me, `views.rs`
+/// NO-TOUCH is wave me). Koi naya size/token nahi. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_column_letter(col: usize) -> String {
+    let mut out = String::new();
+    let mut n = col.saturating_add(1);
+    while n > 0 {
+        let rem = n.saturating_sub(1) % 26;
+        out.insert(0, (b'A'.saturating_add(rem as u8)) as char);
+        n = n.saturating_sub(1) / 26;
+    }
+    out
+}
+
+/// Row-number gutter label (G-B4 groundwork): 0-based data row -> 1-based
+/// label ("1", "2", ...). Glyph-pad gutter column
+/// ([`TABLE_CELL_GLYPH_PAD`] precedent) ka text hai; paint-side Mono me
+/// (gutter `gutter_text_role` precedent — wahan se copy nahi, sirf role
+/// reuse). Koi naya size/token nahi. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_row_gutter_label(row: usize) -> String {
+    row.saturating_add(1).to_string()
+}
+
+/// Page label text pager se: `views.rs` paint wording reuse
+/// (`page {n} of {m}, showing {k} row(s)`), koi naya wording nahi.
+/// [`TablePager::page_count`] + [`TablePager::visible_range`] reuse,
+/// saturating only. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn format_table_page_label(pager: TablePager) -> String {
+    let per_page = pager.rows_per_page.max(1);
+    let page = pager.top.saturating_div(per_page).saturating_add(1);
+    let pages = pager.page_count().max(1);
+    let (start, end) = pager.visible_range();
+    let showing = end.saturating_sub(start);
+    format!("page {page} of {pages}, showing {showing} row(s)")
+}
+
+/// Compact table toolbar ka click result: Find pair + page pair, ek row.
+/// Caller cursor/pager advance App state me karta hai
+/// (`table_find_next_row` / `pager.next_page` precedent). Copy; unit-tested
+/// defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TableToolbarAction {
+    /// Find Prev daba (needle cursor peeche).
+    pub find_prev: bool,
+    /// Find Next daba (needle cursor aage).
+    pub find_next: bool,
+    /// Page Prev daba (pager ek page peeche).
+    pub page_prev: bool,
+    /// Page Next daba (pager ek page aage).
+    pub page_next: bool,
+}
+
+/// Compact table toolbar: Find needle + Prev/Next + page Prev/Next +
+/// page label + N/M badge — sab ek [`TABLE_FIND_BAR_H`] row me (G-B2: ab do
+/// Find bars / do nav rows nahi — caller ek hi toolbar chalata hai).
+/// Find segment [`paint_table_find_bar`] wali single-source body hai (koi
+/// duplicate Find row/badge nahi); button labels existing wording reuse
+/// karte hain (page pair, koi naya wording nahi); bar height, needle
+/// chaudai, col gap, badge pad find-bar precedent reuse. Badge right-end
+/// small weak me, page label Small role me (status precedent). Returns
+/// find + page clicks.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn paint_table_toolbar(
+    ui: &mut egui::Ui,
+    needle: &mut String,
+    badge: &str,
+    page_label: &str,
+) -> TableToolbarAction {
+    let mut action = TableToolbarAction::default();
+    let avail = ui.available_width();
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_FIND_BAR_H));
+        let (find_prev, find_next) = paint_table_find_controls(ui, needle, badge);
+        if find_prev {
+            action.find_prev = true;
+        }
+        if find_next {
+            action.find_next = true;
+        }
+        if ui.small_button("◀ Prev page").clicked() {
+            action.page_prev = true;
+        }
+        if ui.small_button("Next page ▶").clicked() {
+            action.page_next = true;
+        }
+        ui.label(TypoRole::Small.rich(page_label));
+    });
+    action
+}
+
+// ----------------------------------------------------------------------------
+// Table xlsx/tsv source + sheet selector (headless; paint wiring stays with
+// the orchestrator).
+// Gap EXQ-L table half: table tab csv-only dikhta hai — tsv delimiter +
+// multi-sheet xlsx sheet switch key-column parity ke liye chahiye. Engine
+// (`compare::detect_table_delimiter`, `Workbook::from_xlsx`) parse kab ka
+// karta hai; ye section uska GUI-side headless judvaan hai: path se source
+// kind, kind se delimiter, sheet names par clamp/label, key-column reuse.
+// Geometry first: sheet bar key-bar geometry reuse (wahi bar height, wahi
+// col gap, wahi badge pad — koi naya rhythm nahi). Typography second:
+// label Body-strong, sheet names mono (+strong selected), badge Small-role
+// (key-bar hierarchy reuse); koi naya size/token/color nahi. No I/O
+// (sheet bytes engine ke paas rehte hain); colors frozen (koi
+// Color32/Visuals nahi). Paint caller ke locals par chalti hai (`&mut
+// Option<usize>` selection + `&[String]` names), App/viewer struct me koi
+// field edit nahi hota. Pure; unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Table input source: path extension se (engine `detect_table_delimiter`
+/// + `Workbook::from_xlsx` ka GUI-side judvaan — parse yahan nahi hota).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableSourceKind {
+    /// Comma-delimited (`.csv` ya default).
+    #[default]
+    Csv,
+    /// Tab-delimited (`.tsv` / `.tab`).
+    Tsv,
+    /// Multi-sheet workbook (`.xlsx`).
+    Xlsx,
+    /// Bina pehchane extension (csv jaisa treat hota hai).
+    Unknown,
+}
+
+/// Path se source kind: extension lowercase karke (`tsv`/`tab` -> Tsv,
+/// `xlsx` -> Xlsx, `csv` -> Csv, baaki/empty -> Unknown). Query/params
+/// nahi hat-te (dialog paths hamesha plain hote hain). Pure.
+pub fn table_source_kind_for_path(path: &str) -> TableSourceKind {
+    let trimmed = path.trim();
+    let ext = trimmed.rsplit('.').next().unwrap_or("").trim();
+    if ext.len() == trimmed.len() {
+        return TableSourceKind::Unknown;
+    }
+    let mut lower = String::new();
+    for ch in ext.chars() {
+        lower.push(ch.to_ascii_lowercase());
+    }
+    match lower.as_str() {
+        "tsv" | "tab" => TableSourceKind::Tsv,
+        "xlsx" => TableSourceKind::Xlsx,
+        "csv" => TableSourceKind::Csv,
+        _ => TableSourceKind::Unknown,
+    }
+}
+
+/// Source ka field delimiter: Tsv par tab, baaki par comma (xlsx sheets
+/// engine parse karta hai — delimiter wahan irrelevant hai, badge honest
+/// `xlsx` rehta hai). Pure.
+pub fn table_delimiter_for_source(kind: TableSourceKind) -> char {
+    match kind {
+        TableSourceKind::Tsv => '\t',
+        TableSourceKind::Csv | TableSourceKind::Xlsx | TableSourceKind::Unknown => ',',
+    }
+}
+
+/// Source badge text sheet bar ke right-end ke liye: `csv`/`tsv`/`xlsx`/
+/// unknown par `auto`. Pure.
+pub fn table_source_badge_label(kind: TableSourceKind) -> &'static str {
+    match kind {
+        TableSourceKind::Csv => "csv",
+        TableSourceKind::Tsv => "tsv",
+        TableSourceKind::Xlsx => "xlsx",
+        TableSourceKind::Unknown => "auto",
+    }
+}
+
+/// Sheet selector bar height: key-bar precedent reuse (koi naya token nahi).
+pub const TABLE_SHEET_BAR_H: f32 = TABLE_KEY_BAR_H;
+/// Sheet buttons ke beech gap: key-col gap precedent reuse.
+pub const TABLE_SHEET_COL_GAP: f32 = TABLE_KEY_COL_GAP;
+/// Sheet badge right-end pad: key badge precedent reuse.
+pub const TABLE_SHEET_BADGE_PAD: f32 = TABLE_KEY_BADGE_PAD;
+
+/// Sheet bar section-label role: Body (key-bar label precedent reuse).
+/// Paint-side `.strong()` composition; hint/badge Small se ek step upar.
+/// Koi naya size/token/color nahi. Pure.
+pub const fn table_sheet_label_text_role() -> TypoRole {
+    TypoRole::Body
+}
+
+/// Sheet name role: Mono (key-bar cell precedent reuse — selected par
+/// `.strong()` composition, plain par mono). Koi naya size/token nahi.
+pub const fn table_sheet_value_text_role() -> TypoRole {
+    TypoRole::Mono
+}
+
+/// Sheet names ki ginti (workbook sheets ya single csv/tsv par 1).
+/// Khali par 0 (paint honest empty note dikhata hai). Pure.
+pub fn table_sheet_count(names: &[String]) -> usize {
+    names.len()
+}
+
+/// Sheet index clamp: valid par `Some(index)`, khali/out-of-range par
+/// `None` (paint bahar select par honest no-op). Pure.
+pub fn table_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
+    if names.get(index).is_some() {
+        Some(index)
+    } else {
+        None
+    }
+}
+
+/// Sheet label text: `names[index]` ka clone, OOB par `None`.
+/// Pure.
+pub fn table_sheet_label(names: &[String], index: usize) -> Option<String> {
+    names.get(index).cloned()
+}
+
+/// Sheet selector bar: label + per-sheet single-select + source badge.
+/// Key bar (`paint_table_key_bar`) ka geometry/typo mirror (wahi bar
+/// height, wahi col gap, wahi badge right-end Small-role me; label
+/// Body-strong, names Mono (+strong selected), marker reuse
+/// `key_column_marker(selected)` taaki indicator column align rahe).
+/// Selection caller ke `&mut Option<usize>` me likhti hai (App fields
+/// untouched); `None` = koi sheet select nahi (honest empty).
+/// Wiring-pending until orchestrator wires the table tab caller.
+pub fn paint_table_sheet_bar(
+    ui: &mut egui::Ui,
+    selected: &mut Option<usize>,
+    sheets: &[String],
+    source: TableSourceKind,
+) {
+    let avail = ui.available_width();
+    let mut clicked: Option<usize> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.set_min_size(egui::vec2(avail.max(0.0), TABLE_SHEET_BAR_H));
+        // Even rhythm: key bar jaisa ek hi gap source — per-sheet
+        // `add_space` double gap banata tha, isliye hata diya.
+        ui.spacing_mut().item_spacing.x = TABLE_SHEET_COL_GAP;
+        ui.label(table_sheet_label_text_role().rich("Sheet:").strong());
+        for (idx, name) in sheets.iter().enumerate() {
+            let is_selected = *selected == Some(idx);
+            let marker = key_column_marker(is_selected);
+            let text = format!("{marker} {name}");
+            let rich = if is_selected {
+                egui::RichText::new(text).monospace().strong()
+            } else {
+                egui::RichText::new(text).monospace()
+            };
+            if ui.selectable_label(is_selected, rich).clicked() {
+                clicked = Some(idx);
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(TABLE_SHEET_BADGE_PAD);
+            ui.label(TypoRole::Small.rich(table_source_badge_label(source)));
+        });
+    });
+    if let Some(idx) = clicked {
+        *selected = table_sheet_clamp(sheets, idx);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Table cell geometry (pure rect math; paint wiring stays with the
+// orchestrator).
+// Gap AY re-scope: table body Grid paint `views.rs` me hai
+// (`paint_table_keyed:1398`, `paint_table:1866` — `table_grid_columns` +
+// `table_row_cells` se glyph + padded mono cells). Ye section us Grid ka
+// headless judvaan hai: padded-cell box, key-col vertical box, aur
+// find-underline strips — taaki agla views.rs wave `ui.painter()` se key
+// boxes + hit underlines draw kare bina yahan egui ctx laaye. Geometry
+// first: origin + px widths + row/gap rhythm se boxes; underline motai
+// `TABLE_FIND_UNDERLINE_W` reuse (koi naya size/token nahi). Typography
+// second: kuch nahi (rect math me font nahi — `char_w` caller measure
+// karke deta hai). Colors frozen (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. `.get()` + saturating ops only. Paint fns ki tarah test-only
+// until wiring lands (orchestrator owns paint); pure helpers unit-tested.
+// ----------------------------------------------------------------------------
+
+/// Padded cell box px me: Grid origin + rhythm se ek data cell ka paint
+/// rect. `char_w` yahan nahi — `col_widths_px` caller px me deta hai
+/// (font measure paint-side rehta hai). Pure data; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableCellRect {
+    /// Left edge px.
+    pub x: f32,
+    /// Top edge px.
+    pub y: f32,
+    /// Width px (`col_widths_px[col]`).
+    pub w: f32,
+    /// Height px (`row_h`).
+    pub h: f32,
+}
+
+/// Cell Grid ka px rhythm: origin + row height + gaps. Paint
+/// `TABLE_GRID_COL_GAP`/`TABLE_GRID_ROW_GAP` precedent se banata hai;
+/// struct me bandhne se call-sites 4 args me rehte hain (clippy
+/// `too_many_arguments` bina `allow` ke clean). Pure data; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TableCellGrid {
+    /// Grid top-left x px.
+    pub origin_x: f32,
+    /// Grid top-left y px.
+    pub origin_y: f32,
+    /// Ek row ki unchai px.
+    pub row_h: f32,
+    /// Data cols ke beech gap px.
+    pub col_gap: f32,
+    /// Data rows ke beech gap px.
+    pub row_gap: f32,
+}
+
+/// Ek data cell ka px box: `grid` origin + rhythm hai, `col_widths_px`
+/// har data col ki px chaudai (glyph column isme nahi — paint usko
+/// `CONTENT_LEAD` precedent se alag rakhta hai). Kharab input
+/// (non-finite, `row_h <= 0`, negative gap, range-bahar `col`) par
+/// `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_cell_rect(
+    grid: TableCellGrid,
+    col: usize,
+    row: usize,
+    col_widths_px: &[f32],
+) -> Option<TableCellRect> {
+    if !grid.origin_x.is_finite()
+        || !grid.origin_y.is_finite()
+        || !grid.row_h.is_finite()
+        || !grid.col_gap.is_finite()
+        || !grid.row_gap.is_finite()
+    {
+        return None;
+    }
+    if grid.row_h <= 0.0 || grid.col_gap < 0.0 || grid.row_gap < 0.0 {
+        return None;
+    }
+    let w = *col_widths_px.get(col)?;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    let mut x = grid.origin_x;
+    let mut idx = 0usize;
+    while idx < col {
+        let cw = col_widths_px.get(idx)?;
+        if !cw.is_finite() || *cw < 0.0 {
+            return None;
+        }
+        x += *cw + grid.col_gap;
+        idx = idx.saturating_add(1);
+    }
+    let stride = grid.row_h + grid.row_gap;
+    let y = grid.origin_y + row as f32 * stride;
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y,
+        w,
+        h: grid.row_h,
+    })
+}
+
+/// Ek key column ka vertical box: us col ki `x`/`w` se, `y = origin_y`
+/// se, unchai poore data window par (`total_rows * row_h` + gaps).
+/// Caller `is_key_column` se gate karta hai (geometry khud neutral hai).
+/// Khali grid ya range-bahar col par `None`. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_key_col_box_rect(
+    grid: TableCellGrid,
+    col: usize,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Option<TableCellRect> {
+    if total_rows == 0 {
+        return None;
+    }
+    let head = table_cell_rect(grid, col, 0, col_widths_px)?;
+    let rows_f = total_rows as f32;
+    if !rows_f.is_finite() || rows_f <= 0.0 {
+        return None;
+    }
+    let gaps = (total_rows.saturating_sub(1)) as f32 * grid.row_gap;
+    let h = rows_f * grid.row_h + gaps;
+    if !h.is_finite() || h <= 0.0 {
+        return None;
+    }
+    Some(TableCellRect {
+        x: head.x,
+        y: grid.origin_y,
+        w: head.w,
+        h,
+    })
+}
+
+/// Sab key cols ke vertical boxes, `view.key_columns` order me.
+/// Range-bahar col skip hota hai (panic nahi); khali keys par khali vec.
+/// `is_key_column` ka box judvaan — paint isi list par key boxes draw
+/// karta hai. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    let mut out = Vec::new();
+    for col in view.key_columns.iter() {
+        if let Some(box_rect) = table_key_col_box_rect(grid, *col, col_widths_px, total_rows) {
+            out.push(box_rect);
+        }
+    }
+    out
+}
+
+/// Ek find-hit span ka underline strip: cell ke bottom par
+/// `TABLE_FIND_UNDERLINE_W` uncha box, `x`/`w` char offsets se
+/// (`x = cell.x + start * char_w`, `w = (end - start) * char_w`,
+/// cell right par clamp). Span clamp `table_find_span_in_padded` reuse
+/// (cap ke bahar/ulta par `None`). Kharab `char_w`/cell par `None`.
+/// Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_underline_rect(
+    cell: TableCellRect,
+    span_start: usize,
+    span_end: usize,
+    width_chars: usize,
+    char_w: f32,
+) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.y.is_finite() || !cell.w.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= 0.0 || cell.h <= 0.0 {
+        return None;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    if !TABLE_FIND_UNDERLINE_W.is_finite() || TABLE_FIND_UNDERLINE_W <= 0.0 {
+        return None;
+    }
+    let (start, end) = table_find_span_in_padded(span_start, span_end, width_chars)?;
+    let x = cell.x + start as f32 * char_w;
+    let mut w = (end.saturating_sub(start)) as f32 * char_w;
+    let right = cell.x + cell.w;
+    if !x.is_finite() || !w.is_finite() {
+        return None;
+    }
+    if x < cell.x || x >= right {
+        return None;
+    }
+    if x + w > right {
+        w = right - x;
+    }
+    if w <= 0.0 {
+        return None;
+    }
+    let mut y = cell.y + cell.h - TABLE_FIND_UNDERLINE_W;
+    if y < cell.y {
+        y = cell.y;
+    }
+    Some(TableCellRect {
+        x,
+        y,
+        w,
+        h: TABLE_FIND_UNDERLINE_W,
+    })
+}
+
+/// Ek cell ke sab spans ke underline strips, span order me. Kharab
+/// `char_w` par khali vec (koi fake rect nahi); clamp-bahar spans skip
+/// hote hain. `table_find_row_spans`/`table_find_grid_spans` ke `(start,
+/// end)` isi me aate hain. Pure; unit-tested.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_find_underline_rects_for_cell(
+    cell: TableCellRect,
+    spans: &[(usize, usize)],
+    width_chars: usize,
+    char_w: f32,
+) -> Vec<TableCellRect> {
+    let mut out = Vec::new();
+    if spans.is_empty() {
+        return out;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return out;
+    }
+    for span in spans.iter() {
+        if let Some(rect) = table_find_underline_rect(cell, span.0, span.1, width_chars, char_w) {
+            out.push(rect);
+        }
+    }
+    out
+}
+
+// ----------------------------------------------------------------------------
+// Per-hunk merge (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #10: table tab me har modified/orphan row par
+// take-left/take-right. Ye pure row choice hai; file apply (I/O)
+// wiring ka kaam hai aur OPEN rehta hai. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Per-row merge choice: kaunsi side ki row rakhi jaye.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TableMergeSide {
+    /// Left row rakho.
+    #[default]
+    Left,
+    /// Right row rakho.
+    Right,
+}
+
+/// Ek row ka merge result: chosen side ki cells. `None` side matlab
+/// orphan ka missing side: dusri side milti hai; dono `None` par khali row.
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub fn table_resolve_row(
+    left_row: Option<&[String]>,
+    right_row: Option<&[String]>,
+    side: TableMergeSide,
+) -> Vec<String> {
+    let chosen = match side {
+        TableMergeSide::Left => left_row.or(right_row),
+        TableMergeSide::Right => right_row.or(left_row),
+    };
+    chosen.unwrap_or(&[]).to_vec()
+}
+
+// ----------------------------------------------------------------------------
+// Paging (headless; paint wiring stays with the orchestrator).
+// Gap local-run-l #3: lambi table me page-wise move. Chhota pager top
+// data-row rakhta hai; paint PageUp/PageDown se isko chalata hai.
+// Pure math, saturating, kabhi panic nahi. No egui, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Page-wise scroll state ek table grid ke liye (header fixed rehta hai).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TablePager {
+    /// Kul data rows (header ko count nahi karta).
+    pub total_rows: usize,
+    /// Ek page me kitni rows.
+    pub rows_per_page: usize,
+    /// Visible window ki pehli data row.
+    pub top: usize,
+}
+
+/// Test-only until paint wiring lands (orchestrator owns paint).
+impl TablePager {
+    /// Naya pager: page size kam se kam 1, top 0.
+    pub fn new(total_rows: usize, rows_per_page: usize) -> Self {
+        Self {
+            total_rows,
+            rows_per_page: rows_per_page.max(1),
+            top: 0,
+        }
+    }
+
+    /// Kul pages (khali grid = 0).
+    pub fn page_count(self) -> usize {
+        if self.total_rows == 0 {
+            return 0;
+        }
+        self.total_rows
+            .saturating_sub(1)
+            .saturating_div(self.rows_per_page.max(1))
+            .saturating_add(1)
+    }
+
+    /// Aakhri valid top.
+    pub fn last_top(self) -> usize {
+        let count = self.page_count();
+        if count == 0 {
+            return 0;
+        }
+        count
+            .saturating_sub(1)
+            .saturating_mul(self.rows_per_page.max(1))
+    }
+
+    /// Top ko valid range me rakhta hai.
+    pub fn clamp_top(&mut self) {
+        let last = self.last_top();
+        if self.top > last {
+            self.top = last;
+        }
+    }
+
+    /// Ek page aage, aakhri page par clamp.
+    pub fn next_page(&mut self) {
+        self.top = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.last_top());
+    }
+
+    /// Ek page peeche, 0 par clamp.
+    pub fn prev_page(&mut self) {
+        self.top = self.top.saturating_sub(self.rows_per_page.max(1));
+    }
+
+    /// Visible window `[top, end)`: end kabhi total se aage nahi.
+    pub fn visible_range(self) -> (usize, usize) {
+        let end = self
+            .top
+            .saturating_add(self.rows_per_page.max(1))
+            .min(self.total_rows);
+        (self.top, end.max(self.top))
+    }
+
+    /// `row` dikhe isliye top adjust karta hai. Returns whether top moved.
+    pub fn bring_into_view(&mut self, row: usize) -> bool {
+        if self.total_rows == 0 {
+            return false;
+        }
+        let row = row.min(self.total_rows.saturating_sub(1));
+        let (start, end) = self.visible_range();
+        if row >= start && row < end {
+            return false;
+        }
+        if row < self.top {
+            self.top = row;
+        } else {
+            self.top = row
+                .saturating_add(1)
+                .saturating_sub(self.rows_per_page.max(1));
+        }
+        self.clamp_top();
+        true
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite geometry wave hextable3 (headless; paint wiring stays
+// with the orchestrator).
+// Gap BC table half: key-column mapping needs sort-before-align (rows key
+// order me sort hokar align hote hain, positional smear nahi), aur column
+// grid ko ek locked total width chahiye taaki 960px canvas par scroll vs
+// clip honest ho. Geometry FIRST: sort pure index math hai (stable,
+// saturating, `.get()` only), grid fit `table_grid_total_w` reuse + ek
+// `SPACE_SM` gutter nahi — total hi fit gate hai (koi naya rhythm nahi).
+// Typography SECOND: kuch nahi (rect/index math me font nahi — char widths
+// caller measure karke deta hai, roles wahi Mono/Body/Small rehte hain).
+// Colors frozen (koi Color32/Visuals nahi). No egui paint, no I/O.
+// ----------------------------------------------------------------------------
+
+/// Ek row ka normalized sort key: key columns ki cells, `ignore_case` par
+/// lowercased, `trim_space` par trimmed. Range-bahar col `-` (missing-cell
+/// precedent `table_cell_display` jaisa) taaki ragged rows sort me panic
+/// na karen. Pure; unit-tested.
+pub fn table_sort_key_for_row(
+    row: &[String],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for col in key_columns.iter() {
+        let mut cell = row.get(*col).cloned().unwrap_or_else(|| String::from("-"));
+        if trim_space {
+            cell = cell.trim().to_string();
+        }
+        if ignore_case {
+            cell = cell.to_ascii_lowercase();
+        }
+        out.push(cell);
+    }
+    out
+}
+
+/// Sort-before-align row order: data-row indices key tuple se stable
+/// sorted (lexicographic, khali keys par identity — positional path sort
+/// nahi karta). Caller `refresh`/paint isi order me rows align karta hai
+/// taaki reordered rows deletes+inserts na banen. Pure; unit-tested.
+pub fn table_sorted_row_indices(
+    rows: &[Vec<String>],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..rows.len()).collect();
+    if key_columns.is_empty() {
+        return idx;
+    }
+    idx.sort_by(|a, b| {
+        let ra = rows.get(*a);
+        let rb = rows.get(*b);
+        match (ra, rb) {
+            (Some(ra), Some(rb)) => {
+                table_sort_key_for_row(ra, key_columns, ignore_case, trim_space).cmp(
+                    &table_sort_key_for_row(rb, key_columns, ignore_case, trim_space),
+                )
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    });
+    idx
+}
+
+/// Sort-before-align rows: `table_sorted_row_indices` order me cloned
+/// rows. Khali keys par identity clone (positional path untouched).
+/// Pure; unit-tested.
+pub fn table_sort_rows_by_key(
+    rows: &[Vec<String>],
+    key_columns: &[usize],
+    ignore_case: bool,
+    trim_space: bool,
+) -> Vec<Vec<String>> {
+    let order = table_sorted_row_indices(rows, key_columns, ignore_case, trim_space);
+    let mut out = Vec::new();
+    for i in order {
+        if let Some(row) = rows.get(i) {
+            out.push(row.clone());
+        }
+    }
+    out
+}
+
+/// Kya column grid `avail_w` me fit hota hai: `table_grid_total_w` reuse.
+/// Kharab input par false (paint horizontal scroll dikhata hai).
+/// Pure; unit-tested.
+pub fn table_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    if !avail_w.is_finite() || avail_w <= 0.0 {
+        return false;
+    }
+    let total = table_grid_total_w(col_widths_px);
+    total > 0.0 && total.is_finite() && total <= avail_w
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite geometry wave hextable10: column Grid with SECTION_GAP col gap,
+// cell padding, and header weight via TypoRole.
+// Gap BC data/table half: BC table view aligns columns using an explicit Grid
+// layout with standard section column gaps (8.0px = SECTION_GAP = SPACE_SM)
+// and tight row gaps (4.0px = TIGHT_GAP = SPACE_XS). Each cell has internal
+// horizontal padding (8.0px = TABLE_CELL_PAD_X = SPACE_SM) so text never touches
+// borders or adjacent cells. Column headers are visually emphasized using
+// semibold/strong weight (TypoRole::Heading / .strong() parity) without any
+// point size drift (table_header_text_role stays Mono, 12pt).
+// Geometry FIRST:
+// - Column x-offsets in Grid: col 0 starts at 0, col k starts at sum(widths[0..k]) + k * col_gap.
+// - Grid col gap: TABLE_GRID_COL_GAP == GEO_SECTION_GAP (8.0px).
+// - Cell padding: TABLE_CELL_PAD_X == SPACE_SM (8.0px).
+// Typography SECOND:
+// - Header text role: TypoRole::Mono (12.0pt), weight "strong" (value 600).
+// - Zero new point sizes or font families.
+// Colors FROZEN: zero Color32/Visuals modifications.
+// ----------------------------------------------------------------------------
+
+/// Column header font weight name: `"strong"`. Paint uses `.strong()` on
+/// [`table_header_text_role`] to achieve visual weight distinction without
+/// changing font sizes. Pure; unit-tested.
+pub const fn table_header_weight_name() -> &'static str {
+    "strong"
+}
+
+/// Column header font weight numeric value: 600 (matches [`crate::theme::TYPO_WEIGHT_SEMIBOLD`]
+/// and [`crate::theme::TypoRole::Heading::weight_value`]). Pure; unit-tested.
+pub const fn table_header_weight_value() -> u16 {
+    crate::theme::TYPO_WEIGHT_SEMIBOLD
+}
+
+/// Verifies that table Grid column gap strictly equals the theme's [`crate::theme::GEO_SECTION_GAP`]
+/// (8.0px = `SPACE_SM`). Pure; unit-tested.
+pub const fn table_grid_has_section_gap() -> bool {
+    TABLE_GRID_COL_GAP == crate::theme::GEO_SECTION_GAP
+}
+
+/// Verifies that table cell padding strictly equals the theme's [`crate::theme::SPACE_SM`]
+/// (8.0px). Pure; unit-tested.
+pub const fn table_cell_has_space_padding() -> bool {
+    TABLE_CELL_PAD_X == crate::theme::SPACE_SM
+}
+
+/// Exact x-offset of a table column in the Grid given outer column widths and column gap.
+/// Column 0 starts at 0.0. Column `k` starts at `sum(widths[0..k]) + k * col_gap`.
+/// Out of bounds or non-finite inputs return `None`. Pure; unit-tested.
+pub fn table_column_grid_col_x(col_idx: usize, col_widths_px: &[f32], col_gap: f32) -> Option<f32> {
+    if col_idx >= col_widths_px.len() || !col_gap.is_finite() || col_gap < 0.0 {
+        return None;
+    }
+    let mut x = 0.0;
+    let mut i = 0;
+    while i < col_idx {
+        let &w = col_widths_px.get(i)?;
+        if !w.is_finite() || w < 0.0 {
+            return None;
+        }
+        x += w + col_gap;
+        i = i.saturating_add(1);
+    }
+    if !x.is_finite() {
+        return None;
+    }
+    Some(x)
+}
+
+/// Exact rectangle of a header cell in the table header Grid: x computed via
+/// [`table_column_grid_col_x`], width from `col_widths_px`, height `header_h`.
+/// Pure; unit-tested.
+pub fn table_column_grid_header_cell_rect(
+    col_idx: usize,
+    col_widths_px: &[f32],
+    header_h: f32,
+    col_gap: f32,
+) -> Option<TableCellRect> {
+    if !header_h.is_finite() || header_h <= 0.0 {
+        return None;
+    }
+    let x = table_column_grid_col_x(col_idx, col_widths_px, col_gap)?;
+    let &w = col_widths_px.get(col_idx)?;
+    if !w.is_finite() || w <= 0.0 {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: 0.0,
+        w,
+        h: header_h,
+    })
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave gui10-table: cell grid origin alignment, SPACE col gap,
+// Mono line-height row height, TYPO header weight (headless; paint wiring
+// stays with the orchestrator).
+// Gap after-table.png: table panes cramped vs BC — grid origin 0,0 se
+// chipka tha (outer margin reuse nahi), row height ad-hoc 18.0 tha (Mono
+// line-height 15.6 reuse nahi). Fix table-side only (app.rs/home.rs/views.rs
+// NO-TOUCH). Geometry FIRST: grid origin `GEO_OUTER_MARGIN` (12.0) dono
+// axes par (pane chrome precedent — content margin se start, cramped
+// nahi), col gap `GEO_SECTION_GAP` (SPACE_SM 8.0), row gap `GEO_TIGHT_GAP`
+// (SPACE_XS 4.0), row height Mono line-height (15.6) — koi naya literal
+// nahi. Typography SECOND: header Mono role + `.strong()` composition,
+// weight value `TYPO_WEIGHT_SEMIBOLD` (600) reuse — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Narrow-720 edge fixture
+// `checks/gui-exq-table/comparison/table-narrow-720.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Cell grid origin x (px): `GEO_OUTER_MARGIN` reuse (12.0) — grid pane
+/// margin se start hota hai, 0,0 cramped origin nahi. Pure.
+pub const TABLE_CELL_GRID_ORIGIN_X: f32 = crate::theme::GEO_OUTER_MARGIN;
+/// Cell grid origin y (px): `GEO_OUTER_MARGIN` reuse (12.0). Pure.
+pub const TABLE_CELL_GRID_ORIGIN_Y: f32 = crate::theme::GEO_OUTER_MARGIN;
+
+/// Cell grid origin (px): dono axes `GEO_OUTER_MARGIN` — BC parity pane
+/// lead. Pure; unit-tested.
+pub fn table_cell_grid_origin() -> (f32, f32) {
+    (TABLE_CELL_GRID_ORIGIN_X, TABLE_CELL_GRID_ORIGIN_Y)
+}
+
+/// Ek data row ki unchai (px): `TypoRole::Mono.line_height_px()` reuse
+/// (12.0 @ 1.30 = 15.6, views.rs TEXT_ROW_H precedent) — ad-hoc 18.0
+/// nahi. Pure; unit-tested.
+pub fn table_cell_row_h() -> f32 {
+    table_cell_text_role().line_height_px()
+}
+
+/// Default cell grid rhythm: origin + Mono row height + SPACE gaps — ek
+/// call me BC-aligned grid (paint `TableCellGrid` isi se banata hai).
+/// Pure; unit-tested.
+pub fn table_cell_grid_default() -> TableCellGrid {
+    let (origin_x, origin_y) = table_cell_grid_origin();
+    TableCellGrid {
+        origin_x,
+        origin_y,
+        row_h: table_cell_row_h(),
+        col_gap: TABLE_GRID_COL_GAP,
+        row_gap: TABLE_GRID_ROW_GAP,
+    }
+}
+
+/// Header weight contract: name `strong` + value `TYPO_WEIGHT_SEMIBOLD`
+/// (600) — Mono role regular-400 par strong composition se header ek
+/// step upar, koi naya size/token nahi. Pure; unit-tested.
+pub fn table_header_weight_ok() -> bool {
+    table_header_weight_name() == "strong"
+        && table_header_weight_value() == crate::theme::TYPO_WEIGHT_SEMIBOLD
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table2 round-2: symmetric row gap, char-metric outer
+// widths, header underline weight at 960px (headless; paint wiring stays
+// with the orchestrator).
+// Gap table panes uneven row gaps vs BC: Grid row gap ka ek hi source tha
+// par symmetric pad ka naam nahi tha, outer widths char metrics se bante
+// the par 960px budget par lock nahi the, header underline motai ad-hoc
+// 1.0 thi. Fix table-side only (app.rs/home.rs/views.rs NO-TOUCH).
+// Geometry FIRST: row gap symmetric pad `GEO_TIGHT_GAP` (SPACE_XS 4.0),
+// col spacing `GEO_SECTION_GAP` (SPACE_SM 8.0), outer widths
+// `table_col_widths_px` reuse (char metrics), 960px avail origin-se.
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W`
+// reuse (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` (600) reuse — koi
+// naya size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No
+// egui ctx, no I/O. Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table2/comparison/table-wide-960.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table canvas reference width (px): [`crate::theme::VIEWPORT_W`] reuse
+/// (960) — isi par wide fixture fit lock hota hai. Pure.
+pub const TABLE_CANVAS_W: f32 = crate::theme::VIEWPORT_W as f32;
+/// Table canvas reference height (px): [`crate::theme::VIEWPORT_H`] reuse
+/// (600). Pure.
+pub const TABLE_CANVAS_H: f32 = crate::theme::VIEWPORT_H as f32;
+
+/// Header underline width (px): [`crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W`]
+/// reuse (1.0, find `TABLE_FIND_UNDERLINE_W` precedent — koi naya size nahi).
+/// Test-only until paint wiring lands (orchestrator owns paint).
+pub const TABLE_HEADER_UNDERLINE_W: f32 = crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W;
+
+/// Row symmetric pad (px): ek tight gap ([`crate::theme::GEO_TIGHT_GAP`] =
+/// SPACE_XS 4.0) — row ke upar/neeche ek jaisa clearance, isliye gaps
+/// uneven nahi lagte. Pure; unit-tested.
+pub fn table_row_sym_pad() -> f32 {
+    crate::theme::GEO_TIGHT_GAP
+}
+
+/// Column spacing (px): ek section gap ([`crate::theme::GEO_SECTION_GAP`] =
+/// SPACE_SM 8.0) — Grid col gap ka single source. Pure; unit-tested.
+pub fn table_col_spacing() -> f32 {
+    crate::theme::GEO_SECTION_GAP
+}
+
+/// Grid row gap single source (px): [`TABLE_GRID_ROW_GAP`] — symmetric pad
+/// [`table_row_sym_pad`] ke barabar, kabhi drift nahi. Pure; unit-tested.
+pub fn table_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Header underline width single source (px). Pure; unit-tested.
+pub fn table_header_underline_w() -> f32 {
+    TABLE_HEADER_UNDERLINE_W
+}
+
+/// Wide-960 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — 960px canvas par ruler/body desync nahi. Pure; unit-tested.
+pub fn table_wide_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Wide-960 grid avail width (px): canvas minus dono origin margins
+/// (`TABLE_CANVAS_W - 2 * TABLE_CELL_GRID_ORIGIN_X` = 936) — isi me
+/// outer widths fit hote hain. Pure; unit-tested.
+pub fn table_wide_avail_w() -> f32 {
+    TABLE_CANVAS_W - TABLE_CELL_GRID_ORIGIN_X * 2.0
+}
+
+/// Char metrics se outer widths 960px budget par: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table_wide_outer_widths(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Wide-960 visible rows: `floor(panes_h / row_h)` — kharab input par 0
+/// (paint honest empty). Pure; unit-tested.
+pub fn table_wide_960_visible_rows(panes_h: f32) -> u64 {
+    let row_h = table_wide_row_h();
+    if !panes_h.is_finite() || !row_h.is_finite() || panes_h <= 0.0 || row_h <= 0.0 {
+        return 0;
+    }
+    (panes_h / row_h).floor().max(0.0) as u64
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table3 round-1: even row rhythm, char-metric outer
+// widths, aligned sort indicators at narrow-720 (headless; paint wiring
+// stays with the orchestrator).
+// Gap BC table compare: even row rhythm, column widths from char metrics,
+// sort indicators aligned; ours uneven gaps. Fix table-side only
+// (app.rs/home.rs/views.rs/views_hex.rs/gutter.rs/tree.rs/theme.rs/
+// viewmodel.rs/copy.rs/take.rs NO-TOUCH). Geometry FIRST: row height Mono
+// line-height lock (`table_cell_row_h` reuse, 15.6), col spacing SPACE
+// tokens (`table_col_spacing`/`table_grid_gap_y` reuse, 8/4), outer widths
+// `table_col_widths_px` char metrics reuse, narrow-720 avail origin-se
+// (696), sort markers fixed 1-char aligned (indicator column). Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Narrow-720 edge fixture
+// `checks/gui-exq-table3/comparison/table-narrow-720.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table3 narrow canvas width (px): [`crate::theme::VIEWPORT_MIN_W`] reuse
+/// (720) — isi par narrow fixture fit lock hota hai. Pure.
+pub const TABLE_NARROW_CANVAS_W: f32 = crate::theme::VIEWPORT_MIN_W as f32;
+
+/// Table3 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — even row rhythm, ruler/body desync nahi. Pure; unit-tested.
+pub fn table3_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table3 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source. Pure; unit-tested.
+pub fn table3_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table3 row symmetric pad (px): [`table_row_sym_pad`] reuse (SPACE_XS
+/// 4.0) — row ke upar/neeche ek jaisa clearance. Pure; unit-tested.
+pub fn table3_row_sym_pad() -> f32 {
+    table_row_sym_pad()
+}
+
+/// Table3 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table3_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table3 header weight contract: table2 lock reuse (strong/600).
+/// Pure; unit-tested.
+pub fn table3_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Sort indicator marker: fixed 1-char taaki indicator column align rahe —
+/// sorted-asc `▲`, sorted-desc `▼`, unsorted blank ` ` (key-bar
+/// `key_column_marker` precedent: har toggle ke start me ek char).
+/// Pure; unit-tested.
+pub fn table3_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    if !sorted {
+        " "
+    } else if ascending {
+        "▲"
+    } else {
+        "▼"
+    }
+}
+
+/// Kya `col` sort column hai (`Some(col)` match). Pure; unit-tested.
+pub fn table3_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    sort_col == Some(col)
+}
+
+/// Header cell ka sort-aware label: letter + 1-char marker
+/// (`table_column_letter` + `table3_sort_marker`) — markers har header me
+/// ek hi slot lete hain, isliye sort indicators aligned rehte hain.
+/// Pure; unit-tested.
+pub fn table3_sort_label(col: usize, sort_col: Option<usize>, ascending: bool) -> String {
+    let sorted = table3_is_sorted_col(sort_col, col);
+    let marker = table3_sort_marker(sorted, ascending);
+    format!("{}{marker}", table_column_letter(col))
+}
+
+/// Table3 narrow-720 grid avail width (px): narrow canvas minus dono origin
+/// margins (`720 - 2 * 12` = 696) — isi me outer widths fit hote hain.
+/// Pure; unit-tested.
+pub fn table3_narrow_avail_w() -> f32 {
+    TABLE_NARROW_CANVAS_W - TABLE_CELL_GRID_ORIGIN_X * 2.0
+}
+
+/// Char metrics se outer widths narrow-720 budget par:
+/// [`table_col_widths_px`] delegation (koi naya math nahi). Pure;
+/// unit-tested.
+pub fn table3_narrow_outer_widths(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table4 round-1: cols plus rows at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: headers need sort hit-slop (taller than rows),
+// col spacing irregular, delta cells misaligned at wide widths. Fix
+// table-side only (app.rs/views.rs/home.rs/views_hex.rs/gutter.rs/tree.rs/
+// theme.rs/viewmodel.rs/copy.rs/take.rs NO-TOUCH). Geometry FIRST: header
+// height chrome line-height lock (`TABLE4_HEADER_H` = Heading 21.6), col
+// spacing SPACE_SM single-source (`table4_col_spacing` -> `table_col_spacing`
+// -> `GEO_SECTION_GAP`), cell pad SPACE_XS (`TABLE4_CELL_PAD_X` 4.0, outer
+// `chars * char_w + 2 * pad`), row height Mono line-height lock
+// (`table4_row_h` -> `table_cell_row_h` 15.6) at 960px wide avail 936.
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table4/comparison/table-wide-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table4 header height (px): chrome line-height lock
+/// (`TypoRole::Heading.line_height_px()` = 18.0 @ 1.2 = 21.6, section-header
+/// chrome precedent) — rows (Mono 15.6) se taller, isliye sort hit-slop
+/// milta hai. Koi ad-hoc literal nahi. Pure.
+pub const TABLE4_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Table4 cell pad (px): `SPACE_XS` reuse (4.0, symmetric row pad precedent)
+/// — delta cells isi pad se outer boxes banate hain taaki wide widths par
+/// bhi columns align rahen. Pure.
+pub const TABLE4_CELL_PAD_X: f32 = crate::theme::SPACE_XS;
+
+/// Table4 header height single-source (px). Pure; unit-tested.
+pub fn table4_header_h() -> f32 {
+    TABLE4_HEADER_H
+}
+
+/// Table4 header height chrome contract: Heading line-height ke barabar aur
+/// row height se taller (hit-slop). Pure; unit-tested.
+pub fn table4_header_h_ok() -> bool {
+    (table4_header_h() - crate::theme::TypoRole::Heading.line_height_px()).abs() < 0.001
+        && table4_header_h() > table4_row_h()
+}
+
+/// Table4 column spacing (px): `table_col_spacing` reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table4_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table4 cell pad single-source (px). Pure; unit-tested.
+pub fn table4_cell_pad_x() -> f32 {
+    TABLE4_CELL_PAD_X
+}
+
+/// Table4 row height (px): Mono line-height lock (15.6) — wide-960 par
+/// ruler/body desync nahi. Pure; unit-tested.
+pub fn table4_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table4 header underline width (px): `table_header_underline_w` reuse
+/// (1.0) — header underline uneven nahi. Pure; unit-tested.
+pub fn table4_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table4 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table4_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table4 wide-960 avail width (px): `table_wide_avail_w` reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table4_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table4 outer cell box chaudai (px): `text + 2 * TABLE4_CELL_PAD_X`.
+/// Non-finite ya negative text par pad floor. Pure; unit-tested.
+pub fn table4_cell_outer_w(text_w: f32) -> f32 {
+    if !text_w.is_finite() || text_w < 0.0 {
+        return TABLE4_CELL_PAD_X * 2.0;
+    }
+    text_w + TABLE4_CELL_PAD_X * 2.0
+}
+
+/// Table4 outer se text chaudai (px): floor 0 par. Pure; unit-tested.
+pub fn table4_cell_text_w(outer_w: f32) -> f32 {
+    if !outer_w.is_finite() {
+        return 0.0;
+    }
+    (outer_w - TABLE4_CELL_PAD_X * 2.0).max(0.0)
+}
+
+/// Table4 char widths se px outer widths: har char width `char_w` chaudi,
+/// outer `table4_cell_outer_w(chars * char_w)` se. Kharab `char_w` par khali
+/// vec. Pure; unit-tested.
+pub fn table4_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for width in widths_chars.iter() {
+        let text_w = (*width as f32) * char_w;
+        if !text_w.is_finite() || text_w < 0.0 {
+            continue;
+        }
+        out.push(table4_cell_outer_w(text_w));
+    }
+    out
+}
+
+/// Table4 grid kul px chaudai: `table_grid_total_w` reuse taaki col-gap math
+/// kabhi drift na kare. Pure; unit-tested.
+pub fn table4_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table4 wide-960 fit gate: `table_column_grid_fit` reuse. Pure;
+/// unit-tested.
+pub fn table4_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table5 round-1: cols plus separators at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: columns stable row heights ke saath align hote hain
+// aur separators visible/symmetric hain; ours me widths drift karte hain aur
+// separators inconsistent hain. Fix table-side only (app.rs/views.rs/home.rs/
+// views_hex.rs/gutter.rs/tree.rs/theme.rs/viewmodel.rs/take.rs/copy.rs
+// NO-TOUCH). Geometry FIRST: col widths char metrics se SPACE pad ke saath
+// (`table5_col_widths_px` -> `table_col_widths_px` delegation, pad SPACE_SM),
+// row height Mono line-height lock (`table5_row_h` 15.6), col gap SPACE_SM
+// single-source (8.0), separators har gap ke beech me (`table5_separator_xs`,
+// dono taraf gap/2 — symmetric), 960px avail 936 par fit gate. Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table5/comparison/table-wide-960.json` ka headless judvaan
+// test sath me hai (column x-positions prove karta hai).
+// ----------------------------------------------------------------------------
+
+/// Table5 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE5_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table5 row height (px): [`table_cell_row_h`] lock (Mono line-height
+/// 15.6) — stable row heights, ruler/body desync nahi. Pure; unit-tested.
+pub fn table5_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table5 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table5_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table5 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table5_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table5 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table5_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table5 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table5_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table5 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation — char metrics plus SPACE_SM pad (koi naya math nahi).
+/// Pure; unit-tested.
+pub fn table5_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table5 ek column ki x-position (px): [`table_column_grid_col_x`]
+/// delegation, gap [`table5_col_spacing`] se — col 0 hamesha 0.0.
+/// Kharab input ya range-bahar col par `None`. Pure; unit-tested.
+pub fn table5_col_x(col_idx: usize, col_widths_px: &[f32]) -> Option<f32> {
+    table_column_grid_col_x(col_idx, col_widths_px, table5_col_spacing())
+}
+
+/// Table5 sab columns ki x-positions (px), column order me. Kharab widths
+/// par khali vec (koi aadhi list nahi). Pure; unit-tested.
+pub fn table5_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    while idx < col_widths_px.len() {
+        match table5_col_x(idx, col_widths_px) {
+            Some(x) => out.push(x),
+            None => return Vec::new(),
+        }
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Table5 column separators (px): har andaruni gap ke beech me ek line —
+/// `x = col_right_edge + gap / 2`, isliye dono taraf gap/2 clearance
+/// (symmetric). `n` cols par `n - 1` separators; kharab widths par khali
+/// vec. Pure; unit-tested.
+pub fn table5_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    let gap = table5_col_spacing();
+    if !gap.is_finite() || gap < 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut x = 0.0f32;
+    let mut idx = 0usize;
+    while idx.saturating_add(1) < col_widths_px.len() {
+        let w = match col_widths_px.get(idx) {
+            Some(w) if w.is_finite() && *w >= 0.0 => *w,
+            _ => return Vec::new(),
+        };
+        x += w + gap / 2.0;
+        if !x.is_finite() {
+            return Vec::new();
+        }
+        out.push(x);
+        x += gap / 2.0;
+        idx = idx.saturating_add(1);
+    }
+    out
+}
+
+/// Table5 grid kul px chaudai: [`table_grid_total_w`] reuse taaki col-gap
+/// math kabhi drift na kare. Pure; unit-tested.
+pub fn table5_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table5 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table5_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table5 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table5_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table6 round-2: header plus rhythm at wide-960
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: header row keeps its own height distinct from body
+// rows with stable separator insets; ours header/body rhythm uneven (header
+// ad-hoc, body ad-hoc, rule kabhi header se chipka kabhi body se). Fix
+// table-side only (app.rs/views.rs/home.rs/views_hex.rs/gutter.rs/tree.rs/
+// theme.rs/viewmodel.rs/take.rs/copy.rs NO-TOUCH). Geometry FIRST: header row
+// height strong-role line-height lock ([`table6_header_h`] = Heading 21.6,
+// table4 chrome precedent — body se taller, distinct rhythm), body rows Mono
+// line-height lock ([`table6_row_h`] 15.6), header/body separator half-gap
+// par ([`table6_header_sep_y`] — upar/neeche dono taraf gap/2, symmetric),
+// vertical column separators gap/2 par ([`table6_separator_xs`] — table5
+// delegation, symmetric), 960px avail origin-se (936) par fit gate. Typography
+// SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family
+// nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O.
+// Pure; unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table6/comparison/table-header-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table6 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE6_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table6 header row height (px): strong-role line-height lock
+/// (`TypoRole::Heading.line_height_px()` = 18.0 @ 1.2 = 21.6, table4 chrome
+/// precedent) — body rows (Mono 15.6) se distinct, header rhythm stable.
+/// Koi ad-hoc literal nahi. Pure.
+pub const TABLE6_HEADER_H: f32 = crate::theme::TypoRole::Heading.line_height_px();
+
+/// Table6 header row height single-source (px). Pure; unit-tested.
+pub fn table6_header_h() -> f32 {
+    TABLE6_HEADER_H
+}
+
+/// Table6 header contract: Heading line-height ke barabar aur body row se
+/// taller (distinct rhythm — header/body kabhi ek jaise nahi). Pure;
+/// unit-tested.
+pub fn table6_header_h_ok() -> bool {
+    (table6_header_h() - crate::theme::TypoRole::Heading.line_height_px()).abs() < 0.001
+        && table6_header_h() > table6_row_h()
+}
+
+/// Table6 body row height (px): Mono line-height lock (15.6) — stable body
+/// rhythm, ruler/body desync nahi. Pure; unit-tested.
+pub fn table6_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table6 header/body delta (px): header minus body (> 0 — header hamesha
+/// distinct, BC parity). Pure; unit-tested.
+pub fn table6_header_body_delta() -> f32 {
+    table6_header_h() - table6_row_h()
+}
+
+/// Table6 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table6_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table6 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0) —
+/// col gap ka single source, kabhi drift nahi. Pure; unit-tested.
+pub fn table6_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table6 row gap single source (px): [`TABLE_GRID_ROW_GAP`] — header/body
+/// separator insets isi ke aadhe hain (symmetric). Pure; unit-tested.
+pub fn table6_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table6 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table6_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table6 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table6_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table6 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation — char metrics plus SPACE_SM pad (koi naya math nahi).
+/// Pure; unit-tested.
+pub fn table6_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table6 grid kul px chaudai: [`table_grid_total_w`] reuse taaki col-gap
+/// math kabhi drift na kare. Pure; unit-tested.
+pub fn table6_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table6 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table6_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table6 vertical column separators (px): [`table5_separator_xs`]
+/// delegation — har andaruni gap ke beech me ek line (dono taraf gap/2,
+/// symmetric). Pure; unit-tested.
+pub fn table6_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Kya vertical separators symmetric hain: har separator right-edge se
+/// gap/2 aur agli col se gap/2 (table5 geometry ka contract check).
+/// Kharab widths par false (paint honest fallback dikhata hai). Pure;
+/// unit-tested.
+pub fn table6_separators_symmetric(col_widths_px: &[f32]) -> bool {
+    let gap = table6_col_spacing();
+    if !gap.is_finite() || gap < 0.0 || col_widths_px.is_empty() {
+        return false;
+    }
+    let seps = table6_separator_xs(col_widths_px);
+    if seps.len() != col_widths_px.len().saturating_sub(1) {
+        return false;
+    }
+    let xs = table5_col_xs(col_widths_px);
+    if xs.len() != col_widths_px.len() {
+        return false;
+    }
+    let mut k = 0usize;
+    while k < seps.len() {
+        let sep = match seps.get(k) {
+            Some(v) if v.is_finite() => *v,
+            _ => return false,
+        };
+        let right = match xs.get(k).zip(col_widths_px.get(k)) {
+            Some((x, w)) if x.is_finite() && w.is_finite() => *x + *w,
+            _ => return false,
+        };
+        let next_left = match xs.get(k.saturating_add(1)) {
+            Some(v) if v.is_finite() => *v,
+            _ => return false,
+        };
+        if ((sep - right) - gap / 2.0).abs() >= 0.001 {
+            return false;
+        }
+        if ((next_left - sep) - gap / 2.0).abs() >= 0.001 {
+            return false;
+        }
+        k = k.saturating_add(1);
+    }
+    true
+}
+
+/// Table6 header/body separator y (px): header bottom se half row-gap neeche
+/// (`origin_y + header_h + gap / 2`) — header rule body se chipakti nahi,
+/// dono taraf gap/2 inset (symmetric). Pure; unit-tested.
+pub fn table6_header_sep_y() -> f32 {
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    origin_y + table6_header_h() + table6_grid_gap_y() / 2.0
+}
+
+/// Table6 pehli body row ka y (px): header + poora row gap
+/// (`origin_y + header_h + gap`). Pure; unit-tested.
+pub fn table6_body_first_y() -> f32 {
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    origin_y + table6_header_h() + table6_grid_gap_y()
+}
+
+/// Kya header/body separator insets symmetric hain: header-bottom se sep
+/// gap/2 aur sep se body-first gap/2 (dono barabar — rule beech me stable).
+/// Pure; unit-tested.
+pub fn table6_header_sep_insets_symmetric() -> bool {
+    let gap = table6_grid_gap_y();
+    if !gap.is_finite() || gap <= 0.0 {
+        return false;
+    }
+    let (_origin_x, origin_y) = table_cell_grid_origin();
+    if !origin_y.is_finite() {
+        return false;
+    }
+    let header_bottom = origin_y + table6_header_h();
+    let sep = table6_header_sep_y();
+    let body_first = table6_body_first_y();
+    if !header_bottom.is_finite() || !sep.is_finite() || !body_first.is_finite() {
+        return false;
+    }
+    ((sep - header_bottom) - gap / 2.0).abs() < 0.001
+        && ((body_first - sep) - gap / 2.0).abs() < 0.001
+}
+
+/// Table6 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table6_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table7 round-1: sort indicator plus numeric align
+// at 960px wide (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: headers show sort-indicator arrows with stable
+// header height, numeric columns right-align; ours headers lack indicators
+// and everything left-aligns. Fix table-side only (app.rs/views.rs/home.rs/
+// views_hex.rs/gutter.rs/tree.rs/theme.rs/viewmodel.rs/take.rs/copy.rs
+// NO-TOUCH). Geometry FIRST: header height chrome line-height lock
+// ([`table7_header_h`] = Heading 21.6, table6 precedent — marker slot se
+// nahi badhta), sort glyph fixed 1-char right slot me SPACE_XS pad ke
+// saath ([`table7_sort_glyph_rect`] — sorted/unsorted same rect, stable),
+// numeric text-x pad math se ([`table7_cell_text_x`] — left pad, right
+// outer-minus-pad-minus-text), grid origin origin-se (936 avail) par fit
+// gate. Typography SECOND: header underline
+// `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0), header weight
+// `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi. Colors
+// FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure;
+// unit-tested. Wide-960 edge fixture
+// `checks/gui-exq-table7/comparison/table-sort-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table7 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par wide
+/// fixture fit lock hota hai. Pure.
+pub const TABLE7_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table7 sort glyph slot pad (px): [`crate::theme::SPACE_XS`] reuse (4.0)
+/// — glyph header cell ke right end se ek tight-gap andar (symmetric pad
+/// precedent, koi naya rhythm nahi). Pure.
+pub const TABLE7_SORT_SLOT_PAD: f32 = crate::theme::SPACE_XS;
+
+/// Table7 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table6 precedent) — sort marker aaye ya na aaye, height stable.
+/// Pure; unit-tested.
+pub fn table7_header_h() -> f32 {
+    table6_header_h()
+}
+
+/// Table7 header height stable contract: table6 lock ke barabar aur body
+/// row se taller (marker slot height nahi badhata). Pure; unit-tested.
+pub fn table7_header_h_stable() -> bool {
+    (table7_header_h() - TABLE6_HEADER_H).abs() < 0.001 && table7_header_h() > table7_row_h()
+}
+
+/// Table7 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table7_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table7 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936).
+/// Pure; unit-tested.
+pub fn table7_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table7 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table7_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table7 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse. Pure;
+/// unit-tested.
+pub fn table7_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table7 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table7_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table7 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table7_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table7 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 960px budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table7_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Sort indicator marker: fixed 1-char taaki header height stable rahe —
+/// sorted-asc `▲`, sorted-desc `▼`, unsorted blank ` ` (table3 precedent
+/// reuse, koi naya glyph nahi). Pure; unit-tested.
+pub fn table7_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table3_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai (`Some(col)` match, table3 reuse). Pure;
+/// unit-tested.
+pub fn table7_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table3_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label: name + fixed 1-char marker — markers
+/// har header me ek hi slot lete hain, isliye indicators aligned rehte
+/// hain aur header height stable rehti hai. Pure; unit-tested.
+pub fn table7_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    let mut out = String::from(name);
+    out.push_str(table7_sort_marker(sorted, ascending));
+    out
+}
+
+/// Kya cell numeric hai: trim ke baad non-empty aur finite f64 parse ho.
+/// Khali/`-`/NaN/inf numeric nahi (missing-dash precedent: ragged `-`
+/// kabhi right-align nahi hota). Pure; unit-tested.
+pub fn table7_is_numeric_cell(cell: &str) -> bool {
+    let trimmed = cell.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    match trimmed.parse::<f64>() {
+        Ok(v) => v.is_finite(),
+        Err(_) => false,
+    }
+}
+
+/// Kya column numeric hai (right-align): kam se kam ek cell ho aur har
+/// cell numeric ho. Khali column ya text/missing (`-`) par false (left).
+/// Pure; unit-tested.
+pub fn table7_is_numeric_col(cells: &[String]) -> bool {
+    if cells.is_empty() {
+        return false;
+    }
+    for cell in cells.iter() {
+        if !table7_is_numeric_cell(cell) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki
+/// `false` (left). `rows` se per-col cells jodta hai (ragged missing skip
+/// nahi — missing `-` col ko left rakhta hai). Range-bahar par false nahi,
+/// header len ka vec (har col ka faisla). Pure; unit-tested.
+pub fn table7_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    let mut out = Vec::new();
+    for (col, _) in header.iter().enumerate() {
+        let mut cells: Vec<String> = Vec::new();
+        for row in rows.iter() {
+            if let Some(cell) = row.get(col) {
+                cells.push(cell.clone());
+            } else {
+                cells.push(String::from("-"));
+            }
+        }
+        out.push(table7_is_numeric_col(&cells));
+    }
+    out
+}
+
+/// Cell text ka x (px) outer box me: left par `outer.x + pad`, right
+/// (numeric) par `outer.x + outer.w - pad - text_w` — grid origin-se.
+/// `TABLE_CELL_PAD_X` (SPACE_SM 8.0) reuse, koi naya pad nahi. Kharab
+/// input ya overflow (text box se bahar) par `None`. Pure; unit-tested.
+pub fn table7_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    if !outer.x.is_finite() || !outer.w.is_finite() || !outer.w.is_finite() {
+        return None;
+    }
+    if !text_w.is_finite() || text_w < 0.0 {
+        return None;
+    }
+    if outer.w <= 0.0 || outer.h <= 0.0 {
+        return None;
+    }
+    if !TABLE_CELL_PAD_X.is_finite() || TABLE_CELL_PAD_X < 0.0 {
+        return None;
+    }
+    let x = if right {
+        outer.x + outer.w - TABLE_CELL_PAD_X - text_w
+    } else {
+        outer.x + TABLE_CELL_PAD_X
+    };
+    if !x.is_finite() {
+        return None;
+    }
+    let min_x = outer.x + TABLE_CELL_PAD_X;
+    if x < outer.x - 0.001 || x + text_w > outer.x + outer.w - TABLE_CELL_PAD_X + 0.001 {
+        let _ = min_x;
+        return None;
+    }
+    Some(x)
+}
+
+/// Sort glyph ka rect header cell me: 1-char chauda (`char_w`), header
+/// height poori, right end se `TABLE7_SORT_SLOT_PAD` andar — sorted ho ya
+/// unsorted, rect same (stable placement, SPACE token se). Kharab
+/// `char_w`/cell par `None`. Pure; unit-tested.
+pub fn table7_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    if !cell.x.is_finite() || !cell.w.is_finite() || !cell.y.is_finite() || !cell.h.is_finite() {
+        return None;
+    }
+    if cell.w <= 0.0 || cell.h <= 0.0 {
+        return None;
+    }
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return None;
+    }
+    if !TABLE7_SORT_SLOT_PAD.is_finite() || TABLE7_SORT_SLOT_PAD < 0.0 {
+        return None;
+    }
+    let w = char_w;
+    let x = cell.x + cell.w - TABLE7_SORT_SLOT_PAD - w;
+    if !x.is_finite() || x < cell.x {
+        return None;
+    }
+    if x + w > cell.x + cell.w + 0.001 {
+        return None;
+    }
+    Some(TableCellRect {
+        x,
+        y: cell.y,
+        w,
+        h: cell.h,
+    })
+}
+
+/// Table7 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table7_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table7 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table7_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table7 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table7_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table7 sab columns ki x-positions: [`table5_col_xs`] delegation (grid
+/// origin-se, numeric align isi par). Pure; unit-tested.
+pub fn table7_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table7 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table7_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table7 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse.
+/// Pure; unit-tested.
+pub fn table7_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table8 round-1: key-column widths plus align
+// at 960px wide (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: numeric columns right-align with stable header height
+// and sort-indicator arrows; ours table7 fixed sort glyph + right-alignment at
+// 960px, key-column widths + multi-sheet rhythm still loose. Fix table-side
+// only (app.rs views.rs views_hex.rs home.rs tree.rs gutter.rs copy.rs
+// theme.rs viewmodel.rs take.rs dist/** skills/** NO-TOUCH). Geometry FIRST:
+// key-column widths char metrics se (`table_column_widths` reuse +
+// `table_col_widths_px` outer, grid origin-se 936 avail par fit gate),
+// numeric right-alignment grid origin se (`table7_cell_text_x` pad math
+// delegation), header/body row heights TypoRole se (Heading 21.6 vs Mono
+// 15.6). Typography SECOND: header underline
+// `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0), header weight
+// `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi. Colors
+// FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure;
+// unit-tested. Edge fixture
+// `checks/gui-exq-table8/comparison/table-keys-960.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table8 canvas width (px): [`TABLE_CANVAS_W`] reuse (960) — isi par keys
+/// fixture fit lock hota hai. Pure.
+pub const TABLE8_CANVAS_W: f32 = TABLE_CANVAS_W;
+
+/// Table8 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table7 precedent — marker slot se nahi badhta). Pure; unit-tested.
+pub fn table8_header_h() -> f32 {
+    table7_header_h()
+}
+
+/// Table8 header stable contract: table6 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table8_header_h_stable() -> bool {
+    table7_header_h_stable()
+}
+
+/// Table8 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table8_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table8 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table8_header_body_delta() -> f32 {
+    table8_header_h() - table8_row_h()
+}
+
+/// Table8 wide-960 avail width (px): [`table_wide_avail_w`] reuse (936).
+/// Pure; unit-tested.
+pub fn table8_avail_w() -> f32 {
+    table_wide_avail_w()
+}
+
+/// Table8 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table8_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table8 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table8_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table8 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table8_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table8 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table8_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table8 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 960px budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table8_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table8 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table8_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table8 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table8_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table8_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    let widths = table_column_widths(header, rows);
+    let mut out = Vec::new();
+    for key in keys.iter() {
+        if let Some(chars) = widths.get(*key) {
+            out.push((*key, *chars));
+        }
+    }
+    out
+}
+
+/// Key columns ki px outer widths: char widths se
+/// [`table_col_widths_px`] delegation (chars * char_w + pad), kharab
+/// `char_w` par khali vec. Order `table8_key_widths_chars` wali. Pure;
+/// unit-tested.
+pub fn table8_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    if !char_w.is_finite() || char_w <= 0.0 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (col, chars) in key_widths.iter() {
+        let mut single = Vec::new();
+        single.push(*chars);
+        if let Some(px) = table_col_widths_px(&single, char_w).first().copied() {
+            out.push((*col, px));
+        }
+    }
+    out
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative (paint origin add karta
+/// hai). Range-bahar col skip. Pure; unit-tested.
+pub fn table8_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    for key in keys.iter() {
+        if let Some(x) = table_column_grid_col_x(*key, col_widths_px, table_col_spacing()) {
+            out.push((*key, x));
+        }
+    }
+    out
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table8_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table8_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table8_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table8_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table8_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table8_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table8 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table8_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table8 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table8_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table8 wide-960 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table8_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table8 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table8_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table8 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table8_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table8 wide-960 visible rows: [`table_wide_960_visible_rows`] reuse.
+/// Pure; unit-tested.
+pub fn table8_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table9 round-1: key-column widths plus numeric align
+// at 720px narrow (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare key columns right-aligned with stable widths and
+// numeric alignment; table8 PASS at wide-960 (char metrics, 176 fit in 936).
+// Narrow-720 table-side loose: key widths, numeric align, row heights. Fix
+// table-side only (app.rs views.rs views_hex.rs home.rs tree.rs gutter.rs
+// copy.rs theme.rs viewmodel.rs take.rs dist/** skills/** NO-TOUCH).
+// Geometry FIRST: key widths char metrics se (`table_column_widths` reuse +
+// `table_col_widths_px` outer, grid origin-se 696 avail par fit gate),
+// numeric right-alignment grid origin se (`table7_cell_text_x` pad math
+// delegation), header/body heights TypoRole se (Heading 21.6 vs Mono 15.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Edge fixture
+// `checks/gui-exq-table9/comparison/table-keys-720.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table9 narrow canvas width (px): [`TABLE_NARROW_CANVAS_W`] reuse (720) —
+/// isi par narrow keys fixture fit lock hota hai. Pure.
+pub const TABLE9_CANVAS_W: f32 = TABLE_NARROW_CANVAS_W;
+
+/// Table9 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table8 precedent — marker slot se nahi badhta). Pure; unit-tested.
+pub fn table9_header_h() -> f32 {
+    table8_header_h()
+}
+
+/// Table9 header stable contract: table8 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table9_header_h_stable() -> bool {
+    table8_header_h_stable()
+}
+
+/// Table9 body row height (px): Mono line-height lock (15.6). Pure;
+/// unit-tested.
+pub fn table9_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table9 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table9_header_body_delta() -> f32 {
+    table9_header_h() - table9_row_h()
+}
+
+/// Table9 narrow-720 avail width (px): [`table3_narrow_avail_w`] reuse (696) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table9_avail_w() -> f32 {
+    table3_narrow_avail_w()
+}
+
+/// Table9 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table9_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table9 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table9_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table9 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table9_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table9 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table9_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table9 grid origin (px): [`table_cell_grid_origin`] reuse — numeric
+/// right-align isi origin-se 720 budget par lock hota hai. Pure;
+/// unit-tested.
+pub fn table9_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table9 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table9_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table9 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table9_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table9_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table8_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: char widths se [`table_col_widths_px`]
+/// delegation (chars * char_w + pad), kharab `char_w` par khali vec. Pure;
+/// unit-tested.
+pub fn table9_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table8_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative. Range-bahar skip. Pure;
+/// unit-tested.
+pub fn table9_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table8_key_col_xs(keys, col_widths_px)
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table9_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table9_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table9_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table9_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table9_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table9_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table9 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table9_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table9 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table9_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table9 narrow-720 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table9_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table9 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table9_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table9 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table9_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table9 narrow visible rows: [`table_wide_960_visible_rows`] reuse —
+/// Mono row height par ek hi budget. Pure; unit-tested.
+pub fn table9_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table10 round-1: tall plus rows at 1200px tall
+// (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare key columns stable widths with numeric right-alignment
+// over tall scroll; table9 PASS at narrow-720 (key widths char metrics,
+// grid origin right-align, header/body rhythm). Tall-1200 table-side loose:
+// row heights over tall canvas, key-column lock over long scroll, header
+// tall rhythm. Fix table-side only (app.rs views.rs views_hex.rs home.rs
+// tree.rs gutter.rs copy.rs theme.rs viewmodel.rs take.rs dist/** skills/**
+// NO-TOUCH). Geometry FIRST: tall canvas [`TABLE10_CANVAS_H`] (600 x 2 —
+// koi naya literal nahi), row height Mono line-height lock
+// (`table10_row_h` 15.6) over tall panes, key widths char metrics se
+// (`table_column_widths` reuse + `table_col_widths_px` outer, origin-se 696
+// avail par fit gate), key-column tall lock long scroll par
+// (`table10_key_box_h` — rows * row_h + gaps, `table_key_box_rects`
+// delegation), header/body heights TypoRole se (Heading 21.6 vs Mono 15.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse
+// (1.0), header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya
+// size/family nahi. Colors FROZEN (koi Color32/Visuals nahi). No egui ctx,
+// no I/O. Pure; unit-tested. Edge fixture
+// `checks/gui-exq-table10/comparison/table-tall-1200.json` ka headless judvaan
+// test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table10 narrow canvas width (px): [`TABLE_NARROW_CANVAS_W`] reuse (720) —
+/// isi par tall fixture fit lock hota hai. Pure.
+pub const TABLE10_CANVAS_W: f32 = TABLE_NARROW_CANVAS_W;
+
+/// Table10 tall canvas height (px): [`TABLE_CANVAS_H`] doubled (600 x 2 =
+/// 1200) — isi par tall rows lock hote hain, koi naya literal nahi. Pure.
+pub const TABLE10_CANVAS_H: f32 = TABLE_CANVAS_H * 2.0;
+
+/// Table10 header row height (px): strong-role line-height lock (Heading
+/// 21.6, table9 precedent — tall par bhi stable). Pure; unit-tested.
+pub fn table10_header_h() -> f32 {
+    table9_header_h()
+}
+
+/// Table10 header stable contract: table9 lock ke barabar aur body se taller.
+/// Pure; unit-tested.
+pub fn table10_header_h_stable() -> bool {
+    table9_header_h_stable()
+}
+
+/// Table10 body row height (px): Mono line-height lock (15.6) — tall canvas
+/// par bhi ruler/body desync nahi. Pure; unit-tested.
+pub fn table10_row_h() -> f32 {
+    table_cell_row_h()
+}
+
+/// Table10 header/body delta (px): header minus body (> 0). Pure;
+/// unit-tested.
+pub fn table10_header_body_delta() -> f32 {
+    table10_header_h() - table10_row_h()
+}
+
+/// Table10 narrow-720 avail width (px): [`table9_avail_w`] reuse (696) —
+/// canvas minus dono origin margins. Pure; unit-tested.
+pub fn table10_avail_w() -> f32 {
+    table9_avail_w()
+}
+
+/// Table10 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0).
+/// Pure; unit-tested.
+pub fn table10_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table10 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0).
+/// Pure; unit-tested.
+pub fn table10_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table10 header underline width (px): [`table_header_underline_w`] reuse
+/// (1.0). Pure; unit-tested.
+pub fn table10_header_underline_w() -> f32 {
+    table_header_underline_w()
+}
+
+/// Table10 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table10_header_weight_ok() -> bool {
+    table_header_weight_ok()
+}
+
+/// Table10 grid origin (px): [`table_cell_grid_origin`] reuse — tall scroll
+/// par bhi numeric right-align isi origin-se lock hota hai. Pure;
+/// unit-tested.
+pub fn table10_grid_origin() -> (f32, f32) {
+    table_cell_grid_origin()
+}
+
+/// Table10 header/body separator y (px): [`table6_header_sep_y`] reuse —
+/// header bottom se half row-gap neeche. Pure; unit-tested.
+pub fn table10_header_sep_y() -> f32 {
+    table6_header_sep_y()
+}
+
+/// Table10 pehli body row ka y (px): [`table6_body_first_y`] reuse. Pure;
+/// unit-tested.
+pub fn table10_body_first_y() -> f32 {
+    table6_body_first_y()
+}
+
+/// Key columns ki char widths: `table_column_widths(header, rows)` reuse se
+/// har key col ka `(col, chars)` — range-bahar key skip (panic nahi), order
+/// `keys` wali. Pure; unit-tested.
+pub fn table10_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table9_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: char widths se [`table_col_widths_px`]
+/// delegation (chars * char_w + pad), kharab `char_w` par khali vec. Pure;
+/// unit-tested.
+pub fn table10_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table9_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table_column_grid_col_x`] delegation,
+/// gap [`table_col_spacing`] se — origin-relative. Range-bahar skip. Pure;
+/// unit-tested.
+pub fn table10_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table9_key_col_xs(keys, col_widths_px)
+}
+
+/// Har header column ka alignment: numeric col `true` (right), baaki `false`
+/// (left) — [`table7_col_aligns`] delegation. Pure; unit-tested.
+pub fn table10_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table7_col_aligns(header, rows)
+}
+
+/// Cell text ka x outer box me: [`table7_cell_text_x`] delegation (left pad,
+/// right outer-minus-pad-minus-text). Pure; unit-tested.
+pub fn table10_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table7_cell_text_x(outer, text_w, right)
+}
+
+/// Sort marker/header-label/glyph: [`table7_*`] delegation (fixed 1-char
+/// right slot, stable header). Pure; unit-tested.
+pub fn table10_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table7_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort column hai. Pure; unit-tested.
+pub fn table10_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table7_is_sorted_col(sort_col, col)
+}
+
+/// Header cell ka sort-aware label. Pure; unit-tested.
+pub fn table10_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table7_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table7_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table10_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table7_sort_glyph_rect(cell, char_w)
+}
+
+/// Table10 char widths se px outer widths: [`table_col_widths_px`]
+/// delegation (koi naya math nahi). Pure; unit-tested.
+pub fn table10_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table10 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure;
+/// unit-tested.
+pub fn table10_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table10 narrow-720 fit gate: [`table_column_grid_fit`] reuse. Pure;
+/// unit-tested.
+pub fn table10_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table10 sab columns ki x-positions: [`table5_col_xs`] delegation. Pure;
+/// unit-tested.
+pub fn table10_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_col_xs(col_widths_px)
+}
+
+/// Table10 vertical separators: [`table5_separator_xs`] delegation
+/// (symmetric, dono taraf gap/2). Pure; unit-tested.
+pub fn table10_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table5_separator_xs(col_widths_px)
+}
+
+/// Table10 tall panes height (px): [`table_panes_height`] delegation tall
+/// canvas par (1200 -> 1200, floor 100 se upar). Pure; unit-tested.
+pub fn table10_tall_panes_h() -> f32 {
+    table_panes_height(TABLE10_CANVAS_H)
+}
+
+/// Table10 tall visible rows: [`table_wide_960_visible_rows`] reuse tall
+/// panes par (1200 / 15.6 -> 76). Kharab par 0. Pure; unit-tested.
+pub fn table10_tall_visible_rows() -> u64 {
+    table_wide_960_visible_rows(table10_tall_panes_h())
+}
+
+/// Table10 tall total rows (long scroll length): tall visible rows hi scroll
+/// window bharta hai. Pure; unit-tested.
+pub fn table10_tall_total_rows() -> usize {
+    table10_tall_visible_rows() as usize
+}
+
+/// Key-column tall box height (px) long scroll par: `total * row_h +
+/// (total - 1) * gap` — [`table_key_col_box_rect`] ka height hissa
+/// (paint box math wahi, yahan single source taaki tall lock kabhi drift na
+/// kare). Khali/kharab par 0 (paint honest fallback). Pure; unit-tested.
+pub fn table10_key_box_h(total_rows: usize) -> f32 {
+    if total_rows == 0 {
+        return 0.0;
+    }
+    let row_h = table10_row_h();
+    let gap = table10_grid_gap_y();
+    if !row_h.is_finite() || row_h <= 0.0 || !gap.is_finite() || gap < 0.0 {
+        return 0.0;
+    }
+    let rows_f = total_rows as f32;
+    if !rows_f.is_finite() || rows_f <= 0.0 {
+        return 0.0;
+    }
+    let gaps = (total_rows.saturating_sub(1)) as f32 * gap;
+    let h = rows_f * row_h + gaps;
+    if !h.is_finite() || h <= 0.0 { 0.0 } else { h }
+}
+
+/// Key vertical box rects tall scroll par: [`table_key_box_rects`]
+/// delegation — view key order me, range-bahar skip. Pure; unit-tested.
+pub fn table10_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    table_key_box_rects(view, grid, col_widths_px, total_rows)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table30 round-1: live table geometry with key-cols,
+// sort indicators, numeric tolerance, and xlsx sheet selector at 1200px wide
+// without horizontal scrolling (headless; paint wiring stays with the orchestrator).
+// Gap BC table compare: 1200px wide layout with wide columns must fit without
+// horizontal scrolling (`needs_hscroll: false`), key columns maintain stable
+// alignment, sort indicators (▲ / ▼ / blank) remain aligned in dedicated 1-char
+// slots, numeric tolerance threshold formatted and sanitized, and multi-sheet
+// xlsx workbook sheets selectable.
+// Geometry FIRST: wide canvas [`TABLE30_CANVAS_W`] (1200.0 px), available width
+// 1176.0 px (`TABLE30_CANVAS_W - 2 * TABLE30_ORIGIN_X`), column outer widths
+// computed from character metrics plus cell padding `TABLE_CELL_PAD_X` (reusing
+// `crate::theme::SPACE_SM` = 8.0), column spacing reusing `SPACE_SM` (8.0 =
+// `table_col_spacing()`), row gap reusing `SPACE_XS` (4.0 = `TABLE_GRID_ROW_GAP`),
+// row symmetric pad reusing `SPACE_XS` (4.0), row heights from TypoRole line-height
+// locks (Heading 21.6 vs Mono 15.6, delta 6.0, sep 35.6, body 37.6).
+// Typography SECOND: header underline `TEXT_INLINE_SPAN_UNDERLINE_W` reuse (1.0),
+// header weight `TYPO_WEIGHT_SEMIBOLD` reuse (600) — koi naya size/family nahi.
+// Colors FROZEN (koi Color32/Visuals nahi). No egui ctx, no I/O. Pure; unit-tested.
+// Edge fixture `checks/gui-exq-table30/comparison/wide-cols-1200.json` ka headless
+// judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table30 wide canvas width (px): `SPACE_XL * 50.0` = 1200.0 — wide fixture
+/// fit lock bina h-scroll, koi naya rhythm nahi. Pure.
+pub const TABLE30_CANVAS_W: f32 = crate::theme::SPACE_XL * 50.0;
+
+/// Table30 canvas reference height (px): [`TABLE_CANVAS_H`] reuse (600.0). Pure.
+pub const TABLE30_CANVAS_H: f32 = TABLE_CANVAS_H;
+
+/// Table30 origin margin x (px): [`TABLE_CELL_GRID_ORIGIN_X`] reuse (12.0). Pure.
+pub const TABLE30_ORIGIN_X: f32 = TABLE_CELL_GRID_ORIGIN_X;
+
+/// Table30 origin margin y (px): [`TABLE_CELL_GRID_ORIGIN_Y`] reuse (12.0). Pure.
+pub const TABLE30_ORIGIN_Y: f32 = TABLE_CELL_GRID_ORIGIN_Y;
+
+/// Table30 1200px wide grid avail width (px): canvas minus dono origin margins (1176.0). Pure; unit-tested.
+pub fn table30_avail_w() -> f32 {
+    TABLE30_CANVAS_W - TABLE30_ORIGIN_X * 2.0
+}
+
+/// Table30 grid origin (px): (12.0, 12.0) reuse. Pure; unit-tested.
+pub fn table30_grid_origin() -> (f32, f32) {
+    (TABLE30_ORIGIN_X, TABLE30_ORIGIN_Y)
+}
+
+/// Table30 column spacing (px): [`table_col_spacing`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table30_col_spacing() -> f32 {
+    table_col_spacing()
+}
+
+/// Table30 grid row gap (px): [`TABLE_GRID_ROW_GAP`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table30_grid_gap_y() -> f32 {
+    TABLE_GRID_ROW_GAP
+}
+
+/// Table30 row symmetric pad (px): [`table_row_sym_pad`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table30_row_sym_pad() -> f32 {
+    table_row_sym_pad()
+}
+
+/// Table30 cell padding x (px): [`TABLE_CELL_PAD_X`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table30_cell_pad_x() -> f32 {
+    TABLE_CELL_PAD_X
+}
+
+/// Table30 header row height (px): Heading line-height lock (21.6). Pure; unit-tested.
+pub fn table30_header_h() -> f32 {
+    table10_header_h()
+}
+
+/// Table30 body row height (px): Mono line-height lock (15.6). Pure; unit-tested.
+pub fn table30_row_h() -> f32 {
+    table10_row_h()
+}
+
+/// Table30 header/body delta (px): header minus body (> 0). Pure; unit-tested.
+pub fn table30_header_body_delta() -> f32 {
+    table30_header_h() - table30_row_h()
+}
+
+/// Table30 header/body separator y (px): [`table10_header_sep_y`] reuse (35.6). Pure; unit-tested.
+pub fn table30_header_sep_y() -> f32 {
+    table10_header_sep_y()
+}
+
+/// Table30 pehli body row ka y (px): [`table10_body_first_y`] reuse (37.6). Pure; unit-tested.
+pub fn table30_body_first_y() -> f32 {
+    table10_body_first_y()
+}
+
+/// Table30 header underline width (px): [`table10_header_underline_w`] reuse (1.0). Pure; unit-tested.
+pub fn table30_header_underline_w() -> f32 {
+    table10_header_underline_w()
+}
+
+/// Table30 header weight contract: strong/600 lock. Pure; unit-tested.
+pub fn table30_header_weight_ok() -> bool {
+    table10_header_weight_ok()
+}
+
+/// Table30 char widths se outer px widths: [`table_col_widths_px`] delegation. Pure; unit-tested.
+pub fn table30_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table_col_widths_px(widths_chars, char_w)
+}
+
+/// Table30 grid kul px chaudai: [`table_grid_total_w`] reuse. Pure; unit-tested.
+pub fn table30_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table_grid_total_w(col_widths_px)
+}
+
+/// Table30 1200px fit gate: true if total width fits in avail width (bina h-scroll). Pure; unit-tested.
+pub fn table30_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table30 sab columns ki x-positions: [`table10_col_xs`] delegation. Pure; unit-tested.
+pub fn table30_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table10_col_xs(col_widths_px)
+}
+
+/// Table30 vertical separators: [`table10_separator_xs`] delegation. Pure; unit-tested.
+pub fn table30_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table10_separator_xs(col_widths_px)
+}
+
+/// Table30 column alignments: numeric col right (true), baaki left (false). Pure; unit-tested.
+pub fn table30_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table10_col_aligns(header, rows)
+}
+
+/// Table30 cell text ka x outer box me: [`table10_cell_text_x`] delegation. Pure; unit-tested.
+pub fn table30_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table10_cell_text_x(outer, text_w, right)
+}
+
+/// Key columns ki char widths: [`table10_key_widths_chars`] delegation. Pure; unit-tested.
+pub fn table30_key_widths_chars(
+    header: &[String],
+    rows: &[Vec<String>],
+    keys: &[usize],
+) -> Vec<(usize, usize)> {
+    table10_key_widths_chars(header, rows, keys)
+}
+
+/// Key columns ki px outer widths: [`table10_key_outer_widths`] delegation. Pure; unit-tested.
+pub fn table30_key_outer_widths(key_widths: &[(usize, usize)], char_w: f32) -> Vec<(usize, f32)> {
+    table10_key_outer_widths(key_widths, char_w)
+}
+
+/// Key columns ki grid x-positions: [`table10_key_col_xs`] delegation. Pure; unit-tested.
+pub fn table30_key_col_xs(keys: &[usize], col_widths_px: &[f32]) -> Vec<(usize, f32)> {
+    table10_key_col_xs(keys, col_widths_px)
+}
+
+/// Key-column box height: [`table10_key_box_h`] delegation. Pure; unit-tested.
+pub fn table30_key_box_h(total_rows: usize) -> f32 {
+    table10_key_box_h(total_rows)
+}
+
+/// Key-column box rects: [`table10_key_box_rects`] delegation. Pure; unit-tested.
+pub fn table30_key_box_rects(
+    view: &TableKeyView,
+    grid: TableCellGrid,
+    col_widths_px: &[f32],
+    total_rows: usize,
+) -> Vec<TableCellRect> {
+    table10_key_box_rects(view, grid, col_widths_px, total_rows)
+}
+
+/// Sort marker: [`table10_sort_marker`] delegation. Pure; unit-tested.
+pub fn table30_sort_marker(sorted: bool, ascending: bool) -> &'static str {
+    table10_sort_marker(sorted, ascending)
+}
+
+/// Kya `col` sort col hai: [`table10_is_sorted_col`] delegation. Pure; unit-tested.
+pub fn table30_is_sorted_col(sort_col: Option<usize>, col: usize) -> bool {
+    table10_is_sorted_col(sort_col, col)
+}
+
+/// Header cell label sort-aware: [`table10_header_label`] delegation. Pure; unit-tested.
+pub fn table30_header_label(name: &str, sorted: bool, ascending: bool) -> String {
+    table10_header_label(name, sorted, ascending)
+}
+
+/// Sort glyph rect: [`table10_sort_glyph_rect`] delegation. Pure; unit-tested.
+pub fn table30_sort_glyph_rect(cell: TableCellRect, char_w: f32) -> Option<TableCellRect> {
+    table10_sort_glyph_rect(cell, char_w)
+}
+
+/// Tolerance sanitize helper: [`TableKeyView::sanitize_tolerance`] delegation. Pure; unit-tested.
+pub fn table30_sanitize_tolerance(tolerance: Option<f64>) -> Option<f64> {
+    TableKeyView::sanitize_tolerance(tolerance)
+}
+
+/// Tolerance badge label for UI status/affordance. Pure; unit-tested.
+pub fn table30_tolerance_badge_label(tolerance: Option<f64>) -> String {
+    match TableKeyView::sanitize_tolerance(tolerance) {
+        Some(t) => format!("tol: {t}"),
+        None => String::from("exact"),
+    }
+}
+
+/// Multi-sheet workbook source kind: [`table_source_kind_for_path`] delegation. Pure; unit-tested.
+pub fn table30_source_kind(path: &str) -> TableSourceKind {
+    table_source_kind_for_path(path)
+}
+
+/// Source badge string: [`table_source_badge_label`] delegation. Pure; unit-tested.
+pub fn table30_source_badge(kind: TableSourceKind) -> &'static str {
+    table_source_badge_label(kind)
+}
+
+/// Sheet count: [`table_sheet_count`] delegation. Pure; unit-tested.
+pub fn table30_sheet_count(names: &[String]) -> usize {
+    table_sheet_count(names)
+}
+
+/// Sheet index clamp: [`table_sheet_clamp`] delegation. Pure; unit-tested.
+pub fn table30_sheet_clamp(names: &[String], index: usize) -> Option<usize> {
+    table_sheet_clamp(names, index)
+}
+
+/// Sheet label: [`table_sheet_label`] delegation. Pure; unit-tested.
+pub fn table30_sheet_label(names: &[String], index: usize) -> Option<String> {
+    table_sheet_label(names, index)
+}
+
+/// Sheet badge (e.g. "1/3" or "0/3"): pure status label. Pure; unit-tested.
+pub fn table30_sheet_badge(names: &[String], selected: Option<usize>) -> String {
+    let total = names.len();
+    match selected {
+        Some(idx) if idx < total => format!("{}/{}", idx.saturating_add(1), total),
+        _ => format!("0/{total}"),
+    }
+}
+
+/// Visible rows at 600px / 1200px: [`table_wide_960_visible_rows`] reuse. Pure; unit-tested.
+pub fn table30_visible_rows(panes_h: f32) -> u64 {
+    table_wide_960_visible_rows(panes_h)
+}
+
+// ----------------------------------------------------------------------------
+// Table exquisite wave table43 round-1: live table compare grid geometry lock
+// (headless; paint wiring stays with the orchestrator).
+// Gap live table compare grid: live grid apne widths/gaps/rhythm khud
+// compute kare to header/body/key paint drift karte hain. Ye section thin
+// delegation lock hai — har helper table30 single-source ko chalata hai
+// (koi naya math/token/color nahi), taaki live views kabhi drift na karen.
+// Geometry FIRST: 1200px canvas, avail 1176, origin (12,12), col gap 8,
+// row gap 4, header 21.6 / body 15.6, sep 35.6 / body-first 37.6, char-metric
+// outer widths, grid total, fit gate, col xs, symmetric separators, grid
+// column count, grid default, cell rect. Typography SECOND: underline 1.0 +
+// weight strong/600 reuse — koi naya size/family nahi. Colors FROZEN (koi
+// Color32/Visuals nahi). No egui ctx, no I/O. Pure; unit-tested. Edge
+// fixture `checks/gui-exq-table43/comparison/live-table-grid.json` ka
+// headless judvaan test sath me hai.
+// ----------------------------------------------------------------------------
+
+/// Table43 live canvas width (px): [`TABLE30_CANVAS_W`] reuse (1200.0). Pure.
+pub const TABLE43_CANVAS_W: f32 = TABLE30_CANVAS_W;
+
+/// Table43 live avail width (px): [`table30_avail_w`] reuse (1176.0). Pure; unit-tested.
+pub fn table43_avail_w() -> f32 {
+    table30_avail_w()
+}
+
+/// Table43 grid origin (px): [`table30_grid_origin`] reuse (12.0, 12.0). Pure; unit-tested.
+pub fn table43_grid_origin() -> (f32, f32) {
+    table30_grid_origin()
+}
+
+/// Table43 header row height (px): [`table30_header_h`] reuse (21.6). Pure; unit-tested.
+pub fn table43_header_h() -> f32 {
+    table30_header_h()
+}
+
+/// Table43 body row height (px): [`table30_row_h`] reuse (15.6). Pure; unit-tested.
+pub fn table43_row_h() -> f32 {
+    table30_row_h()
+}
+
+/// Table43 header/body delta (px): [`table30_header_body_delta`] reuse (6.0). Pure; unit-tested.
+pub fn table43_header_body_delta() -> f32 {
+    table30_header_body_delta()
+}
+
+/// Table43 header/body separator y (px): [`table30_header_sep_y`] reuse (35.6). Pure; unit-tested.
+pub fn table43_header_sep_y() -> f32 {
+    table30_header_sep_y()
+}
+
+/// Table43 pehli body row ka y (px): [`table30_body_first_y`] reuse (37.6). Pure; unit-tested.
+pub fn table43_body_first_y() -> f32 {
+    table30_body_first_y()
+}
+
+/// Table43 column spacing (px): [`table30_col_spacing`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table43_col_spacing() -> f32 {
+    table30_col_spacing()
+}
+
+/// Table43 grid row gap (px): [`table30_grid_gap_y`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table43_grid_gap_y() -> f32 {
+    table30_grid_gap_y()
+}
+
+/// Table43 row symmetric pad (px): [`table30_row_sym_pad`] reuse (SPACE_XS 4.0). Pure; unit-tested.
+pub fn table43_row_sym_pad() -> f32 {
+    table30_row_sym_pad()
+}
+
+/// Table43 cell padding x (px): [`table30_cell_pad_x`] reuse (SPACE_SM 8.0). Pure; unit-tested.
+pub fn table43_cell_pad_x() -> f32 {
+    table30_cell_pad_x()
+}
+
+/// Table43 header underline width (px): [`table30_header_underline_w`] reuse (1.0). Pure; unit-tested.
+pub fn table43_header_underline_w() -> f32 {
+    table30_header_underline_w()
+}
+
+/// Table43 header weight contract: [`table30_header_weight_ok`] reuse (strong/600). Pure; unit-tested.
+pub fn table43_header_weight_ok() -> bool {
+    table30_header_weight_ok()
+}
+
+/// Table43 char widths se px outer widths: [`table30_col_widths_px`] delegation. Pure; unit-tested.
+pub fn table43_col_widths_px(widths_chars: &[usize], char_w: f32) -> Vec<f32> {
+    table30_col_widths_px(widths_chars, char_w)
+}
+
+/// Table43 grid kul px chaudai: [`table30_grid_total_w`] reuse. Pure; unit-tested.
+pub fn table43_grid_total_w(col_widths_px: &[f32]) -> f32 {
+    table30_grid_total_w(col_widths_px)
+}
+
+/// Table43 1200px fit gate: [`table30_column_grid_fit`] reuse. Pure; unit-tested.
+pub fn table43_column_grid_fit(avail_w: f32, col_widths_px: &[f32]) -> bool {
+    table30_column_grid_fit(avail_w, col_widths_px)
+}
+
+/// Table43 sab columns ki x-positions: [`table30_col_xs`] delegation. Pure; unit-tested.
+pub fn table43_col_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table30_col_xs(col_widths_px)
+}
+
+/// Table43 vertical separators: [`table30_separator_xs`] delegation. Pure; unit-tested.
+pub fn table43_separator_xs(col_widths_px: &[f32]) -> Vec<f32> {
+    table30_separator_xs(col_widths_px)
+}
+
+/// Table43 column alignments: [`table30_col_aligns`] delegation. Pure; unit-tested.
+pub fn table43_col_aligns(header: &[String], rows: &[Vec<String>]) -> Vec<bool> {
+    table30_col_aligns(header, rows)
+}
+
+/// Table43 cell text ka x outer box me: [`table30_cell_text_x`] delegation. Pure; unit-tested.
+pub fn table43_cell_text_x(outer: TableCellRect, text_w: f32, right: bool) -> Option<f32> {
+    table30_cell_text_x(outer, text_w, right)
+}
+
+/// Table43 grid column count: [`table_cell_grid_columns`] reuse (glyph + data cols). Pure; unit-tested.
+pub fn table43_grid_columns(widths: &[usize]) -> usize {
+    table_cell_grid_columns(widths)
+}
+
+/// Table43 grid default rhythm: [`table_cell_grid_default`] reuse (origin + Mono row + SPACE gaps). Pure; unit-tested.
+pub fn table43_grid_default() -> TableCellGrid {
+    table_cell_grid_default()
+}
+
+/// Table43 ek data cell ka px box: [`table_cell_rect`] delegation. Pure; unit-tested.
+pub fn table43_cell_rect(
+    grid: TableCellGrid,
+    col: usize,
+    row: usize,
+    col_widths_px: &[f32],
+) -> Option<TableCellRect> {
+    table_cell_rect(grid, col, row, col_widths_px)
+}
+
+/// Table43 visible rows: [`table30_visible_rows`] reuse (Mono row height par ek hi budget). Pure; unit-tested.
+pub fn table43_visible_rows(panes_h: f32) -> u64 {
+    table30_visible_rows(panes_h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_tables() -> (Table, Table) {
+        let left = Table {
+            header: vec!["ID".to_string(), "Price".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "9.99".to_string()],
+                vec!["2".to_string(), "5.00".to_string()],
+                vec!["3".to_string(), "7.50".to_string()],
+            ],
+        };
+        let right = Table {
+            header: vec!["ID".to_string(), "Price".to_string()],
+            rows: vec![
+                vec!["1".to_string(), "10.04".to_string()],
+                vec!["2".to_string(), "5.00".to_string()],
+                vec!["4".to_string(), "1.00".to_string()],
+            ],
+        };
+        (left, right)
+    }
+
+    #[test]
+    fn key_suggestion_finds_unique_id_column() {
+        let (left, _) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.suggest_for(&left);
+        assert_eq!(view.suggested_keys, vec![0]);
+        view.apply_suggestion();
+        assert_eq!(view.key_columns, vec![0]);
+        assert!(!view.is_positional());
+    }
+
+    #[test]
+    fn keyed_diff_counts_match_modify_and_orphans() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0];
+        view.refresh(&left, &right);
+        assert_eq!(view.summary.matching, 1);
+        assert_eq!(view.summary.modified, 1);
+        assert_eq!(view.summary.left_only, 1);
+        assert_eq!(view.summary.right_only, 1);
+        assert!(view.summary.keyed);
+        assert!(!view.summary.positional_note);
+        assert!(view.summary.line().contains("(keyed)"));
+    }
+
+    #[test]
+    fn empty_keys_fall_back_to_positional_with_note() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        assert!(view.is_positional());
+        assert_eq!(view.positional_note(), Some(POSITIONAL_NOTE));
+        view.refresh(&left, &right);
+        assert!(!view.summary.keyed);
+        assert!(view.summary.positional_note);
+        assert_eq!(
+            view.summary.total(),
+            view.summary
+                .matching
+                .saturating_add(view.summary.modified)
+                .saturating_add(view.summary.left_only)
+                .saturating_add(view.summary.right_only)
+        );
+        assert!(view.summary.line().contains("(positional)"));
+        assert!(view.status_line().contains(POSITIONAL_NOTE));
+    }
+
+    #[test]
+    fn tolerance_bridges_small_numeric_gaps() {
+        let (left, right) = sample_tables();
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0];
+        view.set_tolerance(Some(0.1));
+        view.refresh(&left, &right);
+        // 9.99 vs 10.04 is within 0.1: only the missing-key rows differ.
+        assert_eq!(view.summary.matching, 2);
+        assert_eq!(view.summary.modified, 0);
+        assert_eq!(view.summary.left_only, 1);
+        assert_eq!(view.summary.right_only, 1);
+    }
+
+    #[test]
+    fn invalid_tolerances_sanitize_to_exact_text() {
+        assert_eq!(TableKeyView::sanitize_tolerance(None), None);
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(0.0)), Some(0.0));
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(1.5)), Some(1.5));
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(f64::NAN)), None);
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(f64::INFINITY)), None);
+        assert_eq!(
+            TableKeyView::sanitize_tolerance(Some(f64::NEG_INFINITY)),
+            None
+        );
+        assert_eq!(TableKeyView::sanitize_tolerance(Some(-0.5)), None);
+        let mut view = TableKeyView::new();
+        view.set_tolerance(Some(f64::NAN));
+        assert_eq!(view.numeric_tolerance, None);
+    }
+
+    #[test]
+    fn nan_cells_never_match_numerically() {
+        let mut view = TableKeyView::new();
+        view.set_tolerance(Some(0.01));
+        // "NaN" vs "nan" differ as text and never match numerically.
+        assert!(!view.cells_equal("NaN", "nan"));
+        assert!(!view.cells_equal("inf", "Infinity"));
+        assert!(view.cells_equal("abc", "abc"));
+        assert!(view.cells_equal("1.001", "1.002"));
+        assert!(!view.cells_equal("1.001", "1.02"));
+    }
+
+    #[test]
+    fn case_and_trim_flags_fold_text() {
+        let mut view = TableKeyView::new();
+        assert!(!view.cells_equal("Ready", "ready"));
+        assert!(!view.cells_equal("  x", "x"));
+        view.ignore_case = true;
+        view.trim_space = true;
+        assert!(view.cells_equal("Ready", "ready"));
+        assert!(view.cells_equal("  x ", "X"));
+    }
+
+    #[test]
+    fn key_selector_toggles_columns_sorted() {
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(2);
+        view.toggle_key_column(0);
+        assert_eq!(view.key_columns, vec![0, 2]);
+        view.toggle_key_column(0);
+        assert_eq!(view.key_columns, vec![2]);
+        view.toggle_key_column(2);
+        assert!(view.key_columns.is_empty());
+        assert!(view.is_positional());
+    }
+
+    #[test]
+    fn options_mapping_carries_all_flags() {
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0, 1];
+        view.set_tolerance(Some(0.25));
+        view.ignore_case = true;
+        view.trim_space = true;
+        let cmp_opts = view.to_compare_options();
+        assert_eq!(cmp_opts.key_columns, vec![0, 1]);
+        assert_eq!(cmp_opts.numeric_tolerance, Some(0.25));
+        assert!(cmp_opts.ignore_case);
+        assert!(cmp_opts.trim_space);
+        let key_opts = view.to_key_options();
+        assert_eq!(key_opts.key_columns, vec![0, 1]);
+        assert_eq!(key_opts.numeric_tolerance, Some(0.25));
+        assert!(key_opts.ignore_case);
+        assert!(key_opts.trim_space);
+    }
+
+    #[test]
+    fn key_options_mirror_compare_options() {
+        let mut view = TableKeyView::new();
+        view.key_columns = vec![0, 2];
+        view.set_tolerance(Some(0.5));
+        view.ignore_case = true;
+        let cmp_opts = view.to_compare_options();
+        let key_opts = view.to_key_options();
+        assert_eq!(key_opts.key_columns, cmp_opts.key_columns);
+        assert_eq!(key_opts.numeric_tolerance, cmp_opts.numeric_tolerance);
+        assert_eq!(key_opts.ignore_case, cmp_opts.ignore_case);
+        assert_eq!(key_opts.trim_space, cmp_opts.trim_space);
+    }
+
+    #[test]
+    fn empty_tables_suggest_no_key() {
+        let empty = Table::default();
+        let mut view = TableKeyView::new();
+        view.suggest_for(&empty);
+        assert!(view.suggested_keys.is_empty());
+        view.refresh(&empty, &empty);
+        assert_eq!(view.summary.total(), 0);
+    }
+
+    #[test]
+    fn column_widths_span_header_and_cells_with_cap() {
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "9.99".to_string()],
+            vec!["222".to_string(), "5".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths.len(), 2);
+        // "ID"(2) floor 3 par, cells me 3 max.
+        assert_eq!(widths.first().copied(), Some(3));
+        // "Price"(5) sabse chauda header hai.
+        assert_eq!(widths.get(1).copied(), Some(5));
+        for width in widths.iter() {
+            assert!(*width >= TABLE_MIN_COL_CHARS);
+            assert!(*width <= TABLE_MAX_COL_CHARS);
+        }
+        // Lambi cell cap par rukti hai.
+        let long = "x".repeat(TABLE_MAX_COL_CHARS + 20);
+        let wide_rows = vec![vec![long]];
+        let wide = table_column_widths(&["c".to_string()], &wide_rows);
+        assert_eq!(wide.first().copied(), Some(TABLE_MAX_COL_CHARS));
+        // Extra cells header ke bahar widths nahi badhate.
+        let ragged = vec![vec!["a".to_string(), "b".to_string(), "c".to_string()]];
+        let narrow = table_column_widths(&["h".to_string()], &ragged);
+        assert_eq!(narrow.len(), 1);
+    }
+
+    #[test]
+    fn padded_cells_keep_columns_aligned() {
+        assert_eq!(pad_table_cell("ID", 5), "ID   ");
+        assert_eq!(pad_table_cell("Price", 5), "Price");
+        // Cap se lamba text kat-ta hai.
+        assert_eq!(pad_table_cell("abcdef", 4), "abcd");
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let widths = table_column_widths(&header, &[]);
+        let line = format_table_header(&header, &widths);
+        assert_eq!(line.len(), 2);
+        assert_eq!(line.first().map(String::len), widths.first().copied());
+        assert_eq!(line.get(1).map(String::len), widths.get(1).copied());
+    }
+
+    #[test]
+    fn table_find_scans_cells_row_major_with_wrap() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "5.00".to_string()],
+        ];
+        assert_eq!(table_find_next(&rows, "apple", 0, false), Some((1, 0)));
+        // Case-sensitive: "banana" chhota nahi milega, ignore_case par milega.
+        assert_eq!(table_find_next(&rows, "banana", 0, false), None);
+        assert_eq!(table_find_next(&rows, "banana", 0, true), Some((2, 0)));
+        // Wrap: aakhri row ke baad pehli match.
+        assert_eq!(table_find_next(&rows, "ID", 1, false), Some((0, 0)));
+        // Prev: peeche scan, wrap ke saath.
+        assert_eq!(table_find_prev(&rows, "apple", 2, false), Some((1, 0)));
+        assert_eq!(table_find_prev(&rows, "apple", 0, false), Some((1, 0)));
+        // Khali needle/rows: None.
+        assert_eq!(table_find_next(&rows, "", 0, false), None);
+        assert_eq!(table_find_next(&[], "x", 0, false), None);
+        assert_eq!(table_find_prev(&rows, "", 1, false), None);
+        assert_eq!(table_find_prev(&[], "x", 1, false), None);
+        assert_eq!(table_find_next(&rows, "zzz", 0, false), None);
+    }
+
+    #[test]
+    fn table_find_match_rows_collects_all_hits() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "apple pie".to_string()],
+        ];
+        assert_eq!(
+            table_find_match_rows(&rows, "apple", false),
+            vec![(1, 0), (2, 1)]
+        );
+        // Case-sensitive: chhota "banana" nahi milega, ignore_case par milega.
+        assert!(table_find_match_rows(&rows, "banana", false).is_empty());
+        assert_eq!(table_find_match_rows(&rows, "banana", true), vec![(2, 0)]);
+        // Khali needle/rows: khali vec.
+        assert!(table_find_match_rows(&rows, "", false).is_empty());
+        assert!(table_find_match_rows(&[], "x", false).is_empty());
+        assert!(table_find_match_rows(&rows, "zzz", false).is_empty());
+        // Geometry tokens text precedent reuse karte hain.
+        assert_eq!(TABLE_FIND_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, 4.0);
+    }
+
+    #[test]
+    fn table_find_badge_labels_position_over_total() {
+        assert_eq!(table_find_badge_label(Some(2), 5), "2/5");
+        assert_eq!(table_find_badge_label(Some(1), 1), "1/1");
+        assert_eq!(table_find_badge_label(None, 0), "0/0");
+        assert_eq!(table_find_badge_label(None, 4), "0/4");
+    }
+
+    #[test]
+    fn table_merge_picks_chosen_side_with_orphan_fallback() {
+        let left = vec!["1".to_string(), "9.99".to_string()];
+        let right = vec!["1".to_string(), "10.04".to_string()];
+        assert_eq!(
+            table_resolve_row(Some(&left), Some(&right), TableMergeSide::Left),
+            left
+        );
+        assert_eq!(
+            table_resolve_row(Some(&left), Some(&right), TableMergeSide::Right),
+            right
+        );
+        // Orphan: missing side par dusri side milti hai.
+        assert_eq!(
+            table_resolve_row(Some(&left), None, TableMergeSide::Right),
+            left
+        );
+        assert_eq!(
+            table_resolve_row(None, Some(&right), TableMergeSide::Left),
+            right
+        );
+        assert!(table_resolve_row(None, None, TableMergeSide::Left).is_empty());
+    }
+
+    #[test]
+    fn table_pager_pages_and_brings_rows_into_view() {
+        let mut pager = TablePager::new(25, 10);
+        assert_eq!(pager.page_count(), 3);
+        assert_eq!(pager.visible_range(), (0, 10));
+        pager.next_page();
+        assert_eq!(pager.top, 10);
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        pager.next_page();
+        assert_eq!(pager.top, 20);
+        pager.prev_page();
+        assert_eq!(pager.top, 10);
+        assert!(!pager.bring_into_view(12));
+        assert!(pager.bring_into_view(24));
+        assert_eq!(pager.top, 15);
+        let mut empty = TablePager::new(0, 10);
+        assert_eq!(empty.page_count(), 0);
+        assert!(!empty.bring_into_view(0));
+        let one = TablePager::new(3, 0);
+        assert_eq!(one.rows_per_page, 1);
+    }
+
+    #[test]
+    fn cell_cursor_nav_stays_inside_grid() {
+        let rows = vec![
+            vec!["1".to_string(), "9.99".to_string()],
+            vec!["2".to_string(), "5.00".to_string()],
+        ];
+        let start = TableCellCursor { row: 0, col: 0 };
+        assert!(start.clamp(2, 2).is_some());
+        assert!(TableCellCursor { row: 5, col: 0 }.clamp(2, 2).is_none());
+        assert!(TableCellCursor { row: 0, col: 9 }.clamp(2, 2).is_none());
+        assert_eq!(start.move_left(), start);
+        assert_eq!(start.move_up(), start);
+        let right = start.move_right();
+        assert_eq!(right.col, 1);
+        let down = right.move_down();
+        assert_eq!((down.row, down.col), (1, 1));
+        // Missing cell `-` dikhta hai, maujood cell waisa ka waisa.
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 0, col: 0 }),
+            Some("1".to_string())
+        );
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 1, col: 5 }),
+            Some("-".to_string())
+        );
+        assert_eq!(
+            table_cell_display(&rows, TableCellCursor { row: 9, col: 0 }),
+            None
+        );
+    }
+
+    #[test]
+    fn pad_table_row_pads_and_marks_missing() {
+        let widths = vec![3, 5];
+        let cells = vec!["1".to_string(), "9.99".to_string()];
+        assert_eq!(pad_table_row(&cells, &widths), vec!["1  ", "9.99 "]);
+        // Ragged row: missing cell `-` se bharta hai.
+        let ragged = vec!["only".to_string()];
+        assert_eq!(pad_table_row(&ragged, &widths), vec!["onl", "-    "]);
+        // Lamba text cap par kat-ta hai, widths barkarar.
+        let long = vec!["x".repeat(TABLE_MAX_COL_CHARS + 10)];
+        let wide = vec![TABLE_MAX_COL_CHARS];
+        let padded = pad_table_row(&long, &wide);
+        assert_eq!(padded.len(), 1);
+        assert_eq!(padded.first().map(String::len), Some(TABLE_MAX_COL_CHARS));
+        // Khali widths: khali row.
+        assert!(pad_table_row(&cells, &[]).is_empty());
+    }
+
+    #[test]
+    fn table_key_marker_distinguishes_selected() {
+        let on = key_column_marker(true);
+        let off = key_column_marker(false);
+        assert_ne!(on, off);
+        // Dono single-char: indicator column align rehta hai.
+        assert_eq!(on.chars().count(), 1);
+        assert_eq!(off.chars().count(), 1);
+    }
+
+    #[test]
+    fn table_key_badge_labels_keyed_vs_positional() {
+        let plain = TableKeyView::new();
+        assert_eq!(table_key_badge_label(&plain), "positional");
+        let mut keyed = TableKeyView::new();
+        keyed.toggle_key_column(2);
+        keyed.toggle_key_column(0);
+        assert_eq!(table_key_badge_label(&keyed), "key: 0,2");
+        let mut single = TableKeyView::new();
+        single.toggle_key_column(1);
+        assert_eq!(table_key_badge_label(&single), "key: 1");
+        // Deselect par wapas positional.
+        single.toggle_key_column(1);
+        assert_eq!(table_key_badge_label(&single), "positional");
+    }
+
+    #[test]
+    fn table_key_bar_state_helpers_are_honest() {
+        let mut view = TableKeyView::new();
+        assert!(!is_key_column(&view, 0));
+        assert!(view.positional_note().is_some());
+        view.toggle_key_column(1);
+        assert!(is_key_column(&view, 1));
+        assert!(!is_key_column(&view, 0));
+        assert!(view.positional_note().is_none());
+        let (left, _) = sample_tables();
+        view.suggest_for(&left);
+        assert!(is_suggested_key(&view, 0));
+        assert!(!is_suggested_key(&view, 5));
+        // Geometry tokens find-bar precedent reuse karte hain.
+        assert_eq!(TABLE_KEY_BAR_H, 28.0);
+        assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+    }
+
+    #[test]
+    fn tablefind_cell_spans_empty_needle_gives_no_hits() {
+        assert!(table_find_cell_spans("apple pie", "", false).is_empty());
+        assert!(table_find_cell_spans("", "apple", false).is_empty());
+        assert!(table_find_cell_spans("", "", false).is_empty());
+        // Needle cell se lambi ho to bhi empty (panic nahi).
+        assert!(table_find_cell_spans("hi", "hello world", false).is_empty());
+    }
+
+    #[test]
+    fn tablefind_cell_spans_case_modes() {
+        // Case-sensitive: sirf exact case.
+        assert_eq!(
+            table_find_cell_spans("Banana banana", "banana", false),
+            vec![(7, 13)]
+        );
+        // Ignore-case: dono milte hain, indices original cell par.
+        assert_eq!(
+            table_find_cell_spans("Banana banana", "banana", true),
+            vec![(0, 6), (7, 13)]
+        );
+        // Multibyte: char indices hain (byte nahi).
+        assert_eq!(
+            table_find_cell_spans("café au lait", "au", false),
+            vec![(5, 7)]
+        );
+    }
+
+    #[test]
+    fn tablefind_cell_spans_overlapping_ok() {
+        // Overlap allowed: har offset se ek window, sorted + clamped.
+        assert_eq!(
+            table_find_cell_spans("aaa", "aa", false),
+            vec![(0, 2), (1, 3)]
+        );
+        let spans = table_find_cell_spans("apple pie apple", "apple", false);
+        assert_eq!(spans, vec![(0, 5), (10, 15)]);
+        for (start, end) in spans {
+            assert!(start < end);
+            assert!(end <= "apple pie apple".chars().count());
+        }
+    }
+
+    #[test]
+    fn tablefind_grid_spans_map_rows_and_cols() {
+        let rows = vec![
+            vec!["ID".to_string(), "Price".to_string()],
+            vec!["apple".to_string(), "9.99".to_string()],
+            vec!["Banana".to_string(), "apple pie".to_string()],
+        ];
+        assert_eq!(
+            table_find_grid_spans(&rows, "apple", false),
+            vec![(1, 0, 0, 5), (2, 1, 0, 5)]
+        );
+        // Row-level: (col, start, end) column order me.
+        let row_last: &[String] = rows.get(2).map(Vec::as_slice).unwrap_or(&[]);
+        let row_first: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        assert_eq!(
+            table_find_row_spans(row_last, "apple", false),
+            vec![(1, 0, 5)]
+        );
+        assert!(table_find_row_spans(row_first, "apple", false).is_empty());
+        // Khali needle: khali grid spans (koi fake count nahi).
+        assert!(table_find_grid_spans(&rows, "", false).is_empty());
+        // Row-major order barkarar (row 1 col 0, phir row 2 col 1).
+        let spans = table_find_grid_spans(&rows, "a", true);
+        let mut prev = (0usize, 0usize);
+        for (row, col, _, _) in spans {
+            assert!((row, col) >= prev);
+            prev = (row, col);
+        }
+    }
+
+    #[test]
+    fn tablefind_current_cell_tracks_cursor_with_wrap() {
+        let matches = vec![(1, 0), (2, 1), (2, 0)];
+        assert_eq!(table_find_current_cell(&matches, 0), Some((1, 0)));
+        assert_eq!(table_find_current_cell(&matches, 2), Some((2, 0)));
+        // Bada cursor wrap hota hai.
+        assert_eq!(table_find_current_cell(&matches, 3), Some((1, 0)));
+        assert_eq!(table_find_current_cell(&matches, 4), Some((2, 1)));
+        // Khali list: None.
+        assert_eq!(table_find_current_cell(&[], 0), None);
+        // Current-vs-other distinction.
+        assert!(table_find_is_current((1, 0), Some((1, 0))));
+        assert!(!table_find_is_current((2, 1), Some((1, 0))));
+        assert!(!table_find_is_current((1, 0), None));
+    }
+
+    #[test]
+    fn tablefind_current_other_formats_differ() {
+        let font = egui::FontId::monospace(14.0);
+        let fg = egui::Color32::WHITE;
+        let bg = egui::Color32::BLACK;
+        let current = table_find_hit_format(font.clone(), fg, bg, true);
+        let other = table_find_hit_format(font.clone(), fg, bg, false);
+        // Same mono FontId, koi naya size nahi.
+        assert_eq!(current.font_id, other.font_id);
+        assert_eq!(current.font_id, font);
+        // Block-vs-line: current inverted block (no underline),
+        // other underline-only line (no block).
+        assert_eq!((current.color, current.background), (bg, fg));
+        assert_eq!(current.underline.width, 0.0);
+        assert_eq!((other.color, other.background), (fg, bg));
+        assert_eq!(other.underline.width, TABLE_FIND_UNDERLINE_W);
+        assert_eq!(other.underline.color, fg);
+        // Underline precedent mirror: same 1px value.
+        assert_eq!(TABLE_FIND_UNDERLINE_W, 1.0);
+    }
+
+    #[test]
+    fn tablefind_padded_spans_stay_aligned_with_key_cols() {
+        // Trailing pad: andar ke spans nahi hilte.
+        assert_eq!(table_find_span_in_padded(0, 5, 8), Some((0, 5)));
+        assert_eq!(table_find_span_in_padded(3, 5, 8), Some((3, 5)));
+        // Cap par clamp (TABLE_MAX_COL_CHARS precedent).
+        assert_eq!(
+            table_find_span_in_padded(0, 99, TABLE_MAX_COL_CHARS),
+            Some((0, TABLE_MAX_COL_CHARS))
+        );
+        // Poora bahar ya ulta span: None.
+        assert_eq!(table_find_span_in_padded(8, 10, 8), None);
+        assert_eq!(table_find_span_in_padded(5, 5, 8), None);
+        assert_eq!(table_find_span_in_padded(6, 3, 8), None);
+        // Key-col hits ko wahi highlight: alignment grid se.
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        assert!(table_find_hit_in_key_col(&view, 0));
+        assert!(!table_find_hit_in_key_col(&view, 1));
+        // Padded cells par spans wahi rehte hain (pad trailing-only).
+        let widths = vec![8, 8];
+        let cells = vec!["apple".to_string(), "9.99".to_string()];
+        let padded = pad_table_row(&cells, &widths);
+        for (col, start, end) in table_find_row_spans(&cells, "apple", false) {
+            let width = widths.get(col).copied().unwrap_or(0);
+            let clamped = table_find_span_in_padded(start, end, width);
+            assert_eq!(clamped, Some((start, end)));
+            let _ = padded.get(col);
+        }
+    }
+
+    #[test]
+    fn tablefind_cell_job_marks_current_vs_others() {
+        let font = egui::FontId::monospace(14.0);
+        let fg = egui::Color32::WHITE;
+        let bg = egui::Color32::BLACK;
+        // Current cell: hit inverted block.
+        let job = table_find_cell_job("apple pie", "apple", false, true, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple pie");
+        assert_eq!(job.sections.len(), 2);
+        let hit = job.sections.first();
+        assert!(hit.is_some());
+        if let Some(sec) = hit {
+            assert_eq!((sec.format.color, sec.format.background), (bg, fg));
+            assert_eq!(sec.format.underline.width, 0.0);
+            assert_eq!(
+                job.text.get(sec.byte_range.start.0..sec.byte_range.end.0),
+                Some("apple")
+            );
+        }
+        // Other cell: hit underline-only line.
+        let job = table_find_cell_job("apple pie", "apple", false, false, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple pie");
+        assert_eq!(job.sections.len(), 2);
+        if let Some(sec) = job.sections.first() {
+            assert_eq!((sec.format.color, sec.format.background), (fg, bg));
+            assert_eq!(sec.format.underline.width, TABLE_FIND_UNDERLINE_W);
+        }
+        // Khali needle: single plain section.
+        let job = table_find_cell_job("apple", "", false, false, font.clone(), fg, bg);
+        assert_eq!(job.text, "apple");
+        assert_eq!(job.sections.len(), 1);
+        // Overlap me pehla hit jeetta hai: job text cell ke barabar.
+        let job = table_find_cell_job("aaa", "aa", false, false, font, fg, bg);
+        assert_eq!(job.text, "aaa");
+    }
+
+    #[test]
+    fn tablecell_grid_columns_count_glyph_plus_data() {
+        // Glyph column + ek per data column; khali par sirf glyph.
+        assert_eq!(table_cell_grid_columns(&[]), 1);
+        assert_eq!(table_cell_grid_columns(&[3, 5]), 3);
+        assert_eq!(table_cell_grid_columns(&[4]), 2);
+        // Geometry mirrors: views.rs SECTION_GAP/TIGHT_GAP/CONTENT_LEAD values.
+        assert_eq!(TABLE_GRID_COL_GAP, 8.0);
+        assert_eq!(TABLE_GRID_ROW_GAP, 4.0);
+        assert_eq!(TABLE_CELL_GLYPH_PAD, "  ");
+        assert_ne!(TABLE_CELL_GRID_ID, TABLE_CELL_HEADER_GRID_ID);
+    }
+
+    #[test]
+    fn tablecell_paint_kind_precedence_hit_wins_over_key() {
+        assert_eq!(
+            table_cell_paint_kind(false, false, false),
+            TableCellPaint::Plain
+        );
+        assert_eq!(
+            table_cell_paint_kind(true, false, false),
+            TableCellPaint::KeyStrong
+        );
+        assert_eq!(
+            table_cell_paint_kind(false, true, false),
+            TableCellPaint::FindOther
+        );
+        assert_eq!(
+            table_cell_paint_kind(false, true, true),
+            TableCellPaint::FindCurrent
+        );
+        // Hit format jeetta hai taaki block/line signal saaf rahe; key
+        // identity key bar + badge se barkarar rehti hai.
+        assert_eq!(
+            table_cell_paint_kind(true, true, false),
+            TableCellPaint::FindOther
+        );
+        assert_eq!(
+            table_cell_paint_kind(true, true, true),
+            TableCellPaint::FindCurrent
+        );
+    }
+
+    #[test]
+    fn tablecell_find_ctx_resolves_current_cell_in_key_grid() {
+        let rows = vec![
+            vec!["1".to_string(), "anna".to_string()],
+            vec!["2".to_string(), "bob".to_string()],
+        ];
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let find = TableCellFindCtx {
+            needle: "bob",
+            ignore_case: false,
+            current: None,
+        };
+        let matches = table_find_match_rows(&rows, find.needle, find.ignore_case);
+        assert_eq!(matches, vec![(1, 1)]);
+        let current = table_find_current_cell(&matches, 0);
+        assert_eq!(current, Some((1, 1)));
+        assert!(table_find_is_current((1, 1), current));
+        assert!(!table_find_is_current((0, 0), current));
+        // Key-col hit ko wahi underline/block milta hai (koi alag color nahi).
+        assert!(table_find_hit_in_key_col(&view, 0));
+        assert!(!table_find_hit_in_key_col(&view, 1));
+        // Kind mapping grid coords par: key col plain cell strong, hit cell
+        // current-None par other (underline line).
+        assert_eq!(
+            table_cell_paint_kind(is_key_column(&view, 0), false, false),
+            TableCellPaint::KeyStrong
+        );
+        let spans = table_find_cell_spans("bob", find.needle, find.ignore_case);
+        assert_eq!(spans, vec![(0, 3)]);
+        assert_eq!(
+            table_cell_paint_kind(is_key_column(&view, 1), !spans.is_empty(), false),
+            TableCellPaint::FindOther
+        );
+    }
+
+    #[test]
+    fn tablecell_geo_cell_rect_maps_col_row_with_gaps() {
+        let widths = vec![100.0, 60.0];
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: 8.0,
+            row_gap: 4.0,
+        };
+        // (col 0, row 0) origin par; (col 1) pehle col + gap ke baad.
+        assert_eq!(
+            table_cell_rect(grid, 0, 0, &widths),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 20.0,
+                w: 100.0,
+                h: 18.0,
+            })
+        );
+        assert_eq!(
+            table_cell_rect(grid, 1, 2, &widths),
+            Some(TableCellRect {
+                x: 118.0,
+                y: 64.0,
+                w: 60.0,
+                h: 18.0,
+            })
+        );
+        // Range-bahar col / kharab rhythm par None (panic nahi).
+        assert_eq!(table_cell_rect(grid, 5, 0, &widths), None);
+        assert_eq!(table_cell_rect(grid, 0, 0, &[]), None);
+        let flat = TableCellGrid { row_h: 0.0, ..grid };
+        assert_eq!(table_cell_rect(flat, 0, 0, &widths), None);
+        let neg_gap = TableCellGrid {
+            col_gap: -1.0,
+            ..grid
+        };
+        assert_eq!(table_cell_rect(neg_gap, 0, 0, &widths), None);
+        let nan_origin = TableCellGrid {
+            origin_x: f32::NAN,
+            ..grid
+        };
+        assert_eq!(table_cell_rect(nan_origin, 0, 0, &widths), None);
+    }
+
+    #[test]
+    fn tablecell_geo_key_box_covers_key_cols_only() {
+        let widths = vec![100.0, 60.0];
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: 8.0,
+            row_gap: 4.0,
+        };
+        // Col 0 ka box poore 3 rows par: h = 3*18 + 2*4 = 62.
+        assert_eq!(
+            table_key_col_box_rect(grid, 0, &widths, 3),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 20.0,
+                w: 100.0,
+                h: 62.0,
+            })
+        );
+        // Khali grid / range-bahar col par None.
+        assert_eq!(table_key_col_box_rect(grid, 0, &widths, 0), None);
+        assert_eq!(table_key_col_box_rect(grid, 7, &widths, 3), None);
+        // View ke key cols hi boxes banate hain (order barkarar).
+        let mut view = TableKeyView::new();
+        assert!(table_key_box_rects(&view, grid, &widths, 3).is_empty());
+        view.toggle_key_column(1);
+        view.toggle_key_column(0);
+        let boxes = table_key_box_rects(&view, grid, &widths, 3);
+        assert_eq!(boxes.len(), 2);
+        assert_eq!(boxes.first().map(|b| b.x), Some(10.0));
+        assert_eq!(boxes.get(1).map(|b| b.x), Some(118.0));
+        for box_rect in boxes {
+            assert_eq!(box_rect.y, 20.0);
+            assert_eq!(box_rect.h, 62.0);
+        }
+    }
+
+    #[test]
+    fn tablecell_geo_find_underline_clamps_to_cell() {
+        let cell = TableCellRect {
+            x: 10.0,
+            y: 20.0,
+            w: 80.0,
+            h: 18.0,
+        };
+        // char_w 8: span (0,5) -> x=10, w=40, bottom strip 1px.
+        assert_eq!(
+            table_find_underline_rect(cell, 0, 5, 8, 8.0),
+            Some(TableCellRect {
+                x: 10.0,
+                y: 37.0,
+                w: 40.0,
+                h: TABLE_FIND_UNDERLINE_W,
+            })
+        );
+        // Cap par clamp: span (6,99) width 8 par (6,8) me kat-ta hai.
+        let clamped = table_find_underline_rect(cell, 6, 99, 8, 8.0);
+        assert!(clamped.is_some());
+        if let Some(rect) = clamped {
+            assert!(rect.x + rect.w <= cell.x + cell.w + 0.001);
+            assert_eq!(rect.h, TABLE_FIND_UNDERLINE_W);
+        }
+        // Poora bahar / ulta span / kharab char_w par None.
+        assert_eq!(table_find_underline_rect(cell, 8, 10, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 5, 5, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 6, 3, 8, 8.0), None);
+        assert_eq!(table_find_underline_rect(cell, 0, 5, 8, 0.0), None);
+        // Cell list: order barkarar, bahar spans skip.
+        let spans = vec![(0, 2), (8, 10), (4, 6)];
+        let rects = table_find_underline_rects_for_cell(cell, &spans, 8, 8.0);
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects.first().map(|r| r.x), Some(10.0));
+        assert_eq!(rects.get(1).map(|r| r.x), Some(42.0));
+        assert!(table_find_underline_rects_for_cell(cell, &[], 8, 8.0).is_empty());
+        assert!(table_find_underline_rects_for_cell(cell, &spans, 8, 0.0).is_empty());
+    }
+
+    #[test]
+    fn table_header_role_reuses_mono_grid_content() {
+        // TypoRole reuse: header Mono grid content hai (gutter/hex
+        // `*_text_role` precedent); small-caps intent paint-side `.strong()`
+        // composition hai (folder caption-strong precedent) — koi naya
+        // size/token nahi.
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_header_text_role(), TypoRole::content_grid());
+        assert!(table_header_text_role().is_mono());
+        assert_eq!(
+            table_header_text_role().zoomed_point_size(0),
+            crate::theme::TYPO_MONO_SIZE
+        );
+        // Grid ids kabhi takrate nahi (header vs data Compose).
+        assert_ne!(TABLE_CELL_GRID_ID, TABLE_CELL_HEADER_GRID_ID);
+    }
+
+    #[test]
+    fn table_section_label_role_steps_above_hint() {
+        // Hierarchy: section labels Body (13) hint/badge Small (11) se
+        // ek step upar, mono content se alag family; status notes Body
+        // (weak hata — weight se contrast, color frozen).
+        use crate::theme::{TYPO_BODY_SIZE, TYPO_SMALL_SIZE};
+        assert_eq!(table_section_label_text_role(), TypoRole::Body);
+        assert_eq!(table_section_label_text_role().size(), TYPO_BODY_SIZE);
+        assert!(table_section_label_text_role().size() > TYPO_SMALL_SIZE);
+        assert!(!table_section_label_text_role().is_mono());
+        assert!(table_section_label_text_role().is_chrome());
+        assert_eq!(TypoRole::Body.size(), TypoRole::Small.size() + 2.0);
+    }
+
+    #[test]
+    fn table_page_label_mirrors_pager_state() {
+        let mut pager = TablePager::new(25, 10);
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 1 of 3, showing 10 row(s)"
+        );
+        pager.next_page();
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 2 of 3, showing 10 row(s)"
+        );
+        pager.next_page();
+        assert_eq!(
+            format_table_page_label(pager),
+            "page 3 of 3, showing 5 row(s)"
+        );
+        // Khali grid: honest 0 rows, pages floor 1 (views.rs precedent).
+        let empty = TablePager::new(0, 10);
+        assert_eq!(
+            format_table_page_label(empty),
+            "page 1 of 1, showing 0 row(s)"
+        );
+    }
+
+    #[test]
+    fn table_column_letters_follow_spreadsheet_order() {
+        assert_eq!(table_column_letter(0), "A");
+        assert_eq!(table_column_letter(1), "B");
+        assert_eq!(table_column_letter(25), "Z");
+        assert_eq!(table_column_letter(26), "AA");
+        assert_eq!(table_column_letter(27), "AB");
+        // Har letter non-empty uppercase ASCII hai (paint-side Mono strong).
+        for col in 0..60usize {
+            let label = table_column_letter(col);
+            assert!(!label.is_empty());
+            assert!(label.chars().all(|c| c.is_ascii_uppercase()));
+        }
+    }
+
+    #[test]
+    fn table_row_gutter_labels_are_one_based_and_grids_share_columns() {
+        assert_eq!(table_row_gutter_label(0), "1");
+        assert_eq!(table_row_gutter_label(9), "10");
+        // Header/data Grid column count ek hi source se (dedup: header Grid
+        // ab `table_cell_grid_columns` reuse karta hai).
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let widths = table_column_widths(&header, &[]);
+        assert_eq!(table_cell_grid_columns(&widths), header.len() + 1);
+    }
+
+    #[test]
+    fn table_toolbar_defaults_quiet_and_reuses_find_geometry() {
+        // Koi click nahi to sab false (caller App state untouched rakhta hai).
+        let action = TableToolbarAction::default();
+        assert!(!action.find_prev);
+        assert!(!action.find_next);
+        assert!(!action.page_prev);
+        assert!(!action.page_next);
+        // Toolbar geometry find-bar precedent reuse karti hai (single bar —
+        // G-B2 duplicate rows ka fix, koi naya token nahi).
+        assert_eq!(TABLE_FIND_BAR_H, TABLE_KEY_BAR_H);
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, TABLE_KEY_BADGE_PAD);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+    }
+
+    #[test]
+    fn table_source_kind_and_sheet_helpers_stay_honest() {
+        assert_eq!(table_source_kind_for_path("a.csv"), TableSourceKind::Csv);
+        assert_eq!(table_source_kind_for_path("a.TSV"), TableSourceKind::Tsv);
+        assert_eq!(table_source_kind_for_path("a.tab"), TableSourceKind::Tsv);
+        assert_eq!(table_source_kind_for_path("a.xlsx"), TableSourceKind::Xlsx);
+        assert_eq!(
+            table_source_kind_for_path("a.txt"),
+            TableSourceKind::Unknown
+        );
+        assert_eq!(table_source_kind_for_path(""), TableSourceKind::Unknown);
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Tsv), '\t');
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Csv), ',');
+        assert_eq!(table_delimiter_for_source(TableSourceKind::Xlsx), ',');
+        assert_eq!(table_source_badge_label(TableSourceKind::Xlsx), "xlsx");
+        // Sheet clamp/label: OOB par None (kabhi panic nahi).
+        let names = vec!["S1".to_string(), "S2".to_string()];
+        assert_eq!(table_sheet_count(&names), 2);
+        assert_eq!(table_sheet_clamp(&names, 1), Some(1));
+        assert_eq!(table_sheet_clamp(&names, 9), None);
+        assert_eq!(table_sheet_clamp(&[], 0), None);
+        assert_eq!(table_sheet_label(&names, 0), Some("S1".to_string()));
+        assert_eq!(table_sheet_label(&names, 9), None);
+        // Geometry parity: sheet bar key-bar rhythm reuse karta hai.
+        assert_eq!(TABLE_SHEET_BAR_H, TABLE_KEY_BAR_H);
+        assert_eq!(TABLE_SHEET_COL_GAP, TABLE_KEY_COL_GAP);
+        assert_eq!(TABLE_SHEET_BADGE_PAD, TABLE_KEY_BADGE_PAD);
+        assert_eq!(table_sheet_label_text_role(), TypoRole::Body);
+        assert_eq!(table_sheet_value_text_role(), TypoRole::Mono);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_padding_reuses_space_scale() {
+        use crate::theme::SPACE_SM;
+        // Single source: cell pad folder pad + grid col gap ke barabar.
+        assert_eq!(TABLE_CELL_PAD_X, SPACE_SM);
+        assert_eq!(TABLE_CELL_PAD_X, 8.0);
+        assert_eq!(table_cell_pad_x(), TABLE_CELL_PAD_X);
+        assert_eq!(table_cell_pad_x(), crate::tree::FOLDER_CELL_PAD_X);
+        assert_eq!(table_cell_pad_x(), TABLE_GRID_COL_GAP);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_outer_text_widths_round_trip() {
+        // Outer = text + 2*pad; text = outer - 2*pad floor 0.
+        assert_eq!(table_cell_outer_w(100.0), 116.0);
+        assert_eq!(table_cell_text_w(116.0), 100.0);
+        assert_eq!(table_cell_text_w(table_cell_outer_w(60.0)), 60.0);
+        // Guards: kharab input kabhi NaN/negative nahi deta.
+        assert_eq!(table_cell_outer_w(f32::NAN), 16.0);
+        assert_eq!(table_cell_outer_w(-5.0), 16.0);
+        assert_eq!(table_cell_text_w(f32::NAN), 0.0);
+        assert_eq!(table_cell_text_w(10.0), 0.0);
+        assert_eq!(table_cell_text_w(16.0), 0.0);
+    }
+
+    #[test]
+    fn table_exq_hextable_cell_text_rect_insets_by_pad() {
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: TABLE_GRID_COL_GAP,
+            row_gap: TABLE_GRID_ROW_GAP,
+        };
+        let widths = vec![116.0];
+        let Some(cell) = table_cell_rect(grid, 0, 0, &widths) else {
+            return;
+        };
+        let Some(text) = table_cell_text_rect(cell) else {
+            return;
+        };
+        // x ek pad andar, w do pad kam; y/h same (vertical rhythm gap se).
+        assert_eq!(text.x, cell.x + TABLE_CELL_PAD_X);
+        assert_eq!(text.w, cell.w - TABLE_CELL_PAD_X * 2.0);
+        assert_eq!((text.y, text.h), (cell.y, cell.h));
+        // Tang box (w <= 2*pad) par None — paint plain box dikhata hai.
+        let tight = TableCellRect {
+            x: 0.0,
+            y: 0.0,
+            w: 16.0,
+            h: 18.0,
+        };
+        assert_eq!(table_cell_text_rect(tight), None);
+        let flat = TableCellRect {
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 0.0,
+        };
+        assert_eq!(table_cell_text_rect(flat), None);
+    }
+
+    #[test]
+    fn table_exq_hextable2_pane_heights_plus_cell_gaps() {
+        // Geometry first: pane heights hex/text floor reuse, char widths
+        // -> px outer widths, grid total gaps. Typo second: cell Mono.
+        assert_eq!(TABLE_PANES_MIN_H, 100.0);
+        assert_eq!(table_panes_height(600.0), 600.0);
+        assert_eq!(table_panes_height(90.0), TABLE_PANES_MIN_H);
+        assert_eq!(table_cell_text_role() as u8, TypoRole::Mono as u8);
+        // Grid columns: 2 data cols, 8px char -> outer each +16 pad.
+        let widths = vec![3usize, 5];
+        let px = table_col_widths_px(&widths, 8.0);
+        assert_eq!(px.len(), 2);
+        assert_eq!(px.first().copied(), Some(3.0 * 8.0 + 16.0));
+        assert_eq!(px.get(1).copied(), Some(5.0 * 8.0 + 16.0));
+        // Total = w0 + gap + w1.
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 40.0 + TABLE_GRID_COL_GAP + 56.0);
+        // Key cols + find underline reuse same boxes (no drift).
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let grid = TableCellGrid {
+            origin_x: 10.0,
+            origin_y: 20.0,
+            row_h: 18.0,
+            col_gap: TABLE_GRID_COL_GAP,
+            row_gap: TABLE_GRID_ROW_GAP,
+        };
+        let boxes = table_key_box_rects(&view, grid, &px, 3);
+        assert_eq!(boxes.len(), 1);
+        assert_eq!(boxes.first().map(|b| b.x), Some(10.0));
+        // Bad char_w / empty -> honest empty, total 0.
+        assert!(table_col_widths_px(&widths, 0.0).is_empty());
+        assert!(table_col_widths_px(&widths, f32::NAN).is_empty());
+        assert_eq!(table_grid_total_w(&[]), 0.0);
+    }
+
+    #[test]
+    fn table_exq_hextable2_edge_tail_truncate() {
+        // Tail-truncate: long tail cell caps at 32 chars, padded row keeps
+        // columns aligned, grid total stays finite for paint scroll.
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let long = "x".repeat(TABLE_MAX_COL_CHARS + 20);
+        let rows = vec![vec!["1".to_string(), long.clone()]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths.get(1).copied(), Some(TABLE_MAX_COL_CHARS));
+        let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        let padded = pad_table_row(first_row, &widths);
+        assert_eq!(padded.len(), 2);
+        assert_eq!(
+            padded.get(1).map(|s| s.chars().count()),
+            Some(TABLE_MAX_COL_CHARS)
+        );
+        // Tail find hit clamps to cap, underline rect stays in cell.
+        let spans = table_find_cell_spans(&long, "xxx", false);
+        assert!(!spans.is_empty());
+        let clamped = table_find_span_in_padded(0, 99, TABLE_MAX_COL_CHARS);
+        assert_eq!(clamped, Some((0, TABLE_MAX_COL_CHARS)));
+        let px = table_col_widths_px(&widths, 8.0);
+        assert!(!px.is_empty());
+        assert!(table_grid_total_w(&px).is_finite());
+    }
+
+    #[test]
+    fn table_exq_hextable2_edge_empty_vs_nonempty() {
+        // Empty-vs-nonempty: both empty honest note, one ragged row keeps
+        // missing-cell dash + pad round-trip + key badge positional.
+        let header = vec!["ID".to_string(), "Price".to_string()];
+        let empty_rows: Vec<Vec<String>> = Vec::new();
+        let widths_empty = table_column_widths(&header, &empty_rows);
+        assert_eq!(widths_empty.len(), 2);
+        assert_eq!(table_cell_grid_columns(&widths_empty), 3);
+        let rows: Vec<Vec<String>> = core::iter::once(vec!["only".to_string()]).collect();
+        let widths = table_column_widths(&header, &rows);
+        let first_row: &[String] = rows.first().map(Vec::as_slice).unwrap_or(&[]);
+        let padded = pad_table_row(first_row, &widths);
+        assert_eq!(padded.len(), 2);
+        let view = TableKeyView::new();
+        assert!(view.is_positional());
+        assert_eq!(table_key_badge_label(&view), "positional");
+        assert_eq!(table_panes_height(0.0), TABLE_PANES_MIN_H);
+        assert_eq!(table_cell_outer_w(100.0), 116.0);
+        assert_eq!(table_cell_text_w(116.0), 100.0);
+    }
+
+    #[test]
+    fn table_exq_hextable3_edge_sort_before_align() {
+        // Sort-before-align: reordered rows key order me sort hokar align
+        // hote hain; empty keys positional identity; ragged `-` safe.
+        let rows = vec![
+            vec!["2".to_string(), "b".to_string()],
+            vec!["10".to_string(), "a".to_string()],
+            vec!["1".to_string(), "c".to_string()],
+        ];
+        assert_eq!(
+            table_sorted_row_indices(&rows, &[0], false, false),
+            vec![2, 1, 0]
+        );
+        let sorted = table_sort_rows_by_key(&rows, &[0], false, false);
+        assert_eq!(sorted.first(), rows.get(2));
+        // Empty keys: identity (positional untouched).
+        assert_eq!(
+            table_sorted_row_indices(&rows, &[], false, false),
+            vec![0, 1, 2]
+        );
+        assert_eq!(table_sort_rows_by_key(&rows, &[], false, false), rows);
+        // Case + trim folding.
+        let mixed = vec![vec!["  B ".to_string()], vec!["a".to_string()]];
+        assert_eq!(
+            table_sorted_row_indices(&mixed, &[0], true, true),
+            vec![1, 0]
+        );
+        assert_eq!(
+            table_sort_key_for_row(&["  X ".to_string()], &[0], true, true),
+            vec![String::from("x")]
+        );
+        // Ragged row: missing key col `-` se, panic nahi.
+        let ragged: Vec<Vec<String>> = core::iter::once(vec!["only".to_string()]).collect();
+        let first_ragged: &[String] = ragged.first().map(Vec::as_slice).unwrap_or(&[]);
+        assert_eq!(
+            table_sort_key_for_row(first_ragged, &[1], false, false),
+            vec![String::from("-")]
+        );
+        // Empty rows: khali order.
+        let empty: Vec<Vec<String>> = Vec::new();
+        assert!(table_sorted_row_indices(&empty, &[0], false, false).is_empty());
+        assert!(table_sort_rows_by_key(&empty, &[0], false, false).is_empty());
+        // Grid fit: total via table_grid_total_w reuse.
+        let px = table_col_widths_px(&[3, 5], 8.0);
+        assert!(table_column_grid_fit(1000.0, &px));
+        assert!(!table_column_grid_fit(10.0, &px));
+        assert!(!table_column_grid_fit(f32::NAN, &px));
+        assert!(!table_column_grid_fit(1000.0, &[]));
+    }
+
+    #[test]
+    fn tabledens8_bar_rhythm_stays_even_and_tight() {
+        use crate::theme::{GEO_TIGHT_GAP, SPACE_SM, SPACE_XS};
+        // Even: key/sheet toggle gaps Grid col gap ke barabar — paint ab
+        // ek hi `item_spacing` source use karta hai (double `add_space`
+        // hata), isliye rhythm Grid se kabhi alag nahi hota.
+        assert_eq!(TABLE_KEY_COL_GAP, TABLE_GRID_COL_GAP);
+        assert_eq!(TABLE_KEY_COL_GAP, SPACE_SM);
+        assert_eq!(TABLE_SHEET_COL_GAP, TABLE_KEY_COL_GAP);
+        // Tight: Find action rows dense gap par (hunk-nav `TIGHT_GAP`
+        // precedent) — toggle gaps se alag taaki action vs toggle rhythm
+        // confuse na ho.
+        assert_eq!(GEO_TIGHT_GAP, SPACE_XS);
+        assert_eq!(GEO_TIGHT_GAP, 4.0);
+        assert_eq!(GEO_TIGHT_GAP, TABLE_GRID_ROW_GAP);
+        // Typo parity: section labels Body, values Mono, badge Small —
+        // koi naya size nahi.
+        assert_eq!(table_section_label_text_role(), TypoRole::Body);
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_cell_text_role(), TypoRole::Mono);
+    }
+
+    #[test]
+    fn exq_table63_geometry_tokens_value_identical() {
+        use crate::theme::{CHROME_HEADER_BAR_H, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        // Bar heights chrome bar precedent (28.0), gaps section/tight scale.
+        assert_eq!(TABLE_KEY_BAR_H, CHROME_HEADER_BAR_H);
+        assert_eq!(TABLE_KEY_BAR_H, 28.0);
+        assert_eq!(TABLE_FIND_BAR_H, CHROME_HEADER_BAR_H);
+        assert_eq!(TABLE_FIND_BAR_H, 28.0);
+        assert_eq!(TABLE_KEY_COL_GAP, GEO_SECTION_GAP);
+        assert_eq!(TABLE_KEY_COL_GAP, 8.0);
+        assert_eq!(TABLE_KEY_BADGE_PAD, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_KEY_BADGE_PAD, 4.0);
+        assert_eq!(TABLE_FIND_BADGE_PAD, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_FIND_BADGE_PAD, 4.0);
+        // Needle width SPACE token se hai (`SPACE_XL * 5.0` = 120.0, text
+        // precedent wahi chaudai) — literal nahi, drift-proof.
+        assert_eq!(TABLE_FIND_NEEDLE_W, 120.0);
+        assert_eq!(TABLE_FIND_NEEDLE_W, crate::theme::SPACE_XL * 5.0);
+    }
+
+    #[test]
+    fn table_exq_hextable10_column_grid_and_cell_padding() {
+        // Grid col gap == SECTION_GAP == 8.0, row gap == TIGHT_GAP == 4.0
+        assert!(table_grid_has_section_gap());
+        assert_eq!(TABLE_GRID_COL_GAP, crate::theme::GEO_SECTION_GAP);
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::GEO_TIGHT_GAP);
+
+        // Cell padding == SPACE_SM == 8.0
+        assert!(table_cell_has_space_padding());
+        assert_eq!(table_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // Header weight via TypoRole (no new sizes)
+        assert_eq!(table_header_text_role(), TypoRole::Mono);
+        assert_eq!(table_header_weight_name(), "strong");
+        assert_eq!(table_header_weight_value(), 600);
+        assert_eq!(
+            table_header_weight_value(),
+            crate::theme::TYPO_WEIGHT_SEMIBOLD
+        );
+
+        // Column grid layout x-offsets:
+        // col 0: 0.0, col 1: 40.0 + 8.0 = 48.0, col 2: 48.0 + 80.0 + 8.0 = 136.0
+        let widths = [40.0, 80.0, 120.0];
+        let col_gap = TABLE_GRID_COL_GAP;
+        assert_eq!(table_column_grid_col_x(0, &widths, col_gap), Some(0.0));
+        assert_eq!(table_column_grid_col_x(1, &widths, col_gap), Some(48.0));
+        assert_eq!(table_column_grid_col_x(2, &widths, col_gap), Some(136.0));
+        assert_eq!(table_column_grid_col_x(3, &widths, col_gap), None);
+
+        // Header cell rect
+        let h_rect = table_column_grid_header_cell_rect(1, &widths, 20.0, col_gap);
+        assert_eq!(
+            h_rect,
+            Some(TableCellRect {
+                x: 48.0,
+                y: 0.0,
+                w: 80.0,
+                h: 20.0,
+            })
+        );
+    }
+
+    #[test]
+    fn table_exq_gui10_origin_gaps_rowh_weight_narrow_720() {
+        use crate::theme::{GEO_OUTER_MARGIN, GEO_SECTION_GAP, GEO_TIGHT_GAP};
+        // Origin alignment: grid outer margin se start (cramped 0,0 nahi).
+        assert_eq!(TABLE_CELL_GRID_ORIGIN_X, GEO_OUTER_MARGIN);
+        assert_eq!(TABLE_CELL_GRID_ORIGIN_Y, GEO_OUTER_MARGIN);
+        assert_eq!(table_cell_grid_origin(), (12.0, 12.0));
+        // Column gap via SPACE tokens (koi naya literal nahi).
+        assert_eq!(TABLE_GRID_COL_GAP, GEO_SECTION_GAP);
+        assert_eq!(TABLE_GRID_ROW_GAP, GEO_TIGHT_GAP);
+        assert_eq!(TABLE_GRID_COL_GAP, crate::theme::SPACE_SM);
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::SPACE_XS);
+        // Row height Mono line-height se (ad-hoc 18.0 nahi).
+        assert_eq!(table_cell_row_h(), TypoRole::Mono.line_height_px());
+        assert!((table_cell_row_h() - 15.6).abs() < 0.001);
+        // Header weight via TYPO tokens.
+        assert!(table_header_weight_ok());
+        // Default grid ek hi rhythm me (origin + rowh + gaps).
+        let grid = table_cell_grid_default();
+        assert_eq!((grid.origin_x, grid.origin_y), (12.0, 12.0));
+        assert_eq!(grid.row_h, table_cell_row_h());
+        assert!((grid.row_h - 15.6).abs() < 0.001);
+        assert_eq!(grid.col_gap, GEO_SECTION_GAP);
+        assert_eq!(grid.row_gap, GEO_TIGHT_GAP);
+        // Narrow-720 edge fixture judvaan: 3 cols [3,5,4] chars @8px
+        // -> outer [40,56,48], total 160 + origin offset honest fit.
+        let widths = table_column_widths(
+            &["ID".to_string(), "Price".to_string(), "Note".to_string()],
+            &[vec!["1".to_string(), "9.99".to_string(), "ok".to_string()]],
+        );
+        assert_eq!(widths, vec![3, 5, 4]);
+        let px = table_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![40.0, 56.0, 48.0]);
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 40.0 + 8.0 + 56.0 + 8.0 + 48.0);
+        assert!(table_column_grid_fit(720.0, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        // Origin-aligned first cell box default grid par.
+        let first = table_cell_rect(grid, 0, 0, &px);
+        let expected_h = table_cell_row_h();
+        assert_eq!(first.map(|r| (r.x, r.y, r.w)), Some((12.0, 12.0, 40.0)));
+        assert!((first.map(|r| r.h).unwrap_or(0.0) - expected_h).abs() < 0.001);
+    }
+
+    #[test]
+    fn table_exq_table2_round2_sym_rows_char_widths_header_underline_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // 960px canvas reference width; row gap symmetric via SPACE_XS,
+        // outer widths char metrics se, header underline weight TYPO tokens se.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table2/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table2/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 600.0"));
+        assert!(fixture_raw.contains("\"row_sym_pad\": 4.0"));
+        assert!(fixture_raw.contains("\"grid_gap_y\": 4.0"));
+        assert!(fixture_raw.contains("\"col_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Canvas 960x600 theme viewport reuse (koi naya literal nahi).
+        assert_eq!(TABLE_CANVAS_W, crate::theme::VIEWPORT_W as f32);
+        assert_eq!(TABLE_CANVAS_H, crate::theme::VIEWPORT_H as f32);
+        assert_eq!(TABLE_CANVAS_W, 960.0);
+        assert_eq!(TABLE_CANVAS_H, 600.0);
+
+        // 2. Row gap symmetric via SPACE_XS, col spacing via SPACE_SM.
+        assert_eq!(table_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table_row_sym_pad(), crate::theme::GEO_TIGHT_GAP);
+        assert_eq!(table_row_sym_pad(), 4.0);
+        assert_eq!(table_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table_col_spacing(), 8.0);
+        assert_eq!(table_grid_gap_y(), TABLE_GRID_ROW_GAP);
+        assert_eq!(table_grid_gap_y(), table_row_sym_pad());
+        assert_eq!(TABLE_GRID_ROW_GAP, crate::theme::SPACE_XS);
+
+        // 3. Outer widths char metrics se: 4 cols [3,4,5,11] @8px
+        // -> outer [40,48,56,104], total 272, avail 936 me fit.
+        let header = vec![
+            "ID".to_string(),
+            "Name".to_string(),
+            "Price".to_string(),
+            "Description".to_string(),
+        ];
+        let rows = vec![vec![
+            "1".to_string(),
+            "Anna".to_string(),
+            "9.99".to_string(),
+            "on-sale".to_string(),
+        ]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 4, 5, 11]);
+        let px = table_wide_outer_widths(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 48.0, 56.0, 104.0]);
+        let total = table_grid_total_w(&px);
+        assert_eq!(total, 272.0);
+        assert_eq!(table_wide_avail_w(), 936.0);
+        assert!(table_column_grid_fit(table_wide_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE_CANVAS_W, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        assert!(table_wide_outer_widths(&widths, 0.0).is_empty());
+
+        // 4. Header underline weight via TYPO tokens, row height Mono lock.
+        assert_eq!(
+            TABLE_HEADER_UNDERLINE_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(table_header_underline_w(), 1.0);
+        assert_eq!(table_header_underline_w(), TABLE_FIND_UNDERLINE_W);
+        assert_eq!(
+            TABLE_FIND_UNDERLINE_W,
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert!(table_header_weight_ok());
+        assert!((table_wide_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table_wide_row_h(), table_cell_row_h());
+        assert_eq!(
+            table_wide_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+
+        // 5. Wide-960 visible rows: panes 600 / 15.6 -> 38, kharab par 0.
+        assert_eq!(table_panes_height(TABLE_CANVAS_H), 600.0);
+        assert_eq!(table_wide_960_visible_rows(600.0), 38);
+        assert_eq!(table_wide_960_visible_rows(table_panes_height(600.0)), 38);
+        assert_eq!(table_wide_960_visible_rows(0.0), 0);
+        assert_eq!(table_wide_960_visible_rows(f32::NAN), 0);
+    }
+
+    #[test]
+    fn table_exq_table3_round1_even_rows_char_widths_sort_narrow_720() {
+        // Headless test proving edge fixture comparison/table-narrow-720.json:
+        // even row rhythm (Mono 15.6), col spacing SPACE tokens (8/4),
+        // outer widths char metrics se, header underline/weight reuse,
+        // sort indicators fixed 1-char aligned, narrow-720 fit.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table3/comparison/table-narrow-720.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table3/round-1/comparison/table-narrow-720.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\":\"table-narrow-720\""));
+        assert!(fixture_raw.contains("\"canvas_w\":960.0"));
+        assert!(fixture_raw.contains("\"narrow_w\":720.0"));
+        assert!(fixture_raw.contains("\"row_height\":15.6"));
+        assert!(fixture_raw.contains("\"row_sym_pad\":4.0"));
+        assert!(fixture_raw.contains("\"col_spacing\":8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\":1.0"));
+        assert!(fixture_raw.contains("\"header_weight\":600"));
+        assert!(fixture_raw.contains("\"visible_rows\":38"));
+
+        // 1. Row height Mono line-height lock (even rhythm).
+        assert!((table3_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table3_row_h(), table_cell_row_h());
+        assert_eq!(
+            table3_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(table3_row_h(), table_wide_row_h());
+
+        // 2. Col spacing SPACE tokens se, row gap symmetric.
+        assert_eq!(table3_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table3_col_spacing(), 8.0);
+        assert_eq!(table3_col_spacing(), table_col_spacing());
+        assert_eq!(table3_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table3_row_sym_pad(), 4.0);
+        assert_eq!(table3_row_sym_pad(), table_row_sym_pad());
+        assert_eq!(table_grid_gap_y(), table3_row_sym_pad());
+
+        // 3. Header underline/weight reuse at 960px wide.
+        assert_eq!(TABLE_CANVAS_W, 960.0);
+        assert_eq!(table3_header_underline_w(), 1.0);
+        assert_eq!(
+            table3_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(table3_header_underline_w(), table_header_underline_w());
+        assert!(table3_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 4. Sort indicators fixed 1-char aligned.
+        assert_eq!(table3_sort_marker(false, true).chars().count(), 1);
+        assert_eq!(table3_sort_marker(true, true).chars().count(), 1);
+        assert_eq!(table3_sort_marker(true, false).chars().count(), 1);
+        assert_eq!(table3_sort_marker(false, true), " ");
+        assert_eq!(table3_sort_marker(true, true), "▲");
+        assert_eq!(table3_sort_marker(true, false), "▼");
+        assert!(table3_is_sorted_col(Some(1), 1));
+        assert!(!table3_is_sorted_col(Some(1), 0));
+        assert!(!table3_is_sorted_col(None, 0));
+        assert_eq!(table3_sort_label(0, Some(0), true), "A▲");
+        assert_eq!(table3_sort_label(1, Some(0), true), "B ");
+        assert_eq!(table3_sort_label(1, Some(1), false), "B▼");
+
+        // 5. Narrow-720 char-metric widths fit: 3 cols [3,5,4] @8px
+        // -> outer [40,56,48], total 160, avail 696 me fit.
+        assert_eq!(TABLE_NARROW_CANVAS_W, 720.0);
+        assert_eq!(TABLE_NARROW_CANVAS_W, crate::theme::VIEWPORT_MIN_W as f32);
+        assert_eq!(table3_narrow_avail_w(), 696.0);
+        let header = vec!["ID".to_string(), "Price".to_string(), "Note".to_string()];
+        let rows = vec![vec!["1".to_string(), "9.99".to_string(), "ok".to_string()]];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 4]);
+        let px = table3_narrow_outer_widths(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 48.0]);
+        assert_eq!(table_grid_total_w(&px), 160.0);
+        assert!(table_column_grid_fit(table3_narrow_avail_w(), &px));
+        assert!(table_column_grid_fit(720.0, &px));
+        assert!(!table_column_grid_fit(100.0, &px));
+        assert!(table3_narrow_outer_widths(&widths, 0.0).is_empty());
+    }
+
+    #[test]
+    fn table_exq_table4_round1_cols_plus_rows_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // header height chrome line-height (Heading 21.6, hit-slop over rows),
+        // col spacing SPACE_SM single-source (8), cell pad SPACE_XS (4),
+        // col widths content metrics se, row height Mono lock (15.6) at 960.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table4/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table4/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"col_spacing\": 8.0"));
+        assert!(fixture_raw.contains("\"cell_pad\": 4.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header height chrome line-height lock, taller than rows.
+        assert!((table4_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(
+            table4_header_h(),
+            crate::theme::TypoRole::Heading.line_height_px()
+        );
+        assert!(table4_header_h_ok());
+        assert!(table4_header_h() > table4_row_h());
+
+        // 2. Col spacing SPACE_SM single-source, cell pad SPACE_XS.
+        assert_eq!(table4_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table4_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table4_col_spacing(), 8.0);
+        assert_eq!(table4_col_spacing(), table_col_spacing());
+        assert_eq!(TABLE4_CELL_PAD_X, crate::theme::SPACE_XS);
+        assert_eq!(table4_cell_pad_x(), 4.0);
+        assert_eq!(table4_cell_pad_x(), crate::theme::GEO_TIGHT_GAP);
+
+        // 3. Row height Mono line-height lock at 960px wide.
+        assert!((table4_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table4_row_h(), table_cell_row_h());
+        assert_eq!(
+            table4_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(table4_avail_w(), 936.0);
+        assert_eq!(table4_avail_w(), table_wide_avail_w());
+
+        // 4. Header underline/weight reuse.
+        assert_eq!(table4_header_underline_w(), 1.0);
+        assert_eq!(
+            table4_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert_eq!(table4_header_underline_w(), table_header_underline_w());
+        assert!(table4_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 5. Col widths content metrics se + pad 4: [3,5,6] @8px
+        // -> outer [32,48,56], total 152, avail 936 me fit.
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table4_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![32.0, 48.0, 56.0]);
+        assert_eq!(table4_cell_outer_w(24.0), 32.0);
+        assert_eq!(table4_cell_text_w(32.0), 24.0);
+        assert_eq!(table4_grid_total_w(&px), 152.0);
+        assert_eq!(table4_grid_total_w(&px), table_grid_total_w(&px));
+        assert!(table4_column_grid_fit(table4_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE_CANVAS_W, &px));
+        assert!(!table4_column_grid_fit(100.0, &px));
+        assert!(table4_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table_wide_960_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table5_round1_cols_plus_separators_wide_960() {
+        // Headless test proving edge fixture comparison/table-wide-960.json:
+        // col widths char metrics se SPACE pad ke saath, row height Mono
+        // lock (15.6), separators symmetric (dono taraf gap/2) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table5/comparison/table-wide-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table5/round-1/comparison/table-wide-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-wide-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"col_gap\": 8.0"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Row height Mono line-height lock, avail 960 minus margins.
+        assert!((table5_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table5_row_h(), table_cell_row_h());
+        assert_eq!(
+            table5_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert_eq!(TABLE5_CANVAS_W, 960.0);
+        assert_eq!(TABLE5_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table5_avail_w(), 936.0);
+        assert_eq!(table5_avail_w(), table_wide_avail_w());
+
+        // 2. Col gap SPACE_SM single-source; underline/weight reuse.
+        assert_eq!(table5_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table5_col_spacing(), crate::theme::GEO_SECTION_GAP);
+        assert_eq!(table5_col_spacing(), 8.0);
+        assert_eq!(table5_header_underline_w(), 1.0);
+        assert_eq!(
+            table5_header_underline_w(),
+            crate::theme::TEXT_INLINE_SPAN_UNDERLINE_W
+        );
+        assert!(table5_header_weight_ok());
+        assert!(table_header_weight_ok());
+
+        // 3. Col widths char metrics se SPACE_SM pad ke saath: [3,5,6] @8px
+        // -> outer [40,56,64] (chars*8+16), total 176, avail 936 me fit.
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table5_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table5_grid_total_w(&px), 176.0);
+        assert_eq!(table5_grid_total_w(&px), table_grid_total_w(&px));
+        assert!(table5_column_grid_fit(table5_avail_w(), &px));
+        assert!(table_column_grid_fit(TABLE5_CANVAS_W, &px));
+        assert!(!table5_column_grid_fit(100.0, &px));
+        assert!(table5_col_widths_px(&widths, 0.0).is_empty());
+
+        // 4. Column x-positions: col 0 at 0, har agli col pichhli widths +
+        // gaps ke baad — [0, 48, 112].
+        assert_eq!(table5_col_x(0, &px), Some(0.0));
+        assert_eq!(table5_col_x(1, &px), Some(48.0));
+        assert_eq!(table5_col_x(2, &px), Some(112.0));
+        assert_eq!(table5_col_x(3, &px), None);
+        assert_eq!(table5_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert!(table5_col_xs(&[]).is_empty());
+
+        // 5. Separators symmetric: har separator dono taraf gap/2 (4.0) —
+        // [44, 108], right-edge se +4 aur agli col se -4.
+        let seps = table5_separator_xs(&px);
+        assert_eq!(seps, vec![44.0, 108.0]);
+        assert_eq!(seps.len(), px.len().saturating_sub(1));
+        let gap = table5_col_spacing();
+        let xs = table5_col_xs(&px);
+        for (k, sep) in seps.iter().enumerate() {
+            let right = xs.get(k).copied().unwrap_or(0.0) + px.get(k).copied().unwrap_or(0.0);
+            let next_left = xs.get(k.saturating_add(1)).copied().unwrap_or(0.0);
+            assert!(((sep - right) - gap / 2.0).abs() < 0.001);
+            assert!(((next_left - sep) - gap / 2.0).abs() < 0.001);
+        }
+        assert!(table5_separator_xs(&[]).is_empty());
+        assert_eq!(table5_visible_rows(600.0), 38);
+        assert_eq!(
+            table5_visible_rows(600.0),
+            table_wide_960_visible_rows(600.0)
+        );
+    }
+
+    #[test]
+    fn table_exq_table6_round2_header_plus_rhythm_wide_960() {
+        // Headless test proving edge fixture comparison/table-header-960.json:
+        // header height strong-role line-height (Heading 21.6) distinct from
+        // body Mono lock (15.6), header/body separator insets symmetric
+        // (half-gap both sides) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table6/comparison/table-header-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table6/round-1/comparison/table-header-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-header-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"row_body_delta\": 6.0"));
+        assert!(fixture_raw.contains("\"header_sep_y\": 35.6"));
+        assert!(fixture_raw.contains("\"body_first_y\": 37.6"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header strong line-height lock, body Mono lock, distinct rhythm.
+        assert!((table6_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(
+            table6_header_h(),
+            crate::theme::TypoRole::Heading.line_height_px()
+        );
+        assert_eq!(TABLE6_HEADER_H, table6_header_h());
+        assert!(table6_header_h_ok());
+        assert!((table6_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table6_row_h(), table_cell_row_h());
+        assert_eq!(
+            table6_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table6_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table6_header_body_delta() > 0.0);
+        assert!(table6_header_h() > table6_row_h());
+
+        // 2. Header/body separator insets symmetric (half-gap both sides).
+        assert_eq!(TABLE6_CANVAS_W, 960.0);
+        assert_eq!(TABLE6_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table6_avail_w(), 936.0);
+        assert_eq!(table6_avail_w(), table_wide_avail_w());
+        assert_eq!(table6_grid_gap_y(), TABLE_GRID_ROW_GAP);
+        assert_eq!(table6_grid_gap_y(), 4.0);
+        assert!((table6_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table6_body_first_y() - 37.6).abs() < 0.001);
+        assert!(table6_header_sep_insets_symmetric());
+
+        // 3. Col widths char metrics se + vertical separators symmetric.
+        assert_eq!(table6_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table6_col_spacing(), 8.0);
+        assert_eq!(table6_header_underline_w(), 1.0);
+        assert!(table6_header_weight_ok());
+        let header = vec!["ID".to_string(), "Delta".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "+12".to_string(), "9.99".to_string()],
+            vec!["22".to_string(), "-3".to_string(), "100.50".to_string()],
+        ];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table6_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table6_grid_total_w(&px), 176.0);
+        assert!(table6_column_grid_fit(table6_avail_w(), &px));
+        assert!(!table6_column_grid_fit(100.0, &px));
+        assert!(table6_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table6_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table6_separators_symmetric(&px));
+        assert!(!table6_separators_symmetric(&[]));
+        assert_eq!(table6_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table7_round1_sort_plus_align_wide_960() {
+        // Headless test proving edge fixture comparison/table-sort-960.json:
+        // sort-indicator glyph fixed 1-char right slot (SPACE_XS pad) me
+        // stable header height (Heading 21.6) ke saath, numeric cols
+        // right-align (pad math, grid origin-se) at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table7/comparison/table-sort-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table7/round-1/comparison/table-sort-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-sort-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"sort_col\": 2"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header stable: table6 lock, body se taller, marker se nahi badhta.
+        assert!((table7_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table7_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table7_header_h(), table6_header_h());
+        assert!(table7_header_h_stable());
+        assert!((table7_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table7_row_h(), table_cell_row_h());
+        assert_eq!(TABLE7_CANVAS_W, 960.0);
+        assert_eq!(TABLE7_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table7_avail_w(), 936.0);
+        assert_eq!(table7_grid_origin(), (12.0, 12.0));
+        assert_eq!(table7_col_spacing(), 8.0);
+        assert_eq!(table7_grid_gap_y(), 4.0);
+        assert_eq!(TABLE7_SORT_SLOT_PAD, crate::theme::SPACE_XS);
+        assert_eq!(TABLE7_SORT_SLOT_PAD, 4.0);
+        assert_eq!(table7_header_underline_w(), 1.0);
+        assert!(table7_header_weight_ok());
+
+        // 2. Sort markers fixed 1-char, stable placement.
+        assert_eq!(table7_sort_marker(false, true), " ");
+        assert_eq!(table7_sort_marker(true, true), "▲");
+        assert_eq!(table7_sort_marker(true, false), "▼");
+        assert!(table7_is_sorted_col(Some(2), 2));
+        assert!(!table7_is_sorted_col(Some(2), 0));
+        assert_eq!(table7_header_label("Price", true, false), "Price▼");
+        assert_eq!(table7_header_label("ID", false, true), "ID ");
+        let cell = TableCellRect {
+            x: 112.0,
+            y: 12.0,
+            w: 64.0,
+            h: table7_header_h(),
+        };
+        let glyph_sorted = table7_sort_glyph_rect(cell, 8.0);
+        let glyph_plain = table7_sort_glyph_rect(cell, 8.0);
+        assert_eq!(glyph_sorted, glyph_plain);
+        assert_eq!(
+            glyph_sorted.map(|r| (r.x, r.w, r.h)),
+            Some((164.0, 8.0, table7_header_h()))
+        );
+        assert_eq!(table7_sort_glyph_rect(cell, 0.0), None);
+
+        // 3. Numeric right-align via pad math at grid origin.
+        assert!(table7_is_numeric_cell("100.50"));
+        assert!(table7_is_numeric_cell(" -3 "));
+        assert!(!table7_is_numeric_cell("apple"));
+        assert!(!table7_is_numeric_cell("-"));
+        assert!(!table7_is_numeric_cell(""));
+        assert!(!table7_is_numeric_cell("NaN"));
+        assert!(!table7_is_numeric_col(&[]));
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        assert_eq!(table7_col_aligns(&header, &rows), vec![true, false, true]);
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table7_row_h(),
+        };
+        assert_eq!(table7_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table7_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table7_cell_text_x(outer, 100.0, true), None);
+
+        // 4. Col widths char metrics se + fit at 960: [3,5,6] @8px
+        // -> outer [40,56,64], total 176, xs [0,48,112], seps [44,108].
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        let px = table7_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table7_grid_total_w(&px), 176.0);
+        assert_eq!(table7_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table7_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table7_column_grid_fit(table7_avail_w(), &px));
+        assert!(!table7_column_grid_fit(100.0, &px));
+        assert!(table7_col_widths_px(&widths, 0.0).is_empty());
+        assert_eq!(table7_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table8_round1_keys_plus_widths_wide_960() {
+        // Headless test proving edge fixture comparison/table-keys-960.json:
+        // key-column widths char metrics se, numeric right-align grid origin
+        // se, header/body heights TypoRole se at 960px wide.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table8/comparison/table-keys-960.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table8/round-1/comparison/table-keys-960.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-keys-960\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 960.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 936.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header/body heights TypoRole se, stable rhythm.
+        assert!((table8_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table8_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table8_header_h(), table7_header_h());
+        assert!(table8_header_h_stable());
+        assert!((table8_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table8_row_h(), table_cell_row_h());
+        assert_eq!(
+            table8_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table8_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table8_header_h() > table8_row_h());
+        assert_eq!(TABLE8_CANVAS_W, 960.0);
+        assert_eq!(TABLE8_CANVAS_W, TABLE_CANVAS_W);
+        assert_eq!(table8_avail_w(), 936.0);
+        assert_eq!(table8_grid_origin(), (12.0, 12.0));
+        assert_eq!(table8_col_spacing(), 8.0);
+        assert_eq!(table8_grid_gap_y(), 4.0);
+        assert!((table8_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table8_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table8_header_underline_w(), 1.0);
+        assert!(table8_header_weight_ok());
+
+        // 2. Key-column widths char metrics se at 960px wide.
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(table8_key_widths_chars(&header, &rows, &keys), vec![(0, 3)]);
+        assert_eq!(
+            table8_key_widths_chars(&header, &rows, &[0, 2]),
+            vec![(0, 3), (2, 6)]
+        );
+        assert!(table8_key_widths_chars(&header, &rows, &[9]).is_empty());
+        assert!(table8_key_widths_chars(&header, &rows, &[]).is_empty());
+        let key_px = table8_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table8_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        assert!(table8_key_outer_widths(&[(0, 3)], f32::NAN).is_empty());
+        let px = table8_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table8_grid_total_w(&px), 176.0);
+        assert_eq!(table8_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table8_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table8_key_col_xs(&[2], &px), vec![(2, 112.0)]);
+        assert!(table8_key_col_xs(&[9], &px).is_empty());
+        assert_eq!(table8_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table8_column_grid_fit(table8_avail_w(), &px));
+        assert!(!table8_column_grid_fit(100.0, &px));
+        assert!(table8_col_widths_px(&widths, 0.0).is_empty());
+
+        // 3. Numeric right-alignment grid origin se + sort glyph stable.
+        assert_eq!(table8_col_aligns(&header, &rows), vec![true, false, true]);
+        assert_eq!(
+            table8_col_aligns(&header, &rows),
+            table7_col_aligns(&header, &rows)
+        );
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table8_row_h(),
+        };
+        assert_eq!(table8_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table8_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table8_cell_text_x(outer, 100.0, true), None);
+        assert_eq!(table8_sort_marker(true, false), "▼");
+        assert_eq!(table8_header_label("Price", true, false), "Price▼");
+        assert!(table8_is_sorted_col(Some(0), 0));
+        assert!(!table8_is_sorted_col(Some(0), 1));
+        let cell = TableCellRect {
+            x: 0.0,
+            y: 12.0,
+            w: 40.0,
+            h: table8_header_h(),
+        };
+        assert_eq!(
+            table8_sort_glyph_rect(cell, 8.0).map(|r| (r.x, r.w)),
+            Some((28.0, 8.0))
+        );
+        assert_eq!(table8_sort_glyph_rect(cell, 0.0), None);
+        assert_eq!(table8_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table9_round1_keys_narrow_720() {
+        // Headless test proving edge fixture comparison/table-keys-720.json:
+        // key-column widths char metrics se at 720 narrow, numeric
+        // right-align grid origin se, header/body heights TypoRole se locked.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table9/comparison/table-keys-720.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table9/round-1/comparison/table-keys-720.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-keys-720\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 720.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 696.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 38"));
+
+        // 1. Header/body heights TypoRole se locked, narrow canvas 720.
+        assert!((table9_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table9_header_h(), TABLE6_HEADER_H);
+        assert_eq!(table9_header_h(), table8_header_h());
+        assert!(table9_header_h_stable());
+        assert!((table9_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table9_row_h(), table_cell_row_h());
+        assert_eq!(
+            table9_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table9_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table9_header_h() > table9_row_h());
+        assert_eq!(TABLE9_CANVAS_W, 720.0);
+        assert_eq!(TABLE9_CANVAS_W, TABLE_NARROW_CANVAS_W);
+        assert_eq!(table9_avail_w(), 696.0);
+        assert_eq!(table9_avail_w(), table3_narrow_avail_w());
+        assert_eq!(table9_grid_origin(), (12.0, 12.0));
+        assert_eq!(table9_col_spacing(), 8.0);
+        assert_eq!(table9_grid_gap_y(), 4.0);
+        assert!((table9_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table9_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table9_header_underline_w(), 1.0);
+        assert!(table9_header_weight_ok());
+
+        // 2. Key-column widths char metrics se at narrow-720: [3,5,6] @8px
+        // -> outer [40,56,64], key col 0 -> (0,3) -> 40px at x 0.0, total
+        // 176 fit in 696 (nahi overflow).
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(table9_key_widths_chars(&header, &rows, &keys), vec![(0, 3)]);
+        assert_eq!(
+            table9_key_widths_chars(&header, &rows, &[0, 2]),
+            vec![(0, 3), (2, 6)]
+        );
+        assert!(table9_key_widths_chars(&header, &rows, &[9]).is_empty());
+        assert!(table9_key_widths_chars(&header, &rows, &[]).is_empty());
+        let key_px = table9_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table9_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        assert!(table9_key_outer_widths(&[(0, 3)], f32::NAN).is_empty());
+        let px = table9_col_widths_px(&widths, 8.0);
+        assert_eq!(px, table_col_widths_px(&widths, 8.0));
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table9_grid_total_w(&px), 176.0);
+        assert_eq!(table9_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table9_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table9_key_col_xs(&[2], &px), vec![(2, 112.0)]);
+        assert!(table9_key_col_xs(&[9], &px).is_empty());
+        assert_eq!(table9_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table9_column_grid_fit(table9_avail_w(), &px));
+        assert!(!table9_column_grid_fit(100.0, &px));
+        assert!(table9_col_widths_px(&widths, 0.0).is_empty());
+
+        // 3. Numeric right-alignment via grid origin + sort glyph stable.
+        assert_eq!(table9_col_aligns(&header, &rows), vec![true, false, true]);
+        assert_eq!(
+            table9_col_aligns(&header, &rows),
+            table7_col_aligns(&header, &rows)
+        );
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table9_row_h(),
+        };
+        assert_eq!(table9_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table9_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table9_cell_text_x(outer, 100.0, true), None);
+        assert_eq!(table9_sort_marker(true, false), "▼");
+        assert_eq!(table9_header_label("Price", true, false), "Price▼");
+        assert!(table9_is_sorted_col(Some(0), 0));
+        assert!(!table9_is_sorted_col(Some(0), 1));
+        let cell = TableCellRect {
+            x: 0.0,
+            y: 12.0,
+            w: 40.0,
+            h: table9_header_h(),
+        };
+        assert_eq!(
+            table9_sort_glyph_rect(cell, 8.0).map(|r| (r.x, r.w)),
+            Some((28.0, 8.0))
+        );
+        assert_eq!(table9_sort_glyph_rect(cell, 0.0), None);
+        assert_eq!(table9_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table10_round1_tall_plus_rows_1200() {
+        // Headless test proving edge fixture comparison/table-tall-1200.json:
+        // tall rows over 1200px canvas (Mono 15.6 lock, 76 visible),
+        // key-column tall lock over long scroll (box h 1485.6), header tall
+        // rhythm (Heading 21.6 vs Mono 15.6, sep 35.6, body 37.6).
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table10/comparison/table-tall-1200.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table10/round-1/comparison/table-tall-1200.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"table-tall-1200\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 720.0"));
+        assert!(fixture_raw.contains("\"canvas_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"tall_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"panes_h\": 1200.0"));
+        assert!(fixture_raw.contains("\"header_h\": 21.6"));
+        assert!(fixture_raw.contains("\"row_height\": 15.6"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"header_underline_w\": 1.0"));
+        assert!(fixture_raw.contains("\"header_weight\": 600"));
+        assert!(fixture_raw.contains("\"visible_rows\": 76"));
+        assert!(fixture_raw.contains("\"total_rows\": 76"));
+
+        // 1. Tall canvas: narrow width reuse, height doubled (600 x 2).
+        assert_eq!(TABLE10_CANVAS_W, 720.0);
+        assert_eq!(TABLE10_CANVAS_W, TABLE_NARROW_CANVAS_W);
+        assert_eq!(TABLE10_CANVAS_H, 1200.0);
+        assert_eq!(TABLE10_CANVAS_H, TABLE_CANVAS_H * 2.0);
+        assert_eq!(TABLE10_CANVAS_H, TABLE_CANVAS_H + TABLE_CANVAS_H);
+        assert_eq!(table10_avail_w(), 696.0);
+        assert_eq!(table10_avail_w(), table9_avail_w());
+        assert_eq!(table10_grid_origin(), (12.0, 12.0));
+        assert_eq!(table10_col_spacing(), 8.0);
+        assert_eq!(table10_grid_gap_y(), 4.0);
+
+        // 2. Row heights over tall canvas: header/body TypoRole locks.
+        assert!((table10_header_h() - 21.6).abs() < 0.001);
+        assert_eq!(table10_header_h(), table9_header_h());
+        assert!(table10_header_h_stable());
+        assert!((table10_row_h() - 15.6).abs() < 0.001);
+        assert_eq!(table10_row_h(), table_cell_row_h());
+        assert_eq!(
+            table10_row_h(),
+            crate::theme::TypoRole::Mono.line_height_px()
+        );
+        assert!((table10_header_body_delta() - 6.0).abs() < 0.01);
+        assert!(table10_header_h() > table10_row_h());
+        assert!((table10_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table10_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table10_header_underline_w(), 1.0);
+        assert!(table10_header_weight_ok());
+
+        // 3. Tall panes + visible rows: 1200 / 15.6 -> 76.
+        assert_eq!(table10_tall_panes_h(), 1200.0);
+        assert_eq!(table10_tall_panes_h(), table_panes_height(1200.0));
+        assert_eq!(table10_tall_visible_rows(), 76);
+        assert_eq!(table10_tall_total_rows(), 76);
+        assert_eq!(
+            table10_tall_visible_rows(),
+            table_wide_960_visible_rows(1200.0)
+        );
+
+        // 4. Key-column widths stable + numeric align over tall scroll.
+        let header = vec!["ID".to_string(), "Item".to_string(), "Price".to_string()];
+        let rows = vec![
+            vec!["22".to_string(), "apple".to_string(), "100.50".to_string()],
+            vec!["7".to_string(), "pie".to_string(), "9.99".to_string()],
+        ];
+        let keys = vec![0usize];
+        let widths = table_column_widths(&header, &rows);
+        assert_eq!(widths, vec![3, 5, 6]);
+        assert_eq!(
+            table10_key_widths_chars(&header, &rows, &keys),
+            vec![(0, 3)]
+        );
+        let key_px = table10_key_outer_widths(&[(0, 3)], 8.0);
+        assert_eq!(key_px, vec![(0, 40.0)]);
+        assert!(table10_key_outer_widths(&[(0, 3)], 0.0).is_empty());
+        let px = table10_col_widths_px(&widths, 8.0);
+        assert_eq!(px, vec![40.0, 56.0, 64.0]);
+        assert_eq!(table10_grid_total_w(&px), 176.0);
+        assert_eq!(table10_col_xs(&px), vec![0.0, 48.0, 112.0]);
+        assert_eq!(table10_key_col_xs(&keys, &px), vec![(0, 0.0)]);
+        assert_eq!(table10_separator_xs(&px), vec![44.0, 108.0]);
+        assert!(table10_column_grid_fit(table10_avail_w(), &px));
+        assert!(!table10_column_grid_fit(100.0, &px));
+        assert_eq!(table10_col_aligns(&header, &rows), vec![true, false, true]);
+        let outer = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 40.0,
+            h: table10_row_h(),
+        };
+        assert_eq!(table10_cell_text_x(outer, 16.0, false), Some(20.0));
+        assert_eq!(table10_cell_text_x(outer, 16.0, true), Some(28.0));
+        assert_eq!(table10_sort_marker(true, true), "▲");
+        assert_eq!(table10_header_label("ID", true, true), "ID▲");
+        assert!(table10_is_sorted_col(Some(0), 0));
+
+        // 5. Key-column tall lock: box h rows * row_h + gaps over 76 rows.
+        assert_eq!(table10_tall_total_rows(), 76);
+        let tall_h = table10_key_box_h(table10_tall_total_rows());
+        assert!((tall_h - 1485.6).abs() < 0.5);
+        assert!(tall_h > 0.0);
+        assert_eq!(table10_key_box_h(0), 0.0);
+        assert_eq!(table10_key_box_h(1), table10_row_h());
+        let mut view = TableKeyView::new();
+        view.toggle_key_column(0);
+        let grid = table_cell_grid_default();
+        let boxes = table10_key_box_rects(&view, grid, &px, table10_tall_total_rows());
+        assert_eq!(boxes.len(), 1);
+        let first = boxes.first().copied();
+        assert!(first.is_some());
+        if let Some(box_rect) = first {
+            assert_eq!(box_rect.y, 12.0);
+            assert!((box_rect.h - tall_h).abs() < 0.5);
+            assert_eq!(box_rect.x, 12.0);
+            assert_eq!(box_rect.w, 40.0);
+        }
+        assert!(table10_key_box_rects(&view, grid, &px, 0).is_empty());
+    }
+
+    #[test]
+    fn table_exq_table30_round1_wide_cols_1200() {
+        // Headless test proving edge fixture comparison/wide-cols-1200.json:
+        // 1200px wide canvas without horizontal scroll (needs_hscroll: false),
+        // key columns (ID key at col 0, outer w 48.0), sort indicators (▲ on ID,
+        // glyph x 48.0 w 8.0), numeric tolerance (tol: 0.01), and xlsx sheet
+        // selector ("Inventory", sheet 1/3, source "xlsx").
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table30/comparison/wide-cols-1200.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table30/round-1/comparison/wide-cols-1200.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"wide-cols-1200\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 1200.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 1176.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\": false"));
+        assert!(fixture_raw.contains("\"key_columns\": [0]"));
+        assert!(fixture_raw.contains("\"sort_col\": 0"));
+        assert!(fixture_raw.contains("\"sort_ascending\": true"));
+        assert!(fixture_raw.contains("\"numeric_tolerance\": 0.01"));
+        assert!(fixture_raw.contains("\"source_kind\": \"xlsx\""));
+        assert!(fixture_raw.contains("\"sheet_badge\": \"1/3\""));
+
+        // 1. 1200px Canvas geometry & avail width
+        assert_eq!(TABLE30_CANVAS_W, 1200.0);
+        assert_eq!(TABLE30_CANVAS_W, crate::theme::SPACE_XL * 50.0);
+        assert_eq!(TABLE30_CANVAS_H, 600.0);
+        assert_eq!(table30_avail_w(), 1176.0);
+        assert_eq!(table30_grid_origin(), (12.0, 12.0));
+        assert_eq!(table30_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table30_grid_gap_y(), crate::theme::SPACE_XS);
+        assert_eq!(table30_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table30_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // 2. Row heights and typo rhythm
+        assert!((table30_header_h() - 21.6).abs() < 0.001);
+        assert!((table30_row_h() - 15.6).abs() < 0.001);
+        assert!((table30_header_body_delta() - 6.0).abs() < 0.001);
+        assert!((table30_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table30_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table30_header_underline_w(), 1.0);
+        assert!(table30_header_weight_ok());
+
+        // 3. Wide columns at 1200px: total width 632.0 fits in 1176.0 (no h-scroll)
+        let header = vec![
+            "ID".to_string(),
+            "Product Description".to_string(),
+            "SKU Code".to_string(),
+            "Unit Price".to_string(),
+            "Quantity".to_string(),
+        ];
+        let rows = vec![
+            vec![
+                "1001".to_string(),
+                "Ergonomic Office Chair with Lumbar Support".to_string(),
+                "FURN-CH-001".to_string(),
+                "249.99".to_string(),
+                "15".to_string(),
+            ],
+            vec![
+                "1002".to_string(),
+                "Height-Adjustable Standing Desk Bamboo".to_string(),
+                "FURN-DK-002".to_string(),
+                "489.50".to_string(),
+                "8".to_string(),
+            ],
+        ];
+        let widths_chars = table_column_widths(&header, &rows);
+        assert_eq!(widths_chars, vec![4, 32, 11, 10, 8]);
+        let col_widths_px = table30_col_widths_px(&widths_chars, 8.0);
+        assert_eq!(col_widths_px, vec![48.0, 272.0, 104.0, 96.0, 80.0]);
+        let total_w = table30_grid_total_w(&col_widths_px);
+        assert_eq!(total_w, 632.0);
+        assert!(table30_column_grid_fit(table30_avail_w(), &col_widths_px));
+        assert!(total_w <= table30_avail_w());
+        assert_eq!(
+            table30_col_xs(&col_widths_px),
+            vec![0.0, 56.0, 336.0, 448.0, 552.0]
+        );
+        assert_eq!(
+            table30_separator_xs(&col_widths_px),
+            vec![52.0, 332.0, 444.0, 548.0]
+        );
+        assert_eq!(
+            table30_col_aligns(&header, &rows),
+            vec![true, false, false, true, true]
+        );
+
+        // 4. Key columns
+        let keys = vec![0usize];
+        assert_eq!(
+            table30_key_widths_chars(&header, &rows, &keys),
+            vec![(0, 4)]
+        );
+        assert_eq!(table30_key_outer_widths(&[(0, 4)], 8.0), vec![(0, 48.0)]);
+        assert_eq!(table30_key_col_xs(&keys, &col_widths_px), vec![(0, 0.0)]);
+        let mut key_view = TableKeyView::new();
+        key_view.toggle_key_column(0);
+        let grid = table_cell_grid_default();
+        let key_boxes = table30_key_box_rects(&key_view, grid, &col_widths_px, 2);
+        assert_eq!(key_boxes.len(), 1);
+        if let Some(first_box) = key_boxes.first() {
+            assert_eq!(first_box.x, 12.0);
+            assert_eq!(first_box.w, 48.0);
+        }
+
+        // 5. Sort indicators & glyphs
+        assert_eq!(table30_sort_marker(true, true), "▲");
+        assert_eq!(table30_sort_marker(true, false), "▼");
+        assert_eq!(table30_sort_marker(false, true), " ");
+        assert!(table30_is_sorted_col(Some(0), 0));
+        assert!(!table30_is_sorted_col(Some(0), 1));
+        assert_eq!(table30_header_label("ID", true, true), "ID▲");
+        let outer_header = TableCellRect {
+            x: 12.0,
+            y: 12.0,
+            w: 48.0,
+            h: table30_header_h(),
+        };
+        let glyph_rect = table30_sort_glyph_rect(outer_header, 8.0);
+        assert!(glyph_rect.is_some());
+        if let Some(gr) = glyph_rect {
+            assert_eq!(gr.x, 48.0);
+            assert_eq!(gr.w, 8.0);
+        }
+
+        // 6. Tolerance
+        assert_eq!(table30_sanitize_tolerance(Some(0.01)), Some(0.01));
+        assert_eq!(table30_sanitize_tolerance(Some(-1.0)), None);
+        assert_eq!(table30_sanitize_tolerance(Some(f64::NAN)), None);
+        assert_eq!(table30_tolerance_badge_label(Some(0.01)), "tol: 0.01");
+        assert_eq!(table30_tolerance_badge_label(None), "exact");
+
+        // 7. XLSX Sheet selector
+        assert_eq!(
+            table30_source_kind("data/sample.xlsx"),
+            TableSourceKind::Xlsx
+        );
+        assert_eq!(table30_source_badge(TableSourceKind::Xlsx), "xlsx");
+        let sheet_names = vec![
+            "Inventory".to_string(),
+            "Pricing".to_string(),
+            "Archived".to_string(),
+        ];
+        assert_eq!(table30_sheet_count(&sheet_names), 3);
+        assert_eq!(table30_sheet_clamp(&sheet_names, 0), Some(0));
+        assert_eq!(table30_sheet_clamp(&sheet_names, 5), None);
+        assert_eq!(
+            table30_sheet_label(&sheet_names, 0),
+            Some("Inventory".to_string())
+        );
+        assert_eq!(table30_sheet_badge(&sheet_names, Some(0)), "1/3");
+        assert_eq!(table30_sheet_badge(&sheet_names, None), "0/3");
+
+        // 8. Visible rows
+        assert_eq!(table30_visible_rows(600.0), 38);
+    }
+
+    #[test]
+    fn table_exq_table43_live_table_grid() {
+        // Headless test proving edge fixture comparison/live-table-grid.json:
+        // live grid geometry lock at 1200px canvas (needs_hscroll: false),
+        // char widths [3,4,3] -> outer [40,48,40], total 144.0 fits in
+        // 1176.0 avail, grid columns 4, cell rect + text-x locked.
+        let fixture_raw =
+            include_str!("../../../checks/gui-exq-table43/comparison/live-table-grid.json");
+        let fixture_r1 =
+            include_str!("../../../checks/gui-exq-table43/round-1/comparison/live-table-grid.json");
+        assert_eq!(fixture_raw, fixture_r1);
+        assert!(fixture_raw.contains("\"name\": \"live-table-grid\""));
+        assert!(fixture_raw.contains("\"canvas_w\": 1200.0"));
+        assert!(fixture_raw.contains("\"avail_w\": 1176.0"));
+        assert!(fixture_raw.contains("\"needs_hscroll\": false"));
+
+        // 1. Canvas / origin / spacing single-source lock.
+        assert_eq!(TABLE43_CANVAS_W, 1200.0);
+        assert_eq!(table43_avail_w(), 1176.0);
+        assert_eq!(table43_grid_origin(), (12.0, 12.0));
+        assert_eq!(table43_col_spacing(), crate::theme::SPACE_SM);
+        assert_eq!(table43_grid_gap_y(), crate::theme::SPACE_XS);
+        assert_eq!(table43_row_sym_pad(), crate::theme::SPACE_XS);
+        assert_eq!(table43_cell_pad_x(), crate::theme::SPACE_SM);
+
+        // 2. Header/body rhythm + typo reuse (no new sizes).
+        assert!((table43_header_h() - 21.6).abs() < 0.001);
+        assert!((table43_row_h() - 15.6).abs() < 0.001);
+        assert!((table43_header_body_delta() - 6.0).abs() < 0.001);
+        assert!((table43_header_sep_y() - 35.6).abs() < 0.001);
+        assert!((table43_body_first_y() - 37.6).abs() < 0.001);
+        assert_eq!(table43_header_underline_w(), 1.0);
+        assert!(table43_header_weight_ok());
+
+        // 3. Live grid widths at 1200px: total 144.0 fits in 1176.0.
+        let header = vec!["ID".to_string(), "Name".to_string(), "Qty".to_string()];
+        let rows = vec![
+            vec!["1".to_string(), "Ana".to_string(), "10".to_string()],
+            vec!["22".to_string(), "Bo".to_string(), "300".to_string()],
+        ];
+        let widths_chars = table_column_widths(&header, &rows);
+        assert_eq!(widths_chars, vec![3, 4, 3]);
+        let col_widths_px = table43_col_widths_px(&widths_chars, 8.0);
+        assert_eq!(col_widths_px, vec![40.0, 48.0, 40.0]);
+        let total_w = table43_grid_total_w(&col_widths_px);
+        assert_eq!(total_w, 144.0);
+        assert!(table43_column_grid_fit(table43_avail_w(), &col_widths_px));
+        assert!(total_w <= table43_avail_w());
+        assert_eq!(table43_col_xs(&col_widths_px), vec![0.0, 48.0, 104.0]);
+        assert_eq!(table43_separator_xs(&col_widths_px), vec![44.0, 100.0]);
+        assert_eq!(table43_col_aligns(&header, &rows), vec![true, false, true]);
+
+        // 4. Grid columns + default rhythm + cell rect + text-x.
+        assert_eq!(table43_grid_columns(&widths_chars), 4);
+        let grid = table43_grid_default();
+        assert_eq!((grid.origin_x, grid.origin_y), (12.0, 12.0));
+        assert!((grid.row_h - 15.6).abs() < 0.001);
+        assert_eq!(grid.col_gap, 8.0);
+        assert_eq!(grid.row_gap, 4.0);
+        let cell = table43_cell_rect(grid, 1, 0, &col_widths_px);
+        assert!(cell.is_some());
+        if let Some(rect) = cell {
+            assert_eq!(rect.x, 60.0);
+            assert_eq!(rect.y, 12.0);
+            assert_eq!(rect.w, 48.0);
+            assert!((rect.h - 15.6).abs() < 0.001);
+            assert_eq!(table43_cell_text_x(rect, 16.0, false), Some(68.0));
+            assert_eq!(table43_cell_text_x(rect, 16.0, true), Some(84.0));
+        }
+
+        // 5. Visible rows.
+        assert_eq!(table43_visible_rows(600.0), 38);
+    }
+}

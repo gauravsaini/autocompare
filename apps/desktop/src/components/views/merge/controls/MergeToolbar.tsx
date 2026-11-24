@@ -1,0 +1,117 @@
+/**
+ * Wave-70: single-row merge controls toolbar (Beyond Compare style).
+ *
+ * Collapses the stacked chrome (conflict-count note + nav/take-all row +
+ * find row) into one toolbar row: prev/next conflict nav + position,
+ * take-all left/right (+ receipt), and a find toggle. Purely
+ * presentational: every value and callback is owned by `MergeView`
+ * (existing plan/choice/find logic untouched). All legacy testids ride
+ * the same controls so wave-12/22/45/66F/66J specs keep passing.
+ *
+ * Wave-144 typexquis: nav/take-all arrows ride Lucide icons (no
+ * text-arrow glyphs); labels and testids unchanged.
+ */
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
+import { Button, ToolbarButton } from "../../../ui";
+
+export interface MergeToolbarProps {
+  readonly position: string;
+  readonly onPrev: () => void;
+  readonly onNext: () => void;
+  readonly onTakeAllLeft: () => void;
+  readonly onTakeAllRight: () => void;
+  readonly takeAllNote: string | null;
+  readonly findOpen: boolean;
+  readonly onToggleFind: () => void;
+  /** Wave-147: overview ruler ids in conflict order (toolbar-embedded, same row). */
+  readonly conflictIds?: readonly number[];
+  /** Wave-147: currently selected conflict id (null = none). */
+  readonly selectedId?: number | null;
+  /** Wave-147: jump to conflict by id (same selectConflict path as nav). */
+  readonly onSelectId?: (id: number) => void;
+}
+
+export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Element {
+  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId } = props;  return (
+    <div
+      role="toolbar"
+      aria-label="Merge controls"
+      data-testid="mergeview/toolbar"
+      className="tv-controls-bar"
+    >
+      <Button data-testid="merge-prev" onClick={onPrev}>
+        <ChevronLeft size={14} aria-hidden="true" /> Prev conflict
+      </Button>
+      <Button data-testid="merge-next" onClick={onNext}>
+        Next conflict <ChevronRight size={14} aria-hidden="true" />
+      </Button>
+      <span
+        data-testid="merge-conflict-position"
+        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+      >
+        {position}
+      </span>
+      {/* Wave-147: toolbar-embedded overview ruler (BC right-edge ruler
+          folded into the single toolbar row: same row, no new stacked
+          rows, chrome budget holds). One 12px dot per conflict in
+          conflict order; click jumps via the same selectConflict path
+          as prev/next. Reuses existing accent/border tokens only. */}
+      {(conflictIds ?? []).length > 0 && (
+        <span
+          data-testid="merge-overview"
+          role="group"
+          aria-label="conflict overview"
+          className="inline-flex items-center gap-[var(--ac-space-1)]"
+        >
+          {(conflictIds ?? []).map((id) => {
+            const active = selectedId === id;
+            return (
+              <Button
+                key={id}
+                data-testid={`merge-overview-dot-${id}`}
+                aria-label={`go to conflict ${id}`}
+                aria-current={active ? "true" : undefined}
+                title={`go to conflict ${id}`}
+                onClick={() => onSelectId?.(id)}
+                className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-[var(--ac-border)] bg-[var(--ac-bg)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                style={active ? { backgroundColor: "var(--ac-accent)", borderColor: "var(--ac-accent)" } : undefined}
+              >
+                <span aria-hidden="true" className="block h-1 w-1 rounded-full" style={{ backgroundColor: active ? "var(--ac-bg)" : "var(--ac-fg-muted)" }} />
+              </Button>
+            );
+          })}
+        </span>
+      )}
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <Button data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
+        <ChevronsLeft size={14} aria-hidden="true" /> Take all left
+      </Button>
+      <Button data-testid="merge-take-all-right" onClick={onTakeAllRight}>
+        Take all right <ChevronsRight size={14} aria-hidden="true" />
+      </Button>
+      {takeAllNote === null ? null : (
+        <span
+          data-testid="merge-take-all-status"
+          role="status"
+          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+        >
+          {takeAllNote}
+        </span>
+      )}
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <ToolbarButton
+        data-testid="mergeview/toolbar-find"
+        label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
+        aria-label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
+        title="Find in merge (Ctrl+F)"
+        aria-expanded={findOpen}
+        onClick={onToggleFind}
+        
+      >
+        <Search size={14} strokeWidth={1.75} aria-hidden="true" />
+        <span>Find</span>
+      </ToolbarButton>
+      <span className="inline-flex items-center gap-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">(keys: j/k, n/p, <ArrowUp size={12} aria-hidden="true" />/<ArrowDown size={12} aria-hidden="true" />)</span>
+    </div>
+  );
+}

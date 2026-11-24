@@ -1,0 +1,25 @@
+/target
+/dist
+.DS_Store
+*.swp
+.unlazy/
+docs/
+GATES-*.md
+GATES.md
+.tmp-waves/
+node_modules/
+dist/
+apps/desktop/pnpm-lock.yaml
+apps/desktop/pnpm-workspace.yaml
+
+# dev-support (local only, not source artifacts)
+PLAN.md
+PLAN-*.md
+TIMELINE.md
+bc-exact-brief.md
+craft.json
+/okf/
+/capture/
+/skills/
+/tools/
+/checks/

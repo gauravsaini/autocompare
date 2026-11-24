@@ -1,0 +1,1049 @@
+@import "tailwindcss";
+
+/*
+ * Wave-144 typexquis: bundled offline-first fonts (repo woff2, no npm
+ * dep, no remote fetch). Inter 400/500/600 for UI, JetBrains Mono
+ * 400/500 for code. System stacks stay as fallback. Family stacks
+ * ONLY — sizes/line-heights/tracking/colors/spacing untouched (135).
+ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/inter-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/inter-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/inter-600.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/jetbrains-mono-500.woff2") format("woff2");
+}
+
+/*
+ * AutoCompare macOS design-token system.
+ *
+ * Wave 3B Light-Mode Polish:
+ * - System font stacks: SF Pro for UI, SF Mono / ui-monospace for code/data/ruler.
+ * - WCAG AAA contrast for diff rows and text selections in both light & dark modes.
+ * - Symmetrical tokens across light (:root) and dark (@media prefers-color-scheme: dark).
+ * - Focus-visible rings and selected-row contrast standards.
+ */
+
+:root {
+  /* Typography (Wave-144: bundled Inter/JetBrains Mono first,
+     system stacks stay as fallback) */
+  --ac-font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --ac-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Surfaces & Backgrounds */
+  --ac-bg: #f5f5f7;
+  --ac-bg-raised: #ffffff;
+  --ac-surface: #ffffff;
+  --ac-surface-secondary: #fbfbfd;
+
+  /* Foreground & Typography */
+  --ac-fg: #1d1d1f;
+  --ac-fg-muted: #6e6e73;
+
+  /* Borders & Dividers */
+  --ac-border: #d2d2d7;
+  --ac-border-subtle: #e5e5ea;
+
+  /* Accent & Focus */
+  --ac-accent: #0a84ff;
+  --ac-focus-ring: #0a84ff;
+  --ac-focus-ring-subtle: rgba(10, 132, 255, 0.25);
+
+  /* Selection & Hover */
+  --ac-selection-bg: #b3d7ff;
+  --ac-selection-fg: #002b55;
+  --ac-row-hover-bg: rgba(0, 0, 0, 0.035);
+
+  /* Find Hits (Wave-105: BC gold hit + amber current outline) */
+  --ac-find-hit-bg: #ffdf6b;
+  --ac-find-hit-fg: #433002;
+  --ac-find-current-outline: #b26a00;
+
+  /* Hatch Line (Wave-105: names the orphan-hatch ink; value == the
+     long-standing text-view hatch line so 66Q geometry is untouched) */
+  --ac-hatch-line: #d2d2d7;
+
+  /* Rails, Chevrons, Status Accents (Wave-105: role names, values
+     byte-identical to the tokens they alias so zero pixels move) */
+  --ac-rail-line: #e5e5ea;
+  --ac-rail-accent: #6e6e73;
+  --ac-chevron-fg: #ff9f0a;
+  --ac-status-newer: #0a84ff;
+
+  /* Diff Kinds (BC-tightened pastels, Wave-105 audit vs /tmp/bc-*.png):
+     del wash measured #f5b1ad, chg wash #f6db87/#efd697, add pale green.
+     fg inks unchanged (contrast-verified both modes). */
+  --ac-diff-add-bg: #d9f0dd;
+  --ac-diff-add-fg: #14532d;
+  --ac-diff-add-border: #bbf7d0;
+
+  --ac-diff-del-bg: #f6c2bd;
+  --ac-diff-del-fg: #7f1d1d;
+  --ac-diff-del-border: #fecaca;
+
+  --ac-diff-chg-bg: #f7e3a6;
+  --ac-diff-chg-fg: #713f12;
+  --ac-diff-chg-border: #fde68a;
+
+  --ac-diff-same-bg: transparent;
+  --ac-diff-same-fg: var(--ac-fg);
+
+  /* Chrome: Tabs */
+  --ac-tab-bg: #e8e8ed;
+  --ac-tab-fg: #6e6e73;
+  --ac-tab-active-bg: #ffffff;
+  --ac-tab-active-fg: #1d1d1f;
+  --ac-tab-dirty: #ff9f0a;
+
+  /* Chrome: Toolbar */
+  --ac-toolbar-bg: #f5f5f7;
+  --ac-toolbar-btn-fg: #1d1d1f;
+  --ac-toolbar-btn-disabled: #aeaeb2;
+  --ac-toolbar-btn-hover-bg: #e8e8ed;
+
+  /* Chrome: Pathbar & Statusbar */
+  --ac-pathbar-bg: #ffffff;
+  --ac-statusbar-bg: #e8e8ed;
+  --ac-statusbar-fg: #6e6e73;
+
+  /* Overview Ruler */
+  --ac-ruler-track: transparent;
+  --ac-ruler-same: #d2d2d7;
+  --ac-ruler-del: #ff453a;
+  --ac-ruler-ins: #30d158;
+  --ac-ruler-chg: #ffd60a;
+
+  /* Feedback & Alerts */
+  --ac-alert-bg: #fef2f2;
+  --ac-alert-border: #fca5a5;
+  --ac-alert-fg: #991b1b;
+  --ac-badge-bg: #e5e5ea;
+  --ac-badge-fg: #636366;
+
+  /* Wave-A: shared desktop control kit (macOS density, BC hierarchy).
+     Geometry + hierarchy only; colors ride existing accent/focus tokens. */
+  --ac-control-h-sm: 22px;
+  --ac-control-h-md: 26px;
+  --ac-btn-bg: var(--ac-bg-raised);
+  --ac-btn-fg: var(--ac-fg);
+  --ac-btn-border: var(--ac-border);
+  --ac-btn-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.08);
+  --ac-btn-hover-bg: var(--ac-toolbar-btn-hover-bg);
+  --ac-btn-active-bg: var(--ac-border-subtle);
+  --ac-btn-primary-bg: var(--ac-accent);
+  --ac-btn-primary-fg: #ffffff;
+  --ac-btn-danger-bg: #d70015;
+  --ac-btn-danger-fg: #ffffff;
+  --ac-segment-track: var(--ac-border-subtle);
+  --ac-segment-active-bg: var(--ac-bg-raised);
+  --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.12);
+  --ac-input-bg: var(--ac-bg-raised);
+  --ac-input-border: var(--ac-border);
+  --ac-checkbox-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Existing dark mode tokens kept strictly byte-identical */
+    --ac-bg: #1d1d1f;
+    --ac-bg-raised: #2c2c2e;
+    --ac-fg: #f5f5f7;
+    --ac-fg-muted: #a1a1a6;
+    --ac-border: #48484a;
+    --ac-accent: #0a84ff;
+
+    --ac-diff-add-bg: #16351f;
+    --ac-diff-add-fg: #bbf7d0;
+    --ac-diff-del-bg: #5a1410;
+    --ac-diff-del-fg: #fecaca;
+    --ac-diff-chg-bg: #45300a;
+    --ac-diff-chg-fg: #fde68a;
+
+    --ac-tab-bg: #2c2c2e;
+    --ac-tab-fg: #a1a1a6;
+    --ac-tab-active-bg: #48484a;
+    --ac-tab-active-fg: #f5f5f7;
+    --ac-tab-dirty: #ff9f0a;
+    --ac-toolbar-bg: #1d1d1f;
+    --ac-toolbar-btn-fg: #f5f5f7;
+    --ac-toolbar-btn-disabled: #636366;
+    --ac-toolbar-btn-hover-bg: #2c2c2e;
+    --ac-pathbar-bg: #2c2c2e;
+    --ac-statusbar-bg: #2c2c2e;
+    --ac-statusbar-fg: #a1a1a6;
+    --ac-ruler-track: transparent;
+    --ac-ruler-same: #48484a;
+    --ac-ruler-del: #ff6961;
+    --ac-ruler-ins: #30d158;
+    --ac-ruler-chg: #ffd60a;
+
+    /* Mirrored dark mode extensions */
+    --ac-surface: #242426;
+    --ac-surface-secondary: #1e1e20;
+    --ac-border-subtle: #38383a;
+    --ac-focus-ring: #0a84ff;
+    --ac-focus-ring-subtle: rgba(10, 132, 255, 0.35);
+    --ac-selection-bg: #1a4f8b;
+    --ac-selection-fg: #ffffff;
+    --ac-row-hover-bg: rgba(255, 255, 255, 0.045);
+
+    /* Wave-105 dark mirrors: gold hit readable on dark, amber outline */
+    --ac-find-hit-bg: #6b5410;
+    --ac-find-hit-fg: #ffe9a8;
+    --ac-find-current-outline: #ffd60a;
+    --ac-hatch-line: #48484a;
+    --ac-rail-line: #38383a;
+    --ac-rail-accent: #a1a1a6;
+    --ac-chevron-fg: #ff9f0a;
+    --ac-status-newer: #0a84ff;
+    --ac-diff-same-bg: transparent;
+    --ac-diff-same-fg: var(--ac-fg);
+    --ac-diff-add-border: #235532;
+    --ac-diff-del-border: #632020;
+    --ac-diff-chg-border: #6e4e10;
+    --ac-alert-bg: #450a0a;
+    --ac-alert-border: #991b1b;
+    --ac-alert-fg: #fecaca;
+    --ac-badge-bg: #3a3a3c;
+    --ac-badge-fg: #aeaeb2;
+
+    /* Wave-A dark mirrors: same control geometry, dark surfaces. */
+    --ac-control-h-sm: 22px;
+    --ac-control-h-md: 26px;
+    --ac-btn-bg: var(--ac-bg-raised);
+    --ac-btn-fg: var(--ac-fg);
+    --ac-btn-border: var(--ac-border);
+    --ac-btn-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3);
+    --ac-btn-hover-bg: var(--ac-toolbar-btn-hover-bg);
+    --ac-btn-active-bg: var(--ac-border-subtle);
+    --ac-btn-primary-bg: var(--ac-accent);
+    --ac-btn-primary-fg: #ffffff;
+    --ac-btn-danger-bg: #ff453a;
+    --ac-btn-danger-fg: #ffffff;
+    --ac-segment-track: var(--ac-border-subtle);
+    --ac-segment-active-bg: var(--ac-bg-raised);
+    --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
+    --ac-input-bg: var(--ac-bg-raised);
+    --ac-input-border: var(--ac-border);
+    --ac-checkbox-size: 13px;
+  }
+}
+
+/* Global Typography & Reset */
+body {
+  font-family: var(--ac-font-ui);
+  background: var(--ac-bg);
+  color: var(--ac-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.ac-mono,
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--ac-font-mono);
+}
+
+/*
+ * Wave-51 chrome typography (NO colors, NO geometry).
+ * Tab labels, path history, and status/meta text ride the UI token
+ * ramp with tight tracking; 11px meta is the single honest small size.
+ */
+.ac-chrome-label {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-ui);
+  line-height: var(--ac-line-height-ui);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+.ac-meta {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-meta);
+  line-height: var(--ac-line-height-meta);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+/*
+ * Wave-135 display applications (typography ONLY, no color/geometry).
+ * Welcome/empty-state h1, SessionManager h2, and welcome/body copy
+ * ride these instead of hardcoded text-2xl/text-lg/text-sm.
+ */
+.ac-display {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-display);
+  line-height: var(--ac-line-height-display);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+.ac-title {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-title);
+  line-height: var(--ac-line-height-title);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+.ac-body {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-body);
+  line-height: var(--ac-line-height-ui);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+/* Focus Visible Rings Standard */
+:focus-visible {
+  outline: 2px solid var(--ac-focus-ring);
+  outline-offset: 1px;
+}
+
+/* View Components & Diff Rows */
+.tv-row {
+  /* Wave 66Q: no row border-bottom (BC-gutter exact parity). The 1px
+     striping cut multi-line hunk bracket rails and orphan hatches
+     into strips; rows keep exact 22px via --ac-row-h below. */
+  line-height: 1.5;
+  transition: background-color 0.08s ease;
+}
+
+.tv-row:hover {
+  background-color: var(--ac-row-hover-bg);
+}
+
+.tv-same {
+  background-color: var(--ac-diff-same-bg);
+  color: var(--ac-diff-same-fg);
+}
+
+.tv-del {
+  background-color: var(--ac-diff-del-bg);
+  color: var(--ac-diff-del-fg);
+}
+
+.tv-ins {
+  background-color: var(--ac-diff-add-bg);
+  color: var(--ac-diff-add-fg);
+}
+
+.tv-chg {
+  background-color: var(--ac-diff-chg-bg);
+  color: var(--ac-diff-chg-fg);
+}
+
+.tv-row.is-selected,
+.tv-row:focus-within {
+  background-color: var(--ac-selection-bg);
+  color: var(--ac-selection-fg);
+}
+
+/* Table View */
+.tc-row {
+  border-bottom: 1px solid var(--ac-border-subtle);
+  transition: background-color 0.08s ease;
+}
+
+.tc-row:hover {
+  background-color: var(--ac-row-hover-bg);
+}
+
+.tc-head {
+  background-color: var(--ac-bg-raised);
+  color: var(--ac-fg-muted);
+  border-bottom: 1px solid var(--ac-border);
+  font-weight: var(--ac-font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.tc-cell {
+  color: var(--ac-fg);
+}
+
+.tc-diff {
+  background-color: var(--ac-diff-chg-bg);
+  color: var(--ac-diff-chg-fg);
+}
+
+.tc-row.is-selected {
+  background-color: var(--ac-selection-bg);
+  color: var(--ac-selection-fg);
+}
+
+/* Hex View */
+.hx-row {
+  line-height: 1.5;
+  transition: background-color 0.08s ease;
+}
+
+.hx-row:hover {
+  background-color: var(--ac-row-hover-bg);
+}
+
+.hx-byte {
+  border-radius: 2px;
+}
+
+.hx-diff {
+  background-color: var(--ac-diff-chg-bg);
+  color: var(--ac-diff-chg-fg);
+  font-weight: var(--ac-font-weight-semibold);
+}
+
+.hx-row.is-selected {
+  background-color: var(--ac-selection-bg);
+  color: var(--ac-selection-fg);
+}
+
+/* Folder View */
+.fv-node {
+  border-bottom: 1px solid var(--ac-border-subtle);
+  line-height: 1.5;
+  transition: background-color 0.08s ease;
+}
+
+.fv-node:hover {
+  background-color: var(--ac-row-hover-bg);
+}
+
+.fv-status {
+  letter-spacing: -0.01em;
+}
+
+.fv-status-same {
+  color: var(--ac-fg);
+}
+
+.fv-status-different {
+  color: var(--ac-diff-chg-fg);
+  font-weight: var(--ac-font-weight-medium);
+}
+
+.fv-status-leftOnly {
+  color: var(--ac-diff-del-fg);
+}
+
+.fv-status-rightOnly {
+  color: var(--ac-diff-add-fg);
+}
+
+.fv-status-newerLeft,
+.fv-status-newerRight {
+  color: var(--ac-status-newer);
+}
+
+.fv-node.is-selected {
+  background-color: var(--ac-selection-bg);
+  color: var(--ac-selection-fg);
+}
+
+/* Merge View */
+.mv-conflict {
+  border: 1px solid var(--ac-border);
+  background-color: var(--ac-bg-raised);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.mv-conflict:focus-within {
+  border-color: var(--ac-accent);
+  box-shadow: 0 0 0 1px var(--ac-accent);
+}
+
+/*
+ * Wave 6B: exquisite diff geometry + typography (NO color values here).
+ *
+ * Geometry: one shared row height, one gutter width, one scroll height,
+ * and a 4px-base spacing scale. Every view below reads these tokens so
+ * left/right panes stay symmetric and virtualized rows stay aligned.
+ * Typography: bundled Inter for UI chrome, bundled JetBrains Mono for code
+ * cells (Wave-144 offline-first woff2, system stacks stay as fallback),
+ * tabular numerals for gutters/offsets, 1.5-1.6 code line-height,
+ * 0 code letter-spacing.
+ */
+:root {
+  /* Spacing scale (4px base) */
+  --ac-space-1: 4px;
+  --ac-space-2: 8px;
+  --ac-space-3: 12px;
+  --ac-space-4: 16px;
+  --ac-space-5: 20px;
+  --ac-space-6: 24px;
+  --ac-space-8: 32px;
+
+  /*
+   * Wave-122 geometry audit (spacing ONLY, zero color/font change):
+   * the 4px ramp had no 20px step (space-4 -> space-6 jump); chrome
+   * gaps/paddings now quantize to an unbroken 4px ladder. Hit-area
+   * floor: primary chrome targets >= 32px (space-8); compact icon
+   * buttons 28px (space-7 = 7*4, WCAG 2.5.8 24px minimum exceeded).
+   */
+  --ac-space-7: 28px;
+  --ac-hit-min: 32px;
+
+  /* Chrome geometry: toolbar/tabbar/pathbar/statusbar ride the same 4px scale */
+  --ac-toolbar-h: 44px;
+  --ac-tabbar-h: 40px;
+  --ac-pathbar-h: 40px;
+  --ac-statusbar-h: 28px;
+
+  /* Row geometry: every diff row in every view measures the same (Wave-88 unified 22px) */
+  --ac-row-h: 22px;
+  --ac-gutter-w: 3rem;
+  --ac-gutter-w-hex: 5rem;
+  --ac-scroll-h: 600px;
+
+  /* Type scale */
+  --ac-font-size-ui: 12px;
+  --ac-font-size-meta: 11px;
+  --ac-line-height-meta: 1.45;
+  --ac-font-size-code: 12px;
+  --ac-line-height-ui: 1.5;
+  --ac-line-height-code: 1.55;
+  --ac-letter-spacing-code: 0;
+  --ac-letter-spacing-ui-tight: -0.01em;
+
+  /* Type weights (typo-100: single source for emphasis weights) */
+  --ac-font-weight-regular: 400;
+  --ac-font-weight-medium: 500;
+  --ac-font-weight-semibold: 600;
+
+  /*
+   * Wave-135 display scale (typography ONLY): chrome display/title/body
+   * sizes that were hardcoded text-2xl/text-lg/text-sm. Display/title
+   * get tighter line-heights; body reuses the UI ramp.
+   */
+  --ac-font-size-display: 24px;
+  --ac-font-size-title: 18px;
+  --ac-font-size-body: 14px;
+  --ac-line-height-display: 1.25;
+  --ac-line-height-title: 1.4;
+}
+
+/* Text view: fixed-height rows, symmetric 1fr/1fr panes, tabular gutter */
+.tv-row {
+  height: var(--ac-row-h);
+  min-height: var(--ac-row-h);
+  box-sizing: border-box;
+}
+
+/*
+ * Wave-88: unified row density 22px (matches TextView virtualizer n = 22).
+ */
+
+.tv-grid {
+  display: grid;
+  grid-template-columns: var(--ac-gutter-w) 1fr 1fr;
+  align-items: stretch;
+  height: 100%;
+}
+
+.tv-gutter {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+  font-variant-numeric: tabular-nums;
+}
+
+.tv-cell {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+}
+
+/* Table view: same row height; sans UI header, mono code cells */
+.tc-row {
+  height: var(--ac-row-h);
+  min-height: var(--ac-row-h);
+  box-sizing: border-box;
+}
+
+.tc-head {
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-ui);
+  line-height: var(--ac-line-height-ui);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+.tc-cell {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hex view: same row height; tabular offsets, zero-tracked bytes */
+.hx-row {
+  min-height: var(--ac-row-h);
+  box-sizing: border-box;
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+}
+
+.hx-offset,
+.hx-hex,
+.hx-ascii {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Folder view: same row height; sans UI tree text */
+.fv-node {
+  min-height: var(--ac-row-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-ui);
+  line-height: var(--ac-line-height-ui);
+}
+
+.fv-status {
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+}
+
+/* Merge view: code panes keep mono + 1.55 line-height + 0 tracking */
+.mv-pane pre,
+.mv-conflict pre {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+}
+
+/* Sync + media views: data rows ride the same code type ramp */
+.sv-row,
+.mw-row {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Wave 66I: BC-style orphan hatching + per-cell tint scoping (NO new
+ * palette hues: the hatch line reuses the existing border token, which
+ * reads in both schemes).
+ *
+ * Kind tints (`tv-del` / `tv-ins` / `tv-chg`) now ride the non-null
+ * text cells instead of the whole row, so a null (orphan) cell is
+ * never tinted: it paints the base surface with a pure-CSS 45-degree
+ * hatch (zero extra DOM) in both light and dark modes.
+ *
+ * Wave 66O: hatch line bumped from `--ac-border-subtle` to
+ * `--ac-border` (existing token, no new hues) so the hatch stays
+ * visible on the light `--ac-bg` surface; dark scheme inherits the
+ * same stronger line.
+ *
+ * Wave 97: seamless multi-row hatch. A 5px `-45deg` period shifts
+ * phase by (22px / sqrt(2)) mod 5 = 0.56px at every 22px row
+ * boundary, so orphan blocks read as per-line stripes. A 5.19px
+ * period (22 / sqrt(2) / 3, 1px line kept) is an exact multiple of
+ * the row-height phase, so stacked 22px cells tile boundary to
+ * boundary with no kink — one continuous BC-style hatch block in
+ * both schemes. Wrap-mode auto-height rows keep their own phase
+ * (documented limitation, scroll mode is the parity target).
+ */
+.tv-cell-empty {
+  background-color: var(--ac-bg);
+  background-image: repeating-linear-gradient(-45deg, transparent 0 4.19px, var(--ac-hatch-line) 4.19px 5.19px);
+}
+
+/*
+ * Wave 66O: center divider calm (text-scoped ONLY). The 6px
+ * `.tv-splitter` track keeps its grid width; the visible line is a
+ * single centered 1px rail in the existing `--ac-border-subtle`
+ * token (pure CSS ::before, no extra DOM, no grid-track change), so
+ * the inter-pane gap reads as one thin rail, not a heavy band.
+ */
+.tv-splitter {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: var(--ac-row-h);
+}
+
+.tv-splitter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background-color: var(--ac-rail-line);
+  pointer-events: none;
+}
+
+/* Tinted cells go transparent under selection so a selected row keeps
+ * its single selection wash, exactly as before (when the row carried
+ * the tint and the then-transparent cells showed it through). */
+.tv-row.is-selected .tv-cell,
+.tv-row:focus-within .tv-cell {
+  background-color: transparent;
+  background-image: none;
+}
+
+/*
+ * Wave 66J: merge conflict BC-parity additions (merge-scoped ONLY).
+ * `.mv-cell-empty` reuses the exact 66I orphan-hatch gradient values
+ * (base surface + 45-degree hatch in the existing subtle-border
+ * token, readable in both schemes); `.mv-rail` gives each conflict
+ * card a positioning context whose `::before` paints the left-edge
+ * section bracket rail (1px, `--ac-rail-accent` muted ink (wave-105 rename, same hex),
+ * `pointer-events-none` so clicks reach the card) ONLY on
+ * multi-line conflicts (`data-bracket="multi"`): single-line cards
+ * mount no `::before` at all.
+ */
+.mv-cell-empty {
+  background-color: var(--ac-bg);
+  background-image: repeating-linear-gradient(-45deg, transparent 0 4px, var(--ac-hatch-line) 4px 5px);
+}
+
+.mv-rail {
+  position: relative;
+}
+
+.mv-rail[data-bracket="multi"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  border-radius: inherit;
+  background-color: var(--ac-rail-accent);
+  pointer-events: none;
+}
+
+/*
+ * Wave 66K: folder one-sided row BC-parity additions (folder-scoped
+ * ONLY). `.fv-cell-empty` reuses the exact 66I orphan-hatch gradient
+ * values (base surface + 45-degree hatch in the existing subtle-border
+ * token, readable in both schemes) on a one-sided row so the missing
+ * side reads as filler; `.fv-rail` gives one-sided rows the same
+ * positioning context as the 66I/66J rails. Folder rows are
+ * single-line (`data-bracket="single"`) so no `::before` ever paints;
+ * the `multi` rule below keeps the shared bracket-rail idiom available
+ * in the stylesheet (1px, `--ac-rail-accent` muted ink (wave-105 rename, same hex),
+ * `pointer-events: none` so clicks reach the row).
+ */
+.fv-cell-empty {
+  background-color: var(--ac-bg);
+  background-image: repeating-linear-gradient(-45deg, transparent 0 4px, var(--ac-hatch-line) 4px 5px);
+}
+
+.fv-rail {
+  position: relative;
+}
+
+.fv-rail[data-bracket="multi"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  border-radius: inherit;
+  background-color: var(--ac-rail-accent);
+  pointer-events: none;
+}
+
+/*
+ * Wave 115: folder row BC idiom verify-and-fix (folder-scoped ONLY).
+ * Verified vs /tmp/bc-folder-truth.png with fresh light+dark captures:
+ *  (a) orphan hatch bounded to the missing side (BC fills only the
+ *  empty-side cells, never the full row): one-sided rows keep
+ *  `fv-cell-empty` on the row div (66K pins) but the hatch paints at
+ *  50% width anchored to the missing side (left-only content lives
+ *  left, so the filler sits right, and mirrored for right-only).
+ *  Gradient values, angle, inks untouched — 66K computed-style pins
+ *  (repeating-linear-gradient, -45deg) hold in both schemes.
+ *  (b) copy-path affordance on hover/select (BC shows no per-row
+ *  button): `.fv-copy` rests at opacity 0 (layout kept, so 17px
+ *  density + overlap gates hold and the testid stays clickable) and
+ *  reveals on row hover, row focus-within (keyboard reach), button
+ *  focus, or selected row. Receipt + testids byte-identical.
+ */
+.fv-cell-empty[data-side="left-only"] {
+  background-size: 50% 100%;
+  background-position: right center;
+  background-repeat: no-repeat;
+}
+
+.fv-cell-empty[data-side="right-only"] {
+  background-size: 50% 100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+}
+
+.fv-copy {
+  opacity: 0;
+}
+
+.fv-row:hover .fv-copy,
+.fv-row:focus-within .fv-copy,
+.fv-row[data-selected="true"] .fv-copy,
+.fv-copy:focus-visible {
+  opacity: 1;
+}
+
+/*
+ * Wave 66L: hex dual-pane BC-parity additions (hex-scoped ONLY).
+ * `.hx-cell-empty` reuses the exact 66I orphan-hatch gradient values
+ * (base surface + 45-degree hatch in the existing subtle-border
+ * token, readable in both schemes) for a missing byte in a live row;
+ * differing offsets carry the existing `.hx-diff` tint on BOTH the
+ * left and right byte cells (no new palette hues, no tv/mv/fv
+ * rule touched).
+ */
+.hx-cell-empty {
+  background-color: var(--ac-bg);
+  background-image: repeating-linear-gradient(-45deg, transparent 0 4px, var(--ac-hatch-line) 4px 5px);
+}
+
+/*
+ * Wave 66M: key-column picker additions (table-scoped ONLY). Reuses
+ * existing tokens (muted ink, accent); no new palette hues, and no
+ * tv/mv/fv/hx rule touched.
+ */
+.tb-key-btn {
+  color: var(--ac-fg-muted);
+}
+
+.tb-key-btn[aria-pressed="true"] {
+  color: var(--ac-accent);
+  text-decoration: underline;
+}
+
+/*
+ * Wave 66N: sync direction + prune additions (sync-scoped ONLY). Reuses
+ * existing tokens (muted ink, accent); no new palette hues, and no
+ * tv/mv/fv/hx/tb rule touched.
+ */
+.sy-dir-btn {
+  color: var(--ac-fg-muted);
+}
+
+.sy-dir-btn[aria-pressed="true"] {
+  color: var(--ac-accent);
+  text-decoration: underline;
+}
+
+.sy-prune-label {
+  color: var(--ac-fg-muted);
+}
+
+/*
+ * Wave 66S: BC-style intra-line word highlights (text-scoped ONLY).
+ * Reuses existing chg tokens, no new hues. RowLine wiring lands in
+ * the integration wave; this only defines the paint.
+ */
+.tv-w-hl {
+  background-color: var(--ac-diff-chg-bg);
+  color: var(--ac-diff-chg-fg);
+}
+
+/*
+ * Wave 66U-b: cell edit-mode input (text-scoped ONLY). Transparent so
+ * the row tint shows through; monospace code size so the draft aligns
+ * with the painted text; focus ring reuses the chrome token.
+ */
+.tv-cell-edit {
+  font: inherit;
+  color: inherit;
+  outline: none;
+  border-bottom: 1px solid var(--ac-focus-ring);
+}
+
+/*
+ * Wave 66R: controls collapse additions (text-scoped ONLY). One
+ * toolbar row plus collapsible find / goto / ignore panels replace
+ * the ~180px stacked control block. Reuses existing chrome tokens
+ * (toolbar bg/hover, border-subtle, focus ring, muted ink, accent);
+ * no new hues, no new geometry scale, no tv/mv/fv/hx/tb/sy rule
+ * touched. Panels are in-flow (never absolute) so the wave-7
+ * overlap gate holds with every panel open.
+ */
+.tv-controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: var(--ac-toolbar-h);
+  padding: var(--ac-space-1) var(--ac-space-4);
+  background-color: var(--ac-toolbar-bg);
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+.tv-controls-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  padding: var(--ac-space-1) var(--ac-space-2);
+  font-family: var(--ac-font-ui);
+  font-size: var(--ac-font-size-ui);
+  line-height: var(--ac-line-height-ui);
+  letter-spacing: var(--ac-letter-spacing-ui-tight);
+  font-weight: var(--ac-font-weight-medium);
+  color: var(--ac-toolbar-btn-fg);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color 0.08s ease;
+}
+
+.tv-controls-btn:hover {
+  background-color: var(--ac-toolbar-btn-hover-bg);
+}
+
+.tv-controls-btn[aria-expanded="true"] {
+  color: var(--ac-accent);
+  border-color: var(--ac-border-subtle);
+}
+
+.tv-controls-sep {
+  width: 1px;
+  height: 18px;
+  background-color: var(--ac-border-subtle);
+}
+
+.tv-controls-panel {
+  padding: var(--ac-space-2) var(--ac-space-4);
+  background-color: var(--ac-bg);
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+/*
+ * Wave 66U-a: ruler far-left (ruler-scoped ONLY). OverviewRuler ships
+ * with `border-l` for its old right-edge slot; the ChromeShell flex row
+ * now mounts it BEFORE <main> so the divider must face the content
+ * (right edge), not the window edge. No other rule touched.
+ */
+[data-testid="ruler"] {
+  border-left-width: 0;
+  border-right-width: 1px;
+  border-right-style: solid;
+  border-right-color: var(--ac-border);
+}
+
+/*
+ * Wave 79: far-left overview strip (strip-scoped ONLY). A 5px relative
+ * rail at the far left of the text row flex (`.tv-body` adds the
+ * side-by-side row with no vertical stack, so the first-row budget
+ * holds); per-hunk markers are absolute buttons positioned by
+ * (start/total, length/total) from the SAME hunk grouping the gutter
+ * arrows use. Tints reuse existing diff-border tokens only (no new
+ * hues); the active marker reuses the focus-ring token.
+ */
+.tv-body {
+  display: flex;
+  align-items: stretch;
+}
+
+.tv-overview-strip {
+  position: relative;
+  flex: 0 0 5px;
+  width: 5px;
+  min-height: 100px;
+  align-self: stretch;
+  background-color: var(--ac-ruler-track);
+}
+
+.tv-overview-hunk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background-color: var(--ac-diff-chg-border);
+  cursor: pointer;
+}
+
+.tv-overview-hunk[data-kind="leftOnly"] {
+  background-color: var(--ac-diff-del-border);
+}
+
+.tv-overview-hunk[data-kind="rightOnly"] {
+  background-color: var(--ac-diff-add-border);
+}
+
+.tv-overview-hunk[data-kind="mixed"] {
+  background-color: var(--ac-diff-chg-border);
+}
+
+.tv-overview-hunk[data-active="true"] {
+  outline: 1px solid var(--ac-focus-ring);
+  outline-offset: -1px;
+}
+
+.tv-overview-hunk:focus-visible {
+  outline: 2px solid var(--ac-focus-ring);
+  outline-offset: 0;
+}
+
+/*
+ * Wave-105: find-hit + current paint (color ONLY, no layout, no type).
+ * BC find hits ride a gold wash with dark ink; the current hit keeps
+ * the same wash plus an amber outline. `.hx-find-match` (HexView find
+ * styling, previously selection-blue) is repainted onto the same gold
+ * so every view shares one find-hit role. Unlayered rules win over the
+ * Tailwind utility layer without touching Views/*.
+ */
+.ac-find-hit {
+  background-color: var(--ac-find-hit-bg);
+  color: var(--ac-find-hit-fg);
+}
+
+.ac-find-current {
+  outline: 2px solid var(--ac-find-current-outline);
+  outline-offset: -2px;
+}
+
+.hx-find-match {
+  background-color: var(--ac-find-hit-bg);
+  color: var(--ac-find-hit-fg);
+}
