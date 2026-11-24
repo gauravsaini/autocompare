@@ -18,7 +18,8 @@ import type { FolderEntryDto, FolderStatusDto } from "../../ipc/folder";
 import { pickOpenDialog } from "../session/useSession";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
-import { FolderNamePanel, FolderToolbar } from "./folder/controls";
+import { FolderNamePanel, FolderToolbar, RulesPanel } from "./folder/controls";
+import { VIEW_RULES_EVENT } from "./folder/controls/RulesPanel";
 import { Button, Input, ToolbarButton } from "../ui";
 
 /**
@@ -324,6 +325,11 @@ export default function FolderView({
   // presentational, no new IPC; reset on session switch.
   const [nameQuery, setNameQuery] = useState("");
   const [nameOpen, setNameOpen] = useState(false);
+  // Wave-164: Rules file masks (BC parity). Committed mask string sent
+  // to `folderCompare` (`""` = no filtering, legacy wire); the panel
+  // owns only the draft. Reset on session switch like every control.
+  const [masks, setMasks] = useState("");
+  const [rulesOpen, setRulesOpen] = useState(false);
   // Wave-98: goto entry (Beyond Compare style Ctrl+G, wave-89 text
   // pattern ported to folder). Decimal 1-based position in the
   // currently visible list; jumps focus (+selects file rows) with no
@@ -412,6 +418,7 @@ export default function FolderView({
       } else if (e.key === "Escape") {
         setNameOpen(false);
         setGotoOpen(false);
+        setRulesOpen(false);
       }
     };
     // Wave-127: full-session find (menu `session.find`) rides the
@@ -449,6 +456,20 @@ export default function FolderView({
     };
   }, []);
 
+  /* Wave-164: top-bar Rules follow-effect. The top Toolbar dispatches
+     `autocompare:view-rules` when its (future-enabled) Rules action
+     fires; this opens the in-view Rules panel — the live path the
+     FolderToolbar Rules button toggles directly. Never a crash. */
+  useEffect(() => {
+    const onViewRules = (): void => {
+      setRulesOpen(true);
+    };
+    window.addEventListener(VIEW_RULES_EVENT, onViewRules);
+    return () => {
+      window.removeEventListener(VIEW_RULES_EVENT, onViewRules);
+    };
+  }, []);
+
   const nameNeedle = nameQuery.trim().toLowerCase();
   const filtered = entries.filter((e, idx, arr) => {
     if (rowFilter === "same" && e.status !== "same") return false;
@@ -480,6 +501,16 @@ export default function FolderView({
     overscan: 10,
   });
 
+  // Wave-164: Rules masks reset on session switch (paths/subdir change),
+  // like every other control. Separate from the compare effect below:
+  // `masks` is a compare-effect dep, so resetting it there would
+  // self-wipe an applied mask. The compare effect's `cancelled` guard
+  // drops the stale in-flight compare from the path change.
+  useEffect(() => {
+    setMasks("");
+    setRulesOpen(false);
+  }, [currentLeft, currentRight, fullSubDir]);
+
   useEffect(() => {
     let cancelled = false;
     // Wave-130: no paths = pick-two-paths empty (App.hasPaths gate parity:
@@ -507,7 +538,15 @@ export default function FolderView({
     setOpenNote(null);
     (async () => {
       try {
-        const raw = (await folderCompare(currentLeft, currentRight)) as unknown;
+        // Wave-164: committed Rules masks ride the compare (`""` =
+        // omitted = legacy wire, the backend treats empty as no
+        // filtering). Masks apply at compare time, before the
+        // `filter` used by `folderGetTree`.
+        const raw = (await folderCompare(
+          currentLeft,
+          currentRight,
+          masks === "" ? undefined : masks,
+        )) as unknown;
         if (
           !isRecord(raw) ||
           typeof raw["session"] !== "string" ||
@@ -544,7 +583,7 @@ export default function FolderView({
     return () => {
       cancelled = true;
     };
-  }, [currentLeft, currentRight, fullSubDir]);
+  }, [currentLeft, currentRight, fullSubDir, masks]);
 
   async function loadMore(): Promise<void> {
     if (session === null || loadingMore || entries.length >= total) return;
@@ -940,7 +979,21 @@ export default function FolderView({
         sameCount={sameCount}
         nameFilterOpen={nameOpen}
         onToggleNameFilter={() => setNameOpen((v) => !v)}
+        rulesOpen={rulesOpen}
+        onToggleRules={() => setRulesOpen((v) => !v)}
       />
+      <RulesPanel
+        open={rulesOpen}
+        masks={masks}
+        busy={loadingMore}
+        onApply={(next) => setMasks(next)}
+        onClose={() => setRulesOpen(false)}
+      />
+      {masks !== "" ? (
+        <p data-testid="folderview/masks-note" role="note" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+          Masks: {masks} — clear to compare everything.
+        </p>
+      ) : null}
       <FolderNamePanel
         open={nameOpen}
         query={nameQuery}

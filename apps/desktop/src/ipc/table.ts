@@ -62,25 +62,58 @@ export interface TableHit {
 }
 
 /**
- * Opens a table session for two CSV files. `byKey` requests
- * key-aligned comparison; an empty `keyColumns` in the result means
- * positional fallback (no headers or no unique column).
+ * Ignore flags for [`tableCompare`] (both default `false` = exact cell
+ * match).
  *
- * Wave-66M: `keyColumns` carries user-designated key columns. Omitted
- * (or empty) preserves the legacy wire path: the backend auto-detects
- * under `byKey` and falls back to positional otherwise.
+ * Wave-164: optional `opts` extend the wire backward-compatibly (mirrors
+ * the `textCompare` options pattern). Omitted (or both `false`) keeps
+ * the legacy 4-field wire byte-identical. Passing a flag sends both
+ * camelCase and snake_case spellings, matching the Rust command which
+ * accepts either; the backend applies them to every cell comparison
+ * (positional + key mode).
  */
+export interface TableIgnoreOptions {
+  readonly ignoreCase?: boolean;
+  readonly ignoreSpace?: boolean;
+  // snake_case spellings:
+  readonly ignore_case?: boolean;
+  readonly ignore_space?: boolean;
+}
+
 export function tableCompare(
   left: string,
   right: string,
   byKey: boolean,
   keyColumns?: readonly number[],
+  opts?: TableIgnoreOptions,
 ): Promise<TableSummary> {
+  // Wave-164: optional `opts` carry ignore flags (case/space). Omitted
+  // (or both `false`) keeps the legacy 4-field wire byte-identical.
+  const cs = opts?.ignoreCase === true || opts?.ignore_case === true;
+  const ws = opts?.ignoreSpace === true || opts?.ignore_space === true;
+  if (typeof window !== "undefined") {
+    (window as unknown as Record<string, unknown>)["__TABLE_IGNORE_LAST__"] = {
+      ignoreCase: cs,
+      ignoreSpace: ws,
+    };
+  }
+  if (!cs && !ws) {
+    return invoke<TableSummary>("table_compare", {
+      left,
+      right,
+      by_key: byKey,
+      key_columns: keyColumns === undefined ? [] : [...keyColumns],
+    });
+  }
   return invoke<TableSummary>("table_compare", {
     left,
     right,
     by_key: byKey,
     key_columns: keyColumns === undefined ? [] : [...keyColumns],
+    ignoreCase: cs,
+    ignore_case: cs,
+    ignoreSpace: ws,
+    ignore_space: ws,
   });
 }
 

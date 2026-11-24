@@ -5,7 +5,8 @@ import { textApplyEdit, textApplyHunk, textCompare, textCompareDemo, textFind, t
 import type { InlineSpanDto, OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
-import { FindOverlay, GotoOverlay, IgnoreMenu, OverviewStrip, TextToolbar } from "./text/controls";
+import { FindOverlay, FormatMenu, GotoOverlay, IgnoreMenu, OverviewStrip, TextToolbar } from "./text/controls";
+import { VIEW_FORMAT_EVENT } from "./text/controls/FormatMenu";
 import { Button } from "../ui";
 import type { OverviewStripHunk } from "./text/controls/OverviewStrip";
 import { InlineSpans, sideRanges } from "./text/inline/InlineSpans";
@@ -1188,6 +1189,11 @@ export default function TextView({
   const [findOpen, setFindOpen] = useState(false);
   const [gotoOpen, setGotoOpen] = useState(false);
   const [ignoreOpen, setIgnoreOpen] = useState(false);
+  // Wave-164: Format (encoding/EOL) menu state. `""` = auto = omitted
+  // (legacy exact wire); cleared on session switch like every control.
+  const [formatOpen, setFormatOpen] = useState(false);
+  const [encoding, setEncoding] = useState("");
+  const [eol, setEol] = useState("");
   // Wave-66R: toolbar prev/next difference position note. Set only by
   // the toolbar diff nav; honest empty-backend note when no hunks.
   const [diffNote, setDiffNote] = useState<string | null>(null);
@@ -1260,6 +1266,7 @@ export default function TextView({
         setFindOpen(false);
         setGotoOpen(false);
         setIgnoreOpen(false);
+        setFormatOpen(false);
       } else if (!isInput) {
         const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey;
         if (isCmdAlt && (e.key === "ArrowDown" || e.key === "Down")) {
@@ -1465,6 +1472,9 @@ export default function TextView({
     setFindOpen(false);
     setGotoOpen(false);
     setIgnoreOpen(false);
+    setFormatOpen(false);
+    setEncoding("");
+    setEol("");
     setDiffNote(null);
     (async () => {
       try {
@@ -1713,10 +1723,17 @@ export default function TextView({
    * about. An unusable response (or a throw) keeps the current diff
    * untouched instead of crashing.
    */
-  async function recompareWithIgnores(nextWs: boolean, nextCase: boolean): Promise<void> {
+  async function recompareWithOptions(
+    nextWs: boolean,
+    nextCase: boolean,
+    nextEnc: string,
+    nextEol: string,
+  ): Promise<void> {
     setIgnoreWs(nextWs);
     setIgnoreCase(nextCase);
-    if (!nextWs && !nextCase) {
+    setEncoding(nextEnc);
+    setEol(nextEol);
+    if (!nextWs && !nextCase && nextEnc === "" && nextEol === "") {
       // Both toggles off: the exact diff is the truth again. Best-effort
       // restore through the same typed path (legacy exact shape); the
       // mock serves the same fixture rows, the real backend rebuilds the
@@ -1768,6 +1785,10 @@ export default function TextView({
         raw = (await textCompare(left, right, {
           ignoreWhitespace: nextWs,
           ignoreCase: nextCase,
+          // Wave-164: `""` = auto = omitted (legacy exact wire);
+          // the W163c backend honors both, echoed as `appliedOptions`.
+          encoding: nextEnc === "" ? undefined : nextEnc,
+          eol: nextEol === "" ? undefined : nextEol,
         })) as unknown;
       } catch {
         raw = null;
@@ -1806,6 +1827,24 @@ export default function TextView({
     } finally {
       setIgnoreBusy(false);
     }
+  }
+
+  /**
+   * Wave-30 legacy entry: ignore toggles + the Minor bus ride this
+   * path, keeping the session's current format (encoding/EOL). The
+   * Format menu rides `recompareFormat` below instead.
+   */
+  function recompareWithIgnores(nextWs: boolean, nextCase: boolean): Promise<void> {
+    return recompareWithOptions(nextWs, nextCase, encoding, eol);
+  }
+
+  /**
+   * Wave-164: Format menu entry — keeps the current ignore flags and
+   * re-issues `text_compare` with the new encoding/EOL. `""` = auto =
+   * omitted (legacy exact wire when ignores are off too).
+   */
+  function recompareFormat(nextEnc: string, nextEol: string): Promise<void> {
+    return recompareWithOptions(ignoreWs, ignoreCase, nextEnc, nextEol);
   }
 
   /**
@@ -2099,6 +2138,20 @@ export default function TextView({
     window.addEventListener(VIEW_MINOR_EVENT, onMinor);
     return () => {
       window.removeEventListener(VIEW_MINOR_EVENT, onMinor);
+    };
+  }, []);
+
+  // Wave-164: top-bar Format follow-effect. The top Toolbar dispatches
+  // `autocompare:view-format` when its (future-enabled) Format action
+  // fires; this opens the in-view Format menu — the live path the
+  // TextToolbar Format button toggles directly. Never a crash.
+  useEffect(() => {
+    const onFormat = (): void => {
+      setFormatOpen(true);
+    };
+    window.addEventListener(VIEW_FORMAT_EVENT, onFormat);
+    return () => {
+      window.removeEventListener(VIEW_FORMAT_EVENT, onFormat);
     };
   }, []);
 
@@ -2648,6 +2701,8 @@ export default function TextView({
         onToggleFind={() => setFindOpen((v) => !v)}
         onToggleGoto={() => setGotoOpen((v) => !v)}
         onToggleIgnore={() => setIgnoreOpen((v) => !v)}
+        formatOpen={formatOpen}
+        onToggleFormat={() => setFormatOpen((v) => !v)}
         onBusCommand={handleBusCommand}
         onPrevDiff={() => jumpDiff(-1)}
         onNextDiff={() => jumpDiff(1)}
@@ -2680,6 +2735,13 @@ export default function TextView({
         ignoreCase={ignoreCase}
         busy={ignoreBusy}
         onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
+      />
+      <FormatMenu
+        open={formatOpen}
+        encoding={encoding}
+        eol={eol}
+        busy={ignoreBusy}
+        onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
       />
       {/* Wave-112: undo docks into the bottom status bar (was its own
           row above the list even while disabled). Same testid/behavior,

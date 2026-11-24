@@ -6,5 +6,7 @@ export { default as GotoOverlay } from "./GotoOverlay";
 export type { GotoOverlayProps } from "./GotoOverlay";
 export { default as IgnoreMenu } from "./IgnoreMenu";
 export type { IgnoreMenuProps } from "./IgnoreMenu";
+export { default as FormatMenu, VIEW_FORMAT_EVENT, dispatchViewFormat, FORMAT_AUTO } from "./FormatMenu";
+export type { FormatMenuProps } from "./FormatMenu";
 export { default as OverviewStrip } from "./OverviewStrip";
 export type { OverviewStripProps, OverviewStripHunk } from "./OverviewStrip";

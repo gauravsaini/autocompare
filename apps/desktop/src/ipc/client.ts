@@ -472,12 +472,27 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       // (positional: zipped full-row mismatches + length delta),
       // mirroring the Rust `diff_rows` so the status bar total is
       // truthful under `VITE_MOCK_IPC=1`.
+      // Wave-164: honor the W163c ignore flags (`ignoreCase` /
+      // `ignore_case`, `ignoreSpace` / `ignore_space`, either
+      // spelling). Mirrors `norm_cell` in
+      // `src-tauri/src/commands/table.rs`: whitespace runs fold when
+      // `ignore_space`, case folds when `ignore_case`. On the bundled
+      // fixture this is a faithful no-op (no case/space-only diffs),
+      // but unknown flags must never break the mock path — the e2e
+      // gate drives this branch with flags set.
+      const ignoreCs = args["ignoreCase"] === true || args["ignore_case"] === true;
+      const ignoreWs = args["ignoreSpace"] === true || args["ignore_space"] === true;
+      const normCell = (cell: string): string => {
+        let s = ignoreWs ? cell.replace(/\s+/g, " ").trim() : cell;
+        if (ignoreCs) s = s.toLowerCase();
+        return s;
+      };
       const common = Math.min(cells.rowsL.length, cells.rowsR.length);
       let mismatches = 0;
       for (let i = 0; i < common; i += 1) {
         const a = cells.rowsL[i];
         const b = cells.rowsR[i];
-        if (a.length !== b.length || a.some((v, c) => v !== b[c])) mismatches += 1;
+        if (a.length !== b.length || a.some((v, c) => normCell(v) !== normCell(b[c]))) mismatches += 1;
       }
       const diffRows =
         mismatches + Math.abs(cells.rowsL.length - cells.rowsR.length);
