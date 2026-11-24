@@ -416,6 +416,19 @@ export default function FolderView({
           navRef.current.goUpBoth();
         }
       } else if (e.key === "Escape") {
+        // Wave-182c: global Esc collapses chrome WITHOUT clearing the
+        // name query (98/113b: note survives in the status bar, reopen
+        // keeps the value). The chrome bridge clicks
+        // `folderview/name-close` on Esc, so the panel-level onClose
+        // below is close-only; the legacy input-level clear (63/67b)
+        // lives on here: Esc struck inside the name box still clears.
+        // NOTE: `e.target` (immutable per dispatch), not
+        // `document.activeElement` — the bridge's dismiss click can
+        // steal focus before this bubble listener runs.
+        const t = e.target;
+        if (t instanceof HTMLElement && t.id === "folder-name-box") {
+          setNameQuery("");
+        }
         setNameOpen(false);
         setGotoOpen(false);
         setRulesOpen(false);
@@ -627,10 +640,25 @@ export default function FolderView({
 
   // Wave-130: blank paths render the pick-two-paths empty (no
   // error-fire); a compared-but-empty tree keeps the legacy line.
-  if (leftPath === "" || rightPath === "") return <p data-testid="folderview/empty">Pick two folders to compare — needs two paths.</p>;
+  // Wave-182: calm centered empties (BC: quiet centered states over a
+  // live status bar). Text + testids byte-identical, classes only.
+  if (leftPath === "" || rightPath === "")
+    return (
+      <p
+        data-testid="folderview/empty"
+        className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
+      >
+        Pick two folders to compare — needs two paths.
+      </p>
+    );
   if (status === "loading") return <p>Loading folder comparison…</p>;
   if (status === "error") return <p role="alert">Folder compare failed: {error}</p>;
-  if (status === "empty" || entries.length === 0) return <p>No entries to display.</p>;
+  if (status === "empty" || entries.length === 0)
+    return (
+      <p className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+        No entries to display.
+      </p>
+    );
   const hasMore = entries.length < total;
 
   function activate(entry: FolderEntryDto): void {
@@ -769,9 +797,39 @@ export default function FolderView({
     return d.toISOString().slice(0, 10);
   }
 
-  function sideMeta(side: FolderEntryDto["left"]): string {
-    if (side === null) return "size unknown / modified unknown";
-    return `${formatSize(side.size)}, ${formatDay(side.modifiedMs)}`;
+  function sideMeta(side: FolderEntryDto["left"]): React.JSX.Element {
+    if (side === null)
+      return <span>size unknown / modified unknown</span>;
+    // Wave-182: BC Name | Size | Modified columns, ponytail edition.
+    // Size right-aligns in a fixed slot with tabular numerals and the
+    // date takes its own fixed slot, so every row reads as two columns
+    // instead of one ragged string. Text content is byte-identical to
+    // the legacy `sideMeta` string (specs pin its substrings); only
+    // spans carry the alignment. Inline style only, tokens untouched.
+    return (
+      <>
+        <span
+          style={{
+            display: "inline-block",
+            minWidth: 56,
+            textAlign: "right",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatSize(side.size)}
+        </span>
+        {", "}
+        <span
+          style={{
+            display: "inline-block",
+            minWidth: 76,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatDay(side.modifiedMs)}
+        </span>
+      </>
+    );
   }
 
   function describeSide(
@@ -822,6 +880,18 @@ export default function FolderView({
     // filler (`.fv-cell-empty` hatch over the row) and expose `data-side`
     // plus a single-line `data-bracket` (no rail: single-line rows never
     // span). Two-sided rows mount neither attribute nor hatch class.
+    // Wave-182: BC tree indent (geometry P0). Depth comes from the
+    // relPath segments; the label pads 14px per level and shows the
+    // basename (full path stays in `data-path`, `title`, and the
+    // selected detail, so nav/collapse/filter specs are untouched).
+    // The raw `[{status}]` token leaves the row line — BC carries
+    // status in color + side + detail only (data-status kept).
+    const depth = entry.relPath.split("/").filter(Boolean).length - 1;
+    const baseName = entry.relPath.split("/").pop() ?? entry.relPath;
+    const indentLabel =
+      compactLabel === undefined
+        ? { paddingLeft: `calc(var(--ac-space-3) + ${depth * 14}px)` }
+        : { ...compactLabel, paddingLeft: `calc(var(--ac-space-3) + ${depth * 14}px)` };
     const isOrphan = entry.status === "leftOnly" || entry.status === "rightOnly";
     // Agent F rightOnly parity: rendered-geometry probe showed every row
     // (incl. rightOnly) painting content on the left half while BC parks
@@ -908,7 +978,7 @@ export default function FolderView({
         className={isSelected ? "fv-node is-selected font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]" : "fv-node font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]"}
         style={sidePlace === undefined && compactNode === undefined ? undefined : { ...sidePlace, ...compactNode }}
       >
-        <span className="inline-flex items-center gap-[var(--ac-space-2)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-normal" style={compactLabel}>
+        <span className="inline-flex items-center gap-[var(--ac-space-2)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-normal" style={indentLabel}>
           {entry.isDir ? (
             <Button
               variant="ghost"
@@ -928,8 +998,7 @@ export default function FolderView({
             <File size={14} aria-hidden="true" />
           )}
           <StatusIcon status={entry.status} />
-          <span className={`fv-status fv-status-${entry.status}`}>{entry.relPath}</span>
-          <span className="text-[var(--ac-fg-muted)]">[{entry.status}]</span>
+          <span className={`fv-status fv-status-${entry.status}`} title={entry.relPath}>{baseName}</span>
           <span
             data-testid={`folder-meta-${i}`}
             title={`${describeSide(entry.left, "left")} | ${describeSide(entry.right, "right")}`}
@@ -1017,7 +1086,11 @@ export default function FolderView({
         query={nameQuery}
         onQueryChange={setNameQuery}
         onClose={() => {
-          setNameQuery("");
+          // Wave-182c: close-only (was clear+close). The chrome Esc
+          // bridge clicks `folderview/name-close` even with focus
+          // outside the box — clearing here wiped the query on every
+          // global Esc and hid `folder-name-note` (113b:118). Clearing
+          // on input-level Esc lives in the window Esc branch above.
           setNameOpen(false);
         }}
       />
