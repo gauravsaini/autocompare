@@ -9,7 +9,9 @@ export interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonEleme
   readonly children?: ReactNode;
 }
 
-/** Unified icon button: Lucide icons only at call-site (or via icon prop), 14px/1.75 stroke. Testids pass through. */
+/** Wave-189 icon unify: Lucide-only, 14px / strokeWidth 1.75, round caps/joins (Lucide default). Single renderer so Views never drift. */
+export const AC_ICON_SIZE = 14;
+export const AC_ICON_STROKE_WIDTH = 1.75;
 export default function ToolbarButton({
   label,
   expanded,
@@ -41,7 +43,7 @@ export default function ToolbarButton({
       }
       {...rest}
     >
-      {Icon ? <Icon size={14} strokeWidth={1.75} aria-hidden="true" /> : null}
+      {Icon ? <Icon size={AC_ICON_SIZE} strokeWidth={AC_ICON_STROKE_WIDTH} aria-hidden="true" /> : null}
       {children}
     </button>
   );

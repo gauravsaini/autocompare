@@ -58,10 +58,18 @@
 
 :root {
   /* Typography (Wave-144: bundled Inter/JetBrains Mono first,
-     system stacks stay as fallback) */
-  --ac-font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+     system stacks stay as fallback; Wave-189: system-ui pinned
+     right after Inter so Linux/Windows sans falls back without
+     layout shift) */
+  --ac-font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Helvetica Neue", Helvetica, Arial, sans-serif;
   --ac-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Wave-189 icon unify (typography/chrome ONLY, no color/geometry):
+     Lucide-only 14px / strokeWidth 1.75; ToolbarButton is the single
+     renderer. Tokens here so e2e can pin drift without Views edits. */
+  --ac-icon-size: 14px;
+  --ac-icon-stroke-width: 1.75;
 
   /* Surfaces & Backgrounds */
   --ac-bg: #f5f5f7;
@@ -383,6 +391,9 @@ samp {
   font-size: var(--ac-font-size-ui);
   line-height: var(--ac-line-height-ui);
   letter-spacing: var(--ac-letter-spacing-ui-tight);
+  /* Wave-189: tabular numerals for totals/counts riding chrome-label
+     (typography only, no size/line-height/color change). */
+  font-variant-numeric: tabular-nums;
 }
 
 .ac-meta {
@@ -390,6 +401,16 @@ samp {
   font-size: var(--ac-font-size-meta);
   line-height: var(--ac-line-height-meta);
   letter-spacing: var(--ac-letter-spacing-ui-tight);
+  /* Wave-189: totals/counts tabular so 11px meta numerals align. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wave-189 icon utility (opt-in ONLY, never global `svg` override so
+   Views density stays untouched): ui chrome icons ride 14px. */
+.ac-icon {
+  width: var(--ac-icon-size);
+  height: var(--ac-icon-size);
+  flex-shrink: 0;
 }
 
 /*
@@ -680,6 +701,9 @@ samp {
   font-size: var(--ac-font-size-code);
   line-height: var(--ac-line-height-code);
   letter-spacing: var(--ac-letter-spacing-code);
+  /* Wave-189: tabular numerals for code cells (gutter already had it;
+     typography only, no size/height/color change). */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Table view: same row height; sans UI header, mono code cells */
@@ -1143,4 +1167,17 @@ samp {
 .hx-find-match {
   background-color: var(--ac-find-hit-bg);
   color: var(--ac-find-hit-fg);
+}
+
+/*
+ * Wave-189 pill polish (radius ONLY, no layout/color/type change).
+ * typo-100 pins the active tab as a pill (radius >= 6px, medium
+ * weight, tight tracking); the chip rides rounded-[5px] from the
+ * shared control ramp. This unlayered rule lifts ONLY the selected
+ * tab to an 8px pill so the pin holds light + dark. Unlayered rules
+ * win over the Tailwind utility layer without touching chrome
+ * structure (TabBar.tsx stays read-only).
+ */
+[role="tab"][aria-selected="true"] {
+  border-radius: 8px;
 }
