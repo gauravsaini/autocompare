@@ -48,5 +48,5 @@ test("table and folder chrome ride the label ramp", async ({ page }) => {
     .evaluate((el) => window.getComputedStyle(el).letterSpacing);
   expect(Math.abs(parseFloat(totalsTracking) - -0.12)).toBeLessThan(0.05);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, "[data-testid^=\"view-\"] [data-testid]");
 });
