@@ -240,6 +240,38 @@ function countLoaded(rows: readonly TextRowDto[]): KindCounts {
   return { equal, changed, leftOnly, rightOnly };
 }
 
+/**
+ * Wave-178: shared staged-copy histogram step (BOTH copy callers —
+ * hunk path and line path — ride it; the line path previously skipped
+ * the overview update and drifted under a real backend). `hunkRows`
+ * are the pre-copy rows in the copied range; `merged` is how many
+ * flipped to equal (`applyHunkCopy` drops null-take rows instead of
+ * filling them, so `merged <= hunkRows.length`; dropped rows simply
+ * leave every bucket). Null (no overview yet) stays null so the
+ * caller keeps counting loaded rows.
+ */
+function adjustOverviewForCopy(
+  prev: KindCounts | null,
+  hunkRows: readonly TextRowDto[],
+  merged: number,
+): KindCounts | null {
+  if (prev === null) return null;
+  let chg = 0;
+  let loCount = 0;
+  let roCount = 0;
+  for (const r of hunkRows) {
+    if (r.kind === "changed") chg += 1;
+    else if (r.kind === "leftOnly") loCount += 1;
+    else if (r.kind === "rightOnly") roCount += 1;
+  }
+  return {
+    equal: prev.equal + merged,
+    changed: Math.max(0, prev.changed - chg),
+    leftOnly: Math.max(0, prev.leftOnly - loCount),
+    rightOnly: Math.max(0, prev.rightOnly - roCount),
+  };
+}
+
 /** One Beyond Compare style hunk: a run of consecutive non-equal rows. */
 interface TextHunk {
   /** Backend row index of the first row in the run. */
@@ -323,41 +355,47 @@ function computeVisibleRows(
 /**
  * Apply a one-sided hunk copy to locally held rows: `dir === "left"`
  * (take-left) copies the left side over the hunk so every row's right
- * becomes its left; `dir === "right"` mirrors. BC parity (FIXTEXT
- * GAP-03): the take side wins with NO fallback — copying an empty
- * source clears the target text, so rows whose take side is null are
- * dropped (the Beyond Compare "delete the extra lines" resolution).
- * Remaining rows are re-kindded from their new sides (take is always
- * non-null there, so they flip to equal).
+ * becomes its left; `dir === "right"` mirrors. Wave-178 (FIXTEXT
+ * GAP-03, backend `apply_hunk_to_rows` parity): the take side wins
+ * with NO `?? other` fallback. The pre-178 fallback filled an absent
+ * take side from the other side, so the view kept zombie rows the
+ * backend deletes on Save (`text_apply_hunk` drops null-take rows) —
+ * totals and positional paging diverged and follow-up copies broke
+ * (merge-func-131 orphan-delete pin). An absent take side (`null`)
+ * DROPS the row; a present-but-empty take (`""`) still wins
+ * literally, exactly like the backend.
  */
+interface HunkCopyResult {
+  readonly next: readonly TextRowDto[];
+  /** In-range rows flipped to equal (take side present, incl. `""`). */
+  readonly merged: number;
+  /** In-range rows dropped (take side absent, GAP-03 parity). */
+  readonly removed: number;
+}
+
 function applyHunkCopy(
   rows: readonly TextRowDto[],
   start: number,
   end: number,
   dir: TextSide,
-): TextRowDto[] {
+): HunkCopyResult {
   const next: TextRowDto[] = [];
+  let merged = 0;
+  let removed = 0;
   for (const row of rows) {
     if (row.index < start || row.index > end) {
       next.push(row);
       continue;
     }
-    // Wave-131: true BC merge (Wave-157 restored). Take-side wins;
-    // one-sided orphan rows fill the missing side with the present side
-    // so the hunk flips to equal. No row is dropped from the loaded view,
-    // preserving element identity for keyboard/automation navigation.
     const take = dir === "left" ? row.left : row.right;
-    const other = dir === "left" ? row.right : row.left;
-    const won = take ?? other;
-    if (won === null) {
-      next.push(row);
+    if (take === null) {
+      removed += 1;
       continue;
     }
-    const left = won;
-    const right = won;
-    next.push({ index: row.index, kind: "equal", left, right, inline: [] });
+    merged += 1;
+    next.push({ index: row.index, kind: "equal", left: take, right: take, inline: [] });
   }
-  return next;
+  return { next, merged, removed };
 }
 
 /**
@@ -937,6 +975,26 @@ export default function TextView({
         }
       }
 
+      // Wave-178: converge the view to backend truth after the flush.
+      // `text_apply_hunk` drops empty-take orphan rows (GAP-03), so the
+      // locally held rows/total can lag the session — refetch the loaded
+      // window + total + overview so follow-up copies compute from fresh
+      // indices instead of stale ones. Skipped when nothing was staged
+      // (pure cell-edit saves keep the existing rows byte-identical).
+      if (pendingCopies.length > 0 && session !== null) {
+        try {
+          const page = await textGetRows(session, 0, Math.max(rowsRef.current.length, 1));
+          setRows(page.rows);
+          rowsRef.current = page.rows;
+          setTotal(page.total);
+          const over = await fetchOverviewCounts(session);
+          if (over !== null) setOverview(over);
+        } catch {
+          // Keep the staged local rows on refetch failure — the Save
+          // receipt below still reports the disk write honestly.
+        }
+      }
+
       const next = w["__TEXT_SAVE_SIDE_NEXT__"];
       let receiptPath = targetPath;
       let receiptLines = 0;
@@ -1205,13 +1263,13 @@ export default function TextView({
       openGoto();
     };
     const onKey = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement | null;
-      const isInput =
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable ||
-          target.getAttribute("contenteditable") === "true");
+      // Wave-178: a row-level handler that already consumed the chord
+      // (row `l`/`r`/`n`/`p`/Cmd+Alt-arrows preventDefault) wins — this
+      // window listener must not double-process it. The row `jumpDiff`
+      // closes over fresh state; this `[]`-deps listener would call the
+      // loading-state `jumpDiff` (empty hunks, bogus "no differences"
+      // note) and the chrome bridge would jump a second hunk.
+      if (e.defaultPrevented) return;
 
       if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F") && !e.altKey && !e.shiftKey) {
         e.preventDefault();
@@ -1224,16 +1282,13 @@ export default function TextView({
         setGotoOpen(false);
         setIgnoreOpen(false);
         setFormatOpen(false);
-      } else if (!isInput) {
-        const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey;
-        if (isCmdAlt && (e.key === "ArrowDown" || e.key === "Down")) {
-          e.preventDefault();
-          jumpDiff(1);
-        } else if (isCmdAlt && (e.key === "ArrowUp" || e.key === "Up")) {
-          e.preventDefault();
-          jumpDiff(-1);
-        }
       }
+      // NOTE (wave-178): no Cmd+Alt+Arrow branch here. Difference nav
+      // rides the single routing point: the focused row handles it with
+      // fresh state (preventDefault, see the guard above), otherwise the
+      // App GAP-09 handler + the chrome `autocompare:view-command` bus
+      // drive the current `jumpDiffRef` — this stale `[]`-deps closure
+      // must never call `jumpDiff` (empty-hunks note, double jump).
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("autocompare:session-find", onSessionFind);
@@ -1712,9 +1767,11 @@ export default function TextView({
    *    hunk `{start,end,dir}` joins the in-memory staged set; a
    *    browser reload drops it (BC: unconfirmed merges do not
    *    survive reload).
-   * 2. No per-row backend write at copy time: orphan rows (one-sided
-   *    hunks) have no target cell, so they resolve through the local
-   *    apply only (kept session-local, said so in `copyNote`).
+   * 2. No per-row backend write at copy time: one-sided hunks
+   *    resolve through the local apply only (kept session-local,
+   *    said so in `copyNote`) — a present take side fills the hunk to
+   *    equal, an absent (null) take side drops the rows locally, both
+   *    exactly like the backend `text_apply_hunk` will on Save.
    *    Staged hunks flush to the backend session at Save time
    *    (`text_apply_hunk`, per-row `text_apply_edit` fallback).
    * 3. The local `applyHunkCopy` always runs, so the hunk resolves
@@ -1723,9 +1780,9 @@ export default function TextView({
    *    explicit selection copy stays native) and no disk write: the
    *    buffer is dirty and `copyNote` says so honestly - disk write
    *    happens only on the user Save buttons (`text_save_side`).
-   * Take-side wins, the other side is updated, nothing is lost
-   * silently. `l` / `r` keys, menu Take Left/Right and toolbar Copy
-   * ride this same path (window `autocompare:text-copy` event).
+   * Take-side wins (empty take deletes the orphan lines, BC parity);
+   * `l` / `r` keys, menu Take Left/Right and toolbar Copy ride this
+   * same path (window `autocompare:text-copy` event).
    */
   async function copyHunkAt(rowIndex: number, dir: TextSide): Promise<void> {
     // FIXT2 N3: serialize, never silent-drop. A copy already in flight
@@ -1786,9 +1843,30 @@ export default function TextView({
       const hunkRows = currentRows.slice(lo, hi + 1);
 
       // Phase 1: Local copy first! Apply hunk copy to locally held rows
-      const nextRows = applyHunkCopy(currentRows, start, end, dir);
+      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, start, end, dir);
       setRows(nextRows);
       rowsRef.current = nextRows;
+      // Wave-178: dropped (null-take) rows must not linger as ghost
+      // edit overrides or as phantom total — prune both so Load more /
+      // goto / find page against the same shortened prefix the backend
+      // will hold after Save.
+      if (removed > 0) {
+        const dropped = new Set<number>();
+        for (const r of currentRows) {
+          if (r.index >= start && r.index <= end && (dir === "left" ? r.left : r.right) === null) {
+            dropped.add(r.index);
+          }
+        }
+        setEdits((prevEdits) => {
+          const kept: Record<string, string> = {};
+          for (const [k, v] of Object.entries(prevEdits)) {
+            const sep = k.lastIndexOf(":");
+            if (!dropped.has(Number(k.slice(0, sep)))) kept[k] = v;
+          }
+          return kept;
+        });
+        setTotal((t) => Math.max(0, t - removed));
+      }
       if (selectedIndex !== null) {
         const updatedSelected = nextRows.find((r) => r.index === selectedIndex) ?? null;
         onSelectRow?.(selectedIndex, updatedSelected);
@@ -1801,27 +1879,11 @@ export default function TextView({
       setSaveNote(null);
 
       // Recompute overview counts locally so status line and ruler update accurately
-      let chg = 0;
-      let loCount = 0;
-      let roCount = 0;
-      for (const r of hunkRows) {
-        if (r.kind === "changed") chg += 1;
-        else if (r.kind === "leftOnly") loCount += 1;
-        else if (r.kind === "rightOnly") roCount += 1;
-      }
-      const diffCount = hunkRows.length;
-      setOverview((prev) => {
-        if (!prev) return null;
-        return {
-          equal: prev.equal + diffCount,
-          changed: Math.max(0, prev.changed - chg),
-          leftOnly: Math.max(0, prev.leftOnly - loCount),
-          rightOnly: Math.max(0, prev.rightOnly - roCount),
-        };
-      });
+      setOverview((prev) => adjustOverviewForCopy(prev, hunkRows, merged));
 
       const isOneSided = hunkRows.every((r) => r.kind === "leftOnly") || hunkRows.every((r) => r.kind === "rightOnly");
       const hunkLabel = ordinal >= 0 ? `hunk ${ordinal + 1}` : `rows ${start}-${end}`;
+      const diffCount = hunkRows.length;
       const outcome = isOneSided
         ? `one-sided hunk (${diffCount} of ${diffCount} rows) kept session-local`
         : `${diffCount} of ${diffCount} row(s) merged into the compare session`;
@@ -1880,9 +1942,24 @@ export default function TextView({
     }
     try {
       const target: TextSide = dir === "left" ? "right" : "left";
-      const nextRows = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
+      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
       setRows(nextRows);
       rowsRef.current = nextRows;
+      // Wave-178: same drop/total/overview accounting as the hunk path
+      // (shared `applyHunkCopy` + `adjustOverviewForCopy`) — the line
+      // path previously skipped all three and drifted from backend truth.
+      if (removed > 0) {
+        setEdits((prevEdits) => {
+          const kept: Record<string, string> = {};
+          for (const [k, v] of Object.entries(prevEdits)) {
+            const sep = k.lastIndexOf(":");
+            if (Number(k.slice(0, sep)) !== rowIndex) kept[k] = v;
+          }
+          return kept;
+        });
+        setTotal((t) => Math.max(0, t - removed));
+      }
+      setOverview((prev) => adjustOverviewForCopy(prev, row.kind === "equal" ? [] : [row], merged));
 
       // FIXT2 N4: same-range upsert, never blind append.
       setStagedCopies((prev) => upsertStagedCopy(prev, { start: rowIndex, end: rowIndex, dir, target }));

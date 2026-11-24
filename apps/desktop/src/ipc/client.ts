@@ -803,6 +803,85 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         rows: sourceRows.length,
       } as unknown as T;
     }
+    case "text_apply_hunk": {
+      // Wave-178: mock parity with Rust `text_apply_hunk` (copy-persist
+      // path only). Take-side wins with no fallback: a present take side
+      // fills both cells and flips the row to equal (identity preserved);
+      // an absent take side (`null`) drops the row (FIXTEXT GAP-03).
+      // Unknown sessions reject so the view falls back to the per-row
+      // `text_apply_edit` replay instead of rendering stale rows.
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const start = numArg(args, ["start"], -1);
+      const end = numArg(args, ["end"], -1);
+      const dirStr = strArg(args, ["dir"], "");
+      if (dirStr !== "left" && dirStr !== "right") {
+        throw new Error(`unknown side '${dirStr}'`);
+      }
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < 0 || start > end) {
+        throw new Error(`invalid hunk range: start ${start} > end ${end}`);
+      }
+      let sess = mockTextSessions.get(sessId);
+      if (sess === undefined) {
+        if (sessId === "mock-text-1") {
+          sess = registerFixtureTextSession(dumped.textRows, "", "");
+        } else {
+          throw new Error(`unknown text session '${sessId}'`);
+        }
+      }
+      const maxIdx = sess.rows.reduce((m, r) => (r.index > m ? r.index : m), 0);
+      if (sess.rows.length === 0) {
+        throw new Error("cannot apply hunk to empty session");
+      }
+      if (start > maxIdx) {
+        throw new Error(`row index ${start} out of range`);
+      }
+      const clampedEnd = Math.min(end, maxIdx);
+      const nextRows: DumpedTextRow[] = [];
+      let applied = 0;
+      let total = 0;
+      for (const row of sess.rows) {
+        if (row.index < start || row.index > clampedEnd) {
+          nextRows.push(row);
+          continue;
+        }
+        total += 1;
+        const take = dirStr === "left" ? row.left : row.right;
+        const other = dirStr === "left" ? row.right : row.left;
+        if (take !== null && take !== undefined && other !== null && other !== undefined) {
+          applied += 1;
+        }
+        if (take === null || take === undefined) continue;
+        nextRows.push({ index: row.index, kind: "equal", left: take, right: take, inline: [] });
+      }
+      let leftLines = 0;
+      let rightLines = 0;
+      let opCount = 0;
+      let prevKind = "";
+      for (const row of nextRows) {
+        if (row.left !== null) leftLines += 1;
+        if (row.right !== null) rightLines += 1;
+        if (row.kind !== prevKind) {
+          opCount += 1;
+          prevKind = row.kind;
+        }
+      }
+      mockTextSessions.set(sessId, {
+        ...sess,
+        rows: nextRows,
+        leftLines,
+        rightLines,
+        opCount,
+      });
+      return {
+        session: sessId,
+        start,
+        end: start + total - 1,
+        dir: dirStr,
+        applied,
+        total,
+        rows: nextRows.length,
+      } as unknown as T;
+    }
     case "folder_compare": {
       const masks = typeof args["masks"] === "string" ? (args["masks"] as string) : null;
       mockFolderMasks = masks;
