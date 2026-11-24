@@ -501,7 +501,9 @@ export function PathBar({
     ).trim();
 
     if (thisPath === "" || otherPath === "") {
-      setLocalNote("needs two paths");
+      const sideLabel = side === "left" ? "left" : "right";
+      const otherLabel = side === "left" ? "right" : "left";
+      setLocalNote(`needs two paths (${sideLabel} staged — drop ${otherLabel} to compare)`);
       return;
     }
 
@@ -518,7 +520,19 @@ export function PathBar({
     markDropRecompare();
     const item0 = paths[0]?.trim();
     const item1 = paths[1]?.trim();
-    if (!item0 || !item1) return;
+    if (!item0 || !item1) {
+      // Wave-FIXP (N7 parity): single-path multi-drop is never a silent no-op.
+      if (item0) {
+        setLeftDraft(item0);
+        recordPathHistory("left", item0);
+        handleFieldSubmit("left", item0);
+      } else if (item1) {
+        setRightDraft(item1);
+        recordPathHistory("right", item1);
+        handleFieldSubmit("right", item1);
+      }
+      return;
+    }
     setLeftDraft(item0);
     setRightDraft(item1);
     recordPathHistory("left", item0);

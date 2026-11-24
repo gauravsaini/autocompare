@@ -72,8 +72,8 @@ pub fn route_menu_event(id: &str) -> Option<&'static str> {
         "file.open-workspace" => Some("session_list"),
         "session.new" => Some("session_new"),
         "session.find" => Some("session_find"),
-        "session.take-left" => Some("text_copy_section"),
-        "session.take-right" => Some("text_copy_section"),
+        "session.take-left" => Some("text_copy_left"),
+        "session.take-right" => Some("text_copy_right"),
         "view.kind-text" => Some("text_compare"),
         "view.kind-folder" => Some("folder_compare"),
         "view.kind-hex" => Some("hex_compare"),
@@ -106,6 +106,24 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
             }
         }
         None => eprintln!("desktop: ignoring unknown menu id '{id}'"),
+    }
+}
+
+/// Dynamically updates the enabled state of native Take Left / Take Right menu items
+/// (selection/kind-aware shell control when pushed by the frontend or view lifecycle).
+/// If disabled, the OS suppresses menu accelerators (CmdOrCtrl+D / CmdOrCtrl+E).
+pub fn set_take_menu_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
+    if let Some(menu) = app.menu() {
+        if let Some(item) = menu.get("session.take-left") {
+            if let Some(menu_item) = item.as_menuitem() {
+                let _ = menu_item.set_enabled(enabled);
+            }
+        }
+        if let Some(item) = menu.get("session.take-right") {
+            if let Some(menu_item) = item.as_menuitem() {
+                let _ = menu_item.set_enabled(enabled);
+            }
+        }
     }
 }
 
@@ -180,10 +198,15 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 Some("CmdOrCtrl+F"),
             )?,
             &PredefinedMenuItem::separator(app)?,
-            // Wave-G2: Take Left/Right stay enabled (menu events carry no
-            // payload, so the shell cannot know the selection); the
-            // frontend owns honest enablement — nearest-hunk fallback when
-            // an equal row is selected, parked note when nothing is.
+            // Wave-FIXP (N2 parity): Take Left / Take Right carry distinct
+            // command intents ("text_copy_left" vs "text_copy_right"). Native
+            // menu items are initialized enabled (menu events carry no payload,
+            // so the host shell cannot observe selection state without frontend push);
+            // the frontend owns honest selection/kind-aware enablement — nearest-hunk
+            // fallback when an equal row is selected, and an honest refusal note
+            // when no hunk/conflict is selected ("needs a hunk row selected" in text,
+            // "Take {dir} needs a conflict selected" in merge, or view-kind disabled reason).
+            // Shell callers may dynamically toggle availability via [`set_take_menu_enabled`].
             &MenuItem::with_id(
                 app,
                 "session.take-left",
@@ -345,10 +368,11 @@ mod tests {
 
     #[test]
     fn route_menu_event_take_left_right() {
-        // Wave-131: Take Left/Right ride the existing text copy IPC
-        // intent (no new IPC); the frontend supplies the hunk args.
-        assert_eq!(route_menu_event("session.take-left"), Some("text_copy_section"));
-        assert_eq!(route_menu_event("session.take-right"), Some("text_copy_section"));
+        // Wave-FIXP: Take Left/Right carry distinct IPC intents
+        // ("text_copy_left" vs "text_copy_right") rather than sharing
+        // one ambiguous "text_copy_section" intent.
+        assert_eq!(route_menu_event("session.take-left"), Some("text_copy_left"));
+        assert_eq!(route_menu_event("session.take-right"), Some("text_copy_right"));
     }
 
     #[test]

@@ -59,8 +59,8 @@ const WEB_SHORTCUT_COMMANDS: Record<WebShortcutMenuId, string> = {
   "file.open-session": "session_load",
   "file.open-folder": "folder_compare",
   "file.save-session": "session_save",
-  "session.take-left": "text_copy_section",
-  "session.take-right": "text_copy_section",
+  "session.take-left": "text_copy_left",
+  "session.take-right": "text_copy_right",
 };
 
 export interface WebShortcutChord {
@@ -143,11 +143,86 @@ export function emitWebShortcut(id: WebShortcutMenuId): void {
 }
 
 /**
+ * Wave-FIXP (N6 parity): Trigger Find Next across mounted views.
+ * If the active view's find overlay is mounted with a next button, clicks it;
+ * otherwise dispatches `autocompare:session-find` to open the search bar.
+ */
+export function triggerFindNext(): boolean {
+  if (typeof document === "undefined") return false;
+  const nextBtn = document.querySelector<HTMLButtonElement>(
+    '[data-testid="textview/find-next"], [data-testid="merge/find-next"], [data-testid="hex-find-next"], [data-testid="table-find-next"]',
+  );
+  if (nextBtn && !nextBtn.disabled) {
+    nextBtn.click();
+    return true;
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("autocompare:session-find"));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Wave-FIXP (N6 parity): Trigger Find Previous across mounted views.
+ * If the active view's find overlay is mounted with a prev button, clicks it;
+ * otherwise dispatches `autocompare:session-find` to open the search bar.
+ */
+export function triggerFindPrev(): boolean {
+  if (typeof document === "undefined") return false;
+  const prevBtn = document.querySelector<HTMLButtonElement>(
+    '[data-testid="textview/find-prev"], [data-testid="merge/find-prev"]',
+  );
+  if (prevBtn && !prevBtn.disabled) {
+    prevBtn.click();
+    return true;
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("autocompare:session-find"));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Wave-FIXP (N6 parity): Focus or toggle Go To overlay across views that support it
+ * (Text, Hex, Folder). Views without Go To support (Merge, Table, Sync)
+ * return false without error.
+ */
+export function triggerGoTo(): boolean {
+  if (typeof document === "undefined") return false;
+  const gotoInput = document.querySelector<HTMLElement>(
+    '#textview-goto-box, #hex-goto-box, #folder-goto-box, [data-testid="textview/goto-input"], [data-testid="hex-goto-input"], [data-testid="folder-goto-input"]',
+  );
+  if (gotoInput) {
+    gotoInput.focus();
+    return true;
+  }
+  const gotoToggle = document.querySelector<HTMLButtonElement>(
+    '[data-testid="textview/toolbar-goto"], [data-testid="hexview/toolbar-goto"]',
+  );
+  if (gotoToggle && !gotoToggle.disabled) {
+    gotoToggle.click();
+    return true;
+  }
+  return false;
+}
+
+/**
  * Chrome-level listener (mounted once by `ChromeShell`). Matches each
  * keydown against `matchWebShortcut`; on a hit it `preventDefault`s
  * (browser Save/Bookmark/New-window suppression) and emits the
  * menu-event. Pass-through otherwise, so view-local chords (F/G, plain
  * l/r/n/p/j/k, arrows, Enter/Esc) are untouched.
+ *
+ * Scope note (AUDIT2 N6):
+ * - Find Next / Prev: handled via F3 / Shift+F3 (BC parity, zero collision).
+ * - GoTo: handled view-locally in TextView/FolderView/HexView; triggerGoTo
+ *   serves as a safe fallback.
+ * - Merge/Folder dead navigation keys (n/p): guarded in App.tsx:1537-1538
+ *   (`if (viewKind !== "text") return;`). Because FIXP owns only menu.rs,
+ *   shortcuts.ts, and PathBar files (NO App.tsx / NO MergeView), cross-view
+ *   bus routing for n/p belongs to App-level wave L3.
  */
 export function useWebShortcuts(): void {
   useEffect(() => {
@@ -164,6 +239,18 @@ export function useWebShortcuts(): void {
       // Ctrl+D forward delete, Ctrl+E end of line, Ctrl+N next line) must not
       // be hijacked by menu accelerators.
       if (isInput && e.ctrlKey && !e.metaKey) {
+        return;
+      }
+
+      // Wave-FIXP (N6 parity): F3 / Shift+F3 for Find Next / Find Prev.
+      // Standard across Beyond Compare and browsers; no chord collisions.
+      if (e.key === "F3") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          triggerFindPrev();
+        } else {
+          triggerFindNext();
+        }
         return;
       }
 
