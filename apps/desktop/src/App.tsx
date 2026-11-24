@@ -182,11 +182,13 @@ function applyStoredCopiesToDiffRows(
  * Toolbar as filter actions dispatching the `autocompare:view-filter`
  * window event (`{ filter, viewKind }`); every view listens already, so
  * the top bar is the single dispatch point and the view-level controls
- * keep working untouched. Minor is live in text kind (dispatches
- * `autocompare:view-minor`, applied through the existing text IPC
- * ignore options). Wave-167: Rules/Format are live top-bar actions
- * dispatching `autocompare:view-rules` (folder) / `autocompare:view-format`
- * (text) to the in-view panels, honestly parked elsewhere.
+ * keep working untouched. Minor is live in text and table kinds (dispatches
+ * `autocompare:view-minor` with the kind through the view bus, applied
+ * through the text/table IPC ignore options). Wave-167: Rules/Format are live
+ * top-bar actions dispatching `autocompare:view-rules` (folder) /
+ * `autocompare:view-format` (text) to the in-view panels, honestly parked elsewhere.
+ * Wave-169: Minor extends to table kind (dispatchViewMinor with kind table
+ * through existing view bus + table IPC ignore flags; text behavior unchanged).
  */
 export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";
@@ -1827,18 +1829,24 @@ export default function App(): React.JSX.Element {
   // scattered duplicate dispatches).
   const handleViewFilter = useCallback(
     (filter: ViewFilterKind): void => {
+      if (activeSession === null) {
+        setStatusMessage("Filters need an open session");
+        return;
+      }
       const kind = viewKindRef.current ?? viewKind;
       dispatchViewFilter(filter, kind);
       setStatusMessage(`View filter: ${filter}`);
     },
-    [viewKind],
+    [activeSession, viewKind],
   );
 
   // Wave-161: Minor is LIVE in text kind — it toggles BOTH text IPC
   // ignore options (`ignoreWhitespace` + `ignoreCase`) through the
   // existing `text_compare` path (TextView `autocompare:view-minor`
-  // listener rides `recompareWithIgnores`, no engine change). Other
-  // kinds keep the honest parked state (no ignore IPC there).
+  // listener rides `recompareWithIgnores`, no engine change).
+  // Wave-169: Minor extends to table kind (dispatchViewMinor with kind
+  // table through existing view bus + table IPC ignore flags; text
+  // behavior unchanged). Other kinds keep the honest parked state.
   // Wave-167: Rules/Format ride the same bus pattern (see
   // `handleRulesToggle`/`handleFormatToggle` below).
   const [minorOn, setMinorOn] = useState(false);
@@ -1850,7 +1858,8 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     setMinorOn(false);
   }, [activeTabId, activePaths.left, activePaths.right, compareTick]);
-  const minorLive = viewKind === "text" && activeSession !== null;
+  const minorLive =
+    (viewKind === "text" || viewKind === "table") && activeSession !== null;
   const handleMinorToggle = useCallback(() => {
     if (!minorLive) {
       setStatusMessage("Minor needs text compare");
@@ -1858,11 +1867,23 @@ export default function App(): React.JSX.Element {
     }
     const next = !minorOn;
     setMinorOn(next);
-    dispatchViewMinor(next, "text");
+    if (viewKind === "table") {
+      dispatchViewMinor(next, "table");
+      const left = activePaths.left;
+      const right = activePaths.right;
+      if (left && right) {
+        void tableCompare(left, right, false, [], {
+          ignoreCase: next,
+          ignoreSpace: next,
+        });
+      }
+    } else {
+      dispatchViewMinor(next, "text");
+    }
     setStatusMessage(
       next ? "Minor: ignoring whitespace and case" : "Minor off: exact diff",
     );
-  }, [minorLive, minorOn]);
+  }, [activePaths.left, activePaths.right, minorLive, minorOn, viewKind]);
   // Wave-167: Rules/Format are LIVE top-bar actions (BC Session >
   // Settings parity). Rules opens the in-view Rules panel in folder
   // kind (`autocompare:view-rules`, owned by FolderView); Format opens
@@ -1980,8 +2001,8 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewFilter("context"),
     },
     {
-      // Wave-161: Minor is LIVE in text kind (toggles both text IPC
-      // ignore options through the existing compare path, no engine
+      // Wave-161 / Wave-169: Minor is LIVE in text and table kinds
+      // (toggles ignore options through the existing compare path, no engine
       // change); every other kind keeps the honest parked reason.
       id: "minor",
       icon: Minus,
