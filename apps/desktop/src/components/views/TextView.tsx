@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { textApplyEdit, textApplyHunk, textCompare, textCompareDemo, textFind, textGetOverview, textGetRows, textSaveSide } from "../../ipc/text";
 import type { InlineSpanDto, OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
 import { arrayField, errString, isRecord } from "./types";
@@ -604,30 +605,10 @@ function LineNo({
  * byte-for-byte at the same testids / aria-labels.
  */
 function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {dir === "left" ? (
-        <>
-          <path d="M1.5 2.5 5.5 6 1.5 9.5" />
-          <path d="M6.5 2.5 10.5 6 6.5 9.5" />
-        </>
-      ) : (
-        <>
-          <path d="M10.5 2.5 6.5 6 10.5 9.5" />
-          <path d="M5.5 2.5 1.5 6 5.5 9.5" />
-        </>
-      )}
-    </svg>
+  return dir === "left" ? (
+    <ChevronsRight size={12} strokeWidth={2} aria-hidden="true" />
+  ) : (
+    <ChevronsLeft size={12} strokeWidth={2} aria-hidden="true" />
   );
 }
 
@@ -2838,17 +2819,17 @@ export default function TextView({
             own row above the list even while disabled). Sibling of the
             counts so `textview/status` keeps its exact legacy text and
             every `toHaveText` snapshot (66p/66q/66i/66o) keeps passing. */}
-        <button
-          type="button"
+        <Button
+          size="sm"
+          className="mr-[var(--ac-space-2)]"
           data-testid="textview/undo-edit"
           aria-label="Undo last edit"
           title="Re-applies the previous text of the most recently applied edit (one level)"
           disabled={lastUndo === null || undoing || session === null}
           onClick={() => void undoLastEdit()}
-          className="mr-[var(--ac-space-2)] rounded border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)] py-0 font-medium text-[var(--ac-fg)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {undoing ? "Undoing…" : "Undo last edit"}
-        </button>
+        </Button>
         <p data-testid="textview/status" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
           {rows.length} / {total} rows · {counts.equal} same · {counts.changed} changed ·{" "}
           {counts.leftOnly} left-only · {counts.rightOnly} right-only

@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit } from "../../ipc/table";
-import { Button, Checkbox, Input } from "../ui";
+import { Button, Checkbox, Input, Select } from "../ui";
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -1517,19 +1517,19 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                     className="ac-chrome-label inline-flex items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
                   >
                     {leftName} →{" "}
-                    <select
+                    <Select
+                      controlSize="sm"
                       data-testid={`table-map-right-${c}`}
                       value={mapR(c)}
                       onChange={(e) => toggleMapPair(c, Number(e.target.value))}
                       aria-label={`map left column ${leftName} to right column`}
-                      className="ac-mono rounded-[var(--ac-control-radius)] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
                     >
                       {options.map((i) => (
                         <option key={i} value={i}>
                           {grid.headerR[i] ?? `col ${i + 1}`}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 );
               })}
@@ -1538,12 +1538,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                 className="ac-chrome-label inline-flex items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
               >
                 Key column:{" "}
-                <select
+                <Select
+                  controlSize="sm"
                   data-testid="table-map-key-select"
                   value={pickedKey === null ? "" : String(pickedKey)}
                   onChange={(e) => selectMapKey(e.target.value)}
                   aria-label="key column"
-                  className="ac-mono rounded-[var(--ac-control-radius)] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
                 >
                   <option value="">auto</option>
                   {cols.map((c) => (
@@ -1551,7 +1551,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                       {grid.header[c] ?? `col ${c + 1}`}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <Button
                 variant="secondary"

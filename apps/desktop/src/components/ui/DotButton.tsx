@@ -11,7 +11,7 @@ export interface DotButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> 
   readonly active?: boolean;
 }
 
-export default function DotButton({ active = false, className = "", type = "button", ...rest }: DotButtonProps): React.JSX.Element {
+export function DotButton({ active = false, className = "", type = "button", ...rest }: DotButtonProps): React.JSX.Element {
   return (
     <button
       type={type}
@@ -35,3 +35,8 @@ export default function DotButton({ active = false, className = "", type = "butt
     </button>
   );
 }
+
+export default DotButton;
+
+export type OverviewDotProps = DotButtonProps;
+export const OverviewDot = DotButton;

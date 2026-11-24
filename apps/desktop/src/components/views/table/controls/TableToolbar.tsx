@@ -18,7 +18,7 @@
  */
 
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
-import { Button, Checkbox, ToolbarButton } from "../../../ui";
+import { Button, Checkbox, StatusText, ToolbarButton } from "../../../ui";
 
 export interface TableToolbarProps {
   readonly byKey: boolean;
@@ -92,13 +92,13 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       className="tv-controls-bar"
     >
       <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
-      <span
+      <StatusText
         data-testid="table-bykey-status"
         role="status"
-        className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+        variant="code"
       >
         {byKey ? "by-key" : "positional"}
-      </span>
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-cols-toggle"
@@ -115,13 +115,13 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       >
         Show all
       </Button>
-      <span
+      <StatusText
         data-testid="table-cols-visible"
         role="status"
-        className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+        variant="code"
       >
         {hiddenCount === 0 ? "all columns shown" : `${hiddenCount} hidden`}
-      </span>
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button data-testid="table-export" onClick={onExport}>
         Export CSV
@@ -141,13 +141,13 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       >
         {mapOpen ? "Hide column mapping" : "Map columns"}
       </Button>
-      <span
+      <StatusText
         data-testid="table-map-status"
         role="status"
-        className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+        variant="code"
       >
         {mapSummary}
-      </span>
+      </StatusText>
       {/* Wave-TBL: per-cell/row clipboard copy of the selected grid cell.
           Toolbar-only (no new stacked chrome rows); disabled with an
           honest reason until a cell is selected. */}
@@ -169,13 +169,13 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         Copy row
       </Button>
       {copyNote !== null && (
-        <span
+        <StatusText
           data-testid="table-copy-status"
           role="status"
-          className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+          variant="code"
         >
           {copyNote}
-        </span>
+        </StatusText>
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
@@ -208,11 +208,11 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Next</span>
       </ToolbarButton>
-      <span data-testid="tableview/toolbar-diffs" className="ac-meta text-[var(--ac-fg-muted)]">
+      <StatusText data-testid="tableview/toolbar-diffs" variant="meta">
         {diffCount === 0
           ? "no differences"
           : `difference ${diffPos + 1} of ${diffCount}`}
-      </span>
+      </StatusText>
     </div>
   );
 }

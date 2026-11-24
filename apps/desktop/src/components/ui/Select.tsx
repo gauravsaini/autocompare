@@ -23,3 +23,6 @@ export default function Select({ controlSize, className = "", children, ...rest 
     </select>
   );
 }
+
+export { Select };
+

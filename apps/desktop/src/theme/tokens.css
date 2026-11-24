@@ -202,8 +202,13 @@
   --ac-input-bg: var(--ac-bg-raised);
   --ac-input-border: rgba(0, 0, 0, 0.15);
   --ac-input-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.08);
+  --ac-select-bg: var(--ac-input-bg);
+  --ac-select-border: var(--ac-input-border);
+  --ac-select-shadow: var(--ac-input-shadow);
 
+  /* Checkbox & Tab Chip Tokens (Light) */
   --ac-checkbox-size: 13px;
+  --ac-tab-chip-h: 32px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -319,8 +324,13 @@
     --ac-input-bg: var(--ac-bg-raised);
     --ac-input-border: rgba(255, 255, 255, 0.18);
     --ac-input-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.3);
+    --ac-select-bg: var(--ac-input-bg);
+    --ac-select-border: var(--ac-input-border);
+    --ac-select-shadow: var(--ac-input-shadow);
 
+    /* Checkbox & Tab Chip Tokens (Dark) */
     --ac-checkbox-size: 13px;
+    --ac-tab-chip-h: 32px;
   }
 }
 

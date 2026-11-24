@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Select from "./Select";
+import type { SelectProps } from "./Select";
 
 /**
  * Wave-158: shared labeled-field primitive (typography ONLY via `ac-meta`,
@@ -14,7 +16,7 @@ export interface FieldProps {
   readonly className?: string;
 }
 
-export default function Field({ label, htmlFor, children, className = "" }: FieldProps): React.JSX.Element {
+export function Field({ label, htmlFor, children, className = "" }: FieldProps): React.JSX.Element {
   return (
     <label
       htmlFor={htmlFor}
@@ -23,5 +25,35 @@ export default function Field({ label, htmlFor, children, className = "" }: Fiel
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+export default Field;
+
+export interface LabeledSelectProps extends SelectProps {
+  readonly label: string;
+  readonly htmlFor?: string;
+  readonly fieldClassName?: string;
+}
+
+/**
+ * Wrapper component combining Field and Select.
+ */
+export function LabeledSelect({
+  label,
+  htmlFor,
+  fieldClassName = "",
+  id,
+  className = "",
+  controlSize,
+  children,
+  ...rest
+}: LabeledSelectProps): React.JSX.Element {
+  return (
+    <Field label={label} htmlFor={htmlFor ?? id} className={fieldClassName}>
+      <Select id={id} className={className} controlSize={controlSize} {...rest}>
+        {children}
+      </Select>
+    </Field>
   );
 }
