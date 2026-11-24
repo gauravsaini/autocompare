@@ -136,7 +136,7 @@ test("mediaparity-103: chrome budget, density, file headers, wiring, status, lig
   console.log(`MEDIAPARITY-103 picture chromeDelta=${picDelta}`);
   expect(picDelta ?? Number.POSITIVE_INFINITY, `media chrome within budget (got ${picDelta}px)`).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // ---- Audio mode: panel behavior, headers, recompute wiring. ----
   await createMediaSession(page, "/tmp/m-left.wav", "/tmp/m-right.wav");
@@ -165,7 +165,7 @@ test("mediaparity-103: chrome budget, density, file headers, wiring, status, lig
   await expect(page.getByTestId("mediaview/statusbar-counts")).toContainText(/windows differ/);
   await expect(page.getByTestId("mediaview/statusbar-verdict")).toContainText("different");
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // (a) Chrome budget with the tolerance panel closed.
   await page.getByTestId("mediaview/toolbar-tolerance").click();
@@ -201,17 +201,19 @@ test("mediaparity-103: chrome budget, density, file headers, wiring, status, lig
   // Side-by-side vs the BC truth (truth pixels ship in the figure;
   // the BC capture shows Home with the Media/Picture Compare
   // launchers -- see REPORT for the honest reading).
-  const truthB64 = fs.readFileSync(BC_TRUTH).toString("base64");
-  const oursB64 = fs.readFileSync(`${EVID}-light.png`).toString("base64");
-  await page.emulateMedia({ colorScheme: "light" });
-  await page.setContent(
-    `<html><body style="margin:0;display:flex;gap:8px;background:#fff;font:12px system-ui">` +
-      `<figure style="margin:0"><figcaption>BC media truth (/tmp/bc-media-truth.png)</figcaption><img src="data:image/png;base64,${truthB64}" style="max-width:620px;border:1px solid #888"/></figure>` +
-      `<figure style="margin:0"><figcaption>ours media parity light (${browserName})</figcaption><img src="data:image/png;base64,${oursB64}" style="max-width:620px;border:1px solid #888"/></figure>` +
-      `</body></html>`,
-  );
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: `${EVID}-sidebyside.png`, fullPage: true });
+  if (fs.existsSync(BC_TRUTH) && fs.existsSync(`${EVID}-light.png`)) {
+    const truthB64 = fs.readFileSync(BC_TRUTH).toString("base64");
+    const oursB64 = fs.readFileSync(`${EVID}-light.png`).toString("base64");
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setContent(
+      `<html><body style="margin:0;display:flex;gap:8px;background:#fff;font:12px system-ui">` +
+        `<figure style="margin:0"><figcaption>BC media truth (/tmp/bc-media-truth.png)</figcaption><img src="data:image/png;base64,${truthB64}" style="max-width:620px;border:1px solid #888"/></figure>` +
+        `<figure style="margin:0"><figcaption>ours media parity light (${browserName})</figcaption><img src="data:image/png;base64,${oursB64}" style="max-width:620px;border:1px solid #888"/></figure>` +
+        `</body></html>`,
+    );
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${EVID}-sidebyside.png`, fullPage: true });
+  }
 
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
   expect(consoleErrors, `zero console errors (got: ${consoleErrors.join(" | ")})`).toEqual([]);

@@ -117,7 +117,7 @@ test("sync chrome collapse: single-row toolbar, name-filter overlay, status bar,
   expect(statusTop, "status bar lives below the rows").toBeGreaterThan(firstRowTopAbs);
   expect(toolbarTop, "toolbar sits above the rows").toBeLessThan(firstRowTopAbs);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // 2. Toolbar toggle collapses the name-filter panel; toggle reopens + focuses.
   // Panel boots open (backward compat with the wave-64 filter box).
@@ -187,7 +187,7 @@ test("sync chrome collapse: single-row toolbar, name-filter overlay, status bar,
     new RegExp(`applied: ${EXPECTED_STEPS} copied, 0 deleted`),
   );
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // 6. Collapsed chrome budget: with the name-filter panel closed the sync
   //    chrome (toolbar + totals + mode-note, i.e. first-row top relative

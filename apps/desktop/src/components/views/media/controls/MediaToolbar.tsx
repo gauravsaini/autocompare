@@ -43,14 +43,15 @@ export default function MediaToolbar(props: MediaToolbarProps): React.JSX.Elemen
             data-testid="mediaview/toolbar-tolerance"
             label={toleranceOpen ? "Hide tolerance (Esc)" : "Show tolerance"}
             title="Audio tolerance"
+            icon={SlidersHorizontal}
             expanded={toleranceOpen}
             onClick={onToggleTolerance}
           >
-            <SlidersHorizontal size={14} strokeWidth={1.75} aria-hidden="true" />
             <span>Tolerance</span>
           </ToolbarButton>
           <Button
             data-testid="mediaview/recompare"
+            size="sm"
             onClick={onRecompare}
             disabled={comparing}
           >

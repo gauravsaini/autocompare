@@ -83,5 +83,5 @@ test("step filter narrows list only, misses honestly, focuses via cmd+f", async 
     await expect.poll(() => focusedTestId(page), { timeout: 5000 }).toBe("syncview/name-filter");
   }
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 });

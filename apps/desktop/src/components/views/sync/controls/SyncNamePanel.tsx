@@ -41,6 +41,7 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
             // stays mounted for an immediate refill; Esc on an empty box
             // collapses the panel (wave-73 chrome collapse).
             if (event.key === "Escape") {
+              event.stopPropagation();
               if (query !== "") onQueryChange("");
               else onClose();
             }

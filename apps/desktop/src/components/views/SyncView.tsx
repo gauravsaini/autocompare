@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Trash2 } from "lucide-react";
 import { syncApply, syncPlan, type SyncDirection, type SyncPlan, type SyncStep } from "../../ipc/sync";
+import { Button } from "../ui";
 import { SyncNamePanel, SyncToolbar } from "./sync/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -479,24 +480,32 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
                     <span className="min-w-0 flex-1 truncate" title={step.rel_path}>
                       {step.rel_path}
                     </span>
-                    <span
-                      data-testid="syncview/row-action"
-                      data-action={step.action}
-                      className="text-[var(--ac-fg-muted)]"
-                    >
-                      [{actionLabel(step.action)}]
+                    {/* Wave-185: right-pinned action cluster (BC Folder Sync
+                        center-action-column echo). The badge + include toggle
+                        ride one nowrap group at the row end so narrow windows
+                        keep them together on the row line (uniform-height
+                        gate); testids/aria/words byte-identical. */}
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-[var(--ac-space-2)]">
+                      <span
+                        data-testid="syncview/row-action"
+                        data-action={step.action}
+                        className="whitespace-nowrap text-[var(--ac-fg-muted)]"
+                      >
+                        [{actionLabel(step.action)}]
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`sync-include-${index}`}
+                        aria-pressed={included}
+                        aria-label={`${included ? "Exclude" : "Include"} ${step.rel_path} ${included ? "from" : "in"} apply`}
+                        title={included ? "Exclude from apply (preview keeps it listed)" : "Include in apply"}
+                        onClick={() => toggleInclude(step.rel_path)}
+                      >
+                        {included ? "Exclude" : "Include"}
+                      </Button>
                     </span>
-                    <button
-                      type="button"
-                      data-testid={`sync-include-${index}`}
-                      aria-pressed={included}
-                      aria-label={`${included ? "Exclude" : "Include"} ${step.rel_path} ${included ? "from" : "in"} apply`}
-                      title={included ? "Exclude from apply (preview keeps it listed)" : "Include in apply"}
-                      onClick={() => toggleInclude(step.rel_path)}
-                      className="shrink-0 underline text-[var(--ac-fg-muted)]"
-                    >
-                      {included ? "Exclude" : "Include"}
-                    </button>
                   </div>
                 </div>
               );

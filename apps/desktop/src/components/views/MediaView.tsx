@@ -231,12 +231,19 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
           <p data-testid="mediaview/score" className="ac-chrome-label font-medium text-[var(--ac-fg)]">
             {picture.identical ? "Identical pictures" : `${pct(picture.score)} equal`} — {picture.differingBytes} / {picture.totalBytes} bytes differ
           </p>
-          <p className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-            <span data-testid="mediaview/meta-left" title={leftPath}>
+          {/* Wave-185: two-pane meta (BC Picture Compare pane-header echo:
+              one pane per file, path in `title`, basename + honest scalar
+              dims in words). Single flex line, no new chrome rows; testids,
+              titles and words byte-identical so 147/154 pins hold. */}
+          <p className="mw-row flex flex-nowrap items-baseline gap-x-[var(--ac-space-4)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+            <span data-testid="mediaview/meta-left" title={leftPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Left</span>
+              {" · "}
               {baseName(leftPath)} · {picture.widthL}×{picture.heightL} ({picture.sizeL} bytes, {picture.format})
-            </span>{" "}
-            ·{" "}
-            <span data-testid="mediaview/meta-right" title={rightPath}>
+            </span>
+            <span data-testid="mediaview/meta-right" title={rightPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Right</span>
+              {" · "}
               {baseName(rightPath)} · {picture.widthR}×{picture.heightR} ({picture.sizeR} bytes)
             </span>
             {picture.truncated ? " · samples truncated" : ""}
@@ -249,11 +256,11 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
                   data-testid="mediaview/row"
                   className="mw-row flex items-center gap-[var(--ac-space-2)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
                 >
-                  <span>offset {s.offset}</span>
+                  <span className="font-medium">offset {s.offset}</span>
                   <span className="inline-flex items-center gap-[var(--ac-space-1)]">
-                    <span>{s.left}</span>
+                    <span className="font-medium text-[var(--ac-fg)]">{s.left}</span>
                     <ArrowRight size={12} aria-hidden="true" />
-                    <span>{s.right}</span>
+                    <span className="font-medium text-[var(--ac-fg)]">{s.right}</span>
                   </span>
                 </div>
               ))}
@@ -278,12 +285,15 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
             {audio.identical ? "Identical audio" : `${pct(audio.score)} equal`} — {audio.windowsDiffering} / {audio.windowsTotal} windows differ
             {audio.firstDiffAt !== null ? `, first at ${audio.firstDiffAt.toFixed(2)}s` : ""}
           </p>
-          <p className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-            <span data-testid="mediaview/meta-left" title={leftPath}>
+          <p className="mw-row flex flex-nowrap items-baseline gap-x-[var(--ac-space-4)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+            <span data-testid="mediaview/meta-left" title={leftPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Left</span>
+              {" · "}
               {baseName(leftPath)} · {audio.sampleRateL}Hz×{audio.channelsL} {audio.durationL.toFixed(2)}s
-            </span>{" "}
-            ·{" "}
-            <span data-testid="mediaview/meta-right" title={rightPath}>
+            </span>
+            <span data-testid="mediaview/meta-right" title={rightPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Right</span>
+              {" · "}
               {baseName(rightPath)} · {audio.sampleRateR}Hz×{audio.channelsR} {audio.durationR.toFixed(2)}s
             </span>
             {audio.configMismatch ? " · config mismatch" : ""}
@@ -297,7 +307,7 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
                   data-testid="mediaview/row"
                   className="mw-row flex items-center gap-[var(--ac-space-2)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
                 >
-                  <span>window {w.window}</span>
+                  <span className="font-medium">window {w.window}</span>
                   <span>@{w.atSeconds.toFixed(2)}s</span>
                 </div>
               ))}

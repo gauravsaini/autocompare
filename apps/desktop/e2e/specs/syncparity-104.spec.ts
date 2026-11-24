@@ -157,7 +157,7 @@ test("syncparity-104: chrome budget, density, direction/filter/apply wiring, sta
   expect(statusTop, "status bar lives below the rows").toBeGreaterThan(firstRowTopAbs);
   expect(toolbarTop, "toolbar sits above the rows").toBeLessThan(firstRowTopAbs);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // (b) Density: uniform row heights, compact one-row toolbar.
   const rowHeights = await page.evaluate(() => {

@@ -57,7 +57,7 @@ test("media view: picture mode score+samples, audio mode windows+tolerance, ligh
   await expect(page.getByTestId("mediaview/score")).toContainText(/99.7% equal/);
   await expect(page.getByTestId("mediaview/score")).toContainText(/12 \/ 4100 bytes differ/);
   await expect(page.getByTestId("mediaview/row")).toHaveCount(2);
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   await createMediaSession(page, "/tmp/m-left.wav", "/tmp/m-right.wav");
   await expect(page.getByTestId("mediaview/mode")).toContainText(/Audio compare/);
@@ -66,7 +66,7 @@ test("media view: picture mode score+samples, audio mode windows+tolerance, ligh
   await page.getByTestId("mediaview/tolerance").fill("5");
   await page.getByTestId("mediaview/recompare").click();
   await expect(page.getByTestId("mediaview/score")).toContainText(/windows differ/);
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   await expect(page.getByRole("alert")).toHaveCount(0);
 

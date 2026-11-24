@@ -63,7 +63,7 @@ test("sync plan: engine step count, dry-run receipt, real apply receipt, light+d
   await expect
     .poll(async () => rows.count(), { timeout: 10000 })
     .toBe(EXPECTED_STEPS);
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   await page.getByTestId("syncview/apply-dry").click();
   await expect(page.getByTestId("syncview/receipt")).toContainText(/dry run/);

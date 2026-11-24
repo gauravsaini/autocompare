@@ -164,7 +164,7 @@ test("sync direction+prune: defaults, re-plan request path, mode note, apply smo
   await expect(modeNote).toContainText("prune: on");
 
   // Light + dark evidence (never in-repo).
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
   await page.screenshot({ path: `${EVID_DIR}/syncdirection-66n-light.png` });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.waitForTimeout(300);

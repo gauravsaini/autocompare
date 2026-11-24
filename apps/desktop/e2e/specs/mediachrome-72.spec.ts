@@ -114,7 +114,7 @@ test("media chrome collapse: single-row toolbar, tolerance overlay, status bar, 
   expect(picDelta, "section + first row mounted (picture)").not.toBeNull();
   expect(picDelta ?? Number.POSITIVE_INFINITY, `media chrome collapsed to one row (got ${picDelta}px)`).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // ---- Audio mode: tolerance panel open by default, toggle + Esc. ----
   await createMediaSession(page, "/tmp/m-left.wav", "/tmp/m-right.wav");
@@ -160,7 +160,7 @@ test("media chrome collapse: single-row toolbar, tolerance overlay, status bar, 
   await expect(page.getByTestId("mediaview/score")).toContainText(/windows differ/);
   await expect(page.getByTestId("mediaview/statusbar-counts")).toContainText(/windows differ/);
 
-  await assertNoOverlap(page);
+  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
 
   // 5. Collapsed chrome budget: with the tolerance panel closed the media
   //    chrome (toolbar + panel, i.e. first-row top relative to the media
