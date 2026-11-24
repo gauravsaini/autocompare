@@ -102,7 +102,7 @@ test("parity-sync-147b: action glyphs, toolbar collapse, receipts, budget, light
     new RegExp(`${EXPECTED_STEPS} steps`),
   );
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // (b) Density: uniform row heights, compact one-row toolbar.
   const rowHeights = await page.evaluate(() => {

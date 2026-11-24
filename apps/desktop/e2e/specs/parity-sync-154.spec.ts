@@ -162,7 +162,7 @@ test("mergesyncmedia-154 sync: chrome budget, toolbar collapse, row actions, wir
   expect(statusTop, "status bar lives below the rows").toBeGreaterThan(rowTop);
   expect(toolbarTop, "toolbar sits above the rows").toBeLessThan(rowTop);
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // Density: uniform row heights.
   const rowHeights = await page.evaluate(() => {

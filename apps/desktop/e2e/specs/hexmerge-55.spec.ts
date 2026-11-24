@@ -50,5 +50,5 @@ test("hex and merge buttons ride the label ramp", async ({ page }) => {
   );
   expect(Math.abs(parseFloat(mergeTracking) - -0.12)).toBeLessThan(0.05);
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="view-"] [data-testid], .hx-row, .mw-row');
+  await assertNoOverlap(page);
 });

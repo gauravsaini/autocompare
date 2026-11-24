@@ -22,11 +22,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { assertNoOverlap } from "../helpers/overlap";
 
-/** Wave-184 harden: overlap gate scoped to the OWNED hex section (the app
- * topbar/tabbar occasionally reports a 2px tab-new/action-open brush under
- * this webkit build; that chrome is off-limits, hexmerge-55 precedent). */
-const HEX_SECTION =
-  'section[aria-label="hex comparison"] [data-testid], section[aria-label="hex comparison"] .hx-row, section[aria-label="hex comparison"] .hx-byte';
+/** Wave-187 unscope: full-page overlap gate (W186 chrome root-cause fixed). */
 
 test.setTimeout(120_000);
 
@@ -139,7 +135,7 @@ test("hexparity-170: bus next/prev moves hex diff cursor, foreign kinds ignored"
   await page.getByTestId("hex-find-next").click();
   await expect(page.getByTestId("hex-find-status")).toContainText("match at offset 2");
 
-  await assertNoOverlap(page, HEX_SECTION);
+  await assertNoOverlap(page);
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
   expect(pageErrors, `page errors: ${pageErrors.join(" | ")}`).toEqual([]);
 });
@@ -206,7 +202,7 @@ test("hexparity-170: bus filter narrows hex rows, chrome budget holds", async ({
   expect(delta, "section + first row mounted").not.toBeNull();
   expect(delta!, `firstRowTop<=140 (got ${delta})`).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page, HEX_SECTION);
+  await assertNoOverlap(page);
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
   expect(pageErrors, `page errors: ${pageErrors.join(" | ")}`).toEqual([]);
 });

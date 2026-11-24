@@ -136,7 +136,7 @@ test("mediaparity-103: chrome budget, density, file headers, wiring, status, lig
   console.log(`MEDIAPARITY-103 picture chromeDelta=${picDelta}`);
   expect(picDelta ?? Number.POSITIVE_INFINITY, `media chrome within budget (got ${picDelta}px)`).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // ---- Audio mode: panel behavior, headers, recompute wiring. ----
   await createMediaSession(page, "/tmp/m-left.wav", "/tmp/m-right.wav");
@@ -165,7 +165,7 @@ test("mediaparity-103: chrome budget, density, file headers, wiring, status, lig
   await expect(page.getByTestId("mediaview/statusbar-counts")).toContainText(/windows differ/);
   await expect(page.getByTestId("mediaview/statusbar-verdict")).toContainText("different");
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // (a) Chrome budget with the tolerance panel closed.
   await page.getByTestId("mediaview/toolbar-tolerance").click();

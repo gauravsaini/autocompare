@@ -124,7 +124,7 @@ test("parity-media-147b: diff chrome, empty states, budget, density, light+dark"
     `media chrome within budget (got ${picDelta}px)`,
   ).toBeLessThanOrEqual(140);
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // ---- Audio mode: panel behavior, headers, recompute wiring. ----
   await createMediaSession(page, "/tmp/m-left.wav", "/tmp/m-right.wav");
@@ -148,7 +148,7 @@ test("parity-media-147b: diff chrome, empty states, budget, density, light+dark"
   await expect(page.getByTestId("mediaview/score")).toContainText(/windows differ/);
   await expect(page.getByTestId("mediaview/statusbar-counts")).toContainText(/windows differ/);
 
-  await assertNoOverlap(page, 'main, [data-testid^="view-"], [data-testid^="syncview"], [data-testid^="mediaview"]');
+  await assertNoOverlap(page);
 
   // Chrome budget with the tolerance panel closed.
   await page.getByTestId("mediaview/toolbar-tolerance").click();
