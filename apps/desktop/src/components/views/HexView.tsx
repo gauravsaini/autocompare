@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import { HexFindPanel, HexGotoPanel, HexToolbar } from "./hex/controls";
 import { errString, isRecord } from "./types";
@@ -221,6 +221,36 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
   // + Ctrl+F/Ctrl+G/Esc collapse them). Mirrors merge wave-70.
   const [findOpen, setFindOpen] = useState(true);
   const [gotoOpen, setGotoOpen] = useState(true);
+  // Wave-170: top-bar Next/Prev ride the `autocompare:view-command`
+  // bus (Beyond Compare unified-toolbar parity). Hex owns the
+  // follow-through: bus next/prev walk the hex diff cursor via the
+  // same `stepDiff` path as the toolbar Prev/Next diff buttons, so no
+  // App.tsx change is needed on this side. Applies only when the
+  // event targets this kind (`viewKind === "hex"` or an unkinded
+  // event); other kinds are ignored so text/merge nav never leaks
+  // across views. Placed with the other bus effects (above the early
+  // returns) so hook order stays stable; `stepDiffRef` always points
+  // at the latest ready-render `stepDiff` (null until the first page
+  // is ready, so an early bus event is an honest no-op, never a
+  // crash). When no differences remain `stepDiff` parks honestly on
+  // `hex-diff-status` ("no further/earlier differences").
+  const stepDiffRef = useRef<((dir: 1 | -1) => Promise<void>) | null>(null);
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>)
+        .detail;
+      if (!detail) return;
+      const kind = detail.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "hex") return;
+      const cmd = detail.cmd;
+      if (cmd === "prev") void stepDiffRef.current?.(-1);
+      else if (cmd === "next") void stepDiffRef.current?.(1);
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, []);
   /* HEX2: L2 `autocompare:view-filter` bus (Beyond Compare View menu
      parity: Show All / Differences / Same / Context, dispatched by the
      top Toolbar via `handleViewFilter`). Applies only when the event
@@ -612,6 +642,10 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       setDiffNavBusy(false);
     }
   }
+  // Wave-170: refresh the bus-command ref (see the `stepDiffRef`
+  // effect above the early returns). Assignment lives here — the
+  // first ready render — so the bus always calls the latest closure.
+  stepDiffRef.current = stepDiff;
 
   // Wave 23 footer detail: resolve the selected absolute offset to its
   // visible page-relative bytes (local embedded copies or the IPC page).
