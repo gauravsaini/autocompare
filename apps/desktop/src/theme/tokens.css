@@ -1009,12 +1009,19 @@ samp {
 
 /*
  * Wave 66S: BC-style intra-line word highlights (text-scoped ONLY).
- * Reuses existing chg tokens, no new hues. RowLine wiring lands in
- * the integration wave; this only defines the paint.
+ * Wave-192: BC-exact paint — changed word bright red on pink, both
+ * schemes (no layout change, no new palette outside this rule).
  */
 .tv-w-hl {
-  background-color: var(--ac-diff-chg-bg);
-  color: var(--ac-diff-chg-fg);
+  background-color: #ffd7db;
+  color: #c81e1e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tv-w-hl {
+    background-color: #5c1a22;
+    color: #ff8a8a;
+  }
 }
 
 /*
