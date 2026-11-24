@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  coercePickedPath,
   dedupTauriDropPaths,
   extractDroppedPath,
   extractDroppedPaths,
   firstTauriDropPath,
   hasTauriDropBridge,
   hoveredPaneHalf,
+  isFolderViewActive,
   isTauriDropOnPathBar,
   markDropRecompare,
   resolveStripSideFromRect,
   resolveTauriDropCssSide,
 } from "./dropPaths";
+import { pickOpenDialog } from "../session/useSession";
 
 /**
  * Wave-117: per-pane file-drop zone (Tauri BC parity, verify-first).
@@ -179,6 +182,45 @@ export function PaneDropZone({
     [enabled, isBusyNow, onBusyDrop, onDropPath, onDropPaths],
   );
 
+  // Wave-173: click-to-browse per pane half (BC Browse parity). The
+  // picked path rides the SAME `onDropPath` as a drop (so single-side
+  // stages honestly + kind-switch apply, no new IPC). Buttons are
+  // `hidden` until root hover (zero chrome at rest, zero layout shift —
+  // absolute overlay, no stacked rows) and carry `data-panedrop` so a
+  // mid-hover drop landing on them still resolves the half. Mock without
+  // a stub parks them unrendered (no native dialog, FolderView twin).
+  const canBrowse =
+    typeof window !== "undefined" &&
+    (typeof (window as unknown as Record<string, unknown>).__MOCK_DIALOG_OPEN__ === "function" ||
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined);
+
+  const handleBrowseSide = useCallback(
+    (side: PaneSide): void => {
+      if (!enabled) return;
+      if (isBusyNow()) {
+        onBusyDrop?.();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("autocompare:drop-busy", { detail: { note: PANE_BUSY_NOTE } }),
+          );
+        }
+        return;
+      }
+      void (async () => {
+        const picked = await pickOpenDialog({
+          directory: isFolderViewActive(),
+          multiple: false,
+          title: `Select ${side} path`,
+        });
+        const path = coercePickedPath(picked as string | readonly string[] | null);
+        if (!path) return;
+        markDropRecompare();
+        onDropPath(side, path);
+      })();
+    },
+    [enabled, isBusyNow, onBusyDrop, onDropPath],
+  );
+
   return (
     <div
       ref={rootRef}
@@ -186,7 +228,7 @@ export function PaneDropZone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={className}
+      className={`${className} group/panedrop`}
       style={{ position: "relative" }}
     >
       {children}
@@ -194,6 +236,43 @@ export function PaneDropZone({
           `assertNoOverlap` helper selects every `[data-testid]` box, and
           these pointer-events-none overlays legitimately cover the panes
           they highlight. Specs reach them via `[data-panedrop]` instead. */}
+      {enabled && canBrowse && (
+        <>
+          {(["left", "right"] as const).map((side) => (
+            <button
+              key={`browse-${side}`}
+              type="button"
+              data-testid={`panedrop/browse-${side}`}
+              data-panedrop={side}
+              aria-label={`Browse for ${side} path`}
+              title={`Browse for ${side} path`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleBrowseSide(side);
+              }}
+              className="hidden group-hover/panedrop:block"
+              style={{
+                position: "absolute",
+                top: "3.25rem",
+                left: side === "left" ? "25%" : "75%",
+                transform: "translateX(-50%)",
+                zIndex: 5,
+                fontSize: "11px",
+                fontWeight: 600,
+                padding: "2px 10px",
+                borderRadius: "9999px",
+                border: "1px solid var(--ac-border)",
+                backgroundColor: "var(--ac-bg-raised)",
+                color: "var(--ac-fg)",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              {`Browse ${side}`}
+            </button>
+          ))}
+        </>
+      )}
       {enabled && (
         <>
           {(["left", "right"] as const).map((side) => {

@@ -1,14 +1,17 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, Copy } from "lucide-react";
+import { Check, ChevronDown, Copy, FolderOpen } from "lucide-react";
 import { Button, Input, ToolbarButton } from "../ui";
 import {
+  coercePickedPath,
   extractDroppedPath,
   extractDroppedPaths,
   hoveredPaneHalf,
+  isFolderViewActive,
   markDropRecompare,
   resolveStripSideFromRect,
 } from "../dnd/dropPaths";
 import { useTauriPathBarDrop } from "../dnd/PaneDropZone";
+import { pickOpenDialog } from "../session/useSession";
 
 export interface PathBarProps {
   leftPath: string;
@@ -184,6 +187,42 @@ function PathField({
   };
 
   const isFieldEmpty = draft.trim() === "";
+
+  // Wave-173: click-to-browse (BC Browse parity). Native dialog via the
+  // existing session helper (`pickOpenDialog`, `__MOCK_DIALOG_OPEN__`
+  // stub hook); a picked path rides the SAME submit path as a drop
+  // (draft + history + `onFieldSubmit`, so single-side stages honestly
+  // and both-sides auto-compares via the existing runner prop). Folder /
+  // sync views browse directories, file views + base browse files
+  // (kind-matched, `isFolderViewActive` sniff — chrome owns no kind
+  // prop). Cancel stays silent (standard UX); mock without a stub parks
+  // disabled with the contract reason (FolderView twin).
+  const canBrowse =
+    typeof window !== "undefined" &&
+    (typeof (window as unknown as Record<string, unknown>).__MOCK_DIALOG_OPEN__ === "function" ||
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined);
+  const browseReason = canBrowse
+    ? null
+    : "file picker needs the Tauri shell (mock has no native dialog)";
+
+  const handleBrowse = (): void => {
+    if (comparing) {
+      onBusyDrop?.();
+      return;
+    }
+    void (async () => {
+      const picked = await pickOpenDialog({
+        directory: side === "base" ? false : isFolderViewActive(),
+        multiple: false,
+        title: `Select ${label}`,
+      });
+      const path = coercePickedPath(picked as string | readonly string[] | null);
+      if (!path) return;
+      onDraftChange(path);
+      setHistory(recordPathHistory(side, path));
+      onFieldSubmit(side, path);
+    })();
+  };
 
   return (
     <div
@@ -366,6 +405,18 @@ function PathField({
         }}
         className="shrink-0"
       />
+      <ToolbarButton
+        data-testid={`${testId}-browse`}
+        label={`Browse for ${label}`}
+        disabled={comparing || !canBrowse}
+        size="md"
+        icon={FolderOpen}
+        aria-disabled={comparing || !canBrowse ? true : undefined}
+        title={canBrowse ? `Browse for ${label}` : (browseReason ?? undefined)}
+        data-disabled-reason={!canBrowse ? (browseReason ?? undefined) : undefined}
+        onClick={handleBrowse}
+        className="shrink-0"
+      />
       {open ? (
         <div
           id={listId}
@@ -499,17 +550,11 @@ export function PathBar({
       return;
     }
     const thisPath = path.trim();
-    if (side === "left") {
-      syncedLeftRef.current = thisPath;
-    } else if (side === "right") {
-      syncedRightRef.current = thisPath;
-    } else if (side === "base") {
-      syncedBaseRef.current = thisPath;
-    }
 
     // Wave-134: base submits standalone (history already recorded by the
     // field) — no two-paths gate, no compare run. Blank clears honestly.
     if (side === "base") {
+      syncedBaseRef.current = thisPath;
       setLocalNote(null);
       if (onSubmitBase) {
         submitAsync(onSubmitBase(thisPath));
@@ -528,10 +573,21 @@ export function PathBar({
     ).trim();
 
     if (thisPath === "" || otherPath === "") {
+      // Wave-173: single-side stage stays LOCAL (no App submit, no sync
+      // claim) so the prop-sync effects above never mistake the staged
+      // draft for a stale tab switch and wipe it + the honest note. The
+      // refs only advance on a real submit below, where App echoes the
+      // same paths back as props.
       const sideLabel = side === "left" ? "left" : "right";
       const otherLabel = side === "left" ? "right" : "left";
       setLocalNote(`needs two paths (${sideLabel} staged — drop ${otherLabel} to compare)`);
       return;
+    }
+
+    if (side === "left") {
+      syncedLeftRef.current = thisPath;
+    } else if (side === "right") {
+      syncedRightRef.current = thisPath;
     }
 
     setLocalNote(null);
