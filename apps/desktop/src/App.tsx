@@ -484,7 +484,13 @@ export default function App(): React.JSX.Element {
         setStatusMessage("Take both is only available in Merge view");
         return;
       }
-      if (selectedIndex !== null && selectedRow !== null && selectedRow.kind !== "equal") {
+      const isHunkRow =
+        selectedIndex !== null &&
+        ((selectedRow !== null && selectedRow.kind !== "equal") ||
+          (selectedRow === null &&
+            rulerRows[selectedIndex] !== undefined &&
+            rulerRows[selectedIndex]?.kind !== "same"));
+      if (isHunkRow && selectedIndex !== null) {
         window.dispatchEvent(
           new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir } }),
         );
@@ -492,7 +498,17 @@ export default function App(): React.JSX.Element {
         return;
       }
       if (selectedIndex !== null) {
-        const starts = hunkStartsRef.current;
+        const starts =
+          hunkStartsRef.current.length > 0
+            ? hunkStartsRef.current
+            : (() => {
+                const s: number[] = [];
+                for (let i = 0; i < rulerRows.length; i += 1) {
+                  if (rulerRows[i]?.kind === "same") continue;
+                  if (i === 0 || rulerRows[i - 1]?.kind === "same") s.push(i);
+                }
+                return s;
+              })();
         if (starts.length > 0) {
           const atOrAfter = starts.find((s) => s >= selectedIndex);
           const target = atOrAfter ?? starts[starts.length - 1]!;
@@ -505,7 +521,7 @@ export default function App(): React.JSX.Element {
       }
       setStatusMessage(`Take ${dir} needs a hunk row selected`);
     },
-    [viewKind, selectedIndex, selectedRow],
+    [viewKind, selectedIndex, selectedRow, rulerRows],
   );
 
   // Wave-E1: listen for merge take outcome from MergeView and update statusbar
@@ -1647,14 +1663,10 @@ export default function App(): React.JSX.Element {
 
   const handleToolbarCopy = useCallback(
     (forcedSide?: TextSide) => {
-      const dir = forcedSide ?? copyTakeSide;
-      if (!copyInHunk || selectedIndex === null || dir === null) return;
-      window.dispatchEvent(
-        new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir } }),
-      );
-      setStatusMessage(`Copy take-${dir} requested for row ${selectedIndex}`);
+      const dir = forcedSide ?? copyTakeSide ?? "left";
+      handleMenuTake(dir);
     },
-    [copyInHunk, selectedIndex, copyTakeSide],
+    [handleMenuTake, copyTakeSide],
   );
 
   // FIXSHELL GAP-09 + FIXM N6-app-part: difference navigation (n/p)
@@ -1669,13 +1681,21 @@ export default function App(): React.JSX.Element {
     const onKey = (e: KeyboardEvent): void => {
       if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable ||
-          target.getAttribute("contenteditable") === "true")
-      ) {
+      const activeEl =
+        typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+      const isEditable = (el: HTMLElement | null): boolean => {
+        if (!el) return false;
+        const tag = el.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+        if (el.isContentEditable || el.getAttribute("contenteditable") === "true") return true;
+        if (
+          el.closest?.("input, textarea, select, [contenteditable='true'], [contenteditable='']")
+        ) {
+          return true;
+        }
+        return false;
+      };
+      if (isEditable(target) || isEditable(activeEl)) {
         return;
       }
       const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey;
