@@ -123,9 +123,12 @@ export function ChromeShell({
        * Wave-174: BC chrome budget — ONE shared band for tabs + toolbar
        * (was: tabbar row 40 + toolbar row 44 + pathbar row 32 = 3 stacked
        * shell rows; view toolbars made 4). The band is a single 44px row:
-       * TabBar (40, capped 42% width, internal scroll) + Toolbar (rest,
+       * TabBar (40, capped 34% width, internal scroll) + Toolbar (rest,
        * internal scroll, single-row guarantee intact) side-by-side, then
        * PathBar as the second row (32). Shell above panes: 2 rows, 76px.
+       * Wave-190: cap was 42%, which starved the toolbar (17x44px
+       * actions need 812px+gaps at 1280; merge overflowed ~28px).
+       * Chips keep the W186 shrink-to-fit + ellipsis, so 3 tabs fit.
        * In-view toolbars (Text/Table/Hex/Merge) are views-owned (off
        * limits here) and already single-row + bus-unified (W161/W170);
        * Find/Goto ride overlays, no new stacked row anywhere. All
@@ -142,7 +145,7 @@ export function ChromeShell({
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onNewTab={onNewTab}
-          className="min-w-0 max-w-[42%] shrink"
+          className="min-w-0 max-w-[34%] shrink"
         />
         <Toolbar actions={toolbar.actions} className="min-w-0 flex-1" />
       </div>
