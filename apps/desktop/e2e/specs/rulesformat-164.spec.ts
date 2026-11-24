@@ -269,20 +269,25 @@ test("rulesformat-164: table ignores ride the call-site shape, mock honors both 
   assertClean(pageErrors, consoleErrors, "table ignores");
 });
 
-test("rulesformat-164: top-bar Rules/Format stay honest stubs, Minor untouched", async ({
+test("rulesformat-164: top-bar Rules/Format drive the in-view panels (W167), Minor untouched", async ({
   page,
 }) => {
   const { pageErrors, consoleErrors } = trackErrors(page);
   await bootText(page);
 
-  // App.tsx handlers are off-limits: the top-bar buttons stay disabled
-  // with the contract reason, while the live path lives in-view.
+  // Wave-167 owns the App top-bar handlers: Format is live in text
+  // kind (opens the in-view popover via the view bus) while Rules
+  // stays parked — the Rules panel lives in folder kind only.
   const rules = page.getByTestId("toolbar/action-rules");
   const format = page.getByTestId("toolbar/action-format");
   await expect(rules).toBeDisabled();
-  await expect(rules).toHaveAttribute("title", /needs contract L1/);
-  await expect(format).toBeDisabled();
-  await expect(format).toHaveAttribute("title", /needs contract L1/);
+  await expect(rules).toHaveAttribute("title", /needs folder compare/);
+  await expect(format).toBeEnabled();
+  await expect(format).toHaveAttribute("title", "Format");
+  await format.click();
+  await expect(page.getByTestId("textview/format-options")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("textview/format-options")).toBeHidden();
 
   // Minor keeps its W161 wiring (enabled in text kind with a session,
   // honestly parked otherwise — either way never a crash).
