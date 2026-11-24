@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { mergeCompareToOutput, mergeTextApply, mergeTextPlanForTriple } from "../../ipc/merge";
 import type { TextConflict, TextResolution } from "../../ipc/merge";
@@ -1159,18 +1159,33 @@ export default function MergeView({
           fabricated). One flex row: title left, meta right, so the
           pane header stays one compact line and the wave-70 chrome
           budget (firstCardTop <= 140px) holds. */}
-      <div className="grid grid-cols-3 gap-[var(--ac-space-2)] mx-[var(--ac-space-4)] mt-[var(--ac-space-2)] mb-[var(--ac-space-2)]" role="group" aria-label="merge sides">
+      {/* Wave-188: per-pane gutters + thin splitters (BC 3-way truth:
+          every merge pane carries a line-number gutter; panes are split
+          by a 1px rail, not an 8px gap). Each pane keeps its exact
+          title/meta testids and text; the gutter is aria-hidden,
+          1-based within the pane, same mono/line-height as the pre so
+          rows align. Margins tighten 8->4px so the chrome budget gains
+          headroom (toolbar + one-line headers only above the cards). */}
+      <div className="flex items-stretch gap-[var(--ac-space-1)] mx-[var(--ac-space-4)] mt-[var(--ac-space-1)] mb-[var(--ac-space-1)]" role="group" aria-label="merge sides">
         {(
           [
             { key: "left", title: "Left", testid: "merge-pane-left", metaTestid: "mergeview/meta-left", path: leftPath, lines: sideLines.left },
             { key: "base", title: "Base (ancestor)", testid: "merge-pane-base", metaTestid: "mergeview/meta-base", path: base, lines: sideLines.base },
             { key: "right", title: "Right", testid: "merge-pane-right", metaTestid: "mergeview/meta-right", path: rightPath, lines: sideLines.right },
           ] as const
-        ).map((pane) => {
+        ).map((pane, paneIndex) => {
           const name = baseNameOf(pane.path);
           const meta = name === "" ? linesMeta(pane.lines.length) : `${name} · ${linesMeta(pane.lines.length)}`;
           const dropSide = pane.key as MergeDropSide;
           return (
+          <Fragment key={pane.key}>
+          {paneIndex > 0 && (
+            <div
+              aria-hidden="true"
+              data-testid={`merge-splitter-${pane.key}`}
+              className="mv-splitter"
+            />
+          )}
           <div
             key={pane.key}
             data-testid={pane.testid}
@@ -1197,16 +1212,33 @@ export default function MergeView({
               if (dropped) handleMergePaneDrop(dropSide, dropped);
             }}
             style={dropActive === dropSide ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-2px" } : undefined}
-            className="mv-pane rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]"
+            className="mv-pane min-w-0 flex-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]"
           >
             <div className="flex items-baseline justify-between gap-[var(--ac-space-2)] mb-[var(--ac-space-1)]">
               <p className="ac-mono text-[length:var(--ac-font-size-code)] font-semibold leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">{pane.title}</p>
               <p data-testid={pane.metaTestid} title={pane.path === "" ? undefined : pane.path} className="ac-mono truncate text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">{meta}</p>
             </div>
-            <pre className="whitespace-pre-wrap rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] p-[var(--ac-space-2)] font-normal text-[var(--ac-fg)]">
-              {pane.lines.length > 0 ? pane.lines.join("\n") : "(no lines)"}
-            </pre>
+            <div className="flex items-stretch rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] p-[var(--ac-space-2)]">
+              <span
+                aria-hidden="true"
+                data-testid={`merge-pane-gutter-${pane.key}`}
+                title={`${pane.title} pane: line numbers within this pane (1-based)`}
+                className="ac-mono shrink-0 border-r border-[var(--ac-border-subtle)] pr-[var(--ac-space-1)] mr-[var(--ac-space-2)] text-right text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)] select-none"
+              >
+                {pane.lines.length === 0 ? (
+                  <span className="block">·</span>
+                ) : (
+                  pane.lines.map((_, i) => (
+                    <span key={i} className="block">{i + 1}</span>
+                  ))
+                )}
+              </span>
+              <pre className="whitespace-pre-wrap flex-1 min-w-0 font-normal text-[var(--ac-fg)]">
+                {pane.lines.length > 0 ? pane.lines.join("\n") : "(no lines)"}
+              </pre>
+            </div>
           </div>
+          </Fragment>
           );
         })}
       </div>
@@ -1289,7 +1321,7 @@ export default function MergeView({
               cardRefs.current.set(c.id, el);
             }}
             onClick={() => setSelected(index)}
-            className={`mv-conflict mv-rail mx-[var(--ac-space-4)] rounded-lg border bg-[var(--ac-bg-raised)] p-[var(--ac-space-4)] shadow-xs ${active ? "border-[var(--ac-accent)]" : "border-[var(--ac-border)]"}`}
+            className={`mv-conflict mv-rail mx-[var(--ac-space-4)] rounded-lg border bg-[var(--ac-bg-raised)] p-[var(--ac-space-3)] shadow-xs ${active ? "border-[var(--ac-accent)]" : "border-[var(--ac-border)]"}`}
           >
             <div className="flex items-baseline justify-between gap-[var(--ac-space-2)] mb-[var(--ac-space-2)]">
               <p className="ac-mono text-[length:var(--ac-font-size-code)] font-semibold leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">conflict {c.id}</p>

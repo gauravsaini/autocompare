@@ -875,6 +875,21 @@ samp {
 }
 
 /*
+ * Wave-188: merge thin splitter (merge-scoped ONLY). 1px vertical rail
+ * between the three top panes, reusing the existing --ac-rail-line ink
+ * (same token as the 66O text splitter rail, no new palette, both
+ * schemes). Pure geometry: full-height flex stretch, never intercepts
+ * clicks, no grid-track change.
+ */
+.mv-splitter {
+  width: 1px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background-color: var(--ac-rail-line);
+  pointer-events: none;
+}
+
+/*
  * Wave 66K: folder one-sided row BC-parity additions (folder-scoped
  * ONLY). `.fv-cell-empty` reuses the exact 66I orphan-hatch gradient
  * values (base surface + 45-degree hatch in the existing subtle-border
