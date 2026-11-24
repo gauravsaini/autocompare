@@ -38,6 +38,35 @@ export interface ViewRouterProps extends ViewPaths {
    * calls IPC itself.
    */
   readonly onOpenPaths?: (kind: DataViewKind, left: string, right: string) => void;
+  /**
+   * FIXM GAP-08: forwarded to `MergeView` ONLY (3-way pane-drop
+   * staging). `App` routes the triple through `handleOpenSession` /
+   * `tabPaths` + merge-plan compare; until wired the view stages the
+   * drop honestly inline.
+   */
+  readonly onDropPaths?: (next: {
+    readonly leftPath: string;
+    readonly basePath: string;
+    readonly rightPath: string;
+  }) => void;
+  /**
+   * FIXM GAP-08: forwarded to `MergeView` ONLY (auto-compare routing
+   * for the staged triple). Called with the same triple right after
+   * `onDropPaths` so the host can run the merge plan immediately.
+   */
+  readonly onRequestCompare?: (next: {
+    readonly leftPath: string;
+    readonly basePath: string;
+    readonly rightPath: string;
+  }) => void;
+  /**
+   * FIXM GAP-13: forwarded to `MergeView` ONLY (ViewCommandBus hook
+   * for prev/next/copy, `TextView` `onBusCommand` parity). When
+   * provided, top-toolbar bus commands route here instead of the
+   * internal nav/take handlers; omitted (the `App` default) leaves the
+   * internal `autocompare:view-command` listener owning the bus.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next" | "copy") => void;
 }
 
 export default function ViewRouter({
@@ -49,6 +78,9 @@ export default function ViewRouter({
   selectedIndex,
   onSelectRow,
   onOpenPaths,
+  onDropPaths,
+  onRequestCompare,
+  onBusCommand,
 }: ViewRouterProps): React.JSX.Element {
   return (
     <div data-testid="view-router">
@@ -74,7 +106,7 @@ export default function ViewRouter({
       )}
       {kind === "merge" && (
         <div data-testid="view-merge">
-          <MergeView leftPath={leftPath} rightPath={rightPath} basePath={basePath} />
+          <MergeView leftPath={leftPath} rightPath={rightPath} basePath={basePath} onDropPaths={onDropPaths} onRequestCompare={onRequestCompare} onBusCommand={onBusCommand} />
         </div>
       )}
       {kind === "sync" && (

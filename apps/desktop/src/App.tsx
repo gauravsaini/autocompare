@@ -13,6 +13,7 @@ import { sessionList, sessionLoad } from "./ipc/session";
 import { folderCompare } from "./ipc/folder";
 import { hexCompare } from "./ipc/hex";
 import { tableCompare } from "./ipc/table";
+import { mergeTextPlanForTriple } from "./ipc/merge";
 import { pictureCompare } from "./ipc/media";
 import { HomeSessionsPane } from "./components/home/controls";
 import { PaneDropZone, useTauriPaneDrop, isFolderishPath, type PaneSide } from "./components/dnd";
@@ -92,9 +93,11 @@ function toViewKind(kind: string): DataViewKind | null {
   }
 }
 
-/** Kinds whose toolbar-level Compare maps 1:1 to an `*_compare` IPC. */
+/** Kinds whose toolbar-level Compare maps 1:1 to a compare IPC (merge
+ * runs `merge_text_plan` over the staged triple; the MergeView re-plans
+ * from the same triple, so Compare/dual-drop/auto-compare stay in sync). */
 function canCompareKind(kind: string): boolean {
-  return kind === "text" || kind === "folder" || kind === "hex" || kind === "table" || kind === "media" || kind === "sync";
+  return kind === "text" || kind === "folder" || kind === "hex" || kind === "table" || kind === "media" || kind === "sync" || kind === "merge";
 }
 
 const COPY_STORE_PREFIX = "ac:textcopy125:";
@@ -1044,6 +1047,18 @@ export default function App(): React.JSX.Element {
           case "sync":
             await syncPlan(left, right);
             break;
+          case "merge": {
+            // FIXM GAP-08: merge triple compare (BC 3-way). The base
+            // rides `runPaths` (PathBar submit / merge-pane drops keep it
+            // staged; the MergeView re-plans from the same triple), so
+            // this run validates the triple through the real
+            // `merge_text_plan` IPC and snapshots the tick like every
+            // other kind. Single-file drops never reach here (guarded
+            // above by `!left || !right`).
+            const base = runPaths.base ?? left;
+            await mergeTextPlanForTriple({ base, left, right });
+            break;
+          }
           default:
             return false;
         }
@@ -1186,11 +1201,20 @@ export default function App(): React.JSX.Element {
         })();
         return;
       }
+      // FIXM N1: merge triple never side-splits here. A single outer
+      // drop sets only that side; the base ancestor rides through
+      // untouched (the MergeView center zone owns base drops via its
+      // `data-mergedrop="base"` zones with stopPropagation; shell drops
+      // only carry a left/right half, so base can never arrive here and
+      // must never be cleared here).
       const runId = activeSession.id;
       const next: TabPaths = {
         kind: activeSession.kind,
         left: side === "left" ? path : activePaths.left,
         right: side === "right" ? path : activePaths.right,
+        ...(activeSession.kind === "merge" && activePaths.base !== undefined
+          ? { base: activePaths.base }
+          : {}),
       };
       setTabPaths((prev) => ({ ...prev, [runId]: next }));
       const label = side === "left" ? "Left" : "Right";
@@ -1220,6 +1244,25 @@ export default function App(): React.JSX.Element {
       const first = paths[0];
       const second = paths[1];
       if (first === undefined || second === undefined) return;
+      // FIXM N1: dual-drop into a merge session never auto-switches
+      // kind (two paths cannot name a triple side-split). Item 0 ->
+      // left, Item 1 -> right, base ancestor preserved; then the same
+      // merge-plan compare as the toolbar Compare.
+      const mergeSession = activeSession;
+      if (mergeSession !== null && mergeSession.kind === "merge" && !isFolderishPath(first) && !isFolderishPath(second)) {
+        const mergeRunId = mergeSession.id;
+        const live = tabPathsRef.current[mergeRunId] ?? activePaths;
+        const mergeNext: TabPaths = {
+          kind: "merge",
+          left: first,
+          right: second,
+          ...(live.base !== undefined ? { base: live.base } : {}),
+        };
+        tabPathsRef.current = { ...tabPathsRef.current, [mergeRunId]: mergeNext };
+        setTabPaths(tabPathsRef.current);
+        void runComparePaths("merge", mergeNext.left, mergeNext.right, mergeRunId, mergeSession.name, mergeNext);
+        return;
+      }
       if (!activeSession) {
         // FIXSHELL GAP-07: empty workspace dual-drop opens session and auto-compares
         const anyFolderish = isFolderishPath(first) || isFolderishPath(second);
@@ -1276,6 +1319,48 @@ export default function App(): React.JSX.Element {
       void runComparePaths(activeSession.kind, next.left, next.right, runId, activeSession.name, next);
     },
     [activeSession, runComparePaths, handleOpenSession],
+  );
+
+  // FIXM GAP-08: merge-pane drop handoff (MergeView 3-way zones call
+  // these through ViewRouter). `onDropPaths` stages the full triple in
+  // `tabPaths` (the view re-plans automatically once its path props
+  // change — no new IPC); `onRequestCompare` runs the same merge-plan
+  // compare as the toolbar Compare right after. Non-merge sessions
+  // never reach here (MergeView only mounts for merge kind).
+  const handleMergeDropTriple = useCallback(
+    (next: { readonly leftPath: string; readonly basePath: string; readonly rightPath: string }) => {
+      if (!activeSession) {
+        setStatusMessage("Drop needs an open session");
+        return;
+      }
+      if (activeSession.kind !== "merge") return;
+      const runId = activeSession.id;
+      const updated: TabPaths = {
+        kind: "merge",
+        left: next.leftPath,
+        right: next.rightPath,
+        base: next.basePath,
+      };
+      tabPathsRef.current = { ...tabPathsRef.current, [runId]: updated };
+      setTabPaths(tabPathsRef.current);
+      setStatusMessage("Merge triple staged — auto-compare re-plans from the new triple");
+    },
+    [activeSession],
+  );
+
+  const handleMergeRequestCompare = useCallback(
+    (next: { readonly leftPath: string; readonly basePath: string; readonly rightPath: string }) => {
+      if (!activeSession || activeSession.kind !== "merge") return;
+      const runId = activeSession.id;
+      const runPaths: TabPaths = {
+        kind: "merge",
+        left: next.leftPath,
+        right: next.rightPath,
+        base: next.basePath,
+      };
+      void runComparePaths("merge", next.leftPath, next.rightPath, runId, activeSession.name, runPaths);
+    },
+    [activeSession, runComparePaths],
   );
 
   // Wave-117: production-shell Tauri drag-drop subscription (no-op under
@@ -1382,11 +1467,11 @@ export default function App(): React.JSX.Element {
     ? "needs an open session"
     : !hasPaths
       ? "needs two paths"
-      : sessionKind === "merge"
-        ? "merge uses the Merge view"
-        : !canCompareKind(sessionKind)
-          ? `no compare for kind "${sessionKind}"`
-          : null;
+      // FIXM GAP-08: merge is comparable (triple plan through
+      // `merge_text_plan`; the MergeView re-plans from the same triple).
+      : !canCompareKind(sessionKind)
+        ? `no compare for kind "${sessionKind}"`
+        : null;
   const syncEnabled =
     sessionKind !== null &&
     hasPaths &&
@@ -1442,6 +1527,10 @@ export default function App(): React.JSX.Element {
   }, [viewKind, hunkStarts, rulerActive, handleRulerJump]);
 
   const hunkNavEnabled = viewKind === "text" && hunkStarts.length > 0;
+  // FIXM GAP-13: merge conflict nav is bus-owned (MergeView wraps +
+  // no-ops honestly when clean), so prev/next stay enabled in merge
+  // with conflict labels; other non-text kinds keep the parked label.
+  const mergeNavActive = viewKind === "merge";
 
   // Wave-27: live statusbar diff stats (Beyond Compare style bottom
   // summary). Derived from the ALREADY-LOADED `rulerRows` for the active
@@ -1519,8 +1608,14 @@ export default function App(): React.JSX.Element {
     [copyInHunk, selectedIndex, copyTakeSide],
   );
 
-  // FIXSHELL GAP-09: difference navigation (n/p) and section copy (l/r)
-  // Work from body, toolbar, gutter, or ruler focus (BC parity).
+  // FIXSHELL GAP-09 + FIXM N6-app-part: difference navigation (n/p)
+  // and section copy (l/r) from body/toolbar/gutter/ruler focus (BC
+  // parity). Text keeps the live hunk handlers; merge routes through
+  // the `autocompare:view-command` bus (`viewKind: "merge"`, owned by
+  // the MergeView listener) and l/r ride `handleMenuTake` (which already
+  // routes merge takes to `autocompare:merge-take`). Folder/hex/table/
+  // sync/media keep the dead guard below — no view owns n/p/l/r there
+  // yet (toolbar parks them honestly instead of pretending).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.defaultPrevented) return;
@@ -1535,15 +1630,29 @@ export default function App(): React.JSX.Element {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (viewKind !== "text") return;
+      const keyKind = viewKindRef.current ?? viewKind;
+      if (keyKind !== "text" && keyKind !== "merge") return;
 
       const key = e.key.toLowerCase();
       if (key === "n") {
         e.preventDefault();
-        handleNextHunk();
+        // FIXM: no `handleViewCommand` ref here (declared below; naming
+        // it in the deps array would hit TDZ at render). Merge nav
+        // dispatches the same bus event inline.
+        if (keyKind === "merge") {
+          window.dispatchEvent(
+            new CustomEvent("autocompare:view-command", { detail: { cmd: "next", viewKind: "merge" } }),
+          );
+          setStatusMessage("Next conflict");
+        } else handleNextHunk();
       } else if (key === "p") {
         e.preventDefault();
-        handlePrevHunk();
+        if (keyKind === "merge") {
+          window.dispatchEvent(
+            new CustomEvent("autocompare:view-command", { detail: { cmd: "prev", viewKind: "merge" } }),
+          );
+          setStatusMessage("Previous conflict");
+        } else handlePrevHunk();
       } else if (key === "l") {
         e.preventDefault();
         setTakeSidePref("left");
@@ -1586,16 +1695,25 @@ export default function App(): React.JSX.Element {
 
   // Wave-L2: ViewCommandBus — ONE routing point for prev/next/copy/swap
   // per active viewKind (BC unified-toolbar parity). Text keeps the live
-  // hunk handlers above; every other kind gets an honest parked status
-  // note (per-view wiring lands in L3), never a silent no-op. The top
-  // Toolbar calls this bus directly; TextToolbar prefers its
-  // `onBusCommand` prop (L3) with legacy-prop fallback.
+  // hunk handlers above; FIXM GAP-13: merge dispatches the bus with
+  // `viewKind: "merge"` (MergeView owns prev/next/copy incl. `dir`);
+  // every other kind gets an honest parked status note (per-view wiring
+  // lands in L3), never a silent no-op. The top Toolbar calls this bus
+  // directly; TextToolbar prefers its `onBusCommand` prop (L3) with
+  // legacy-prop fallback.
   const handleViewCommand = useCallback(
     (cmd: ViewCommand): void => {
       const kind = viewKindRef.current ?? viewKind;
       switch (cmd) {
         case "prev":
         case "next": {
+          if (kind === "merge") {
+            window.dispatchEvent(
+              new CustomEvent("autocompare:view-command", { detail: { cmd, viewKind: "merge" } }),
+            );
+            setStatusMessage(cmd === "prev" ? "Previous conflict" : "Next conflict");
+            return;
+          }
           if (kind !== "text") {
             setStatusMessage(
               `${cmd === "prev" ? "Previous" : "Next"} hunk needs view wiring in L3`,
@@ -1611,6 +1729,21 @@ export default function App(): React.JSX.Element {
           return;
         }
         case "copy": {
+          // FIXM GAP-13: merge copy resolves the active conflict
+          // (default take-left; take-right rides `copy-right` below).
+          // The bus branch is live for bus/programmatic callers; the top
+          // toolbar Copy stays disabled in merge (conflict selection is
+          // owned by MergeView — per-conflict Take buttons + menu Take
+          // are the enabled paths there), so this never fires silently.
+          if (kind === "merge") {
+            window.dispatchEvent(
+              new CustomEvent("autocompare:view-command", {
+                detail: { cmd: "copy", viewKind: "merge", dir: "left" },
+              }),
+            );
+            setStatusMessage("Copy take-left requested (merge)");
+            return;
+          }
           if (kind !== "text") {
             setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
             return;
@@ -1619,6 +1752,15 @@ export default function App(): React.JSX.Element {
           return;
         }
         case "copy-right": {
+          if (kind === "merge") {
+            window.dispatchEvent(
+              new CustomEvent("autocompare:view-command", {
+                detail: { cmd: "copy", viewKind: "merge", dir: "right" },
+              }),
+            );
+            setStatusMessage("Copy take-right requested (merge)");
+            return;
+          }
           if (kind !== "text") {
             setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
             return;
@@ -1678,8 +1820,9 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewCommand("swap"),
     },
     {
-      // Wave-L2: bus-routed (text keeps the live hunk handlers; other
-      // kinds park with the L3-wiring reason instead of silent no-op).
+      // Wave-L2: bus-routed (text keeps the live hunk handlers; FIXM
+      // GAP-13: merge dispatches the conflict bus, staying enabled with
+      // conflict labels; other kinds park with the L3-wiring reason).
       id: "prev-hunk",
       icon: ChevronUp,
       label:
@@ -1687,9 +1830,11 @@ export default function App(): React.JSX.Element {
           ? hunkNavEnabled
             ? "Previous hunk"
             : "Previous hunk (no hunks)"
-          : "Previous hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled,
-      disabledReason: hunkNavEnabled ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+          : mergeNavActive
+            ? "Previous conflict"
+            : "Previous hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
       onClick: () => handleViewCommand("prev"),
     },
     {
@@ -1701,9 +1846,11 @@ export default function App(): React.JSX.Element {
           ? hunkNavEnabled
             ? "Next hunk"
             : "Next hunk (no hunks)"
-          : "Next hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled,
-      disabledReason: hunkNavEnabled ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+          : mergeNavActive
+            ? "Next conflict"
+            : "Next hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
       onClick: () => handleViewCommand("next"),
     },
     {
@@ -1768,22 +1915,30 @@ export default function App(): React.JSX.Element {
     {
       // Wave-125: live in text kind with a hunk row selected (same
       // path as the gutter arrows); parked with an honest reason
-      // otherwise.
+      // otherwise. FIXM GAP-13: merge keeps Copy disabled honestly —
+      // conflict selection lives in MergeView (per-conflict Take
+      // buttons + menu Take Left/Right/Both + the bus `copy` branch
+      // are the live merge paths), never a silent no-op.
       id: "copy",
       icon: Copy,
       label: copyInHunk
         ? `Copy (take ${copyTakeSide})`
         : viewKind === "text" && selectedRow !== null
           ? "Copy (selected row is not a difference)"
-          : "Copy (select a row first)",
+          : viewKind === "merge"
+            ? "Copy (use Take buttons in Merge view)"
+            : "Copy (select a row first)",
       enabled: copyInHunk,
       disabledReason: copyInHunk
         ? null
         : viewKind === "text" && selectedRow !== null
           ? "selected row is not a difference"
-          : "select a row first",
+          : viewKind === "merge"
+            ? "use Take buttons in Merge view"
+            : "select a row first",
       // Wave-L2: bus-routed (text rides the staged text-copy path;
-      // other kinds park with the L3-wiring reason).
+      // merge resolves the active conflict; other kinds park with the
+      // L3-wiring reason).
       onClick: () => handleViewCommand("copy"),
     },
     {
@@ -1793,13 +1948,17 @@ export default function App(): React.JSX.Element {
         ? "Copy (take right)"
         : viewKind === "text" && selectedRow !== null
           ? "Copy (selected row is not a difference)"
-          : "Copy (select a row first)",
+          : viewKind === "merge"
+            ? "Copy (use Take buttons in Merge view)"
+            : "Copy (select a row first)",
       enabled: copyInHunk && selectedRow?.right !== null,
       disabledReason: copyInHunk
         ? null
         : viewKind === "text" && selectedRow !== null
           ? "selected row is not a difference"
-          : "select a row first",
+          : viewKind === "merge"
+            ? "use Take buttons in Merge view"
+            : "select a row first",
       onClick: () => handleViewCommand("copy-right"),
     },
     {
@@ -1984,6 +2143,11 @@ export default function App(): React.JSX.Element {
                   </button>
                 </div>
               )}
+              {/* FIXM GAP-08: merge host wiring — pane-drop triple staging
+                  + auto-compare routing. `onBusCommand` is deliberately
+                  NOT passed: the MergeView internal
+                  `autocompare:view-command` listener owns the bus, and a
+                  re-dispatching prop would loop back into itself. */}
               <ViewRouter
                 key={`${activeTabId}:${compareTick}`}
                 kind={viewKind}
@@ -1994,6 +2158,8 @@ export default function App(): React.JSX.Element {
                 selectedIndex={selectedIndex}
                 onSelectRow={handleSelectRow}
                 onOpenPaths={handleOpenPaths}
+                onDropPaths={handleMergeDropTriple}
+                onRequestCompare={handleMergeRequestCompare}
               />
               {/* Wave-D3: session counter lives BELOW the view as a subtle
                   footer-affiliated note (was a top stacked row overlapping the
