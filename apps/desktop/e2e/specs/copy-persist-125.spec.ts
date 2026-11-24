@@ -9,10 +9,13 @@
  *    51) copies left to right through `text_apply_edit` + local apply
  *    with NO autosave (planted save probe stays unconsumed) and NO
  *    clipboard touch, shows the unsaved `textview/copy-note` receipt,
- *    and records the hunk in localStorage;
- *  - reload keeps the result: after `page.reload()` row 51 is still
- *    equal with the left text on both sides (replay via
- *    `text_apply_edit` + local apply, no new IPC);
+ *    and records NOTHING in localStorage (wave-172b BC-faithful
+ *    stage-only: reload clears staged copies, BC wins);
+ *  - reload drops the staged result: after `page.reload()` row 51 is
+ *    changed again with no copy-note (wave-172b honest update — the
+ *    old wave-125 "reload keeps the copy" expectation was removed
+ *    because BC parity says unconfirmed merges do not survive
+ *    reload; see checks/textmerge-172b/REPORT.md);
  *  - toolbar Copy enables when a hunk row is selected (take side
  *    follows the selection), runs the same path, and disables honestly
  *    on equal rows (`selected row is not a difference`) and with no
@@ -68,7 +71,7 @@ async function storedCopyRecord(page: Page): Promise<string | null> {
   });
 }
 
-test("gutter copy merges with no autosave and reload keeps it", async ({ page }) => {
+test("gutter copy merges with no autosave and reload drops it (BC stage-only)", async ({ page }) => {
   const { pageErrors, consoleErrors } = trackErrors(page);
   await bootText(page);
 
@@ -119,18 +122,17 @@ test("gutter copy merges with no autosave and reload keeps it", async ({ page })
   await expect(page.getByTestId("textview/row-51").locator('[data-testid^="hunk-copy-"]')).toHaveCount(0);
   await expect.poll(async () => pairCount(), { timeout: 10000 }).toBe(pairsBefore - 1);
 
-  // localStorage recorded the hunk for reload replay.
-  expect(await storedCopyRecord(page)).toContain('"start":51');
+  // BC stage-only (wave-172b): nothing is journaled for reload replay.
+  expect(await storedCopyRecord(page)).toBeNull();
 
-  // Reload: the copy survives (replay, no new IPC, no crash).
+  // Reload: the staged copy is dropped (BC wins over wave-125
+  // persistence) — the hunk is a difference again, no note, no crash.
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("session-count")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("view-text")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("textview/status")).toContainText("200 / 644 rows");
-  const rightAfter = page.getByTestId("textview/row-51").locator('div[title="right"]');
-  const leftAfter = page.getByTestId("textview/row-51").locator('div[title="left"]');
-  await expect(page.getByTestId("textview/row-51")).toHaveAttribute("data-kind", "equal", { timeout: 15000 });
-  await expect(rightAfter).toHaveText((await leftAfter.textContent()) ?? "");
+  await expect(page.getByTestId("textview/row-51")).toHaveAttribute("data-kind", "changed", { timeout: 15000 });
+  await expect(page.getByTestId("textview/copy-note")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
 
   expect(pageErrors).toEqual([]);

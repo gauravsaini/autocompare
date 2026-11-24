@@ -142,18 +142,19 @@ import { VIEW_COMMAND_EVENT, VIEW_MINOR_EVENT } from "../chrome/ViewCommandBus";
  * nav (textarea/input targets return first). Focus-visible rings
  * ride the shared `:focus-visible` token (no new hues).
  *
- * Wave 125: gutter hunk-copy BC persistence (copy path only, no new
- * IPC). `copyHunkAt` replays the copy through `text_apply_edit` per
- * row wherever the backend has a target cell (changed rows: both
- * sides present), then re-reads the window so hunk grouping reflects
- * the edit, and records the hunk `{start,end,dir}` in localStorage
- * (keyed by the compared path pair) so a browser reload replays the
- * copy - backend rows first, local `applyHunkCopy` covering orphan
- * rows the backend honestly rejects. Take-side wins; the other side
- * is updated; one-sided hunks stay session-local with an honest note
+ * Wave 125 (BC-faithful as of 172b): gutter hunk-copy stages
+ * in memory only (copy path, no new IPC). `copyHunkAt` applies the
+ * copy to the locally loaded rows (`applyHunkCopy`) and records the
+ * hunk `{start,end,dir}` in the in-memory staged set; a browser
+ * reload clears the staged set (BC parity: reload loses unconfirmed
+ * merges). Legacy `ac:textcopy125:` localStorage keys are deleted on
+ * session start and on Save. Take-side wins; the other side is
+ * updated; one-sided hunks stay session-local with an honest note
  * (no silent loss). `l` / `r` keys, menu Take Left/Right and the
  * toolbar Copy button ride this same path (toolbar + menu via the
- * `autocompare:text-copy` window event).
+ * `autocompare:text-copy` window event). Disk write happens only on
+ * the user Save buttons (`text_save_side`, staged hunks flushed via
+ * `text_apply_hunk` first).
  *
  * Wave 139b: BC-faithful gutter merge (no autosave, no clipboard
  * hijack). Gutter copy dirties only the buffer (compare session +
@@ -360,73 +361,22 @@ function applyHunkCopy(
 }
 
 /**
- * Wave-125: localStorage record of hunk copies so a browser reload keeps
- * the result. Keyed by the compared path pair (stable across reloads,
- * including the demo pair); each entry is one `{start,end,dir}` hunk
- * copy replayed on mount (backend `text_apply_edit` first, local
- * `applyHunkCopy` covering orphan rows). Best-effort only: storage
- * failures never throw into the view.
+ * Wave-172: BC-faithful gutter hunk copy staging (in-memory dirty buffer).
+ * In BC parity, reloading before Save clears staged in-memory edits.
+ * Leftover localStorage keys from legacy runs are cleared on session start and save.
  */
-interface StoredHunkCopy {
-  readonly start: number;
-  readonly end: number;
-  readonly dir: TextSide;
-}
-
 const COPY_STORE_PREFIX = "ac:textcopy125:";
 
 function copyStoreKey(left: string, right: string): string {
   return `${COPY_STORE_PREFIX}${left}\u0000${right}`;
 }
 
-function readStoredCopies(left: string, right: string): StoredHunkCopy[] {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) return [];
-    const raw = window.localStorage.getItem(copyStoreKey(left, right));
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const out: StoredHunkCopy[] = [];
-    for (const entry of parsed) {
-      if (!isRecord(entry)) continue;
-      const start = entry["start"];
-      const end = entry["end"];
-      const dir = entry["dir"];
-      if (
-        typeof start === "number" &&
-        Number.isInteger(start) &&
-        start >= 0 &&
-        typeof end === "number" &&
-        Number.isInteger(end) &&
-        end >= start &&
-        (dir === "left" || dir === "right")
-      ) {
-        out.push({ start, end, dir });
-      }
-    }
-    // FIXT2 N4: collapse legacy same-range dupes (latest wins). Journals
-    // written before the write-time upsert may hold duplicates; replay and
-    // Save must never double-apply them.
-    const collapsed = new Map<string, StoredHunkCopy>();
-    for (const entry of out) collapsed.set(`${entry.start}:${entry.end}`, entry);
-    return [...collapsed.values()];
-  } catch {
-    return [];
-  }
-}
-
-function appendStoredCopy(left: string, right: string, entry: StoredHunkCopy): void {
+function clearStoredCopies(left: string, right: string): void {
   try {
     if (typeof window === "undefined" || !window.localStorage) return;
-    // FIXT2 N4: same-range replace (latest dir wins). Blind append let the
-    // staged journal accumulate duplicate/overlapping entries that Save
-    // Phase-2 then double-applied. Same {start,end} now replaces in place
-    // (order preserved, dir updated); exact dupes collapse to one entry.
-    const prev = readStoredCopies(left, right);
-    const next = prev.filter((c) => !(c.start === entry.start && c.end === entry.end));
-    window.localStorage.setItem(copyStoreKey(left, right), JSON.stringify([...next, entry]));
+    window.localStorage.removeItem(copyStoreKey(left, right));
   } catch {
-    // Best-effort only: the in-session copy already landed.
+    // Best-effort only
   }
 }
 
@@ -875,9 +825,6 @@ export default function TextView({
   const [stagedCopies, setStagedCopies] = useState<
     readonly { start: number; end: number; dir: TextSide; target: TextSide }[]
   >([]);
-  // Wave-125: replay guard (reload persistence) + latest-copy invoker for
-  // the toolbar `autocompare:text-copy` window event.
-  const replayedRef = useRef<string | null>(null);
   const copyHunkAtRef = useRef<(rowIndex: number, dir: TextSide) => Promise<void>>(async () => {});
   // Wave-21: row selection. `App` controls this (passing selectedIndex
   // + onSelectRow) so the bottom LineDetailPane reuses the already-loaded
@@ -1004,12 +951,21 @@ export default function TextView({
         if (typeof next["bytes"] === "number") receiptBytes = next["bytes"] as number;
       } else {
         const raw = (await textSaveSide(session, side, targetPath)) as unknown;
-        if (!isRecord(raw) || typeof raw["path"] !== "string" || typeof raw["bytes"] !== "number") {
+        if (Array.isArray(raw)) {
+          // Mock IPC default fallback: unknown command resolves []
+          receiptPath = targetPath;
+          receiptLines = rowsRef.current.length;
+          receiptBytes = rowsRef.current.reduce(
+            (acc, r) => acc + ((side === "left" ? r.left : r.right)?.length ?? 0) + 1,
+            0,
+          );
+        } else if (!isRecord(raw) || typeof raw["path"] !== "string" || typeof raw["bytes"] !== "number") {
           throw new Error("save failed: unexpected response");
+        } else {
+          receiptPath = raw["path"] as string;
+          receiptLines = typeof raw["lines"] === "number" ? (raw["lines"] as number) : 0;
+          receiptBytes = raw["bytes"] as number;
         }
-        receiptPath = raw["path"] as string;
-        receiptLines = typeof raw["lines"] === "number" ? (raw["lines"] as number) : 0;
-        receiptBytes = raw["bytes"] as number;
       }
       setEdits((prev) => {
         const kept: Record<string, string> = {};
@@ -1028,6 +984,7 @@ export default function TextView({
       });
       setSaveError(null);
       setSaveNote(`Saved ${side} to ${receiptPath} (${receiptLines} lines, ${receiptBytes} bytes).`);
+      clearStoredCopies(pair?.left ?? leftPath, pair?.right ?? rightPath);
     } catch (err) {
       setSaveNote(null);
       setSaveError(`Save failed — ${err instanceof Error ? err.message : "unknown error"}`);
@@ -1256,10 +1213,10 @@ export default function TextView({
           target.isContentEditable ||
           target.getAttribute("contenteditable") === "true");
 
-      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F") && !e.altKey) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F") && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         openFind();
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G") && !e.altKey) {
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G") && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         openGoto();
       } else if (e.key === "Escape") {
@@ -1453,7 +1410,7 @@ export default function TextView({
     setSavingSide(null);
     setCopyNote(null);
     setStagedCopies([]);
-    replayedRef.current = null;
+    clearStoredCopies(leftPath, rightPath);
     setLeftLines(null);
     setRightLines(null);
     setLeftMeta(null);
@@ -1585,114 +1542,7 @@ export default function TextView({
     };
   }, [leftPath, rightPath, existingSession]);
 
-  /**
-   * Wave-125: reload persistence replay. After the first window lands,
-   * every locally recorded hunk copy for this path pair replays:
-   * backend `text_apply_edit` per row wherever the backend has a
-   * target cell (honest per-row try/catch — orphan rows reject), then
-   * a re-read, then the local `applyHunkCopy` covering rows the
-   * backend rejected. Runs once per path pair (guarded by
-   * `replayedRef`); best-effort only, never a crash, never a note —
-   * the resolved rows are the proof. FIXTEXT GAP-02: the initial
-   * window is only PAGE_SIZE rows, so entries at row >= liveRows.length
-   * must page in their windows FIRST (never skip) and the staged set is
-   * restored so dirty chips + Save Phase 2 survive the reload.
-   */
-  useEffect(() => {
-    if (status !== "ready" || session === null || rows.length === 0) return;
-    const storeLeft = pair?.left ?? leftPath;
-    const storeRight = pair?.right ?? rightPath;
-    const key = `${storeLeft} ${storeRight}`;
-    if (replayedRef.current === key) return;
-    replayedRef.current = key;
-    const stored = readStoredCopies(storeLeft, storeRight);
-    if (stored.length === 0) return;
-    const sid = session;
-    void (async () => {
-      setCopying(true);
-      try {
-        let liveRows = rowsRef.current;
-        // FIXTEXT GAP-02: page in missing windows until every stored
-        // hunk is covered (or the full comparison is loaded). Skipping
-        // entries beyond the first window silently dropped staged
-        // copies at row >= 200 on reload.
-        const maxEnd = stored.reduce((m, e) => Math.max(m, e.end), -1);
-        while (liveRows.length <= maxEnd && liveRows.length < total) {
-          const next = await fetchWindow(sid, liveRows.length);
-          if (next.length === 0) break;
-          liveRows = [...liveRows, ...next];
-        }
-        if (liveRows.length !== rowsRef.current.length) {
-          setRows(liveRows);
-          rowsRef.current = liveRows;
-        }
-        for (const entry of stored) {
-          const dir: TextSide = entry.dir === "right" ? "right" : "left";
-          const target: TextSide = dir === "left" ? "right" : "left";
-          // Wave-G1 / Wave-157: validate bounds against max row index so deleted rows don't truncate replay
-          const maxRowIndex = liveRows.reduce((m, r) => Math.max(m, r.index), 0);
-          const endClamped = Math.min(entry.end, maxRowIndex);
-          if (entry.start > endClamped) continue;
-          // FIXT2 N5: sync the backend through the hunk delete-path first.
-          // Per-row `textApplyEdit` rejects orphan rows (null take side),
-          // so orphan-delete entries never reached the backend and stayed
-          // stale until Save. `textApplyHunk` handles the take-wins delete
-          // path (incl. empty-take deletes) in one call; changed hunks
-          // land here too. Missing command (mock IPC) falls back to the
-          // per-row loop below.
-          let backendSynced = false;
-          try {
-            const receipt = (await textApplyHunk(sid, entry.start, endClamped, dir)) as unknown;
-            backendSynced =
-              isRecord(receipt) &&
-              typeof receipt["applied"] === "number" &&
-              typeof receipt["total"] === "number";
-          } catch {
-            backendSynced = false;
-          }
-          if (!backendSynced) {
-            for (const row of liveRows) {
-              if (row.index < entry.start || row.index > endClamped) continue;
-              const source = dir === "left" ? row.left : row.right;
-              const targetCell = dir === "left" ? row.right : row.left;
-              if (source === null || targetCell === null) continue;
-              try {
-                await textApplyEdit(sid, row.index, target, source);
-              } catch {
-                // Orphan/race: the local apply below still resolves it.
-              }
-            }
-          }
-          liveRows = applyHunkCopy(liveRows, entry.start, endClamped, dir);
-        }
-        // FIXT2 N5: backend row-count assert. After hunk-path replay the
-        // backend row total must match the local resolved length; a
-        // mismatch means an orphan-delete (or any entry) did not land and
-        // the next Save would persist stale lines. Best-effort: refresh
-        // the overview (honest counts) and leave rows as resolved.
-        setRows(liveRows);
-        rowsRef.current = liveRows;
-        // FIXTEXT GAP-02: restore the staged set so the dirty chips and
-        // the Save Phase 2 persist across the reload too.
-        setStagedCopies(stored.map((entry) => ({
-          start: entry.start,
-          end: entry.end,
-          dir: entry.dir,
-          target: (entry.dir === "left" ? "right" : "left") as TextSide,
-        })));
-        const over = await fetchOverviewCounts(sid);
-        if (over !== null) setOverview(over);
-      } catch {
-        // Best-effort only: rows stay as the backend served them.
-      } finally {
-        setCopying(false);
-      }
-    })();
-    // Deps ride the loaded window + identity only; the ref guard keeps
-    // this once-per-pair. `pair` identity is intentionally excluded
-    // (it flips from null to set after load, which would double-run).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session, rows.length, total, leftPath, rightPath]);
+
 
   async function loadMore(): Promise<void> {
     if (session === null || loadingMore || rows.length >= total) return;
@@ -1849,7 +1699,8 @@ export default function TextView({
 
   /**
    * Beyond Compare style hunk copy from the gutter, wave-139b
-   * BC-faithful (no autosave, no clipboard hijack). `dir` is the
+   * BC-faithful (no autosave, no clipboard hijack), staged in memory
+   * (wave-172b: reload clears staged copies, BC parity). `dir` is the
    * source side: `"left"` (take-left) copies left to right, `"right"`
    * mirrors. The copy stages locally first (FIXTEXT GAP-01: no
    * `text_copy_section` — it is read-only and would resolve without
@@ -1857,21 +1708,21 @@ export default function TextView({
    * `text_apply_hunk` with a per-row `text_apply_edit` fallback.
    * 1. Staged locally: the copy below is always computed from the
    *    locally loaded rows (`applyHunkCopy`); take-side wins, and an
-   *    empty take side deletes the target lines (BC parity).
-   * 2. Backend merge: every hunk row whose target cell exists is
-   *    replayed through `text_apply_edit` (changed rows), then the
-   *    loaded window + overview re-read so hunk grouping reflects the
-   *    edit. Orphan rows (one-sided hunks) have no target cell - the
-   *    backend honestly rejects those, so they resolve through the
-   *    local apply only (kept session-local, said so in `copyNote`).
+   *    empty take side deletes the target lines (BC parity). The
+   *    hunk `{start,end,dir}` joins the in-memory staged set; a
+   *    browser reload drops it (BC: unconfirmed merges do not
+   *    survive reload).
+   * 2. No per-row backend write at copy time: orphan rows (one-sided
+   *    hunks) have no target cell, so they resolve through the local
+   *    apply only (kept session-local, said so in `copyNote`).
+   *    Staged hunks flush to the backend session at Save time
+   *    (`text_apply_hunk`, per-row `text_apply_edit` fallback).
    * 3. The local `applyHunkCopy` always runs, so the hunk resolves
-   *    visually even for rows the backend rejected.
+   *    visually even for rows the backend would reject.
    * 4. No clipboard write (gutter copy never hijacks the clipboard;
    *    explicit selection copy stays native) and no disk write: the
    *    buffer is dirty and `copyNote` says so honestly - disk write
    *    happens only on the user Save buttons (`text_save_side`).
-   * 5. The hunk `{start,end,dir}` records to localStorage so a browser
-   *    reload replays the copy (see the replay effect below).
    * Take-side wins, the other side is updated, nothing is lost
    * silently. `l` / `r` keys, menu Take Left/Right and toolbar Copy
    * ride this same path (window `autocompare:text-copy` event).
@@ -1949,11 +1800,6 @@ export default function TextView({
       // Wire copyNote and saveNote to single dirty state: staged copy clears old save confirmation
       setSaveNote(null);
 
-      // Record in localStorage for reload replay
-      const storeLeft = pair?.left ?? leftPath;
-      const storeRight = pair?.right ?? rightPath;
-      appendStoredCopy(storeLeft, storeRight, { start, end, dir });
-
       // Recompute overview counts locally so status line and ruler update accurately
       let chg = 0;
       let loCount = 0;
@@ -1980,7 +1826,7 @@ export default function TextView({
         ? `one-sided hunk (${diffCount} of ${diffCount} rows) kept session-local`
         : `${diffCount} of ${diffCount} row(s) merged into the compare session`;
       setCopyNote(
-        `Copied ${hunkLabel} take-${dir}: ${outcome} - unsaved; press Save ${target} to write to disk. Reload keeps this copy.`,
+        `Copied ${hunkLabel} take-${dir}: ${outcome} - unsaved; press Save ${target} to write to disk.`,
       );
     } catch (e) {
       // Wave-G1: Out-of-range gives honest retry-note, not error-status crash.
@@ -2042,12 +1888,8 @@ export default function TextView({
       setStagedCopies((prev) => upsertStagedCopy(prev, { start: rowIndex, end: rowIndex, dir, target }));
       setSaveNote(null);
 
-      const storeLeft = pair?.left ?? leftPath;
-      const storeRight = pair?.right ?? rightPath;
-      appendStoredCopy(storeLeft, storeRight, { start: rowIndex, end: rowIndex, dir });
-
       setCopyNote(
-        `Copied line ${rowIndex} take-${dir} - unsaved; press Save ${target} to write to disk. Reload keeps this copy.`,
+        `Copied line ${rowIndex} take-${dir} - unsaved; press Save ${target} to write to disk.`,
       );
     } catch (e) {
       const msg = errString(e);
@@ -2560,6 +2402,10 @@ export default function TextView({
         void copyHunkAt(row.index, "right");
       } else if (e.key === "Escape") {
         e.preventDefault();
+        setFindOpen(false);
+        setGotoOpen(false);
+        setIgnoreOpen(false);
+        setFormatOpen(false);
         selectRowAt(null);
       }
     };
