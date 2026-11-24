@@ -456,6 +456,24 @@ export default function FolderView({
     };
   }, []);
 
+  /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
+     parity). Folder owns no command: prev/next have no hunk cursor here,
+     copy stages text hunks only, swap is App-owned (props reload). The
+     toolbar parks those buttons, so this never fires by click — the
+     kind-scoped listener exists so a bus/programmatic dispatch can never
+     crash the view. Never throws. */
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "folder") return;
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, []);
+
   /* Wave-164: top-bar Rules follow-effect. The top Toolbar dispatches
      `autocompare:view-rules` when its (future-enabled) Rules action
      fires; this opens the in-view Rules panel — the live path the

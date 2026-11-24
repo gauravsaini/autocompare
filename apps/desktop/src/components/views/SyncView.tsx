@@ -292,6 +292,24 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
     (window as unknown as Record<string, unknown>)["__SYNC_FILTER_LAST__"] = stepFilter;
   }, [stepFilter]);
 
+  /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
+     parity). Sync owns no command: plan steps have no section cursor
+     (prev/next no-op), copy stages text hunks only, swap is App-owned
+     (props reload). The toolbar parks those buttons, so this never
+     fires by click — the kind-scoped listener exists so a
+     bus/programmatic dispatch can never crash the view. Never throws. */
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "sync") return;
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, []);
+
   /* Wave-73: an active filter is never hidden by default -- if a filter
      value lands while the panel is collapsed (e.g. kept across a
      direction/prune re-plan after the user collapsed it), reopen. */

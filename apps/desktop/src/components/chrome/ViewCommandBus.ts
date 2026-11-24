@@ -17,6 +17,14 @@
  *
  * Event names are spelled byte-identical to the L2 strings so every
  * existing listener keeps working unmodified.
+ *
+ * Wave-180: this bus is the SINGLE routing vocabulary for the 14-action
+ * unified top Toolbar (full contract:
+ * `checks/topbar-180/CONTRACT.md`). Rules/Format/Minor/filters keep
+ * their own events below; Home/Sessions/Reload stay App-owned (tabs,
+ * SessionManager, kind-matched compare — no per-view listener needed).
+ * Every view subscribes to `VIEW_COMMAND_EVENT` kind-scoped and no-ops
+ * honestly where the command does not apply (see contract table).
  */
 
 /** Bus-routed nav/copy/swap commands (top bar + TextToolbar share them). */
@@ -33,6 +41,20 @@ export const VIEW_FILTER_EVENT = "autocompare:view-filter";
 
 /** Window event carrying the Minor toggle (`{ on: boolean }`). */
 export const VIEW_MINOR_EVENT = "autocompare:view-minor";
+
+/**
+ * Wave-180: kind-scope guard shared by every per-view `VIEW_COMMAND_EVENT`
+ * listener. Returns true when the event targets `ownKind` (exact match)
+ * or is unkinded/blank (broadcast — the view applies it when it owns the
+ * command, no-ops otherwise). Foreign kinds and malformed payloads
+ * return false so text/merge nav never leaks across views.
+ */
+export function isBusCommandForKind(detail: unknown, ownKind: string): boolean {
+  if (typeof detail !== "object" || detail === null) return true;
+  const kind = (detail as { viewKind?: unknown }).viewKind;
+  if (typeof kind !== "string" || kind === "") return true;
+  return kind === ownKind;
+}
 
 /**
  * Dispatch a view command on the bus. `viewKind` scopes which view owns

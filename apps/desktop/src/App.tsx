@@ -1888,22 +1888,17 @@ export default function App(): React.JSX.Element {
     const next = !minorOn;
     setMinorOn(next);
     if (viewKind === "table") {
+      // Wave-180: bus ONLY — TableView applies it to ignoreWs/ignoreCase
+      // and its compare effect re-issues `table_compare` (single source,
+      // no parallel direct IPC).
       dispatchViewMinor(next, "table");
-      const left = activePaths.left;
-      const right = activePaths.right;
-      if (left && right) {
-        void tableCompare(left, right, false, [], {
-          ignoreCase: next,
-          ignoreSpace: next,
-        });
-      }
     } else {
       dispatchViewMinor(next, "text");
     }
     setStatusMessage(
       next ? "Minor: ignoring whitespace and case" : "Minor off: exact diff",
     );
-  }, [activePaths.left, activePaths.right, minorLive, minorOn, viewKind]);
+  }, [minorLive, minorOn, viewKind]);
   // Wave-167: Rules/Format are LIVE top-bar actions (BC Session >
   // Settings parity). Rules opens the in-view Rules panel in folder
   // kind (`autocompare:view-rules`, owned by FolderView); Format opens
