@@ -1,5 +1,9 @@
 export { default as Button } from "./Button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button";
+export { default as DotButton } from "./DotButton";
+export type { DotButtonProps } from "./DotButton";
+export { default as Field } from "./Field";
+export type { FieldProps } from "./Field";
 export { default as SegmentedControl } from "./SegmentedControl";
 export type { SegmentOption, SegmentedControlProps, SegmentedControlSize } from "./SegmentedControl";
 export { default as ToolbarButton } from "./ToolbarButton";

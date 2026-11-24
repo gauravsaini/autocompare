@@ -327,6 +327,8 @@ function PathField({
         data-testid={`${testId}-history-toggle`}
         label={`${label} history`}
         expanded={open}
+        size="md"
+        icon={ChevronDown}
         aria-controls={listId}
         disabled={comparing}
         aria-disabled={comparing ? true : undefined}
@@ -334,22 +336,20 @@ function PathField({
         onClick={() => {
           if (!comparing) setOpen((prev) => !prev);
         }}
-        className="!h-7 !w-7 flex size-7 shrink-0 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
-      </ToolbarButton>
+        className="shrink-0"
+      />
       <ToolbarButton
         label={`Copy ${label}`}
         disabled={comparing}
+        size="md"
+        icon={copied ? Check : Copy}
         aria-disabled={comparing ? true : undefined}
         title={copied ? "Copied" : `Copy ${label}`}
         onClick={() => {
           if (!comparing) void handleCopy();
         }}
-        className="!h-7 !w-7 flex size-7 shrink-0 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {copied ? <Check size={14} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={14} strokeWidth={1.75} aria-hidden="true" />}
-      </ToolbarButton>
+        className="shrink-0"
+      />
       {open ? (
         <div
           id={listId}
@@ -367,12 +367,13 @@ function PathField({
               <Button
                 key={entry}
                 variant="ghost"
+                fullWidth
                 role="option"
                 aria-selected="false"
                 data-testid={`${testId}-history-item`}
                 title={entry}
                 onClick={() => handlePick(entry)}
-                className="ac-mono !block !w-full !justify-start !h-auto truncate px-[var(--ac-space-2)] py-[var(--ac-space-2)] text-left text-xs !font-normal text-[var(--ac-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:bg-[var(--ac-toolbar-btn-hover-bg)]"
+                className="ac-mono truncate px-[var(--ac-space-2)] text-left text-xs font-normal text-[var(--ac-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:bg-[var(--ac-toolbar-btn-hover-bg)]"
               >
                 {entry}
               </Button>
@@ -576,7 +577,8 @@ export function PathBar({
     },
   );
 
-  // Wave-116: compact single-row height (h-8) with tighter side padding.
+  // Wave-116: compact single-row height (token --ac-pathbar-h, 32px) with
+  // tighter side padding.
   // Wave-124: Enter submits compare after recording history; pending/comparing state;
   // honest 'needs two paths' empty check.
   // Wave-126: file/folder drop targets with dashed outline affordance,
@@ -664,7 +666,7 @@ export function PathBar({
           ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-1px" }
           : undefined
       }
-      className="flex h-8 items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]"
+      className="flex h-[var(--ac-pathbar-h)] items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]"
     >
       <PathField
         testId="pathbar/left"

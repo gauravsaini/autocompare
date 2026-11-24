@@ -12,7 +12,7 @@
  */
 
 import { ArrowDownToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { Button, Checkbox, Select, ToolbarButton } from "../../../ui";
+import { Checkbox, Field, Select, ToolbarButton } from "../../../ui";
 
 export interface HexToolbarProps {
   readonly pageLabel: string;
@@ -76,12 +76,12 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       data-testid="hexview/toolbar"
       className="tv-controls-bar"
     >
-      <Button onClick={onPrevPage} disabled={prevDisabled}>
-        <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Prev
-      </Button>
-      <Button onClick={onNextPage} disabled={nextDisabled}>
-        Next <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
-      </Button>
+      <ToolbarButton onClick={onPrevPage} disabled={prevDisabled} icon={ChevronLeft} label="Prev">
+        Prev
+      </ToolbarButton>
+      <ToolbarButton onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
+        Next
+      </ToolbarButton>
       <span
         data-testid="hexview/page-label"
         className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
@@ -91,12 +91,12 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       <span aria-hidden="true" className="tv-controls-sep" />
       {/* HEX2: diff-only navigation (BC next/previous difference).
           Same row, honest busy disable; receipt rides `hex-diff-status`. */}
-      <Button data-testid="hex-diff-prev" onClick={onPrevDiff} disabled={diffNavBusy}>
-        <ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" /> Prev diff
-      </Button>
-      <Button data-testid="hex-diff-next" onClick={onNextDiff} disabled={diffNavBusy}>
-        Next diff <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
-      </Button>
+      <ToolbarButton data-testid="hex-diff-prev" onClick={onPrevDiff} disabled={diffNavBusy} icon={ChevronUp} label="Prev diff">
+        Prev diff
+      </ToolbarButton>
+      <ToolbarButton data-testid="hex-diff-next" onClick={onNextDiff} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
+        Next diff
+      </ToolbarButton>
       <span
         data-testid="hex-diff-status"
         role="status"
@@ -113,25 +113,21 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
         onChange={(e) => onToggleDiffsOnly(e.target.checked)}
       />
       {/* HEX2: bytes-per-line layout (BC hex columns parity) + sync-scroll
-          follow toggle. Native controls, same row, no stacked chrome. */}
-      <label
-        htmlFor="hexview/bytes-per-line"
-        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-      >
-        Bytes/line
-      </label>
-      <Select
-        id="hexview/bytes-per-line"
-        data-testid="hexview/bytes-per-line"
-        aria-label="Bytes per line"
-        controlSize="sm"
-        value={String(bytesPerRow)}
-        onChange={(e) => onBytesPerRow(Number(e.target.value))}
-      >
-        <option value="8">8</option>
-        <option value="16">16</option>
-        <option value="32">32</option>
-      </Select>
+          follow toggle. Shared Field primitive, same row, no stacked chrome. */}
+      <Field label="Bytes/line" htmlFor="hexview/bytes-per-line">
+        <Select
+          id="hexview/bytes-per-line"
+          data-testid="hexview/bytes-per-line"
+          aria-label="Bytes per line"
+          controlSize="sm"
+          value={String(bytesPerRow)}
+          onChange={(e) => onBytesPerRow(Number(e.target.value))}
+        >
+          <option value="8">8</option>
+          <option value="16">16</option>
+          <option value="32">32</option>
+        </Select>
+      </Field>
       <Checkbox
         id="hexview/sync-toggle"
         data-testid="hexview/sync-toggle"
@@ -142,12 +138,12 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       />
       <span aria-hidden="true" className="tv-controls-sep" />
       <span data-testid="hex-copy-bar" className="inline-flex flex-wrap items-center gap-[var(--ac-space-2)]">
-        <Button data-testid="hex-copy-hex" onClick={onCopyHex}>
+        <ToolbarButton data-testid="hex-copy-hex" onClick={onCopyHex} label="Copy hex">
           Copy hex
-        </Button>
-        <Button data-testid="hex-copy-ascii" onClick={onCopyAscii}>
+        </ToolbarButton>
+        <ToolbarButton data-testid="hex-copy-ascii" onClick={onCopyAscii} label="Copy ASCII">
           Copy ASCII
-        </Button>
+        </ToolbarButton>
       </span>
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
