@@ -215,7 +215,15 @@ function PathField({
         setDropActive(false);
       }}
       onDrop={(event) => {
-        if (comparing) {
+        const isBusy =
+          comparing ||
+          Boolean(
+            typeof document !== "undefined" &&
+              document.querySelector(
+                '[data-comparing="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+              ),
+          );
+        if (isBusy) {
           event.preventDefault();
           event.stopPropagation();
           onBusyDrop?.();
@@ -288,7 +296,15 @@ function PathField({
           }}
           onDrop={(event) => {
             // Wave-G2: honest busy note instead of a silent no-op.
-            if (comparing) {
+            const isBusy =
+              comparing ||
+              Boolean(
+                typeof document !== "undefined" &&
+                  document.querySelector(
+                    '[data-comparing="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+                  ),
+              );
+            if (isBusy) {
               event.preventDefault();
               event.stopPropagation();
               onBusyDrop?.();
@@ -418,6 +434,16 @@ export function PathBar({
   // handler below only fires for gap/label drops — never double-compare.
   const barRef = useRef<HTMLDivElement | null>(null);
   const [stripDropActive, setStripDropActive] = useState(false);
+
+  // Wave-159: sync busy note from pane/tauri drops attempted while comparing
+  useEffect(() => {
+    const onDropBusy = (e: Event): void => {
+      const detail = (e as CustomEvent<{ note?: string }>).detail;
+      setLocalNote(detail?.note ?? PATHBAR_BUSY_NOTE);
+    };
+    window.addEventListener("autocompare:drop-busy", onDropBusy);
+    return () => window.removeEventListener("autocompare:drop-busy", onDropBusy);
+  }, []);
 
   // Active-tab switches push new paths down; adopt them. Local edits,
   // submits, and history picks never trigger this (prop unchanged).
@@ -601,7 +627,15 @@ export function PathBar({
 
   const handleStripDrop = (event: React.DragEvent<HTMLDivElement>): void => {
     // Wave-G2: honest busy note instead of a silent no-op.
-    if (comparing) {
+    const isBusy =
+      comparing ||
+      Boolean(
+        typeof document !== "undefined" &&
+          document.querySelector(
+            '[data-comparing="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+          ),
+      );
+    if (isBusy) {
       event.preventDefault();
       event.stopPropagation();
       setLocalNote(PATHBAR_BUSY_NOTE);

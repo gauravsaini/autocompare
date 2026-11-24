@@ -37,6 +37,9 @@ import {
 
 export type PaneSide = "left" | "right";
 
+/** Wave-159: honest busy note for drops attempted while comparing. */
+export const PANE_BUSY_NOTE = "busy — compare running, drop paused";
+
 export interface PaneDropZoneProps {
   /** Fired with the resolved side + path for every accepted drop. */
   readonly onDropPath: (side: PaneSide, path: string) => void;
@@ -50,6 +53,10 @@ export interface PaneDropZoneProps {
   readonly enabled: boolean;
   readonly className?: string;
   readonly children: React.ReactNode;
+  /** Wave-159: busy guard during comparison run */
+  readonly isComparing?: boolean;
+  readonly comparing?: boolean;
+  readonly onBusyDrop?: () => void;
 }
 
 function resolveSide(target: EventTarget | null, clientX: number, root: HTMLElement): PaneSide {
@@ -59,9 +66,9 @@ function resolveSide(target: EventTarget | null, clientX: number, root: HTMLElem
       const side = sided.getAttribute("data-panedrop");
       if (side === "left" || side === "right") return side;
     }
-    const pane = target.closest("[data-pane], [data-side]");
+    const pane = target.closest("[data-pane]");
     if (pane instanceof HTMLElement) {
-      const p = pane.getAttribute("data-pane") || pane.getAttribute("data-side");
+      const p = pane.getAttribute("data-pane");
       if (p === "left" || p === "right") return p;
     }
   }
@@ -78,13 +85,39 @@ function resolveSide(target: EventTarget | null, clientX: number, root: HTMLElem
 const ACTIVE_OUTLINE = "2px dashed var(--ac-accent)";
 const ACTIVE_FILL = "rgba(59, 130, 246, 0.08)";
 
-export function PaneDropZone({ onDropPath, onDropPaths, enabled, className = "", children }: PaneDropZoneProps): React.JSX.Element {
+export function PaneDropZone({
+  onDropPath,
+  onDropPaths,
+  enabled,
+  className = "",
+  children,
+  isComparing,
+  comparing,
+  onBusyDrop,
+}: PaneDropZoneProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [hoverSide, setHoverSide] = useState<PaneSide | null>(null);
+
+  const isBusyNow = useCallback((): boolean => {
+    return Boolean(
+      isComparing ||
+        comparing ||
+        (typeof document !== "undefined" &&
+          document.querySelector(
+            '[data-comparing="true"], [aria-busy="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+          )),
+    );
+  }, [isComparing, comparing]);
 
   const handleDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       if (!enabled) return;
+      if (isBusyNow()) {
+        e.preventDefault();
+        e.stopPropagation();
+        setHoverSide(null);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -95,7 +128,7 @@ export function PaneDropZone({ onDropPath, onDropPaths, enabled, className = "",
       const root = rootRef.current;
       if (root) setHoverSide(resolveSide(e.target, e.clientX, root));
     },
-    [enabled],
+    [enabled, isBusyNow],
   );
 
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -106,6 +139,18 @@ export function PaneDropZone({ onDropPath, onDropPaths, enabled, className = "",
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       if (!enabled) return;
+      if (isBusyNow()) {
+        e.preventDefault();
+        e.stopPropagation();
+        setHoverSide(null);
+        onBusyDrop?.();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("autocompare:drop-busy", { detail: { note: PANE_BUSY_NOTE } }),
+          );
+        }
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       const root = rootRef.current;
@@ -131,7 +176,7 @@ export function PaneDropZone({ onDropPath, onDropPaths, enabled, className = "",
       const path = extractDroppedPath(e.dataTransfer);
       if (path) onDropPath(side, path);
     },
-    [enabled, onDropPath, onDropPaths],
+    [enabled, isBusyNow, onBusyDrop, onDropPath, onDropPaths],
   );
 
   return (
@@ -258,6 +303,18 @@ export function useTauriPaneDrop(
             // Wave-140: y-gated strip (input+gap+label) owns its band;
             // unknown position stays pane-owned — single compare guaranteed.
             if (isTauriDropOnPathBar(payload.position)) return;
+            // Wave-159: reject drops attempted while comparing
+            if (
+              typeof document !== "undefined" &&
+              document.querySelector(
+                '[data-comparing="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+              )
+            ) {
+              window.dispatchEvent(
+                new CustomEvent("autocompare:drop-busy", { detail: { note: PANE_BUSY_NOTE } }),
+              );
+              return;
+            }
             markDropRecompare();
             // Wave-132: x vs half-width, hovered-half fallback when the
             // shell gives no position. Wave-143: physical-px -> CSS-px
@@ -350,6 +407,18 @@ export function useTauriPathBarDrop(
             if (!isTauriDropOnPathBar(payload.position)) return;
             const paths = dedupTauriDropPaths(payload.paths);
             if (paths.length === 0) return;
+            // Wave-159: reject drops attempted while comparing
+            if (
+              typeof document !== "undefined" &&
+              document.querySelector(
+                '[data-comparing="true"], [data-testid="pathbar"][aria-busy="true"], [data-testid="toolbar/action-compare"][aria-busy="true"]',
+              )
+            ) {
+              window.dispatchEvent(
+                new CustomEvent("autocompare:drop-busy", { detail: { note: PANE_BUSY_NOTE } }),
+              );
+              return;
+            }
             markDropRecompare();
             // Wave-143: DPR-aware side (physical -> CSS, Retina-safe).
             const side: PaneSide = resolveTauriDropCssSide(
