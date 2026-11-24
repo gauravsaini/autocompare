@@ -37,6 +37,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             let opts = autocompare_compare::TextOptions {
                 ignore_case: *ignore_case,
                 ignore_space_change: *ignore_space_change,
+                ..Default::default()
             };
             let cmp =
                 autocompare_compare::compare_text_files(Path::new(left), Path::new(right), &opts)?;
@@ -72,6 +73,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
                 case_insensitive: *ignore_case,
                 include: include.clone(),
                 exclude: exclude.clone(),
+                ..Default::default()
             };
             let cmp =
                 autocompare_compare::compare_folders(Path::new(left), Path::new(right), &opts)?;
