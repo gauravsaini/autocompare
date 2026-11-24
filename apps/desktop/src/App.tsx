@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
 import { ChromeShell, rowIndexToScrollTop, textCompareKindToDiffKind } from "./components/chrome";
+import {
+  dispatchViewCommand,
+  dispatchViewFilter,
+  dispatchViewMinor,
+} from "./components/chrome";
 import { DiffStatsContext, type DiffStats } from "./components/chrome/StatusBar";
 import type { ChromeTab, DiffRow, TextCompareRowKind, ToolbarAction } from "./components/chrome";
 import { LineDetailPane } from "./components/chrome/LineDetailPane";
@@ -173,9 +178,12 @@ function applyStoredCopiesToDiffRows(
  *
  * `ViewFilterKind` lifts All/Diffs/Same/Context into the unified top
  * Toolbar as filter actions dispatching the `autocompare:view-filter`
- * window event (`{ filter, viewKind }`); views listen already or L3
- * wires them. Minor/Rules/Format stay disabled stubs until L1 extends
- * `AppliedTextOptions` (minor/rules/encoding/eol).
+ * window event (`{ filter, viewKind }`); every view listens already, so
+ * the top bar is the single dispatch point and the view-level controls
+ * keep working untouched. Minor is live in text kind (dispatches
+ * `autocompare:view-minor`, applied through the existing text IPC
+ * ignore options); Rules/Format stay disabled stubs until L1 extends
+ * `AppliedTextOptions` (rules/format/encoding/eol).
  */
 export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";
@@ -1531,9 +1539,10 @@ export default function App(): React.JSX.Element {
       handleRulerJump(next);
       setSelectedIndex(next);
       setRulerActive(next);
-      window.dispatchEvent(
-        new CustomEvent("autocompare:view-command", { detail: { cmd: "next", viewKind: "text" } }),
-      );
+      // Wave-161: follow-effect for TextView (scroll/focus sync) via the
+      // shared bus — TextView's window listener consumes it directly and
+      // never re-dispatches, so this cannot loop.
+      dispatchViewCommand("next", "text");
     }
   }, [viewKind, hunkStarts, selectedIndex, rulerActive, handleRulerJump]);
 
@@ -1555,9 +1564,9 @@ export default function App(): React.JSX.Element {
       handleRulerJump(prev);
       setSelectedIndex(prev);
       setRulerActive(prev);
-      window.dispatchEvent(
-        new CustomEvent("autocompare:view-command", { detail: { cmd: "prev", viewKind: "text" } }),
-      );
+      // Wave-161: follow-effect for TextView (scroll/focus sync) via the
+      // shared bus — consumed directly, never re-dispatched, no loop.
+      dispatchViewCommand("prev", "text");
     }
   }, [viewKind, hunkStarts, selectedIndex, rulerActive, handleRulerJump]);
 
@@ -1681,17 +1690,13 @@ export default function App(): React.JSX.Element {
         // it in the deps array would hit TDZ at render). Merge nav
         // dispatches the same bus event inline.
         if (keyKind === "merge") {
-          window.dispatchEvent(
-            new CustomEvent("autocompare:view-command", { detail: { cmd: "next", viewKind: "merge" } }),
-          );
+          dispatchViewCommand("next", "merge");
           setStatusMessage("Next conflict");
         } else handleNextHunk();
       } else if (isPrev) {
         e.preventDefault();
         if (keyKind === "merge") {
-          window.dispatchEvent(
-            new CustomEvent("autocompare:view-command", { detail: { cmd: "prev", viewKind: "merge" } }),
-          );
+          dispatchViewCommand("prev", "merge");
           setStatusMessage("Previous conflict");
         } else handlePrevHunk();
       } else if (isPlain && key === "l") {
@@ -1734,14 +1739,17 @@ export default function App(): React.JSX.Element {
     setStatusMessage("Merge view — resolve conflicts below");
   }, [mergeLive]);
 
-  // Wave-L2: ViewCommandBus — ONE routing point for prev/next/copy/swap
-  // per active viewKind (BC unified-toolbar parity). Text keeps the live
-  // hunk handlers above; FIXM GAP-13: merge dispatches the bus with
-  // `viewKind: "merge"` (MergeView owns prev/next/copy incl. `dir`);
-  // every other kind gets an honest parked status note (per-view wiring
-  // lands in L3), never a silent no-op. The top Toolbar calls this bus
-  // directly; TextToolbar prefers its `onBusCommand` prop (L3) with
-  // legacy-prop fallback.
+  // Wave-161: ViewCommandBus (`components/chrome/ViewCommandBus`) — ONE
+  // routing point for prev/next/copy/swap per active viewKind (BC
+  // unified-toolbar parity). Text keeps the live hunk handlers above;
+  // FIXM GAP-13: merge dispatches the bus with `viewKind: "merge"`
+  // (MergeView owns prev/next/copy incl. `dir`); every other kind gets
+  // an honest parked status note (per-view wiring lands in L3), never a
+  // silent no-op. The top Toolbar calls this bus directly; TextToolbar
+  // rides the SAME bus via the `onTextBusCommand` prop on ViewRouter
+  // (forwarded to TextView `onBusCommand`) — no duplicate handlers.
+  // TextView's internal window listener stays a pure follow-effect
+  // (scroll/focus sync), never a second invocation.
   const handleViewCommand = useCallback(
     (cmd: ViewCommand): void => {
       const kind = viewKindRef.current ?? viewKind;
@@ -1749,9 +1757,7 @@ export default function App(): React.JSX.Element {
         case "prev":
         case "next": {
           if (kind === "merge") {
-            window.dispatchEvent(
-              new CustomEvent("autocompare:view-command", { detail: { cmd, viewKind: "merge" } }),
-            );
+            dispatchViewCommand(cmd, "merge");
             setStatusMessage(cmd === "prev" ? "Previous conflict" : "Next conflict");
             return;
           }
@@ -1777,11 +1783,7 @@ export default function App(): React.JSX.Element {
           // owned by MergeView — per-conflict Take buttons + menu Take
           // are the enabled paths there), so this never fires silently.
           if (kind === "merge") {
-            window.dispatchEvent(
-              new CustomEvent("autocompare:view-command", {
-                detail: { cmd: "copy", viewKind: "merge", dir: "left" },
-              }),
-            );
+            dispatchViewCommand(cmd, "merge", { dir: "left" });
             setStatusMessage("Copy take-left requested (merge)");
             return;
           }
@@ -1794,11 +1796,7 @@ export default function App(): React.JSX.Element {
         }
         case "copy-right": {
           if (kind === "merge") {
-            window.dispatchEvent(
-              new CustomEvent("autocompare:view-command", {
-                detail: { cmd: "copy", viewKind: "merge", dir: "right" },
-              }),
-            );
+            dispatchViewCommand(cmd, "merge", { dir: "right" });
             setStatusMessage("Copy take-right requested (merge)");
             return;
           }
@@ -1818,24 +1816,50 @@ export default function App(): React.JSX.Element {
     [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleSwapSides],
   );
 
-  // Wave-L2: unified filter dispatch (BC View: Show All/Differences/Same/
-  // Context). Views listen for `autocompare:view-filter` already, or L3
-  // wires them; the dispatch + status note are honest either way and the
-  // view-level controls keep working untouched.
+  // Wave-161: unified filter dispatch (BC View: Show All/Differences/Same/
+  // Context) through the ViewCommandBus. Every view listens for
+  // `autocompare:view-filter` already; the dispatch + status note are
+  // honest either way and the view-level controls keep working
+  // untouched (their testids stay pinned — single dispatch point, no
+  // scattered duplicate dispatches).
   const handleViewFilter = useCallback(
     (filter: ViewFilterKind): void => {
       const kind = viewKindRef.current ?? viewKind;
-      window.dispatchEvent(
-        new CustomEvent("autocompare:view-filter", { detail: { filter, viewKind: kind } }),
-      );
+      dispatchViewFilter(filter, kind);
       setStatusMessage(`View filter: ${filter}`);
     },
     [viewKind],
   );
 
-  // Wave-L2: L1-contract stubs (Minor/Rules/Format). `AppliedTextOptions`
-  // carries only ignoreWhitespace/ignoreCase today, so these stay
-  // disabled with the contract reason instead of pretending to work.
+  // Wave-161: Minor is LIVE in text kind — it toggles BOTH text IPC
+  // ignore options (`ignoreWhitespace` + `ignoreCase`) through the
+  // existing `text_compare` path (TextView `autocompare:view-minor`
+  // listener rides `recompareWithIgnores`, no engine change). Other
+  // kinds keep the honest parked state (no ignore IPC there).
+  // Rules/Format stay disabled stubs: no rules/format IPC exists, so
+  // the contract reason is honest, not a placeholder.
+  const [minorOn, setMinorOn] = useState(false);
+  // Mirror TextView's session-switch ignore reset (its load effect
+  // clears ws/case on path/session change, and a remount on
+  // `compareTick` drops them too): the toggle resets with the tab, the
+  // paths, and the compare generation so the button never claims "on"
+  // while the view runs exact.
+  useEffect(() => {
+    setMinorOn(false);
+  }, [activeTabId, activePaths.left, activePaths.right, compareTick]);
+  const minorLive = viewKind === "text" && activeSession !== null;
+  const handleMinorToggle = useCallback(() => {
+    if (!minorLive) {
+      setStatusMessage("Minor needs text compare");
+      return;
+    }
+    const next = !minorOn;
+    setMinorOn(next);
+    dispatchViewMinor(next, "text");
+    setStatusMessage(
+      next ? "Minor: ignoring whitespace and case" : "Minor off: exact diff",
+    );
+  }, [minorLive, minorOn]);
   const handleContractStub = useCallback((name: string): void => {
     setStatusMessage(`${name} needs contract L1`);
   }, []);
@@ -1895,8 +1919,10 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewCommand("next"),
     },
     {
-      // Wave-L2: lifted BC View filters — dispatch `view-filter` for the
-      // active viewKind (views listen already or L3 wires them).
+      // Wave-161: lifted BC View filters — the single dispatch point for
+      // All/Diffs/Same/Context (every view listens on the bus; no
+      // scattered duplicate dispatches). View-level controls keep their
+      // own testids and keep working untouched.
       id: "filter-all",
       icon: List,
       label: "Show all",
@@ -1929,13 +1955,15 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewFilter("context"),
     },
     {
-      // Wave-L2: L1-contract stub — disabled with the contract reason.
+      // Wave-161: Minor is LIVE in text kind (toggles both text IPC
+      // ignore options through the existing compare path, no engine
+      // change); every other kind keeps the honest parked reason.
       id: "minor",
       icon: Minus,
-      label: "Minor (needs contract L1)",
-      enabled: false,
-      disabledReason: "needs contract L1",
-      onClick: () => handleContractStub("Minor"),
+      label: minorOn ? "Minor (on)" : "Minor",
+      enabled: minorLive,
+      disabledReason: minorLive ? null : "needs text compare",
+      onClick: handleMinorToggle,
     },
     {
       id: "rules",
@@ -2177,10 +2205,12 @@ export default function App(): React.JSX.Element {
                 </div>
               )}
               {/* FIXM GAP-08: merge host wiring — pane-drop triple staging
-                  + auto-compare routing. `onBusCommand` is deliberately
-                  NOT passed: the MergeView internal
+                  + auto-compare routing. `onBusCommand` (merge) is
+                  deliberately NOT passed: the MergeView internal
                   `autocompare:view-command` listener owns the bus, and a
-                  re-dispatching prop would loop back into itself. */}
+                  re-dispatching prop would loop back into itself.
+                  `onTextBusCommand` below is text-only (ViewRouter
+                  forwards it to TextView alone), so merge is unaffected. */}
               <ViewRouter
                 key={`${activeTabId}:${compareTick}`}
                 kind={viewKind}
@@ -2193,6 +2223,11 @@ export default function App(): React.JSX.Element {
                 onOpenPaths={handleOpenPaths}
                 onDropPaths={handleMergeDropTriple}
                 onRequestCompare={handleMergeRequestCompare}
+                // Wave-161: TextToolbar prev/next ride the SAME bus as
+                // the top Toolbar (`handleViewCommand`) — no duplicate
+                // handlers. Merge keeps its internal listener (see the
+                // comment the L2 block below preserves).
+                onTextBusCommand={(cmd: "prev" | "next") => handleViewCommand(cmd)}
               />
               {/* Wave-D3: session counter lives BELOW the view as a subtle
                   footer-affiliated note (was a top stacked row overlapping the

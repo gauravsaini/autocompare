@@ -67,6 +67,15 @@ export interface ViewRouterProps extends ViewPaths {
    * internal `autocompare:view-command` listener owning the bus.
    */
   readonly onBusCommand?: (cmd: "prev" | "next" | "copy") => void;
+  /**
+   * Wave-161: forwarded to `TextView` ONLY (`onBusCommand` parity for
+   * prev/next). When provided, the TextToolbar prev/next buttons ride
+   * the SAME App `handleViewCommand` bus as the top Toolbar — no
+   * duplicate handlers. TextView's internal window listener stays a
+   * pure follow-effect (scroll/focus sync). Merge is untouched: it only
+   * ever sees `onBusCommand`.
+   */
+  readonly onTextBusCommand?: (cmd: "prev" | "next") => void;
 }
 
 export default function ViewRouter({
@@ -81,12 +90,13 @@ export default function ViewRouter({
   onDropPaths,
   onRequestCompare,
   onBusCommand,
+  onTextBusCommand,
 }: ViewRouterProps): React.JSX.Element {
   return (
     <div data-testid="view-router">
       {kind === "text" && (
         <div data-testid="view-text">
-          <TextView leftPath={leftPath} rightPath={rightPath} sessionId={sessionId} selectedIndex={selectedIndex} onSelectRow={onSelectRow} />
+          <TextView leftPath={leftPath} rightPath={rightPath} sessionId={sessionId} selectedIndex={selectedIndex} onSelectRow={onSelectRow} onBusCommand={onTextBusCommand} />
         </div>
       )}
       {kind === "folder" && (

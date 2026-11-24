@@ -25,10 +25,10 @@ export interface TextToolbarProps {
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
   /**
-   * Wave-L2: ViewCommandBus hook (BC unified-toolbar parity). When L3
-   * passes it, Prev/Next dispatch through the shared bus
-   * (`onBusCommand("prev" | "next")`) so the top Toolbar and this
-   * TextToolbar call the SAME handlers; otherwise the legacy
+   * Wave-161: ViewCommandBus hook (BC unified-toolbar parity). App passes
+   * `onBusCommand` through ViewRouter (`onTextBusCommand`), so Prev/Next
+   * dispatch through the SAME App `handleViewCommand` bus as the top
+   * Toolbar — no duplicate handlers; without the prop the legacy
    * `onPrevDiff`/`onNextDiff` props run. Testids stay byte-identical
    * either way; view-level controls are never removed.
    */
