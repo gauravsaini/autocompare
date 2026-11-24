@@ -12,7 +12,7 @@
  */
 
 import { ArrowDownToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { Checkbox, Field, Select, ToolbarButton } from "../../../ui";
+import { Checkbox, Field, Select, StatusText, ToolbarButton } from "../../../ui";
 
 export interface HexToolbarProps {
   readonly pageLabel: string;
@@ -82,12 +82,9 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       <ToolbarButton onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
         Next
       </ToolbarButton>
-      <span
-        data-testid="hexview/page-label"
-        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-      >
+      <StatusText data-testid="hexview/page-label">
         {pageLabel}
-      </span>
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       {/* HEX2: diff-only navigation (BC next/previous difference).
           Same row, honest busy disable; receipt rides `hex-diff-status`. */}
@@ -97,13 +94,9 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       <ToolbarButton data-testid="hex-diff-next" onClick={onNextDiff} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
         Next diff
       </ToolbarButton>
-      <span
-        data-testid="hex-diff-status"
-        role="status"
-        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-      >
+      <StatusText data-testid="hex-diff-status" role="status">
         {diffStatusText}
-      </span>
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       <Checkbox
         id="hexview/diffsonly-toggle"

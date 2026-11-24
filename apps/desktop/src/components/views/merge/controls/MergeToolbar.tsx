@@ -12,7 +12,7 @@
  * text-arrow glyphs); labels and testids unchanged.
  */
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
-import { Button, DotButton, ToolbarButton } from "../../../ui";
+import { Button, DotButton, StatusText, ToolbarButton } from "../../../ui";
 
 export interface MergeToolbarProps {
   readonly position: string;
@@ -62,12 +62,9 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       <Button data-testid="merge-next" onClick={onNext}>
         Next conflict <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
-      <span
-        data-testid="merge-conflict-position"
-        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-      >
+      <StatusText data-testid="merge-conflict-position">
         {position}
-      </span>
+      </StatusText>
       {/* Wave-147: toolbar-embedded overview ruler (BC right-edge ruler
           folded into the single toolbar row: same row, no new stacked
           rows, chrome budget holds). One 12px DotButton dot per conflict in
@@ -104,13 +101,12 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
         Take all right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       {takeAllNote === null ? null : (
-        <span
+        <StatusText
           data-testid="merge-take-all-status"
           role="status"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
         >
           {takeAllNote}
-        </span>
+        </StatusText>
       )}
       {/* GAP-13 (FIXMERGE): active-conflict pointer + per-hunk Take
           Left/Center/Right for the SELECTED conflict (BC 3-way toolbar
@@ -120,16 +116,15 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       {showActiveTakes ? (
         <>
           <span aria-hidden="true" className="tv-controls-sep" />
-          <span
+          <StatusText
             data-testid="merge-active-conflict"
             data-active-id={activeId ?? ""}
             role="status"
             aria-label={activePosition ?? (activeId === null || activeId === undefined ? "no active conflict" : `conflict ${activeId}`)}
             title={activePosition ?? "no active conflict"}
-            className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
           >
             {activePosition ?? "no active conflict"}
-          </span>
+          </StatusText>
           <Button
             data-testid="merge-take-active-left"
             onClick={onTakeActiveLeft}
@@ -167,7 +162,9 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
         <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Find</span>
       </ToolbarButton>
-      <span className="inline-flex items-center gap-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">(keys: j/k, n/p, <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />)</span>
+      <StatusText className="inline-flex items-center gap-[var(--ac-space-1)]">
+        (keys: j/k, n/p, <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />)
+      </StatusText>
     </div>
   );
 }
