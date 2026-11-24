@@ -370,9 +370,15 @@ export function useWebShortcuts(): void {
           handled = true;
         }
 
-        // 3. Active find/goto/chrome overlays with dismiss buttons
+        // 3. Active find/goto/chrome overlays with dismiss buttons.
+        // Wave-186: `folderview/name-close` is EXCLUDED on purpose. Its
+        // `onClose` clears the query, but the folder contract (98/113b)
+        // is global-Esc = collapse WITHOUT clearing — FolderView's own
+        // window Esc handler already closes it from any focus, and the
+        // input-level Esc keeps the legacy clear+close. Clicking the X
+        // here ran in the same task and always wiped the query.
         const overlayCloseButtons = document.querySelectorAll<HTMLButtonElement>(
-          '[data-testid="textview/find-close"], [data-testid="textview/goto-close"], [data-testid="hex-find-close"], [data-testid="hex-goto-close"], [data-testid="merge/find-close"], [data-testid="folderview/name-close"], [data-testid="folderview/goto-close"], [data-testid="folderview/rules-close"], [data-testid="syncview/name-close"], [data-testid="mediaview/tolerance-close"]',
+          '[data-testid="textview/find-close"], [data-testid="textview/goto-close"], [data-testid="hex-find-close"], [data-testid="hex-goto-close"], [data-testid="merge/find-close"], [data-testid="folderview/goto-close"], [data-testid="folderview/rules-close"], [data-testid="syncview/name-close"], [data-testid="mediaview/tolerance-close"]',
         );
         overlayCloseButtons.forEach((btn) => {
           if (!btn.disabled && btn.offsetParent !== null) {
