@@ -239,11 +239,11 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
             : (action.disabledReason ?? compareBlockedReasonOf(action))
           : (action.disabledReason ?? null);
         const title = isCompare && busy ? `Compare (${COMPARE_BUSY_REASON})` : actionTitle(action, reason);
-        // Wave-164: Rules/Format route through the view bus FIRST (the
-        // in-view Rules/Format panels open), then run the host handler
-        // (today a disabled-stub note; App.tsx handlers are off-limits
-        // and stay the source of truth). Minor is untouched (W161 live
-        // bus path). Disabled buttons never fire either path.
+        // Wave-164/167: Rules/Format route through the view bus FIRST
+        // (the in-view Rules/Format panels open), then run the host
+        // handler (App.tsx toggles are live in folder/text kind and park
+        // honestly elsewhere). Minor is live via the W161 bus path.
+        // Disabled buttons never fire either path.
         const handleActionClick = isRules
           ? (): void => {
               window.dispatchEvent(new CustomEvent(VIEW_RULES_EVENT));

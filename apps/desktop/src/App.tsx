@@ -7,6 +7,8 @@ import {
   dispatchViewFilter,
   dispatchViewMinor,
 } from "./components/chrome";
+import { dispatchViewFormat } from "./components/views/text/controls/FormatMenu";
+import { dispatchViewRules } from "./components/views/folder/controls/RulesPanel";
 import { DiffStatsContext, type DiffStats } from "./components/chrome/StatusBar";
 import type { ChromeTab, DiffRow, TextCompareRowKind, ToolbarAction } from "./components/chrome";
 import { LineDetailPane } from "./components/chrome/LineDetailPane";
@@ -182,8 +184,9 @@ function applyStoredCopiesToDiffRows(
  * the top bar is the single dispatch point and the view-level controls
  * keep working untouched. Minor is live in text kind (dispatches
  * `autocompare:view-minor`, applied through the existing text IPC
- * ignore options); Rules/Format stay disabled stubs until L1 extends
- * `AppliedTextOptions` (rules/format/encoding/eol).
+ * ignore options). Wave-167: Rules/Format are live top-bar actions
+ * dispatching `autocompare:view-rules` (folder) / `autocompare:view-format`
+ * (text) to the in-view panels, honestly parked elsewhere.
  */
 export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";
@@ -1836,8 +1839,8 @@ export default function App(): React.JSX.Element {
   // existing `text_compare` path (TextView `autocompare:view-minor`
   // listener rides `recompareWithIgnores`, no engine change). Other
   // kinds keep the honest parked state (no ignore IPC there).
-  // Rules/Format stay disabled stubs: no rules/format IPC exists, so
-  // the contract reason is honest, not a placeholder.
+  // Wave-167: Rules/Format ride the same bus pattern (see
+  // `handleRulesToggle`/`handleFormatToggle` below).
   const [minorOn, setMinorOn] = useState(false);
   // Mirror TextView's session-switch ignore reset (its load effect
   // clears ws/case on path/session change, and a remount on
@@ -1860,9 +1863,31 @@ export default function App(): React.JSX.Element {
       next ? "Minor: ignoring whitespace and case" : "Minor off: exact diff",
     );
   }, [minorLive, minorOn]);
-  const handleContractStub = useCallback((name: string): void => {
-    setStatusMessage(`${name} needs contract L1`);
-  }, []);
+  // Wave-167: Rules/Format are LIVE top-bar actions (BC Session >
+  // Settings parity). Rules opens the in-view Rules panel in folder
+  // kind (`autocompare:view-rules`, owned by FolderView); Format opens
+  // the in-view Format menu in text kind (`autocompare:view-format`,
+  // owned by TextView). Other kinds keep the honest parked reason —
+  // the panel/menu simply does not exist there, so the button parks
+  // instead of pretending.
+  const rulesLive = viewKind === "folder" && activeSession !== null;
+  const formatLive = viewKind === "text" && activeSession !== null;
+  const handleRulesToggle = useCallback(() => {
+    if (!rulesLive) {
+      setStatusMessage("Rules needs folder compare");
+      return;
+    }
+    dispatchViewRules();
+    setStatusMessage("Rules panel opened");
+  }, [rulesLive]);
+  const handleFormatToggle = useCallback(() => {
+    if (!formatLive) {
+      setStatusMessage("Format needs text compare");
+      return;
+    }
+    dispatchViewFormat();
+    setStatusMessage("Format options opened");
+  }, [formatLive]);
 
   const filterEnabled = activeSession !== null;
   const filterReason = filterEnabled ? null : "needs an open session";
@@ -1966,20 +1991,24 @@ export default function App(): React.JSX.Element {
       onClick: handleMinorToggle,
     },
     {
+      // Wave-167: LIVE in folder kind (opens the in-view Rules panel
+      // through the view bus); honestly parked everywhere else.
       id: "rules",
       icon: Code,
-      label: "Rules (needs contract L1)",
-      enabled: false,
-      disabledReason: "needs contract L1",
-      onClick: () => handleContractStub("Rules"),
+      label: rulesLive ? "Rules" : "Rules (needs folder compare)",
+      enabled: rulesLive,
+      disabledReason: rulesLive ? null : "needs folder compare",
+      onClick: handleRulesToggle,
     },
     {
+      // Wave-167: LIVE in text kind (opens the in-view Format menu
+      // through the view bus); honestly parked everywhere else.
       id: "format",
       icon: Type,
-      label: "Format (needs contract L1)",
-      enabled: false,
-      disabledReason: "needs contract L1",
-      onClick: () => handleContractStub("Format"),
+      label: formatLive ? "Format" : "Format (needs text compare)",
+      enabled: formatLive,
+      disabledReason: formatLive ? null : "needs text compare",
+      onClick: handleFormatToggle,
     },
     {
       // Wave-125: live in text kind with a hunk row selected (same
