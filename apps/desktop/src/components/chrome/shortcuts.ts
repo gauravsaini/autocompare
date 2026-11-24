@@ -191,11 +191,12 @@ export function triggerFindPrev(): boolean {
  */
 export function triggerGoTo(): boolean {
   if (typeof document === "undefined") return false;
-  const gotoInput = document.querySelector<HTMLElement>(
-    '#textview-goto-box, #hex-goto-box, #folder-goto-box, [data-testid="textview/goto-input"], [data-testid="hex-goto-input"], [data-testid="folder-goto-input"]',
-  );
+  const selector =
+    '#textview-goto-box, #hex-goto-box, #folder-goto-box, [data-testid="textview/goto-input"], [data-testid="hex-goto-input"], [data-testid="folder-goto-input"]';
+  const gotoInput = document.querySelector<HTMLElement>(selector);
   if (gotoInput) {
     gotoInput.focus();
+    if (gotoInput instanceof HTMLInputElement) gotoInput.select();
     return true;
   }
   const gotoToggle = document.querySelector<HTMLButtonElement>(
@@ -203,9 +204,43 @@ export function triggerGoTo(): boolean {
   );
   if (gotoToggle && !gotoToggle.disabled) {
     gotoToggle.click();
-    return true;
   }
-  return false;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("autocompare:session-goto"));
+  }
+  let attempts = 0;
+  const tick = (): void => {
+    attempts += 1;
+    const target = document.querySelector<HTMLElement>(selector);
+    if (target) {
+      target.focus();
+      if (target instanceof HTMLInputElement) target.select();
+      return;
+    }
+    if (attempts < 25) window.setTimeout(tick, 30);
+  };
+  window.setTimeout(tick, 0);
+  return true;
+}
+
+/**
+ * Wave-157: Trigger Next Difference across mounted views (Text, Merge).
+ * Dispatches `autocompare:view-command` with cmd "next".
+ */
+export function triggerNextDiff(): boolean {
+  if (typeof window === "undefined") return false;
+  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "next" } }));
+  return true;
+}
+
+/**
+ * Wave-157: Trigger Previous Difference across mounted views (Text, Merge).
+ * Dispatches `autocompare:view-command` with cmd "prev".
+ */
+export function triggerPrevDiff(): boolean {
+  if (typeof window === "undefined") return false;
+  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "prev" } }));
+  return true;
 }
 
 /**
@@ -252,6 +287,44 @@ export function useWebShortcuts(): void {
           triggerFindNext();
         }
         return;
+      }
+
+      // Wave-157: Cmd+Alt+Down / Cmd+Alt+Up for Next/Prev difference (Beyond Compare parity).
+      const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey;
+      if (!isInput && isCmdAlt) {
+        if (e.key === "ArrowDown" || e.key === "Down") {
+          e.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent("autocompare:view-command", { detail: { cmd: "next" } }),
+          );
+          return;
+        }
+        if (e.key === "ArrowUp" || e.key === "Up") {
+          e.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent("autocompare:view-command", { detail: { cmd: "prev" } }),
+          );
+          return;
+        }
+      }
+
+      // Wave-157: Global fallback for Cmd/Ctrl+G (Go To) and Cmd/Ctrl+F (Find)
+      // when not already consumed by the mounted view.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !isInput) {
+        if ((e.key === "g" || e.key === "G") && !e.shiftKey) {
+          if (!e.defaultPrevented) {
+            e.preventDefault();
+            triggerGoTo();
+          }
+          return;
+        }
+        if ((e.key === "f" || e.key === "F") && !e.shiftKey) {
+          if (!e.defaultPrevented) {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent("autocompare:session-find"));
+          }
+          return;
+        }
       }
 
       const id = matchWebShortcut({

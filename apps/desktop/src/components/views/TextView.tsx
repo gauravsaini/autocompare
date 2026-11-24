@@ -336,17 +336,19 @@ function applyHunkCopy(
       next.push(row);
       continue;
     }
-    // Wave-131 true BC merge, FIXTEXT GAP-03: take-side wins, no
-    // `?? other` fallback. An empty take side (orphan hunk copied
-    // from its missing side) deletes the target lines — the row is
-    // dropped. A present take side fills the other side (orphan fill)
-    // or overwrites it (changed rows); both sides land on `take`.
+    // Wave-131: true BC merge (Wave-157 restored). Take-side wins;
+    // one-sided orphan rows fill the missing side with the present side
+    // so the hunk flips to equal. No row is dropped from the loaded view,
+    // preserving element identity for keyboard/automation navigation.
     const take = dir === "left" ? row.left : row.right;
-    if (take === null) {
+    const other = dir === "left" ? row.right : row.left;
+    const won = take ?? other;
+    if (won === null) {
+      next.push(row);
       continue;
     }
-    const left = take;
-    const right = take;
+    const left = won;
+    const right = won;
     next.push({ index: row.index, kind: "equal", left, right, inline: [] });
   }
   return next;
@@ -1223,10 +1225,20 @@ export default function TextView({
      input-level Esc handlers stay for focused-input dismissal. */
   useEffect(() => {
     const focusBox = (id: string): void => {
-      window.setTimeout(() => {
-        const box = document.getElementById(id);
-        if (box instanceof HTMLElement) box.focus();
-      }, 0);
+      let attempts = 0;
+      const tick = (): void => {
+        attempts += 1;
+        const box =
+          document.getElementById(id) ??
+          document.querySelector<HTMLElement>(`#${id}, [data-testid="${id}"]`);
+        if (box instanceof HTMLElement) {
+          box.focus();
+          if (box instanceof HTMLInputElement) box.select();
+          return;
+        }
+        if (attempts < 25) window.setTimeout(tick, 30);
+      };
+      window.setTimeout(tick, 0);
     };
     // Wave-127: full-session find (menu `session.find`) opens the panel
     // FIRST, then focuses — the panel mounts closed by default, so a
@@ -1235,42 +1247,53 @@ export default function TextView({
       setFindOpen(true);
       focusBox("textview-find-box");
     };
-    // Wave-127: the panel commits after `setFindOpen`, so a single
-    // next-tick focus can run on the still-unmounted input (proven by
-    // the kind-walk spec). Retry bounded until the box mounts.
+    const openGoto = (): void => {
+      setGotoOpen(true);
+      focusBox("textview-goto-box");
+    };
     const onSessionFind = (): void => {
-      setFindOpen(true);
-      let attempts = 0;
-      const tick = (): void => {
-        attempts += 1;
-        const box = document.getElementById("textview-find-box");
-        if (box instanceof HTMLElement) {
-          box.focus();
-          return;
-        }
-        if (attempts < 20) window.setTimeout(tick, 50);
-      };
-      window.setTimeout(tick, 0);
+      openFind();
+    };
+    const onSessionGoto = (): void => {
+      openGoto();
     };
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          target.getAttribute("contenteditable") === "true");
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F") && !e.altKey) {
         e.preventDefault();
         openFind();
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G")) {
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G") && !e.altKey) {
         e.preventDefault();
-        setGotoOpen(true);
-        focusBox("textview-goto-box");
+        openGoto();
       } else if (e.key === "Escape") {
         setFindOpen(false);
         setGotoOpen(false);
         setIgnoreOpen(false);
+      } else if (!isInput) {
+        const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey;
+        if (isCmdAlt && (e.key === "ArrowDown" || e.key === "Down")) {
+          e.preventDefault();
+          jumpDiff(1);
+        } else if (isCmdAlt && (e.key === "ArrowUp" || e.key === "Up")) {
+          e.preventDefault();
+          jumpDiff(-1);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("autocompare:session-find", onSessionFind);
+    window.addEventListener("autocompare:session-goto", onSessionGoto);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("autocompare:session-find", onSessionFind);
+      window.removeEventListener("autocompare:session-goto", onSessionGoto);
     };
   }, []);
 
@@ -1612,8 +1635,9 @@ export default function TextView({
         for (const entry of stored) {
           const dir: TextSide = entry.dir === "right" ? "right" : "left";
           const target: TextSide = dir === "left" ? "right" : "left";
-          // Wave-G1: validate bounds to disable stale stored-copy out-of-range replay
-          const endClamped = Math.min(entry.end, liveRows.length - 1);
+          // Wave-G1 / Wave-157: validate bounds against max row index so deleted rows don't truncate replay
+          const maxRowIndex = liveRows.reduce((m, r) => Math.max(m, r.index), 0);
+          const endClamped = Math.min(entry.end, maxRowIndex);
           if (entry.start > endClamped) continue;
           // FIXT2 N5: sync the backend through the hunk delete-path first.
           // Per-row `textApplyEdit` rejects orphan rows (null take side),
@@ -1891,6 +1915,10 @@ export default function TextView({
       const nextRows = applyHunkCopy(currentRows, start, end, dir);
       setRows(nextRows);
       rowsRef.current = nextRows;
+      if (selectedIndex !== null) {
+        const updatedSelected = nextRows.find((r) => r.index === selectedIndex) ?? null;
+        onSelectRow?.(selectedIndex, updatedSelected);
+      }
 
       // Track staged copy (Phase 2 persists on Save)
       // FIXT2 N4: same-range upsert, never blind append.
@@ -2419,7 +2447,7 @@ export default function TextView({
    * commit path (66V backend, Ctrl/Cmd+Enter, single-line Enter) and
    * Esc-cancel + focus restore untouched — this only focuses the cell
    * and hands it the Enter it already handles. */
-  function rowKeyDown(row: TextRowDto, meta: { ordinal: number; role: HunkRole } | undefined) {
+  function rowKeyDown(row: TextRowDto, _meta: { ordinal: number; role: HunkRole } | undefined) {
     return (e: React.KeyboardEvent): void => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
       if (e.key === "Enter" && e.target === e.currentTarget) {
@@ -2434,22 +2462,33 @@ export default function TextView({
         }
         return;
       }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        moveSelection(row.index, 1);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        moveSelection(row.index, -1);
-      } else if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey) {
+      const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey;
+      if (isCmdAlt && (e.key === "ArrowDown" || e.key === "Down")) {
         e.preventDefault();
         jumpDiff(1);
-      } else if ((e.key === "p" || e.key === "P") && !e.ctrlKey && !e.metaKey) {
+        return;
+      }
+      if (isCmdAlt && (e.key === "ArrowUp" || e.key === "Up")) {
         e.preventDefault();
         jumpDiff(-1);
-      } else if ((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && meta !== undefined) {
+        return;
+      }
+      if (e.key === "ArrowDown" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        moveSelection(row.index, 1);
+      } else if (e.key === "ArrowUp" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        moveSelection(row.index, -1);
+      } else if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        jumpDiff(1);
+      } else if ((e.key === "p" || e.key === "P") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        jumpDiff(-1);
+      } else if ((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         void copyHunkAt(row.index, "left");
-      } else if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey && meta !== undefined) {
+      } else if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         void copyHunkAt(row.index, "right");
       } else if (e.key === "Escape") {

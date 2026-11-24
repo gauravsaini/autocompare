@@ -550,10 +550,29 @@ pub fn copy_section_of(
     index: u64,
     side: Side,
 ) -> Result<CopiedSection, String> {
-    let at = usize::try_from(index).unwrap_or(usize::MAX);
-    let anchor = rows
-        .get(at)
-        .ok_or_else(|| format!("row index {index} out of range"))?;
+    if rows.is_empty() {
+        return Err("cannot copy section from empty session".to_string());
+    }
+    let max_idx = rows.iter().map(|r| r.index).max().unwrap_or(0);
+    let at = match rows.iter().position(|r| r.index == index) {
+        Some(pos) => pos,
+        None => {
+            if index > max_idx {
+                return Err(format!("row index {index} out of range"));
+            }
+            // The row existed but was deleted (e.g. orphan delete from earlier copy).
+            return Ok(CopiedSection {
+                session: session.to_string(),
+                index,
+                side,
+                start: index,
+                end: index,
+                text: String::new(),
+                line_count: 0,
+            });
+        }
+    };
+    let anchor = &rows[at];
     let (mut lo, mut hi) = (at, at.saturating_add(1));
     if anchor.kind != RowKind::Equal {
         while lo > 0 {
@@ -582,19 +601,15 @@ pub fn copy_section_of(
             lines.push(line.clone());
         }
     }
-    // Wave-T: an existing section whose take side is empty (right-only
-    // hunk copied l2r, left-only copied r2l) is an honest empty receipt,
-    // NOT an error. Erroring here made multi-hunk l2r/r2l runs "fail in
-    // midst" in the UI; the local apply below still resolves the hunk
-    // (missing side fills from the present side) and staging proceeds.
-    // Truly unknown rows (out of range) still reject above.
+    let start_row = rows.get(lo).map(|r| r.index).unwrap_or(lo as u64);
+    let end_row = rows.get(hi.saturating_sub(1)).map(|r| r.index).unwrap_or(hi.saturating_sub(1) as u64);
     if lines.is_empty() {
         return Ok(CopiedSection {
             session: session.to_string(),
             index,
             side,
-            start: lo as u64,
-            end: hi.saturating_sub(1) as u64,
+            start: start_row,
+            end: end_row,
             text: String::new(),
             line_count: 0,
         });
@@ -603,8 +618,8 @@ pub fn copy_section_of(
         session: session.to_string(),
         index,
         side,
-        start: lo as u64,
-        end: hi.saturating_sub(1) as u64,
+        start: start_row,
+        end: end_row,
         text: lines.join("\n"),
         line_count: lines.len() as u64,
     })
@@ -841,19 +856,12 @@ pub fn apply_hunk_to_rows(
     if total_rows == 0 {
         return Err("cannot apply hunk to empty session".to_string());
     }
-    if start >= total_rows {
+    let max_idx = rows.iter().map(|r| r.index).max().unwrap_or(0);
+    if start > max_idx {
         return Err(format!("row index {start} out of range"));
     }
-    // Wave-G1: clamp end to total_rows - 1 so shifted / post-merge bounds don't crash
-    let end = end.min(total_rows.saturating_sub(1));
-    let start_idx = usize::try_from(start).map_err(|_| "start overflow".to_string())?;
-    let end_idx = usize::try_from(end).map_err(|_| "end overflow".to_string())?;
-    if rows.get(start_idx).map(|r| r.index) != Some(start) && !rows.iter().any(|r| r.index == start) {
-        return Err(format!("row index {start} out of range"));
-    }
-    if rows.get(end_idx).map(|r| r.index) != Some(end) && !rows.iter().any(|r| r.index == end) {
-        return Err(format!("row index {end} out of range"));
-    }
+    // Wave-G1 / Wave-157: clamp end to max_idx so shifted/post-merge bounds don't crash
+    let end = end.min(max_idx);
 
     let mut left_lines: Vec<String> = Vec::new();
     let mut right_lines: Vec<String> = Vec::new();
@@ -896,8 +904,8 @@ pub fn apply_hunk_to_rows(
     Ok((left_lines, right_lines, applied, total))
 }
 
-/// Patches an entire hunk range `[start, end]` atomically and re-runs
-/// the comparison with the session's own ignore options.
+/// Patches an entire hunk range `[start, end]` atomically and updates
+/// the cached rows preserving row identity on surviving rows.
 /// Take-side wins with no fallback (empty take deletes the orphan
 /// lines, FIXTEXT GAP-03); a present take side fills or overwrites.
 #[tauri::command]
@@ -912,9 +920,27 @@ pub fn text_apply_hunk(
     let (left_lines, right_lines, applied, total) =
         apply_hunk_to_rows(&cached.rows, start, end, &which)?;
     let opts = cached.opts.clone();
-    let compared = compare_text_lines(&left_lines, &right_lines, &opts);
-    let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
-    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
+    let mut rows: Vec<TextRowDto> = Vec::new();
+    for row in &cached.rows {
+        if row.index < start || row.index > end {
+            rows.push(row.clone());
+        } else {
+            let take = match which {
+                Side::Left => row.left.as_ref(),
+                Side::Right => row.right.as_ref(),
+            };
+            if let Some(line) = take {
+                rows.push(TextRowDto {
+                    index: row.index,
+                    kind: RowKind::Equal,
+                    left: Some(line.clone()),
+                    right: Some(line.clone()),
+                    inline: Vec::new(),
+                    suppressed: row.suppressed,
+                });
+            }
+        }
+    }
     let (overview, overview_truncated) = summarize_overview(&rows);
     let post_start = start;
     let post_end = start.saturating_add(total).saturating_sub(1);
@@ -922,8 +948,8 @@ pub fn text_apply_hunk(
     guard.insert(
         session.clone(),
         StoredText {
-            left_count: compared.left_lines.len() as u64,
-            right_count: compared.right_lines.len() as u64,
+            left_count: left_lines.len() as u64,
+            right_count: right_lines.len() as u64,
             rows: rows.clone(),
             overview,
             overview_truncated,
@@ -1626,35 +1652,48 @@ mod tests {
             }
         }
 
-        // Test text_copy_section for first 5 hunks (dir = "left", l2r)
+        // Test text_copy_section for all hunks (dir = "left", l2r)
         println!("\nTesting text_copy_section (l2r):");
-        for (i, (s, _, _)) in hunks.iter().enumerate().take(5) {
+        for (i, (s, _, _)) in hunks.iter().enumerate() {
             let res = text_copy_section(session.clone(), *s, "left".to_string());
-            println!("  Hunk {i} at row {s}: result={:?}", res.as_ref().map(|c| (c.start, c.end, c.line_count)));
-            if let Err(e) = &res {
-                println!("  --> FAILED text_copy_section: {e}");
-            }
+            assert!(res.is_ok(), "text_copy_section failed at hunk {i} (row {s}): {:?}", res.err());
         }
 
-        // Test sequential text_apply_hunk (dir = "left", l2r) with ORIGINAL hunks
-        println!("\nTesting sequential text_apply_hunk with initial hunk indices:");
+        // Wave-157: Test sequential text_copy_section and text_apply_hunk alternating L2R and R2L
+        println!("\nTesting sequential text_apply_hunk alternating L2R and R2L across hunks:");
         let sim_session = session.clone();
-        for (i, (s, e, _)) in hunks.iter().enumerate().take(5) {
-            let res = text_apply_hunk(sim_session.clone(), *s, *e, "left".to_string());
-            println!("  Apply Hunk {i} ({s}..={e}): result={:?}", res.as_ref().map(|a| (a.start, a.end, a.applied, a.total, a.rows)));
-            if let Err(err) = &res {
-                println!("  --> FAILED text_apply_hunk at hunk {i} ({s}..={e}): {err}");
-            }
-            if let Ok(c) = stored(&sim_session) {
-                // Find remaining hunks
-                let rem_hunks: Vec<(u64, u64, RowKind)> = c.rows.iter().filter(|r| r.kind != RowKind::Equal)
-                    .map(|r| (r.index, r.index, r.kind)).collect();
-                println!("    Remaining non-equal row count after hunk {i}: {}", rem_hunks.len());
-                if let Some(first_rem) = rem_hunks.first() {
-                    println!("    Next non-equal row starts at: {}", first_rem.0);
-                }
-            }
+        for (i, (s, e, _)) in hunks.iter().enumerate() {
+            let dir = if i % 2 == 0 { "left" } else { "right" };
+            let copy_res = text_copy_section(sim_session.clone(), *s, dir.to_string());
+            assert!(copy_res.is_ok(), "text_copy_section failed at hunk {i} (row {s}): {:?}", copy_res.err());
+            let res = text_apply_hunk(sim_session.clone(), *s, *e, dir.to_string());
+            assert!(res.is_ok(), "text_apply_hunk failed at hunk {i} ({s}..={e}, dir={dir}): {:?}", res.err());
         }
+        let c = stored(&sim_session).expect("sim_session stored");
+        let rem: Vec<_> = c.rows.iter().filter(|r| r.kind != RowKind::Equal).collect();
+        assert_eq!(rem.len(), 0, "all hunks must be resolved to equal with 0 non-equal rows remaining (alternating)");
+
+        // Test full sequential L2R across all hunks
+        let l2r_session = text_compare_test(f1.to_string(), f2.to_string(), None, None, None, None)
+            .expect("text_compare failed").session;
+        for (i, (s, e, _)) in hunks.iter().enumerate() {
+            let res = text_apply_hunk(l2r_session.clone(), *s, *e, "left".to_string());
+            assert!(res.is_ok(), "text_apply_hunk l2r failed at hunk {i} ({s}..={e}): {:?}", res.err());
+        }
+        let c_l2r = stored(&l2r_session).expect("l2r_session stored");
+        let rem_l2r: Vec<_> = c_l2r.rows.iter().filter(|r| r.kind != RowKind::Equal).collect();
+        assert_eq!(rem_l2r.len(), 0, "all hunks must be resolved to equal with 0 non-equal rows remaining (l2r)");
+
+        // Test full sequential R2L across all hunks
+        let r2l_session = text_compare_test(f1.to_string(), f2.to_string(), None, None, None, None)
+            .expect("text_compare failed").session;
+        for (i, (s, e, _)) in hunks.iter().enumerate() {
+            let res = text_apply_hunk(r2l_session.clone(), *s, *e, "right".to_string());
+            assert!(res.is_ok(), "text_apply_hunk r2l failed at hunk {i} ({s}..={e}): {:?}", res.err());
+        }
+        let c_r2l = stored(&r2l_session).expect("r2l_session stored");
+        let rem_r2l: Vec<_> = c_r2l.rows.iter().filter(|r| r.kind != RowKind::Equal).collect();
+        assert_eq!(rem_r2l.len(), 0, "all hunks must be resolved to equal with 0 non-equal rows remaining (r2l)");
     }
 
     // Wave-T: empty take-side sections are honest empty receipts, not
