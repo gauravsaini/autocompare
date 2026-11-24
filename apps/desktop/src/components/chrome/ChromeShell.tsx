@@ -119,14 +119,33 @@ export function ChromeShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--ac-bg)] text-[var(--ac-fg)]">
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelectTab={onSelectTab}
-        onCloseTab={onCloseTab}
-        onNewTab={onNewTab}
-      />
-      <Toolbar actions={toolbar.actions} />
+      {/*
+       * Wave-174: BC chrome budget — ONE shared band for tabs + toolbar
+       * (was: tabbar row 40 + toolbar row 44 + pathbar row 32 = 3 stacked
+       * shell rows; view toolbars made 4). The band is a single 44px row:
+       * TabBar (40, capped 42% width, internal scroll) + Toolbar (rest,
+       * internal scroll, single-row guarantee intact) side-by-side, then
+       * PathBar as the second row (32). Shell above panes: 2 rows, 76px.
+       * In-view toolbars (Text/Table/Hex/Merge) are views-owned (off
+       * limits here) and already single-row + bus-unified (W161/W170);
+       * Find/Goto ride overlays, no new stacked row anywhere. All
+       * testids, heights-per-component, labels, wiring byte-identical —
+       * placement only.
+       */}
+      <div
+        data-testid="chrome/band"
+        className="flex h-[var(--ac-toolbar-h)] items-center border-b border-[var(--ac-border)] bg-[var(--ac-tab-bg)]"
+      >
+        <TabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={onSelectTab}
+          onCloseTab={onCloseTab}
+          onNewTab={onNewTab}
+          className="min-w-0 max-w-[42%] shrink"
+        />
+        <Toolbar actions={toolbar.actions} className="min-w-0 flex-1" />
+      </div>
       <PathBar
         leftPath={leftPath}
         rightPath={rightPath}
