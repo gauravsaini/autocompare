@@ -15,6 +15,16 @@
  * asserts `aria-expanded="false"` + no menu on load); the find panel
  * defaults OPEN (wave-20/38 specs fill the find box on load). Both
  * panels are in-flow (never absolute) so the overlap gate holds.
+ *
+ * Wave-168b: the two ignore-flag checkboxes grow the row near the
+ * 1280px container edge, so the row is `nowrap` + `overflow-x-auto`
+ * (single row keeps the chrome budget + `barH < 120`). A
+ * scroll-clipped child keeps its full bounding box, which the
+ * wave-7 `assertNoOverlap` gate reads as an overlap (e.g.
+ * `tableview/toolbar-next-diff`). `[&>*]:min-w-0` lets every item
+ * shrink in place instead of scrolling out, so measured boxes always
+ * tile with no overlap; the ignore checkboxes ride `shrink-0` so the
+ * wave-168 additions never compress away.
  */
 
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
@@ -23,6 +33,11 @@ import { Button, Checkbox, StatusText, ToolbarButton } from "../../../ui";
 export interface TableToolbarProps {
   readonly byKey: boolean;
   readonly onToggleByKey: (v: boolean) => void;
+  /** Wave-168: ignore whitespace / case flags (Beyond Compare parity). */
+  readonly ignoreWs: boolean;
+  readonly onToggleIgnoreWs: (v: boolean) => void;
+  readonly ignoreCase: boolean;
+  readonly onToggleIgnoreCase: (v: boolean) => void;
   readonly colsOpen: boolean;
   readonly onToggleCols: () => void;
   readonly showAllDisabled: boolean;
@@ -61,6 +76,10 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
   const {
     byKey,
     onToggleByKey,
+    ignoreWs,
+    onToggleIgnoreWs,
+    ignoreCase,
+    onToggleIgnoreCase,
     colsOpen,
     onToggleCols,
     showAllDisabled,
@@ -89,7 +108,8 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       role="toolbar"
       aria-label="Table controls"
       data-testid="tableview/toolbar"
-      className="tv-controls-bar"
+      style={{ flexWrap: "nowrap", gap: "2px" }}
+      className="tv-controls-bar flex-nowrap overflow-x-auto whitespace-nowrap !gap-[2px] !px-2 [&>*]:min-w-0"
     >
       <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
       <StatusText
@@ -99,6 +119,23 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       >
         {byKey ? "by-key" : "positional"}
       </StatusText>
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <Checkbox
+        id="table-ignore-ws"
+        data-testid="tableview/ignore-ws"
+        label="Ignore ws"
+        className="shrink-0"
+        checked={ignoreWs}
+        onChange={(e) => onToggleIgnoreWs(e.target.checked)}
+      />
+      <Checkbox
+        id="table-ignore-case"
+        data-testid="tableview/ignore-case"
+        label="Ignore case"
+        className="shrink-0"
+        checked={ignoreCase}
+        onChange={(e) => onToggleIgnoreCase(e.target.checked)}
+      />
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-cols-toggle"
