@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
+import { Button, ToolbarButton } from "../ui";
 
 export interface ChromeTab {
   id: string;
@@ -182,56 +183,52 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
                   }}
                   className="flex shrink-0 items-center gap-[var(--ac-space-1)]"
                 >
-                  <button
-                    type="button"
+                  <ToolbarButton
                     data-testid={`tab-close-confirm-${tab.id}`}
-                    aria-label={`Discard changes and close ${tab.title}`}
+                    label={`Discard changes and close ${tab.title}`}
                     title={`Discard changes and close ${tab.title}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       confirmDiscard(tab);
                     }}
-                    className="rounded p-1 text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                    className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
                   >
-                    <Check size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
+                    <Check size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </ToolbarButton>
+                  <ToolbarButton
                     data-testid={`tab-close-cancel-${tab.id}`}
-                    aria-label={`Keep ${tab.title} open`}
+                    label={`Keep ${tab.title} open`}
                     title={`Keep ${tab.title} open`}
                     onClick={(e) => {
                       e.stopPropagation();
                       cancelClose();
                     }}
-                    className="rounded p-1 text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                    className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
                   >
-                    <X size={14} aria-hidden="true" />
-                  </button>
+                    <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </ToolbarButton>
                 </span>
               ) : (
-                <button
-                  type="button"
+                <ToolbarButton
                   data-testid={`tab-close-${tab.id}`}
-                  aria-label={`Close ${tab.title}`}
+                  label={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
                   title={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     requestClose(tab);
                   }}
-                  className="rounded p-1 text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                  className="!h-auto !p-1 rounded text-[var(--ac-fg-muted)] hover:bg-[var(--ac-border)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
                 >
-                  <X size={14} aria-hidden="true" />
-                </button>
+                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                </ToolbarButton>
               )
             ) : null}
           </div>
         );
       })}
-      <button
-        type="button"
+      <ToolbarButton
         data-testid="tab-new"
-        aria-label="New tab"
+        label="New tab"
         title="New tab"
         onClick={() => {
           try {
@@ -242,10 +239,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
         }}
         // Wave-122: 32px hit-area (was 28) — meets the --ac-hit-min floor,
         // still fits the 40px tabbar row. Testid/aria/wiring untouched.
-        className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+        className="!h-8 !w-8 flex size-8 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
       >
-        <Plus size={16} aria-hidden="true" />
-      </button>
+        <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+      </ToolbarButton>
       {closeError && (
         <span
           role="alert"
@@ -253,14 +250,15 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }:
           className="ml-1 flex max-w-72 shrink-0 items-center gap-1 truncate rounded border border-[var(--ac-alert-border)] bg-[var(--ac-alert-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--ac-alert-fg)]"
         >
           <span className="truncate">{closeError}</span>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label="Dismiss tab error"
             onClick={() => setCloseError(null)}
-            className="shrink-0 underline hover:no-underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+            className="!h-auto !px-0 !py-0 shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
           >
             Dismiss
-          </button>
+          </Button>
         </span>
       )}
     </div>

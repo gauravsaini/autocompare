@@ -1,10 +1,12 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Copy } from "lucide-react";
-import { Input } from "../ui";
+import { Button, Input, ToolbarButton } from "../ui";
 import {
   extractDroppedPath,
   extractDroppedPaths,
+  hoveredPaneHalf,
   markDropRecompare,
+  resolveStripSideFromRect,
 } from "../dnd/dropPaths";
 import { useTauriPathBarDrop } from "../dnd/PaneDropZone";
 
@@ -40,6 +42,14 @@ export interface PathBarProps {
 
 /** Wave-26: Beyond Compare style per-pane recent-path cap. */
 export const PATHBAR_HISTORY_MAX = 8;
+
+/**
+ * Wave-G2: honest busy note for drops attempted while comparing. The
+ * `comparing` gate never swallows a drop silently — it reports this
+ * instead of staging, so a mid-compare Finder drop reads as paused,
+ * not dead.
+ */
+export const PATHBAR_BUSY_NOTE = "busy — compare running, drop paused";
 
 function historyKey(side: "left" | "right" | "base"): string {
   return `ac:pathbar-history:${side}`;
@@ -88,6 +98,7 @@ function PathField({
   hasNote,
   onFieldSubmit,
   onMultiDrop,
+  onBusyDrop,
 }: {
   testId: string;
   label: string;
@@ -98,6 +109,8 @@ function PathField({
   hasNote: boolean;
   onFieldSubmit: (side: "left" | "right" | "base", path: string) => void;
   onMultiDrop?: (paths: readonly string[]) => void;
+  /** Wave-G2: honest busy reporter — fired when a drop lands while comparing. */
+  onBusyDrop?: () => void;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<string[]>(() => readPathHistory(side));
@@ -175,9 +188,57 @@ function PathField({
   return (
     <div
       ref={wrapRef}
+      data-pathfield-side={side}
       className="relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]"
       onKeyDown={(event) => {
         if (event.key === "Escape") setOpen(false);
+      }}
+      onDragOver={(event) => {
+        if (comparing) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+        } catch {
+          // Best-effort only
+        }
+        setDropActive(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDropActive(false);
+      }}
+      onDrop={(event) => {
+        if (comparing) {
+          event.preventDefault();
+          event.stopPropagation();
+          onBusyDrop?.();
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        setDropActive(false);
+
+        markDropRecompare();
+
+        const paths = extractDroppedPaths(event.dataTransfer);
+        if (paths.length >= 2 && onMultiDrop) {
+          onMultiDrop(paths);
+          return;
+        }
+
+        const path = (paths.length >= 1 ? paths[0] : extractDroppedPath(event.dataTransfer))?.trim();
+        if (path) {
+          onDraftChange(path);
+          setHistory(recordPathHistory(side, path));
+          onFieldSubmit(side, path);
+        }
       }}
     >
       <span className="sr-only">{label}</span>
@@ -203,7 +264,14 @@ function PathField({
             }
           }}
           onDragOver={(event) => {
-            if (comparing) return;
+            // Wave-G2: comparing never swallows the gesture silently —
+            // preventDefault keeps the browser from navigating, the busy
+            // note (via onDrop) explains the pause, no affordance arms.
+            if (comparing) {
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
             event.preventDefault();
             event.stopPropagation();
             try {
@@ -219,7 +287,13 @@ function PathField({
             setDropActive(false);
           }}
           onDrop={(event) => {
-            if (comparing) return;
+            // Wave-G2: honest busy note instead of a silent no-op.
+            if (comparing) {
+              event.preventDefault();
+              event.stopPropagation();
+              onBusyDrop?.();
+              return;
+            }
             event.preventDefault();
             event.stopPropagation();
             setDropActive(false);
@@ -246,14 +320,13 @@ function PathField({
               ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-1px" }
               : undefined
           }
-          className="ac-mono min-w-0 flex-1 truncate text-[length:var(--ac-font-size-code)]"
+          className="ac-code min-w-0 flex-1 truncate"
         />
       </form>
-      <button
-        type="button"
+      <ToolbarButton
         data-testid={`${testId}-history-toggle`}
-        aria-label={`${label} history`}
-        aria-expanded={open}
+        label={`${label} history`}
+        expanded={open}
         aria-controls={listId}
         disabled={comparing}
         aria-disabled={comparing ? true : undefined}
@@ -261,23 +334,22 @@ function PathField({
         onClick={() => {
           if (!comparing) setOpen((prev) => !prev);
         }}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="!h-7 !w-7 flex size-7 shrink-0 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        aria-label={`Copy ${label}`}
+        <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
+      </ToolbarButton>
+      <ToolbarButton
+        label={`Copy ${label}`}
         disabled={comparing}
         aria-disabled={comparing ? true : undefined}
         title={copied ? "Copied" : `Copy ${label}`}
         onClick={() => {
           if (!comparing) void handleCopy();
         }}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="!h-7 !w-7 flex size-7 shrink-0 items-center justify-center rounded-md p-0 text-[var(--ac-fg-muted)] transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-      </button>
+        {copied ? <Check size={14} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={14} strokeWidth={1.75} aria-hidden="true" />}
+      </ToolbarButton>
       {open ? (
         <div
           id={listId}
@@ -292,18 +364,18 @@ function PathField({
             </p>
           ) : (
             history.map((entry) => (
-              <button
+              <Button
                 key={entry}
-                type="button"
+                variant="ghost"
                 role="option"
                 aria-selected="false"
                 data-testid={`${testId}-history-item`}
                 title={entry}
                 onClick={() => handlePick(entry)}
-                className="ac-mono block w-full truncate px-[var(--ac-space-2)] py-[var(--ac-space-2)] text-left text-xs text-[var(--ac-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:bg-[var(--ac-toolbar-btn-hover-bg)]"
+                className="ac-mono !block !w-full !justify-start !h-auto truncate px-[var(--ac-space-2)] py-[var(--ac-space-2)] text-left text-xs !font-normal text-[var(--ac-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:bg-[var(--ac-toolbar-btn-hover-bg)]"
               >
                 {entry}
-              </button>
+              </Button>
             ))
           )}
         </div>
@@ -350,19 +422,25 @@ export function PathBar({
   // submits, and history picks never trigger this (prop unchanged).
   useEffect(() => {
     if (syncedLeftRef.current !== leftPath) {
+      const wasEmpty = !syncedLeftRef.current;
       syncedLeftRef.current = leftPath;
-      setLeftDraft(leftPath ?? "");
+      if (!wasEmpty || !leftDraft) {
+        setLeftDraft(leftPath ?? "");
+      }
       setLocalNote(null);
     }
-  }, [leftPath]);
+  }, [leftPath, leftDraft]);
 
   useEffect(() => {
     if (syncedRightRef.current !== rightPath) {
+      const wasEmpty = !syncedRightRef.current;
       syncedRightRef.current = rightPath;
-      setRightDraft(rightPath ?? "");
+      if (!wasEmpty || !rightDraft) {
+        setRightDraft(rightPath ?? "");
+      }
       setLocalNote(null);
     }
-  }, [rightPath]);
+  }, [rightPath, rightDraft]);
 
   // Wave-134: active-tab switches push a new base down; local edits and
   // submits never trigger this (prop unchanged).
@@ -388,8 +466,19 @@ export function PathBar({
     path: string,
     overrideOtherPath?: string,
   ): void => {
-    if (comparing) return;
+    // Wave-G2: comparing gate reports honestly instead of swallowing the submit.
+    if (comparing) {
+      setLocalNote(PATHBAR_BUSY_NOTE);
+      return;
+    }
     const thisPath = path.trim();
+    if (side === "left") {
+      syncedLeftRef.current = thisPath;
+    } else if (side === "right") {
+      syncedRightRef.current = thisPath;
+    } else if (side === "base") {
+      syncedBaseRef.current = thisPath;
+    }
 
     // Wave-134: base submits standalone (history already recorded by the
     // field) — no two-paths gate, no compare run. Blank clears honestly.
@@ -421,7 +510,11 @@ export function PathBar({
   };
 
   const handleMultiDrop = (paths: readonly string[]): void => {
-    if (comparing) return;
+    // Wave-G2: comparing gate reports honestly instead of swallowing the drop.
+    if (comparing) {
+      setLocalNote(PATHBAR_BUSY_NOTE);
+      return;
+    }
     markDropRecompare();
     const item0 = paths[0]?.trim();
     const item1 = paths[1]?.trim();
@@ -446,8 +539,11 @@ export function PathBar({
   // Position maps to the field side; single-file stages that side +
   // submits, 2-file dual stages Item0 -> left, Item1 -> right. The hook
   // keeps the latest callbacks via ref, so inline closures stay fresh.
+  // Wave-G2: always subscribed (even while comparing) so a mid-compare
+  // shell drop lands on the honest busy note instead of vanishing —
+  // `handleFieldSubmit`/`handleMultiDrop` own the comparing gate.
   useTauriPathBarDrop(
-    !comparing,
+    true,
     (side, path) => {
       const trimmed = path.trim();
       if (trimmed === "") return;
@@ -472,23 +568,29 @@ export function PathBar({
   // Wave-126: file/folder drop targets with dashed outline affordance,
   // history record, submit on drop, multi-drop Item0 -> left, Item1 -> right.
   // Wave-140: whole strip droppable — gap/label drops resolve the side by
-  // x vs strip midpoint (clientX<=0 falls back left, same as pane halves),
-  // single-file stages that side + submit, dual stages Item0->left Item1->right.
+  // x vs the bar rect (shared `resolveStripSideFromRect`, same helper the
+  // pane halves use: one owner, one midpoint rule, hovered-half fallback
+  // when the shell gives no position). Single-file stages that side +
+  // submit, dual stages Item0->left Item1->right.
   const resolveStripSide = (clientX: number): "left" | "right" => {
-    const bar = barRef.current;
-    if (bar && clientX > 0) {
-      try {
-        const rect = bar.getBoundingClientRect();
-        return clientX >= rect.left + rect.width / 2 ? "right" : "left";
-      } catch {
-        return "left";
-      }
+    let rect: { readonly left: number; readonly width: number } | null = null;
+    try {
+      const r = barRef.current?.getBoundingClientRect();
+      if (r) rect = { left: r.left, width: r.width };
+    } catch {
+      rect = null;
     }
-    return "left";
+    return resolveStripSideFromRect(clientX, rect, hoveredPaneHalf() ?? "left");
   };
 
   const handleStripDrop = (event: React.DragEvent<HTMLDivElement>): void => {
-    if (comparing) return;
+    // Wave-G2: honest busy note instead of a silent no-op.
+    if (comparing) {
+      event.preventDefault();
+      event.stopPropagation();
+      setLocalNote(PATHBAR_BUSY_NOTE);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     setStripDropActive(false);
@@ -522,7 +624,13 @@ export function PathBar({
       title={note ?? undefined}
       data-note={note ?? undefined}
       onDragOver={(event) => {
-        if (comparing) return;
+        // Wave-G2: comparing keeps preventDefault (no navigation) but arms
+        // no affordance — the drop itself reports the busy note.
+        if (comparing) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         try {
@@ -554,6 +662,7 @@ export function PathBar({
         hasNote={Boolean(note)}
         onFieldSubmit={handleFieldSubmit}
         onMultiDrop={handleMultiDrop}
+        onBusyDrop={() => setLocalNote(PATHBAR_BUSY_NOTE)}
       />
       {/* Wave-134: merge ancestor field (BC 3-pane middle). History +
           Enter-submit reuse the shared PathField; a 2-file drop here
@@ -568,6 +677,7 @@ export function PathBar({
           comparing={comparing}
           hasNote={false}
           onFieldSubmit={handleFieldSubmit}
+          onBusyDrop={() => setLocalNote(PATHBAR_BUSY_NOTE)}
         />
       ) : null}
       {note ? (
@@ -590,6 +700,7 @@ export function PathBar({
         hasNote={Boolean(note)}
         onFieldSubmit={handleFieldSubmit}
         onMultiDrop={handleMultiDrop}
+        onBusyDrop={() => setLocalNote(PATHBAR_BUSY_NOTE)}
       />
     </div>
   );

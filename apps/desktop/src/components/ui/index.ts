@@ -1,12 +1,12 @@
 export { default as Button } from "./Button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button";
 export { default as SegmentedControl } from "./SegmentedControl";
-export type { SegmentOption, SegmentedControlProps } from "./SegmentedControl";
+export type { SegmentOption, SegmentedControlProps, SegmentedControlSize } from "./SegmentedControl";
 export { default as ToolbarButton } from "./ToolbarButton";
 export type { ToolbarButtonProps } from "./ToolbarButton";
 export { default as Checkbox } from "./Checkbox";
 export type { CheckboxProps } from "./Checkbox";
 export { default as Input } from "./Input";
-export type { InputProps } from "./Input";
+export type { InputProps, InputSize } from "./Input";
 export { default as Select } from "./Select";
-export type { SelectProps } from "./Select";
+export type { SelectProps, SelectSize } from "./Select";

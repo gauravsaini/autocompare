@@ -103,6 +103,38 @@ export function mergeTextPlan(
 }
 
 /**
+ * GAP-08 (FIXMERGE): merge auto-compare routing helper (frontend-only
+ * handoff). Same `merge_text_plan` call as `mergeTextPlan`, but keyed
+ * by the staged drop triple so a host drop router (`App`
+ * `handlePaneDrop` handoff: add `"merge"` to `canCompareKind` and route
+ * the dropped triple here) re-plans with zero extra IPC surface.
+ */
+export interface MergeTriple {
+  readonly base: string;
+  readonly left: string;
+  readonly right: string;
+}
+
+export function mergeTextPlanForTriple(triple: MergeTriple): Promise<TextMergePlan> {
+  return mergeTextPlan(triple.base, triple.left, triple.right);
+}
+
+/**
+ * Compare a side to output file using existing merge_text_plan IPC
+ * (2-way diff via 3-way engine: base = side, left = side, right = outPath).
+ */
+export function mergeCompareToOutput(
+  sidePath: string,
+  outPath: string,
+): Promise<TextMergePlan> {
+  return invoke<TextMergePlan>("merge_text_plan", {
+    base: sidePath,
+    left: sidePath,
+    right: outPath,
+  });
+}
+
+/**
  * Apply a 3-way text merge. `outPath` is required server-side; when
  * omitted here the backend refuses rather than touching an input.
  */

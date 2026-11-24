@@ -27,6 +27,14 @@ import { invoke } from "./client";
 export interface AppliedTextOptions {
   readonly ignoreWhitespace: boolean;
   readonly ignoreCase: boolean;
+  /** Wave-L1: minor / unimportant difference toggle. */
+  readonly minorUnimportant?: boolean;
+  /** Wave-L1: encoding name passthrough. */
+  readonly encoding?: string;
+  /** Wave-L1: eol line ending format passthrough. */
+  readonly eol?: string;
+  /** Wave-L1: line indices suppressed / marked ignored (row flag, not deletion). */
+  readonly suppressedLines?: readonly number[];
 }
 
 /**
@@ -75,6 +83,15 @@ export interface TextCompareDto {
 export interface TextIgnoreOptions {
   readonly ignoreWhitespace?: boolean;
   readonly ignoreCase?: boolean;
+  readonly minorUnimportant?: boolean;
+  readonly encoding?: string;
+  readonly eol?: string;
+  readonly suppressedLines?: readonly number[];
+  // snake_case spellings:
+  readonly ignore_whitespace?: boolean;
+  readonly ignore_case?: boolean;
+  readonly minor_unimportant?: boolean;
+  readonly suppressed_lines?: readonly number[];
 }
 
 /** Rust mirror: `commands::text::InlineSpanDto` (half-open char offsets). */
@@ -93,6 +110,8 @@ export interface TextRowDto {
   readonly right: string | null;
   /** Word/char diff spans; only for `changed` rows with both sides. */
   readonly inline: readonly InlineSpanDto[];
+  /** Wave-L1: per-line suppressed flag (row flag, not deletion). */
+  readonly suppressed?: boolean;
 }
 
 /** Rust mirror: `commands::text::RowsPage`. */
@@ -160,15 +179,32 @@ export function textCompare(
   right: string,
   opts?: TextIgnoreOptions,
 ): Promise<TextCompareDto> {
-  const ws = opts?.ignoreWhitespace === true;
-  const cs = opts?.ignoreCase === true;
+  const ws = opts?.ignoreWhitespace === true || opts?.ignore_whitespace === true;
+  const cs = opts?.ignoreCase === true || opts?.ignore_case === true;
+  const minor = opts?.minorUnimportant === true || opts?.minor_unimportant === true;
+  const enc = opts?.encoding;
+  const eol = opts?.eol;
+  const supp = opts?.suppressedLines ?? opts?.suppressed_lines;
+
+  const hasOptions =
+    ws ||
+    cs ||
+    minor ||
+    enc !== undefined ||
+    eol !== undefined ||
+    (supp !== undefined && supp.length > 0);
+
   if (typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__TEXT_IGNORE_LAST__ = {
       ignoreWhitespace: ws,
       ignoreCase: cs,
+      minorUnimportant: minor,
+      encoding: enc,
+      eol,
+      suppressedLines: supp,
     };
   }
-  if (!ws && !cs) return invoke<TextCompareDto>("text_compare", { left, right });
+  if (!hasOptions) return invoke<TextCompareDto>("text_compare", { left, right });
   return invoke<TextCompareDto>("text_compare", {
     left,
     right,
@@ -176,6 +212,12 @@ export function textCompare(
     ignoreCase: cs,
     ignore_whitespace: ws,
     ignore_case: cs,
+    minorUnimportant: minor,
+    minor_unimportant: minor,
+    encoding: enc,
+    eol,
+    suppressedLines: supp,
+    suppressed_lines: supp,
   });
 }
 
@@ -229,6 +271,17 @@ export interface AppliedEdit {
   readonly rows: number;
 }
 
+/** Rust mirror: `commands::text::AppliedHunk` (atomic hunk patch receipt). */
+export interface AppliedHunk {
+  readonly session: string;
+  readonly start: number;
+  readonly end: number;
+  readonly dir: TextSide;
+  readonly applied: number;
+  readonly total: number;
+  readonly rows: number;
+}
+
 /**
  * Patch one cached cell and re-run the comparison (wave-66V). The
  * backend regroups hunks, inline spans and the overview; the UI
@@ -241,6 +294,20 @@ export function textApplyEdit(
   text: string,
 ): Promise<AppliedEdit> {
   return invoke<AppliedEdit>("text_apply_edit", { session, index, side, text });
+}
+
+/**
+ * Patch an entire hunk range `[start, end]` atomically (BC parity Swarm-1).
+ * Take-side wins, orphan side filled, no row dropped; single compare_text_lines
+ * and single store insert returning an AppliedHunk receipt.
+ */
+export function textApplyHunk(
+  session: string,
+  start: number,
+  end: number,
+  dir: TextSide,
+): Promise<AppliedHunk> {
+  return invoke<AppliedHunk>("text_apply_hunk", { session, start, end, dir });
 }
 
 // ---------------------------------------------------------------------------

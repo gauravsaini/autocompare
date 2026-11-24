@@ -23,6 +23,7 @@ import { sessionLoad, sessionSave, settingsGet, settingsSet } from "../../ipc/se
 import { useSession, pickOpenDialog, dedupSessionsById } from "./useSession";
 import { textCompareDemo, TEXT_DEMO_CANDIDATES } from "../../ipc/text";
 import { extractDroppedPath } from "../dnd/dropPaths";
+import { Button, Input, Select, ToolbarButton } from "../ui";
 
 export interface SessionManagerProps {
   /** Controls dialog open/close visibility. Defaults to true if omitted. */
@@ -797,14 +798,13 @@ export function SessionManager({
 
           <div className="flex items-center gap-2">
             {onClose && (
-              <button
-                type="button"
+              <ToolbarButton
+                data-testid="session/close"
+                label="Close dialog"
                 onClick={onClose}
-                aria-label="Close dialog"
-                className="rounded-lg p-1.5 text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
               >
-                <X size={18} />
-              </button>
+                <X size={14} strokeWidth={1.75} aria-hidden="true" />
+              </ToolbarButton>
             )}
           </div>
         </div>
@@ -812,55 +812,55 @@ export function SessionManager({
         {/* Toolbar Action Bar */}
         <div className="flex items-center justify-between border-b border-[var(--ac-border)] bg-[var(--ac-surface-secondary)] px-6 py-2.5">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               data-testid="session/open"
               onClick={handleOpenClick}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-1.5 ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
             >
-              <FolderOpen size={14} />
+              <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />
               <span>Open</span>
-            </button>
+            </Button>
 
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               data-testid="session/save"
               onClick={handleSaveClick}
               disabled={!activeId}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-1.5 ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Save size={14} />
+              <Save size={14} strokeWidth={1.75} aria-hidden="true" />
               <span>Save</span>
-            </button>
+            </Button>
 
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="sm"
               data-testid="session/delete"
               onClick={handleDeleteClick}
               disabled={!activeId}
-              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-[var(--ac-bg)] px-3 py-1.5 ac-chrome-label font-medium text-red-600 dark:text-red-400 shadow-xs transition hover:bg-red-500/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Trash2 size={14} />
+              <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
               <span>{confirmToolbarDelete ? "Confirm?" : "Delete"}</span>
-            </button>
+            </Button>
             {confirmToolbarDelete && (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="sm"
                   data-testid="session/delete-confirm"
                   onClick={handleDeleteClick}
-                  className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 ac-chrome-label font-medium text-white shadow-xs transition hover:bg-red-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-red-400"
                 >
                   <span>Confirm</span>
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   data-testid="session/delete-cancel"
                   onClick={() => setConfirmToolbarDelete(false)}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-1.5 ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
                 >
                   <span>Cancel</span>
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -883,14 +883,13 @@ export function SessionManager({
               Cleaned up {effectiveCleanupCount} duplicate{" "}
               {effectiveCleanupCount === 1 ? "session" : "sessions"}.
             </span>
-            <button
-              type="button"
+            <ToolbarButton
+              label="Dismiss cleanup note"
               onClick={() => setCleanupVisible(false)}
-              aria-label="Dismiss cleanup note"
-              className="rounded p-0.5 transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+              className="!h-auto !p-0.5"
             >
-              <X size={14} />
-            </button>
+              <X size={14} strokeWidth={1.75} aria-hidden="true" />
+            </ToolbarButton>
           </div>
         )}
 
@@ -901,13 +900,13 @@ export function SessionManager({
             className="flex items-center justify-between border-b border-[var(--ac-alert-border)] bg-[var(--ac-alert-bg)] px-6 py-2 ac-chrome-label font-medium text-[var(--ac-alert-fg)]"
           >
             <span>{hook.error}</span>
-            <button
-              type="button"
+            <ToolbarButton
+              label="Dismiss error"
               onClick={hook.clearError}
-              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+              className="!h-auto !p-0.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200"
             >
-              <X size={14} />
-            </button>
+              <X size={14} strokeWidth={1.75} aria-hidden="true" />
+            </ToolbarButton>
           </div>
         )}
 
@@ -925,11 +924,12 @@ export function SessionManager({
                 Filter sessions
               </label>
               <div className="relative">
-                <input
+                <Input
                   id="session-search-input"
                   data-testid="session/search"
                   type="text"
                   role="searchbox"
+                  controlSize="sm"
                   placeholder="Filter by name, kind, or path…"
                   aria-label="Filter sessions by name, kind, or path"
                   autoComplete="off"
@@ -941,18 +941,17 @@ export function SessionManager({
                       handleClearSearch();
                     }
                   }}
-                  className="w-full rounded-lg border border-[var(--ac-border)] bg-[var(--ac-pathbar-bg)] py-1.5 pl-3 pr-8 text-xs text-[var(--ac-fg)] placeholder:text-[var(--ac-fg-muted)] focus-visible:outline-hidden focus-visible:border-[var(--ac-accent)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                  className="w-full pr-8"
                 />
                 {search !== "" && (
-                  <button
-                    type="button"
+                  <ToolbarButton
                     data-testid="session/search-clear"
+                    label="Clear filter"
                     onClick={handleClearSearch}
-                    aria-label="Clear filter"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 !h-6 !w-6 !p-0 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
                   >
-                    <X size={13} />
-                  </button>
+                    <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </ToolbarButton>
                 )}
               </div>
               {searchQuery !== "" && (
@@ -974,7 +973,7 @@ export function SessionManager({
                 className="group flex w-full cursor-pointer items-center justify-between rounded-lg border border-dashed border-[var(--ac-accent)]/60 bg-[var(--ac-surface)] px-3 py-2.5 text-left transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
-                  <FileText size={16} className="shrink-0 text-[var(--ac-accent)]" />
+                  <FileText size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-[var(--ac-accent)]" />
                   <div className="truncate">
                     <p className="truncate ac-chrome-label font-medium text-[var(--ac-fg)]">
                       Try the demo pair
@@ -995,14 +994,15 @@ export function SessionManager({
                   className="py-12 text-center ac-chrome-label text-[var(--ac-fg-muted)]"
                 >
                   <p>No sessions match “{search.trim()}”.</p>
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     data-testid="session/search-clear-empty"
                     onClick={handleClearSearch}
-                    className="mt-2 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-1.5 ac-chrome-label font-medium text-[var(--ac-fg)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                    className="mt-2"
                   >
                     Clear filter
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 filteredSessions.map((session) => {
@@ -1028,16 +1028,17 @@ export function SessionManager({
                       }`}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-                        <IconComp size={16} className="shrink-0 text-[var(--ac-accent)]" />
+                        <IconComp size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-[var(--ac-accent)]" />
                         <div className="min-w-0 flex-1 truncate">
                           {isRenaming ? (
                             <span
                               className="flex items-center gap-1"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <input
+                              <Input
                                 data-testid={`session/rename-input-${session.id}`}
                                 type="text"
+                                controlSize="sm"
                                 value={draftName}
                                 autoFocus
                                 onChange={(e) => setDraftName(e.target.value)}
@@ -1046,26 +1047,28 @@ export function SessionManager({
                                   if (e.key === "Escape") handleCancelRename();
                                 }}
                                 aria-label="Session name"
-                                className="min-w-0 flex-1 rounded border border-[var(--ac-accent)] bg-[var(--ac-bg)] px-1.5 py-0.5 text-xs text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                                className="min-w-0 flex-1"
                               />
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 data-testid={`session/rename-save-${session.id}`}
                                 onClick={() => handleSaveRename(session)}
                                 aria-label="Save name"
-                                className="rounded p-1 text-[var(--ac-accent)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                                className="!h-6 !w-6 !p-0 text-[var(--ac-accent)]"
                               >
-                                <Check size={13} />
-                              </button>
-                              <button
-                                type="button"
+                                <Check size={14} strokeWidth={1.75} aria-hidden="true" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 data-testid={`session/rename-cancel-${session.id}`}
                                 onClick={handleCancelRename}
                                 aria-label="Cancel rename"
-                                className="rounded p-1 text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                                className="!h-6 !w-6 !p-0 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
                               >
-                                <X size={13} />
-                              </button>
+                                <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                              </Button>
                             </span>
                           ) : (
                             <p className="truncate ac-chrome-label font-medium text-inherit">
@@ -1090,51 +1093,55 @@ export function SessionManager({
                           className="flex shrink-0 items-center gap-0.5"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             data-testid={`session/favorite-${session.id}`}
                             onClick={() => handleToggleFavorite(session)}
                             aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
                             aria-pressed={isFavorite}
                             title={isFavorite ? "Favorited" : "Favorite"}
-                            className={`rounded p-1 transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)] ${
+                            className={`!h-6 !w-6 !p-0 ${
                               isFavorite
                                 ? "text-amber-500"
                                 : "text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
                             }`}
                           >
-                            <Star size={13} fill={isFavorite ? "currentColor" : "none"} />
-                          </button>
-                          <button
-                            type="button"
+                            <Star size={14} strokeWidth={1.75} fill={isFavorite ? "currentColor" : "none"} aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             data-testid={`session/rename-${session.id}`}
                             onClick={() => handleStartRename(session)}
                             aria-label={`Rename ${session.name}`}
                             title="Rename"
-                            className="rounded p-1 text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                            className="!h-6 !w-6 !p-0 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
                           >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            type="button"
+                            <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             data-testid={`session/clone-${session.id}`}
                             onClick={() => handleClone(session)}
                             aria-label={`Clone ${session.name}`}
                             title="Clone"
-                            className="rounded p-1 text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                            className="!h-6 !w-6 !p-0 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
                           >
-                            <Copy size={13} />
-                          </button>
-                          <button
-                            type="button"
+                            <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             data-testid={`session/row-delete-${session.id}`}
                             onClick={() => handleRowDeleteRequest(session)}
                             aria-label={`Delete ${session.name}`}
                             title="Delete"
-                            className="rounded p-1 text-[var(--ac-fg-muted)] transition hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-red-400"
+                            className="!h-6 !w-6 !p-0 text-[var(--ac-fg-muted)] hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
                           >
-                            <Trash2 size={13} />
-                          </button>
+                            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                          </Button>
                         </div>
                       )}
 
@@ -1144,22 +1151,24 @@ export function SessionManager({
                           className="flex shrink-0 items-center gap-1"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <button
-                            type="button"
+                          <Button
+                            variant="danger"
+                            size="sm"
                             data-testid={`session/delete-confirm-${session.id}`}
                             onClick={() => void handleRowDeleteConfirm(session)}
-                            className="rounded bg-red-600 px-2 py-1 text-[10px] font-medium text-white transition hover:bg-red-700 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-red-400"
+                            className="!h-6 !px-2 text-[10px]"
                           >
                             Confirm
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             data-testid={`session/delete-cancel-${session.id}`}
                             onClick={() => setConfirmDeleteId(null)}
-                            className="rounded border border-[var(--ac-border)] px-2 py-1 text-[10px] font-medium text-[var(--ac-fg)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+                            className="!h-6 !px-2 text-[10px]"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -1200,19 +1209,20 @@ export function SessionManager({
                   >
                     Session Type
                   </label>
-                  <select
+                  <Select
                     id="session-kind-select"
                     data-testid="session/kind-select"
+                    controlSize="sm"
                     value={kind}
                     onChange={(e) => setKind(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--ac-border)] bg-[var(--ac-pathbar-bg)] px-3 py-2 text-xs text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:border-[var(--ac-accent)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                    className="w-full"
                   >
                     {KIND_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 {/* Left Path Picker */}
@@ -1224,26 +1234,27 @@ export function SessionManager({
                     Left Target
                   </label>
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       id="session-left-path"
                       data-testid="session/left-path"
                       type="text"
+                      controlSize="sm"
                       placeholder="File or folder path..."
                       value={leftPath}
                       onChange={(e) => setLeftPath(e.target.value)}
                       data-drop-active={inputDrop === "left" ? "true" : "false"}
                       style={inputDropStyle("left")}
                       {...inputDropHandlers("left")}
-                      className="flex-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-pathbar-bg)] px-3 py-2 text-xs text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:border-[var(--ac-accent)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                      className="flex-1"
                     />
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={handlePickLeft}
-                      className="flex items-center gap-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-2 ac-chrome-label font-medium text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
                     >
-                      <FolderSearch size={14} />
+                      <FolderSearch size={14} strokeWidth={1.75} aria-hidden="true" />
                       <span>Browse</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -1256,26 +1267,27 @@ export function SessionManager({
                     Right Target
                   </label>
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       id="session-right-path"
                       data-testid="session/right-path"
                       type="text"
+                      controlSize="sm"
                       placeholder="File or folder path..."
                       value={rightPath}
                       onChange={(e) => setRightPath(e.target.value)}
                       data-drop-active={inputDrop === "right" ? "true" : "false"}
                       style={inputDropStyle("right")}
                       {...inputDropHandlers("right")}
-                      className="flex-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-pathbar-bg)] px-3 py-2 text-xs text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:border-[var(--ac-accent)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                      className="flex-1"
                     />
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={handlePickRight}
-                      className="flex items-center gap-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-2 ac-chrome-label font-medium text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
                     >
-                      <FolderSearch size={14} />
+                      <FolderSearch size={14} strokeWidth={1.75} aria-hidden="true" />
                       <span>Browse</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -1290,26 +1302,27 @@ export function SessionManager({
                       Base (Ancestor)
                     </label>
                     <div className="flex gap-2">
-                      <input
+                      <Input
                         id="session-base-path"
                         data-testid="session/base-path"
                         type="text"
+                        controlSize="sm"
                         placeholder="Ancestor file path (optional)..."
                         value={basePath}
                         onChange={(e) => setBasePath(e.target.value)}
                         data-drop-active={inputDrop === "base" ? "true" : "false"}
                         style={inputDropStyle("base")}
                         {...inputDropHandlers("base")}
-                        className="flex-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-pathbar-bg)] px-3 py-2 text-xs text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:border-[var(--ac-accent)] focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                        className="flex-1"
                       />
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={handlePickBase}
-                        className="flex items-center gap-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg)] px-3 py-2 ac-chrome-label font-medium text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
                       >
-                        <FolderSearch size={14} />
+                        <FolderSearch size={14} strokeWidth={1.75} aria-hidden="true" />
                         <span>Browse</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -1321,14 +1334,16 @@ export function SessionManager({
 
               {/* Submit Button */}
               <div className="pt-2">
-                <button
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="sm"
                   data-testid="session/create-button"
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--ac-accent)] px-4 py-2.5 ac-chrome-label font-medium text-white shadow-xs transition hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] active:opacity-100"
+                  className="w-full"
                 >
-                  <Plus size={14} />
+                  <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
                   <span>Create Session</span>
-                </button>
+                </Button>
               </div>
             </form>
           </div>

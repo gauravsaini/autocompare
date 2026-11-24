@@ -36,6 +36,25 @@ export interface TableToolbarProps {
   readonly diffPos: number;
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
+  /**
+   * Wave-TBL: column-mapping panel state (Beyond Compare style left <->
+   * right mapping). Purely presentational — `TableView` owns the map.
+   */
+  readonly mapOpen: boolean;
+  readonly onToggleMap: () => void;
+  readonly mapDisabled: boolean;
+  readonly mapDisabledReason: string | null;
+  readonly mapSummary: string;
+  /**
+   * Wave-TBL: per-cell/row clipboard copy of the selected cell. Disabled
+   * with an honest reason until a cell is selected (no new chrome rows;
+   * the receipt rides this toolbar).
+   */
+  readonly copyCellDisabled: boolean;
+  readonly onCopyCell: () => void;
+  readonly copyRowDisabled: boolean;
+  readonly onCopyRow: () => void;
+  readonly copyNote: string | null;
 }
 
 export default function TableToolbar(props: TableToolbarProps): React.JSX.Element {
@@ -54,6 +73,16 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
     diffPos,
     onPrevDiff,
     onNextDiff,
+    mapOpen,
+    onToggleMap,
+    mapDisabled,
+    mapDisabledReason,
+    mapSummary,
+    copyCellDisabled,
+    onCopyCell,
+    copyRowDisabled,
+    onCopyRow,
+    copyNote,
   } = props;
   return (
     <div
@@ -97,6 +126,57 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       <Button data-testid="table-export" onClick={onExport}>
         Export CSV
       </Button>
+      {/* Wave-TBL: column mapping (Beyond Compare style left <-> right).
+          Toggle + summary ride the single toolbar row; the panel itself
+          collapses in-flow below (closed by default, like the cols menu)
+          so the collapsed-chrome budget holds. */}
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <Button
+        data-testid="table-map-toggle"
+        aria-expanded={mapOpen}
+        aria-controls="table-map-panel"
+        onClick={onToggleMap}
+        disabled={mapDisabled}
+        title={mapDisabledReason ?? "Map left columns to right columns"}
+      >
+        {mapOpen ? "Hide column mapping" : "Map columns"}
+      </Button>
+      <span
+        data-testid="table-map-status"
+        role="status"
+        className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+      >
+        {mapSummary}
+      </span>
+      {/* Wave-TBL: per-cell/row clipboard copy of the selected grid cell.
+          Toolbar-only (no new stacked chrome rows); disabled with an
+          honest reason until a cell is selected. */}
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <Button
+        data-testid="table-copy-cell"
+        onClick={onCopyCell}
+        disabled={copyCellDisabled}
+        title={copyCellDisabled ? "select a cell first" : "Copy selected cell to clipboard"}
+      >
+        Copy cell
+      </Button>
+      <Button
+        data-testid="table-copy-row"
+        onClick={onCopyRow}
+        disabled={copyRowDisabled}
+        title={copyRowDisabled ? "select a cell first" : "Copy selected row to clipboard"}
+      >
+        Copy row
+      </Button>
+      {copyNote !== null && (
+        <span
+          data-testid="table-copy-status"
+          role="status"
+          className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
+        >
+          {copyNote}
+        </span>
+      )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
         data-testid="tableview/toolbar-find"

@@ -1,15 +1,27 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentType, ReactNode } from "react";
 
 export interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly label: string;
   readonly expanded?: boolean;
   readonly orientation?: "horizontal" | "vertical";
-  readonly children: ReactNode;
+  readonly size?: "sm" | "md";
+  readonly icon?: ComponentType<{ size?: number; strokeWidth?: number; className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  readonly children?: ReactNode;
 }
 
-/** Unified icon button: Lucide icons only at call-site, 14px/1.75 stroke. Testids pass through. */
-export default function ToolbarButton({ label, expanded, orientation = "horizontal", className = "", children, ...rest }: ToolbarButtonProps): React.JSX.Element {
+/** Unified icon button: Lucide icons only at call-site (or via icon prop), 14px/1.75 stroke. Testids pass through. */
+export default function ToolbarButton({
+  label,
+  expanded,
+  orientation = "horizontal",
+  size = "sm",
+  icon: Icon,
+  className = "",
+  children,
+  ...rest
+}: ToolbarButtonProps): React.JSX.Element {
   const vertical = orientation === "vertical";
+  const h = size === "md" ? "h-[var(--ac-control-h-md)] px-2" : "h-[var(--ac-control-h-sm)] px-1.5";
   return (
     <button
       type="button"
@@ -20,14 +32,16 @@ export default function ToolbarButton({ label, expanded, orientation = "horizont
       className={
         (vertical
           ? "inline-flex min-h-[38px] min-w-[44px] flex-col items-center justify-center gap-[var(--ac-space-1)] rounded-[5px] px-[var(--ac-space-2)] py-1 "
-          : "inline-flex h-[var(--ac-control-h-sm)] items-center gap-1 rounded-[5px] px-1.5 ") +
+          : `inline-flex ${h} items-center gap-1 rounded-[5px] `) +
         "ac-chrome-label font-medium text-[var(--ac-fg)] hover:bg-[var(--ac-btn-hover-bg)] " +
         "active:bg-[var(--ac-btn-active-bg)] focus-visible:outline-hidden focus-visible:ring-2 " +
-        "focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 " +
-        (expanded === true ? "bg-[var(--ac-btn-hover-bg)] " : "") + className
+        "focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45 select-none " +
+        (expanded === true ? "bg-[var(--ac-btn-hover-bg)] " : "") +
+        className
       }
       {...rest}
     >
+      {Icon ? <Icon size={14} strokeWidth={1.75} aria-hidden="true" /> : null}
       {children}
     </button>
   );

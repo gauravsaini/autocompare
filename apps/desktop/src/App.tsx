@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowLeftRight, Binary, ChevronDown, ChevronUp, Columns2, Copy, FileText, Folder, FolderOpen, GitMerge, Image, RefreshCw, Table } from "lucide-react";
+import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
 import { ChromeShell, rowIndexToScrollTop, textCompareKindToDiffKind } from "./components/chrome";
 import { DiffStatsContext, type DiffStats } from "./components/chrome/StatusBar";
 import type { ChromeTab, DiffRow, TextCompareRowKind, ToolbarAction } from "./components/chrome";
@@ -66,6 +66,17 @@ const HOME_CARDS = [
   { kind: "media", icon: Image, label: "Media Compare", hint: "Picture and audio" },
 ] as const;
 
+/**
+ * Wave-D3: transient status notes fade. Event-style notes ("Tab closed: …",
+ * "Tab selected: …", staged-path notes, Take/Copy takes, …) revert to the
+ * honest "Ready" default after a quiet window so the bar never shows a
+ * stale event next to fresh content. Persistent outcomes the specs pin
+ * ("Compare finished", "Sync plan", "Session saved", "Nothing to save",
+ * errors) are NOT matched — they stay until the next action replaces them.
+ */
+const TRANSIENT_STATUS_RE =
+  /^(Tab (closed|selected)|Session (active|opened|loaded)|Demo session ready|Blank session|Swapped left and right|Welcome|Session Manager opened|Find (focused|is not available)|Take |Copy take-|Merge take-|Merge view|Path set|Left set|Right set|Drop needs|2 files set|Submit needs|Theme follows|Layout toggle|Settings UI|.*drop the other side.*|.*no compare for kind.*|.*opened (folder|text) compare.*)$/;
+
 function toViewKind(kind: string): DataViewKind | null {
   switch (kind) {
     case "text":
@@ -85,6 +96,86 @@ function toViewKind(kind: string): DataViewKind | null {
 function canCompareKind(kind: string): boolean {
   return kind === "text" || kind === "folder" || kind === "hex" || kind === "table" || kind === "media" || kind === "sync";
 }
+
+const COPY_STORE_PREFIX = "ac:textcopy125:";
+
+function copyStoreKey(left: string, right: string): string {
+  return `${COPY_STORE_PREFIX}${left}\u0000${right}`;
+}
+
+interface StoredHunkCopy {
+  readonly start: number;
+  readonly end: number;
+  readonly dir: TextSide;
+}
+
+function readStoredCopies(left: string, right: string): StoredHunkCopy[] {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return [];
+    const raw = window.localStorage.getItem(copyStoreKey(left, right));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const out: StoredHunkCopy[] = [];
+    for (const entry of parsed) {
+      if (typeof entry === "object" && entry !== null) {
+        const start = (entry as { start?: unknown }).start;
+        const end = (entry as { end?: unknown }).end;
+        const dir = (entry as { dir?: unknown }).dir;
+        if (
+          typeof start === "number" &&
+          Number.isInteger(start) &&
+          start >= 0 &&
+          typeof end === "number" &&
+          Number.isInteger(end) &&
+          end >= start &&
+          (dir === "left" || dir === "right")
+        ) {
+          out.push({ start, end, dir });
+        }
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function applyStoredCopiesToDiffRows(
+  rows: readonly DiffRow[],
+  copies: readonly StoredHunkCopy[],
+): DiffRow[] {
+  if (copies.length === 0 || rows.length === 0) return [...rows];
+  const next = [...rows];
+  for (const copy of copies) {
+    const lo = Math.max(0, copy.start);
+    const hi = Math.min(next.length - 1, copy.end);
+    for (let i = lo; i <= hi; i += 1) {
+      next[i] = { kind: "same" };
+    }
+  }
+  return next;
+}
+
+/**
+ * Wave-L2: ViewCommandBus vocabulary (BC unified-toolbar parity).
+ *
+ * `ViewCommand` routes prev/next/copy/swap per active viewKind from ONE
+ * place (`handleViewCommand` in `App` scope): text keeps the live hunk
+ * handlers, every other kind gets an honest parked status note (per-view
+ * wiring lands in L3) instead of a silent no-op. The top Toolbar calls
+ * the bus directly; `TextToolbar` prefers its `onBusCommand` prop when
+ * L3 passes it and falls back to the legacy TextView props meanwhile —
+ * testids stay byte-identical either way.
+ *
+ * `ViewFilterKind` lifts All/Diffs/Same/Context into the unified top
+ * Toolbar as filter actions dispatching the `autocompare:view-filter`
+ * window event (`{ filter, viewKind }`); views listen already or L3
+ * wires them. Minor/Rules/Format stay disabled stubs until L1 extends
+ * `AppliedTextOptions` (minor/rules/encoding/eol).
+ */
+export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
+export type ViewFilterKind = "all" | "diffs" | "same" | "context";
 
 /**
  * Wave-120: drop kind-class (BC `TFileView` vs `TDirBaseView` parity).
@@ -131,6 +222,17 @@ export default function App(): React.JSX.Element {
   // state only: no new IPC, no layout changes.
   const [comparedPaths, setComparedPaths] = useState<Readonly<Record<string, TabPaths>>>({});
   const [statusMessage, setStatusMessage] = useState<string>("Ready");
+  // Wave-D3: transient fade — event-style notes revert to "Ready" after a
+  // quiet window (see TRANSIENT_STATUS_RE above); the text stays byte-same
+  // until then so specs pinning last-state strings keep passing, and every
+  // next action still replaces it immediately via the setters below.
+  useEffect(() => {
+    if (!TRANSIENT_STATUS_RE.test(statusMessage)) return;
+    const timer = window.setTimeout(() => {
+      setStatusMessage((current) => (TRANSIENT_STATUS_RE.test(current) ? "Ready" : current));
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [statusMessage]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [compareTick, setCompareTick] = useState(0);
   // Wave-13: live ruler rows for the text pane (same equal/del/ins/chg
@@ -159,6 +261,10 @@ export default function App(): React.JSX.Element {
   // bottom zone. Cleared whenever the active session changes.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<TextRowDto | null>(null);
+  // Wave-G2: live mirror of hunk starts for the menu Take fallback
+  // (`handleMenuTake` is defined above the `hunkStarts` memo, so it reads
+  // the ref — fresh at call time, no stale closure).
+  const hunkStartsRef = useRef<number[]>([]);
 
   const handleSelectRow = useCallback((index: number | null, row: TextRowDto | null) => {
     setSelectedIndex(index);
@@ -218,6 +324,10 @@ export default function App(): React.JSX.Element {
   };
 
   const viewKind: DataViewKind | null = activeSession ? toViewKind(activeSession.kind) : null;
+  const viewKindRef = useRef<DataViewKind | null>(viewKind);
+  useEffect(() => {
+    viewKindRef.current = viewKind;
+  });
 
   const handleSelectTab = useCallback(
     (id: string) => {
@@ -331,19 +441,80 @@ export default function App(): React.JSX.Element {
   // uses (TextView owns `copyHunkAt`); honest status note when no
   // hunk row is selected (native items stay enabled: no new IPC to
   // toggle them, so the frontend reports instead of pretending).
+  // Wave-G2: a selected equal row falls back to the nearest hunk (next
+  // hunk at/after the selection, else the last) so menu Take still
+  // merges; with NO selection at all the honest parked note stays
+  // (menumerge-141 pin).
+  // Wave-E1: when merge view active (`viewKind === "merge"`), route
+  // Cmd+D/E and menu Take directly to MergeView take-left / take-right /
+  // take-both logic instead of `autocompare:text-copy`. TextView keeps
+  // its exact text path intact.
   const handleMenuTake = useCallback(
-    (dir: TextSide) => {
-      if (selectedIndex === null || selectedRow === null || selectedRow.kind === "equal") {
-        setStatusMessage(`Take ${dir} needs a hunk row selected`);
+    (dir: TextSide | "both") => {
+      const activeKind = viewKindRef.current ?? viewKind;
+      if (activeKind === "merge") {
+        const takeEvent = new CustomEvent("autocompare:merge-take", {
+          detail: { dir },
+          cancelable: true,
+        });
+        window.dispatchEvent(takeEvent);
+        if (!takeEvent.defaultPrevented) {
+          setStatusMessage(`Take ${dir} needs a conflict selected`);
+        }
         return;
       }
-      window.dispatchEvent(
-        new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir } }),
-      );
-      setStatusMessage(`Copy take-${dir} requested for row ${selectedIndex}`);
+      if (dir === "both") {
+        setStatusMessage("Take both is only available in Merge view");
+        return;
+      }
+      if (selectedIndex !== null && selectedRow !== null && selectedRow.kind !== "equal") {
+        window.dispatchEvent(
+          new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir } }),
+        );
+        setStatusMessage(`Copy take-${dir} requested for row ${selectedIndex}`);
+        return;
+      }
+      if (selectedIndex !== null) {
+        const starts = hunkStartsRef.current;
+        if (starts.length > 0) {
+          const atOrAfter = starts.find((s) => s >= selectedIndex);
+          const target = atOrAfter ?? starts[starts.length - 1]!;
+          window.dispatchEvent(
+            new CustomEvent("autocompare:text-copy", { detail: { index: target, dir } }),
+          );
+          setStatusMessage(`Copy take-${dir} requested for row ${target}`);
+          return;
+        }
+      }
+      setStatusMessage(`Take ${dir} needs a hunk row selected`);
     },
-    [selectedIndex, selectedRow],
+    [viewKind, selectedIndex, selectedRow],
   );
+
+  // Wave-E1: listen for merge take outcome from MergeView and update statusbar
+  useEffect(() => {
+    const handleMergeTakeResult = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        dir: string;
+        conflictId?: number;
+        ok: boolean;
+        reason?: string;
+      }>;
+      if (customEvent.detail) {
+        if (customEvent.detail.ok) {
+          const id = customEvent.detail.conflictId;
+          const dir = customEvent.detail.dir;
+          setStatusMessage(`Merge take-${dir} applied for conflict ${id}`);
+        } else {
+          setStatusMessage(
+            customEvent.detail.reason ?? `Take ${customEvent.detail.dir} needs a conflict selected`,
+          );
+        }
+      }
+    };
+    window.addEventListener("autocompare:merge-take-result", handleMergeTakeResult);
+    return () => window.removeEventListener("autocompare:merge-take-result", handleMergeTakeResult);
+  }, []);
 
   // Wave-128: native menu wiring (BC parity). The Rust shell (`menu.rs`)
   // emits `menu-event` for all 18 menu items (including merge kind and
@@ -426,6 +597,9 @@ export default function App(): React.JSX.Element {
           break;
         case "session.take-right":
           handleMenuTake("right");
+          break;
+        case "session.take-both":
+          handleMenuTake("both");
           break;
         case "view.toggle-theme":
           setStatusMessage("Theme follows the OS appearance (no in-app toggle yet)");
@@ -621,8 +795,6 @@ export default function App(): React.JSX.Element {
       }
       if (!found) return;
       if (demoDismissedRef.current || liveSessionCountRef.current > 0) return;
-      // TMP-138DEBUG
-      console.log(`[138demo] opening demo live=${liveSessionCountRef.current} dismissed=${demoDismissedRef.current}`);
       const pair = found;
       const id = await openSession("text", pair.left, pair.right);
       if (id) {
@@ -709,7 +881,8 @@ export default function App(): React.JSX.Element {
             }
             if (shaped && expanded.length > 0) {
               if (!cancelled) {
-                setRulerRows(expanded);
+                const copies = readStoredCopies(left, right);
+                setRulerRows(applyStoredCopiesToDiffRows(expanded, copies));
                 setRulerActive(0);
               }
               return;
@@ -730,7 +903,8 @@ export default function App(): React.JSX.Element {
           start += rows.length;
         }
         if (!cancelled) {
-          setRulerRows(all);
+          const copies = readStoredCopies(left, right);
+          setRulerRows(applyStoredCopiesToDiffRows(all, copies));
           setRulerActive(0);
         }
       } catch {
@@ -741,6 +915,67 @@ export default function App(): React.JSX.Element {
       cancelled = true;
     };
   }, [viewKind, activePaths.left, activePaths.right, compareTick, activeTabId]);
+
+  // Wave-125 / FIXSHELL GAP-04: intercept localStorage setItem for COPY_STORE_PREFIX so
+  // App instantly knows when TextView stages a hunk copy or re-saves.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const origSetItem = window.localStorage.setItem;
+    window.localStorage.setItem = function (key: string, val: string) {
+      origSetItem.call(window.localStorage, key, val);
+      if (typeof key === "string" && key.startsWith(COPY_STORE_PREFIX)) {
+        window.dispatchEvent(new CustomEvent("autocompare:staged-copy", { detail: { key } }));
+      }
+    };
+    return () => {
+      window.localStorage.setItem = origSetItem;
+    };
+  }, []);
+
+  // Wave-125 / FIXSHELL GAP-04: refresh ruler + hunk nav on staged copy or save events
+  useEffect(() => {
+    const refreshRulerCopies = () => {
+      if (viewKind !== "text") return;
+      const left = activePaths.left;
+      const right = activePaths.right;
+      const copies = readStoredCopies(left, right);
+      setRulerRows((prev) => applyStoredCopiesToDiffRows(prev, copies));
+    };
+
+    const handleSaveEvent = () => {
+      setCompareTick((t) => t + 1);
+    };
+
+    window.addEventListener("storage", refreshRulerCopies);
+    window.addEventListener("autocompare:staged-copy", refreshRulerCopies);
+    window.addEventListener("autocompare:text-copy", () => {
+      setTimeout(refreshRulerCopies, 30);
+    });
+    window.addEventListener("autocompare:text-copy-line", () => {
+      setTimeout(refreshRulerCopies, 30);
+    });
+    window.addEventListener("autocompare:text-save", handleSaveEvent);
+    window.addEventListener("autocompare:session-saved", handleSaveEvent);
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('[data-testid^="hunk-copy-"]') || target.closest('[data-testid*="copy-line"]')) {
+        setTimeout(refreshRulerCopies, 30);
+      } else if (target.closest('[data-testid*="save"]')) {
+        setTimeout(handleSaveEvent, 60);
+      }
+    };
+    window.addEventListener("click", handleClick, true);
+
+    return () => {
+      window.removeEventListener("storage", refreshRulerCopies);
+      window.removeEventListener("autocompare:staged-copy", refreshRulerCopies);
+      window.removeEventListener("autocompare:text-save", handleSaveEvent);
+      window.removeEventListener("autocompare:session-saved", handleSaveEvent);
+      window.removeEventListener("click", handleClick, true);
+    };
+  }, [viewKind, activePaths.left, activePaths.right]);
 
   const handleClearDemo = useCallback(() => {
     const id = demoId;
@@ -902,7 +1137,21 @@ export default function App(): React.JSX.Element {
   const handlePaneDrop = useCallback(
     (side: PaneSide, path: string) => {
       if (!activeSession) {
-        setStatusMessage("Drop needs an open session");
+        // FIXSHELL GAP-07: empty workspace single-file drop opens a new session (BC parity)
+        const folderish = isFolderishPath(path);
+        const targetKind = folderish ? "folder" : "text";
+        const left = side === "left" ? path : "";
+        const right = side === "right" ? path : "";
+        const switchNote =
+          targetKind === "folder"
+            ? "Folder dropped — opened folder compare (BC DIRVIEWNEW)"
+            : "File dropped — opened text compare (BC FILEVIEWNEW)";
+        void (async () => {
+          const newId = await handleOpenSession(targetKind, left, right);
+          if (newId) {
+            setStatusMessage(`${switchNote}, drop the other side to compare`);
+          }
+        })();
         return;
       }
       const cls = dropKindClass(activeSession.kind);
@@ -968,13 +1217,25 @@ export default function App(): React.JSX.Element {
   // default). Extra paths past the second are ignored (two panes only).
   const handlePaneDropPaths = useCallback(
     (paths: readonly string[], _side: PaneSide) => {
-      if (!activeSession) {
-        setStatusMessage("Drop needs an open session");
-        return;
-      }
       const first = paths[0];
       const second = paths[1];
       if (first === undefined || second === undefined) return;
+      if (!activeSession) {
+        // FIXSHELL GAP-07: empty workspace dual-drop opens session and auto-compares
+        const anyFolderish = isFolderishPath(first) || isFolderishPath(second);
+        const targetKind = anyFolderish ? "folder" : "text";
+        void (async () => {
+          const newId = await handleOpenSession(targetKind, first, second);
+          if (newId && canCompareKind(targetKind)) {
+            void runComparePaths(targetKind, first, second, newId, `${targetKind} session`, {
+              kind: targetKind,
+              left: first,
+              right: second,
+            });
+          }
+        })();
+        return;
+      }
       const cls = dropKindClass(activeSession.kind);
       const anyFolderish = isFolderishPath(first) || isFolderishPath(second);
       const allFiles = !isFolderishPath(first) && !isFolderishPath(second);
@@ -1020,7 +1281,7 @@ export default function App(): React.JSX.Element {
   // Wave-117: production-shell Tauri drag-drop subscription (no-op under
   // `VITE_MOCK_IPC=1` / plain browser, where the HTML5 handlers own drops).
   // Wave-120: dual-drop paths ride the same hook (third arg).
-  useTauriPaneDrop(viewKind !== null, handlePaneDrop, handlePaneDropPaths);
+  useTauriPaneDrop(true, handlePaneDrop, handlePaneDropPaths);
 
   const handleSync = useCallback(() => {
     void (async () => {
@@ -1144,10 +1405,21 @@ export default function App(): React.JSX.Element {
     return starts;
   }, [rulerRows]);
 
+  // Wave-G2: mirror hunk starts for the menu Take fallback above.
+  useEffect(() => {
+    hunkStartsRef.current = hunkStarts;
+  }, [hunkStarts]);
+
   const handleNextHunk = useCallback(() => {
     if (viewKind !== "text" || hunkStarts.length === 0) return;
     const next = hunkStarts.find((s) => s > rulerActive) ?? hunkStarts[0];
-    if (next !== undefined) handleRulerJump(next);
+    if (next !== undefined) {
+      handleRulerJump(next);
+      setSelectedIndex(next);
+      window.dispatchEvent(
+        new CustomEvent("autocompare:view-command", { detail: { cmd: "next", viewKind: "text" } }),
+      );
+    }
   }, [viewKind, hunkStarts, rulerActive, handleRulerJump]);
 
   const handlePrevHunk = useCallback(() => {
@@ -1160,7 +1432,13 @@ export default function App(): React.JSX.Element {
         break;
       }
     }
-    if (prev !== undefined) handleRulerJump(prev);
+    if (prev !== undefined) {
+      handleRulerJump(prev);
+      setSelectedIndex(prev);
+      window.dispatchEvent(
+        new CustomEvent("autocompare:view-command", { detail: { cmd: "prev", viewKind: "text" } }),
+      );
+    }
   }, [viewKind, hunkStarts, rulerActive, handleRulerJump]);
 
   const hunkNavEnabled = viewKind === "text" && hunkStarts.length > 0;
@@ -1197,22 +1475,88 @@ export default function App(): React.JSX.Element {
   // Merge view (scroll + status); every other kind keeps the honest
   // parked label (blank keeps the legacy `select a row` / `Merge view`
   // substrings the chrome specs pin).
+  // FIXSHELL GAP-05: support take-right on changed lines
+  const [takeSidePref, setTakeSidePref] = useState<TextSide>("left");
+
+  // Track cell click to prefer clicked side on changed lines
+  useEffect(() => {
+    const handleCellClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const cell = target.closest(".tv-cell");
+      if (cell) {
+        if (cell.classList.contains("order-last") || cell.getAttribute("data-side") === "right") {
+          setTakeSidePref("right");
+        } else {
+          setTakeSidePref("left");
+        }
+      }
+    };
+    window.addEventListener("click", handleCellClick, true);
+    return () => window.removeEventListener("click", handleCellClick, true);
+  }, []);
+
   const copyTakeSide: TextSide | null =
     viewKind === "text" && selectedRow !== null
-      ? selectedRow.left !== null
-        ? "left"
-        : "right"
+      ? selectedRow.kind === "changed"
+        ? takeSidePref
+        : selectedRow.left !== null
+          ? "left"
+          : "right"
       : null;
   const copyInHunk = copyTakeSide !== null && selectedRow !== null && selectedRow.kind !== "equal";
   const mergeLive = sessionKind === "merge";
 
-  const handleToolbarCopy = useCallback(() => {
-    if (!copyInHunk || selectedIndex === null || copyTakeSide === null) return;
-    window.dispatchEvent(
-      new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir: copyTakeSide } }),
-    );
-    setStatusMessage(`Copy take-${copyTakeSide} requested for row ${selectedIndex}`);
-  }, [copyInHunk, selectedIndex, copyTakeSide]);
+  const handleToolbarCopy = useCallback(
+    (forcedSide?: TextSide) => {
+      const dir = forcedSide ?? copyTakeSide;
+      if (!copyInHunk || selectedIndex === null || dir === null) return;
+      window.dispatchEvent(
+        new CustomEvent("autocompare:text-copy", { detail: { index: selectedIndex, dir } }),
+      );
+      setStatusMessage(`Copy take-${dir} requested for row ${selectedIndex}`);
+    },
+    [copyInHunk, selectedIndex, copyTakeSide],
+  );
+
+  // FIXSHELL GAP-09: difference navigation (n/p) and section copy (l/r)
+  // Work from body, toolbar, gutter, or ruler focus (BC parity).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          target.getAttribute("contenteditable") === "true")
+      ) {
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (viewKind !== "text") return;
+
+      const key = e.key.toLowerCase();
+      if (key === "n") {
+        e.preventDefault();
+        handleNextHunk();
+      } else if (key === "p") {
+        e.preventDefault();
+        handlePrevHunk();
+      } else if (key === "l") {
+        e.preventDefault();
+        setTakeSidePref("left");
+        handleMenuTake("left");
+      } else if (key === "r") {
+        e.preventDefault();
+        setTakeSidePref("right");
+        handleMenuTake("right");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewKind, handleNextHunk, handlePrevHunk, handleMenuTake]);
 
   // Wave-136: BC-style Swap sides (active tab left<->right exchange).
   // Touches ONLY the active tabPaths record (base ancestor untouched);
@@ -1240,6 +1584,82 @@ export default function App(): React.JSX.Element {
     setStatusMessage("Merge view — resolve conflicts below");
   }, [mergeLive]);
 
+  // Wave-L2: ViewCommandBus — ONE routing point for prev/next/copy/swap
+  // per active viewKind (BC unified-toolbar parity). Text keeps the live
+  // hunk handlers above; every other kind gets an honest parked status
+  // note (per-view wiring lands in L3), never a silent no-op. The top
+  // Toolbar calls this bus directly; TextToolbar prefers its
+  // `onBusCommand` prop (L3) with legacy-prop fallback.
+  const handleViewCommand = useCallback(
+    (cmd: ViewCommand): void => {
+      const kind = viewKindRef.current ?? viewKind;
+      switch (cmd) {
+        case "prev":
+        case "next": {
+          if (kind !== "text") {
+            setStatusMessage(
+              `${cmd === "prev" ? "Previous" : "Next"} hunk needs view wiring in L3`,
+            );
+            return;
+          }
+          if (hunkStarts.length === 0) {
+            setStatusMessage("No hunks to navigate");
+            return;
+          }
+          if (cmd === "prev") handlePrevHunk();
+          else handleNextHunk();
+          return;
+        }
+        case "copy": {
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleToolbarCopy();
+          return;
+        }
+        case "copy-right": {
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleToolbarCopy("right");
+          return;
+        }
+        case "swap": {
+          handleSwapSides();
+          return;
+        }
+      }
+    },
+    [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleSwapSides],
+  );
+
+  // Wave-L2: unified filter dispatch (BC View: Show All/Differences/Same/
+  // Context). Views listen for `autocompare:view-filter` already, or L3
+  // wires them; the dispatch + status note are honest either way and the
+  // view-level controls keep working untouched.
+  const handleViewFilter = useCallback(
+    (filter: ViewFilterKind): void => {
+      const kind = viewKindRef.current ?? viewKind;
+      window.dispatchEvent(
+        new CustomEvent("autocompare:view-filter", { detail: { filter, viewKind: kind } }),
+      );
+      setStatusMessage(`View filter: ${filter}`);
+    },
+    [viewKind],
+  );
+
+  // Wave-L2: L1-contract stubs (Minor/Rules/Format). `AppliedTextOptions`
+  // carries only ignoreWhitespace/ignoreCase today, so these stay
+  // disabled with the contract reason instead of pretending to work.
+  const handleContractStub = useCallback((name: string): void => {
+    setStatusMessage(`${name} needs contract L1`);
+  }, []);
+
+  const filterEnabled = activeSession !== null;
+  const filterReason = filterEnabled ? null : "needs an open session";
+
   const toolbarActions: readonly ToolbarAction[] = [
     { id: "open", icon: FolderOpen, label: "Open session", enabled: true, onClick: () => setManagerOpen(true) },
     {
@@ -1250,27 +1670,100 @@ export default function App(): React.JSX.Element {
       onClick: handleCompare,
     },
     {
-      // Wave-136: BC Swap sides (active tab left<->right, base untouched).
       id: "swap",
       icon: ArrowLeftRight,
       label: "Swap sides",
       enabled: activeSession !== null,
       disabledReason: activeSession !== null ? null : "needs an open session",
-      onClick: handleSwapSides,
+      onClick: () => handleViewCommand("swap"),
     },
     {
+      // Wave-L2: bus-routed (text keeps the live hunk handlers; other
+      // kinds park with the L3-wiring reason instead of silent no-op).
       id: "prev-hunk",
       icon: ChevronUp,
-      label: hunkNavEnabled ? "Previous hunk" : "Previous hunk (no hunks)",
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Previous hunk"
+            : "Previous hunk (no hunks)"
+          : "Previous hunk (needs view wiring in L3)",
       enabled: hunkNavEnabled,
-      onClick: handlePrevHunk,
+      disabledReason: hunkNavEnabled ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("prev"),
     },
     {
+      // Wave-L2: bus-routed, same per-kind honesty as prev-hunk.
       id: "next-hunk",
       icon: ChevronDown,
-      label: hunkNavEnabled ? "Next hunk" : "Next hunk (no hunks)",
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Next hunk"
+            : "Next hunk (no hunks)"
+          : "Next hunk (needs view wiring in L3)",
       enabled: hunkNavEnabled,
-      onClick: handleNextHunk,
+      disabledReason: hunkNavEnabled ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("next"),
+    },
+    {
+      // Wave-L2: lifted BC View filters — dispatch `view-filter` for the
+      // active viewKind (views listen already or L3 wires them).
+      id: "filter-all",
+      icon: List,
+      label: "Show all",
+      enabled: filterEnabled,
+      disabledReason: filterReason,
+      onClick: () => handleViewFilter("all"),
+    },
+    {
+      id: "filter-diffs",
+      icon: Filter,
+      label: "Show differences",
+      enabled: filterEnabled,
+      disabledReason: filterReason,
+      onClick: () => handleViewFilter("diffs"),
+    },
+    {
+      id: "filter-same",
+      icon: Equal,
+      label: "Show same",
+      enabled: filterEnabled,
+      disabledReason: filterReason,
+      onClick: () => handleViewFilter("same"),
+    },
+    {
+      id: "filter-context",
+      icon: AlignJustify,
+      label: "Context",
+      enabled: filterEnabled,
+      disabledReason: filterReason,
+      onClick: () => handleViewFilter("context"),
+    },
+    {
+      // Wave-L2: L1-contract stub — disabled with the contract reason.
+      id: "minor",
+      icon: Minus,
+      label: "Minor (needs contract L1)",
+      enabled: false,
+      disabledReason: "needs contract L1",
+      onClick: () => handleContractStub("Minor"),
+    },
+    {
+      id: "rules",
+      icon: Code,
+      label: "Rules (needs contract L1)",
+      enabled: false,
+      disabledReason: "needs contract L1",
+      onClick: () => handleContractStub("Rules"),
+    },
+    {
+      id: "format",
+      icon: Type,
+      label: "Format (needs contract L1)",
+      enabled: false,
+      disabledReason: "needs contract L1",
+      onClick: () => handleContractStub("Format"),
     },
     {
       // Wave-125: live in text kind with a hunk row selected (same
@@ -1289,7 +1782,25 @@ export default function App(): React.JSX.Element {
         : viewKind === "text" && selectedRow !== null
           ? "selected row is not a difference"
           : "select a row first",
-      onClick: handleToolbarCopy,
+      // Wave-L2: bus-routed (text rides the staged text-copy path;
+      // other kinds park with the L3-wiring reason).
+      onClick: () => handleViewCommand("copy"),
+    },
+    {
+      id: "copy-right",
+      icon: Copy,
+      label: copyInHunk
+        ? "Copy (take right)"
+        : viewKind === "text" && selectedRow !== null
+          ? "Copy (selected row is not a difference)"
+          : "Copy (select a row first)",
+      enabled: copyInHunk && selectedRow?.right !== null,
+      disabledReason: copyInHunk
+        ? null
+        : viewKind === "text" && selectedRow !== null
+          ? "selected row is not a difference"
+          : "select a row first",
+      onClick: () => handleViewCommand("copy-right"),
     },
     {
       id: "sync",
@@ -1332,10 +1843,13 @@ export default function App(): React.JSX.Element {
         // (BC Item0 -> left, Item1 -> right; side arg ignored for dual).
         onDropPaths={(paths) => handlePaneDropPaths(paths, "left")}
         status={{
+          // Wave-D3: session count mirrored in the footer line (BC status
+          // affiliation); in-pane `session-count` notes stay as subtle
+          // mirrors with their pinned testids.
           left: activeSession ? `session: ${activeSession.name}` : "session: none",
           right: activeSession
-            ? `${activeSession.kind} \u2022 ${activeSession.pageCount} tab(s)`
-            : "0 files",
+            ? `${activeSession.kind} \u2022 ${activeSession.pageCount} tab(s) \u2022 sessions: ${visibleSessions.length}`
+            : `0 files \u2022 sessions: ${visibleSessions.length}`,
         }}
         statusMessage={statusMessage}
         diffRows={rulerRows}
@@ -1359,142 +1873,147 @@ export default function App(): React.JSX.Element {
             </button>
           </div>
         )}
-        {!activeSession ? (
-          // Wave-74: Home is two-pane (Beyond Compare Home style) — the
-          // `HomeSessionsPane` left list renders from the existing
-          // `visibleSessions`/`activeSession` data (title + kind + dirty
-          // dot, click activates via `handleSelectTab`). NO new session
-          // kinds, NO backend change, NO new HOME_CARDS: the right pane
-          // below is the untouched cards grid with all legacy testids.
-          <div
-            className="mx-auto flex w-full max-w-4xl flex-row items-start gap-6 px-8 py-16"
-            data-testid="workspace/welcome"
-          >
-            <HomeSessionsPane
-              sessions={visibleSessions.map((s) => ({
-                id: s.id,
-                title: s.name,
-                kind: s.kind,
-                dirty: isTabDirty(s.id),
-              }))}
-              activeId={null} // Welcome branch: no session is active (Home itself is selected)
-              onSelect={handleSelectTab}
-            />
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-6 text-center">
-              <h1 className="ac-display font-semibold text-[var(--ac-fg)]">AutoCompare</h1>
-            <p className="ac-body text-[var(--ac-fg-muted)]">
-              Open or create a session to start comparing.
-            </p>
-            <button
-              type="button"
-              data-testid="workspace/open-manager"
-              onClick={() => setManagerOpen(true)}
-              className="rounded-lg bg-[var(--ac-accent)] px-4 py-2 ac-body font-medium text-white shadow-xs transition hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-            >
-              Open Session Manager
-            </button>
+        <PaneDropZone
+          enabled={true}
+          onDropPath={handlePaneDrop}
+          onDropPaths={handlePaneDropPaths}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {!activeSession ? (
+            // Wave-74: Home is two-pane (Beyond Compare Home style) — the
+            // `HomeSessionsPane` left list renders from the existing
+            // `visibleSessions`/`activeSession` data (title + kind + dirty
+            // dot, click activates via `handleSelectTab`). NO new session
+            // kinds, NO backend change, NO new HOME_CARDS: the right pane
+            // below is the untouched cards grid with all legacy testids.
             <div
-              className="grid w-full max-w-2xl grid-cols-2 gap-3 text-left sm:grid-cols-3"
-              aria-label="Start a new comparison"
+              className="mx-auto flex w-full max-w-4xl flex-row items-start gap-6 px-8 py-16"
+              data-testid="workspace/welcome"
             >
-              {HOME_CARDS.map((card) => {
-                const CardIcon = card.icon;
-                return (
-                  <button
-                    key={card.kind}
-                    type="button"
-                    data-testid={`home/new-${card.kind}`}
-                    title={`${card.label} — ${card.hint}`}
-                    onClick={() => void handleOpenSession(card.kind)}
-                    className="flex items-center gap-3 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-4 py-3 transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-                  >
-                    <CardIcon size={20} aria-hidden="true" className="shrink-0 text-[var(--ac-fg-muted)]" />
-                    <span className="min-w-0">
-                      <span className="ac-chrome-label block truncate font-medium text-[var(--ac-fg)]">
-                        {card.label}
-                      </span>
-                      <span className="ac-meta block truncate text-[var(--ac-fg-muted)]">
-                        {card.hint}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="ac-mono text-xs text-[var(--ac-fg-muted)]" data-testid="session-count">
-              sessions: {visibleSessions.length}
-            </p>
-            </div>
-          </div>
-        ) : !hasAnyPath ? (
-          // Wave-138: blank-path session honest empty (views ke 130-empty
-          // guards parity: do paths mango, koi compare/error/demo nahi).
-          // ViewRouter mount nahi hota isliye TextView ka demo auto-load
-          // kabhi fire nahi hota; paths bharte hi normal compare resume.
-          // Wave-151: sirf fully-blank yahan aata hai; half-staged (ek
-          // side set) neeche view mount karta hai taaki one-sided drop
-          // stage + auto-switch stage note dikhe bina compare.
-          <div
-            className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-8 py-16 text-center"
-            data-testid="workspace/blank-empty"
-          >
-            <p className="ac-body text-[var(--ac-fg-muted)]">
-              Pick two paths to compare — needs two paths.
-            </p>
-            <p className="ac-mono text-xs text-[var(--ac-fg-muted)]" data-testid="session-count">
-              sessions: {visibleSessions.length}
-            </p>
-          </div>
-        ) : viewKind ? (
-          <PaneDropZone
-            enabled={viewKind !== null}
-            onDropPath={handlePaneDrop}
-            onDropPaths={handlePaneDropPaths}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            {isDemo && (
-              <div
-                role="status"
-                data-testid="workspace/demo-banner"
-                className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-surface-secondary)] px-4 py-2 text-xs font-medium text-[var(--ac-fg)]"
+              <HomeSessionsPane
+                sessions={visibleSessions.map((s) => ({
+                  id: s.id,
+                  title: s.name,
+                  kind: s.kind,
+                  dirty: isTabDirty(s.id),
+                }))}
+                activeId={null} // Welcome branch: no session is active (Home itself is selected)
+                onSelect={handleSelectTab}
+              />
+              <div className="flex min-w-0 flex-1 flex-col items-center gap-6 text-center">
+                <h1 className="ac-display font-semibold text-[var(--ac-fg)]">AutoCompare</h1>
+              <p className="ac-body text-[var(--ac-fg-muted)]">
+                Open or create a session to start comparing.
+              </p>
+              <button
+                type="button"
+                data-testid="workspace/open-manager"
+                onClick={() => setManagerOpen(true)}
+                className="rounded-lg bg-[var(--ac-accent)] px-4 py-2 ac-body font-medium text-white shadow-xs transition hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
               >
-                <span>Demo — pick your own files to start</span>
-                <button
-                  type="button"
-                  data-testid="workspace/demo-clear"
-                  onClick={handleClearDemo}
-                  className="rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-2.5 py-1 text-xs font-medium text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-                >
-                  Start blank
-                </button>
+                Open Session Manager
+              </button>
+              <div
+                className="grid w-full max-w-2xl grid-cols-2 gap-3 text-left sm:grid-cols-3"
+                aria-label="Start a new comparison"
+              >
+                {HOME_CARDS.map((card) => {
+                  const CardIcon = card.icon;
+                  return (
+                    <button
+                      key={card.kind}
+                      type="button"
+                      data-testid={`home/new-${card.kind}`}
+                      title={`${card.label} — ${card.hint}`}
+                      onClick={() => void handleOpenSession(card.kind)}
+                      className="flex items-center gap-3 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-4 py-3 transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                    >
+                      <CardIcon size={20} aria-hidden="true" className="shrink-0 text-[var(--ac-fg-muted)]" />
+                      <span className="min-w-0">
+                        <span className="ac-chrome-label block truncate font-medium text-[var(--ac-fg)]">
+                          {card.label}
+                        </span>
+                        <span className="ac-meta block truncate text-[var(--ac-fg-muted)]">
+                          {card.hint}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-            <p className="ac-mono px-4 pt-2 text-[11px] text-[var(--ac-fg-muted)]" data-testid="session-count">
-              sessions: {visibleSessions.length}
-            </p>
-            <ViewRouter
-              key={`${activeTabId}:${compareTick}`}
-              kind={viewKind}
-              leftPath={activePaths.left}
-              rightPath={activePaths.right}
-              basePath={activePaths.base}
-              sessionId={activeSession.id}
-              selectedIndex={selectedIndex}
-              onSelectRow={handleSelectRow}
-              onOpenPaths={handleOpenPaths}
-            />
-          </PaneDropZone>
-        ) : (
-          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-8 py-16 text-center" data-testid="view-router">
-            <h1 className="ac-display font-semibold text-[var(--ac-fg)]">AutoCompare</h1>
-            <p className="ac-body text-[var(--ac-fg-muted)]">
-              No data view for kind &ldquo;{activeSession.kind}&rdquo; yet. Manage paths in the Session Manager.
-            </p>
-            <p className="ac-mono text-xs text-[var(--ac-fg-muted)]" data-testid="session-count">
-              sessions: {visibleSessions.length}
-            </p>
-          </div>
-        )}
+              <p className="ac-mono self-stretch text-right text-[10px] leading-none text-[var(--ac-fg-muted)] opacity-60" data-testid="session-count">
+                sessions: {visibleSessions.length}
+              </p>
+              </div>
+            </div>
+          ) : !hasAnyPath ? (
+            // Wave-138: blank-path session honest empty (views ke 130-empty
+            // guards parity: do paths mango, koi compare/error/demo nahi).
+            // ViewRouter mount nahi hota isliye TextView ka demo auto-load
+            // kabhi fire nahi hota; paths bharte hi normal compare resume.
+            // Wave-151: sirf fully-blank yahan aata hai; half-staged (ek
+            // side set) neeche view mount karta hai taaki one-sided drop
+            // stage + auto-switch stage note dikhe bina compare.
+            <div
+              className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-8 py-16 text-center"
+              data-testid="workspace/blank-empty"
+            >
+              <p className="ac-body text-[var(--ac-fg-muted)]">
+                Pick two paths to compare — needs two paths.
+              </p>
+              <p className="ac-mono self-stretch text-right text-[10px] leading-none text-[var(--ac-fg-muted)] opacity-60" data-testid="session-count">
+                sessions: {visibleSessions.length}
+              </p>
+            </div>
+          ) : viewKind ? (
+            <>
+              {isDemo && (
+                <div
+                  role="status"
+                  data-testid="workspace/demo-banner"
+                  className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-surface-secondary)] px-4 py-2 text-xs font-medium text-[var(--ac-fg)]"
+                >
+                  <span>Demo — pick your own files to start</span>
+                  <button
+                    type="button"
+                    data-testid="workspace/demo-clear"
+                    onClick={handleClearDemo}
+                    className="rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-2.5 py-1 text-xs font-medium text-[var(--ac-fg-muted)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+                  >
+                    Start blank
+                  </button>
+                </div>
+              )}
+              <ViewRouter
+                key={`${activeTabId}:${compareTick}`}
+                kind={viewKind}
+                leftPath={activePaths.left}
+                rightPath={activePaths.right}
+                basePath={activePaths.base}
+                sessionId={activeSession.id}
+                selectedIndex={selectedIndex}
+                onSelectRow={handleSelectRow}
+                onOpenPaths={handleOpenPaths}
+              />
+              {/* Wave-D3: session counter lives BELOW the view as a subtle
+                  footer-affiliated note (was a top stacked row overlapping the
+                  empty-state/ruler notes). testid + text byte-identical. */}
+              <p className="ac-mono mt-auto pointer-events-none select-none px-4 pb-1.5 text-right text-[10px] leading-none text-[var(--ac-fg-muted)] opacity-60" data-testid="session-count">
+                sessions: {visibleSessions.length}
+              </p>
+            </>
+          ) : (
+            <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-8 py-16 text-center" data-testid="view-router">
+              <h1 className="ac-display font-semibold text-[var(--ac-fg)]">AutoCompare</h1>
+              <p className="ac-body text-[var(--ac-fg-muted)]">
+                No data view for kind &ldquo;{activeSession.kind}&rdquo; yet. Manage paths in the Session Manager.
+              </p>
+              <p className="ac-mono self-stretch text-right text-[10px] leading-none text-[var(--ac-fg-muted)] opacity-60" data-testid="session-count">
+                sessions: {visibleSessions.length}
+              </p>
+            </div>
+          )}
+        </PaneDropZone>
       </ChromeShell>
       <SessionManager
         isOpen={managerOpen}

@@ -39,10 +39,13 @@ test("chrome type rides the ui token ramp", async ({ page }) => {
     .evaluate((el) => window.getComputedStyle(el).fontSize);
   expect(statusSize).toBe("11px");
 
+  // BC parity: path fields use the proportional UI stack (Inter),
+  // not mono — matches Beyond Compare, where path combos render in
+  // the UI font. (Was SF Mono before the deliberate Inter move.)
   const inputFamily = await page
     .getByTestId("pathbar/left")
     .evaluate((el) => window.getComputedStyle(el).fontFamily);
-  expect(inputFamily).toContain("SF Mono");
+  expect(inputFamily).toContain("Inter");
 
   await assertNoOverlap(page);
 });

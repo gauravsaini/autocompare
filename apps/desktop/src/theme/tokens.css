@@ -153,25 +153,56 @@
   --ac-badge-bg: #e5e5ea;
   --ac-badge-fg: #636366;
 
-  /* Wave-A: shared desktop control kit (macOS density, BC hierarchy).
+  /* Wave-A / Wave-U2: shared desktop control kit (macOS density 22/26px, hairline border + bevel, accent #0a84ff).
      Geometry + hierarchy only; colors ride existing accent/focus tokens. */
   --ac-control-h-sm: 22px;
   --ac-control-h-md: 26px;
+  --ac-control-h-input: 24px;
+  --ac-control-h-input-sm: 22px;
+  --ac-control-h-input-md: 26px;
+  --ac-control-radius: 5px;
+  --ac-control-radius-sm: 4px;
+  --ac-control-radius-md: 6px;
+
+  /* Button Tokens (Light) */
   --ac-btn-bg: var(--ac-bg-raised);
   --ac-btn-fg: var(--ac-fg);
-  --ac-btn-border: var(--ac-border);
-  --ac-btn-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.08);
+  --ac-btn-border: rgba(0, 0, 0, 0.15);
+  --ac-btn-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --ac-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0.5px 1px rgba(0, 0, 0, 0.08);
+  --ac-btn-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.12);
   --ac-btn-hover-bg: var(--ac-toolbar-btn-hover-bg);
   --ac-btn-active-bg: var(--ac-border-subtle);
+
+  /* Primary Button Tokens (#0a84ff Accent) */
   --ac-btn-primary-bg: var(--ac-accent);
   --ac-btn-primary-fg: #ffffff;
+  --ac-btn-primary-border: rgba(0, 0, 0, 0.18);
+  --ac-btn-primary-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  --ac-btn-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0.5px 1px rgba(0, 0, 0, 0.15);
+  --ac-btn-primary-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.25);
+
+  /* Danger Button Tokens */
   --ac-btn-danger-bg: #d70015;
   --ac-btn-danger-fg: #ffffff;
-  --ac-segment-track: var(--ac-border-subtle);
+  --ac-btn-danger-border: rgba(0, 0, 0, 0.2);
+  --ac-btn-danger-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  --ac-btn-danger-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0.5px 1px rgba(0, 0, 0, 0.15);
+  --ac-btn-danger-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.25);
+
+  /* Segmented Control Tokens (Light) */
+  --ac-segment-track: #e3e3e8;
+  --ac-segment-track-border: rgba(0, 0, 0, 0.06);
+  --ac-segment-track-shadow: inset 0 0.5px 1px rgba(0, 0, 0, 0.08);
   --ac-segment-active-bg: var(--ac-bg-raised);
-  --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.12);
+  --ac-segment-active-border: rgba(0, 0, 0, 0.08);
+  --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.12), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.8);
+
+  /* Input & Select Tokens (Light) */
   --ac-input-bg: var(--ac-bg-raised);
-  --ac-input-border: var(--ac-border);
+  --ac-input-border: rgba(0, 0, 0, 0.15);
+  --ac-input-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.08);
+
   --ac-checkbox-size: 13px;
 }
 
@@ -240,24 +271,55 @@
     --ac-badge-bg: #3a3a3c;
     --ac-badge-fg: #aeaeb2;
 
-    /* Wave-A dark mirrors: same control geometry, dark surfaces. */
+    /* Wave-A / Wave-U2 dark mirrors: same control geometry, dark surfaces + bevels. */
     --ac-control-h-sm: 22px;
     --ac-control-h-md: 26px;
+    --ac-control-h-input: 24px;
+    --ac-control-h-input-sm: 22px;
+    --ac-control-h-input-md: 26px;
+    --ac-control-radius: 5px;
+    --ac-control-radius-sm: 4px;
+    --ac-control-radius-md: 6px;
+
+    /* Button Tokens (Dark) */
     --ac-btn-bg: var(--ac-bg-raised);
     --ac-btn-fg: var(--ac-fg);
-    --ac-btn-border: var(--ac-border);
-    --ac-btn-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3);
+    --ac-btn-border: rgba(255, 255, 255, 0.14);
+    --ac-btn-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --ac-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.4);
+    --ac-btn-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.35);
     --ac-btn-hover-bg: var(--ac-toolbar-btn-hover-bg);
     --ac-btn-active-bg: var(--ac-border-subtle);
+
+    /* Primary Button Tokens (#0a84ff Accent) */
     --ac-btn-primary-bg: var(--ac-accent);
     --ac-btn-primary-fg: #ffffff;
+    --ac-btn-primary-border: rgba(0, 0, 0, 0.35);
+    --ac-btn-primary-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    --ac-btn-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0.5px 1px rgba(0, 0, 0, 0.4);
+    --ac-btn-primary-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.4);
+
+    /* Danger Button Tokens */
     --ac-btn-danger-bg: #ff453a;
     --ac-btn-danger-fg: #ffffff;
-    --ac-segment-track: var(--ac-border-subtle);
-    --ac-segment-active-bg: var(--ac-bg-raised);
-    --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
+    --ac-btn-danger-border: rgba(0, 0, 0, 0.35);
+    --ac-btn-danger-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    --ac-btn-danger-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0.5px 1px rgba(0, 0, 0, 0.4);
+    --ac-btn-danger-active-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.4);
+
+    /* Segmented Control Tokens (Dark) */
+    --ac-segment-track: #38383a;
+    --ac-segment-track-border: rgba(255, 255, 255, 0.06);
+    --ac-segment-track-shadow: inset 0 0.5px 1px rgba(0, 0, 0, 0.3);
+    --ac-segment-active-bg: #636366;
+    --ac-segment-active-border: rgba(255, 255, 255, 0.1);
+    --ac-segment-active-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.15);
+
+    /* Input & Select Tokens (Dark) */
     --ac-input-bg: var(--ac-bg-raised);
-    --ac-input-border: var(--ac-border);
+    --ac-input-border: rgba(255, 255, 255, 0.18);
+    --ac-input-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.3);
+
     --ac-checkbox-size: 13px;
   }
 }
@@ -278,6 +340,23 @@ pre,
 kbd,
 samp {
   font-family: var(--ac-font-mono);
+}
+
+/*
+ * DESIGNSWEEP: code-size utility (typography ONLY, no color/geometry).
+ * Replaces dead Tailwind arbitrary `text-[length:var(--ac-font-size-code)]`
+ * + `leading-[var(--ac-line-height-code)]` + `tracking-[var(--ac-letter-spacing-code)]`
+ * trios (lightningcss rejects them, vite build warns) with one token class.
+ * Mono family + 12px code size + 1.55 line-height + 0 tracking + tabular-nums
+ * for gutters/offsets/paths. Colors ride existing `text-[var(--ac-*)]`
+ * utilities at call-site, untouched.
+ */
+.ac-code {
+  font-family: var(--ac-font-mono);
+  font-size: var(--ac-font-size-code);
+  line-height: var(--ac-line-height-code);
+  letter-spacing: var(--ac-letter-spacing-code);
+  font-variant-numeric: tabular-nums;
 }
 
 /*

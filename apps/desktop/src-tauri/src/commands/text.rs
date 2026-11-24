@@ -120,11 +120,19 @@ pub struct InlineSpanDto {
 
 /// Applied ignore flags echoed back so the UI can tell support from
 /// honest fallback. `camelCase` on the wire (`appliedOptions`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppliedTextOptions {
     pub ignore_whitespace: bool,
     pub ignore_case: bool,
+    #[serde(default)]
+    pub minor_unimportant: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eol: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suppressed_lines: Vec<u64>,
 }
 
 /// Per-side file metadata (byte length + modification timestamp).
@@ -187,6 +195,9 @@ pub struct TextRowDto {
     /// Word/character diff spans; non-empty only for [`Changed`](RowKind)
     /// rows where both sides are present.
     pub inline: Vec<InlineSpanDto>,
+    /// Wave-L1: per-line suppressed flag (row flag, not deletion).
+    #[serde(default)]
+    pub suppressed: bool,
 }
 
 /// One `(start, limit)` window over the aligned rows.
@@ -264,8 +275,7 @@ struct StoredText {
     rows: Vec<TextRowDto>,
     overview: Vec<OverviewChunk>,
     overview_truncated: bool,
-    ignore_ws: bool,
-    ignore_case: bool,
+    opts: TextOptions,
 }
 
 fn text_store() -> &'static Mutex<HashMap<String, StoredText>> {
@@ -305,6 +315,20 @@ pub fn clamp_window(total: u64, start: u64, limit: u64) -> (u64, u64) {
     (start, end.saturating_sub(start))
 }
 
+/// Marks rows whose indices match `suppressed_lines` as `suppressed: true`.
+/// Suppressed rows are flagged, never dropped.
+pub fn mark_suppressed_rows(rows: &mut [TextRowDto], suppressed: &[u64]) {
+    if suppressed.is_empty() {
+        return;
+    }
+    let set: std::collections::HashSet<u64> = suppressed.iter().copied().collect();
+    for row in rows.iter_mut() {
+        if set.contains(&row.index) {
+            row.suppressed = true;
+        }
+    }
+}
+
 /// Pairs display lines into aligned rows from a [`DiffScript`].
 ///
 /// A `Delete` run immediately followed by an `Insert` run is zipped into
@@ -336,6 +360,7 @@ pub fn build_rows(
                         left: l,
                         right: r,
                         inline,
+                        suppressed: false,
                     });
                 }
             }
@@ -359,6 +384,7 @@ pub fn build_rows(
                         left: l,
                         right: r,
                         inline,
+                        suppressed: false,
                     });
                 }
                 for _ in paired..*len {
@@ -370,6 +396,7 @@ pub fn build_rows(
                         left: l,
                         right: None,
                         inline: Vec::new(),
+                        suppressed: false,
                     });
                 }
                 for _ in paired..insert_len {
@@ -381,6 +408,7 @@ pub fn build_rows(
                         left: None,
                         right: r,
                         inline: Vec::new(),
+                        suppressed: false,
                     });
                 }
             }
@@ -394,6 +422,7 @@ pub fn build_rows(
                         left: None,
                         right: r,
                         inline: Vec::new(),
+                        suppressed: false,
                     });
                 }
             }
@@ -553,8 +582,22 @@ pub fn copy_section_of(
             lines.push(line.clone());
         }
     }
+    // Wave-T: an existing section whose take side is empty (right-only
+    // hunk copied l2r, left-only copied r2l) is an honest empty receipt,
+    // NOT an error. Erroring here made multi-hunk l2r/r2l runs "fail in
+    // midst" in the UI; the local apply below still resolves the hunk
+    // (missing side fills from the present side) and staging proceeds.
+    // Truly unknown rows (out of range) still reject above.
     if lines.is_empty() {
-        return Err(format!("no {} content at row {index}", side.as_str()));
+        return Ok(CopiedSection {
+            session: session.to_string(),
+            index,
+            side,
+            start: lo as u64,
+            end: hi.saturating_sub(1) as u64,
+            text: String::new(),
+            line_count: 0,
+        });
     }
     Ok(CopiedSection {
         session: session.to_string(),
@@ -570,13 +613,10 @@ pub fn copy_section_of(
 /// Compares two text files and caches the full result under a new session
 /// id. Only the summary travels back over IPC.
 ///
-/// Wave-66T: optional ignore flags, backward compat. Old callers send
-/// only `{left, right}` and get byte-identical comparison
-/// (`ignoreWhitespace`/`ignoreCase` default `false`). New callers may
-/// send camelCase (`ignoreWhitespace`, `ignoreCase`, what the
-/// TextView `recompareWithIgnores` probe sends) and/or snake_case
-/// (`ignore_whitespace`, `ignore_case`, what the typed `textCompare`
-/// wrapper sends); either spelling wins when `true`.
+/// Wave-66T + Wave-L1: optional ignore flags, minor/unimportant, suppressed lines,
+/// encoding, and EOL flags with backward compat. Old callers send
+/// only `{left, right}` and get byte-identical comparison. New callers may
+/// send camelCase and/or snake_case spellings; either spelling wins.
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn text_compare(
@@ -586,6 +626,12 @@ pub fn text_compare(
     ignoreCase: Option<bool>,
     ignore_whitespace: Option<bool>,
     ignore_case: Option<bool>,
+    minorUnimportant: Option<bool>,
+    minor_unimportant: Option<bool>,
+    suppressedLines: Option<Vec<u64>>,
+    suppressed_lines: Option<Vec<u64>>,
+    encoding: Option<String>,
+    eol: Option<String>,
 ) -> Result<TextCompareDto, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
@@ -597,9 +643,18 @@ pub fn text_compare(
         .or(ignore_whitespace)
         .unwrap_or(false);
     let ignore_cs = ignoreCase.or(ignore_case).unwrap_or(false);
+    let minor = minorUnimportant.or(minor_unimportant).unwrap_or(false);
+    let suppressed = suppressedLines.or(suppressed_lines).unwrap_or_default();
+    let enc = encoding;
+    let line_ending = eol;
+
     let opts = TextOptions {
         ignore_case: ignore_cs,
         ignore_space_change: ignore_ws,
+        minor_unimportant: minor,
+        suppressed_lines: suppressed.clone(),
+        encoding: enc.clone(),
+        eol: line_ending.clone(),
     };
     let compared = compare_text_files(
         std::path::Path::new(&left),
@@ -607,11 +662,12 @@ pub fn text_compare(
         &opts,
     )
     .map_err(|e| e.to_string())?;
-    let rows = build_rows(
+    let mut rows = build_rows(
         &compared.left_lines,
         &compared.right_lines,
         &compared.script,
     );
+    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
     let dto = TextCompareDto {
         session: next_session_id(),
@@ -626,6 +682,10 @@ pub fn text_compare(
         applied_options: AppliedTextOptions {
             ignore_whitespace: ignore_ws,
             ignore_case: ignore_cs,
+            minor_unimportant: minor,
+            encoding: enc,
+            eol: line_ending,
+            suppressed_lines: suppressed,
         },
         left_meta: read_file_meta(&left),
         right_meta: read_file_meta(&right),
@@ -639,8 +699,7 @@ pub fn text_compare(
             rows,
             overview,
             overview_truncated,
-            ignore_ws,
-            ignore_case: ignore_cs,
+            opts,
         },
     );
     Ok(dto)
@@ -656,6 +715,20 @@ pub struct AppliedEdit {
     pub side: Side,
     pub kind: RowKind,
     /// Aligned row count after the re-compare.
+    pub rows: u64,
+}
+
+/// Receipt returned by [`text_apply_hunk`] after copying an entire hunk
+/// atomically and re-running the comparison over the cached rows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppliedHunk {
+    pub session: String,
+    pub start: u64,
+    pub end: u64,
+    pub dir: Side,
+    pub applied: u64,
+    pub total: u64,
     pub rows: u64,
 }
 
@@ -721,12 +794,10 @@ pub fn text_apply_edit(
     let cached = stored(&session)?;
     let (left_lines, right_lines) =
         apply_edit_to_rows(&cached.rows, index, &which, &text)?;
-    let opts = TextOptions {
-        ignore_case: cached.ignore_case,
-        ignore_space_change: cached.ignore_ws,
-    };
+    let opts = cached.opts.clone();
     let compared = compare_text_lines(&left_lines, &right_lines, &opts);
-    let rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
     let at = usize::try_from(index).unwrap_or(usize::MAX);
     let kind = rows.get(at).map(|r| r.kind).unwrap_or(RowKind::Equal);
@@ -739,8 +810,7 @@ pub fn text_apply_edit(
             rows: rows.clone(),
             overview,
             overview_truncated,
-            ignore_ws: cached.ignore_ws,
-            ignore_case: cached.ignore_case,
+            opts,
         },
     );
     Ok(AppliedEdit {
@@ -748,6 +818,125 @@ pub fn text_apply_edit(
         index,
         side: which,
         kind,
+        rows: rows.len() as u64,
+    })
+}
+
+/// Rebuilds the display line vectors from cached `rows` and patches the
+/// entire hunk range `start..=end` atomically.
+/// Take-side wins with no fallback: an empty take side deletes the
+/// orphan lines (BC parity, FIXTEXT GAP-03); a present take side fills
+/// or overwrites both sides; no row is fabricated.
+/// Returns `(left_lines, right_lines, applied, total)`.
+pub fn apply_hunk_to_rows(
+    rows: &[TextRowDto],
+    start: u64,
+    end: u64,
+    dir: &Side,
+) -> Result<(Vec<String>, Vec<String>, u64, u64), String> {
+    if start > end {
+        return Err(format!("invalid hunk range: start {start} > end {end}"));
+    }
+    let total_rows = rows.len() as u64;
+    if total_rows == 0 {
+        return Err("cannot apply hunk to empty session".to_string());
+    }
+    if start >= total_rows {
+        return Err(format!("row index {start} out of range"));
+    }
+    // Wave-G1: clamp end to total_rows - 1 so shifted / post-merge bounds don't crash
+    let end = end.min(total_rows.saturating_sub(1));
+    let start_idx = usize::try_from(start).map_err(|_| "start overflow".to_string())?;
+    let end_idx = usize::try_from(end).map_err(|_| "end overflow".to_string())?;
+    if rows.get(start_idx).map(|r| r.index) != Some(start) && !rows.iter().any(|r| r.index == start) {
+        return Err(format!("row index {start} out of range"));
+    }
+    if rows.get(end_idx).map(|r| r.index) != Some(end) && !rows.iter().any(|r| r.index == end) {
+        return Err(format!("row index {end} out of range"));
+    }
+
+    let mut left_lines: Vec<String> = Vec::new();
+    let mut right_lines: Vec<String> = Vec::new();
+    let mut applied: u64 = 0;
+    let mut total: u64 = 0;
+
+    for row in rows {
+        if row.index < start || row.index > end {
+            if let Some(line) = row.left.as_ref() {
+                left_lines.push(line.clone());
+            }
+            if let Some(line) = row.right.as_ref() {
+                right_lines.push(line.clone());
+            }
+        } else {
+            total = total.saturating_add(1);
+            let take = match dir {
+                Side::Left => row.left.as_deref(),
+                Side::Right => row.right.as_deref(),
+            };
+            let other = match dir {
+                Side::Left => row.right.as_deref(),
+                Side::Right => row.left.as_deref(),
+            };
+            if take.is_some() && other.is_some() {
+                applied = applied.saturating_add(1);
+            }
+            // FIXTEXT GAP-03 (BC parity): take-side wins with NO
+            // `or(other)` fallback. Copying an empty source clears the
+            // target text: `None` pushes nothing to EITHER line vector,
+            // deleting the orphan lines (re-compare then closes the gap).
+            // A present take side fills/overwrites both sides as before.
+            let won = take;
+            if let Some(line) = won {
+                left_lines.push(line.to_string());
+                right_lines.push(line.to_string());
+            }
+        }
+    }
+    Ok((left_lines, right_lines, applied, total))
+}
+
+/// Patches an entire hunk range `[start, end]` atomically and re-runs
+/// the comparison with the session's own ignore options.
+/// Take-side wins with no fallback (empty take deletes the orphan
+/// lines, FIXTEXT GAP-03); a present take side fills or overwrites.
+#[tauri::command]
+pub fn text_apply_hunk(
+    session: String,
+    start: u64,
+    end: u64,
+    dir: String,
+) -> Result<AppliedHunk, String> {
+    let which = Side::parse(&dir)?;
+    let cached = stored(&session)?;
+    let (left_lines, right_lines, applied, total) =
+        apply_hunk_to_rows(&cached.rows, start, end, &which)?;
+    let opts = cached.opts.clone();
+    let compared = compare_text_lines(&left_lines, &right_lines, &opts);
+    let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
+    let (overview, overview_truncated) = summarize_overview(&rows);
+    let post_start = start;
+    let post_end = start.saturating_add(total).saturating_sub(1);
+    let mut guard = lock_store()?;
+    guard.insert(
+        session.clone(),
+        StoredText {
+            left_count: compared.left_lines.len() as u64,
+            right_count: compared.right_lines.len() as u64,
+            rows: rows.clone(),
+            overview,
+            overview_truncated,
+            opts,
+        },
+    );
+    Ok(AppliedHunk {
+        session,
+        start: post_start,
+        end: post_end,
+        dir: which,
+        applied,
+        total,
         rows: rows.len() as u64,
     })
 }
@@ -890,6 +1079,99 @@ mod tests {
     }
 
     #[test]
+    fn apply_hunk_patches_changed_hunk_atomically() {
+        let left = lines(&["a", "b", "c", "d"]);
+        let right = lines(&["a", "B", "C", "d"]);
+        let rows = build_rows(&left, &right, &script_for(&left, &right));
+        assert_eq!(rows.get(1).map(|r| r.kind), Some(RowKind::Changed));
+        assert_eq!(rows.get(2).map(|r| r.kind), Some(RowKind::Changed));
+        let applied = apply_hunk_to_rows(&rows, 1, 2, &Side::Left);
+        assert!(applied.is_ok(), "apply hunk failed: {applied:?}");
+        let (left_lines, right_lines, count, total) = applied.unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(total, 2);
+        let opts = autocompare_compare::TextOptions::default();
+        let recompared = autocompare_compare::compare_text_lines(&left_lines, &right_lines, &opts);
+        let rows2 = build_rows(
+            &recompared.left_lines,
+            &recompared.right_lines,
+            &recompared.script,
+        );
+        assert_eq!(rows2.len(), 4);
+        assert_eq!(rows2.get(1).map(|r| r.kind), Some(RowKind::Equal));
+        assert_eq!(rows2.get(2).map(|r| r.kind), Some(RowKind::Equal));
+    }
+
+    #[test]
+    fn apply_hunk_fills_orphan_hunk_without_dropping_rows() {
+        let left = lines(&["a", "o1", "o2", "d"]);
+        let right = lines(&["a", "d"]);
+        let rows = build_rows(&left, &right, &script_for(&left, &right));
+        let applied = apply_hunk_to_rows(&rows, 1, 2, &Side::Left);
+        assert!(applied.is_ok(), "apply orphan hunk failed: {applied:?}");
+        let (left_lines, right_lines, count, total) = applied.unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(total, 2);
+        assert_eq!(left_lines, lines(&["a", "o1", "o2", "d"]));
+        assert_eq!(right_lines, lines(&["a", "o1", "o2", "d"]));
+        let opts = autocompare_compare::TextOptions::default();
+        let recompared = autocompare_compare::compare_text_lines(&left_lines, &right_lines, &opts);
+        let rows2 = build_rows(
+            &recompared.left_lines,
+            &recompared.right_lines,
+            &recompared.script,
+        );
+        assert_eq!(rows2.len(), 4);
+        for r in &rows2 {
+            assert_eq!(r.kind, RowKind::Equal);
+        }
+    }
+
+    #[test]
+    fn apply_hunk_empty_take_deletes_orphan_lines() {
+        // FIXTEXT GAP-03 (BC parity): take-right on a left-only hunk has
+        // an empty take side, so the orphan lines are DELETED, not cloned.
+        let left = lines(&["a", "o1", "o2", "d"]);
+        let right = lines(&["a", "d"]);
+        let rows = build_rows(&left, &right, &script_for(&left, &right));
+        assert_eq!(rows.get(1).map(|r| r.kind), Some(RowKind::LeftOnly));
+        assert_eq!(rows.get(2).map(|r| r.kind), Some(RowKind::LeftOnly));
+        let applied = apply_hunk_to_rows(&rows, 1, 2, &Side::Right);
+        assert!(applied.is_ok(), "delete orphan hunk failed: {applied:?}");
+        let (left_lines, right_lines, count, total) = applied.unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(total, 2);
+        assert_eq!(left_lines, lines(&["a", "d"]));
+        assert_eq!(right_lines, lines(&["a", "d"]));
+        let opts = autocompare_compare::TextOptions::default();
+        let recompared = autocompare_compare::compare_text_lines(&left_lines, &right_lines, &opts);
+        let rows2 = build_rows(
+            &recompared.left_lines,
+            &recompared.right_lines,
+            &recompared.script,
+        );
+        assert_eq!(rows2.len(), 2);
+        for r in &rows2 {
+            assert_eq!(r.kind, RowKind::Equal);
+        }
+    }
+
+    #[test]
+    fn apply_hunk_clamps_end_out_of_range() {
+        let left = lines(&["a", "b1", "c1", "d"]);
+        let right = lines(&["a", "b2", "c2", "d"]);
+        let rows = build_rows(&left, &right, &script_for(&left, &right));
+        // End index beyond total rows clamps instead of hard-failing
+        let applied = apply_hunk_to_rows(&rows, 1, 999, &Side::Left);
+        assert!(applied.is_ok(), "clamped apply hunk should succeed: {applied:?}");
+        let (left_lines, right_lines, count, total) = applied.unwrap();
+        assert_eq!(count, 3);
+        assert_eq!(total, 3);
+        assert_eq!(left_lines, lines(&["a", "b1", "c1", "d"]));
+        assert_eq!(right_lines, lines(&["a", "b1", "c1", "d"]));
+    }
+
+    #[test]
     fn apply_edit_rejects_orphan_and_range() {
         let left = lines(&["a", "b"]);
         let right = lines(&["a", "b", "c"]);
@@ -995,18 +1277,85 @@ mod tests {
     }
 
     #[test]
-    fn copy_section_errors_on_bad_index_or_side() {
+    fn copy_section_errors_on_bad_index_only() {
         let left = lines(&["only-left"]);
         let right = lines(&[]);
         let rows = build_rows(&left, &right, &script_for(&left, &right));
         assert!(copy_section_of("s", &rows, 7, Side::Left).is_err());
-        assert!(copy_section_of("s", &rows, 0, Side::Right).is_err());
+        // Wave-T: empty take side is an honest empty receipt, not an error.
+        let empty = copy_section_of("s", &rows, 0, Side::Right)
+            .expect("empty-source copy must be Ok");
+        assert_eq!(empty.line_count, 0);
+        assert_eq!(empty.text, "");
     }
 
     #[test]
     fn side_and_direction_reject_unknown_values() {
         assert!(Side::parse("middle").is_err());
         assert!(Direction::parse("sideways").is_err());
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn text_compare_test(
+        left: String,
+        right: String,
+        ws: Option<bool>,
+        cs: Option<bool>,
+        ws_snake: Option<bool>,
+        cs_snake: Option<bool>,
+    ) -> Result<TextCompareDto, String> {
+        text_compare(
+            left, right, ws, cs, ws_snake, cs_snake, None, None, None, None, None, None,
+        )
+    }
+
+    #[test]
+    fn save_side_persists_applied_hunk_to_disk() {
+        // FIXTEXT GAP-01 end-to-end: the Save Phase 2 path
+        // (text_apply_hunk -> text_save_side) must land the copied hunk
+        // in the disk file. `text_copy_section` alone never mutates the
+        // stored session, so a save gated on it writes unmutated bytes.
+        use std::io::Write;
+        let dir = std::env::temp_dir();
+        let left = dir.join("fixtext-gap01-left.txt");
+        let right = dir.join("fixtext-gap01-right.txt");
+        let out = dir.join("fixtext-gap01-saved.txt");
+        {
+            let mut f = std::fs::File::create(&left).expect("create left");
+            f.write_all(b"a\nAAA\nc\n").expect("write left");
+            let mut f = std::fs::File::create(&right).expect("create right");
+            f.write_all(b"a\nBBB\nc\n").expect("write right");
+        }
+        let dto = text_compare_test(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("compare must succeed");
+        let sess = dto.session.clone();
+        // Row 1 is the changed hunk; take-left must apply.
+        let hunk = text_apply_hunk(sess.clone(), 1, 1, "left".to_string())
+            .expect("apply hunk must succeed");
+        assert_eq!((hunk.applied, hunk.total), (1, 1));
+        let receipt =
+            text_save_side(sess, "right".to_string(), out.display().to_string())
+                .expect("save must succeed");
+        assert_eq!(receipt.lines, 3);
+        let content = std::fs::read_to_string(&out).expect("read saved file");
+        assert!(
+            content.contains("AAA"),
+            "disk file must contain the copied hunk, got: {content:?}"
+        );
+        assert!(
+            !content.contains("BBB"),
+            "disk file must not keep the overwritten text, got: {content:?}"
+        );
+        let _ = std::fs::remove_file(&left);
+        let _ = std::fs::remove_file(&right);
+        let _ = std::fs::remove_file(&out);
     }
 
     #[test]
@@ -1024,6 +1373,10 @@ mod tests {
             applied_options: AppliedTextOptions {
                 ignore_whitespace: false,
                 ignore_case: false,
+                minor_unimportant: false,
+                encoding: None,
+                eol: None,
+                suppressed_lines: Vec::new(),
             },
             left_meta: Some(FileMetaDto {
                 bytes: 42,
@@ -1054,6 +1407,10 @@ mod tests {
             applied_options: AppliedTextOptions {
                 ignore_whitespace: false,
                 ignore_case: false,
+                minor_unimportant: false,
+                encoding: None,
+                eol: None,
+                suppressed_lines: Vec::new(),
             },
             left_meta: None,
             right_meta: None,
@@ -1077,7 +1434,7 @@ mod tests {
         }
         let ls = left.display().to_string();
         let rs = right.display().to_string();
-        let res = text_compare(ls.clone(), rs.clone(), None, None, None, None)
+        let res = text_compare_test(ls.clone(), rs.clone(), None, None, None, None)
             .expect("text_compare must succeed");
 
         let left_meta = res.left_meta.expect("left_meta should be populated");
@@ -1121,7 +1478,7 @@ mod tests {
         let ls = left.display().to_string();
         let rs = right.display().to_string();
         // Default (all None): byte-identical wire, flags echo false/false.
-        if let Ok(exact) = text_compare(ls.clone(), rs.clone(), None, None, None, None) {
+        if let Ok(exact) = text_compare_test(ls.clone(), rs.clone(), None, None, None, None) {
             assert_eq!(
                 (exact.applied_options.ignore_whitespace, exact.applied_options.ignore_case),
                 (false, false)
@@ -1131,7 +1488,7 @@ mod tests {
             assert!(false, "default compare must succeed");
         }
         // CamelCase flags: case+space differences collapse.
-        if let Ok(ignored) = text_compare(
+        if let Ok(ignored) = text_compare_test(
             ls.clone(),
             rs.clone(),
             Some(true),
@@ -1147,7 +1504,7 @@ mod tests {
             assert!(false, "ignore compare must succeed");
         }
         // Snake_case spellings win too (typed wrapper path).
-        if let Ok(snake) = text_compare(ls, rs, None, None, Some(true), Some(true)) {
+        if let Ok(snake) = text_compare_test(ls, rs, None, None, Some(true), Some(true)) {
             assert_eq!(
                 (snake.applied_options.ignore_whitespace, snake.applied_options.ignore_case),
                 (true, true)
@@ -1161,11 +1518,11 @@ mod tests {
 
     #[test]
     fn error_paths_on_missing_files_and_sessions() {
-        assert!(text_compare(String::new(), "/b".to_string(), None, None, None, None).is_err());
-        assert!(text_compare("/a".to_string(), String::new(), None, None, None, None).is_err());
+        assert!(text_compare_test(String::new(), "/b".to_string(), None, None, None, None).is_err());
+        assert!(text_compare_test("/a".to_string(), String::new(), None, None, None, None).is_err());
         let missing = "/definitely/not/here-wave1a-left.txt".to_string();
         assert!(
-            text_compare(missing, "/definitely/not/here-wave1a-right.txt".to_string(), None, None, None, None).is_err()
+            text_compare_test(missing, "/definitely/not/here-wave1a-right.txt".to_string(), None, None, None, None).is_err()
         );
         assert!(text_get_rows("no-such-session".to_string(), 0, 10).is_err());
         assert!(text_get_overview("no-such-session".to_string()).is_err());
@@ -1202,5 +1559,233 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn repro_file1_file2_sequential_copy() {
+        let f1 = "/Users/ektasaini/Documents/File 1.txt";
+        let f2 = "/Users/ektasaini/Documents/File 2.txt";
+        if !std::path::Path::new(f1).exists() || !std::path::Path::new(f2).exists() {
+            println!("repro_file1_file2: files not found, skipping");
+            return;
+        }
+        let comp = text_compare_test(f1.to_string(), f2.to_string(), None, None, None, None)
+            .expect("text_compare failed");
+        let session = comp.session;
+        let cached = stored(&session).expect("session stored");
+        println!("Initial rows count: {}", cached.rows.len());
+
+        // Find hunks in initial rows
+        let mut hunks: Vec<(u64, u64, RowKind)> = Vec::new();
+        let mut in_hunk: Option<(u64, u64, RowKind)> = None;
+        for r in &cached.rows {
+            if r.kind != RowKind::Equal {
+                if let Some((_start, end, _)) = &mut in_hunk {
+                    *end = r.index;
+                } else {
+                    in_hunk = Some((r.index, r.index, r.kind));
+                }
+            } else if let Some(h) = in_hunk.take() {
+                hunks.push(h);
+            }
+        }
+        if let Some(h) = in_hunk.take() {
+            hunks.push(h);
+        }
+
+        println!("Found {} hunks:", hunks.len());
+        for (i, (s, e, k)) in hunks.iter().enumerate().take(10) {
+            println!("  Hunk {i}: rows {s}..={e} (kind {k:?})");
+            for r in &cached.rows[*s as usize..=*e as usize] {
+                println!("    row {}: left={:?} right={:?}", r.index, r.left, r.right);
+            }
+        }
+
+        // Test text_copy_section for first 5 hunks (dir = "left", l2r)
+        println!("\nTesting text_copy_section (l2r):");
+        for (i, (s, _, _)) in hunks.iter().enumerate().take(5) {
+            let res = text_copy_section(session.clone(), *s, "left".to_string());
+            println!("  Hunk {i} at row {s}: result={:?}", res.as_ref().map(|c| (c.start, c.end, c.line_count)));
+            if let Err(e) = &res {
+                println!("  --> FAILED text_copy_section: {e}");
+            }
+        }
+
+        // Test sequential text_apply_hunk (dir = "left", l2r) with ORIGINAL hunks
+        println!("\nTesting sequential text_apply_hunk with initial hunk indices:");
+        let sim_session = session.clone();
+        for (i, (s, e, _)) in hunks.iter().enumerate().take(5) {
+            let res = text_apply_hunk(sim_session.clone(), *s, *e, "left".to_string());
+            println!("  Apply Hunk {i} ({s}..={e}): result={:?}", res.as_ref().map(|a| (a.start, a.end, a.applied, a.total, a.rows)));
+            if let Err(err) = &res {
+                println!("  --> FAILED text_apply_hunk at hunk {i} ({s}..={e}): {err}");
+            }
+            if let Ok(c) = stored(&sim_session) {
+                // Find remaining hunks
+                let rem_hunks: Vec<(u64, u64, RowKind)> = c.rows.iter().filter(|r| r.kind != RowKind::Equal)
+                    .map(|r| (r.index, r.index, r.kind)).collect();
+                println!("    Remaining non-equal row count after hunk {i}: {}", rem_hunks.len());
+                if let Some(first_rem) = rem_hunks.first() {
+                    println!("    Next non-equal row starts at: {}", first_rem.0);
+                }
+            }
+        }
+    }
+
+    // Wave-T: empty take-side sections are honest empty receipts, not
+    // errors — this is what unblocked mid-sequence l2r/r2l failures.
+    #[test]
+    fn copy_section_empty_source_is_ok() {
+        let f1 = "/Users/ektasaini/Documents/File 1.txt";
+        let f2 = "/Users/ektasaini/Documents/File 2.txt";
+        if !std::path::Path::new(f1).exists() || !std::path::Path::new(f2).exists() {
+            println!("copy_section_empty_source: files not found, skipping");
+            return;
+        }
+        let comp = text_compare_test(f1.to_string(), f2.to_string(), None, None, None, None)
+            .expect("text_compare failed");
+        // Hunk 2 (rows 25..=27) is RightOnly: l2r take side is empty.
+        let empty = text_copy_section(comp.session.clone(), 25, "left".to_string())
+            .expect("empty-source copy must not err");
+        assert_eq!(empty.line_count, 0);
+        assert_eq!(empty.text, "");
+        // Hunk 0 (rows 0..=2) is LeftOnly: l2r carries real lines.
+        let full = text_copy_section(comp.session.clone(), 0, "left".to_string())
+            .expect("content copy must succeed");
+        assert!(full.line_count > 0);
+        // Unknown rows still reject honestly.
+        assert!(text_copy_section(comp.session, 99999, "left".to_string()).is_err());
+    }
+
+    #[test]
+    fn text_compare_minor_unimportant_and_suppressed_lines() {
+        use std::io::Write;
+        let dir = std::env::temp_dir();
+        let left = dir.join("contract-l1-left.txt");
+        let right = dir.join("contract-l1-right.txt");
+        let write = |p: &std::path::PathBuf, s: &str| {
+            if let Ok(mut f) = std::fs::File::create(p) {
+                let _ = f.write_all(s.as_bytes());
+            }
+        };
+        write(&left, "line 1\nline 2\nline 3\n");
+        write(&right, "line 1\nline 2 changed\nline 3\n");
+        let ls = left.display().to_string();
+        let rs = right.display().to_string();
+
+        // 1. camelCase options in -> echoed appliedOptions + row flag
+        let res = text_compare(
+            ls.clone(),
+            rs.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            Some(vec![1]),
+            None,
+            Some("utf-8".to_string()),
+            Some("lf".to_string()),
+        )
+        .expect("text_compare must succeed");
+
+        assert_eq!(res.applied_options.minor_unimportant, true);
+        assert_eq!(res.applied_options.suppressed_lines, vec![1]);
+        assert_eq!(res.applied_options.encoding, Some("utf-8".to_string()));
+        assert_eq!(res.applied_options.eol, Some("lf".to_string()));
+        assert_eq!(res.rows, 3); // rows are NOT dropped!
+
+        let page = text_get_rows(res.session.clone(), 0, 10).expect("text_get_rows");
+        assert_eq!(page.rows.len(), 3);
+        assert!(!page.rows[0].suppressed);
+        assert!(page.rows[1].suppressed); // row 1 flagged as suppressed!
+        assert!(!page.rows[2].suppressed);
+
+        // 2. snake_case options in -> echoed appliedOptions
+        let res_snake = text_compare(
+            ls.clone(),
+            rs.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            Some(vec![2]),
+            Some("windows-1252".to_string()),
+            Some("crlf".to_string()),
+        )
+        .expect("text_compare with snake_case must succeed");
+
+        assert_eq!(res_snake.applied_options.minor_unimportant, true);
+        assert_eq!(res_snake.applied_options.suppressed_lines, vec![2]);
+        assert_eq!(res_snake.applied_options.encoding, Some("windows-1252".to_string()));
+        assert_eq!(res_snake.applied_options.eol, Some("crlf".to_string()));
+        assert_eq!(res_snake.rows, 3);
+
+        let page_snake = text_get_rows(res_snake.session.clone(), 0, 10).expect("text_get_rows");
+        assert!(!page_snake.rows[0].suppressed);
+        assert!(!page_snake.rows[1].suppressed);
+        assert!(page_snake.rows[2].suppressed); // row 2 flagged!
+
+        let _ = std::fs::remove_file(&left);
+        let _ = std::fs::remove_file(&right);
+    }
+
+    #[test]
+    fn sequential_apply_and_copy_preserves_options_snapshot() {
+        use std::io::Write;
+        let dir = std::env::temp_dir();
+        let left = dir.join("contract-l1-seq-left.txt");
+        let right = dir.join("contract-l1-seq-right.txt");
+        let write = |p: &std::path::PathBuf, s: &str| {
+            if let Ok(mut f) = std::fs::File::create(p) {
+                let _ = f.write_all(s.as_bytes());
+            }
+        };
+        write(&left, "first\nsecond\nthird\n");
+        write(&right, "first\nchanged second\nthird\n");
+        let ls = left.display().to_string();
+        let rs = right.display().to_string();
+
+        let comp = text_compare(
+            ls,
+            rs,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            Some(vec![0]),
+            None,
+            Some("utf-8".to_string()),
+            Some("lf".to_string()),
+        )
+        .expect("text_compare must succeed");
+
+        // Apply hunk at row 1
+        let applied = text_apply_hunk(comp.session.clone(), 1, 1, "left".to_string())
+            .expect("text_apply_hunk must succeed");
+        assert_eq!(applied.applied, 1);
+
+        // Verify options and suppressed lines are preserved across snapshot in StoredText
+        let cached = stored(&comp.session).expect("stored session");
+        assert_eq!(cached.opts.minor_unimportant, true);
+        assert_eq!(cached.opts.suppressed_lines, vec![0]);
+        assert_eq!(cached.opts.encoding, Some("utf-8".to_string()));
+        assert_eq!(cached.opts.eol, Some("lf".to_string()));
+        assert!(cached.rows[0].suppressed);
+
+        // Sequential copy re-resolves against snapshot
+        let section = text_copy_section(comp.session.clone(), 1, "left".to_string())
+            .expect("text_copy_section must succeed");
+        assert_eq!(section.start, 1);
+        assert_eq!(section.end, 1);
+
+        let _ = std::fs::remove_file(&left);
+        let _ = std::fs::remove_file(&right);
     }
 }

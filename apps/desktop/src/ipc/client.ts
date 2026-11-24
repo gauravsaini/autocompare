@@ -149,9 +149,11 @@ function mockSessionStoreMint(): string {
 // edit + re-compare wiring is provable without the Rust backend. Cleared
 // on reload (module state, never localStorage).
 const mockTextEdits = new Map<number, { left?: string | null; right?: string | null }>();
+const mockSuppressedLines = new Set<number>();
 
 export function __mockTextEditResetForTests(): void {
   mockTextEdits.clear();
+  mockSuppressedLines.clear();
 }
 
 async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Promise<T> {
@@ -216,7 +218,7 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
           prevKind = row.kind;
         }
       }
-      // Wave-75: echo appliedOptions for EITHER spelling (camelCase
+      // Wave-75 + Wave-L1: echo appliedOptions for EITHER spelling (camelCase
       // from the TextView probe path, snake_case from the typed
       // wrapper path), mirroring the real Rust backend which accepts
       // both and always echoes `appliedOptions`. Legacy `{left,
@@ -229,7 +231,13 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         typeof args["ignore_whitespace"] === "boolean" ||
         typeof args["ignore_case"] === "boolean" ||
         typeof args["ignoreWhitespace"] === "boolean" ||
-        typeof args["ignoreCase"] === "boolean";
+        typeof args["ignoreCase"] === "boolean" ||
+        typeof args["minor_unimportant"] === "boolean" ||
+        typeof args["minorUnimportant"] === "boolean" ||
+        typeof args["encoding"] === "string" ||
+        typeof args["eol"] === "string" ||
+        Array.isArray(args["suppressed_lines"]) ||
+        Array.isArray(args["suppressedLines"]);
       const base = {
         session: "mock-text-1",
         leftPath: strArg(args, ["left"], ""),
@@ -244,9 +252,33 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       if (hasIgnoreFlags) {
         const ws = args["ignore_whitespace"] === true || args["ignoreWhitespace"] === true;
         const cs = args["ignore_case"] === true || args["ignoreCase"] === true;
-        base["appliedOptions"] = { ignoreWhitespace: ws, ignoreCase: cs };
+        const minor = args["minor_unimportant"] === true || args["minorUnimportant"] === true;
+        const enc = typeof args["encoding"] === "string" ? args["encoding"] : undefined;
+        const eol = typeof args["eol"] === "string" ? args["eol"] : undefined;
+        const suppRaw = args["suppressedLines"] ?? args["suppressed_lines"];
+        const supp = Array.isArray(suppRaw) ? (suppRaw as number[]) : undefined;
+
+        mockSuppressedLines.clear();
+        if (supp !== undefined) {
+          for (const idx of supp) mockSuppressedLines.add(idx);
+        }
+
+        const applied: Record<string, unknown> = {
+          ignoreWhitespace: ws,
+          ignoreCase: cs,
+          minorUnimportant: minor,
+        };
+        if (enc !== undefined) applied.encoding = enc;
+        if (eol !== undefined) applied.eol = eol;
+        if (supp !== undefined) applied.suppressedLines = supp;
+
+        base["appliedOptions"] = applied;
         base["ignoreWhitespace"] = ws;
         base["ignoreCase"] = cs;
+        base["minorUnimportant"] = minor;
+        if (enc !== undefined) base["encoding"] = enc;
+        if (eol !== undefined) base["eol"] = eol;
+        if (supp !== undefined) base["suppressedLines"] = supp;
       }
       return base as unknown as T;
     }
@@ -256,9 +288,8 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       const limit = Math.min(numArg(args, ["limit"], 200), 500);
       const rows = dumped.textRows.slice(start, start + limit).map((row) => {
         const patch = mockTextEdits.get(row.index);
-        if (patch === undefined) return row;
-        const left = patch.left !== undefined ? patch.left : row.left;
-        const right = patch.right !== undefined ? patch.right : row.right;
+        const left = patch !== undefined && patch.left !== undefined ? patch.left : row.left;
+        const right = patch !== undefined && patch.right !== undefined ? patch.right : row.right;
         // Mock-only kind recompute: a patched row whose sides are both
         // present and identical becomes equal (spans cleared); orphans
         // keep their kind (null edits are rejected below anyway).
@@ -266,12 +297,14 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
           left !== null && right !== null && left === right
             ? "equal"
             : row.kind;
+        const suppressed = mockSuppressedLines.has(row.index);
         return {
           ...row,
           left,
           right,
           kind,
           inline: left !== null && right !== null && left === right ? [] : row.inline,
+          suppressed,
         };
       });
       return { session: "mock-text-1", start, total, rows } as unknown as T;

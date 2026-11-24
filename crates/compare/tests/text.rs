@@ -116,6 +116,7 @@ fn compare_text_files_display_lines_keep_original_case() {
     let opts = TextOptions {
         ignore_case: true,
         ignore_space_change: true,
+        ..Default::default()
     };
     let cmp = compare_text_files(&left, &right, &opts).expect("readable files must compare");
     // The returned lines are the originals; keys only drive the script.

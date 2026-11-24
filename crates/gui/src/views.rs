@@ -5248,15 +5248,24 @@ pub fn prefs_pane_segments(
 
 /// (text color, row background) for one row kind. Equal rows keep the
 /// theme's text color on a transparent background. Deleted/Inserted/Changed
-/// route via `theme::*_for(dark)`: dark keeps the byte-identical saturated
-/// pairs, light uses the pale washes with dark ink (WCAG AA per
-/// `theme_contrast_ok`). Wave-66b2 theme wiring. Pure; unit-tested.
+/// route via `theme::*_for(dark)` for dark mode (byte-identical saturated pairs),
+/// and explicitly wire `theme::LIGHT_*` design tokens for light mode (pale washes
+/// with dark ink satisfying WCAG AA per `theme_contrast_ok`). Pure; unit-tested.
 pub fn kind_palette(kind: TextRowKind, base_text: Color32, dark: bool) -> (Color32, Color32) {
-    match kind {
-        TextRowKind::Equal => (base_text, Color32::TRANSPARENT),
-        TextRowKind::Deleted => (deleted_fg_for(dark), deleted_bg_for(dark)),
-        TextRowKind::Inserted => (inserted_fg_for(dark), inserted_bg_for(dark)),
-        TextRowKind::Changed => (changed_fg_for(dark), changed_bg_for(dark)),
+    if !dark {
+        match kind {
+            TextRowKind::Equal => (base_text, Color32::TRANSPARENT),
+            TextRowKind::Deleted => (crate::theme::LIGHT_RED, crate::theme::LIGHT_DELETED_BG),
+            TextRowKind::Inserted => (crate::theme::LIGHT_GREEN, crate::theme::LIGHT_INSERTED_BG),
+            TextRowKind::Changed => (crate::theme::LIGHT_CHANGED_FG, crate::theme::LIGHT_CHANGED_BG),
+        }
+    } else {
+        match kind {
+            TextRowKind::Equal => (base_text, Color32::TRANSPARENT),
+            TextRowKind::Deleted => (deleted_fg_for(dark), deleted_bg_for(dark)),
+            TextRowKind::Inserted => (inserted_fg_for(dark), inserted_bg_for(dark)),
+            TextRowKind::Changed => (changed_fg_for(dark), changed_bg_for(dark)),
+        }
     }
 }
 

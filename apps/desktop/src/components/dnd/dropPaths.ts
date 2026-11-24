@@ -146,6 +146,35 @@ export function resolveTauriDropCssSide(
 }
 
 /**
+ * Wave-143: single bar-rect side helper (BC parity, web + shell unified).
+ *
+ * Pure CSS-pixel mapping: `clientX` vs the bar/pane rect midpoint.
+ * `clientX <= 0` / missing rect means the shell gave no position, so the
+ * caller passes the hovered-half fallback (`hoveredPaneHalf() ?? "left"`)
+ * — web strip drops (`PathBar`) and pane halves (`PaneDropZone`) resolve
+ * the SAME side for the SAME cursor, no Retina/DPR split. Unknown
+ * position stays pane-owned via `isTauriDropOnPathBar` (single owner:
+ * pane keeps the drop, PathBar skips it) — exactly one hook compares.
+ */
+export function resolveStripSideFromRect(
+  clientX: number | null | undefined,
+  rect: { readonly left: number; readonly width: number } | null | undefined,
+  fallback: "left" | "right" = "left",
+): "left" | "right" {
+  if (
+    typeof clientX === "number" &&
+    Number.isFinite(clientX) &&
+    clientX > 0 &&
+    rect !== null &&
+    rect !== undefined &&
+    rect.width > 0
+  ) {
+    return clientX >= rect.left + rect.width / 2 ? "right" : "left";
+  }
+  return fallback;
+}
+
+/**
  * Wave-132: hovered pane half from the outline affordance, if armed.
  * `null` when no half is hovered (dragover never armed it, e.g. a
  * keyboard-driven synthetic drop).
@@ -247,13 +276,42 @@ export function isArchivePath(path: string): boolean {
   return ARCHIVE_RE.test(path.trim());
 }
 
+const COMMON_EXTENSIONLESS_FILES = new Set([
+  "license",
+  "licence",
+  "copying",
+  "makefile",
+  "gnumakefile",
+  "dockerfile",
+  "containerfile",
+  "readme",
+  "changelog",
+  "authors",
+  "contributing",
+  "install",
+  "news",
+  "todo",
+  "patents",
+  "version",
+  "notice",
+  "build",
+  "workspace",
+  "rakefile",
+  "gemfile",
+  "procfile",
+  "vagrantfile",
+  "brewfile",
+  "justfile",
+]);
+
 /**
- * Wave-120 + Wave-126: folderish classifier (BC `isDir OR SPECSAREARCHIVES` parity).
+ * Wave-120 + Wave-126 + FIXSHELL GAP-06: folderish classifier (BC `isDir OR SPECSAREARCHIVES` parity).
  *
  * A dropped path counts as folderish when:
  * 1. It is archive-typed (.zip/.tar/.gz/.tgz/.7z/.rar/.bz2/.xz/.dmg);
  * 2. It carries a trailing slash (/ or \);
- * 3. Wave-126: It is an extensionless folder (no '.' in basename after char 0).
+ * 3. It is an extensionless folder (excluding common extensionless files like LICENSE/Makefile/README);
+ * 4. Or it is a versioned directory name (e.g. release-1.0, autocompare-0.5.0).
  */
 export function isFolderishPath(path: string): boolean {
   const p = path.trim();
@@ -261,12 +319,34 @@ export function isFolderishPath(path: string): boolean {
   if (isArchivePath(p)) return true;
   if (p.endsWith("/") || p.endsWith("\\")) return true;
 
-  // Wave-126: extensionless folders staged as folders (e.g. no '.' in basename after char 0)
   const normalized = p.replace(/[/\\]+$/, "");
   const lastSlash = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
   const basename = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
   if (basename === "") return false;
-  return basename.indexOf(".", 1) === -1;
+
+  const lower = basename.toLowerCase();
+  // Known extensionless files are plain files (not folders)
+  if (COMMON_EXTENSIONLESS_FILES.has(lower)) return false;
+
+  // Dotfiles without additional extension (e.g. .gitignore, .env) are files
+  if (basename.startsWith(".") && basename.indexOf(".", 1) === -1) return false;
+
+  // If there's a dot, check if it's a file extension or a versioned folder name
+  const dotIndex = basename.lastIndexOf(".");
+  if (dotIndex > 0) {
+    const ext = basename.slice(dotIndex + 1);
+    // Versioned folders (e.g. release-1.0, autocompare-0.5.0) end with numeric version
+    if (/^\d+$/.test(ext)) {
+      return true;
+    }
+    // File extensions starting with a letter (e.g. .txt, .json, .rs) are files
+    if (/^[a-zA-Z][a-zA-Z0-9_-]{0,10}$/.test(ext)) {
+      return false;
+    }
+  }
+
+  // Extensionless folder
+  return true;
 }
 
 /**

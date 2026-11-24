@@ -10,6 +10,7 @@
  * testid rides the same input.
  */
 import { X } from "lucide-react";
+import { Input, ToolbarButton } from "../../../ui";
 
 export interface MediaTolerancePanelProps {
   readonly tolerance: string;
@@ -29,7 +30,7 @@ export default function MediaTolerancePanel(props: MediaTolerancePanelProps): Re
         >
           Tolerance
         </label>
-        <input
+        <Input
           id="mediaview-tolerance"
           data-testid="mediaview/tolerance"
           value={tolerance}
@@ -44,18 +45,14 @@ export default function MediaTolerancePanel(props: MediaTolerancePanelProps): Re
           placeholder="exact"
           autoComplete="off"
           spellCheck={false}
-          className="w-24 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-2)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="w-24 ac-mono"
         />
-        <button
-          type="button"
+        <ToolbarButton
           data-testid="mediaview/tolerance-close"
-          aria-label="Dismiss tolerance (Esc)"
-          title="Dismiss tolerance (Esc)"
+          label="Dismiss tolerance (Esc)"
           onClick={onClose}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-        >
-          <X size={12} aria-hidden="true" />
-        </button>
+          icon={X}
+        />
       </div>
     </section>
   );

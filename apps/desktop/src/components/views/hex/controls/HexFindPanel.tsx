@@ -35,9 +35,7 @@ export default function HexFindPanel(props: HexFindPanelProps): React.JSX.Elemen
           id="hex-find-box"
           data-testid="hex-find-input"
           value={query}
-          onChange={(event) => {
-            onQueryChange(event.target.value);
-          }}
+          onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") onFindNext();
             else if (event.key === "Escape") onClose();
@@ -45,20 +43,18 @@ export default function HexFindPanel(props: HexFindPanelProps): React.JSX.Elemen
           placeholder="de ad be ef"
           autoComplete="off"
           spellCheck={false}
-          className="min-w-48 flex-1 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="ac-mono min-w-48 flex-1 text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]"
         />
         <Button
           data-testid="hex-find-next"
           onClick={onFindNext}
           disabled={finding}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {finding ? "Finding…" : "Find next"}
         </Button>
         <ToolbarButton
           data-testid="hex-find-close"
           label="Dismiss find (Esc)"
-          aria-label="Dismiss find (Esc)"
           title="Dismiss find (Esc)"
           onClick={onClose}
         >

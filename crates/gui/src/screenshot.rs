@@ -330,7 +330,10 @@ fn render_plan(plan: &ShotPlan, dark: bool) -> Result<RgbaImage, String> {
         .with_step_dt(0.01)
         .with_theme(theme)
         .wgpu()
-        .build_eframe(|_cc| app);
+        .build_eframe(|cc| {
+            cc.egui_ctx.set_fonts(crate::theme::fonts76_font_definitions());
+            app
+        });
 
     let mut waited_ms = 0u64;
     while waited_ms < 10_000 {

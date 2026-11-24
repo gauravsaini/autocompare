@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowLeftRight, Check, ChevronLeft, ChevronRight, Clock, File, Folder, FolderUp, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  File,
+  Folder,
+  FolderUp,
+  X,
+} from "lucide-react";
 import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto, FolderStatusDto } from "../../ipc/folder";
+import { pickOpenDialog } from "../session/useSession";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 import { FolderNamePanel, FolderToolbar } from "./folder/controls";
+import { Button, Input, ToolbarButton } from "../ui";
 
 /**
  * Folder comparison tree view (Wave 2B).
@@ -72,6 +86,13 @@ function reRootEntries(
   }));
 }
 
+interface FolderNavState {
+  readonly leftBase: string;
+  readonly rightBase: string;
+  readonly baseSubDir: string;
+  readonly subDir: string;
+}
+
 export default function FolderView({
   leftPath,
   rightPath,
@@ -84,23 +105,202 @@ export default function FolderView({
    */
   readonly onOpenPaths?: (kind: "text", left: string, right: string) => void;
 }): React.JSX.Element {
+  const [baseLeft, setBaseLeft] = useState<string>(leftPath);
+  const [baseRight, setBaseRight] = useState<string>(rightPath);
+  const [baseSubDir, setBaseSubDir] = useState<string>("");
   const [subDir, setSubDir] = useState<string>("");
+
+  const [history, setHistory] = useState<readonly FolderNavState[]>([
+    { leftBase: leftPath, rightBase: rightPath, baseSubDir: "", subDir: "" },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+
   const prevLeftRef = useRef(leftPath);
   const prevRightRef = useRef(rightPath);
 
   if (prevLeftRef.current !== leftPath || prevRightRef.current !== rightPath) {
     prevLeftRef.current = leftPath;
     prevRightRef.current = rightPath;
-    if (subDir !== "") {
-      setSubDir("");
-    }
+    setBaseLeft(leftPath);
+    setBaseRight(rightPath);
+    setBaseSubDir("");
+    setSubDir("");
+    setHistory([{ leftBase: leftPath, rightBase: rightPath, baseSubDir: "", subDir: "" }]);
+    setHistoryIndex(0);
   }
 
   const join = (base: string, rel: string): string =>
     rel ? `${base.replace(/\/+$/, "")}/${rel}` : base;
 
-  const currentLeft = join(leftPath, subDir);
-  const currentRight = join(rightPath, subDir);
+  const fullSubDir = baseSubDir ? (subDir ? `${baseSubDir}/${subDir}` : baseSubDir) : subDir;
+  const currentLeft = join(baseLeft, subDir);
+  const currentRight = join(baseRight, subDir);
+  const isBasePinned = baseSubDir !== "" || baseLeft !== leftPath || baseRight !== rightPath;
+  const isAtRoot = subDir === "" && !isBasePinned;
+  const canGoUpBoth = !isAtRoot;
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < history.length - 1;
+
+  function navigateTo(
+    nextLeft: string,
+    nextRight: string,
+    nextBaseSubDir: string,
+    nextSubDir: string,
+  ): void {
+    const nextState: FolderNavState = {
+      leftBase: nextLeft,
+      rightBase: nextRight,
+      baseSubDir: nextBaseSubDir,
+      subDir: nextSubDir,
+    };
+    const current = history[historyIndex];
+    if (
+      !current ||
+      current.leftBase !== nextLeft ||
+      current.rightBase !== nextRight ||
+      current.baseSubDir !== nextBaseSubDir ||
+      current.subDir !== nextSubDir
+    ) {
+      const nextHistory = [...history.slice(0, historyIndex + 1), nextState];
+      setHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+    }
+    setBaseLeft(nextLeft);
+    setBaseRight(nextRight);
+    setBaseSubDir(nextBaseSubDir);
+    setSubDir(nextSubDir);
+    setOpenNote(null);
+  }
+
+  function goBack(): void {
+    if (historyIndex <= 0) return;
+    const prevIdx = historyIndex - 1;
+    const target = history[prevIdx];
+    if (!target) return;
+    setHistoryIndex(prevIdx);
+    setBaseLeft(target.leftBase);
+    setBaseRight(target.rightBase);
+    setBaseSubDir(target.baseSubDir);
+    setSubDir(target.subDir);
+    setOpenNote(null);
+  }
+
+  function goForward(): void {
+    if (historyIndex >= history.length - 1) return;
+    const nextIdx = historyIndex + 1;
+    const target = history[nextIdx];
+    if (!target) return;
+    setHistoryIndex(nextIdx);
+    setBaseLeft(target.leftBase);
+    setBaseRight(target.rightBase);
+    setBaseSubDir(target.baseSubDir);
+    setSubDir(target.subDir);
+    setOpenNote(null);
+  }
+
+  function parentDir(p: string): string {
+    const clean = p.replace(/\/+$/, "");
+    const idx = clean.lastIndexOf("/");
+    if (idx <= 0) return "/";
+    return clean.slice(0, idx);
+  }
+
+  function goUpBoth(): void {
+    if (subDir !== "") {
+      const parts = subDir.split("/").filter(Boolean);
+      parts.pop();
+      navigateTo(baseLeft, baseRight, baseSubDir, parts.join("/"));
+    } else if (baseSubDir !== "") {
+      const parts = baseSubDir.split("/").filter(Boolean);
+      parts.pop();
+      const nextBaseSubDir = parts.join("/");
+      const nextLeft = nextBaseSubDir ? join(leftPath, nextBaseSubDir) : leftPath;
+      const nextRight = nextBaseSubDir ? join(rightPath, nextBaseSubDir) : rightPath;
+      navigateTo(nextLeft, nextRight, nextBaseSubDir, "");
+    }
+  }
+
+  function goUpLeft(): void {
+    if (subDir !== "") {
+      const nextLeft = parentDir(currentLeft);
+      navigateTo(nextLeft, baseRight, baseSubDir, subDir);
+    } else {
+      const nextLeft = parentDir(baseLeft);
+      navigateTo(nextLeft, baseRight, baseSubDir, "");
+    }
+  }
+
+  function goUpRight(): void {
+    if (subDir !== "") {
+      const nextRight = parentDir(currentRight);
+      navigateTo(baseLeft, nextRight, baseSubDir, subDir);
+    } else {
+      const nextRight = parentDir(baseRight);
+      navigateTo(baseLeft, nextRight, baseSubDir, "");
+    }
+  }
+
+  function setAsBase(): void {
+    if (subDir === "") {
+      setOpenNote("already at base folder — select a subdirectory first");
+      return;
+    }
+    const nextLeft = currentLeft;
+    const nextRight = currentRight;
+    const nextBaseSubDir = fullSubDir;
+    navigateTo(nextLeft, nextRight, nextBaseSubDir, "");
+  }
+
+  // Wave-L3: Browse L/R folder picker (BC Browse parity). Native
+  // directory dialog via the existing session dialog helper
+  // (`pickOpenDialog`, `@tauri-apps/plugin-dialog` with the
+  // `__MOCK_DIALOG_OPEN__` stub hook); a picked folder re-roots that
+  // side (subDir/baseSubDir clear so the new root compares clean) and
+  // refetches through the existing effect. Cancelled/unavailable
+  // dialogs render an honest inline note, never a throw. In mock /
+  // plain-browser runs there is no native dialog, so both buttons park
+  // disabled with the contract reason (a stubbed
+  // `__MOCK_DIALOG_OPEN__` re-enables them for probes).
+  const canBrowse =
+    typeof window !== "undefined" &&
+    (typeof (window as unknown as Record<string, unknown>).__MOCK_DIALOG_OPEN__ === "function" ||
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined);
+  const browseReason = canBrowse ? null : "folder picker needs the Tauri shell (mock has no native dialog)";
+
+  async function browseSide(side: "left" | "right"): Promise<void> {
+    setOpenNote(null);
+    const picked = await pickOpenDialog({
+      directory: true,
+      multiple: false,
+      defaultPath: side === "left" ? baseLeft : baseRight,
+    });
+    const dir = Array.isArray(picked) ? picked[0] : picked;
+    if (typeof dir !== "string" || dir === "") {
+      setOpenNote(
+        `folder picker ${side === "left" ? "left" : "right"} unavailable here — no folder was chosen`,
+      );
+      return;
+    }
+    if (side === "left") navigateTo(dir, baseRight, "", "");
+    else navigateTo(baseLeft, dir, "", "");
+  }
+
+  const navRef = useRef({
+    canGoBack,
+    canGoForward,
+    canGoUpBoth,
+    goBack,
+    goForward,
+    goUpBoth,
+  });
+  navRef.current = {
+    canGoBack,
+    canGoForward,
+    canGoUpBoth,
+    goBack,
+    goForward,
+    goUpBoth,
+  };
 
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +308,13 @@ export default function FolderView({
   const [entries, setEntries] = useState<readonly FolderEntryDto[]>([]);
   const [total, setTotal] = useState(0);
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
-  const [rowFilter, setRowFilter] = useState<"all" | "diffs" | "same">("all");
+  // Wave-L3: L2 `autocompare:view-filter` bus vocabulary
+  // (all/diffs/same/context, BC View menu parity, TableView twin).
+  // `context` keeps each differing row plus one neighbor on either side
+  // (tree order); the toolbar SegmentedControl keeps its four legacy
+  // options (all/diffs/same/changes-only) with none pressed under
+  // context. Pure client-side over the loaded entries, no new IPC.
+  const [rowFilter, setRowFilter] = useState<"all" | "diffs" | "same" | "context">("all");
   // Wave-35 changes-only (Beyond Compare style show-differences): one
   // toggle hiding every `same` row. Composes with rowFilter + collapse.
   const [changesOnly, setChangesOnly] = useState(false);
@@ -188,6 +394,21 @@ export default function FolderView({
           const box = document.getElementById("folder-goto-box");
           if (box instanceof HTMLElement) box.focus();
         }, 0);
+      } else if (e.altKey && e.key === "ArrowLeft") {
+        if (navRef.current.canGoBack) {
+          e.preventDefault();
+          navRef.current.goBack();
+        }
+      } else if (e.altKey && e.key === "ArrowRight") {
+        if (navRef.current.canGoForward) {
+          e.preventDefault();
+          navRef.current.goForward();
+        }
+      } else if (e.altKey && e.key === "ArrowUp") {
+        if (navRef.current.canGoUpBoth) {
+          e.preventDefault();
+          navRef.current.goUpBoth();
+        }
       } else if (e.key === "Escape") {
         setNameOpen(false);
         setGotoOpen(false);
@@ -203,10 +424,45 @@ export default function FolderView({
     };
   }, []);
 
+  /* Wave-L3: L2 `autocompare:view-filter` bus (BC View menu parity:
+     Show All / Differences / Same / Context, dispatched by the top
+     Toolbar via `handleViewFilter`). Applies only when the event
+     targets this kind (`viewKind === "folder"` or an unkinded event);
+     other kinds are ignored so text/hex filters never leak across
+     views. A bus selection defines the view, so it clears
+     `changesOnly` (the toggle follows, staying in sync). TableView
+     twin; same contract. */
+  useEffect(() => {
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ filter?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "folder") return;
+      const f = detail?.filter;
+      if (f === "all" || f === "diffs" || f === "same" || f === "context") {
+        setRowFilter(f);
+        setChangesOnly(false);
+      }
+    };
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
+
   const nameNeedle = nameQuery.trim().toLowerCase();
-  const filtered = entries.filter((e) => {
+  const filtered = entries.filter((e, idx, arr) => {
     if (rowFilter === "same" && e.status !== "same") return false;
     if (rowFilter === "diffs" && e.status === "same") return false;
+    // Wave-L3 context (TableView twin): differing rows plus one
+    // same-status neighbor on either side; the rest hide.
+    if (rowFilter === "context" && e.status === "same") {
+      const prev = arr[idx - 1];
+      const next = arr[idx + 1];
+      const nearDiff =
+        (prev !== undefined && prev.status !== "same") ||
+        (next !== undefined && next.status !== "same");
+      if (!nearDiff) return false;
+    }
     if (changesOnly && e.status === "same") return false;
     if (nameNeedle !== "" && !e.relPath.toLowerCase().includes(nameNeedle)) return false;
     return true;
@@ -269,10 +525,10 @@ export default function FolderView({
           setStatus("empty");
           return;
         }
-        const first = await fetchWindow(sessionId, 0, subDir ? 500 : PAGE_SIZE);
+        const first = await fetchWindow(sessionId, 0, fullSubDir ? 500 : PAGE_SIZE);
         if (!cancelled) {
-          const isMockSubdir = subDir !== "" && first.some((e) => e.relPath.startsWith(`${subDir}/`));
-          const displayed = isMockSubdir ? reRootEntries(first, subDir) : first;
+          const isMockSubdir = fullSubDir !== "" && first.some((e) => e.relPath.startsWith(`${fullSubDir}/`));
+          const displayed = isMockSubdir ? reRootEntries(first, fullSubDir) : first;
           const displayedTotal = isMockSubdir ? displayed.length : entryTotal;
           setTotal(displayedTotal);
           setEntries(displayed);
@@ -288,15 +544,15 @@ export default function FolderView({
     return () => {
       cancelled = true;
     };
-  }, [currentLeft, currentRight, subDir]);
+  }, [currentLeft, currentRight, fullSubDir]);
 
   async function loadMore(): Promise<void> {
     if (session === null || loadingMore || entries.length >= total) return;
     setLoadingMore(true);
     try {
-      const next = await fetchWindow(session, entries.length, subDir ? 500 : PAGE_SIZE);
-      const isMockSubdir = subDir !== "" && next.some((e) => e.relPath.startsWith(`${subDir}/`));
-      const displayedNext = isMockSubdir ? reRootEntries(next, subDir) : next;
+      const next = await fetchWindow(session, entries.length, fullSubDir ? 500 : PAGE_SIZE);
+      const isMockSubdir = fullSubDir !== "" && next.some((e) => e.relPath.startsWith(`${fullSubDir}/`));
+      const displayedNext = isMockSubdir ? reRootEntries(next, fullSubDir) : next;
       setEntries((prev) => [...prev, ...displayedNext]);
     } catch (e) {
       setError(errString(e));
@@ -335,14 +591,7 @@ export default function FolderView({
     }
     setOpenNote(null);
     const nextSubdir = subDir ? `${subDir}/${entry.relPath}` : entry.relPath;
-    setSubDir(nextSubdir);
-  }
-
-  function goUp(): void {
-    if (!subDir) return;
-    const parts = subDir.split("/").filter(Boolean);
-    parts.pop();
-    setSubDir(parts.join("/"));
+    navigateTo(baseLeft, baseRight, baseSubDir, nextSubdir);
   }
 
   /** Wave-46: double-click drills a two-sided file into a text session. */
@@ -359,7 +608,7 @@ export default function FolderView({
       return;
     }
     setOpenNote(null);
-    const fullRel = subDir ? `${subDir}/${entry.relPath}` : entry.relPath;
+    const fullRel = fullSubDir ? `${fullSubDir}/${entry.relPath}` : entry.relPath;
     onOpenPaths("text", join(leftPath, fullRel), join(rightPath, fullRel));
   }
 
@@ -506,13 +755,30 @@ export default function FolderView({
     // box (17px row minus the 1px .fv-node divider). Zero the collapse
     // padding (14px icon) and tighten the copy-button line (14px + 2px
     // border = 16px) so nothing bleeds into the next row.
-    const compactIconBtn = isSelected ? undefined : { padding: 0 };
-    const compactCopyBtn = isSelected ? undefined : { lineHeight: "14px" };
+    const compactIconBtn = isSelected
+      ? undefined
+      : { padding: 0, height: 14, minHeight: 14, maxHeight: 14, lineHeight: "14px", borderWidth: 0 };
+    const compactCopyBtn = isSelected
+      ? undefined
+      : { lineHeight: "14px", height: 16, minHeight: 16, maxHeight: 16, paddingTop: 0, paddingBottom: 0 };
     // Wave-66K: BC orphan idiom. One-sided rows read the missing side as
     // filler (`.fv-cell-empty` hatch over the row) and expose `data-side`
     // plus a single-line `data-bracket` (no rail: single-line rows never
     // span). Two-sided rows mount neither attribute nor hatch class.
     const isOrphan = entry.status === "leftOnly" || entry.status === "rightOnly";
+    // Agent F rightOnly parity: rendered-geometry probe showed every row
+    // (incl. rightOnly) painting content on the left half while BC parks
+    // orphan content on its OWN side (hatch = missing side only). The row
+    // div keeps the 66K/115 hatch (50% bg anchored to the missing side);
+    // the content node takes the own-side half (leftOnly -> left half,
+    // rightOnly -> right half, two-sided -> full width, unchanged). Inline
+    // style only (tokens.css untouched); testids/classes/heights identical.
+    const sidePlace =
+      entry.status === "rightOnly"
+        ? { width: "50%", marginLeft: "auto", boxSizing: "border-box" as const }
+        : entry.status === "leftOnly"
+          ? { width: "50%", marginRight: "auto", boxSizing: "border-box" as const }
+          : undefined;
     return (
       <div
         key={entry.relPath}
@@ -536,6 +802,18 @@ export default function FolderView({
                 if (e.key === "Enter") {
                   e.preventDefault();
                   descend(entry);
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  stepSelection(entry.relPath, 1);
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  stepSelection(entry.relPath, -1);
+                } else if (e.key === "Home") {
+                  e.preventDefault();
+                  jumpSelection("first");
+                } else if (e.key === "End") {
+                  e.preventDefault();
+                  jumpSelection("last");
                 }
               },
             }
@@ -566,11 +844,12 @@ export default function FolderView({
               },
             })}
       >
-      <div data-testid={`folderview/node-${i}`} className={isSelected ? "fv-node is-selected font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]" : "fv-node font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]"} style={compactNode}>
+      <div data-testid={`folderview/node-${i}`} className={isSelected ? "fv-node is-selected font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]" : "fv-node font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)]"} style={sidePlace === undefined && compactNode === undefined ? undefined : { ...sidePlace, ...compactNode }}>
         <span className="inline-flex items-center gap-[var(--ac-space-2)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-normal" style={compactLabel}>
           {entry.isDir ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid={`folder-collapse-${i}`}
               style={compactIconBtn}
               onClick={(e) => {
@@ -578,10 +857,10 @@ export default function FolderView({
                 toggle(entry.relPath);
               }}
               aria-label={isCollapsed ? "expand" : "collapse"}
-              className="rounded p-0.5 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+              className="!h-[14px] !min-h-[14px] !max-h-[14px] !p-0 !border-0 text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
             >
               <Folder size={14} aria-hidden="true" />
-            </button>
+            </Button>
           ) : (
             <File size={14} aria-hidden="true" />
           )}
@@ -596,8 +875,9 @@ export default function FolderView({
             {sideMeta(entry.left)} · {sideMeta(entry.right)}
           </span>
           {!entry.isDir && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid={`folder-copy-${i}`}
               aria-label={`copy path ${entry.relPath}`}
               style={compactCopyBtn}
@@ -608,10 +888,10 @@ export default function FolderView({
               onKeyDown={(e) => e.stopPropagation()}
               // Wave-115: `fv-copy` hides the per-row button until
               // hover/focus/select (BC affordance); testid kept.
-              className="fv-copy rounded border border-[var(--ac-border)] px-1 py-0 ac-meta text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+              className="fv-copy !h-[16px] !min-h-[16px] !max-h-[16px] !border-[var(--ac-border)] !px-1 !py-0 ac-meta text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
             >
               copy path
-            </button>
+            </Button>
           )}
           {!entry.isDir && isCopied && (
             <span data-testid={`folder-copied-${i}`} role="status">
@@ -670,7 +950,7 @@ export default function FolderView({
             <label htmlFor="folder-goto-box" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
               Go to entry
             </label>
-            <input
+            <Input
               id="folder-goto-box"
               data-testid="folder-goto-input"
               inputMode="numeric"
@@ -684,26 +964,23 @@ export default function FolderView({
                 if (event.key === "Enter") goToEntry();
                 else if (event.key === "Escape") setGotoOpen(false);
               }}
-              className="w-24 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+              className="w-24 ac-mono text-[length:var(--ac-font-size-code)]"
             />
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               data-testid="folderview/goto-go"
               onClick={goToEntry}
-              className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
             >
               Go
-            </button>
-            <button
-              type="button"
+            </Button>
+            <ToolbarButton
               data-testid="folderview/goto-close"
-              aria-label="Dismiss go to entry (Esc)"
+              label="Dismiss go to entry (Esc)"
               title="Dismiss go to entry (Esc)"
               onClick={() => setGotoOpen(false)}
-              className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
             >
               <X size={12} aria-hidden="true" />
-            </button>
+            </ToolbarButton>
           </div>
           {gotoNote !== null && (
             <p data-testid="folder-goto-note" role="status" className="pt-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
@@ -722,57 +999,184 @@ export default function FolderView({
           {openNote}
         </p>
       )}
-      {subDir !== "" && (
-        <div
-          data-testid="folder-breadcrumb-bar"
-          className="flex items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal"
+      {/* Wave-FNAV: folder navigation bar with Back, Forward, Up variants, Set-as-Base, and Breadcrumbs */}
+      <div
+        data-testid="folder-breadcrumb-bar"
+        className="flex items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal"
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="folder-back"
+          onClick={goBack}
+          disabled={!canGoBack}
+          title={canGoBack ? "Back in history (Alt+Left)" : "No previous folder in history"}
+          data-disabled-reason={!canGoBack ? "At start of history" : undefined}
+          aria-label="Back in folder history"
+          className="!h-6 !px-2 text-xs"
         >
-          <button
-            type="button"
-            data-testid="folder-up-level"
-            onClick={goUp}
-            aria-label="Up to parent folder"
-            className="inline-flex items-center gap-1 rounded border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-2 py-0.5 text-xs font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
-          >
-            <FolderUp size={13} aria-hidden="true" />
-            <span>Up</span>
-          </button>
-          <nav
-            data-testid="folder-breadcrumb"
-            aria-label="Folder breadcrumbs"
-            className="inline-flex items-center gap-1 text-xs text-[var(--ac-fg-muted)]"
-          >
-            <button
-              type="button"
-              data-testid="folder-breadcrumb-root"
-              onClick={() => setSubDir("")}
-              className="hover:text-[var(--ac-fg)] hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
+          <ArrowLeft size={12} aria-hidden="true" />
+          <span>Back</span>
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="folder-forward"
+          onClick={goForward}
+          disabled={!canGoForward}
+          title={canGoForward ? "Forward in history (Alt+Right)" : "No next folder in history"}
+          data-disabled-reason={!canGoForward ? "At end of history" : undefined}
+          aria-label="Forward in folder history"
+          className="!h-6 !px-2 text-xs"
+        >
+          <ArrowRight size={12} aria-hidden="true" />
+          <span>Forward</span>
+        </Button>
+        {/* Wave-L3: Browse L/R sit in this same bar (no new stacked
+            rows, chrome budget holds): native directory picker per side,
+            disabled with the contract reason where no shell exists. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="folder-browse-left"
+          onClick={() => void browseSide("left")}
+          disabled={!canBrowse}
+          title={canBrowse ? "Browse for the left folder" : browseReason ?? undefined}
+          data-disabled-reason={!canBrowse ? browseReason ?? undefined : undefined}
+          aria-label="Browse for the left folder"
+          className="!h-6 !px-1.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
+        >
+          Browse L
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="folder-browse-right"
+          onClick={() => void browseSide("right")}
+          disabled={!canBrowse}
+          title={canBrowse ? "Browse for the right folder" : browseReason ?? undefined}
+          data-disabled-reason={!canBrowse ? browseReason ?? undefined : undefined}
+          aria-label="Browse for the right folder"
+          className="!h-6 !px-1.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
+        >
+          Browse R
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="folder-up-both"
+          onClick={goUpBoth}
+          disabled={!canGoUpBoth}
+          title={isAtRoot ? "At root folder — cannot go up further" : "Up one level (both sides)"}
+          data-disabled-reason={isAtRoot ? "At root folder — cannot go up further" : undefined}
+          aria-label="Up one level (both sides)"
+          className="!h-6 !px-1.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
+        >
+          Up Both
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="folder-up-left"
+          onClick={goUpLeft}
+          title="Up one level (left side)"
+          aria-label="Up one level (left side)"
+          className="!h-6 !px-1.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
+        >
+          Up L
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="folder-up-right"
+          onClick={goUpRight}
+          title="Up one level (right side)"
+          aria-label="Up one level (right side)"
+          className="!h-6 !px-1.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)]"
+        >
+          Up R
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="folder-set-base"
+          onClick={setAsBase}
+          disabled={subDir === ""}
+          title={subDir === "" ? "Already at base folder" : "Set current subdirectory as base folder"}
+          data-disabled-reason={subDir === "" ? "Already at base folder" : undefined}
+          aria-label="Set as base folder"
+          className="!h-6 !px-2 text-xs"
+        >
+          <span>Set as Base</span>
+        </Button>
+
+        {(subDir !== "" || isBasePinned) && (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              data-testid="folder-up-level"
+              onClick={goUpBoth}
+              disabled={!canGoUpBoth}
+              title={isAtRoot ? "At root folder — cannot go up further" : "Up to parent folder"}
+              data-disabled-reason={isAtRoot ? "At root folder — cannot go up further" : undefined}
+              aria-label="Up to parent folder"
+              className="!h-6 !px-2 text-xs"
             >
-              root
-            </button>
-            {subDir.split("/").map((segment, idx, arr) => {
-              const pathUpTo = arr.slice(0, idx + 1).join("/");
-              const isLast = idx === arr.length - 1;
-              return (
-                <span key={pathUpTo} className="inline-flex items-center gap-1">
-                  <span>/</span>
-                  {isLast ? (
-                    <span className="font-semibold text-[var(--ac-fg)]">{segment}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setSubDir(pathUpTo)}
-                      className="hover:text-[var(--ac-fg)] hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus-ring)]"
-                    >
-                      {segment}
-                    </button>
-                  )}
-                </span>
-              );
-            })}
-          </nav>
-        </div>
-      )}
+              <FolderUp size={12} aria-hidden="true" />
+              <span>Up</span>
+            </Button>
+            <nav
+              data-testid="folder-breadcrumb"
+              aria-label="Folder breadcrumbs"
+              className="inline-flex items-center gap-1 text-xs text-[var(--ac-fg-muted)] ml-[var(--ac-space-2)]"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="folder-breadcrumb-root"
+                onClick={() => navigateTo(leftPath, rightPath, "", "")}
+                className="!h-auto !px-1 !py-0.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] hover:underline"
+              >
+                root
+              </Button>
+              {fullSubDir.split("/").filter(Boolean).map((segment, idx, arr) => {
+                const pathUpTo = arr.slice(0, idx + 1).join("/");
+                const isLast = idx === arr.length - 1;
+                return (
+                  <span key={pathUpTo} className="inline-flex items-center gap-1">
+                    <span>/</span>
+                    {isLast ? (
+                      <span className="font-semibold text-[var(--ac-fg)]">
+                        {segment}
+                        {baseSubDir && pathUpTo === baseSubDir ? " [base]" : ""}
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (baseSubDir && pathUpTo === baseSubDir) {
+                            navigateTo(baseLeft, baseRight, baseSubDir, "");
+                          } else if (baseSubDir && pathUpTo.startsWith(`${baseSubDir}/`)) {
+                            const relToPinned = pathUpTo.slice(baseSubDir.length + 1);
+                            navigateTo(baseLeft, baseRight, baseSubDir, relToPinned);
+                          } else {
+                            navigateTo(leftPath, rightPath, "", pathUpTo);
+                          }
+                        }}
+                        className="!h-auto !px-1 !py-0.5 text-xs text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] hover:underline"
+                      >
+                        {segment}
+                      </Button>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+          </>
+        )}
+      </div>
       {visible.length > VIRTUALIZE_AFTER ? (
         <div ref={parentRef} data-testid="folderview/scroller" className="h-[var(--ac-scroll-h)] overflow-auto">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
@@ -800,9 +1204,16 @@ export default function FolderView({
         <div data-testid="folderview/list">{visible.map(renderNode)}</div>
       )}
       {hasMore && (
-        <button type="button" data-testid="folderview/load-more" onClick={() => void loadMore()} disabled={loadingMore} className="my-[var(--ac-space-3)] ml-[var(--ac-space-4)] inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45">
+        <Button
+          variant="secondary"
+          size="md"
+          data-testid="folderview/load-more"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+          className="my-[var(--ac-space-3)] ml-[var(--ac-space-4)]"
+        >
           {loadingMore ? "Loading…" : `Load more (${entries.length}/${total})`}
-        </button>
+        </Button>
       )}
       {/* Wave-67B: totals + counts live in the bottom status line (BC
           truth: counts in the status bar). Legacy testids ride the same

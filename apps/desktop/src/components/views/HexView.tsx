@@ -44,10 +44,19 @@ import type { ViewPaths } from "./types";
  * right-pane offset gutter doubling as the pane divider, per-char ASCII
  * `hx-diff` tint on both sides, and per-side counts + client-measured
  * load time in the bottom status. All legacy testids/logic untouched.
+ *
+ * HEX2 BC parity batch (owns hex view + hex controls + hex IPC only):
+ * L2 `autocompare:view-filter` bus (all/diffs/same/context, hex-kind or
+ * unkinded events only), diff-only prev/next navigation by scanning the
+ * loaded page then bounded `hex_get_page` windows (existing IPC only,
+ * no new command), bytes-per-line layout (8/16/32, default 16) and a
+ * sync-scroll follow toggle — all toolbar-row chrome, no new stacked
+ * rows. Every legacy `hex-*` / `hexview/*` testid stays byte-identical.
  */
 
 const PAGE_LEN = 256;
-const BYTES_PER_ROW = 16;
+/** Default grid width; HEX2 makes it a toolbar layout control (8/16/32). */
+const DEFAULT_BYTES_PER_ROW = 16;
 
 /** Byte-identical copy of `tools/parity-harness/fixtures/h_left.bin`. */
 const EMBEDDED_LEFT: readonly number[] = [
@@ -186,15 +195,51 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
     };
   }, []);
   // Wave-60: differences-only display filter (HexView twin of the
-  // text-59 toggle). Off by default, reset on session switch,
-  // keyboard reachable native checkbox. Purely presentational:
-  // hides rows with zero differing bytes, no IPC.
-  const [diffsOnly, setDiffsOnly] = useState(false);
+  // text-59 toggle). HEX2 widens it to the L2 `autocompare:view-filter`
+  // bus vocabulary (`all` / `diffs` / `same` / `context`, Beyond Compare
+  // View menu parity): `diffs` is the legacy checkbox state (off by
+  // default, reset on session switch, keyboard reachable), `same` shows
+  // only matching rows, `context` keeps each differing row plus one
+  // neighbor on either side. Purely presentational: hides rows with no
+  // differing bytes, no IPC. The legacy checkbox maps diffs<->all.
+  const [viewFilter, setViewFilter] = useState<"all" | "diffs" | "same" | "context">("all");
+  const diffsOnly = viewFilter === "diffs";
+  function setDiffsOnly(v: boolean): void {
+    setViewFilter(v ? "diffs" : "all");
+  }
+  // HEX2: bytes-per-line layout (BC hex columns) + sync-scroll follow
+  // (both panes track the selection together). Cleared on session
+  // switch alongside the filter, toolbar-row controls only.
+  const [bytesPerRow, setBytesPerRow] = useState(DEFAULT_BYTES_PER_ROW);
+  const [syncScroll, setSyncScroll] = useState(true);
+  // HEX2: diff-only navigation receipt (toolbar `hex-diff-status`) +
+  // busy guard. No new stacked rows; the status line keeps its totals.
+  const [diffNote, setDiffNote] = useState<string | null>(null);
+  const [diffNavBusy, setDiffNavBusy] = useState(false);
   // Wave-71: collapsible in-flow find + goto panels (open by default so
   // the wave-19/42 find/goto boxes stay visible on load; toolbar toggle
   // + Ctrl+F/Ctrl+G/Esc collapse them). Mirrors merge wave-70.
   const [findOpen, setFindOpen] = useState(true);
   const [gotoOpen, setGotoOpen] = useState(true);
+  /* HEX2: L2 `autocompare:view-filter` bus (Beyond Compare View menu
+     parity: Show All / Differences / Same / Context, dispatched by the
+     top Toolbar via `handleViewFilter`). Applies only when the event
+     targets this kind (`viewKind === "hex"` or an unkinded event);
+     other kinds are ignored so folder/text filters never leak across
+     views. TableView twin; same contract. */
+  useEffect(() => {
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ filter?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "hex") return;
+      const f = detail?.filter;
+      if (f === "all" || f === "diffs" || f === "same" || f === "context") setViewFilter(f);
+    };
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
   const [finding, setFinding] = useState(false);
   const [findNote, setFindNote] = useState<string | null>(null);
   const [gotoInput, setGotoInput] = useState("");
@@ -224,6 +269,9 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
     setSelectedOffset(null);
     setCopyNote(null);
     setDiffsOnly(false);
+    setBytesPerRow(DEFAULT_BYTES_PER_ROW);
+    setSyncScroll(true);
+    setDiffNote(null);
     (async () => {
       try {
         const t0 = typeof performance !== "undefined" ? performance.now() : 0;
@@ -325,6 +373,16 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       setSelectedOffset(null);
     }
   }, [baseForEffect, selectedOffset]);
+  // HEX2: sync-scroll follow (BC synced-panes parity). Both panes share
+  // one grid, so "sync" means the landed/selected byte scrolls into view
+  // on both sides together; off leaves the scroll position untouched.
+  useEffect(() => {
+    if (!syncScroll || selectedOffset === null) return;
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-testid="hexview/byte-${selectedOffset}"]`);
+      if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
+    }, 0);
+  }, [syncScroll, selectedOffset, pageIdx, page]);
 
   /** Parse a goto offset: `0x`-prefixed hex or plain decimal. */
   function parseGotoOffset(text: string): number | null {
@@ -359,9 +417,10 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
     // Wave-60: the target page loads async, so only a same-page target
     // can be checked against the current rows; anything else stays on
     // the plain jump note and the filter keeps applying after paging.
+    // HEX2: the check is filter-aware (`same`/`context` hide rows too).
     const samePage = Math.floor(off / PAGE_LEN) === pageIdx;
-    const rowInPage = Math.floor((off - Math.floor(off / PAGE_LEN) * PAGE_LEN) / BYTES_PER_ROW);
-    const hiddenTarget = diffsOnly && samePage && page !== null && !rowHasDiff(rowInPage);
+    const rowInPage = Math.floor((off - Math.floor(off / PAGE_LEN) * PAGE_LEN) / bytesPerRow);
+    const hiddenTarget = samePage && page !== null && !rowShown(rowInPage);
     setGotoNote(
       hiddenTarget
         ? `offset ${off} sits in a hidden same row — toggle Differences only off to view`
@@ -419,21 +478,140 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
   const pageCount = Math.max(1, Math.ceil(total / PAGE_LEN));
   const base = pageIdx * PAGE_LEN;
   const rows: number[] = [];
-  const rowCount = Math.ceil(PAGE_LEN / BYTES_PER_ROW);
+  const rowCount = Math.ceil(PAGE_LEN / bytesPerRow);
   for (let r = 0; r < rowCount; r += 1) rows.push(r);
-  /** Wave-60: a hex row survives the filter when any byte differs. */
+  /** Wave-60: a hex row survives the `diffs` filter when any byte differs. */
   function rowHasDiff(r: number): boolean {
     if (page === null) return false;
-    for (let c = 0; c < BYTES_PER_ROW; c += 1) {
-      const i = r * BYTES_PER_ROW + c;
+    for (let c = 0; c < bytesPerRow; c += 1) {
+      const i = r * bytesPerRow + c;
       const lb = page.left[i];
       const rb = page.right[i];
       if (lb !== undefined && rb !== undefined && lb !== rb) return true;
     }
     return false;
   }
-  const visibleRows = diffsOnly && page !== null ? rows.filter(rowHasDiff) : rows;
+  /** HEX2: filter-aware row visibility for goto/diff-nav honest notes. */
+  function rowShown(r: number): boolean {
+    if (viewFilter === "all") return true;
+    if (page === null) return true;
+    if (viewFilter === "diffs") return rowHasDiff(r);
+    if (viewFilter === "same") return !rowHasDiff(r);
+    return rowHasDiff(r) || rowHasDiff(r - 1) || rowHasDiff(r + 1);
+  }
+  const visibleRows =
+    viewFilter === "all" || page === null
+      ? rows
+      : viewFilter === "diffs"
+        ? rows.filter(rowHasDiff)
+        : viewFilter === "same"
+          ? rows.filter((r) => !rowHasDiff(r))
+          : rows.filter((r) => rowHasDiff(r) || rowHasDiff(r - 1) || rowHasDiff(r + 1));
   const hiddenSameCount = rows.length - visibleRows.length;
+  /** HEX2: one bounded page window via the existing hex IPC (no new command). */
+  async function fetchWindow(offset: number): Promise<{ readonly left: readonly number[]; readonly right: readonly number[] } | null> {
+    if (localMode) {
+      return {
+        left: EMBEDDED_LEFT.slice(offset, offset + PAGE_LEN),
+        right: EMBEDDED_RIGHT.slice(offset, offset + PAGE_LEN),
+      };
+    }
+    if (session === null) return null;
+    try {
+      const raw = (await hexGetPage(session, offset, PAGE_LEN)) as unknown;
+      if (!isRecord(raw) || !Array.isArray(raw["left"]) || !Array.isArray(raw["right"])) return null;
+      return {
+        left: raw["left"] as readonly number[],
+        right: raw["right"] as readonly number[],
+      };
+    } catch {
+      return null;
+    }
+  }
+  /** HEX2: land the pager + selection on a differing offset, honestly. */
+  function landOnDiff(off: number): void {
+    const targetPage = Math.floor(off / PAGE_LEN);
+    setPageIdx(targetPage);
+    setSelectedOffset(off);
+    const samePage = targetPage === pageIdx;
+    const rowInPage = Math.floor((off - targetPage * PAGE_LEN) / bytesPerRow);
+    const hidden = samePage && page !== null && !rowShown(rowInPage);
+    setDiffNote(
+      hidden
+        ? `difference at offset ${off} sits in a hidden row — toggle the filter to All to view`
+        : `difference at offset ${off} (0x${off.toString(16)})`,
+    );
+  }
+  /** HEX2: diff-only prev/next navigation (BC next/previous difference).
+   * Scans the loaded page first (zero IPC), then walks neighboring pages
+   * through the existing `hex_get_page` window (bounded: 64 windows max,
+   * so a huge identical tail resolves honestly instead of hanging). The
+   * differing-byte rule mirrors `rowHasDiff` (both sides present and
+   * unequal); the landed row stays subject to the active view filter. */
+  async function stepDiff(dir: 1 | -1): Promise<void> {
+    if (diffNavBusy || session === null || total <= 0) return;
+    const origin = selectedOffset ?? (dir === 1 ? -1 : total);
+    setDiffNavBusy(true);
+    try {
+      const isDiffAt = (
+        left: readonly number[],
+        right: readonly number[],
+        rel: number,
+      ): boolean => {
+        const lb = left[rel];
+        const rb = right[rel];
+        return lb !== undefined && rb !== undefined && lb !== rb;
+      };
+      if (page !== null) {
+        const rel = origin - base;
+        if (dir === 1) {
+          for (let i = Math.max(rel + 1, 0); i < PAGE_LEN; i += 1) {
+            if (isDiffAt(page.left, page.right, i)) {
+              landOnDiff(base + i);
+              return;
+            }
+          }
+        } else {
+          for (let i = Math.min(rel - 1, PAGE_LEN - 1); i >= 0; i -= 1) {
+            if (isDiffAt(page.left, page.right, i)) {
+              landOnDiff(base + i);
+              return;
+            }
+          }
+        }
+      }
+      const originPage = Math.floor(Math.max(origin, 0) / PAGE_LEN);
+      let visited = 0;
+      for (let step = 1; step < pageCount && visited < 64; step += 1) {
+        const p = dir === 1 ? originPage + step : originPage - step;
+        if (p < 0 || p >= pageCount) break;
+        const win = await fetchWindow(p * PAGE_LEN);
+        visited += 1;
+        if (win === null) continue;
+        if (dir === 1) {
+          for (let i = 0; i < PAGE_LEN; i += 1) {
+            const off = p * PAGE_LEN + i;
+            if (off >= total) break;
+            if (isDiffAt(win.left, win.right, i)) {
+              landOnDiff(off);
+              return;
+            }
+          }
+        } else {
+          const top = Math.min(PAGE_LEN - 1, total - 1 - p * PAGE_LEN);
+          for (let i = top; i >= 0; i -= 1) {
+            if (isDiffAt(win.left, win.right, i)) {
+              landOnDiff(p * PAGE_LEN + i);
+              return;
+            }
+          }
+        }
+      }
+      setDiffNote(dir === 1 ? "no further differences" : "no earlier differences");
+    } finally {
+      setDiffNavBusy(false);
+    }
+  }
 
   // Wave 23 footer detail: resolve the selected absolute offset to its
   // visible page-relative bytes (local embedded copies or the IPC page).
@@ -461,16 +639,21 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       ? selRight !== undefined && selLeft === selRight
       : selVisible && selBothMissing;
 
-  function moveSelection(dir: 1 | -1): void {
+  function moveSelection(dir: number): void {
     if (total <= 0) return;
     if (selectedOffset === null) {
-      setSelectedOffset(Math.min(base, Math.max(0, total - 1)));
+      const initial = Math.min(base, Math.max(0, total - 1));
+      setSelectedOffset(initial);
+      const el = document.querySelector(`[data-testid="hexview/byte-${initial}"]`);
+      if (el instanceof HTMLElement) el.focus();
       return;
     }
     const next = selectedOffset + dir;
     if (next < 0 || next >= total) return;
     setPageIdx(Math.floor(next / PAGE_LEN));
     setSelectedOffset(next);
+    const el = document.querySelector(`[data-testid="hexview/byte-${next}"]`);
+    if (el instanceof HTMLElement) el.focus();
   }
 
   // Wave 36 copy selection: resolve an absolute offset to its byte value
@@ -533,6 +716,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
   return (
     <section
       aria-label="hex comparison"
+      tabIndex={0}
       data-testid={`hexview/page-${pageIdx}`}
       onKeyDown={(event) => {
         const target = event.target as HTMLElement | null;
@@ -543,9 +727,10 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
           copyHex();
           return;
         }
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
-        moveSelection(event.key === "ArrowRight" ? 1 : -1);
+        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+        moveSelection(delta);
       }}
     >
       {/* Wave-71: chrome collapse (Beyond Compare style). One toolbar row
@@ -568,6 +753,16 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         onToggleFind={() => setFindOpen((v) => !v)}
         gotoOpen={gotoOpen}
         onToggleGoto={() => setGotoOpen((v) => !v)}
+        onPrevDiff={() => void stepDiff(-1)}
+        onNextDiff={() => void stepDiff(1)}
+        diffNavBusy={diffNavBusy}
+        diffStatusText={diffNote ?? "Prev/Next diff walks differing bytes."}
+        bytesPerRow={bytesPerRow}
+        onBytesPerRow={(v) => {
+          if (v === 8 || v === 16 || v === 32) setBytesPerRow(v);
+        }}
+        syncScroll={syncScroll}
+        onToggleSyncScroll={setSyncScroll}
       />
       {findOpen && (
         <HexFindPanel
@@ -645,15 +840,15 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
             // it; a missing byte in a live row paints the 66I orphan
             // hatch, while fully-empty rows keep the blank muted filler.
             let live = false;
-            for (let c = 0; c < BYTES_PER_ROW; c += 1) {
-              const i = r * BYTES_PER_ROW + c;
+            for (let c = 0; c < bytesPerRow; c += 1) {
+              const i = r * bytesPerRow + c;
               if (page.left[i] !== undefined || page.right[i] !== undefined) {
                 live = true;
                 break;
               }
             }
-            for (let c = 0; c < BYTES_PER_ROW; c += 1) {
-              const i = r * BYTES_PER_ROW + c;
+            for (let c = 0; c < bytesPerRow; c += 1) {
+              const i = r * bytesPerRow + c;
               const lb = page.left[i];
               const rb = page.right[i];
               const diff = lb !== undefined && rb !== undefined && lb !== rb;
@@ -709,6 +904,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         setSelectedOffset(g);
+                        return;
+                      }
+                      if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
+                        event.preventDefault();
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        moveSelection(delta);
+                        return;
                       }
                     }}
                     className={`${tone}${hl}${selCls}`}
@@ -763,6 +965,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         setSelectedOffset(g);
+                        return;
+                      }
+                      if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
+                        event.preventDefault();
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        moveSelection(delta);
+                        return;
                       }
                     }}
                     className={`${rtone}${selCls}`}
@@ -776,7 +985,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
             return (
               <div key={r} className="hx-row flex items-center gap-[var(--ac-space-2)] whitespace-pre px-[var(--ac-space-2)] py-0.5 hover:bg-[var(--ac-row-hover-bg)] rounded-xs">
                 <span className="hx-offset w-[var(--ac-gutter-w-hex)] shrink-0 tabular-nums text-[var(--ac-fg-muted)] select-none">
-                  {(base + r * BYTES_PER_ROW).toString(16).padStart(8, "0")}
+                  {(base + r * bytesPerRow).toString(16).padStart(8, "0")}
                 </span>
                 <span className="hx-hex">{cells}</span>
                 <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-2">{text.map((c, i) => (
@@ -789,7 +998,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                   aria-hidden="true"
                   className="hx-offset w-[var(--ac-gutter-w-hex)] shrink-0 tabular-nums text-[var(--ac-fg-muted)] select-none border-l border-[var(--ac-border-subtle)] pl-2"
                 >
-                  {(base + r * BYTES_PER_ROW).toString(16).padStart(8, "0")}
+                  {(base + r * bytesPerRow).toString(16).padStart(8, "0")}
                 </span>
                 <span className="hx-hex">{rcells}</span>
                 <span className="hx-ascii text-[var(--ac-fg-muted)] border-l border-[var(--ac-border-subtle)] pl-2">{textR.map((c, i) => (
@@ -822,9 +1031,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
           <span className="text-[var(--ac-fg-muted)]">Click a byte to inspect offset + both-side values.</span>
         )}
       </div>
-      {diffsOnly ? (
+      {viewFilter !== "all" ? (
         <p data-testid="hexview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          Hiding {hiddenSameCount} {hiddenSameCount === 1 ? "row" : "rows"} without differences — toggle off to restore.
+          {viewFilter === "diffs"
+            ? `Hiding ${hiddenSameCount} ${hiddenSameCount === 1 ? "row" : "rows"} without differences — toggle off to restore.`
+            : viewFilter === "same"
+              ? `Hiding ${hiddenSameCount} differing ${hiddenSameCount === 1 ? "row" : "rows"} — toggle off to restore.`
+              : `Showing differences with one neighbor row — ${visibleRows.length} of ${rows.length} rows.`}
         </p>
       ) : null}
       <p

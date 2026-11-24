@@ -1657,12 +1657,95 @@ pub const fn fonts76_mono_family() -> egui::FontFamily {
     egui::FontFamily::Monospace
 }
 
+/// Loads Inter (proportional) and JetBrains Mono (monospace) bundled fonts if present,
+/// otherwise gracefully falls back to the system/built-in typography stacks.
+pub fn load_bundled_fonts_if_present(defs: &mut egui::FontDefinitions) {
+    use std::sync::Arc;
+
+    let inter_candidates = [
+        "assets/fonts/Inter.ttf",
+        "assets/fonts/Inter-Regular.ttf",
+        "crates/gui/assets/fonts/Inter.ttf",
+        "apps/desktop/src/fonts/inter-400.ttf",
+        "/System/Library/Fonts/Supplemental/Inter.ttf",
+        "/Library/Fonts/Inter.ttf",
+    ];
+    for path in inter_candidates {
+        if let Ok(bytes) = std::fs::read(path) {
+            defs.font_data.insert(
+                "Inter".to_string(),
+                Arc::new(egui::FontData::from_owned(bytes)),
+            );
+            defs.families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "Inter".to_string());
+            break;
+        }
+    }
+
+    let jb_candidates = [
+        "assets/fonts/JetBrainsMono.ttf",
+        "assets/fonts/JetBrainsMono-Regular.ttf",
+        "crates/gui/assets/fonts/JetBrainsMono.ttf",
+        "apps/desktop/src/fonts/jetbrains-mono-400.ttf",
+        "/System/Library/Fonts/Supplemental/JetBrainsMono.ttf",
+        "/Library/Fonts/JetBrainsMono.ttf",
+    ];
+    for path in jb_candidates {
+        if let Ok(bytes) = std::fs::read(path) {
+            defs.font_data.insert(
+                "JetBrains Mono".to_string(),
+                Arc::new(egui::FontData::from_owned(bytes)),
+            );
+            defs.families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "JetBrains Mono".to_string());
+            break;
+        }
+    }
+
+    // System fallback candidates
+    if !defs.font_data.contains_key("Inter") {
+        for sys_path in ["/System/Library/Fonts/SFNS.ttf"] {
+            if let Ok(bytes) = std::fs::read(sys_path) {
+                defs.font_data.insert(
+                    "SystemSans".to_string(),
+                    Arc::new(egui::FontData::from_owned(bytes)),
+                );
+                defs.families
+                    .entry(egui::FontFamily::Proportional)
+                    .or_default()
+                    .push("SystemSans".to_string());
+                break;
+            }
+        }
+    }
+    if !defs.font_data.contains_key("JetBrains Mono") {
+        for sys_path in ["/System/Library/Fonts/SFNSMono.ttf"] {
+            if let Ok(bytes) = std::fs::read(sys_path) {
+                defs.font_data.insert(
+                    "SystemMono".to_string(),
+                    Arc::new(egui::FontData::from_owned(bytes)),
+                );
+                defs.families
+                    .entry(egui::FontFamily::Monospace)
+                    .or_default()
+                    .push("SystemMono".to_string());
+                break;
+            }
+        }
+    }
+}
+
 /// Bundled font definitions: default egui defs with both slots ensured
 /// (never empty, built-ins fallback barkarar). Headless-safe.
 pub fn fonts76_font_definitions() -> egui::FontDefinitions {
     let mut defs = egui::FontDefinitions::default();
     defs.families.entry(fonts76_sans_family()).or_default();
     defs.families.entry(fonts76_mono_family()).or_default();
+    load_bundled_fonts_if_present(&mut defs);
     defs
 }
 
@@ -3066,5 +3149,16 @@ mod tests {
         assert_eq!(light.window_fill, light_bg);
         assert_eq!(light.panel_fill, light_bg);
         assert_eq!(light.extreme_bg_color, LIGHT_TRACK);
+    }
+
+    #[test]
+    fn load_bundled_fonts_if_present_ensures_fallback_and_slots() {
+        let mut defs = egui::FontDefinitions::default();
+        load_bundled_fonts_if_present(&mut defs);
+        assert!(defs.families.contains_key(&fonts76_sans_family()));
+        assert!(defs.families.contains_key(&fonts76_mono_family()));
+        let defs_bundled = fonts76_font_definitions();
+        assert!(defs_bundled.families.contains_key(&fonts76_sans_family()));
+        assert!(defs_bundled.families.contains_key(&fonts76_mono_family()));
     }
 }

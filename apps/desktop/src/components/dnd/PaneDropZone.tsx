@@ -8,6 +8,7 @@ import {
   hoveredPaneHalf,
   isTauriDropOnPathBar,
   markDropRecompare,
+  resolveStripSideFromRect,
   resolveTauriDropCssSide,
 } from "./dropPaths";
 
@@ -58,12 +59,20 @@ function resolveSide(target: EventTarget | null, clientX: number, root: HTMLElem
       const side = sided.getAttribute("data-panedrop");
       if (side === "left" || side === "right") return side;
     }
+    const pane = target.closest("[data-pane], [data-side]");
+    if (pane instanceof HTMLElement) {
+      const p = pane.getAttribute("data-pane") || pane.getAttribute("data-side");
+      if (p === "left" || p === "right") return p;
+    }
   }
-  if (clientX > 0) {
-    const rect = root.getBoundingClientRect();
-    return clientX >= rect.left + rect.width / 2 ? "right" : "left";
+  // Wave-G2: same bar-rect helper the PathBar strip uses (one midpoint
+  // rule, hovered-half fallback when the event carries no position) —
+  // synthetic clientX:0 drops fall back to the armed half, else left.
+  try {
+    return resolveStripSideFromRect(clientX, root.getBoundingClientRect(), hoveredPaneHalf() ?? "left");
+  } catch {
+    return hoveredPaneHalf() ?? "left";
   }
-  return "left";
 }
 
 const ACTIVE_OUTLINE = "2px dashed var(--ac-accent)";
@@ -252,7 +261,10 @@ export function useTauriPaneDrop(
             markDropRecompare();
             // Wave-132: x vs half-width, hovered-half fallback when the
             // shell gives no position. Wave-143: physical-px -> CSS-px
-            // first (Retina DPR 2 drops misrouted before this).
+            // first (Retina DPR 2 drops misrouted before this). Wave-G2:
+            // unknown position stays pane-owned by design (single owner:
+            // `isTauriDropOnPathBar` is false without y, so the PathBar
+            // hook skips and exactly one hook compares).
             const side: PaneSide = resolveTauriDropCssSide(
               payload.position,
               window.innerWidth,
@@ -297,6 +309,9 @@ export function useTauriPaneDrop(
  * Position maps to the field side (x vs half-width, hovered-half
  * fallback): single-file stages that side via `onDropPath`, 2-file
  * dual stages Item0 -> left, Item1 -> right via `onDropPaths`.
+ * Wave-G2: single-owner rule — unknown position is pane-owned
+ * (`isTauriDropOnPathBar` false without y), so this hook skips it and
+ * exactly one hook compares.
  */
 export function useTauriPathBarDrop(
   enabled: boolean,

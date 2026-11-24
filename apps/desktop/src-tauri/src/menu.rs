@@ -180,6 +180,10 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 Some("CmdOrCtrl+F"),
             )?,
             &PredefinedMenuItem::separator(app)?,
+            // Wave-G2: Take Left/Right stay enabled (menu events carry no
+            // payload, so the shell cannot know the selection); the
+            // frontend owns honest enablement — nearest-hunk fallback when
+            // an equal row is selected, parked note when nothing is.
             &MenuItem::with_id(
                 app,
                 "session.take-left",

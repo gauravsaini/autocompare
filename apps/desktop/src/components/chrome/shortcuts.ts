@@ -20,6 +20,11 @@ import { useEffect } from "react";
  * Cmd+D (bookmark) at browser level; `preventDefault` on the page
  * suppresses them while the app has focus, but a real Tauri shell is
  * the authoritative host for those chords. See checks/shortcuts-142.
+ *
+ * Wave-G2: CmdOrCtrl+D/E (`session.take-left/right`) intentionally carry
+ * no selection payload — `App.handleMenuTake` owns the fallback (nearest
+ * hunk when an equal row is selected, honest parked note when nothing
+ * is selected), so this bridge stays a pure 1:1 id forwarder.
  */
 
 /** Menu ids mirrored from `MENU_ITEM_IDS` in `src-tauri/src/menu.rs`. */
@@ -66,14 +71,28 @@ export interface WebShortcutChord {
   readonly altKey: boolean;
 }
 
+export function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent) || /Mac/i.test(navigator.platform);
+}
+
 /**
  * Pure chord matcher (unit-coverable, no DOM). Returns the menu id for a
  * CmdOrCtrl chord, else `null`. Requires the platform modifier
  * (Cmd on macOS / Ctrl elsewhere); Alt chords never match (macOS
  * Option-combos type special characters and must not be hijacked).
+ * FIXSHELL GAP-12: On macOS, pure Ctrl chords are standard readline text
+ * shortcuts (Ctrl+D forward delete, Ctrl+E end of line, Ctrl+N next line)
+ * and must not match menu accelerators.
  */
-export function matchWebShortcut(chord: WebShortcutChord): WebShortcutMenuId | null {
-  if (!chord.metaKey && !chord.ctrlKey) return null;
+export function matchWebShortcut(chord: WebShortcutChord, isMac: boolean = isMacPlatform()): WebShortcutMenuId | null {
+  if (isMac) {
+    // macOS requires metaKey (Cmd). Pure Ctrl chords must not match.
+    if (!chord.metaKey) return null;
+  } else {
+    // Non-macOS requires Ctrl (or Meta).
+    if (!chord.ctrlKey && !chord.metaKey) return null;
+  }
   if (chord.altKey) return null;
   const key = chord.key;
   const lower = key.toLowerCase();
@@ -133,6 +152,21 @@ export function emitWebShortcut(id: WebShortcutMenuId): void {
 export function useWebShortcuts(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable ||
+          target.getAttribute("contenteditable") === "true");
+
+      // FIXSHELL GAP-12: In text inputs, pure Ctrl chords (e.g. macOS/readline
+      // Ctrl+D forward delete, Ctrl+E end of line, Ctrl+N next line) must not
+      // be hijacked by menu accelerators.
+      if (isInput && e.ctrlKey && !e.metaKey) {
+        return;
+      }
+
       const id = matchWebShortcut({
         key: e.key,
         metaKey: e.metaKey,

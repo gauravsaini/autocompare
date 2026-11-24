@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight } from "lucide-react";
-import { mergeTextApply, mergeTextPlan } from "../../ipc/merge";
+import { mergeCompareToOutput, mergeTextApply, mergeTextPlanForTriple } from "../../ipc/merge";
 import type { TextConflict, TextResolution } from "../../ipc/merge";
 import { pickSaveDialog } from "../session/useSession";
+import { Button, Input } from "../ui";
 import { MergeFindPanel, MergeToolbar } from "./merge/controls";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -73,7 +74,41 @@ type Status = "loading" | "ready" | "empty" | "error";
 export interface MergeViewProps extends ViewPaths {
   /** Base (common ancestor) path; defaults to `leftPath` when omitted. */
   readonly basePath?: string;
+  /**
+   * GAP-08 (FIXMERGE): 3-way drop routing handoff (frontend-only, no
+   * `App.tsx` router change). Fired when a file lands on a merge pane
+   * (left / base / right) with the staged triple. Until `App` wires it
+   * (route through `handleOpenSession`/`tabPaths` + add `"merge"` to
+   * `canCompareKind`), the view stages the drop honestly inline and
+   * emits `autocompare:merge-drop` on `window` with the same detail.
+   */
+  readonly onDropPaths?: (next: {
+    readonly leftPath: string;
+    readonly basePath: string;
+    readonly rightPath: string;
+  }) => void;
+  /**
+   * GAP-08 (FIXMERGE): auto-compare routing handoff. Called with the
+   * same staged triple right after `onDropPaths` so the host can run
+   * the merge plan immediately (the view itself re-plans automatically
+   * whenever its path props change, so a wired host gets BC-style
+   * drop-to-compare with zero extra IPC).
+   */
+  readonly onRequestCompare?: (next: {
+    readonly leftPath: string;
+    readonly basePath: string;
+    readonly rightPath: string;
+  }) => void;
+  /**
+   * GAP-13 (FIXMERGE): ViewCommandBus hook for prev/next/copy
+   * (`TextView` `onBusCommand` parity). When provided, top-toolbar bus
+   * commands route here instead of the internal nav/take handlers.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next" | "copy") => void;
 }
+
+/** GAP-08: merge pane drop side (left / base-center / right). */
+export type MergeDropSide = "left" | "base" | "right";
 
 /** Bundled demo triples tried in order (repo-root vs desktop vs CWDs). */
 const MERGE_DEMO_CANDIDATES: readonly (readonly [base: string, left: string, right: string])[] = [
@@ -205,6 +240,60 @@ function splitThreeWay(base: readonly string[], left: readonly string[], right: 
   };
 }
 
+/**
+ * GAP-08 (FIXMERGE): dropped-file path extraction for merge panes.
+ * Same channel order as the shared `dropPaths` helper (NOT imported:
+ * `components/dnd/*` is outside FIXMERGE ownership): `files[0].path`
+ * (Tauri/Electron + Playwright synthetic drops), `files[0].name`
+ * (`/tmp/<name>` browser fallback), then `text/uri-list` / `text/plain`
+ * (`file://` URI or raw path). Never throws.
+ */
+function extractMergeDropPath(dataTransfer: DataTransfer | null | undefined): string | null {
+  try {
+    if (!dataTransfer) return null;
+    const files = (dataTransfer as unknown as {
+      files?: ArrayLike<{ name?: string; path?: string }> | null;
+    }).files;
+    if (files && files.length > 0) {
+      const first = files[0];
+      if (first) {
+        if (typeof first.path === "string" && first.path.trim() !== "") return first.path.trim();
+        if (typeof first.name === "string" && first.name.trim() !== "") {
+          return `/tmp/${first.name.replace(/^[/\\]+/, "").trim()}`;
+        }
+      }
+    }
+    const getData = (dataTransfer as unknown as { getData?: (type: string) => string }).getData;
+    if (typeof getData === "function") {
+      for (const type of ["text/uri-list", "text/plain", "text"]) {
+        let raw = "";
+        try {
+          raw = getData.call(dataTransfer, type) ?? "";
+        } catch {
+          continue;
+        }
+        const line = raw
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .find((s) => s !== "" && !s.startsWith("#"));
+        if (line) {
+          if (line.startsWith("file://")) {
+            try {
+              return decodeURI(line.replace(/^file:\/\/+/, "/"));
+            } catch {
+              return line.replace(/^file:\/\/+/, "/");
+            }
+          }
+          return line;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Wave-66F: one loaded-row find hit. Each hit names its owning conflict
  * (for selection + focus) plus the matching side and line. */
 interface MergeFindHit {
@@ -214,7 +303,14 @@ interface MergeFindHit {
   readonly lineIndex: number;
 }
 
-export default function MergeView({ leftPath, rightPath, basePath }: MergeViewProps): React.JSX.Element {
+export default function MergeView({
+  leftPath,
+  rightPath,
+  basePath,
+  onDropPaths,
+  onRequestCompare,
+  onBusCommand: propsOnBusCommand,
+}: MergeViewProps): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<readonly TextConflict[]>([]);
@@ -222,6 +318,15 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
   const [choices, setChoices] = useState<Readonly<Record<number, "base" | "left" | "right" | "bothLeftFirst" | "bothRightFirst">>>({});
   const [bothOrders, setBothOrders] = useState<Readonly<Record<number, "leftFirst" | "rightFirst">>>({});
   const [bothNotes, setBothNotes] = useState<Readonly<Record<number, string>>>({});
+  // Wave-MRG: Conflict set/clear state (Beyond Compare Conflict Set / Clear parity).
+  // `true` means conflict was cleared (treated as non-conflict / resolved);
+  // absent/false means active conflict.
+  const [clearedConflicts, setClearedConflicts] = useState<Readonly<Record<number, boolean>>>({});
+  // Wave-MRG: Compare-to-output state per side.
+  const [comparingOutput, setComparingOutput] = useState<"left" | "right" | null>(null);
+  const [compareOutputReport, setCompareOutputReport] = useState<string | null>(null);
+  // Wave-MRG: L2 `autocompare:view-filter` bus filter state.
+  const [mergeFilter, setMergeFilter] = useState<"all" | "diffs" | "same" | "context">("all");
   const [selected, setSelected] = useState(0);
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   const [fullPrefix, setFullPrefix] = useState<readonly string[] | null>(null);
@@ -245,7 +350,16 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
   // truth shows one toolbar row; toolbar toggle + Cmd/Ctrl+F open +
   // focus, Esc collapses). Mirrors table wave-68.
   const [findOpen, setFindOpen] = useState(false);
+  // GAP-08 (FIXMERGE): per-pane drop affordance + honest staging note.
+  // `dropActive` paints the hovered pane outline (zero layout shift:
+  // outline only, like `PaneDropZone`); `dropNote` carries the staged
+  // triple until the next session reload. Both clear on triple change.
+  const [dropActive, setDropActive] = useState<MergeDropSide | null>(null);
+  const [dropNote, setDropNote] = useState<string | null>(null);
   const cardRefs = useRef(new Map<number, HTMLElement | null>());
+  const handleTakeRequestRef = useRef<
+    ((dir: "left" | "right" | "both" | "base" | "bothLeftFirst" | "bothRightFirst" | "clear" | "set") => void) | null
+  >(null);
 
   const base = basePath ?? leftPath;
   const tripleKey = `${base}\0${leftPath}\0${rightPath}`;
@@ -256,6 +370,10 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
     setError(null);
     setReport(null);
     setChoices({});
+    setClearedConflicts({});
+    setComparingOutput(null);
+    setCompareOutputReport(null);
+    setMergeFilter("all");
     setManualText(null);
     setTakeAllNote(null);
     setBothOrders({});
@@ -264,13 +382,15 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
     setFindQuery("");
     setFindActive(-1);
     setFindNote(null);
+    setDropActive(null);
+    setDropNote(null);
     setSourceLabel(null);
     setFullPrefix(null);
     setFullSuffix(null);
     (async () => {
       const tryPlan = async (b: string, l: string, r: string): Promise<LocalPlan | null> => {
         try {
-          const raw = (await mergeTextPlan(b, l, r)) as unknown;
+          const raw = (await mergeTextPlanForTriple({ base: b, left: l, right: r })) as unknown;
           const usable = asUsablePlan(raw);
           return usable === null ? null : { ...usable, prefix: [], suffix: [] };
         } catch {
@@ -355,6 +475,9 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
         // input-level Esc already closes it when focused).
       } else if (e.key === "Escape") {
         setFindOpen(false);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        handleTakeRequestRef.current?.("both");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -468,14 +591,239 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
     [bothOrders],
   );
 
+  /**
+   * Wave-MRG: Conflict Set / Clear (Beyond Compare parity).
+   * `asConflict === true`: Set Conflict (forces hunk to be treated as an active conflict, unsetting choices).
+   * `asConflict === false`: Clear Conflict (clears conflict status so it is treated as resolved).
+   */
+  const setConflictStatus = useCallback((id: number, asConflict: boolean): void => {
+    if (asConflict) {
+      setClearedConflicts((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      // Clear choice so it returns to an unresolved conflict with markers
+      setChoices((prev) => {
+        if (prev[id] === undefined) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      setClearedConflicts((prev) => ({ ...prev, [id]: true }));
+    }
+    setManualText(null);
+    setTakeAllNote(null);
+  }, []);
+
+  // Wave-E1: menu Take / Cmd+D/E / Cmd+B routing handler for MergeView.
+  const lastTakeTickRef = useRef<{ time: number; dir: string }>({ time: 0, dir: "" });
+  const handleTakeRequest = useCallback(
+    (dir: "left" | "right" | "both" | "base" | "bothLeftFirst" | "bothRightFirst" | "clear" | "set") => {
+      const now = Date.now();
+      if (now - lastTakeTickRef.current.time < 30 && lastTakeTickRef.current.dir === dir) {
+        return;
+      }
+      lastTakeTickRef.current = { time: now, dir };
+
+      if (conflicts.length === 0) {
+        window.dispatchEvent(
+          new CustomEvent("autocompare:merge-take-result", {
+            detail: { dir, ok: false, reason: "No conflicts to resolve" },
+          }),
+        );
+        return;
+      }
+      const current = conflicts[selected];
+      if (!current) {
+        window.dispatchEvent(
+          new CustomEvent("autocompare:merge-take-result", {
+            detail: { dir, ok: false, reason: `Take ${dir} needs a conflict selected` },
+          }),
+        );
+        return;
+      }
+      if (dir === "left") {
+        choose(current.id, "left");
+      } else if (dir === "right") {
+        choose(current.id, "right");
+      } else if (dir === "base") {
+        choose(current.id, "base");
+      } else if (dir === "both") {
+        if (current.left.length === 0 || current.right.length === 0) {
+          chooseBoth(current);
+          const empty = current.left.length === 0 ? "left" : "right";
+          window.dispatchEvent(
+            new CustomEvent("autocompare:merge-take-result", {
+              detail: {
+                dir,
+                ok: false,
+                conflictId: current.id,
+                reason: `take-both needs both sides: ${empty} side is empty`,
+              },
+            }),
+          );
+          return;
+        }
+        chooseBoth(current);
+      } else if (dir === "bothLeftFirst") {
+        setBothOrders((prev) => ({ ...prev, [current.id]: "leftFirst" }));
+        chooseBoth(current);
+      } else if (dir === "bothRightFirst") {
+        setBothOrders((prev) => ({ ...prev, [current.id]: "rightFirst" }));
+        chooseBoth(current);
+      } else if (dir === "clear") {
+        setConflictStatus(current.id, false);
+      } else if (dir === "set") {
+        setConflictStatus(current.id, true);
+      }
+      window.dispatchEvent(
+        new CustomEvent("autocompare:merge-take-result", {
+          detail: { dir, ok: true, conflictId: current.id },
+        }),
+      );
+    },
+    [conflicts, selected, choose, chooseBoth, setConflictStatus],
+  );
+
+  useEffect(() => {
+    handleTakeRequestRef.current = handleTakeRequest;
+  });
+
+  useEffect(() => {
+    const onMergeTake = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        dir: "left" | "right" | "both" | "base" | "bothLeftFirst" | "bothRightFirst" | "clear" | "set";
+      }>;
+      if (!customEvent.detail) return;
+      customEvent.preventDefault();
+      handleTakeRequest(customEvent.detail.dir);
+    };
+    window.addEventListener("autocompare:merge-take", onMergeTake);
+    return () => {
+      window.removeEventListener("autocompare:merge-take", onMergeTake);
+    };
+  }, [handleTakeRequest]);
+
+  // GAP-08 (FIXMERGE): 3-way pane drop routing. Each merge pane (left /
+  // base / right) stages its side and re-plans automatically once the
+  // host applies the triple (the `tripleKey` effect above is the
+  // auto-compare: no new IPC, no `App.tsx` change). The staged triple
+  // is offered to the host through `onDropPaths` / `onRequestCompare`
+  // and broadcast as `autocompare:merge-drop` for the App handoff.
+  const handleMergePaneDrop = useCallback(
+    (side: MergeDropSide, path: string): void => {
+      const next = {
+        leftPath: side === "left" ? path : leftPath,
+        basePath: side === "base" ? path : base,
+        rightPath: side === "right" ? path : rightPath,
+      };
+      try {
+        window.dispatchEvent(
+          new CustomEvent("autocompare:merge-drop", { detail: { side, path, ...next } }),
+        );
+      } catch {
+        // Broadcast only; a hostile listener must never break the drop.
+      }
+      onDropPaths?.(next);
+      onRequestCompare?.(next);
+      const routed = onDropPaths !== undefined || onRequestCompare !== undefined;
+      setDropNote(
+        routed
+          ? `Drop staged: ${side} set to ${path} — auto-compare re-plans from the new triple.`
+          : `Drop staged: ${side} set to ${path} (host has not wired onDropPaths yet — App handoff: route this triple through handleOpenSession/tabPaths and add "merge" to canCompareKind).`,
+      );
+    },
+    [leftPath, rightPath, base, onDropPaths, onRequestCompare],
+  );
+
+  // GAP-13 (FIXMERGE): ViewCommandBus hook for prev/next/copy
+  // (`TextView` `autocompare:view-command` parity, placed with the
+  // other effects above the early returns so hook order stays stable).
+  // `copy` resolves the active conflict (optional `dir` detail honours
+  // left/base/right/both, default left) through the same
+  // `handleTakeRequest` path as the card buttons and Cmd+D/E, so the
+  // top Toolbar prev/next/copy work in merge once `App` routes the
+  // merge kind here (handoff: extend `handleViewCommand` merge branch
+  // to dispatch `autocompare:view-command` with `viewKind: "merge"`).
+  const handleBusCommand = useCallback(
+    (cmd: "prev" | "next" | "copy", dir?: unknown): void => {
+      if (propsOnBusCommand) {
+        propsOnBusCommand(cmd);
+        return;
+      }
+      if (cmd === "prev") {
+        selectConflict(selected - 1);
+        return;
+      }
+      if (cmd === "next") {
+        selectConflict(selected + 1);
+        return;
+      }
+      const takeDir =
+        dir === "right" || dir === "base" || dir === "both" ? dir : ("left" as const);
+      handleTakeRequest(takeDir);
+    },
+    [propsOnBusCommand, selectConflict, selected, handleTakeRequest],
+  );
+
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown; dir?: unknown }>)
+        .detail;
+      if (!detail) return;
+      const kind = detail.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "merge") return;
+      const cmd = detail.cmd;
+      if (cmd === "prev" || cmd === "next" || cmd === "copy") {
+        handleBusCommand(cmd, detail.dir);
+      }
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, [handleBusCommand]);
+
+  // Wave-MRG: L2 `autocompare:view-filter` bus (Beyond Compare View menu
+  // parity: Show All / Differences / Same / Context). Applies when
+  // `viewKind === "merge"` or an unkinded event.
+  useEffect(() => {
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ filter?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "merge") return;
+      const f = detail?.filter;
+      if (f === "all" || f === "diffs" || f === "same" || f === "context") {
+        setMergeFilter(f);
+      }
+    };
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
+
   function onKeyDown(event: React.KeyboardEvent): void {
     // Wave-110: Cmd+B / Ctrl+B takes both on the selected conflict (BC
     // "Take Left Then Right"). Handled before the input guard so it also
     // fires from inside the editable preview textarea.
+    // Wave-E1: Cmd+D / Cmd+E takes left / right on the selected conflict.
     if ((event.metaKey || event.ctrlKey) && (event.key === "b" || event.key === "B")) {
       event.preventDefault();
-      const current = conflicts[selected];
-      if (current !== undefined) chooseBoth(current);
+      handleTakeRequest("both");
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && (event.key === "d" || event.key === "D")) {
+      event.preventDefault();
+      handleTakeRequest("left");
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && (event.key === "e" || event.key === "E")) {
+      event.preventDefault();
+      handleTakeRequest("right");
       return;
     }
     // Wave-66F: typing in the find box must not drive conflict navigation.
@@ -577,18 +925,20 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
   /** Merged preview: full-file render when the embedded bytes are known, else per-conflict chunks. */
   const previewLines = useMemo((): readonly string[] => {
     const resolve = (c: TextConflict): readonly string[] => {
+      const isCleared = clearedConflicts[c.id] === true;
       const choice = choices[c.id];
       if (choice === "base") return [...(c.base ?? [])];
       if (choice === "left") return c.left;
       if (choice === "right") return c.right;
       if (choice === "bothLeftFirst") return [...c.left, ...c.right];
       if (choice === "bothRightFirst") return [...c.right, ...c.left];
+      if (isCleared) return [...(c.base ?? [])];
       return ["<<<<<<< left", ...c.left, "=======", ...c.right, ">>>>>>> right"];
     };
     const chunks = conflicts.map(resolve);
     if (fullPrefix === null || fullSuffix === null) return chunks.flat();
     return [...fullPrefix, ...chunks.flat(), ...fullSuffix];
-  }, [conflicts, choices, fullPrefix, fullSuffix]);
+  }, [conflicts, choices, clearedConflicts, fullPrefix, fullSuffix]);
 
   // Wave-110: editable preview text. Follows plan + choices until the
   // user types, then the manual snapshot wins until the next choice.
@@ -610,11 +960,17 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
             choices[c.id] === "left" ||
             choices[c.id] === "right" ||
             choices[c.id] === "bothLeftFirst" ||
-            choices[c.id] === "bothRightFirst",
+            choices[c.id] === "bothRightFirst" ||
+            clearedConflicts[c.id] === true,
         )
         .map((c) => ({
           conflictId: c.id,
-          choice: (choices[c.id] ?? "left") as "base" | "left" | "right" | "bothLeftFirst" | "bothRightFirst",
+          choice: (choices[c.id] ?? (clearedConflicts[c.id] ? "base" : "left")) as
+            | "base"
+            | "left"
+            | "right"
+            | "bothLeftFirst"
+            | "bothRightFirst",
         }));
       let raw: unknown;
       try {
@@ -647,15 +1003,96 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
     }
   }
 
+  // Wave-MRG: Compare-to-output per side (Beyond Compare parity).
+  const compareLeftDisabledReason = useMemo((): string | null => {
+    if (leftPath.trim() === "") return "Left path is required to compare";
+    if (outPath.trim() === "") return "Output path is required to compare";
+    if (report === null) return "Apply merge first: output file must exist on disk";
+    return null;
+  }, [leftPath, outPath, report]);
+
+  const compareRightDisabledReason = useMemo((): string | null => {
+    if (rightPath.trim() === "") return "Right path is required to compare";
+    if (outPath.trim() === "") return "Output path is required to compare";
+    if (report === null) return "Apply merge first: output file must exist on disk";
+    return null;
+  }, [rightPath, outPath, report]);
+
+  const compareToOutput = useCallback(
+    async (side: "left" | "right"): Promise<void> => {
+      const disabledReason = side === "left" ? compareLeftDisabledReason : compareRightDisabledReason;
+      if (disabledReason !== null) {
+        setCompareOutputReport(`Compare ${side} to output disabled: ${disabledReason}`);
+        return;
+      }
+      setComparingOutput(side);
+      setCompareOutputReport(null);
+      const targetSidePath = side === "left" ? leftPath.trim() : rightPath.trim();
+      const targetOutPath = outPath.trim();
+      try {
+        let raw: unknown;
+        try {
+          raw = (await mergeCompareToOutput(targetSidePath, targetOutPath)) as unknown;
+        } catch {
+          raw = null;
+        }
+        const usable = asUsablePlan(raw);
+        if (usable !== null) {
+          const diffs = usable.conflicts.length;
+          const clean = usable.cleanBlockCount;
+          if (diffs === 0) {
+            setCompareOutputReport(`Output matches ${side} exactly (0 differences across ${clean} clean block(s))`);
+          } else {
+            setCompareOutputReport(`Output differs from ${side}: ${diffs} difference section(s), ${clean} clean block(s)`);
+          }
+        } else {
+          // In mock mode (mock adapter returns []) or embedded fixture fallback:
+          // compare loaded lines with preview lines
+          const sideLinesForSide = side === "left" ? sideLines.left : sideLines.right;
+          const outputLines = displayText.split("\n");
+          const isIdentical =
+            sideLinesForSide.length === outputLines.length &&
+            sideLinesForSide.every((line, idx) => line === outputLines[idx]);
+          if (isIdentical) {
+            setCompareOutputReport(`Output matches ${side} (${outputLines.length} line(s) identical)`);
+          } else {
+            setCompareOutputReport(
+              `Output differs from ${side} (${sideLinesForSide.length} lines in ${side} vs ${outputLines.length} in output)`,
+            );
+          }
+        }
+      } catch (err) {
+        setCompareOutputReport(`Compare ${side} to output failed: ${errString(err)}`);
+      } finally {
+        setComparingOutput(null);
+      }
+    },
+    [compareLeftDisabledReason, compareRightDisabledReason, leftPath, rightPath, outPath, displayText, sideLines],
+  );
+
+  // Wave-MRG: conflict filtering via L2 `autocompare:view-filter` bus
+  // ("all" | "diffs" | "same" | "context"). Must be declared before early returns (Rules of Hooks).
+  const visibleConflicts = useMemo(() => {
+    if (mergeFilter === "diffs") {
+      return conflicts.filter((c) => choices[c.id] === undefined && clearedConflicts[c.id] !== true);
+    }
+    if (mergeFilter === "same") {
+      return conflicts.filter((c) => choices[c.id] !== undefined || clearedConflicts[c.id] === true);
+    }
+    return conflicts;
+  }, [conflicts, choices, clearedConflicts, mergeFilter]);
+
   if (status === "loading") return <p>Loading merge plan…</p>;
   if (status === "error") return <p role="alert">Merge plan failed: {error}</p>;
   if (status === "empty") return <p>No conflicts — merge is clean.</p>;
 
   const position = count === 0 ? "No conflicts" : `Conflict ${selected + 1} of ${count}`;
-  // Wave-70: bottom status bar counts reuse existing merge state (no
-  // backend change): resolved = conflicts with a recorded choice.
-  const resolvedCount = conflicts.filter((c) => choices[c.id] !== undefined).length;
+  // Wave-70 / Wave-MRG: bottom status bar counts reuse existing merge state:
+  // resolved = conflicts with a recorded choice OR cleared conflict.
+  const resolvedCount = conflicts.filter((c) => choices[c.id] !== undefined || clearedConflicts[c.id] === true).length;
   const unresolvedCount = count - resolvedCount;
+  const clearedCount = conflicts.filter((c) => clearedConflicts[c.id] === true).length;
+
   const findStatusText =
     findNote ??
     (findActive >= 0 && findActive < findHits.length
@@ -663,7 +1100,13 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
       : "Find across loaded rows — Enter searches.");
 
   return (
-    <section aria-label="three-way merge" tabIndex={0} onKeyDown={onKeyDown} className="relative outline-none">
+    <section
+      aria-label="three-way merge"
+      data-filter={mergeFilter}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="relative outline-none"
+    >
       {/* Wave-70: chrome collapse (Beyond Compare style). One toolbar row
           (conflict nav + take-all + find toggle) plus a collapsible
           in-flow find panel (open by default, Ctrl+F/Esc). Counts live
@@ -684,6 +1127,12 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
           const index = conflicts.findIndex((c) => c.id === id);
           if (index >= 0) selectConflict(index);
         }}
+        activeId={conflicts[selected]?.id ?? null}
+        activePosition={position}
+        takeActiveDisabled={count === 0}
+        onTakeActiveLeft={() => handleTakeRequest("left")}
+        onTakeActiveCenter={() => handleTakeRequest("base")}
+        onTakeActiveRight={() => handleTakeRequest("right")}
       />
       {findOpen && (
         <MergeFindPanel
@@ -720,8 +1169,36 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
         ).map((pane) => {
           const name = baseNameOf(pane.path);
           const meta = name === "" ? linesMeta(pane.lines.length) : `${name} · ${linesMeta(pane.lines.length)}`;
+          const dropSide = pane.key as MergeDropSide;
           return (
-          <div key={pane.key} data-testid={pane.testid} className="mv-pane rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]">
+          <div
+            key={pane.key}
+            data-testid={pane.testid}
+            data-mergedrop={dropSide}
+            data-active={dropActive === dropSide ? "true" : "false"}
+            title={`Drop a file to set ${dropSide} (auto-compare re-plans from the new triple)`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              try {
+                if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+              } catch {
+                // Best-effort only.
+              }
+              setDropActive(dropSide);
+            }}
+            onDragLeave={() => {
+              setDropActive((cur) => (cur === dropSide ? null : cur));
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDropActive(null);
+              const dropped = extractMergeDropPath(e.dataTransfer);
+              if (dropped) handleMergePaneDrop(dropSide, dropped);
+            }}
+            style={dropActive === dropSide ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-2px" } : undefined}
+            className="mv-pane rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]"
+          >
             <div className="flex items-baseline justify-between gap-[var(--ac-space-2)] mb-[var(--ac-space-1)]">
               <p className="ac-mono text-[length:var(--ac-font-size-code)] font-semibold leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">{pane.title}</p>
               <p data-testid={pane.metaTestid} title={pane.path === "" ? undefined : pane.path} className="ac-mono truncate text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">{meta}</p>
@@ -733,6 +1210,18 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
           );
         })}
       </div>
+      {/* GAP-08 (FIXMERGE): staged drop receipt. Renders ONLY after a pane
+          drop (null otherwise), so the wave-70 chrome budget (first card
+          top <= 140px) and every legacy testid stay untouched. */}
+      {dropNote !== null && (
+        <p
+          data-testid="merge-drop-note"
+          role="status"
+          className="mx-[var(--ac-space-4)] mt-[var(--ac-space-2)] rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]"
+        >
+          {dropNote}
+        </p>
+      )}
       {/* Wave-147: BC overview-ruler parity. The cards ride a flex row
           with a far-right in-flow rail (zero vertical chrome: no new
           stacked rows, firstCardTop untouched). One marker per
@@ -746,7 +1235,15 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
             bust the wave-70 chrome budget. Gap keeps the exact
             8px rhythm with zero collapse surprise. */}
         <div className="flex min-w-0 flex-1 flex-col gap-[var(--ac-space-2)]">
-        {conflicts.map((c, index) => {
+        {visibleConflicts.length === 0 && (
+          <p
+            data-testid="merge-filter-empty"
+            className="mx-[var(--ac-space-4)] p-[var(--ac-space-3)] rounded border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] ac-meta text-[var(--ac-fg-muted)]"
+          >
+            No conflicts match view filter &ldquo;{mergeFilter}&rdquo;.
+          </p>
+        )}
+        {visibleConflicts.map((c, index) => {
         const chosen = choices[c.id];
         const active = index === selected;
         // Wave-66J: BC section bracket. A conflict spanning more than one
@@ -785,6 +1282,7 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
             id={`merge-conflict-${c.id}`}
             data-testid={`mergeview/conflict-${c.id}`}
             data-bracket={bracket}
+            data-conflict-status={clearedConflicts[c.id] === true ? "cleared" : "conflict"}
             aria-current={active ? "true" : undefined}
             tabIndex={-1}
             ref={(el) => {
@@ -817,57 +1315,91 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
                 </div>
               ))}
             </div>
-            <div className="flex gap-[var(--ac-space-2)]">
-              <button
-                type="button"
+            <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]">
+              <Button
+                variant="ghost"
                 data-testid={`merge-take-left-${c.id}`}
                 aria-pressed={chosen === "left"}
                 onClick={() => choose(c.id, "left")}
-                className="inline-flex items-center gap-[var(--ac-space-1)] rounded-md px-[var(--ac-space-2)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-tab-dirty)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] aria-pressed:bg-[var(--ac-selection-bg)]"
+                className="border-0 text-[var(--ac-tab-dirty)] aria-pressed:bg-[var(--ac-selection-bg)]"
               >
                 <ChevronLeft size={12} aria-hidden="true" /> Take left{chosen === "left" ? (<Check size={12} aria-hidden="true" />) : null}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="ghost"
                 data-testid={`merge-take-right-${c.id}`}
                 aria-pressed={chosen === "right"}
                 onClick={() => choose(c.id, "right")}
-                className="inline-flex items-center gap-[var(--ac-space-1)] rounded-md px-[var(--ac-space-2)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-tab-dirty)] transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] aria-pressed:bg-[var(--ac-selection-bg)]"
+                className="border-0 text-[var(--ac-tab-dirty)] aria-pressed:bg-[var(--ac-selection-bg)]"
               >
                 Take right <ChevronRight size={12} aria-hidden="true" />{chosen === "right" ? (<Check size={12} aria-hidden="true" />) : null}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 data-testid={`merge-take-base-${c.id}`}
                 aria-pressed={chosen === "base"}
                 aria-label={`take base (ancestor) for conflict ${c.id}`}
                 title="Take base (common ancestor — Beyond Compare Take Center)"
                 onClick={() => choose(c.id, "base")}
-                className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg-muted)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
+                className="aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
               >
                 Take base{chosen === "base" ? (<Check size={12} aria-hidden="true" />) : null}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 data-testid={`merge-take-both-${c.id}`}
                 aria-pressed={chosen === "bothLeftFirst" || chosen === "bothRightFirst"}
                 aria-label={`take both for conflict ${c.id} (Cmd+B)`}
                 title="Take both (Beyond Compare Take Left Then Right — Cmd+B on the selected conflict)"
                 onClick={() => chooseBoth(c)}
-                className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
+                className="aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
               >
                 Take both{(chosen === "bothLeftFirst" || chosen === "bothRightFirst") ? (<Check size={12} aria-hidden="true" />) : null}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 data-testid={`merge-take-both-order-${c.id}`}
-                aria-label={`take-both order for conflict ${c.id}: ${(bothOrders[c.id] ?? "leftFirst") === "leftFirst" ? "left then right" : "right then left"}`}
-                title="Toggle take-both order (Beyond Compare left-then-right / right-then-left)"
+                data-order={(bothOrders[c.id] ?? "leftFirst") === "leftFirst" ? "L-then-R" : "R-then-L"}
+                aria-label={`take-both order for conflict ${c.id}: ${(bothOrders[c.id] ?? "leftFirst") === "leftFirst" ? "left then right (L-then-R)" : "right then left (R-then-L)"}`}
+                title="Toggle take-both order (Beyond Compare L-then-R vs R-then-L)"
                 onClick={() => toggleBothOrder(c)}
-                className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg-muted)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
               >
-                {(bothOrders[c.id] ?? "leftFirst") === "leftFirst" ? (<><ArrowRight size={12} aria-hidden="true" /><span>L to R</span></>) : (<><ArrowLeft size={12} aria-hidden="true" /><span>R to L</span></>)}
-              </button>
+                {(bothOrders[c.id] ?? "leftFirst") === "leftFirst" ? (
+                  <>
+                    <ArrowRight size={12} aria-hidden="true" />
+                    <span>L to R</span>
+                    <span data-testid={`merge-take-order-label-${c.id}`} className="ac-mono text-[11px] opacity-80">(L-then-R)</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowLeft size={12} aria-hidden="true" />
+                    <span>R to L</span>
+                    <span data-testid={`merge-take-order-label-${c.id}`} className="ac-mono text-[11px] opacity-80">(R-then-L)</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                data-testid={`merge-set-${c.id}`}
+                aria-label={`Mark conflict ${c.id} as conflict (Conflict Set)`}
+                title="Mark as conflict (Beyond Compare Conflict Set)"
+                aria-pressed={clearedConflicts[c.id] !== true}
+                onClick={() => setConflictStatus(c.id, true)}
+                className="aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
+              >
+                Set conflict{clearedConflicts[c.id] !== true && chosen === undefined ? (<Check size={12} aria-hidden="true" />) : null}
+              </Button>
+              <Button
+                variant="secondary"
+                data-testid={`merge-clear-${c.id}`}
+                aria-label={`Clear conflict ${c.id} (Conflict Clear)`}
+                title="Clear conflict status (Beyond Compare Conflict Clear)"
+                aria-pressed={clearedConflicts[c.id] === true}
+                onClick={() => setConflictStatus(c.id, false)}
+                className="aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]"
+              >
+                Clear conflict{clearedConflicts[c.id] === true ? (<Check size={12} aria-hidden="true" />) : null}
+              </Button>
             </div>
             {bothNotes[c.id] !== undefined && (
               <p data-testid={`merge-take-both-note-${c.id}`} className="mt-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]">
@@ -933,16 +1465,16 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
       </div>
       <div className="flex flex-wrap items-center gap-[var(--ac-space-2)] m-[var(--ac-space-4)]">
         <label htmlFor="merge-out-path" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">Output path</label>
-        <input
+        <Input
           id="merge-out-path"
           data-testid="merge-out-path"
           value={outPath}
           onChange={(event) => setOutPath(event.target.value)}
           placeholder="/tmp/merge-12-out.txt"
-          className="min-w-64 flex-1 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="min-w-64 flex-1 ac-mono text-[length:var(--ac-font-size-code)]"
         />
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           data-testid="merge-out-browse"
           aria-label="Browse for output path (Save As)"
           title="Browse for output path (native Save dialog; typed path still works when no dialog is available)"
@@ -959,20 +1491,46 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
               }
             })();
           }}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
         >
           Browse…
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="primary"
           data-testid="merge-apply"
           onClick={() => void apply()}
           disabled={applying}
-          className="inline-flex items-center rounded-md bg-[var(--ac-accent)] px-[var(--ac-space-4)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-white shadow-xs transition hover:opacity-90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {applying ? "Applying…" : "Apply merge"}
-        </button>
+        </Button>
+        <Button
+          variant="secondary"
+          data-testid="merge-compare-output-left"
+          data-disabled-reason={compareLeftDisabledReason ?? undefined}
+          disabled={compareLeftDisabledReason !== null || comparingOutput !== null}
+          title={compareLeftDisabledReason ?? "Compare Left to Output (diff output vs left via merge IPC)"}
+          onClick={() => void compareToOutput("left")}
+        >
+          <span data-testid="merge-compare-to-output-left" className="sr-only" aria-hidden="true" />
+          {comparingOutput === "left" ? "Comparing left…" : "Compare Left to Output"}
+        </Button>
+        <Button
+          variant="secondary"
+          data-testid="merge-compare-output-right"
+          data-disabled-reason={compareRightDisabledReason ?? undefined}
+          disabled={compareRightDisabledReason !== null || comparingOutput !== null}
+          title={compareRightDisabledReason ?? "Compare Right to Output (diff output vs right via merge IPC)"}
+          onClick={() => void compareToOutput("right")}
+        >
+          <span data-testid="merge-compare-to-output-right" className="sr-only" aria-hidden="true" />
+          {comparingOutput === "right" ? "Comparing right…" : "Compare Right to Output"}
+        </Button>
       </div>
+      {compareOutputReport !== null && (
+        <p data-testid="merge-compare-output-report" className="ac-meta font-normal px-4 py-1 text-[var(--ac-fg)]">
+          <span data-testid="merge-compare-to-output-report" className="sr-only" aria-hidden="true" />
+          {compareOutputReport}
+        </p>
+      )}
       {report !== null && <p data-testid="merge-apply-report" className="ac-meta font-normal px-4 py-2 text-[var(--ac-fg)]">{report}</p>}
       {/* Wave-70: counts live in the bottom status bar (BC truth:
           counts in the status bar). Legacy `merge-conflict-count`
@@ -985,6 +1543,7 @@ export default function MergeView({ leftPath, rightPath, basePath }: MergeViewPr
         </span>
         <span data-testid="mergeview/status-note">
           {" · "}{resolvedCount} resolved · {unresolvedCount} unresolved
+          {clearedCount > 0 ? ` · ${clearedCount} cleared` : ""}
           {sourceLabel !== null ? ` \u00b7 ${sourceLabel}` : ""}
         </span>
       </div>

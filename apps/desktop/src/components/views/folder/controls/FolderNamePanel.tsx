@@ -1,5 +1,5 @@
 /**
- * Wave-67B: collapsible name-filter panel (Beyond Compare style).
+ * Wave-67B / Wave-B3: collapsible name-filter panel (Beyond Compare style).
  *
  * In-flow collapsible (never `position: absolute`, so the overlap gate
  * holds with the panel open): open by default for backward compat,
@@ -37,17 +37,16 @@ export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.
           placeholder="file or folder name"
           autoComplete="off"
           spellCheck={false}
-          className="w-64 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="w-64 ac-mono text-[length:var(--ac-font-size-code)]"
         />
         <ToolbarButton
           data-testid="folderview/name-close"
           label="Dismiss name filter (Esc)"
           aria-label="Dismiss name filter (Esc)"
           title="Dismiss name filter (Esc)"
+          icon={X}
           onClick={onClose}
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden="true" />
-        </ToolbarButton>
+        />
       </div>
     </section>
   );

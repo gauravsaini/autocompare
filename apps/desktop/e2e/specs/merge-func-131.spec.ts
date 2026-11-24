@@ -9,8 +9,9 @@
  *  - gutter take-left on the single-row changed hunk (row 51) flips it
  *    equal through `text_apply_edit` + local apply with no autosave
  *    (unsaved note, Save buttons write), pair count -1;
- *  - gutter take-right on the leftOnly orphan hunk (rows 6-9) fills the
- *    missing side, flips all four rows equal, drops NO row silently;
+ *  - gutter take-right on the leftOnly orphan hunk (rows 6-9) deletes
+ *    the orphan lines (BC parity: empty source clears target), drops
+ *    NO other row silently;
  *  - `l` / `r` keys ride the same path (rows 98 / 145), `n` / `p` jump
  *    hunks, `Enter` opens the cell editor, `Escape` cancels it and then
  *    clears the selection; letters typed in the editor never take;
@@ -80,7 +81,7 @@ test("gutter take-left flips changed hunk equal, pair count drops", async ({ pag
   expect(consoleErrors).toEqual([]);
 });
 
-test("gutter take-right fills orphan hunk, drops no rows", async ({ page }) => {
+test("gutter take-right deletes orphan hunk lines (BC parity), drops no other rows", async ({ page }) => {
   const { pageErrors, consoleErrors } = trackErrors(page);
   await bootText(page);
 
@@ -93,18 +94,20 @@ test("gutter take-right fills orphan hunk, drops no rows", async ({ page }) => {
 
   await page.getByTestId("hunk-copy-right-0").click();
 
-  // Orphan: the backend has no target cell, so the copy stays
-  // session-local — but every row survives and flips to equal.
+  // BC parity (GAP-03): the take side is empty, so the orphan lines are
+  // deleted instead of cloned. Rows 6-9 disappear, later rows shift up,
+  // the hunk count drops by one, and the copy stays session-local.
   const note = page.getByTestId("textview/copy-note");
   await expect(note).toContainText("Copied hunk 1 take-right");
-  await expect(note).toContainText("applied 0 of 4");
   await expect(note).toContainText("kept session-local");
-  for (const index of [6, 7, 8, 9]) {
-    await expect(page.getByTestId(`textview/row-${index}`)).toHaveAttribute("data-kind", "equal");
-  }
-  const leftTexts = await page.getByTestId("textview/row-6").locator('div[title="left"]').textContent();
-  await expect(page.getByTestId("textview/row-6").locator('div[title="right"]')).toHaveText(leftTexts ?? "");
   await expect.poll(async () => pairCount(page), { timeout: 10000 }).toBe(pairsBefore - 1);
+  // Row ids are stable: the deleted run leaves a gap (rows 6-9 gone),
+  // neighbors keep their ids — no other row is dropped.
+  for (const index of [6, 7, 8, 9]) {
+    await expect(page.getByTestId(`textview/row-${index}`)).toHaveCount(0);
+  }
+  await expect(page.getByTestId("textview/row-5")).toBeVisible();
+  await expect(page.getByTestId("textview/row-10")).toBeVisible();
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);

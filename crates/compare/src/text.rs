@@ -110,3 +110,35 @@ fn comparison_key(line: &str, opts: &TextOptions) -> String {
     }
     key
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_options_defaults_and_extensions() {
+        let def = TextOptions::default();
+        assert!(!def.ignore_case);
+        assert!(!def.ignore_space_change);
+        assert!(!def.minor_unimportant);
+        assert!(def.suppressed_lines.is_empty());
+        assert_eq!(def.encoding, None);
+        assert_eq!(def.eol, None);
+
+        let custom = TextOptions {
+            ignore_case: true,
+            ignore_space_change: false,
+            minor_unimportant: true,
+            suppressed_lines: vec![0, 3],
+            encoding: Some("windows-1252".to_string()),
+            eol: Some("crlf".to_string()),
+        };
+        let l = vec!["A".to_string(), "B".to_string()];
+        let r = vec!["a".to_string(), "B".to_string()];
+        let cmp = compare_text_lines(&l, &r, &custom);
+        assert_eq!(cmp.left_lines, l);
+        assert_eq!(cmp.right_lines, r);
+        assert!(cmp.script.exact);
+    }
+}
+

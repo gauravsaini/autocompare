@@ -16,7 +16,8 @@
  *     repo-bundled faces (Inter + JetBrains Mono, offline-first woff2 —
  *     zero remote webfont families);
  *  4. active tab pill: rounded + medium weight + tight tracking,
- *     light + dark; toolbar icons: stroke-width 2, round caps/joins,
+ *     light + dark; toolbar icons: stroke-width 1.75 (Lucide
+ *     standard, BC-parity direction — was 2.0), round caps/joins,
  *     light + dark.
  * Zoomed crops (code pane, gutter numerals, tab pill) land in
  * `/tmp/typo-100-*.png` (never in-repo). Zero console/page errors.
@@ -132,7 +133,7 @@ test("typo-100: type scale + tab pill + icon strokes pin, light+dark", async ({ 
       const w = svg.getAttribute("stroke-width");
       const cap = svg.getAttribute("stroke-linecap");
       const join = svg.getAttribute("stroke-linejoin");
-      if (w !== "2") failures.push(`icon stroke-width: ${w}`);
+      if (w !== "1.75") failures.push(`icon stroke-width: ${w}`);
       if (cap !== "round") failures.push(`icon linecap: ${cap}`);
       if (join !== "round") failures.push(`icon linejoin: ${join}`);
     }
@@ -228,7 +229,7 @@ test("typo-100: type scale + tab pill + icon strokes pin, light+dark", async ({ 
       if (window.getComputedStyle(latch).fontSize !== "12px") failures.push("dark size drift");
     }
     for (const svg of Array.from(document.querySelectorAll('[role="toolbar"] svg'))) {
-      if (svg.getAttribute("stroke-width") !== "2") failures.push("dark icon stroke drift");
+      if (svg.getAttribute("stroke-width") !== "1.75") failures.push("dark icon stroke drift");
       if (svg.getAttribute("stroke-linejoin") !== "round") failures.push("dark icon join drift");
     }
     return failures;

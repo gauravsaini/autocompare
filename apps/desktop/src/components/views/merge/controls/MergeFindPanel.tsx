@@ -47,13 +47,12 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           placeholder="text to find"
           autoComplete="off"
           spellCheck={false}
-          className="w-40 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="ac-mono w-40 text-[length:var(--ac-font-size-code)]"
         />
         <Button
           data-testid="merge/find-prev"
           onClick={onPrev}
           disabled={prevDisabled}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           Prev
         </Button>
@@ -61,14 +60,12 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           data-testid="merge/find-next"
           onClick={onNext}
           disabled={nextDisabled}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           Next
         </Button>
         <ToolbarButton
           data-testid="merge/find-close"
           label="Dismiss find (Esc)"
-          aria-label="Dismiss find (Esc)"
           title="Dismiss find (Esc)"
           onClick={onClose}
         >

@@ -104,13 +104,13 @@ export function LineDetailPane({ row }: LineDetailPaneProps): React.JSX.Element 
       <div className="grid grid-cols-1 gap-[var(--ac-space-2)] px-[var(--ac-space-4)] py-[var(--ac-space-2)]">
         <div>
           <p className="ac-meta font-medium text-[var(--ac-fg-muted)]">Left</p>
-          <pre data-testid="line-detail/left" className="overflow-x-auto whitespace-pre-wrap ac-mono text-[length:var(--ac-font-size-code)] leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">
+          <pre data-testid="line-detail/left" className="overflow-x-auto whitespace-pre-wrap ac-code text-[var(--ac-fg)]">
             {renderHighlighted(left, leftRanges, "left")}
           </pre>
         </div>
         <div>
           <p className="ac-meta font-medium text-[var(--ac-fg-muted)]">Right</p>
-          <pre data-testid="line-detail/right" className="overflow-x-auto whitespace-pre-wrap ac-mono text-[length:var(--ac-font-size-code)] leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">
+          <pre data-testid="line-detail/right" className="overflow-x-auto whitespace-pre-wrap ac-code text-[var(--ac-fg)]">
             {renderHighlighted(right, rightRanges, "right")}
           </pre>
         </div>

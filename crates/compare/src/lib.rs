@@ -75,13 +75,25 @@ impl std::error::Error for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Options that tune how text comparison decides equality.
-#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextOptions {
     /// Ignore differences in letter case.
     pub ignore_case: bool,
     /// Ignore whitespace differences inside lines: leading, trailing
     /// and repeated internal spaces or tabs.
     pub ignore_space_change: bool,
+    /// Treat unimportant/minor differences (comments, minor edits) as minor.
+    #[serde(default)]
+    pub minor_unimportant: bool,
+    /// Optional line indices to suppress / mark ignored (row flag, not deletion).
+    #[serde(default)]
+    pub suppressed_lines: Vec<u64>,
+    /// Optional encoding name (e.g. "utf-8", "windows-1252").
+    #[serde(default)]
+    pub encoding: Option<String>,
+    /// Optional line ending override (e.g. "crlf", "lf").
+    #[serde(default)]
+    pub eol: Option<String>,
 }
 
 /// Loads a text file for comparison: reads the bytes, decodes UTF-8

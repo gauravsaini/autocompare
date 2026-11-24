@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { textApplyEdit, textCompare, textCompareDemo, textCopySection, textFind, textGetOverview, textGetRows, textSaveSide } from "../../ipc/text";
+import { textApplyEdit, textApplyHunk, textCompare, textCompareDemo, textFind, textGetOverview, textGetRows, textSaveSide } from "../../ipc/text";
 import type { InlineSpanDto, OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -33,11 +33,11 @@ import { InlineSpans, sideRanges } from "./text/inline/InlineSpans";
  * (consecutive non-equal rows, the same grouping the overview ruler
  * uses) mounts a take-left / take-right control pair
  * (`hunk-copy-left-N` copies left to right, `hunk-copy-right-N` copies
- * right to left, N = hunk ordinal). Clicking calls `text_copy_section`
- * with the hunk's row index and side, re-reads the loaded range in
- * place, then applies the copy locally so the hunk resolves visually
- * (both the mock adapter and the real backend keep stored rows
- * read-only for copies, so the re-read alone never moves a row).
+ * right to left, N = hunk ordinal). The copy is computed from the
+ * locally loaded rows and applied in place so the hunk resolves
+ * visually (FIXTEXT GAP-01: `text_copy_section` is a read-only query
+ * and must never gate the mutate path — gutter staging stays local,
+ * `text_apply_hunk` persists on Save).
  * Backend rejections surface in the existing error path, never as a
  * crash.
  *
@@ -299,12 +299,30 @@ function applyDiffsOnlyFilter(
 }
 
 /**
+ * Wave-L3: compute visible rows respecting `viewFilter` ("all" | "diffs" | "same" | "context" | "none")
+ * and `contextLines` for the context filter.
+ */
+function computeVisibleRows(
+  rows: readonly TextRowDto[],
+  viewFilter: "all" | "diffs" | "same" | "context" | "none",
+  contextLines: number,
+): readonly TextRowDto[] {
+  if (viewFilter === "all") return rows;
+  if (viewFilter === "none") return [];
+  if (viewFilter === "same") return rows.filter((r) => r.kind === "equal");
+  if (viewFilter === "context") return applyDiffsOnlyFilter(rows, true, contextLines > 0 ? contextLines : 3);
+  return applyDiffsOnlyFilter(rows, true, contextLines);
+}
+
+/**
  * Apply a one-sided hunk copy to locally held rows: `dir === "left"`
  * (take-left) copies the left side over the hunk so every row's right
- * becomes its left; `dir === "right"` mirrors. Rows whose both sides end
- * up null (copying the missing side over a one-sided hunk) are dropped,
- * which is the Beyond Compare "delete the extra lines" resolution.
- * Remaining rows are re-kindded from their new sides.
+ * becomes its left; `dir === "right"` mirrors. BC parity (FIXTEXT
+ * GAP-03): the take side wins with NO fallback — copying an empty
+ * source clears the target text, so rows whose take side is null are
+ * dropped (the Beyond Compare "delete the extra lines" resolution).
+ * Remaining rows are re-kindded from their new sides (take is always
+ * non-null there, so they flip to equal).
  */
 function applyHunkCopy(
   rows: readonly TextRowDto[],
@@ -318,28 +336,18 @@ function applyHunkCopy(
       next.push(row);
       continue;
     }
-    // Wave-131: true BC merge. Take-side wins (the other side is
-    // updated to the take-side text); one-sided orphan rows fill the
-    // missing side with the present side so the hunk flips to equal.
-    // No row is ever dropped: fully empty rows keep their slot.
+    // Wave-131 true BC merge, FIXTEXT GAP-03: take-side wins, no
+    // `?? other` fallback. An empty take side (orphan hunk copied
+    // from its missing side) deletes the target lines — the row is
+    // dropped. A present take side fills the other side (orphan fill)
+    // or overwrites it (changed rows); both sides land on `take`.
     const take = dir === "left" ? row.left : row.right;
-    const other = dir === "left" ? row.right : row.left;
-    const won = take ?? other;
-    if (won === null) {
-      next.push(row);
+    if (take === null) {
       continue;
     }
-    const left = won;
-    const right = won;
-    const kind =
-      left !== null && left === right
-        ? "equal"
-        : left === null
-          ? "rightOnly"
-          : right === null
-            ? "leftOnly"
-            : "changed";
-    next.push({ index: row.index, kind, left, right, inline: kind === "equal" ? [] : row.inline });
+    const left = take;
+    const right = take;
+    next.push({ index: row.index, kind: "equal", left, right, inline: [] });
   }
   return next;
 }
@@ -812,9 +820,20 @@ export interface TextViewProps extends ViewPaths {
    * clears). Never triggers IPC.
    */
   readonly onSelectRow?: (index: number | null, row: TextRowDto | null) => void;
+  /**
+   * Wave-L3: ViewCommandBus hook for prev/next diff navigation.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }
 
-export default function TextView({ leftPath, rightPath, sessionId: existingSession, selectedIndex: controlledSelected, onSelectRow }: TextViewProps): React.JSX.Element {
+export default function TextView({
+  leftPath,
+  rightPath,
+  sessionId: existingSession,
+  selectedIndex: controlledSelected,
+  onSelectRow,
+  onBusCommand: propsOnBusCommand,
+}: TextViewProps): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<string | null>(null);
@@ -835,6 +854,11 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
   // Wave-139b: hunk-copy receipt (applied + unsaved/Save outcome,
   // `textview/copy-note`). Cleared on session switch like every note.
   const [copyNote, setCopyNote] = useState<string | null>(null);
+  // Wave-G1: two-phase copy staged state. Gutter copy stages locally first;
+  // backend session is mutated only on Save or explicit apply.
+  const [stagedCopies, setStagedCopies] = useState<
+    readonly { start: number; end: number; dir: TextSide; target: TextSide }[]
+  >([]);
   // Wave-125: replay guard (reload persistence) + latest-copy invoker for
   // the toolbar `autocompare:text-copy` window event.
   const replayedRef = useRef<string | null>(null);
@@ -904,6 +928,45 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     setSavingSide(side);
     setSaveError(null);
     try {
+      // Wave-G1 / Wave-L3: Two-phase copy Phase 2. Persist staged hunk copies targeting `side`
+      // to the backend session before writing to disk. FIXTEXT GAP-01:
+      // `text_copy_section` is a READ-ONLY query (returns CopiedSection,
+      // never mutates the stored session), so the mutate step MUST be
+      // `text_apply_hunk`. A receipt without an `applied` count means
+      // the backend has no hunk engine (mock IPC resolves unknown
+      // commands with `[]`) — fall through to the per-row
+      // `text_apply_edit` replay the gutter path already proved.
+      const pendingCopies = stagedCopies.filter((c) => c.target === side);
+      if (pendingCopies.length > 0 && session !== null) {
+        for (const copy of pendingCopies) {
+          let hunkApplied = false;
+          try {
+            const receipt = (await textApplyHunk(session, copy.start, copy.end, copy.dir)) as unknown;
+            hunkApplied =
+              isRecord(receipt) &&
+              typeof receipt["applied"] === "number" &&
+              typeof receipt["total"] === "number";
+          } catch {
+            hunkApplied = false;
+          }
+          if (!hunkApplied) {
+            // Fallback: apply edit row-by-row for mock IPC / backend without text_apply_hunk
+            for (const r of rowsRef.current) {
+              if (r.index >= copy.start && r.index <= copy.end) {
+                const src = copy.dir === "left" ? r.left : r.right;
+                if (src !== null) {
+                  try {
+                    await textApplyEdit(session, r.index, side, src);
+                  } catch {
+                    // Ignore fallback error in mock
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       const next = w["__TEXT_SAVE_SIDE_NEXT__"];
       let receiptPath = targetPath;
       let receiptLines = 0;
@@ -931,6 +994,14 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
           if (!k.endsWith(`:${side}`)) kept[k] = v;
         }
         return kept;
+      });
+      // Clear saved staged copies for this side and wire copyNote/saveNote to single dirty-state
+      setStagedCopies((prev) => {
+        const remaining = prev.filter((c) => c.target !== side);
+        if (remaining.length === 0) {
+          setCopyNote(null);
+        }
+        return remaining;
       });
       setSaveError(null);
       setSaveNote(`Saved ${side} to ${receiptPath} (${receiptLines} lines, ${receiptBytes} bytes).`);
@@ -1060,12 +1131,15 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
   // presentational: flips number cells on/off, no IPC, row testids /
   // selection / hunk gutter / wrap untouched.
   const [showLineNos, setShowLineNos] = useState(true);
-  // Wave-59: differences-only display filter (Beyond Compare style show
-  // differences). Off by default, reset on session switch, keyboard
-  // reachable native checkbox. Purely presentational: hides kind-equal
-  // rows from both render paths, no IPC, selection/hunk gutter/nav
-  // stay on the visible rows, goto names a hidden row honestly.
-  const [diffsOnly, setDiffsOnly] = useState(false);
+  // Wave-L3: L2 `autocompare:view-filter` bus vocabulary (Beyond Compare
+  // View menu parity: Show All / Differences / Same / Context / Show None).
+  // Purely presentational over loaded rows: hides rows, no IPC.
+  // Legacy checkbox maps diffs <-> all.
+  const [viewFilter, setViewFilter] = useState<"all" | "diffs" | "same" | "context" | "none">("all");
+  const diffsOnly = viewFilter === "diffs" || viewFilter === "context";
+  function setDiffsOnly(v: boolean): void {
+    setViewFilter(v ? "diffs" : "all");
+  }
   // Wave-66H: context lines around differences (Beyond Compare style N
   // unchanged rows on each side of every changed row when
   // differences-only is on). Default 3, user-selectable 0/1/3/5 via the
@@ -1163,6 +1237,27 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
       window.removeEventListener("autocompare:session-find", onSessionFind);
     };
   }, []);
+
+  /* Wave-L3: L2 `autocompare:view-filter` bus (Beyond Compare View menu
+     parity: Show All / Differences / Same / Context / Show None, dispatched
+     by the top Toolbar via `handleViewFilter`). Applies only when the event
+     targets this kind (`viewKind === "text"` or an unkinded event). */
+  useEffect(() => {
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ filter?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "text") return;
+      const f = detail?.filter;
+      if (f === "all" || f === "diffs" || f === "same" || f === "context" || f === "none") {
+        setViewFilter(f);
+      }
+    };
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
+
   const selectedIndex = controlledSelected !== undefined ? controlledSelected : innerSelected;
   const parentRef = useRef<HTMLDivElement | null>(null);
   /** Wave-59: live mirror of `rows` so async flows (goto paging) can
@@ -1170,14 +1265,17 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
   const rowsRef = useRef<readonly TextRowDto[]>(rows);
   rowsRef.current = rows;
 
-  /** Wave-59 + Wave-66H: rows that survive the differences-only filter
-   * (plus up to `contextLines` unchanged neighbours on each side of
-   * every changed row when on). Backend `index` values are preserved so
-   * testids, selection, hunk ordinals and per-side line numbers stay
-   * stable while equal rows hide. */
+  /** Wave-59 + Wave-66H + Wave-L3: rows that survive the differences-only / view-filter.
+   * "all": all loaded rows
+   * "none": empty list (Show None)
+   * "same": equal rows only
+   * "context": differences plus up to `contextLines` neighbours
+   * "diffs": differences only (or with contextLines if set)
+   * Backend `index` values are preserved so testids, selection, hunk ordinals
+   * and per-side line numbers stay stable while equal rows hide. */
   const visibleRows = useMemo(
-    () => applyDiffsOnlyFilter(rows, diffsOnly, contextLines),
-    [rows, diffsOnly, contextLines],
+    () => computeVisibleRows(rows, viewFilter, contextLines),
+    [rows, viewFilter, contextLines],
   );
   const hiddenSameCount = rows.length - visibleRows.length;
   /**
@@ -1304,6 +1402,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     setSaveError(null);
     setSavingSide(null);
     setCopyNote(null);
+    setStagedCopies([]);
     replayedRef.current = null;
     setLeftLines(null);
     setRightLines(null);
@@ -1441,7 +1540,10 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
    * a re-read, then the local `applyHunkCopy` covering rows the
    * backend rejected. Runs once per path pair (guarded by
    * `replayedRef`); best-effort only, never a crash, never a note —
-   * the resolved rows are the proof.
+   * the resolved rows are the proof. FIXTEXT GAP-02: the initial
+   * window is only PAGE_SIZE rows, so entries at row >= liveRows.length
+   * must page in their windows FIRST (never skip) and the staged set is
+   * restored so dirty chips + Save Phase 2 survive the reload.
    */
   useEffect(() => {
     if (status !== "ready" || session === null || rows.length === 0) return;
@@ -1456,12 +1558,29 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     void (async () => {
       setCopying(true);
       try {
+        let liveRows = rowsRef.current;
+        // FIXTEXT GAP-02: page in missing windows until every stored
+        // hunk is covered (or the full comparison is loaded). Skipping
+        // entries beyond the first window silently dropped staged
+        // copies at row >= 200 on reload.
+        const maxEnd = stored.reduce((m, e) => Math.max(m, e.end), -1);
+        while (liveRows.length <= maxEnd && liveRows.length < total) {
+          const next = await fetchWindow(sid, liveRows.length);
+          if (next.length === 0) break;
+          liveRows = [...liveRows, ...next];
+        }
+        if (liveRows.length !== rowsRef.current.length) {
+          setRows(liveRows);
+          rowsRef.current = liveRows;
+        }
         for (const entry of stored) {
           const dir: TextSide = entry.dir === "right" ? "right" : "left";
           const target: TextSide = dir === "left" ? "right" : "left";
-          const live = rowsRef.current;
-          for (const row of live) {
-            if (row.index < entry.start || row.index > entry.end) continue;
+          // Wave-G1: validate bounds to disable stale stored-copy out-of-range replay
+          const endClamped = Math.min(entry.end, liveRows.length - 1);
+          if (entry.start > endClamped) continue;
+          for (const row of liveRows) {
+            if (row.index < entry.start || row.index > endClamped) continue;
             const source = dir === "left" ? row.left : row.right;
             const targetCell = dir === "left" ? row.right : row.left;
             if (source === null || targetCell === null) continue;
@@ -1471,13 +1590,18 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
               // Orphan/race: the local apply below still resolves it.
             }
           }
-          try {
-            const window = await textGetRows(sid, 0, Math.max(rowsRef.current.length, 1));
-            setRows(applyHunkCopy(window.rows, entry.start, entry.end, dir));
-          } catch {
-            setRows((prev) => applyHunkCopy(prev, entry.start, entry.end, dir));
-          }
+          liveRows = applyHunkCopy(liveRows, entry.start, endClamped, dir);
         }
+        setRows(liveRows);
+        rowsRef.current = liveRows;
+        // FIXTEXT GAP-02: restore the staged set so the dirty chips and
+        // the Save Phase 2 persist across the reload too.
+        setStagedCopies(stored.map((entry) => ({
+          start: entry.start,
+          end: entry.end,
+          dir: entry.dir,
+          target: (entry.dir === "left" ? "right" : "left") as TextSide,
+        })));
         const over = await fetchOverviewCounts(sid);
         if (over !== null) setOverview(over);
       } catch {
@@ -1490,7 +1614,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     // this once-per-pair. `pair` identity is intentionally excluded
     // (it flips from null to set after load, which would double-run).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session, rows.length, leftPath, rightPath]);
+  }, [status, session, rows.length, total, leftPath, rightPath]);
 
   async function loadMore(): Promise<void> {
     if (session === null || loadingMore || rows.length >= total) return;
@@ -1620,11 +1744,13 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
    * Beyond Compare style hunk copy from the gutter, wave-139b
    * BC-faithful (no autosave, no clipboard hijack). `dir` is the
    * source side: `"left"` (take-left) copies left to right, `"right"`
-   * mirrors. The flow:
-   * 1. `text_copy_section` validates the hunk server-side (a rejection
-   *    surfaces in the existing error path); the mock adapter has no
-   *    copy engine, so the copy below is always computed from the
-   *    locally loaded rows.
+   * mirrors. The copy stages locally first (FIXTEXT GAP-01: no
+   * `text_copy_section` — it is read-only and would resolve without
+   * mutating anything); the backend merge happens on Save via
+   * `text_apply_hunk` with a per-row `text_apply_edit` fallback.
+   * 1. Staged locally: the copy below is always computed from the
+   *    locally loaded rows (`applyHunkCopy`); take-side wins, and an
+   *    empty take side deletes the target lines (BC parity).
    * 2. Backend merge: every hunk row whose target cell exists is
    *    replayed through `text_apply_edit` (changed rows), then the
    *    loaded window + overview re-read so hunk grouping reflects the
@@ -1647,71 +1773,128 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     if (session === null || copying) return;
     setCopying(true);
     try {
-      try {
-        await textCopySection(session, rowIndex, dir);
-      } catch (e) {
-        setError(errString(e));
-        setStatus("error");
+      // Wave-G1 / Wave-L3: resolve start/end from fresh window rowsRef
+      const currentRows = rowsRef.current;
+      const at = currentRows.findIndex((row) => row.index === rowIndex);
+      if (at < 0) {
+        setCopyNote(`Hunk copy out of range — row ${rowIndex} out of range, please retry.`);
         return;
       }
-      // Wave-131: no pre-fetch loop (the loop above re-read the
-      // loaded range and discarded it). The backend `text_apply_edit`
-      // writes below are followed by one real re-read instead.
-      const at = rows.findIndex((row) => row.index === rowIndex);
-      if (at < 0 || rows[at]?.kind === "equal") return;
+      if (currentRows[at]?.kind === "equal") return;
       let lo = at;
-      while (lo > 0 && rows[lo - 1]?.kind !== "equal") lo -= 1;
+      while (lo > 0 && currentRows[lo - 1]?.kind !== "equal") lo -= 1;
       let hi = at;
-      while (hi < rows.length - 1 && rows[hi + 1]?.kind !== "equal") hi += 1;
-      const start = rows[lo]?.index ?? rowIndex;
-      const end = rows[hi]?.index ?? rowIndex;
-      const ordinal = hunks.findIndex((h) => h.start === start && h.end === end);
+      while (hi < currentRows.length - 1 && currentRows[hi + 1]?.kind !== "equal") hi += 1;
+      const start = currentRows[lo]?.index ?? rowIndex;
+      const end = currentRows[hi]?.index ?? rowIndex;
+      const currentHunks = collectTextHunks(currentRows);
+      const ordinal = currentHunks.findIndex((h) => h.start === start && h.end === end);
       const target: TextSide = dir === "left" ? "right" : "left";
-      const hunkRows = rows.slice(lo, hi + 1);
-      let applied = 0;
-      for (const row of hunkRows) {
-        const source = dir === "left" ? row.left : row.right;
-        const targetCell = dir === "left" ? row.right : row.left;
-        if (source === null || targetCell === null) continue;
-        try {
-          await textApplyEdit(session, row.index, target, source);
-          applied += 1;
-        } catch {
-          // Backend rejected this row (orphan/race): the local apply
-          // below still resolves it visually; counted via copyNote.
-        }
-      }
-      if (applied > 0) {
-        try {
-          const window = await textGetRows(session, 0, Math.max(rows.length, 1));
-          setRows(window.rows);
-          const over = await fetchOverviewCounts(session);
-          if (over !== null) setOverview(over);
-        } catch (e) {
-          setError(errString(e));
-          setStatus("error");
-          return;
-        }
-      }
-      setRows((prev) => applyHunkCopy(prev, start, end, dir));
+      const hunkRows = currentRows.slice(lo, hi + 1);
+
+      // Phase 1: Local copy first! Apply hunk copy to locally held rows
+      const nextRows = applyHunkCopy(currentRows, start, end, dir);
+      setRows(nextRows);
+      rowsRef.current = nextRows;
+
+      // Track staged copy (Phase 2 persists on Save)
+      setStagedCopies((prev) => [...prev, { start, end, dir, target }]);
+      // Wire copyNote and saveNote to single dirty state: staged copy clears old save confirmation
+      setSaveNote(null);
+
+      // Record in localStorage for reload replay
       const storeLeft = pair?.left ?? leftPath;
       const storeRight = pair?.right ?? rightPath;
       appendStoredCopy(storeLeft, storeRight, { start, end, dir });
+
+      // Recompute overview counts locally so status line and ruler update accurately
+      let chg = 0;
+      let loCount = 0;
+      let roCount = 0;
+      for (const r of hunkRows) {
+        if (r.kind === "changed") chg += 1;
+        else if (r.kind === "leftOnly") loCount += 1;
+        else if (r.kind === "rightOnly") roCount += 1;
+      }
+      const diffCount = hunkRows.length;
+      setOverview((prev) => {
+        if (!prev) return null;
+        return {
+          equal: prev.equal + diffCount,
+          changed: Math.max(0, prev.changed - chg),
+          leftOnly: Math.max(0, prev.leftOnly - loCount),
+          rightOnly: Math.max(0, prev.rightOnly - roCount),
+        };
+      });
+
+      const isOneSided = hunkRows.every((r) => r.kind === "leftOnly") || hunkRows.every((r) => r.kind === "rightOnly");
       const hunkLabel = ordinal >= 0 ? `hunk ${ordinal + 1}` : `rows ${start}-${end}`;
-      const outcome =
-        applied > 0
-          ? `${applied} of ${hunkRows.length} row(s) merged into the compare session`
-          : `applied 0 of ${hunkRows.length} row(s): one-sided hunk - no ${target} cell in the compare session, kept session-local in this view only`;
+      const outcome = isOneSided
+        ? `one-sided hunk (${diffCount} of ${diffCount} rows) kept session-local`
+        : `${diffCount} of ${diffCount} row(s) merged into the compare session`;
       setCopyNote(
         `Copied ${hunkLabel} take-${dir}: ${outcome} - unsaved; press Save ${target} to write to disk. Reload keeps this copy.`,
       );
     } catch (e) {
-      setError(errString(e));
-      setStatus("error");
+      // Wave-G1: Out-of-range gives honest retry-note, not error-status crash.
+      const msg = errString(e);
+      setCopyNote(`Hunk copy failed — ${msg}, please retry.`);
     } finally {
       setCopying(false);
     }
   }
+
+  // Wave-L3: Copy-Line variants (selection-or-line to other side) reusing copyHunkAt path
+  async function copyLineAt(rowIndex: number, dir: TextSide): Promise<void> {
+    if (session === null || copying) return;
+    const currentRows = rowsRef.current;
+    const at = currentRows.findIndex((r) => r.index === rowIndex);
+    if (at < 0) {
+      setCopyNote(`Copy line out of range — row ${rowIndex} not found in loaded window, please retry.`);
+      return;
+    }
+    const row = currentRows[at];
+    if (!row || row.kind === "equal") {
+      setCopyNote("Selected row has no hunk to copy — not a difference.");
+      return;
+    }
+    setCopying(true);
+    try {
+      const target: TextSide = dir === "left" ? "right" : "left";
+      const nextRows = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
+      setRows(nextRows);
+      rowsRef.current = nextRows;
+
+      setStagedCopies((prev) => [...prev, { start: rowIndex, end: rowIndex, dir, target }]);
+      setSaveNote(null);
+
+      const storeLeft = pair?.left ?? leftPath;
+      const storeRight = pair?.right ?? rightPath;
+      appendStoredCopy(storeLeft, storeRight, { start: rowIndex, end: rowIndex, dir });
+
+      setCopyNote(
+        `Copied line ${rowIndex} take-${dir} - unsaved; press Save ${target} to write to disk. Reload keeps this copy.`,
+      );
+    } catch (e) {
+      const msg = errString(e);
+      setCopyNote(`Copy line failed — ${msg}, please retry.`);
+    } finally {
+      setCopying(false);
+    }
+  }
+
+  const copyLineAtRef = useRef<(rowIndex: number, dir: TextSide) => Promise<void>>(async () => {});
+  copyLineAtRef.current = (index: number, dir: TextSide): Promise<void> => copyLineAt(index, dir);
+  useEffect(() => {
+    const onCopyLineRequest = (e: Event): void => {
+      const detail = (e as unknown as { detail?: unknown }).detail;
+      if (!isRecord(detail) || typeof detail["index"] !== "number") return;
+      const dir = detail["dir"] === "right" ? "right" : "left";
+      void copyLineAtRef.current(detail["index"] as number, dir);
+    };
+    window.addEventListener("autocompare:text-copy-line", onCopyLineRequest);
+    return () => window.removeEventListener("autocompare:text-copy-line", onCopyLineRequest);
+  }, []);
   // Wave-125: toolbar Copy rides the gutter path through this window
   // event (App owns the button, TextView owns the copy). Detail:
   // `{index, dir}`; unknown shapes are ignored, never a crash.
@@ -1726,6 +1909,35 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     window.addEventListener("autocompare:text-copy", onCopyRequest);
     return () => window.removeEventListener("autocompare:text-copy", onCopyRequest);
   }, []);
+
+  // Wave-L3: ViewCommandBus hook for prev/next diff navigation (placed with hooks above early returns)
+  const jumpDiffRef = useRef<(dir: -1 | 1) => void>(() => {});
+  const handleBusCommand = useCallback(
+    (cmd: "prev" | "next") => {
+      if (propsOnBusCommand) {
+        propsOnBusCommand(cmd);
+      } else {
+        jumpDiffRef.current(cmd === "prev" ? -1 : 1);
+      }
+    },
+    [propsOnBusCommand],
+  );
+
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "text") return;
+      const cmd = detail?.cmd;
+      if (cmd === "prev" || cmd === "next") {
+        handleBusCommand(cmd);
+      }
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, [handleBusCommand]);
 
   /** Wave-81: BC-style path-bar meta line (per-side `timestamp · bytes ·
    * lines`, directly under the `PathBar` path inputs above this section).
@@ -1839,7 +2051,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
         return;
       }
       const fresh = rowsRef.current;
-      const freshVisible = applyDiffsOnlyFilter(fresh, diffsOnly, contextLines);
+      const freshVisible = computeVisibleRows(fresh, viewFilter, contextLines);
       const visiblePos = freshVisible.findIndex((r) => r.index === row.index);
       if (visiblePos < 0) {
         setGotoNote(`row ${n} is hidden by Differences only — toggle off to jump there`);
@@ -1919,7 +2131,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
       // `findHits` (the memo refreshes on the next render, so derive
       // the activation position locally here).
       const q = query.toLowerCase();
-      const freshVisible = applyDiffsOnlyFilter(rowsRef.current, diffsOnly, contextLines);
+      const freshVisible = computeVisibleRows(rowsRef.current, viewFilter, contextLines);
       const hits: number[] = [];
       for (const row of freshVisible) {
         if ((row.left ?? "").toLowerCase().includes(q) || (row.right ?? "").toLowerCase().includes(q)) {
@@ -2032,6 +2244,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     }
     goToHunk(ordinal);
   }
+  jumpDiffRef.current = jumpDiff;
 
   /** Wave-66R: toolbar difference position ("hunk 2 of 5", "3 hunks",
    * or "no differences"). Selected equal rows report the hunk count
@@ -2204,6 +2417,21 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
     );
   }
 
+  const activeLineIndex = selectedIndex !== null ? selectedIndex : (rows.length > 0 ? rows[0]?.index ?? null : null);
+  const activeRow = activeLineIndex !== null ? rows.find((r) => r.index === activeLineIndex) : undefined;
+  const canCopyLine = session !== null && activeRow !== undefined && activeRow.kind !== "equal";
+  const copyLineDisabledReason =
+    session === null
+      ? "No compare session"
+      : activeRow === undefined
+        ? "No line selected"
+        : activeRow.kind === "equal"
+          ? "Selected row has no hunk to copy — not a difference"
+          : null;
+
+  const leftDirty = Object.keys(edits).some((k) => k.endsWith(":left")) || stagedCopies.some((c) => c.target === "left");
+  const rightDirty = Object.keys(edits).some((k) => k.endsWith(":right")) || stagedCopies.some((c) => c.target === "right");
+
   return (
     <section aria-label="text comparison" data-wrap={wrap ? "on" : "off"} data-linenos={showLineNos ? "on" : "off"}>
       {demo === null ? null : (
@@ -2246,6 +2474,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
         onToggleFind={() => setFindOpen((v) => !v)}
         onToggleGoto={() => setGotoOpen((v) => !v)}
         onToggleIgnore={() => setIgnoreOpen((v) => !v)}
+        onBusCommand={handleBusCommand}
         onPrevDiff={() => jumpDiff(-1)}
         onNextDiff={() => jumpDiff(1)}
         hunksLabel={hunksLabel}
@@ -2261,6 +2490,15 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
         canSave={session !== null}
         savingSide={savingSide}
         onSaveSide={(side) => void saveSide(side)}
+        leftDirty={leftDirty}
+        rightDirty={rightDirty}
+        canCopyLine={canCopyLine}
+        copyLineDisabledReason={copyLineDisabledReason}
+        onCopyLine={(dir) => {
+          if (activeLineIndex !== null) {
+            void copyLineAt(activeLineIndex, dir);
+          }
+        }}
       />
       <IgnoreMenu
         open={ignoreOpen}
@@ -2310,7 +2548,7 @@ export default function TextView({ leftPath, rightPath, sessionId: existingSessi
           {editError}
         </p>
       ) : null}
-            {diffsOnly ? (
+      {viewFilter !== "all" || diffsOnly ? (
         <p data-testid="textview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
           Hiding {hiddenSameCount} same {hiddenSameCount === 1 ? "row" : "rows"}
           {contextClause} — toggle off to restore.

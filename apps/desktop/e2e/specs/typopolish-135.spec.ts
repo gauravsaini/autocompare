@@ -3,7 +3,7 @@
  *
  * Gap survey — what prior specs already pin (NOT re-asserted here):
  *  - typo-51: selected tab tracking (-0.12px), statusbar 11px,
- *    pathbar input mono family.
+ *    pathbar input Inter (UI-stack) family.
  *  - typo-unify: `.tv-cell`/`.tv-gutter` family+lh+tracking,
  *    `.mv-pane pre`, `.sv-row`, `.mw-row` family+lh.
  *  - typopolish-66d: all seven views code+UI weight/lh/tracking,
@@ -29,8 +29,9 @@
  *  5. merge preview textarea rides the mono token (code surface the
  *     `.mv-pane pre` rule never covered) — pinned when the merge
  *     session mounts it;
- *  6. pathbar input line-height rides the code token (18.6px — was
- *     `leading-none`, typo-51 pinned family only).
+ *  6. pathbar input rides the UI token ramp (Inter stack 12px /
+ *     18px = 12px * 1.5 UI lh — BC parity: path fields use the
+ *     proportional UI font, not mono; typo-51 pins the family).
  * Light + dark, zero console/page errors, view-scoped no-overlap.
  * Zoomed crops land in `/tmp/typopolish-135-*` (never in-repo).
  * New file only; no existing spec touched.
@@ -139,7 +140,8 @@ test("typopolish-135: display scale + code-surface gaps ride tokens, light+dark"
   await page.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByTestId("session/dialog")).toBeHidden();
 
-  // ---- 6. Pathbar input rides the code line-height (typo-51 did family).
+  // ---- 6. Pathbar rides the UI ramp (typo-51 pins the Inter
+  // family; lh is the UI token 18px = 12px * 1.5, not the code 18.6px).
   await expect(page.getByTestId("view-text")).toBeVisible();
   const pathVerdict = await page.evaluate(() => {
     const failures: string[] = [];
@@ -148,9 +150,9 @@ test("typopolish-135: display scale + code-surface gaps ride tokens, light+dark"
       failures.push("no pathbar/left");
     } else {
       const c = window.getComputedStyle(input);
-      if (!c.fontFamily.includes("SF Mono")) failures.push(`pathbar family: ${c.fontFamily}`);
-      if (Math.abs(parseFloat(c.lineHeight) - 18.6) > 0.2)
-        failures.push(`pathbar lh: ${c.lineHeight} (was leading-none 12px)`);
+      if (!c.fontFamily.includes("Inter")) failures.push(`pathbar family: ${c.fontFamily}`);
+      if (Math.abs(parseFloat(c.lineHeight) - 18) > 0.2)
+        failures.push(`pathbar lh: ${c.lineHeight} (UI token 12px*1.5=18px)`);
     }
     return failures;
   });
@@ -226,7 +228,7 @@ test("typopolish-135: display scale + code-surface gaps ride tokens, light+dark"
     const input = document.querySelector('[data-testid="pathbar/left"]');
     if (input) {
       const i = window.getComputedStyle(input);
-      if (Math.abs(parseFloat(i.lineHeight) - 18.6) > 0.2)
+      if (Math.abs(parseFloat(i.lineHeight) - 18) > 0.2)
         failures.push(`dark pathbar lh: ${i.lineHeight}`);
     }
     return failures;

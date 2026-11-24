@@ -1,9 +1,8 @@
 /**
- * Wave-73: collapsible sync name-filter panel (Beyond Compare style).
+ * Wave-73 / Wave-B3: collapsible sync name-filter panel (Beyond Compare style).
  *
  * In-flow collapsible (never `position: absolute`, so the overlap gate
- * holds with the panel open): open on load for backward compat (the
- * wave-64 filter box stays visible, mirroring folder-67B/media-72),
+ * holds with the panel open): open on load for backward compat,
  * toggled from the toolbar, Ctrl+F, or Esc. Esc is two-stage: it clears
  * a non-empty query first (wave-64 refill contract keeps the box
  * mounted) and collapses the panel once the box is empty. Purely
@@ -49,17 +48,16 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
           placeholder="file or folder name"
           autoComplete="off"
           spellCheck={false}
-          className="w-64 rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg)] px-[var(--ac-space-3)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
+          className="w-64 ac-mono text-[length:var(--ac-font-size-code)]"
         />
         <ToolbarButton
           data-testid="syncview/name-close"
           label="Dismiss name filter (Esc)"
           aria-label="Dismiss name filter (Esc)"
           title="Dismiss name filter (Esc)"
+          icon={X}
           onClick={onClose}
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden="true" />
-        </ToolbarButton>
+        />
       </div>
     </section>
   );

@@ -472,6 +472,66 @@ mod tests {
     }
 
     #[test]
+    fn text_apply_takes_base_resolution() {
+        // GAP-13 (FIXMERGE): per-hunk Take Center (Base ancestor) proof.
+        let dir = unique_dir("apply-base");
+        assert!(write_text_tree(&dir, "a\nb\nc\n", "a\nB\nc\n", "a\nC\nc\n"));
+        let (base, left, right) = plan_paths(&dir);
+        let out = dir.join("out.txt").display().to_string();
+        let report = match merge_text_apply(
+            base,
+            left,
+            right,
+            vec![TextResolution {
+                conflict_id: 0,
+                choice: TextChoice::Base,
+            }],
+            Some(out.clone()),
+        ) {
+            Ok(report) => report,
+            Err(e) => {
+                assert!(e.is_empty(), "apply failed: {e}");
+                return;
+            }
+        };
+        assert_eq!(report.conflict_count, 1);
+        assert_eq!(report.resolved_count, 1);
+        assert_eq!(report.unresolved_count, 0);
+        assert!(!report.has_conflict_markers);
+        assert_eq!(read_file(Path::new(&out)), Some("a\nb\nc\n".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn text_apply_takes_both_left_first_resolution() {
+        // GAP-13 (FIXMERGE): per-hunk Take Both (L-then-R) proof.
+        let dir = unique_dir("apply-both");
+        assert!(write_text_tree(&dir, "a\nb\nc\n", "a\nB\nc\n", "a\nC\nc\n"));
+        let (base, left, right) = plan_paths(&dir);
+        let out = dir.join("out.txt").display().to_string();
+        let report = match merge_text_apply(
+            base,
+            left,
+            right,
+            vec![TextResolution {
+                conflict_id: 0,
+                choice: TextChoice::BothLeftFirst,
+            }],
+            Some(out.clone()),
+        ) {
+            Ok(report) => report,
+            Err(e) => {
+                assert!(e.is_empty(), "apply failed: {e}");
+                return;
+            }
+        };
+        assert_eq!(report.resolved_count, 1);
+        assert!(!report.has_conflict_markers);
+        assert_eq!(read_file(Path::new(&out)), Some("a\nB\nC\nc\n".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn text_apply_unresolved_keeps_markers_and_counts() {
         let dir = unique_dir("apply-markers");
         assert!(write_text_tree(&dir, "a\nb\nc\n", "a\nB\nc\n", "a\nC\nc\n"));

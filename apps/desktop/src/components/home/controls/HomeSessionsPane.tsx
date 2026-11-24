@@ -7,6 +7,8 @@
  * kinds, NO backend/IPC change, NO new HOME_CARDS — the right pane keeps
  * the existing cards grid untouched.
  */
+import { Button } from "../../ui";
+
 export interface HomeSessionEntry {
   readonly id: string;
   readonly title: string;
@@ -43,15 +45,15 @@ export default function HomeSessionsPane(props: HomeSessionsPaneProps): React.JS
             const selected = s.id === activeId;
             return (
               <li key={s.id}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   data-testid={`home/session-row-${s.id}`}
                   aria-current={selected}
                   aria-label={`${s.title} (${s.kind})${s.dirty ? ", unsaved changes" : ""}`}
                   title={`${s.title} — ${s.kind}`}
                   onClick={() => onSelect(s.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] ${
-                    selected ? "bg-[var(--ac-toolbar-btn-hover-bg)]" : ""
+                  className={`!flex !w-full !items-center !justify-start !h-auto gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--ac-toolbar-btn-hover-bg)] ${
+                    selected ? "!bg-[var(--ac-toolbar-btn-hover-bg)]" : ""
                   }`}
                 >
                   <span className="min-w-0 flex-1">
@@ -73,7 +75,7 @@ export default function HomeSessionsPane(props: HomeSessionsPaneProps): React.JS
                       className="inline-block size-1.5 shrink-0 rounded-full bg-[var(--ac-tab-dirty)]"
                     />
                   ) : null}
-                </button>
+                </Button>
               </li>
             );
           })}

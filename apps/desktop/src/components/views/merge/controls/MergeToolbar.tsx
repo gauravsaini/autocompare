@@ -29,10 +29,27 @@ export interface MergeToolbarProps {
   readonly selectedId?: number | null;
   /** Wave-147: jump to conflict by id (same selectConflict path as nav). */
   readonly onSelectId?: (id: number) => void;
+  /**
+   * GAP-13 (FIXMERGE): active-conflict pointer + per-hunk Take
+   * Left/Center/Right (BC 3-way toolbar parity). `activeId` names the
+   * selected conflict, `activePosition` mirrors the view position label
+   * (`Conflict i of n`); the three take callbacks resolve the ACTIVE
+   * conflict only (per-conflict card buttons stay untouched). All props
+   * optional so legacy mounts render byte-identical chrome.
+   */
+  readonly activeId?: number | null;
+  readonly activePosition?: string | null;
+  readonly onTakeActiveLeft?: () => void;
+  readonly onTakeActiveCenter?: () => void;
+  readonly onTakeActiveRight?: () => void;
+  readonly takeActiveDisabled?: boolean;
 }
 
 export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Element {
-  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId } = props;  return (
+  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId, activeId, activePosition, onTakeActiveLeft, onTakeActiveCenter, onTakeActiveRight, takeActiveDisabled } = props;
+  const showActiveTakes = onTakeActiveLeft !== undefined || onTakeActiveCenter !== undefined || onTakeActiveRight !== undefined;
+  const activeDisabled = takeActiveDisabled === true || activeId === null || activeId === undefined;
+  return (
     <div
       role="toolbar"
       aria-label="Merge controls"
@@ -40,10 +57,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       className="tv-controls-bar"
     >
       <Button data-testid="merge-prev" onClick={onPrev}>
-        <ChevronLeft size={14} aria-hidden="true" /> Prev conflict
+        <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Prev conflict
       </Button>
       <Button data-testid="merge-next" onClick={onNext}>
-        Next conflict <ChevronRight size={14} aria-hidden="true" />
+        Next conflict <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       <span
         data-testid="merge-conflict-position"
@@ -84,10 +101,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
-        <ChevronsLeft size={14} aria-hidden="true" /> Take all left
+        <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take all left
       </Button>
       <Button data-testid="merge-take-all-right" onClick={onTakeAllRight}>
-        Take all right <ChevronsRight size={14} aria-hidden="true" />
+        Take all right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       {takeAllNote === null ? null : (
         <span
@@ -98,20 +115,62 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           {takeAllNote}
         </span>
       )}
+      {/* GAP-13 (FIXMERGE): active-conflict pointer + per-hunk Take
+          Left/Center/Right for the SELECTED conflict (BC 3-way toolbar
+          parity). Same row, compact buttons; per-conflict card buttons
+          below stay untouched. Renders only when the view wires the
+          active-take callbacks, so legacy mounts are byte-identical. */}
+      {showActiveTakes ? (
+        <>
+          <span aria-hidden="true" className="tv-controls-sep" />
+          <span
+            data-testid="merge-active-conflict"
+            data-active-id={activeId ?? ""}
+            role="status"
+            aria-label={activePosition ?? (activeId === null || activeId === undefined ? "no active conflict" : `conflict ${activeId}`)}
+            title={activePosition ?? "no active conflict"}
+            className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          >
+            {activePosition ?? "no active conflict"}
+          </span>
+          <Button
+            data-testid="merge-take-active-left"
+            onClick={onTakeActiveLeft}
+            disabled={activeDisabled || onTakeActiveLeft === undefined}
+            title="Take Left for the active conflict"
+          >
+            <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take Left
+          </Button>
+          <Button
+            data-testid="merge-take-active-center"
+            onClick={onTakeActiveCenter}
+            disabled={activeDisabled || onTakeActiveCenter === undefined}
+            title="Take Center (common ancestor) for the active conflict"
+          >
+            Take Center
+          </Button>
+          <Button
+            data-testid="merge-take-active-right"
+            onClick={onTakeActiveRight}
+            disabled={activeDisabled || onTakeActiveRight === undefined}
+            title="Take Right for the active conflict"
+          >
+            Take Right <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+          </Button>
+        </>
+      ) : null}
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
         data-testid="mergeview/toolbar-find"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
-        aria-label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in merge (Ctrl+F)"
-        aria-expanded={findOpen}
+        expanded={findOpen}
         onClick={onToggleFind}
-        
       >
         <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Find</span>
       </ToolbarButton>
-      <span className="inline-flex items-center gap-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">(keys: j/k, n/p, <ArrowUp size={12} aria-hidden="true" />/<ArrowDown size={12} aria-hidden="true" />)</span>
+      <span className="inline-flex items-center gap-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">(keys: j/k, n/p, <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />)</span>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Wave-73: single-row sync controls toolbar (Beyond Compare Folder Sync style).
+ * Wave-73 / Wave-B3: single-row sync controls toolbar (Beyond Compare Folder Sync style).
  *
  * Collapses the stacked sync chrome (direction group + prune row + sync
  * actions group) into one toolbar row: the three direction buttons
@@ -7,8 +7,7 @@
  * name-filter toggle, and the dry-run / real apply buttons. Purely
  * presentational: direction/prune/apply/filter state and every IPC call
  * stay owned by `SyncView` (waves 47/62/64/66N logic untouched). All
- * legacy testids ride the same controls so the wave-47/64/66N specs keep
- * passing unmodified.
+ * legacy testids ride the same controls so specs keep passing unmodified.
  */
 import { Search } from "lucide-react";
 import { Button, Checkbox, SegmentedControl, ToolbarButton } from "../../../ui";
@@ -23,6 +22,7 @@ export interface SyncToolbarProps {
   readonly onToggleFilter: () => void;
   readonly applying: boolean;
   readonly canApply: boolean;
+  readonly disabledReason?: string | null;
   readonly onDry: () => void;
   readonly onReal: () => void;
 }
@@ -37,6 +37,7 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
     onToggleFilter,
     applying,
     canApply,
+    disabledReason,
     onDry,
     onReal,
   } = props;
@@ -58,17 +59,30 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
         data-testid="syncview/toolbar-filter"
         label={filterOpen ? "Hide name filter (Esc)" : "Show name filter (Ctrl+F)"}
         title="Filter steps by name (Ctrl+F)"
+        icon={Search}
         expanded={filterOpen}
         onClick={onToggleFilter}
       >
-        <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Name filter</span>
       </ToolbarButton>
       <span aria-hidden="true" className="tv-controls-sep" />
-      <Button data-testid="syncview/apply-dry" onClick={onDry} disabled={applying || !canApply}>
+      <Button
+        data-testid="syncview/apply-dry"
+        onClick={onDry}
+        disabled={applying || !canApply}
+        data-disabled-reason={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : undefined}
+        title={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : "Preview apply (dry run)"}
+      >
         Preview apply (dry run)
       </Button>
-      <Button data-testid="syncview/apply-real" variant="primary" onClick={onReal} disabled={applying || !canApply}>
+      <Button
+        data-testid="syncview/apply-real"
+        variant="primary"
+        onClick={onReal}
+        disabled={applying || !canApply}
+        data-disabled-reason={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : undefined}
+        title={!canApply ? (disabledReason ?? "no steps to apply") : applying ? "sync in progress" : "Apply for real"}
+      >
         Apply for real
       </Button>
     </div>

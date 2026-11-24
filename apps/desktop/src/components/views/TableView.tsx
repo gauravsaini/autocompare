@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit } from "../../ipc/table";
+import { Button, Checkbox, Input } from "../ui";
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -133,6 +134,33 @@ import type { ViewPaths } from "./types";
  * exactly the old merged rule); the right grid lights only
  * right-side hits. Sort/key state is shared: either side's header
  * buttons drive the same session order.
+ *
+ * Wave-TBL (BC Table parity batch): column mapping, per-cell/row copy,
+ * and the L2 view-filter bus — all inside the owned table scope
+ * (`TableView.tsx`, `table/*`, `ipc/table.ts`; backend untouched)
+ * under the collapsed-chrome budget (toolbar + closed-by-default
+ * in-flow panels only, no new stacked rows):
+ * - Column mapping (`table-map-toggle` -> `table-map-panel`): pairs
+ *   each left column with a right column (`table-map-right-C`,
+ *   `table-map-pair-C`), plus a key-column select
+ *   (`table-map-key-select`, mirrors the header `table-key-C`
+ *   buttons). Identity collapses to `null` so every rule is
+ *   positional again; diff/sort/find-hit/export right-side resolution
+ *   follows the map. Needs headers on BOTH sides — otherwise the
+ *   toggle + panel report the honest disabled reason
+ *   (`table-map-disabled-note`) instead of index-only pairing.
+ * - Per-cell/row copy: clicking any data cell selects it
+ *   (`data-selected`); `table-copy-cell` / `table-copy-row` copy the
+ *   displayed value to the clipboard (right side mapped), disabled
+ *   with "select a cell first" until a selection exists. The receipt
+ *   (`table-copy-status`) rides the toolbar, and `__TABLE_COPY_LAST__`
+ *   records the copy headlessly. No IPC, no file writes, never throws.
+ * - View filter: listens for `autocompare:view-filter`
+ *   (`all`/`diffs`/`same`/`context`, other viewKinds ignored);
+ *   `context` keeps each diff row plus one neighbor. Prev/next nav
+ *   walks the filtered visible order via the existing toolbar route
+ *   (`stepDiff`); the status bar keeps the FULL-table summary totals.
+ *   All legacy testids byte-identical.
  */
 
 const ROW_PAGE = 100;
@@ -207,6 +235,11 @@ function tableMetaField(raw: Record<string, unknown>, key: string): TableFileMet
 
 interface GridData {
   readonly header: readonly string[];
+  /** Wave-TBL: right-side header kept alongside the merged `header`
+      (left-preferred) so column mapping can pair left <-> right names
+      and the right pane can show its own header. Empty when the backend
+      served no right header. */
+  readonly headerR: readonly string[];
   readonly rowsL: ReadonlyArray<readonly string[]>;
   readonly rowsR: ReadonlyArray<readonly string[]>;
   readonly totalRows: number;
@@ -298,6 +331,26 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       window.removeEventListener("autocompare:session-find", onSessionFind);
     };
   }, []);
+  /* Wave-TBL: L2 `autocompare:view-filter` bus (Beyond Compare View menu
+     parity: Show All / Differences / Same / Context, dispatched by the
+     top Toolbar via `handleViewFilter`). Applies only when the event
+     targets this kind (`viewKind === "table"` or an unkinded event);
+     other kinds are ignored so folder/text filters never leak across
+     views. Prev/next keep their existing toolbar route (`stepDiff`
+     over the filtered loaded scope, below). */
+  useEffect(() => {
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ filter?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "table") return;
+      const f = detail?.filter;
+      if (f === "all" || f === "diffs" || f === "same" || f === "context") setRowFilter(f);
+    };
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
   const [hits, setHits] = useState<readonly TableHit[]>([]);
   const [hitPos, setHitPos] = useState(0);
   const [finding, setFinding] = useState(false);
@@ -326,16 +379,143 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // session (re)load, find runs, and visibility changes so it never
   // describes a stale grid.
   const [exportNote, setExportNote] = useState<string | null>(null);
+  /**
+   * Wave-TBL: row filter driven by the L2 `autocompare:view-filter`
+   * bus (`all` / `diffs` / `same` / `context`, Beyond Compare View menu
+   * parity). Client-side over the loaded rows; `context` keeps each
+   * difference row plus one neighbor on either side. The status bar
+   * keeps the FULL-table summary totals regardless.
+   */
+  const [rowFilter, setRowFilter] = useState<"all" | "diffs" | "same" | "context">("all");
+  /**
+   * Wave-TBL: column mapping (Beyond Compare style left <-> right).
+   * `null` = positional identity; otherwise `colMap[c]` is the RIGHT
+   * column paired with left column `c`. Panel closed by default so the
+   * collapsed-chrome budget holds; cleared on session (re)load.
+   */
+  const [colMap, setColMap] = useState<readonly number[] | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  /**
+   * Wave-TBL: selected grid cell for per-cell/row clipboard copy.
+   * Set by clicking any data cell; cleared on session (re)load.
+   */
+  const [selected, setSelected] = useState<{ r: number; c: number; side: "left" | "right" } | null>(null);
+  /** Wave-TBL: copy receipt, toolbar-only (no new stacked chrome rows). */
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   // Wave-44: column sort over loaded rows. `null` = session order.
   // Cleared on session (re)load; header buttons cycle
   // unsorted -> asc -> desc. Display-only: data stays loaded.
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const parentRef = useRef<HTMLDivElement | null>(null);
+  // Wave-TBL: previous session paths — the mapping/panel/filter reset
+  // only when the FILES change (see session effect). By-key and
+  // key-column toggles re-compare the same files, so the user's
+  // mapping survives its own reload.
+  const prevPathsRef = useRef<readonly [string, string] | null>(null);
 
-  const rowCount = grid?.rowsL.length ?? 0;
+  // Wave-TBL: derived grid scope lives ABOVE the virtualizer hook (and
+  // the loading/empty early returns below): `useVirtualizer` needs the
+  // FILTERED row count, and hooks cannot move past the returns. Every
+  // access is null-safe (`grid` is null until the session loads), so
+  // the loading state derives empty scopes without crashing; the early
+  // returns below re-narrow `grid` for the JSX. Function helpers
+  // (`isDiffRow`, `isDiffCell`, `mapR`, …) are hoisted declarations.
+  const colCount = Math.max(
+    grid?.header.length ?? 0,
+    grid?.totalCols ?? 0,
+    ...(grid?.rowsL ?? []).map((r) => r.length),
+    ...(grid?.rowsR ?? []).map((r) => r.length),
+  );
+  const cols: number[] = [];
+  for (let c = 0; c < colCount; c += 1) cols.push(c);
+  // Wave 32: visible columns = all loaded columns minus hidden ones. The
+  // grid (head + cells + diff classes) renders only these; the data stays
+  // loaded underneath so show-all restores without refetching.
+  const visibleCols = cols.filter((c) => !hiddenCols.has(c));
+  const hiddenCount = colCount - visibleCols.length;
+  const loadedRows = Math.max(grid?.rowsL.length ?? 0, grid?.rowsR.length ?? 0);
+  const hasMore = (grid?.rowsL.length ?? 0) < (grid?.totalRows ?? 0);
+
+  const rowIdx: number[] = [];
+  for (let r = 0; r < loadedRows; r += 1) rowIdx.push(r);
+  /**
+   * Wave-44: display order of the loaded rows. Session order when no
+   * sort is active; otherwise a stable, numeric-aware sort by the
+   * column's display value (same left-preferred resolution the grid
+   * and export render). Row numbers shown stay physical (r + 1).
+   */
+  const orderedRows: readonly number[] = (() => {
+    if (sortCol === null || grid === null) return rowIdx;
+    const col = sortCol;
+    const dir = sortDir;
+    // Wave-TBL: the right fallback resolves through the column map so
+    // a remapped pair sorts by the PAIRED values.
+    const val = (r: number): string =>
+      grid?.rowsL[r]?.[col] ?? rightValueAt(r, col) ?? "";
+    const num = (v: string): number | null => {
+      if (v.trim() === "") return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    return [...rowIdx].sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      const na = num(va);
+      const nb = num(vb);
+      let cmp: number;
+      if (na !== null && nb !== null) cmp = na - nb;
+      else cmp = va.localeCompare(vb);
+      if (cmp !== 0) return dir * cmp;
+      return a - b;
+    });
+  })();
+
+  /**
+   * Wave-TBL: L2 view-filter application over the display order.
+   * `all` shows every loaded row; `diffs`/`same` narrow to the
+   * loaded-scope diff rule; `context` keeps each difference row plus
+   * one neighbor on either side (Beyond Compare View > Context parity,
+   * N=1, honest and cheap). Prev/next nav walks this visible order;
+   * the status bar keeps the FULL-table summary totals regardless.
+   */
+  const visibleRowOrder: readonly number[] = (() => {
+    if (rowFilter === "all") return orderedRows;
+    if (rowFilter === "diffs") return orderedRows.filter(isDiffRow);
+    if (rowFilter === "same") return orderedRows.filter((r) => !isDiffRow(r));
+    const diffSet = new Set<number>();
+    for (let r = 0; r < loadedRows; r += 1) {
+      if (isDiffRow(r)) diffSet.add(r);
+    }
+    return orderedRows.filter((r) => diffSet.has(r) || diffSet.has(r - 1) || diffSet.has(r + 1));
+  })();
+
+  /** Wave-TBL: show the active filter in the counts line (substring-safe). */
+  function filterSuffix(): string {
+    if (rowFilter === "all") return "";
+    return ` · filter: ${rowFilter} (${visibleRowOrder.length} shown)`;
+  }
+  /**
+   * Wave-68: loaded-scope difference rows for prev/next nav
+   * (`isDiffRow` above mirrors the grid's `.tc-diff` rule over the
+   * visible columns). Wave-69: the status bar shows the FULL-table
+   * total from the summary (`totalDiffRows`, falling back to this
+   * loaded scope when the backend predates the field).
+   * Wave-TBL: nav walks the FILTERED visible order (view-filter bus).
+   */
+  const diffRows: readonly number[] = visibleRowOrder.filter(isDiffRow);
+  const sameCount = visibleRowOrder.length - diffRows.length;
+  // Wave-69: FULL-table totals from the summary for the status bar
+  // (null on old backends => fall back to the loaded scope above).
+  const shownDiffs = totalDiffRows ?? diffRows.length;
+  const shownSame =
+    totalDiffRows === null || grid === null
+      ? sameCount
+      : Math.max(grid.totalRows - totalDiffRows, 0);
+  const safeDiffPos = diffRows.length === 0 ? -1 : diffPos % diffRows.length;
+
   const virtualizer = useVirtualizer({
-    count: rowCount,
+    count: visibleRowOrder.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_PX,
     overscan: 10,
@@ -361,6 +541,24 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     setColsOpen(false);
     // Wave 38: a new session invalidates any previous export receipt.
     setExportNote(null);
+    // Wave-TBL: path changes invalidate the filter, mapping, panel,
+    // selection and copy receipt (they reference the old header/rows).
+    // By-key / key-column toggles re-compare the SAME files, so the
+    // mapping + open panel survive — the key select lives inside the
+    // panel, and closing it on its own reload would strand the user.
+    // Same-file realigns still drop the row selection + copy receipt.
+    const prevPaths = prevPathsRef.current;
+    prevPathsRef.current = [leftPath, rightPath];
+    if (prevPaths === null || prevPaths[0] !== leftPath || prevPaths[1] !== rightPath) {
+      setRowFilter("all");
+      setColMap(null);
+      setMapOpen(false);
+      setSelected(null);
+      setCopyNote(null);
+    } else {
+      setSelected(null);
+      setCopyNote(null);
+    }
     // Wave-44: a new session means a possibly different header — drop sort.
     setSortCol(null);
     setSortDir(1);
@@ -439,6 +637,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         }
         setGrid({
           header: headerL.length > 0 ? headerL : headerR,
+          headerR,
           rowsL,
           rowsR,
           totalRows,
@@ -604,34 +803,16 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   if (status === "error") return <p role="alert">Table compare failed: {error}</p>;
   if (status === "empty" || grid === null) return <p>No cells to display.</p>;
 
-  const colCount = Math.max(
-    grid.header.length,
-    grid.totalCols,
-    ...grid.rowsL.map((r) => r.length),
-    ...grid.rowsR.map((r) => r.length),
-  );
-  const cols: number[] = [];
-  for (let c = 0; c < colCount; c += 1) cols.push(c);
-  // Wave 32: visible columns = all loaded columns minus hidden ones. The
-  // grid (head + cells + diff classes) renders only these; the data stays
-  // loaded underneath so show-all restores without refetching.
-  const visibleCols = cols.filter((c) => !hiddenCols.has(c));
-  const hiddenCount = colCount - visibleCols.length;
-  const loadedRows = Math.max(grid.rowsL.length, grid.rowsR.length);
-  const hasMore = grid.rowsL.length < grid.totalRows;
-
   /**
    * Wave-68: loaded-scope difference rows for prev/next nav. Same
-   * cell rule the grid renders (`lv` vs `rv` over the VISIBLE columns,
-   * so hiding a column narrows the nav exactly like the `.tc-diff`
-   * cells). Wave-69: the status bar total comes from the summary
-   * (`totalDiffRows`), not from this loaded scope.
+   * cell rule the grid renders (`lv` vs mapped `rv` over the VISIBLE
+   * columns, so hiding a column narrows the nav exactly like the
+   * `.tc-diff` cells). Wave-69: the status bar total comes from the
+   * summary (`totalDiffRows`), not from this loaded scope.
    */
   function isDiffRow(r: number): boolean {
     for (const c of visibleCols) {
-      const lv = grid?.rowsL[r]?.[c];
-      const rv = grid?.rowsR[r]?.[c];
-      if (lv !== undefined && rv !== undefined && lv !== rv) return true;
+      if (isDiffCell(r, c)) return true;
     }
     return false;
   }
@@ -654,14 +835,39 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   /**
+   * Wave-TBL: column mapping (Beyond Compare style left <-> right).
+   * `colMap[c]` is the RIGHT physical column paired with left column
+   * `c`; `null` (or an out-of-range entry) means positional identity,
+   * so every pre-TBL rule renders byte-identically until the user
+   * remaps a pair in the mapping panel.
+   */
+  function mapR(c: number): number {
+    if (colMap === null) return c;
+    const mapped = colMap[c];
+    return typeof mapped === "number" && Number.isInteger(mapped) && mapped >= 0 ? mapped : c;
+  }
+
+  /** Wave-TBL: non-identity mapped pairs (drives status + honesty notes). */
+  function mappedPairs(): number {
+    if (colMap === null) return 0;
+    let n = 0;
+    for (let c = 0; c < colMap.length; c += 1) {
+      if (colMap[c] !== c) n += 1;
+    }
+    return n;
+  }
+
+  /**
    * Wave-91: per-side diff rule. A cell pair diffs when both sides
    * carry a value and they disagree (missing side = empty, never a
    * diff) — byte-identical to the pre-91 merged rule, applied
    * per-side so both grids tint the same changed coordinates.
+   * Wave-TBL: the right value resolves through the column map, so a
+   * remapped pair compares the PAIRED cells instead of positional ones.
    */
   function isDiffCell(r: number, c: number): boolean {
     const lv = grid?.rowsL[r]?.[c];
-    const rv = grid?.rowsR[r]?.[c];
+    const rv = grid?.rowsR[r]?.[mapR(c)];
     return lv !== undefined && rv !== undefined && lv !== rv;
   }
 
@@ -670,15 +876,33 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
    * grid) keeps the merged rule — left AND right hits share one
    * cell — so pre-91 find specs hold; the right grid takes only
    * right-side hits (`side === "right"`).
+   * Wave-TBL: the right grid renders the MAPPED right column at each
+   * position, so a right-side hit lands where its physical column is
+   * mapped (`mapR(c) === h.col`); left-grid behavior is untouched.
    */
   function hitsAt(r: number, c: number, side: "left" | "right"): number[] {
     const out: number[] = [];
     for (let i = 0; i < hits.length; i += 1) {
       const h = hits[i];
-      if (h.row !== r || h.col !== c) continue;
-      if (side === "left" || h.side === "right") out.push(i);
+      if (h.row !== r) continue;
+      if (side === "left") {
+        if (h.col !== c) continue;
+      } else {
+        if (h.side !== "right" || mapR(c) !== h.col) continue;
+      }
+      out.push(i);
     }
     return out;
+  }
+
+  /** Wave-TBL: right-pane value/header resolution through the map. */
+  function rightValueAt(r: number, c: number): string | undefined {
+    return grid?.rowsR[r]?.[mapR(c)];
+  }
+
+  function rightNameAt(c: number): string {
+    const mapped = mapR(c);
+    return grid?.headerR[mapped] ?? grid?.header[c] ?? `col ${c + 1}`;
   }
 
   function hitStyle(isCurrent: boolean, isHit: boolean): React.CSSProperties | undefined {
@@ -695,29 +919,45 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // vertical padding so the row content (12px * 1.55 = 18.6px) fits
   // inside the token `.tc-row` 22px height; `py-[space-1]` pushed rows
   // to 28px and fought the ROW_PX virtualizer estimate.
+  // Wave-Table-Density: `table-fixed` keeps left/right grids
+  // column-aligned razor-sharp (auto layout sized each side by its own
+  // content, so the same column drifted between panes).
   const CELL_BASE =
-    "tc-cell px-[var(--ac-space-2)] py-0 ac-mono font-normal tabular-nums";
+    "tc-cell px-[var(--ac-space-2)] py-0 ac-mono font-normal tabular-nums whitespace-nowrap overflow-hidden text-ellipsis";
   const TABLE_CLASS =
-    "w-full border-collapse ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]";
+    "w-full border-collapse table-fixed ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]";
 
   function renderLeftCells(r: number): React.JSX.Element[] {
     return visibleCols.map((c) => {
       const lv = grid?.rowsL[r]?.[c];
       const value = lv ?? "";
       const diff = isDiffCell(r, c);
+      // Orphan-cell hatch (missing side): the value is absent on THIS
+      // side, so the cell paints the BC filler hatch (see the
+      // `tableview/diff-style` block) instead of an empty flat cell.
+      // Never a diff (isDiffCell already excludes missing sides).
+      const missing = lv === undefined;
       const cellHits = hitsAt(r, c, "left");
       const isCurrent = cellHits.includes(hitPos) && hits.length > 0;
       const isHit = cellHits.length > 0;
-      const rv = grid?.rowsR[r]?.[c];
+      // Wave-TBL: the paired right value resolves through the column
+      // map (identity until the user remaps a pair).
+      const rv = rightValueAt(r, c);
+      // Wave-TBL: click selects the cell for toolbar copy; the
+      // `data-selected` hook is new, every legacy attr is untouched.
+      const isSelected = selected !== null && selected.r === r && selected.c === c && selected.side === "left";
       return (
         <td
           key={c}
           data-testid={isCurrent ? `table-hit-${hitPos}` : `tableview/cell-${r}-${c}`}
           data-hit={isHit ? "true" : undefined}
           data-diff={diff ? "true" : undefined}
-          className={diff ? `tc-cell tc-diff ${CELL_BASE}` : CELL_BASE}
-          style={hitStyle(isCurrent, isHit)}
+          data-missing={missing ? "true" : undefined}
+          data-selected={isSelected ? "true" : undefined}
+          className={missing ? `tc-cell tc-missing ${CELL_BASE}` : diff ? `tc-cell tc-diff ${CELL_BASE}` : CELL_BASE}
+          style={hitStyle(isSelected || isCurrent, isHit)}
           title={rv !== undefined && rv !== lv ? `right: ${rv}` : undefined}
+          onClick={() => setSelected({ r, c, side: "left" })}
         >
           {value}
         </td>
@@ -727,14 +967,17 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
 
   function renderRightCells(r: number): React.JSX.Element[] {
     return visibleCols.map((c) => {
-      const rv = grid?.rowsR[r]?.[c];
+      const rv = rightValueAt(r, c);
       const value = rv ?? "";
       const diff = isDiffCell(r, c);
+      const missing = rv === undefined;
       const cellHits = hitsAt(r, c, "right");
       const isCurrent =
         hits.length > 0 && hits[hitPos]?.side === "right" && cellHits.includes(hitPos);
       const isHit = cellHits.length > 0;
       const lv = grid?.rowsL[r]?.[c];
+      // Wave-TBL: click selects the cell for toolbar copy (mirrors left).
+      const isSelected = selected !== null && selected.r === r && selected.c === c && selected.side === "right";
       return (
         <td
           key={c}
@@ -743,9 +986,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           }
           data-hit-right={isHit ? "true" : undefined}
           data-diff={diff ? "true" : undefined}
-          className={diff ? `tc-cell tc-diff ${CELL_BASE}` : CELL_BASE}
-          style={hitStyle(isCurrent, isHit)}
+          data-missing={missing ? "true" : undefined}
+          data-selected={isSelected ? "true" : undefined}
+          className={missing ? `tc-cell tc-missing ${CELL_BASE}` : diff ? `tc-cell tc-diff ${CELL_BASE}` : CELL_BASE}
+          style={hitStyle(isSelected || isCurrent, isHit)}
           title={lv !== undefined && lv !== rv ? `left: ${lv}` : undefined}
+          onClick={() => setSelected({ r, c, side: "right" })}
         >
           {value}
         </td>
@@ -755,8 +1001,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
 
   // Wave-146: row-number gutter rides the same 22px density (py-0,
   // content 18.6px line box inside the 22px `.tc-row` height).
+  // Wave-Table-Density: fixed gutter width (text-view `--ac-gutter-w`
+  // reference) so `table-fixed` keeps the number column narrow and
+  // data columns share the rest identically on both panes.
   const ROW_NUM_CLASS =
-    "px-[var(--ac-space-2)] py-0 text-right ac-mono tabular-nums text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]";
+    "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)] overflow-hidden px-[var(--ac-space-2)] py-0 text-right ac-mono tabular-nums whitespace-nowrap text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]";
+  const ROW_NUM_HEAD_CLASS = "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)]";
 
   function renderLeftRow(r: number, style?: React.CSSProperties): React.JSX.Element {
     return (
@@ -786,26 +1036,6 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     );
   }
 
-  const rowIdx: number[] = [];
-  for (let r = 0; r < loadedRows; r += 1) rowIdx.push(r);
-  /**
-   * Wave-68: loaded-scope difference rows for prev/next nav
-   * (`isDiffRow` above mirrors the grid's `.tc-diff` rule over the
-   * visible columns). Wave-69: the status bar shows the FULL-table
-   * total from the summary (`totalDiffRows`, falling back to this
-   * loaded scope when the backend predates the field).
-   */
-  const diffRows: readonly number[] = rowIdx.filter(isDiffRow);
-  const sameCount = loadedRows - diffRows.length;
-  // Wave-69: FULL-table totals from the summary for the status bar
-  // (null on old backends => fall back to the loaded scope above).
-  const shownDiffs = totalDiffRows ?? diffRows.length;
-  const shownSame =
-    totalDiffRows === null || grid === null
-      ? sameCount
-      : Math.max(grid.totalRows - totalDiffRows, 0);
-  const safeDiffPos = diffRows.length === 0 ? -1 : diffPos % diffRows.length;
-
   function scrollToDiffRow(r: number): void {
     document
       .querySelector(`[data-testid="tableview/row-${r}"]`)
@@ -830,36 +1060,6 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   const leftMetaText = formatTableMeta(leftMeta);
   const rightMetaText = formatTableMeta(rightMeta);
   const isKeyCol = (c: number): boolean => effectiveByKey && keyColumns.includes(c);
-
-  /**
-   * Wave-44: display order of the loaded rows. Session order when no
-   * sort is active; otherwise a stable, numeric-aware sort by the
-   * column's display value (same left-preferred resolution the grid
-   * and export render). Row numbers shown stay physical (r + 1).
-   */
-  const orderedRows: readonly number[] = (() => {
-    if (sortCol === null || grid === null) return rowIdx;
-    const col = sortCol;
-    const dir = sortDir;
-    const val = (r: number): string =>
-      grid?.rowsL[r]?.[col] ?? grid?.rowsR[r]?.[col] ?? "";
-    const num = (v: string): number | null => {
-      if (v.trim() === "") return null;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    };
-    return [...rowIdx].sort((a, b) => {
-      const va = val(a);
-      const vb = val(b);
-      const na = num(va);
-      const nb = num(vb);
-      let cmp: number;
-      if (na !== null && nb !== null) cmp = na - nb;
-      else cmp = va.localeCompare(vb);
-      if (cmp !== 0) return dir * cmp;
-      return a - b;
-    });
-  })();
 
   /**
    * Wave-66M: user-designated key column (single-column only, Beyond
@@ -948,17 +1148,20 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         }
       } else {
         // Wave-44: export the displayed order (sorted when a sort is on).
-        scopeRows = [...orderedRows];
+        // Wave-TBL: the view-filter narrows what is displayed, so it
+        // narrows the export identically; the receipt names the scope.
+        scopeRows = [...visibleRowOrder];
       }
-      // Same visible values the grid renders: left preferred, right
-      // fallback, missing cells empty.
+      // Same visible values the grid renders: left preferred, mapped
+      // right fallback (Wave-TBL: identity until a pair is remapped),
+      // missing cells empty.
       const lines: string[] = [
         visibleCols.map((c) => csvField(grid.header[c] ?? `col ${c + 1}`)).join(","),
       ];
       for (const r of scopeRows) {
         lines.push(
           visibleCols
-            .map((c) => csvField(grid.rowsL[r]?.[c] ?? grid.rowsR[r]?.[c] ?? ""))
+            .map((c) => csvField(grid.rowsL[r]?.[c] ?? rightValueAt(r, c) ?? ""))
             .join(","),
         );
       }
@@ -982,13 +1185,19 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       const scope =
         findQuery !== "" && hits.length > 0
           ? `find "${findQuery}": ${hits.length} hits to ${scopeRows.length} rows (${order})`
-          : `all ${scopeRows.length} loaded rows (${order})`;
+          : rowFilter !== "all"
+            ? `filter "${rowFilter}": ${scopeRows.length} shown rows (${order})`
+            : `all ${scopeRows.length} loaded rows (${order})`;
       const hiddenSuffix =
         hiddenCount > 0
           ? `, ${hiddenCount} hidden column${hiddenCount === 1 ? "" : "s"} excluded`
           : "";
+      // Wave-TBL: name the active mapping so the receipt never
+      // describes a positional grid as mapped (or vice versa).
+      const pairs = mappedPairs();
+      const mapSuffix = pairs > 0 ? `, ${pairs} mapped pair${pairs === 1 ? "" : "s"}` : "";
       setExportNote(
-        `Exported ${scopeRows.length} rows × ${visibleCols.length} cols to table-export.csv — ${scope}${hiddenSuffix}.`,
+        `Exported ${scopeRows.length} rows × ${visibleCols.length} cols to table-export.csv — ${scope}${hiddenSuffix}${mapSuffix}.`,
       );
       try {
         (window as unknown as Record<string, unknown>)["__TABLE_EXPORT_LAST__"] = {
@@ -1005,6 +1214,148 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   /**
+   * Wave-TBL: clipboard helpers (Beyond Compare per-cell/row copy
+   * parity, toolbar-only). No IPC, no file writes: the selected grid
+   * value goes to the clipboard and the toolbar receipt + the
+   * `__TABLE_COPY_LAST__` headless hook record exactly what was
+   * copied. Never throws — clipboard denial reports inline.
+   */
+  async function writeClipboard(text: string): Promise<boolean> {
+    try {
+      const nav = navigator as Navigator & {
+        clipboard?: { writeText?: (t: string) => Promise<void> };
+      };
+      if (nav.clipboard?.writeText !== undefined) {
+        await nav.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      /* fall through to the legacy path */
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function copyCell(): Promise<void> {
+    if (selected === null || grid === null) return;
+    const { r, c, side } = selected;
+    const raw = side === "left" ? grid.rowsL[r]?.[c] : rightValueAt(r, c);
+    if (raw === undefined) {
+      setCopyNote(
+        `Nothing to copy — selected cell (row ${r + 1}, col ${c + 1}) is empty on the ${side} side.`,
+      );
+      return;
+    }
+    const ok = await writeClipboard(raw);
+    const label = `cell (row ${r + 1}, col ${c + 1}, ${side})`;
+    setCopyNote(
+      ok ? `Copied ${label} to clipboard.` : `Copy failed — clipboard unavailable (${label} kept selected).`,
+    );
+    try {
+      (window as unknown as Record<string, unknown>)["__TABLE_COPY_LAST__"] = {
+        kind: "cell",
+        r,
+        c,
+        side,
+        value: raw,
+        ok,
+      };
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function copyRow(): Promise<void> {
+    if (selected === null || grid === null) return;
+    const { r, side } = selected;
+    // The DISPLAYED row: visible columns in display order (right side
+    // resolves through the column map), tab-joined for the clipboard.
+    const text = visibleCols
+      .map((c) => (side === "left" ? (grid.rowsL[r]?.[c] ?? "") : (rightValueAt(r, c) ?? "")))
+      .join("\t");
+    if (visibleCols.length === 0) {
+      setCopyNote("Nothing to copy — all columns hidden.");
+      return;
+    }
+    const ok = await writeClipboard(text);
+    const label = `row ${r + 1} (${side})`;
+    setCopyNote(
+      ok ? `Copied ${label} to clipboard.` : `Copy failed — clipboard unavailable (${label} kept selected).`,
+    );
+    try {
+      (window as unknown as Record<string, unknown>)["__TABLE_COPY_LAST__"] = {
+        kind: "row",
+        r,
+        side,
+        value: text,
+        ok,
+      };
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Wave-TBL: column-mapping panel state helpers. Mapping needs a
+   * header name on BOTH sides to pair honestly (index-only pairing
+   * would silently misalign renamed/reordered columns), so the panel
+   * stays disabled with the contract reason when either header is
+   * missing. Remapping back to identity collapses to `null` so every
+   * rule is positional again.
+   */
+  const headersMissing = grid.header.length === 0 || grid.headerR.length === 0;
+  const mapDisabledReason = headersMissing ? "needs headers on both sides" : null;
+  const pairCount = mappedPairs();
+  const mapSummary = headersMissing
+    ? "mapping unavailable"
+    : pairCount > 0
+      ? `${pairCount} mapped`
+      : "unmapped";
+
+  function toggleMapPair(left: number, right: number): void {
+    setColMap((prev) => {
+      const base: number[] = [];
+      for (let c = 0; c < colCount; c += 1) base.push(prev?.[c] ?? c);
+      base[left] = right;
+      return base.every((v, i) => v === i) ? null : base;
+    });
+    // A remap changes diffs, sort display and the export scope.
+    setExportNote(null);
+    setCopyNote(null);
+  }
+
+  function resetMap(): void {
+    setColMap(null);
+    setExportNote(null);
+    setCopyNote(null);
+  }
+
+  /** Wave-TBL: mapping-panel key select mirrors the header key buttons. */
+  function selectMapKey(v: string): void {
+    if (v === "") {
+      setPickedKey(null);
+    } else {
+      const c = Number(v);
+      if (Number.isInteger(c) && c >= 0 && c < colCount) {
+        setPickedKey(c);
+        setByKey(true);
+      }
+    }
+  }
+
+  /**
    * Wave-91: per-side column headers. The left header keeps every
    * legacy testid (`table-sort-C`, `table-key-C`,
    * `tableview/key-col-C`); the right header mirrors the same state
@@ -1014,7 +1365,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   function renderHeadCell(c: number, side: "left" | "right"): React.JSX.Element {
     const key = isKeyCol(c);
     const active = sortCol === c;
-    const name = grid?.header[c] ?? `col ${c + 1}`;
+    // Wave-TBL: the right pane shows its own (mapped) header name so a
+    // remapped pair reads honestly; identity mapping falls back to the
+    // shared left-preferred name, byte-identical to pre-TBL.
+    const name = side === "right" ? rightNameAt(c) : (grid?.header[c] ?? `col ${c + 1}`);
     const right = side === "right";
     const sortId = right ? `table-sort-right-${c}` : `table-sort-${c}`;
     const keyId = right ? `table-key-right-${c}` : `table-key-${c}`;
@@ -1027,8 +1381,9 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         className={key ? "tc-head tc-key px-[var(--ac-space-2)] py-[var(--ac-space-1)]" : "tc-head px-[var(--ac-space-2)] py-[var(--ac-space-1)]"}
         title={key ? "key column" : undefined}
       >
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid={sortId}
           onClick={() => cycleSort(c)}
           aria-label={`sort by ${name}${right ? " (right)" : ""}${active ? (sortDir === 1 ? " (ascending, activate for descending)" : " (descending, activate to clear)") : ""}`}
@@ -1042,9 +1397,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
               <ChevronDown size={12} aria-hidden="true" className="inline" />
             )
           ) : null}
-        </button>{" "}
-        <button
-          type="button"
+        </Button>{" "}
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid={keyId}
           aria-pressed={pickedKey === c}
           aria-label={pickedKey === c ? `remove key column ${name}` : `use ${name} as key column`}
@@ -1053,7 +1409,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           className="tb-key-btn rounded-sm font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
         >
           key
-        </button>
+        </Button>
       </th>
     );
   }
@@ -1092,7 +1448,101 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         diffPos={safeDiffPos}
         onPrevDiff={() => stepDiff(-1)}
         onNextDiff={() => stepDiff(1)}
+        mapOpen={mapOpen}
+        onToggleMap={() => setMapOpen((v) => !v)}
+        mapDisabled={mapDisabledReason !== null}
+        mapDisabledReason={mapDisabledReason}
+        mapSummary={mapSummary}
+        copyCellDisabled={selected === null}
+        onCopyCell={() => void copyCell()}
+        copyRowDisabled={selected === null}
+        onCopyRow={() => void copyRow()}
+        copyNote={copyNote}
       />
+      {/* Wave-TBL: column-mapping panel (Beyond Compare style left <->
+          right pairing + key-column select). Closed by default (like
+          the cols menu) so the collapsed-chrome budget holds; the
+          toggle lives in the single toolbar row above. When either
+          header is missing the panel reports the honest disabled
+          reason instead of offering index-only pairing. */}
+      {mapOpen && (
+        <div
+          id="table-map-panel"
+          data-testid="table-map-panel"
+          role="group"
+          aria-label="column mapping"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setMapOpen(false);
+          }}
+          className="flex flex-wrap items-center gap-[var(--ac-space-3)] px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]"
+        >
+          {mapDisabledReason !== null ? (
+            <p data-testid="table-map-disabled-note" className="ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+              Column mapping unavailable — {mapDisabledReason}.
+            </p>
+          ) : (
+            <>
+              {cols.map((c) => {
+                const leftName = grid.header[c] ?? `col ${c + 1}`;
+                const rightCount = Math.max(grid.headerR.length, colCount);
+                const options: number[] = [];
+                for (let i = 0; i < rightCount; i += 1) options.push(i);
+                return (
+                  <label
+                    key={c}
+                    data-testid={`table-map-pair-${c}`}
+                    className="ac-chrome-label inline-flex items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
+                  >
+                    {leftName} →{" "}
+                    <select
+                      data-testid={`table-map-right-${c}`}
+                      value={mapR(c)}
+                      onChange={(e) => toggleMapPair(c, Number(e.target.value))}
+                      aria-label={`map left column ${leftName} to right column`}
+                      className="ac-mono rounded-[5px] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
+                    >
+                      {options.map((i) => (
+                        <option key={i} value={i}>
+                          {grid.headerR[i] ?? `col ${i + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
+              <label
+                data-testid="table-map-key"
+                className="ac-chrome-label inline-flex items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
+              >
+                Key column:{" "}
+                <select
+                  data-testid="table-map-key-select"
+                  value={pickedKey === null ? "" : String(pickedKey)}
+                  onChange={(e) => selectMapKey(e.target.value)}
+                  aria-label="key column"
+                  className="ac-mono rounded-[5px] border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] px-[var(--ac-space-1)] py-[var(--ac-space-1)] text-[var(--ac-fg)]"
+                >
+                  <option value="">auto</option>
+                  {cols.map((c) => (
+                    <option key={c} value={c}>
+                      {grid.header[c] ?? `col ${c + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                variant="secondary"
+                data-testid="table-map-reset"
+                onClick={resetMap}
+                disabled={colMap === null}
+                title={colMap === null ? "mapping is already positional" : "Reset to positional mapping"}
+              >
+                Reset mapping
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       {/* Wave-87: BC-style two-pane header (mirrors the text pane
           grid). One compact `1fr / 6px / 1fr` row with a thin center
           splitter: each pane owns its path line over its meta line.
@@ -1165,6 +1615,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         {hiddenCount === 0
           ? `${colCount} cols`
           : `${visibleCols.length} of ${colCount} cols (${hiddenCount} hidden)`}
+        {filterSuffix()}
       </p>
       {colsOpen && (
         <div
@@ -1181,18 +1632,14 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
             const name = grid?.header[c] ?? `col ${c + 1}`;
             const cid = `table-col-visibility-${c}`;
             return (
-              <span key={c} className="inline-flex items-center gap-[var(--ac-space-1)]">
-                <input
-                  id={cid}
-                  data-testid={cid}
-                  type="checkbox"
-                  checked={!hiddenCols.has(c)}
-                  onChange={() => toggleCol(c)}
-                />
-                <label htmlFor={cid} className="ac-chrome-label font-medium text-[var(--ac-fg-muted)]">
-                  {name}
-                </label>
-              </span>
+              <Checkbox
+                key={c}
+                id={cid}
+                data-testid={cid}
+                label={name}
+                checked={!hiddenCols.has(c)}
+                onChange={() => toggleCol(c)}
+              />
             );
           })}
         </div>
@@ -1202,7 +1649,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         <label htmlFor="table-find-input" className="ac-chrome-label font-medium text-[var(--ac-fg-muted)]">
           Find
         </label>
-        <input
+        <Input
           id="table-find-input"
           data-testid="table-find-input"
           type="search"
@@ -1213,26 +1660,24 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
             else if (e.key === "Escape") setFindOpen(false);
           }}
           placeholder="Find in table…"
-          className="rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]"
+          className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]"
         />
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           data-testid="table-find-search"
           onClick={() => void runFind(findInput)}
           disabled={finding}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {finding ? "Searching…" : "Find"}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
           data-testid="table-find-next"
           onClick={nextHit}
           disabled={hits.length === 0}
-          className="inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45"
         >
           Next
-        </button>
+        </Button>
         <span data-testid="table-find-status" role="status" className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
           {findStatusText}
         </span>
@@ -1247,8 +1692,15 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           existing del tokens (no new palette; tokens.css untouched).
           Later in the cascade than the linked stylesheet, so this
           wins at equal specificity and the dark `@media` token swap
-          still applies. */}
-      <style data-testid="tableview/diff-style">{`.tc-diff{background-color:var(--ac-diff-del-bg);color:var(--ac-diff-del-fg);}`}</style>
+          still applies.
+          Wave-Table-Density: orphan filler + seamless rows (BC feel,
+          table-scoped ONLY, no new palette, no new DOM/testids).
+          `.tc-missing` reuses the existing `--ac-hatch-line` ink with
+          the text-view 5.19px seamless period so stacked missing cells
+          tile boundary-to-boundary; `.tc-row` drops its 1px
+          border-bottom (box-sizing keeps the 22px ROW_PX pin) so the
+          hatch + hover wash run seamless like the text view. */}
+      <style data-testid="tableview/diff-style">{`.tc-diff{background-color:var(--ac-diff-del-bg);color:var(--ac-diff-del-fg);}.tc-row{border-bottom:none;}.tc-missing{background-color:var(--ac-bg);background-image:repeating-linear-gradient(-45deg, transparent 0 4.19px, var(--ac-hatch-line) 4.19px 5.19px);}`}</style>
       {loadedRows > VIRTUALIZE_AFTER ? (
         <div ref={parentRef} data-testid="tableview/grids-scroller" className="h-[var(--ac-scroll-h)] overflow-auto">
           <div
@@ -1259,7 +1711,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
               <table className={TABLE_CLASS}>
                 <thead className="sticky top-0">
                   <tr>
-                    <th aria-label="row number" />
+                    <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                     {visibleCols.map((c) => renderLeftHeadCell(c))}
                   </tr>
                 </thead>
@@ -1267,7 +1719,8 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
                   {virtualizer.getVirtualItems().map((v) => {
                     // Wave-44: virtual position -> physical row through the
                     // display order; the row-number cell stays physical.
-                    const r = orderedRows[v.index] ?? v.index;
+                    // Wave-TBL: the FILTERED visible order (view-filter bus).
+                    const r = visibleRowOrder[v.index] ?? v.index;
                     return renderLeftRow(r, {
                       position: "absolute",
                       top: 0,
@@ -1284,13 +1737,14 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
               <table className={TABLE_CLASS}>
                 <thead className="sticky top-0">
                   <tr>
-                    <th aria-label="row number" />
+                    <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                     {visibleCols.map((c) => renderRightHeadCell(c))}
                   </tr>
                 </thead>
                 <tbody style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
                   {virtualizer.getVirtualItems().map((v) => {
-                    const r = orderedRows[v.index] ?? v.index;
+                    // Wave-TBL: filtered visible order (mirrors left).
+                    const r = visibleRowOrder[v.index] ?? v.index;
                     return renderRightRow(r, {
                       position: "absolute",
                       top: 0,
@@ -1313,11 +1767,11 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
             <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th aria-label="row number" />
+                  <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                   {visibleCols.map((c) => renderLeftHeadCell(c))}
                 </tr>
               </thead>
-              <tbody>{orderedRows.map((r) => renderLeftRow(r))}</tbody>
+              <tbody>{visibleRowOrder.map((r) => renderLeftRow(r))}</tbody>
             </table>
           </div>
           <span aria-hidden="true" data-testid="tableview/grid-splitter" className="tv-splitter" />
@@ -1325,19 +1779,25 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
             <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th aria-label="row number" />
+                  <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                   {visibleCols.map((c) => renderRightHeadCell(c))}
                 </tr>
               </thead>
-              <tbody>{orderedRows.map((r) => renderRightRow(r))}</tbody>
+              <tbody>{visibleRowOrder.map((r) => renderRightRow(r))}</tbody>
             </table>
           </div>
         </div>
       )}
       {hasMore && (
-        <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="my-[var(--ac-space-3)] ml-[var(--ac-space-4)] inline-flex items-center rounded-md border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)] shadow-xs transition hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] disabled:cursor-not-allowed disabled:opacity-45">
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+          className="my-[var(--ac-space-3)] ml-[var(--ac-space-4)]"
+        >
           {loadingMore ? "Loading…" : `Load more (${grid.rowsL.length}/${grid.totalRows})`}
-        </button>
+        </Button>
       )}
       {/* Wave-69: the status bar shows the FULL-table total diff count
           from the `table_compare` summary (`diffRows`); prev/next nav

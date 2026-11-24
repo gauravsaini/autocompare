@@ -1,5 +1,7 @@
+
+
 <p align="center">
-  <img src="logo.png" alt="autocompare logo" width="48">
+  <img src="logo.png" alt="autocompare logo" width="32">
 </p>
 
 # autocompare
@@ -20,7 +22,7 @@ assets or wording were taken from it.
 
 ```sh
 cargo build --release        # binary at target/release/autocompare
-cargo test --workspace       # 72 tests
+cargo test --workspace       # 400+ tests
 ```
 
 ## Install (macOS, GUI early feedback)
@@ -258,7 +260,7 @@ honestly as not comparable instead of guessed.
 cargo run -p autocompare-gui
 ```
 
-A thin desktop client (eframe/egui) with nine tabs over the same
+A Tauri desktop app (Rust engine + native webview) with seven views over the same
 engine libraries the CLI uses — Text, Folder, Hex, Merge, Table,
 Sync, Picture, FolderMerge and Audio, matching the nine session
 types of the original: side-by-side rows with accent highlights,
@@ -323,8 +325,7 @@ minimality on random pairs, budget fallback, symlink-safe folder
 fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
 sync plan and apply semantics, three-way tree merge rules, PNG and
 audio decode totality sweeps (every prefix truncation of a valid WAV,
-random buffers, hostile headers), plus 57 headless GUI view-model
-tests covering all nine tabs. Five exhaustive sweeps (~430k pairs, each checked for replay,
+random buffers, hostile headers), plus headless GUI view-model tests and 150+ Playwright e2e specs. Five exhaustive sweeps (~430k pairs, each checked for replay,
 canonical form and minimal edit count) run separately in release
 mode:
 

@@ -24,6 +24,15 @@ export interface TextToolbarProps {
   readonly onToggleIgnore: () => void;
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
+  /**
+   * Wave-L2: ViewCommandBus hook (BC unified-toolbar parity). When L3
+   * passes it, Prev/Next dispatch through the shared bus
+   * (`onBusCommand("prev" | "next")`) so the top Toolbar and this
+   * TextToolbar call the SAME handlers; otherwise the legacy
+   * `onPrevDiff`/`onNextDiff` props run. Testids stay byte-identical
+   * either way; view-level controls are never removed.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
   /** e.g. "hunk 2 of 5", "3 hunks", or "no differences". */
   readonly hunksLabel: string;
   readonly diffNote: string | null;
@@ -41,6 +50,13 @@ export interface TextToolbarProps {
   readonly canSave: boolean;
   readonly savingSide: "left" | "right" | null;
   readonly onSaveSide: (side: "left" | "right") => void;
+  /** Wave-L3: honest per-side dirty indicator (staged edits or staged copies). */
+  readonly leftDirty?: boolean;
+  readonly rightDirty?: boolean;
+  /** Wave-L3: Copy-Line controls (selection-or-line to other side). */
+  readonly canCopyLine?: boolean;
+  readonly copyLineDisabledReason?: string | null;
+  readonly onCopyLine?: (dir: "left" | "right") => void;
 }
 
 export default function TextToolbar(props: TextToolbarProps): React.JSX.Element {
@@ -53,6 +69,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
     onToggleIgnore,
     onPrevDiff,
     onNextDiff,
+    onBusCommand,
     hunksLabel,
     diffNote,
     wrap,
@@ -66,13 +83,18 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
     canSave,
     savingSide,
     onSaveSide,
+    leftDirty = false,
+    rightDirty = false,
+    canCopyLine = false,
+    copyLineDisabledReason = null,
+    onCopyLine,
   } = props;
   return (
     <div
       role="toolbar"
       aria-label="Text controls"
       data-testid="textview/toolbar"
-      className="tv-controls-bar"
+      className="tv-controls-bar flex-nowrap overflow-x-auto whitespace-nowrap"
     >
       <ToolbarButton
         data-testid="textview/toolbar-find"
@@ -109,7 +131,10 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         data-testid="textview/toolbar-prev-diff"
         label="Previous difference"
         title="Previous difference"
-        onClick={onPrevDiff}
+        onClick={() => {
+          if (onBusCommand) onBusCommand("prev");
+          else onPrevDiff();
+        }}
       >
         <ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Prev</span>
@@ -118,10 +143,31 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         data-testid="textview/toolbar-next-diff"
         label="Next difference"
         title="Next difference"
-        onClick={onNextDiff}
+        onClick={() => {
+          if (onBusCommand) onBusCommand("next");
+          else onNextDiff();
+        }}
       >
         <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Next</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-testid="textview/toolbar-copy-line-left"
+        label="Copy line left"
+        title={copyLineDisabledReason ?? "Copy line to left (take right line)"}
+        disabled={!canCopyLine}
+        onClick={() => onCopyLine?.("right")}
+      >
+        <span>Copy Line L</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-testid="textview/toolbar-copy-line-right"
+        label="Copy line right"
+        title={copyLineDisabledReason ?? "Copy line to right (take left line)"}
+        disabled={!canCopyLine}
+        onClick={() => onCopyLine?.("left")}
+      >
+        <span>Copy Line R</span>
       </ToolbarButton>
       <span data-testid="textview/toolbar-hunks" className="ac-meta text-[var(--ac-fg-muted)]">
         {hunksLabel}
@@ -160,20 +206,40 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       <span data-testid="textview/toolbar-overflow" className="inline-flex items-center gap-[var(--ac-space-2)]">
         <Button
           data-testid="textview/save-left"
-          aria-label="Save left side to disk"
-          title="Save left side to disk"
+          aria-label={leftDirty ? "Save left side to disk (unsaved changes)" : "Save left side to disk"}
+          title={leftDirty ? "Save left side to disk (unsaved changes)" : "Save left side to disk"}
           disabled={!canSave || savingSide !== null}
           onClick={() => onSaveSide("left")}
         >
+          {leftDirty && (
+            <>
+              <span
+                data-testid="textview/dirty-left"
+                className="mr-1 inline-block size-1.5 shrink-0 rounded-full bg-[var(--ac-tab-dirty)]"
+                aria-label="unsaved changes"
+              />
+              <span data-testid="textview/dirty-dot" className="sr-only" aria-hidden="true" />
+            </>
+          )}
           {savingSide === "left" ? "Saving…" : "Save left"}
         </Button>
         <Button
           data-testid="textview/save-right"
-          aria-label="Save right side to disk"
-          title="Save right side to disk"
+          aria-label={rightDirty ? "Save right side to disk (unsaved changes)" : "Save right side to disk"}
+          title={rightDirty ? "Save right side to disk (unsaved changes)" : "Save right side to disk"}
           disabled={!canSave || savingSide !== null}
           onClick={() => onSaveSide("right")}
         >
+          {rightDirty && (
+            <>
+              <span
+                data-testid="textview/dirty-right"
+                className="mr-1 inline-block size-1.5 shrink-0 rounded-full bg-[var(--ac-tab-dirty)]"
+                aria-label="unsaved changes"
+              />
+              <span data-testid="textview/dirty-dot" className="sr-only" aria-hidden="true" />
+            </>
+          )}
           {savingSide === "right" ? "Saving…" : "Save right"}
         </Button>
       </span>
