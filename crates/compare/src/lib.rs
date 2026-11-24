@@ -238,6 +238,15 @@ pub struct FolderOptions {
     pub include: Option<String>,
     /// Exclude names matching this simple glob ('*' and '?').
     pub exclude: Option<String>,
+    /// BC-Rules style file masks: a semicolon-separated list where each
+    /// item is a simple glob ('*' and '?') matched against the file name
+    /// and the '/'-separated relative path. Items prefixed with '-'
+    /// are excludes, the rest are includes: excludes win, and when any
+    /// include is present a file must match at least one. Directories
+    /// always pass so masked trees stay walkable. `None` (or an empty
+    /// string) disables mask filtering for backward compatibility.
+    #[serde(default)]
+    pub masks: Option<String>,
 }
 
 impl Default for FolderOptions {
@@ -248,6 +257,7 @@ impl Default for FolderOptions {
             case_insensitive: false,
             include: None,
             exclude: None,
+            masks: None,
         }
     }
 }

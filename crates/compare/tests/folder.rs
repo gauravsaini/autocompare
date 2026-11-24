@@ -659,3 +659,93 @@ fn folder_tree_expand_collapse_and_visibility() {
 
     cleanup(&base);
 }
+
+fn masks_opts(masks: Option<&str>) -> FolderOptions {
+    FolderOptions {
+        masks: masks.map(|s| s.to_string()),
+        ..FolderOptions::default()
+    }
+}
+
+#[test]
+fn compare_folders_masks_include_only() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    for name in ["a.ts", "b.tsx", "c.js"] {
+        write(&left.join(name), "shared\n");
+        write(&right.join(name), "shared\n");
+    }
+    let res = compare_folders(&left, &right, &masks_opts(Some("*.ts;*.tsx")))
+        .expect("masked compare must succeed");
+    assert_eq!(
+        rel_paths(&res.entries),
+        vec!["a.ts".to_string(), "b.tsx".to_string()]
+    );
+    cleanup(&base);
+}
+
+#[test]
+fn compare_folders_masks_exclude_only() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    write(&left.join("app.js"), "v1\n");
+    write(&right.join("app.js"), "v1\n");
+    write(&left.join("app.min.js"), "min\n");
+    write(&right.join("app.min.js"), "min\n");
+    let res = compare_folders(&left, &right, &masks_opts(Some("-*.min.js")))
+        .expect("masked compare must succeed");
+    assert_eq!(rel_paths(&res.entries), vec!["app.js".to_string()]);
+    cleanup(&base);
+}
+
+#[test]
+fn compare_folders_masks_mixed_exclude_wins() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    for name in ["main.ts", "main.test.ts", "util.js"] {
+        write(&left.join(name), "shared\n");
+        write(&right.join(name), "shared\n");
+    }
+    let res = compare_folders(&left, &right, &masks_opts(Some("*.ts;-*.test.ts")))
+        .expect("masked compare must succeed");
+    assert_eq!(rel_paths(&res.entries), vec!["main.ts".to_string()]);
+    cleanup(&base);
+}
+
+#[test]
+fn compare_folders_masks_no_mask_lists_everything() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    for name in ["a.ts", "b.js"] {
+        write(&left.join(name), "shared\n");
+        write(&right.join(name), "shared\n");
+    }
+    for masks in [None, Some(""), Some("  ; ")] {
+        let res =
+            compare_folders(&left, &right, &masks_opts(masks)).expect("compare must succeed");
+        assert_eq!(
+            rel_paths(&res.entries),
+            vec!["a.ts".to_string(), "b.js".to_string()],
+            "masks {masks:?} must keep backward compatibility"
+        );
+    }
+    cleanup(&base);
+}
+
+#[test]
+fn compare_folders_masks_keep_dirs_walkable() {
+    let base = temp_root();
+    let (left, right) = make_pair(&base);
+    write(&left.join("src/main.ts"), "shared\n");
+    write(&right.join("src/main.ts"), "shared\n");
+    write(&left.join("src/notes.md"), "notes\n");
+    write(&right.join("src/notes.md"), "notes\n");
+    let res = compare_folders(&left, &right, &masks_opts(Some("*.ts")))
+        .expect("masked compare must succeed");
+    assert_eq!(
+        rel_paths(&res.entries),
+        vec!["src".to_string(), "src/main.ts".to_string()]
+    );
+    assert!(entry(&res.entries, "src").is_dir);
+    cleanup(&base);
+}

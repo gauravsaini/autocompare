@@ -215,6 +215,7 @@ fn compare_folders_inner(
 
     let mut entries: Vec<FolderEntry> = Vec::new();
     let mut truncated = false;
+    let masks = active_masks(opts);
     let mut stack: Vec<WalkNode> = vec![WalkNode {
         rel: String::new(),
         left: Some(left.to_path_buf()),
@@ -261,6 +262,7 @@ fn compare_folders_inner(
                         rel,
                         child_depth,
                         opts,
+                        &masks,
                         &mut entries,
                         &mut stack,
                         cancel,
@@ -268,23 +270,23 @@ fn compare_folders_inner(
                 }
                 for child in left_only {
                     let rel = join_rel(&node.rel, &child.name);
-                    one_sided(child, true, rel, child_depth, &mut entries, &mut stack);
+                    one_sided(child, true, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
                 for child in right_only {
                     let rel = join_rel(&node.rel, &child.name);
-                    one_sided(child, false, rel, child_depth, &mut entries, &mut stack);
+                    one_sided(child, false, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (Some(lc), None) => {
                 for child in &lc {
                     let rel = join_rel(&node.rel, &child.name);
-                    one_sided(child, true, rel, child_depth, &mut entries, &mut stack);
+                    one_sided(child, true, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (None, Some(rc)) => {
                 for child in &rc {
                     let rel = join_rel(&node.rel, &child.name);
-                    one_sided(child, false, rel, child_depth, &mut entries, &mut stack);
+                    one_sided(child, false, rel, child_depth, opts, &masks, &mut entries, &mut stack);
                 }
             }
             (None, None) => {}
@@ -439,12 +441,39 @@ fn classify_pair(
     rel: String,
     child_depth: usize,
     opts: &FolderOptions,
+    masks: &FileMasks,
     entries: &mut Vec<FolderEntry>,
     stack: &mut Vec<WalkNode>,
     cancel: Option<&AtomicBool>,
 ) -> Result<()> {
     let lside = probe_side(&lc.path);
     let rside = probe_side(&rc.path);
+    // File masks apply to the entry before any status verdict: a masked
+    // file pair is dropped entirely. When either side is a directory the
+    // walk still descends the directory side(s) so nested matches are
+    // not lost; the masked pair itself is never listed.
+    if !lside.is_dir || !rside.is_dir {
+        let name = file_name_of(&rel);
+        if !masks_allow(masks, name, &rel, opts.case_insensitive) {
+            if lside.is_dir {
+                stack.push(WalkNode {
+                    rel: rel.clone(),
+                    left: Some(lc.path.clone()),
+                    right: None,
+                    depth: child_depth,
+                });
+            }
+            if rside.is_dir {
+                stack.push(WalkNode {
+                    rel,
+                    left: None,
+                    right: Some(rc.path.clone()),
+                    depth: child_depth,
+                });
+            }
+            return Ok(());
+        }
+    }
     let mut walk: Option<WalkNode> = None;
     let status;
 
@@ -487,15 +516,26 @@ fn classify_pair(
 }
 
 /// Records a one-sided node and walks it when it is a directory.
+/// File masks apply before the entry is recorded: masked files are
+/// dropped, while directories always pass so their matching children
+/// still surface.
 fn one_sided(
     child: &Child,
     on_left: bool,
     rel: String,
     child_depth: usize,
+    opts: &FolderOptions,
+    masks: &FileMasks,
     entries: &mut Vec<FolderEntry>,
     stack: &mut Vec<WalkNode>,
 ) {
     let side = probe_side(&child.path);
+    if !side.is_dir {
+        let name = file_name_of(&rel);
+        if !masks_allow(masks, name, &rel, opts.case_insensitive) {
+            return;
+        }
+    }
     let (left_info, right_info, status) = if on_left {
         (Some(side.info), None, FolderStatus::LeftOnly)
     } else {
@@ -648,6 +688,110 @@ pub(crate) fn glob_match(name: &str, pattern: &str) -> bool {
         pi += 1;
     }
     pi == p.len()
+}
+
+/// BC-Rules style file masks: a semicolon-separated list of simple
+/// globs (`*` and `?`). Items prefixed with `-` are excludes, the rest
+/// are includes. Each pattern is matched against the file name and the
+/// '/'-separated relative path, so `*.ts` filters by name while
+/// `src/*.ts` filters by path.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FileMasks {
+    /// Patterns a file must match at least one of (empty = no constraint).
+    pub includes: Vec<String>,
+    /// Patterns that hide a file when matched (win over includes).
+    pub excludes: Vec<String>,
+}
+
+impl FileMasks {
+    /// Whether any include or exclude pattern is present.
+    pub fn is_active(&self) -> bool {
+        !self.includes.is_empty() || !self.excludes.is_empty()
+    }
+}
+
+/// Parses a `masks` string into includes and excludes. `None`, empty,
+/// or whitespace-only input yields an inactive [`FileMasks`]. Items are
+/// split on `;`, trimmed, and empty items are ignored; a `-` prefix
+/// (after trimming) marks an exclude. A lone `-` is ignored.
+pub fn parse_file_masks(masks: Option<&str>) -> FileMasks {
+    let mut out = FileMasks::default();
+    let Some(raw) = masks else {
+        return out;
+    };
+    for item in raw.split(';') {
+        let item = item.trim();
+        if item.is_empty() || item == "-" {
+            continue;
+        }
+        if let Some(pattern) = item.strip_prefix('-') {
+            let pattern = pattern.trim();
+            if !pattern.is_empty() {
+                out.excludes.push(pattern.to_owned());
+            }
+        } else {
+            out.includes.push(item.to_owned());
+        }
+    }
+    out
+}
+
+/// Whether a file with this name and relative path passes `masks`.
+/// Excludes win: any exclude match hides the file even when an include
+/// also matches. When includes are present, at least one must match.
+/// Matching is [`glob_match`] against the file name and the full
+/// relative path, folded to lowercase when `case_insensitive` is set.
+pub fn masks_allow(
+    masks: &FileMasks,
+    file_name: &str,
+    rel_path: &str,
+    case_insensitive: bool,
+) -> bool {
+    if !masks.is_active() {
+        return true;
+    }
+    if masks
+        .excludes
+        .iter()
+        .any(|p| mask_pattern_matches(p, file_name, rel_path, case_insensitive))
+    {
+        return false;
+    }
+    if masks.includes.is_empty() {
+        return true;
+    }
+    masks
+        .includes
+        .iter()
+        .any(|p| mask_pattern_matches(p, file_name, rel_path, case_insensitive))
+}
+
+/// Matches one mask pattern against the file name and the relative
+/// path (either match keeps the file).
+fn mask_pattern_matches(
+    pattern: &str,
+    file_name: &str,
+    rel_path: &str,
+    case_insensitive: bool,
+) -> bool {
+    if case_insensitive {
+        let pattern = pattern.to_lowercase();
+        let file_name = file_name.to_lowercase();
+        let rel_path = rel_path.to_lowercase();
+        glob_match(&file_name, &pattern) || glob_match(&rel_path, &pattern)
+    } else {
+        glob_match(file_name, pattern) || glob_match(rel_path, pattern)
+    }
+}
+
+/// File name part of a '/'-separated relative path.
+fn file_name_of(rel_path: &str) -> &str {
+    rel_path.rsplit('/').next().unwrap_or(rel_path)
+}
+
+/// Masks from `opts`, ready for per-entry checks.
+fn active_masks(opts: &FolderOptions) -> FileMasks {
+    parse_file_masks(opts.masks.as_deref())
 }
 
 /// A node in a folder tree view with depth and expansion metadata.
@@ -921,6 +1065,68 @@ mod tests {
             Duration::from_secs(2),
         );
         assert_eq!(res_diff, FolderStatus::NewerLeft);
+    }
+
+    #[test]
+    fn test_parse_file_masks_splits_includes_and_excludes() {
+        let masks = parse_file_masks(Some("*.ts; *.tsx ; -*.min.js;- bundle.js"));
+        assert_eq!(masks.includes, vec!["*.ts".to_string(), "*.tsx".to_string()]);
+        assert_eq!(
+            masks.excludes,
+            vec!["*.min.js".to_string(), "bundle.js".to_string()]
+        );
+        assert!(masks.is_active());
+
+        assert!(!parse_file_masks(None).is_active());
+        assert!(!parse_file_masks(Some("")).is_active());
+        assert!(!parse_file_masks(Some("  ; - ; ")).is_active());
+    }
+
+    #[test]
+    fn test_masks_allow_include_only() {
+        let masks = parse_file_masks(Some("*.ts;*.tsx"));
+        assert!(masks_allow(&masks, "a.ts", "a.ts", false));
+        assert!(masks_allow(&masks, "b.tsx", "sub/b.tsx", false));
+        assert!(!masks_allow(&masks, "c.js", "c.js", false));
+    }
+
+    #[test]
+    fn test_masks_allow_exclude_only() {
+        let masks = parse_file_masks(Some("-*.min.js"));
+        assert!(!masks_allow(&masks, "app.min.js", "app.min.js", false));
+        assert!(masks_allow(&masks, "app.js", "app.js", false));
+    }
+
+    #[test]
+    fn test_masks_allow_mixed_exclude_wins() {
+        let masks = parse_file_masks(Some("*.ts;-*.test.ts"));
+        assert!(masks_allow(&masks, "main.ts", "main.ts", false));
+        assert!(!masks_allow(&masks, "main.test.ts", "main.test.ts", false));
+        assert!(!masks_allow(&masks, "util.js", "util.js", false));
+    }
+
+    #[test]
+    fn test_masks_allow_matches_relative_path() {
+        let masks = parse_file_masks(Some("src/*.ts"));
+        assert!(masks_allow(&masks, "a.ts", "src/a.ts", false));
+        assert!(!masks_allow(&masks, "a.ts", "lib/a.ts", false));
+    }
+
+    #[test]
+    fn test_masks_allow_question_wildcard_and_case_option() {
+        let masks = parse_file_masks(Some("file?.ts"));
+        assert!(masks_allow(&masks, "file1.ts", "file1.ts", false));
+        assert!(!masks_allow(&masks, "file12.ts", "file12.ts", false));
+
+        let masks = parse_file_masks(Some("*.TS"));
+        assert!(!masks_allow(&masks, "a.ts", "a.ts", false));
+        assert!(masks_allow(&masks, "a.ts", "a.ts", true));
+    }
+
+    #[test]
+    fn test_masks_allow_inactive_passes_everything() {
+        let masks = parse_file_masks(None);
+        assert!(masks_allow(&masks, "anything.bin", "sub/anything.bin", false));
     }
 
     #[test]

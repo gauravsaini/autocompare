@@ -242,27 +242,50 @@ pub fn entry_matches(status: FolderStatusDto, filter: &str) -> Result<bool, Stri
 /// Compares two folder trees and caches the full result under a new
 /// snapshot id. Only the summary travels back over IPC.
 ///
+/// `masks` is an optional BC-Rules style file-mask list (semicolon
+/// separated, `*`/`?` wildcards, `-` prefix excludes) matched against
+/// file names and relative paths. `None` (or empty) disables mask
+/// filtering; masks apply at compare time, before any `filter` used
+/// by [`folder_get_tree`].
+///
 /// The walk runs through [`compare_folders_cancellable`] against a flag
 /// registered up front, so a concurrent [`folder_cancel`] for the returned
 /// session id can interrupt it.
 #[tauri::command]
-pub fn folder_compare(left: String, right: String) -> Result<FolderCompareDto, String> {
+pub fn folder_compare(
+    left: String,
+    right: String,
+    masks: Option<String>,
+) -> Result<FolderCompareDto, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
     if right.is_empty() {
         return Err("right path must not be empty".to_string());
     }
+    // Empty/whitespace-only masks mean "no filtering", matching the
+    // engine's backward-compatible default.
+    let masks = masks.and_then(|m| {
+        if m.trim().is_empty() {
+            None
+        } else {
+            Some(m)
+        }
+    });
     let session = next_session_id();
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let mut inflight = lock_inflight()?;
         inflight.insert(session.clone(), Arc::clone(&cancel));
     }
+    let options = FolderOptions {
+        masks,
+        ..FolderOptions::default()
+    };
     let outcome = compare_folders_cancellable(
         std::path::Path::new(&left),
         std::path::Path::new(&right),
-        &FolderOptions::default(),
+        &options,
         &cancel,
     );
     {
@@ -438,10 +461,21 @@ mod tests {
 
     #[test]
     fn error_paths_on_missing_dirs_and_sessions() {
-        assert!(folder_compare(String::new(), "/b".to_string()).is_err());
-        assert!(folder_compare("/a".to_string(), String::new()).is_err());
+        assert!(folder_compare(String::new(), "/b".to_string(), None).is_err());
+        assert!(folder_compare("/a".to_string(), String::new(), None).is_err());
         let missing = "/definitely/not/here-wave1a-left".to_string();
-        assert!(folder_compare(missing, "/definitely/not/here-wave1a-right".to_string()).is_err());
+        assert!(folder_compare(
+            missing,
+            "/definitely/not/here-wave1a-right".to_string(),
+            None
+        )
+        .is_err());
+        assert!(folder_compare(
+            "/definitely/not/here-wave1a-left".to_string(),
+            "/definitely/not/here-wave1a-right".to_string(),
+            Some("*.ts".to_string())
+        )
+        .is_err());
         assert!(folder_get_tree("no-such-session".to_string(), 0, 10, "all".to_string()).is_err());
         assert!(
             folder_get_tree("no-such-session".to_string(), 0, 10, "bogus".to_string()).is_err()
@@ -452,5 +486,98 @@ mod tests {
     fn cancel_unknown_session_reports_false() {
         let receipt = folder_cancel("no-such-session-wave1a".to_string());
         assert_eq!(receipt.map(|r| r.cancelled), Ok(false));
+    }
+
+    fn mask_fixture_roots(tag: &str) -> (String, String, String) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let base = std::env::temp_dir().join(format!(
+            "autocompare-folder-masks-{}-{}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed),
+            tag
+        ));
+        let left = base.join("left");
+        let right = base.join("right");
+        for name in ["a.ts", "b.js", "app.min.js"] {
+            for root in [&left, &right] {
+                std::fs::create_dir_all(root).unwrap_or(());
+                let path = root.join(name);
+                std::fs::write(&path, "shared\n").unwrap_or(());
+                // Pin both sides to the same mtime so verdicts are `Same`
+                // and the status-filter composition check is deterministic.
+                if let Ok(file) = std::fs::File::options().write(true).open(&path) {
+                    let stamp = std::time::UNIX_EPOCH
+                        .checked_add(std::time::Duration::from_secs(1_700_000_000))
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    let _ = file.set_times(
+                        std::fs::FileTimes::new().set_modified(stamp),
+                    );
+                }
+            }
+        }
+        (
+            base.display().to_string(),
+            left.display().to_string(),
+            right.display().to_string(),
+        )
+    }
+
+    fn tree_paths(session: &str) -> Vec<String> {
+        let page = folder_get_tree(session.to_string(), 0, 500, "all".to_string())
+            .unwrap_or_else(|_| panic!("tree fetch must succeed for {session}"));
+        page.entries.iter().map(|e| e.rel_path.clone()).collect()
+    }
+
+    #[test]
+    fn masks_param_filters_before_status_filter() {
+        // No masks: everything is listed (backward compatible).
+        let (base_none, left, right) = mask_fixture_roots("none");
+        let dto = folder_compare(left.clone(), right.clone(), None).unwrap_or_else(|_| {
+            panic!("compare without masks must succeed");
+        });
+        assert_eq!(dto.total, 3);
+        assert_eq!(tree_paths(&dto.session), vec!["a.ts", "app.min.js", "b.js"]);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base_none).unwrap_or(());
+
+        // Include-only: only *.ts survives.
+        let (base_inc, left, right) = mask_fixture_roots("inc");
+        let dto = folder_compare(left, right, Some("*.ts".to_string()))
+            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        assert_eq!(dto.total, 1);
+        assert_eq!(tree_paths(&dto.session), vec!["a.ts"]);
+        // Status filter composes on the masked snapshot.
+        let changed = folder_get_tree(dto.session.clone(), 0, 500, "changed".to_string())
+            .unwrap_or_else(|_| panic!("filtered fetch must succeed"));
+        assert!(changed.entries.is_empty());
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base_inc).unwrap_or(());
+
+        // Exclude-only: the minified bundle is hidden.
+        let (base_exc, left, right) = mask_fixture_roots("exc");
+        let dto = folder_compare(left, right, Some("-*.min.js".to_string()))
+            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        assert_eq!(dto.total, 2);
+        assert_eq!(tree_paths(&dto.session), vec!["a.ts", "b.js"]);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base_exc).unwrap_or(());
+
+        // Mixed: include *.js but still drop the minified bundle.
+        let (base_mix, left, right) = mask_fixture_roots("mix");
+        let dto = folder_compare(left, right, Some("*.js;-*.min.js".to_string()))
+            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        assert_eq!(dto.total, 1);
+        assert_eq!(tree_paths(&dto.session), vec!["b.js"]);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base_mix).unwrap_or(());
+
+        // Empty masks string behaves like None.
+        let (base_empty, left, right) = mask_fixture_roots("empty");
+        let dto = folder_compare(left, right, Some("  ".to_string()))
+            .unwrap_or_else(|_| panic!("compare with empty masks must succeed"));
+        assert_eq!(dto.total, 3);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base_empty).unwrap_or(());
     }
 }

@@ -145,6 +145,54 @@ function mockSessionStoreMint(): string {
   return `sess-mock-${Date.now()}-${seq}`;
 }
 
+// Wave-165: mock file-mask support (mock branch ONLY). Mirrors the engine
+// grammar (`parse_file_masks` in `crates/compare/src/folder.rs`):
+// semicolon list, `*`/`?` wildcards, `-` prefix = exclude, matched
+// against the file name and the `/`-separated relPath. Directories always
+// pass so masked trees stay walkable. Masks apply at compare time, before
+// the status filter, exactly like the Rust handlers.
+let mockFolderMasks: string | null = null;
+
+function mockGlobToRegExp(glob: string): RegExp {
+  let out = "^";
+  for (const ch of glob) {
+    if (ch === "*") out += ".*";
+    else if (ch === "?") out += ".";
+    else out += ch.replace(/[.*+?^${}()|[\]\\]/, "\\$&");
+  }
+  return new RegExp(`${out}$`);
+}
+
+interface MockMasks {
+  readonly includes: readonly RegExp[];
+  readonly excludes: readonly RegExp[];
+}
+
+function parseMockMasks(raw: unknown): MockMasks {
+  const includes: RegExp[] = [];
+  const excludes: RegExp[] = [];
+  if (typeof raw !== "string") return { includes, excludes };
+  for (const item of raw.split(";")) {
+    const trimmed = item.trim();
+    if (trimmed === "" || trimmed === "-") continue;
+    if (trimmed.startsWith("-")) {
+      const pattern = trimmed.slice(1).trim();
+      if (pattern !== "") excludes.push(mockGlobToRegExp(pattern));
+    } else {
+      includes.push(mockGlobToRegExp(trimmed));
+    }
+  }
+  return { includes, excludes };
+}
+
+function mockMasksAllow(parsed: MockMasks, relPath: string, isDir: boolean): boolean {
+  if (isDir) return true;
+  if (parsed.includes.length === 0 && parsed.excludes.length === 0) return true;
+  const fileName = relPath.split("/").pop() ?? relPath;
+  if (parsed.excludes.some((re) => re.test(fileName) || re.test(relPath))) return false;
+  if (parsed.includes.length === 0) return true;
+  return parsed.includes.some((re) => re.test(fileName) || re.test(relPath));
+}
 // Wave-66V mock edit overlay: `text_apply_edit` patches served rows so
 // edit + re-compare wiring is provable without the Rust backend. Cleared
 // on reload (module state, never localStorage).
@@ -377,21 +425,30 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       } as unknown as T;
     }
     case "folder_compare": {
+      const masks = typeof args["masks"] === "string" ? (args["masks"] as string) : null;
+      mockFolderMasks = masks;
+      const parsed = parseMockMasks(masks);
+      const nodes = dumped.folderNodes.filter((node) =>
+        mockMasksAllow(parsed, node.relPath, node.isDir),
+      );
       return {
         session: "mock-folder-1",
         leftRoot: strArg(args, ["left"], ""),
         rightRoot: strArg(args, ["right"], ""),
-        total: dumped.folderNodes.length,
+        total: nodes.length,
         truncated: false,
       } as unknown as T;
     }
     case "folder_get_tree": {
       const filter = strArg(args, ["filter"], "all");
-      const entries = dumped.folderNodes.filter((entry) => {
-        if (filter === "all") return true;
-        if (filter === "changed") return entry.status !== "same";
-        return entry.status === filter;
-      });
+      const parsed = parseMockMasks(mockFolderMasks);
+      const entries = dumped.folderNodes
+        .filter((node) => mockMasksAllow(parsed, node.relPath, node.isDir))
+        .filter((entry) => {
+          if (filter === "all") return true;
+          if (filter === "changed") return entry.status !== "same";
+          return entry.status === filter;
+        });
       const total = entries.length;
       const start = Math.min(numArg(args, ["start"], 0), total);
       const limit = Math.min(numArg(args, ["limit"], 50), 500);
