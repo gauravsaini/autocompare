@@ -1,11 +1,12 @@
 /**
- * Wave-66R: collapsible goto bar (Beyond Compare style Ctrl+G overlay).
+ * Wave-199c: goto rides the chrome overlay stack (Beyond Compare
+ * style Ctrl+G popover).
  *
- * In-flow collapsible (never `position: absolute`, so the overlap
- * gate keeps passing): open by default for backward compat, toggled
- * from the toolbar, Ctrl+G, or Esc. Purely presentational: input
- * state and the paging jump live in `TextView` (wave-43 logic
- * byte-identical).
+ * Absolute popover (never in-flow): floats over the rows via the
+ * `tv-chrome` relative wrapper, so an open goto panel never pushes
+ * `textview/row-0` down. Purely presentational: input state and the
+ * paging jump live in `TextView` (wave-43 logic byte-identical).
+ * All testids/aria unchanged.
  */
 import { X } from "lucide-react";
 import { Button, Input, ToolbarButton } from "../../../ui";
@@ -23,7 +24,10 @@ export interface GotoOverlayProps {
 export default function GotoOverlay(props: GotoOverlayProps): React.JSX.Element {
   const { value, placeholder, onValueChange, busy, onGo, onClose, statusText } = props;
   return (
-    <section data-testid="textview/goto-panel" className="tv-controls-panel">
+    <section
+      data-testid="textview/goto-panel"
+      className="tv-controls-panel rounded-md border border-[var(--ac-border-subtle)] shadow-lg"
+    >
       <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="goto row">
         <label htmlFor="textview-goto-box" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
           Goto row

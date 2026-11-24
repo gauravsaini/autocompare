@@ -2,18 +2,20 @@ import { ArrowDownToLine, ChevronDown, ChevronUp, Search, SlidersHorizontal, Typ
 import { Button, Checkbox, Select, ToolbarButton } from "../../../ui";
 
 /**
- * Wave-66R: single-row text controls toolbar (Beyond Compare style).
+ * Wave-199c: single-row text controls toolbar (Beyond Compare style).
  *
- * Replaces the ~180px stacked control block (ignore fieldset + toggle
- * row + always-visible find/goto rows) with one toolbar row: Find /
- * Goto / Ignore toggle buttons (Ctrl+F, Ctrl+G, menu), prev/next
- * difference nav, the difference position, and the compact display
- * toggles (wrap, line numbers, differences-only + context N).
+ * One toolbar row: Find / Goto / Ignore / Format toggles (Ctrl+F,
+ * Ctrl+G, menus), prev/next difference nav, display toggles (wrap,
+ * line numbers, differences-only + context N), save overflow.
+ * Find/Goto/Ignore/Format panels float in the `tv-chrome` overlay
+ * stack (absolute popovers, never in-flow) so open panels never push
+ * `textview/row-0` down. Difference counts live in the bottom status
+ * bar (`textview/toolbar-hunks` + `textview/diffnav-note` render
+ * there, BC "N difference sections" truth) — same testids/text,
+ * new address.
  *
  * Purely presentational: every value and callback is owned by
- * `TextView` (existing find/goto/ignore logic untouched). All legacy
- * testids ride the same inputs so wave-30/34/39/59/61/62/66H specs
- * keep passing unmodified.
+ * `TextView`. All legacy testids ride the same inputs.
  */
 export interface TextToolbarProps {
   readonly findOpen: boolean;
@@ -37,9 +39,13 @@ export interface TextToolbarProps {
    * either way; view-level controls are never removed.
    */
   readonly onBusCommand?: (cmd: "prev" | "next") => void;
-  /** e.g. "hunk 2 of 5", "3 hunks", or "no differences". */
-  readonly hunksLabel: string;
-  readonly diffNote: string | null;
+  /** Wave-199c: moved to the bottom status bar (BC "N difference
+      sections" truth). Kept in the props interface so `TextView`
+      call sites compile unchanged; the toolbar no longer renders
+      them — `TextView` renders the same testids in `textview/status`.
+      @deprecated toolbar no longer renders; read from status bar. */
+  readonly hunksLabel?: string;
+  readonly diffNote?: string | null;
   readonly wrap: boolean;
   readonly onToggleWrap: (v: boolean) => void;
   readonly showLineNos: boolean;
@@ -76,8 +82,6 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
     onPrevDiff,
     onNextDiff,
     onBusCommand,
-    hunksLabel,
-    diffNote,
     wrap,
     onToggleWrap,
     showLineNos,
@@ -185,22 +189,10 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       >
         <span>Copy Line R</span>
       </ToolbarButton>
-      {/* Wave-198: fixed-width hunks slot. The label is
-          selection-driven ("8 hunks" -> "hunk 3 of 8"), and without a
-          reserved width the widening shoved the Save group mid-gesture
-          (the wave-195 wrap fix stopped the line-wrap, but the shift
-          remained). `min-w-[14ch]` covers "hunk 100 of 100" so every
-          real label fits without moving siblings; `shrink-0` keeps the
-          flex row from squeezing it, `text-center` keeps short labels
-          ("8 hunks") visually parked. Text + testid byte-identical. */}
-      <span data-testid="textview/toolbar-hunks" className="ac-meta inline-block min-w-[14ch] shrink-0 text-center tabular-nums text-[var(--ac-fg-muted)]">
-        {hunksLabel}
-      </span>
-      {diffNote === null ? null : (
-        <span data-testid="textview/diffnav-note" role="note" className="ac-meta text-[var(--ac-fg-muted)]">
-          {diffNote}
-        </span>
-      )}
+      {/* Wave-199c: counts moved to the bottom status bar (BC "N
+          difference sections" truth). `textview/toolbar-hunks` +
+          `textview/diffnav-note` render in `textview/status` with the
+          same testids/text — the toolbar stays one compact row. */}
       <span aria-hidden="true" className="tv-controls-sep" />
       <Checkbox data-testid="textview/wrap-toggle" label="Word wrap" checked={wrap} onChange={(e) => onToggleWrap(e.target.checked)} />
       <Checkbox data-testid="textview/linenos-toggle" label="Line numbers" checked={showLineNos} onChange={(e) => onToggleLineNos(e.target.checked)} />
