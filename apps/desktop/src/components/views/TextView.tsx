@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { textApplyEdit, textApplyHunk, textCompare, textCompareDemo, textFind, textGetOverview, textGetRows, textSaveSide } from "../../ipc/text";
 import type { OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
 import { arrayField, errString, isRecord } from "./types";
@@ -594,10 +593,35 @@ function LineNo({
  * byte-for-byte at the same testids / aria-labels.
  */
 function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
-  return dir === "left" ? (
-    <ChevronsRight size={12} strokeWidth={2} aria-hidden="true" />
-  ) : (
-    <ChevronsLeft size={12} strokeWidth={2} aria-hidden="true" />
+  // Inline (no lucide class): the wave-66O spec probes the svg
+  // directly for 12px currentColor stroke-width 2 with mirrored
+  // paths per direction.
+  const paths =
+    dir === "left" ? (
+      <>
+        <path d="m6 17 5-5-5-5" />
+        <path d="m13 17 5-5-5-5" />
+      </>
+    ) : (
+      <>
+        <path d="m11 17-5-5 5-5" />
+        <path d="m18 17-5-5 5-5" />
+      </>
+    );
+  return (
+    <svg
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths}
+    </svg>
   );
 }
 

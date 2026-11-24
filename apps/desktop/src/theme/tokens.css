@@ -1047,9 +1047,20 @@ samp {
  */
 .tv-controls-bar {
   display: flex;
-  flex-wrap: wrap;
+  /* Wave-195: nowrap (the component's own `flex-nowrap overflow-x-auto`
+     intent). `wrap` let the selection-driven hunks label ("8 hunks" ->
+     "hunk 3 of 8", +18px at zero slack) wrap the Save group onto a
+     second line, shifting every row 19px mid-gesture so a dblclick on a
+     row opened the WRONG row's editor. Single row + horizontal scroll:
+     the bar height never moves, so row positions are gesture-stable. */
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--ac-space-2);
+  /* Wave-195: 4px gaps (was 8px). The bar sits at zero slack at the
+     1280px gate viewport, and selection ("hunk 3 of 8") + dirty dots
+     add ~22px; 16 gaps × 4px buys 64px so every state fits on one
+     line with margin — no overflow for the wave-7 overlap probe to
+     flag, no wrap for gestures to race. Token-clean (space-1). */
+  gap: var(--ac-space-1);
   min-height: var(--ac-toolbar-h);
   padding: var(--ac-space-1) var(--ac-space-4);
   background-color: var(--ac-toolbar-bg);
