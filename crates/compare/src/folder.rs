@@ -519,6 +519,7 @@ fn classify_pair(
 /// File masks apply before the entry is recorded: masked files are
 /// dropped, while directories always pass so their matching children
 /// still surface.
+#[allow(clippy::too_many_arguments)]
 fn one_sided(
     child: &Child,
     on_left: bool,
