@@ -1,19 +1,24 @@
 /**
  * Wave-107 multiline cells + draft safety + one-level undo.
- * MOCK IPC ONLY (`VITE_MOCK_IPC=1`).
+ * MOCK IPC ONLY (`VITE_MOCK_IPC=1`). Wave-198 staged form: commits
+ * stage locally (`edit-note`); Save replays them through
+ * `text_apply_edit` (`applied-note`); undo of a staged edit reverts
+ * locally with no IPC, undo of an applied edit re-applies via the
+ * backend (and can honestly fail).
  *
  * Drives the REAL `App` workspace over the auto-boot demo text diff
  * and proves:
  *  - the RowLine editor is an auto-sized `<textarea>` prefilled with
  *    the cell text, with key hints in its `title` tooltip;
- *  - `Ctrl/Cmd+Enter` commits (single-line and multiline);
- *  - plain `Enter` on a still-single-line draft commits (legacy
+ *  - `Ctrl/Cmd+Enter` stages (single-line and multiline), Save applies;
+ *  - plain `Enter` on a still-single-line draft stages (legacy
  *    66ub/66v/67a compat), while `Enter` on an already-multiline
  *    draft inserts a newline;
  *  - blur (clicking away) keeps the draft open; `Esc` cancels;
  *  - `textview/undo-edit` is disabled when empty, restores the
- *    previous text of the most recently applied edit via
- *    `text_apply_edit`, and reports honestly on failure.
+ *    previous text of the most recently committed edit (locally while
+ *    staged, via `text_apply_edit` once applied), and reports honestly
+ *    on failure.
  *
  * New file only, no existing spec touched. Skip policy matches the
  * other specs.
@@ -68,7 +73,7 @@ test("editor is an auto-sized textarea with key hints", async ({ page }) => {
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });
 
-test("Ctrl+Enter commits a single-line edit", async ({ page }) => {
+test("Ctrl+Enter stages a single-line edit, Save applies it", async ({ page }) => {
   const pageErrors = trackErrors(page);
   const { cell } = await firstChangedLeftCell(page);
   const before = (await cell.textContent()) ?? "";
@@ -79,11 +84,15 @@ test("Ctrl+Enter commits a single-line edit", async ({ page }) => {
   await editor.press("Control+Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(cell).toContainText("MULTI107-SINGLE");
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });
 
-test("plain Enter commits a single-line draft (legacy compat)", async ({ page }) => {
+test("plain Enter stages a single-line draft (legacy compat), Save applies it", async ({ page }) => {
   const pageErrors = trackErrors(page);
   const { cell } = await firstChangedLeftCell(page);
   const before = (await cell.textContent()) ?? "";
@@ -94,11 +103,15 @@ test("plain Enter commits a single-line draft (legacy compat)", async ({ page })
   await editor.press("Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(cell).toContainText("LEGACY107");
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });
 
-test("Enter adds a line once multiline, Ctrl+Enter commits both lines", async ({ page }) => {
+test("Enter adds a line once multiline, Ctrl+Enter stages both, Save applies", async ({ page }) => {
   const pageErrors = trackErrors(page);
   const { cell } = await firstChangedLeftCell(page);
   await cell.dblclick();
@@ -106,12 +119,17 @@ test("Enter adds a line once multiline, Ctrl+Enter commits both lines", async ({
   await expect(editor).toBeVisible();
   await editor.fill("LINE-ONE-107\nLINE-TWO-107");
   await editor.press("Enter");
-  // Multiline draft: Enter inserts a newline, nothing is applied.
+  // Multiline draft: Enter inserts a newline, nothing is staged.
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(1);
   await expect(editor).toHaveValue("LINE-ONE-107\nLINE-TWO-107\n");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
   await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
   await editor.press("Control+Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
   await expect(cell).toContainText("LINE-ONE-107");
   await expect(cell).toContainText("LINE-TWO-107");
@@ -152,7 +170,8 @@ test("undo restores the previous text, then disables", async ({ page }) => {
   await expect(editor).toBeVisible();
   await editor.fill("UNDO-TARGET-107");
   await editor.press("Control+Enter");
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // Wave-198: the commit is still staged — undo reverts it locally.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
   await expect(undo).toBeEnabled();
 
   await page.screenshot({ path: "/tmp/editmulti-107-before-undo.png" });
@@ -180,8 +199,14 @@ test("failed undo keeps the stack with an honest error", async ({ page }) => {
   await expect(editor).toBeVisible();
   await editor.fill("UNDO-FAIL-107");
   await editor.press("Control+Enter");
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
   await expect(undo).toBeEnabled();
+
+  // Wave-198: staged undos are local and cannot fail — flush via Save
+  // first so the undo rides the backend path, then break it.
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
 
   await page.evaluate(() => {
     (window as unknown as Record<string, unknown>).__TEXT_APPLY_EDIT_NEXT__ = {

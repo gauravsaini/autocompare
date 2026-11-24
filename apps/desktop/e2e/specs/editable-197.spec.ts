@@ -5,19 +5,22 @@
  *
  * Drives the REAL `App` workspace over the auto-booted demo text diff
  * (mock `text_compare` over `dumped.json`) and pins the thinnest
- * editable slice — single-line edit -> backend apply -> Save — on BOTH
- * panes (cells open via keyboard focus + Enter, the same `RowLine`
- * `startEdit` path dblclick rides; dblclick coordinates race the
- * scrolled list in this webkit harness — see REPORT):
+ * editable slice — single-line edit -> stage locally -> Save flushes
+ * via backend -> receipt — on BOTH panes (cells open via keyboard
+ * focus + Enter, the same `RowLine` `startEdit` path dblclick rides;
+ * dblclick coordinates race the scrolled list in this webkit harness
+ * — see REPORT):
  *  - left cell: focus + Enter opens the prefilled editor, fill + Enter
- *    applies via `text_apply_edit` (mock serves the patched row on
- *    refetch), `applied-note` counts it, editor closes;
- *  - right cell: same path on the right pane (BC parity needs both
- *    panes editable, not just left);
+ *    stages locally (`edit-note`, dirty dot, row kind untouched),
+ *    Save flushes via `text_apply_edit` (mock serves the patched row
+ *    on refetch), `applied-note` counts it, editor closes;
+ *  - right cell: same staged path on the right pane (BC parity needs
+ *    both panes editable, not just left);
  *  - Esc cancels with zero change and no notes;
  *  - orphan (null) cell click selects the row but never opens an editor;
- *  - Save right writes via `text_save_side` (mock `[]` fallback
- *    receipt) with no `save-error`.
+ *  - Save is per-side: saving right leaves a left staged edit staged
+ *    (honest independence), saving left flushes it with a receipt
+ *    (mock `[]` fallback) and no `save-error`.
  *
  * New file only, no existing spec touched. Skip policy matches the
  * other specs.
@@ -48,12 +51,13 @@ function trackErrors(page: Page): { pageErrors: string[] } {
   return { pageErrors };
 }
 
-test("left pane single-line edit applies via backend", async ({ page }) => {
+test("left pane single-line edit stages locally, Save applies via backend", async ({ page }) => {
   const { pageErrors } = trackErrors(page);
   await expect(page.getByTestId("view-text")).toBeVisible();
-  const { left } = await firstChangedCells(page);
+  const { row, left } = await firstChangedCells(page);
   const before = (await left.textContent()) ?? "";
   expect(before.length).toBeGreaterThan(0);
+  const rowId = await row.getAttribute("data-testid");
 
   await left.focus();
   await left.press("Enter");
@@ -65,13 +69,22 @@ test("left pane single-line edit applies via backend", async ({ page }) => {
 
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(left).toContainText("EDIT197-L");
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // Wave-198 staged: session-local, row kind untouched, nothing applied.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await expect(page.getByTestId("textview/dirty-left")).toBeVisible();
+  await expect(page.getByTestId(rowId as string)).toHaveAttribute("data-kind", "changed");
+
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/save-error")).toHaveCount(0);
 
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });
 
-test("right pane single-line edit applies via backend", async ({ page }) => {
+test("right pane single-line edit stages locally, Save applies via backend", async ({ page }) => {
   const { pageErrors } = trackErrors(page);
   await expect(page.getByTestId("view-text")).toBeVisible();
   const { right } = await firstChangedCells(page);
@@ -88,7 +101,15 @@ test("right pane single-line edit applies via backend", async ({ page }) => {
 
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(right).toContainText("EDIT197-R");
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await expect(page.getByTestId("textview/dirty-right")).toBeVisible();
+
+  await page.getByTestId("textview/save-right").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved right to");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/save-error")).toHaveCount(0);
 
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });
@@ -141,13 +162,26 @@ test("Save right persists after an edit with an honest receipt", async ({ page }
   await expect(input).toBeVisible();
   await input.fill(`${before} EDIT197-SAVE`);
   await input.press("Enter");
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // Wave-198 staged: the commit is session-local — Save is per-side,
+  // so saving right leaves the left edit staged (honest independence).
+  await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
 
   await page.getByTestId("textview/save-right").click();
   const receipt = page.getByTestId("textview/save-note");
   await expect(receipt).toContainText("Saved right to");
   await expect(receipt).toContainText("bytes");
   await expect(page.getByTestId("textview/save-error")).toHaveCount(0);
+  // Left staged edit survives the right-side save.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+
+  // Saving left flushes the staged edit with an honest receipt.
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
 
   expect(pageErrors, `zero pageerrors (got: ${pageErrors.join(" | ")})`).toEqual([]);
 });

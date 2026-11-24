@@ -4,10 +4,13 @@ import { InlineSpans, sideRanges } from "./inline/InlineSpans";
 
 /**
  * Wave-197: cell editor home (moved verbatim from `TextView.tsx`).
- * Single-line edit -> `text_apply_edit` -> Save (`text_save_side`).
- * Zero behavior change: dblclick/Enter opens a prefilled `<textarea>`,
- * plain Enter commits a still-single-line draft, Ctrl/Cmd+Enter commits
- * always, Esc cancels with focus restore, orphan (null) cells no-op.
+ * Wave-198: commits stage locally in `TextView` (`edits` map,
+ * `edit-note` "session-local until save") — no backend IPC at commit
+ * time; Save replays staged edits via `text_apply_edit` then
+ * `text_save_side`. Zero editor behavior change: dblclick/Enter opens
+ * a prefilled `<textarea>`, plain Enter commits a still-single-line
+ * draft, Ctrl/Cmd+Enter commits always, Esc cancels with focus
+ * restore, orphan (null) cells no-op.
  */
 export function RowLine({ label, value, wrap, tint, spans, side, editKey, edited, onCommitEdit }: { label: string; value: string | null; wrap: boolean; tint: "tv-del" | "tv-ins" | "tv-chg" | null; spans?: readonly InlineSpanDto[]; side?: "left" | "right"; editKey: string | null; edited: boolean; onCommitEdit: ((key: string, text: string, prevText: string) => void) | null }): React.JSX.Element {
   // Wave-66S2: inline word highlights ride the non-null cells of

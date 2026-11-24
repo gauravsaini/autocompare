@@ -772,13 +772,18 @@ export default function TextView({
   // + onSelectRow) so the bottom LineDetailPane reuses the already-loaded
   // row; uncontrolled fallback keeps standalone mounts clickable.
   const [innerSelected, setInnerSelected] = useState<number | null>(null);
-  // Wave-66U-b: session-local cell edits (`"<rowIndex>:<side>"` ->
+  // Wave-66U-b: session-local staged cell edits (`"<rowIndex>:<side>"` ->
   // committed text). Cleared on session switch in the effect below.
-  // Wave-66V: commits go through the `text_apply_edit` backend (patch +
-  // re-compare with the session's own ignore options), then the loaded
-  // window is re-fetched so hunk grouping, inline spans and the ruler
-  // reflect the edit. Backend failures keep the text as a local-only
-  // override with an honest note; applied edits clear their override.
+  // Wave-198 (full staged-edit parity, was 66V immediate-apply):
+  // commits stage ONLY in this map — no `text_apply_edit` at commit
+  // time, so the `edit-note` ("session-local until save lands") is the
+  // honest dirty marker and the row kind/highlights stay backend-truth
+  // until Save. `saveSide` replays each staged edit for its side via
+  // `text_apply_edit` (Phase-2, same pattern as `stagedCopies`) and
+  // only then runs `text_save_side`; a replay reject keeps the staged
+  // text with an honest `edit-error`, a Save failure keeps staged.
+  // Backend-applied edits clear their override; `appliedCount` counts
+  // edits the Save flush applied (not commits).
   const [edits, setEdits] = useState<Readonly<Record<string, string>>>({});
   const [appliedCount, setAppliedCount] = useState(0);
   // Wave-107: one-level undo for the most recently APPLIED cell edit
@@ -879,13 +884,55 @@ export default function TextView({
         }
       }
 
+      // Wave-198: Phase-2 edit flush. Staged cell edits targeting
+      // `side` replay through `text_apply_edit` (same per-row path the
+      // gutter fallback proved) BEFORE the disk write, so the session
+      // the receipt names actually holds the staged text. Copies flush
+      // first and edits replay second, matching the local display
+      // (the `renderRow` override paints staged edits over copied
+      // rows). The test-only `__TEXT_APPLY_EDIT_NEXT__` failure
+      // override is honored once per replayed edit: a reject keeps the
+      // staged text with an honest `edit-error` and pauses the Save
+      // (no disk write, staged kept for retry). A Save failure below
+      // likewise keeps staged edits — clearing happens only on
+      // success.
+      const pendingEdits = Object.entries(edits).filter(([k]) => k.endsWith(`:${side}`));
+      let appliedEdits = 0;
+      if (pendingEdits.length > 0 && session !== null) {
+        for (const [key, text] of pendingEdits) {
+          const sep = key.lastIndexOf(":");
+          const index = Number(key.slice(0, sep));
+          if (!Number.isInteger(index) || index < 0) continue;
+          try {
+            const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
+            if (isRecord(forced) && forced["mode"] === "failure") {
+              w["__TEXT_APPLY_EDIT_NEXT__"] = null;
+              throw new Error(
+                typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
+              );
+            }
+            await textApplyEdit(session, index, side, text);
+            appliedEdits += 1;
+          } catch (err) {
+            setEditError(
+              `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+            );
+            setSaveNote(null);
+            setSaveError(`Save ${side} paused — row ${index} edit failed to apply, staged edits kept.`);
+            return;
+          }
+        }
+      }
+
       // Wave-178: converge the view to backend truth after the flush.
       // `text_apply_hunk` drops empty-take orphan rows (GAP-03), so the
       // locally held rows/total can lag the session — refetch the loaded
       // window + total + overview so follow-up copies compute from fresh
-      // indices instead of stale ones. Skipped when nothing was staged
-      // (pure cell-edit saves keep the existing rows byte-identical).
-      if (pendingCopies.length > 0 && session !== null) {
+      // indices instead of stale ones. Wave-198: the edit replay above
+      // regroups the edited rows the same way (mock recomputes a
+      // left==right row to equal), so the refetch also runs when only
+      // edits flushed. Skipped when nothing was staged.
+      if ((pendingCopies.length > 0 || appliedEdits > 0) && session !== null) {
         try {
           const page = await textGetRows(session, 0, Math.max(rowsRef.current.length, 1));
           setRows(page.rows);
@@ -929,6 +976,13 @@ export default function TextView({
           receiptBytes = raw["bytes"] as number;
         }
       }
+      // Wave-198: flushed edits applied to the session — count them
+      // (the `applied-note` now means session-applied, honest only
+      // after this flush) and drop their staged overrides for `side`.
+      // A prior `edit-error` clears once nothing is staged anywhere.
+      if (appliedEdits > 0) {
+        setAppliedCount((c) => c + appliedEdits);
+      }
       setEdits((prev) => {
         const kept: Record<string, string> = {};
         for (const [k, v] of Object.entries(prev)) {
@@ -936,6 +990,9 @@ export default function TextView({
         }
         return kept;
       });
+      if (Object.keys(edits).filter((k) => !k.endsWith(`:${side}`)).length === 0) {
+        setEditError(null);
+      }
       // Clear saved staged copies for this side and wire copyNote/saveNote to single dirty-state
       setStagedCopies((prev) => {
         const remaining = prev.filter((c) => c.target !== side);
@@ -954,74 +1011,95 @@ export default function TextView({
       setSavingSide(null);
     }
   }
+  /**
+   * Wave-198: stage a cell commit LOCALLY (no backend IPC at commit
+   * time — the 66V immediate `text_apply_edit` + refetch is retired).
+   * The staged text renders at once (the `renderRow` override +
+   * `edit-note` dirty marker), the `lastUndo` entry is recorded for
+   * one-level undo, and any stale save receipt is cleared (dirty
+   * again). The test-only `__TEXT_APPLY_EDIT_NEXT__` failure override
+   * is still honored once here so the mock-IPC specs can stage a
+   * backend-rejected edit deterministically: staged text kept with an
+   * honest `edit-error` (the same note a Save-flush replay failure
+   * raises). A clean commit leaves a prior `edit-error` untouched —
+   * it names a still-staged failure, cleared when nothing is staged.
+   */
   const commitEdit = (key: string, text: string, prevText: string): void => {
-    void (async () => {
-      const sep = key.lastIndexOf(":");
-      const index = Number(key.slice(0, sep));
-      const side = key.slice(sep + 1) === "right" ? "right" : "left";
-      if (session === null || !Number.isInteger(index) || index < 0) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        return;
-      }
-      // Test-only apply override (mock-IPC spec): force the failure
-      // branch once so a dirty staged edit exists to save/clear.
-      try {
-        const w = window as unknown as Record<string, unknown>;
-        const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
-        if (isRecord(forced) && forced["mode"] === "failure") {
-          w["__TEXT_APPLY_EDIT_NEXT__"] = null;
-          throw new Error(
-            typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
-          );
-        }
-      } catch (err) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        setEditError(
-          `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
-        );
-        return;
-      }
-      try {
-        await textApplyEdit(session, index, side, text);
-        setEdits((prev) => {
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        setEditError(null);
-        // Wave-107: record the pre-edit text for one-level undo. The
-        // entry is replaced by every new applied edit.
-        setLastUndo({ key, index, side, prevText });
-        setUndoNote(null);
-        setAppliedCount((c) => c + 1);
-        const window = await textGetRows(session, 0, Math.max(rows.length, 1));
-        setRows(window.rows);
-        const over = await fetchOverviewCounts(session);
-        if (over !== null) setOverview(over);
-      } catch (err) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        setEditError(
-          `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+    const sep = key.lastIndexOf(":");
+    const index = Number(key.slice(0, sep));
+    const side = key.slice(sep + 1) === "right" ? "right" : "left";
+    if (!Number.isInteger(index) || index < 0) {
+      setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+      return;
+    }
+    try {
+      const w = window as unknown as Record<string, unknown>;
+      const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
+      if (isRecord(forced) && forced["mode"] === "failure") {
+        w["__TEXT_APPLY_EDIT_NEXT__"] = null;
+        throw new Error(
+          typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
         );
       }
-    })();
+    } catch (err) {
+      setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+      setLastUndo({ key, index, side, prevText });
+      setUndoNote(null);
+      setSaveNote(null);
+      setEditError(
+        `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+      return;
+    }
+    setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+    // Wave-107: record the pre-edit text for one-level undo. The entry
+    // is replaced by every new commit; a staged undo reverts locally
+    // (no IPC), an applied undo re-applies via `textApplyEdit`.
+    setLastUndo({ key, index, side, prevText });
+    setUndoNote(null);
+    setSaveNote(null);
   };
   const dirtyCount = Object.keys(edits).length;
   /**
-   * Wave-107: undo the most recently applied cell edit (GAP-C, one
-   * level). Re-applies the recorded pre-edit text through the same
-   * `textApplyEdit` backend path as a commit, then refetches the
-   * loaded window + overview so hunk grouping and highlights reflect
-   * the restore. No-op while empty or already undoing; success clears
-   * the entry with a receipt note, failure keeps the entry (retryable)
-   * with an honest error note. The test-only
-   * `__TEXT_APPLY_EDIT_NEXT__` failure override is honored once so the
-   * mock-IPC spec can drive the failure branch deterministically.
+   * Wave-107: undo the most recently committed cell edit (GAP-C, one
+   * level). Wave-198: two paths. A STAGED (unsaved) edit reverts
+   * locally with no IPC — the override drops back to the recorded
+   * pre-edit text (or vanishes when that text is the backend text),
+   * so a planted backend failure is never consumed and the undo
+   * cannot fail. An APPLIED edit (Save already flushed it) re-applies
+   * the recorded pre-edit text through `textApplyEdit`, then refetches
+   * the loaded window + overview; success clears the entry with a
+   * receipt note, failure keeps the entry (retryable) with an honest
+   * error note. The test-only `__TEXT_APPLY_EDIT_NEXT__` failure
+   * override is honored once on the backend path so the mock-IPC spec
+   * can drive the failure branch deterministically.
    */
   async function undoLastEdit(): Promise<void> {
     const entry = lastUndo;
-    if (entry === null || undoing || session === null) return;
+    if (entry === null || undoing) return;
+    // Staged path: the key is still in the dirty map, so the backend
+    // never saw the text — revert the override in place. `rowsRef`
+    // holds backend truth (edits never mutate local rows), so a
+    // pre-edit text equal to the backend text drops the override
+    // entirely while a chained pre-edit (itself staged) is restored.
+    if (Object.prototype.hasOwnProperty.call(edits, entry.key)) {
+      const row = rowsRef.current.find((r) => r.index === entry.index);
+      const backendText = row === undefined ? null : entry.side === "left" ? row.left : row.right;
+      const next: Record<string, string> = { ...edits };
+      if (backendText !== null && entry.prevText === backendText) delete next[entry.key];
+      else next[entry.key] = entry.prevText;
+      setEdits(next);
+      setLastUndo(null);
+      // Same "Undid last edit" lead as the backend path so the 107/109
+      // receipt pins hold for both paths; the tail names the path.
+      setUndoNote("Undid last edit — staged text restored.");
+      if (Object.keys(next).length === 0) setEditError(null);
+      // Wave-109: focus restore (caret affordance) — keyboard focus
+      // returns to the restored row.
+      focusRowWhenMounted(entry.index);
+      return;
+    }
+    if (session === null) return;
     setUndoing(true);
     setUndoNote(null);
     try {

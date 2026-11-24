@@ -185,7 +185,15 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       >
         <span>Copy Line R</span>
       </ToolbarButton>
-      <span data-testid="textview/toolbar-hunks" className="ac-meta text-[var(--ac-fg-muted)]">
+      {/* Wave-198: fixed-width hunks slot. The label is
+          selection-driven ("8 hunks" -> "hunk 3 of 8"), and without a
+          reserved width the widening shoved the Save group mid-gesture
+          (the wave-195 wrap fix stopped the line-wrap, but the shift
+          remained). `min-w-[14ch]` covers "hunk 100 of 100" so every
+          real label fits without moving siblings; `shrink-0` keeps the
+          flex row from squeezing it, `text-center` keeps short labels
+          ("8 hunks") visually parked. Text + testid byte-identical. */}
+      <span data-testid="textview/toolbar-hunks" className="ac-meta inline-block min-w-[14ch] shrink-0 text-center tabular-nums text-[var(--ac-fg-muted)]">
         {hunksLabel}
       </span>
       {diffNote === null ? null : (
