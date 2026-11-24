@@ -87,6 +87,31 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
     setToleranceOpen(mode === "audio");
   }, [mode]);
 
+  /* Wave-180: `autocompare:view-command` + `autocompare:view-filter` bus
+     (unified top Toolbar parity). Media is a summary view (score/metrics,
+     no cursor, no row filter): every command is an honest no-op. The
+     toolbar parks non-session buttons, so this never fires by click —
+     the kind-scoped listeners exist so a bus/programmatic dispatch can
+     never crash the view. Never throws. */
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "media") return;
+    };
+    const onViewFilter = (e: Event): void => {
+      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "media") return;
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    window.addEventListener("autocompare:view-filter", onViewFilter);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+      window.removeEventListener("autocompare:view-filter", onViewFilter);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     // Wave-130: no paths = pick-two-paths empty (App.hasPaths gate parity:

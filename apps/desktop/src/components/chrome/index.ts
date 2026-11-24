@@ -8,6 +8,7 @@ export {
   dispatchViewCommand,
   dispatchViewFilter,
   dispatchViewMinor,
+  isBusCommandForKind,
   type ViewCommand as BusViewCommand,
   type ViewFilterKind as BusViewFilterKind,
 } from "./ViewCommandBus";

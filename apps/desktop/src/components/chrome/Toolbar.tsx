@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Square, type LucideIcon } from "lucide-react";
 import { ToolbarButton } from "../ui";
-import { VIEW_FORMAT_EVENT } from "../views/text/controls/FormatMenu";
-import { VIEW_RULES_EVENT } from "../views/folder/controls/RulesPanel";
 
 export interface ToolbarAction {
   id: string;
@@ -236,8 +234,6 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
     >
       {actions.map((action) => {
         const isCompare = action.id === "compare";
-        const isRules = action.id === "rules";
-        const isFormat = action.id === "format";
         const actionBusy = action.busy ?? (isCompare && busy);
         const actionEnabled = action.enabled && !(isCompare && busy);
         const reason: string | null = isCompare
@@ -246,22 +242,13 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
             : (action.disabledReason ?? compareBlockedReasonOf(action))
           : (action.disabledReason ?? null);
         const title = isCompare && busy ? `Compare (${COMPARE_BUSY_REASON})` : actionTitle(action, reason);
-        // Wave-164/167/169: Rules/Format route through the view bus FIRST
-        // (the in-view Rules/Format panels open), then run the host
-        // handler (App.tsx toggles are live in folder/text kind and park
-        // honestly elsewhere). Minor is live via the W161/W169 bus path
-        // for text and table kinds. Disabled buttons never fire either path.
-        const handleActionClick = isRules
-          ? (): void => {
-              window.dispatchEvent(new CustomEvent(VIEW_RULES_EVENT));
-              action.onClick();
-            }
-          : isFormat
-            ? (): void => {
-                window.dispatchEvent(new CustomEvent(VIEW_FORMAT_EVENT));
-                action.onClick();
-              }
-            : action.onClick;
+        // Wave-180: single bus source — Rules/Format events dispatch
+        // ONLY from the host `onClick` (App `handleRulesToggle` /
+        // `handleFormatToggle` own `dispatchViewRules` /
+        // `dispatchViewFormat`). The bar never fires a parallel raw
+        // event, so the in-view panel opens exactly once per click.
+        // Disabled buttons never fire either path.
+        const handleActionClick = action.onClick;
         // Wave-116: idle Prev/Next collapse out of the bar (testid stays
         // mounted, honestly hidden) instead of holding an always-on slot.
         const idleCollapsed =

@@ -351,6 +351,49 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       window.removeEventListener("autocompare:view-filter", onViewFilter);
     };
   }, []);
+  /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
+     parity: NextSection/PrevSection). Table owns prev/next — they ride
+     the same `stepDiff` path as the in-view Prev/Next diff buttons over
+     the FILTERED visible order. copy/swap are honest no-ops in table
+     kind (the toolbar parks those buttons, so this never fires by
+     click; the listener exists so a bus/programmatic dispatch can never
+     crash the view). Kind-scoped so text/merge nav never leaks across
+     views. `stepDiffRef` tracks the latest ready-render `stepDiff`
+     (null until the first page is ready, so an early bus event is an
+     honest no-op, never a crash). */
+  const stepDiffRef = useRef<((dir: 1 | -1) => void) | null>(null);
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "table") return;
+      const cmd = detail?.cmd;
+      if (cmd === "prev") stepDiffRef.current?.(-1);
+      else if (cmd === "next") stepDiffRef.current?.(1);
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, []);
+  /* Wave-180: `autocompare:view-minor` bus (top-bar Minor parity). Applies
+     to this kind only; the compare effect below re-issues `table_compare`
+     with the flags — the single live path (App fires no parallel direct
+     IPC). Foreign kinds and malformed payloads are ignored, never a crash. */
+  useEffect(() => {
+    const onMinor = (e: Event): void => {
+      const detail = (e as CustomEvent<{ on?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "table") return;
+      if (typeof detail?.on !== "boolean") return;
+      setIgnoreWs(detail.on);
+      setIgnoreCase(detail.on);
+    };
+    window.addEventListener("autocompare:view-minor", onMinor);
+    return () => {
+      window.removeEventListener("autocompare:view-minor", onMinor);
+    };
+  }, []);
   const [hits, setHits] = useState<readonly TableHit[]>([]);
   const [hitPos, setHitPos] = useState(0);
   const [finding, setFinding] = useState(false);
@@ -1088,6 +1131,8 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     setDiffPos(next);
     scrollToDiffRow(diffRows[next]);
   }
+  // Wave-180: keep the bus `stepDiffRef` on the latest ready render.
+  stepDiffRef.current = stepDiff;
   // Wave 24: honest fallback — the toggle always sends an explicit
   // `by_key` param, but a backend without key support echoes
   // `byKey: false` / empty `keyColumns`. Never a crash: just note it.
