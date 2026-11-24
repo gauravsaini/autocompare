@@ -28,7 +28,7 @@ export default function SegmentedControl<T extends string>({
       role="group"
       aria-label={label}
       data-testid={testid}
-      className="inline-flex items-center gap-0 rounded-[6px] border border-[var(--ac-segment-track-border,transparent)] bg-[var(--ac-segment-track)] p-0.5 shadow-[var(--ac-segment-track-shadow,inset_0_0.5px_1px_rgba(0,0,0,0.08))]"
+      className="inline-flex items-center gap-0 rounded-[5px] border border-[var(--ac-segment-track-border,transparent)] bg-[var(--ac-segment-track)] p-0.5 shadow-[var(--ac-segment-track-shadow,inset_0_0.5px_1px_rgba(0,0,0,0.08))]"
     >
       {options.map((o) => (
         <button
@@ -39,8 +39,8 @@ export default function SegmentedControl<T extends string>({
           onClick={o.onSelect}
           className={
             o.pressed
-              ? `inline-flex ${h} items-center rounded-[5px] border border-[var(--ac-segment-active-border,transparent)] bg-[var(--ac-segment-active-bg)] px-2 ac-chrome-label font-medium text-[var(--ac-fg)] shadow-[var(--ac-segment-active-shadow)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] select-none`
-              : `inline-flex ${h} items-center rounded-[5px] border border-transparent px-2 ac-chrome-label font-medium text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] select-none`
+              ? `inline-flex ${h} items-center rounded-[5px] border border-[var(--ac-segment-active-border,transparent)] bg-[var(--ac-segment-active-bg)] px-2 ac-chrome-label font-medium text-[var(--ac-fg)] shadow-[var(--ac-segment-active-shadow)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)] select-none`
+              : `inline-flex ${h} items-center rounded-[5px] border border-transparent px-2 ac-chrome-label font-medium text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)] select-none`
           }
         >
           {o.label}

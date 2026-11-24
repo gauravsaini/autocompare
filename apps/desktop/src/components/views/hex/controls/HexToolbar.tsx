@@ -144,9 +144,9 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find bytes (Ctrl+F)"
         expanded={findOpen}
+        icon={Search}
         onClick={onToggleFind}
       >
-        <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Find</span>
       </ToolbarButton>
       <ToolbarButton
@@ -154,9 +154,9 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
         label={gotoOpen ? "Hide goto (Ctrl+G)" : "Show goto (Ctrl+G)"}
         title="Goto offset (Ctrl+G)"
         expanded={gotoOpen}
+        icon={ArrowDownToLine}
         onClick={onToggleGoto}
       >
-        <ArrowDownToLine size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Goto</span>
       </ToolbarButton>
     </div>

@@ -56,10 +56,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       data-testid="mergeview/toolbar"
       className="tv-controls-bar"
     >
-      <Button data-testid="merge-prev" onClick={onPrev}>
+      <Button size="sm" data-testid="merge-prev" onClick={onPrev}>
         <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Prev conflict
       </Button>
-      <Button data-testid="merge-next" onClick={onNext}>
+      <Button size="sm" data-testid="merge-next" onClick={onNext}>
         Next conflict <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       <StatusText data-testid="merge-conflict-position">
@@ -94,10 +94,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
         </span>
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
-      <Button data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
+      <Button size="sm" data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
         <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take all left
       </Button>
-      <Button data-testid="merge-take-all-right" onClick={onTakeAllRight}>
+      <Button size="sm" data-testid="merge-take-all-right" onClick={onTakeAllRight}>
         Take all right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       {takeAllNote === null ? null : (
@@ -126,6 +126,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
             {activePosition ?? "no active conflict"}
           </StatusText>
           <Button
+            size="sm"
             data-testid="merge-take-active-left"
             onClick={onTakeActiveLeft}
             disabled={activeDisabled || onTakeActiveLeft === undefined}
@@ -134,6 +135,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
             <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take Left
           </Button>
           <Button
+            size="sm"
             data-testid="merge-take-active-center"
             onClick={onTakeActiveCenter}
             disabled={activeDisabled || onTakeActiveCenter === undefined}
@@ -142,6 +144,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
             Take Center
           </Button>
           <Button
+            size="sm"
             data-testid="merge-take-active-right"
             onClick={onTakeActiveRight}
             disabled={activeDisabled || onTakeActiveRight === undefined}
@@ -157,13 +160,13 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in merge (Ctrl+F)"
         expanded={findOpen}
+        icon={Search}
         onClick={onToggleFind}
       >
-        <Search size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Find</span>
       </ToolbarButton>
       <StatusText className="inline-flex items-center gap-[var(--ac-space-1)]">
-        (keys: j/k, n/p, <ArrowUp size={12} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={12} strokeWidth={1.75} aria-hidden="true" />)
+        (keys: j/k, n/p, <ArrowUp size={14} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={14} strokeWidth={1.75} aria-hidden="true" />)
       </StatusText>
     </div>
   );

@@ -18,8 +18,8 @@ export function DotButton({ active = false, className = "", type = "button", ...
       data-active={active ? "true" : undefined}
       className={
         "inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border transition " +
-        "hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-2 " +
-        "focus-visible:ring-[var(--ac-focus-ring)] " +
+        "hover:bg-[var(--ac-toolbar-btn-hover-bg)] focus-visible:outline-hidden focus-visible:ring-1 " +
+        "focus-visible:ring-[var(--ac-focus)] " +
         (active
           ? "border-[var(--ac-accent)] bg-[var(--ac-accent)] "
           : "border-[var(--ac-border)] bg-[var(--ac-bg)] ") +
