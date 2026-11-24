@@ -69,9 +69,19 @@ export interface FolderCancelDto {
   readonly cancelled: boolean;
 }
 
-/** Compare two folder trees; caches the result under a new snapshot id. */
-export function folderCompare(left: string, right: string): Promise<FolderCompareDto> {
-  return invoke<FolderCompareDto>("folder_compare", { left, right });
+/** Compare two folder trees; caches the result under a new snapshot id.
+ *
+ * `masks` is an optional BC-Rules style file-mask list (semicolon
+ * separated, `*`/`?` wildcards, `-` prefix excludes). `null`/omitted
+ * disables mask filtering; masks apply at compare time, before any
+ * `filter` used by `folderGetTree`.
+ */
+export function folderCompare(
+  left: string,
+  right: string,
+  masks?: string | null,
+): Promise<FolderCompareDto> {
+  return invoke<FolderCompareDto>("folder_compare", { left, right, masks: masks ?? null });
 }
 
 /** Fetch one `(start, limit)` window of snapshot entries. */
