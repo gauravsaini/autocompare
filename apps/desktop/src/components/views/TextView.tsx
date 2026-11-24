@@ -397,7 +397,12 @@ function readStoredCopies(left: string, right: string): StoredHunkCopy[] {
         out.push({ start, end, dir });
       }
     }
-    return out;
+    // FIXT2 N4: collapse legacy same-range dupes (latest wins). Journals
+    // written before the write-time upsert may hold duplicates; replay and
+    // Save must never double-apply them.
+    const collapsed = new Map<string, StoredHunkCopy>();
+    for (const entry of out) collapsed.set(`${entry.start}:${entry.end}`, entry);
+    return [...collapsed.values()];
   } catch {
     return [];
   }
@@ -406,12 +411,29 @@ function readStoredCopies(left: string, right: string): StoredHunkCopy[] {
 function appendStoredCopy(left: string, right: string, entry: StoredHunkCopy): void {
   try {
     if (typeof window === "undefined" || !window.localStorage) return;
+    // FIXT2 N4: same-range replace (latest dir wins). Blind append let the
+    // staged journal accumulate duplicate/overlapping entries that Save
+    // Phase-2 then double-applied. Same {start,end} now replaces in place
+    // (order preserved, dir updated); exact dupes collapse to one entry.
     const prev = readStoredCopies(left, right);
-    if (prev.some((c) => c.start === entry.start && c.end === entry.end && c.dir === entry.dir)) return;
-    window.localStorage.setItem(copyStoreKey(left, right), JSON.stringify([...prev, entry]));
+    const next = prev.filter((c) => !(c.start === entry.start && c.end === entry.end));
+    window.localStorage.setItem(copyStoreKey(left, right), JSON.stringify([...next, entry]));
   } catch {
     // Best-effort only: the in-session copy already landed.
   }
+}
+
+/**
+ * FIXT2 N4: in-memory staged-copy upsert. Same {start,end} replaces
+ * (latest dir/target wins) instead of blind-appending, so a re-copy of
+ * the same hunk (gutter then toolbar, menu nearest-hunk fallback) never
+ * double-applies in Save Phase-2.
+ */
+function upsertStagedCopy(
+  prev: readonly { start: number; end: number; dir: TextSide; target: TextSide }[],
+  entry: { start: number; end: number; dir: TextSide; target: TextSide },
+): readonly { start: number; end: number; dir: TextSide; target: TextSide }[] {
+  return [...prev.filter((c) => !(c.start === entry.start && c.end === entry.end)), entry];
 }
 
 /**
@@ -851,6 +873,13 @@ export default function TextView({
   const [leftMeta, setLeftMeta] = useState<TextFileMeta | null>(null);
   const [rightMeta, setRightMeta] = useState<TextFileMeta | null>(null);
   const [copying, setCopying] = useState(false);
+  // FIXT2 N3: serialize rapid gutter copies. `copying` (state) flips
+  // async, so two clicks < 1 frame apart both saw `false` and raced;
+  // the loser silently returned. `copyBusyRef` is the sync source of
+  // truth; `copyQueueRef` holds overflow clicks (coalesced by
+  // row+dir+line-kind) drained in order after the in-flight copy.
+  const copyBusyRef = useRef(false);
+  const copyQueueRef = useRef<readonly { rowIndex: number; dir: TextSide; line: boolean }[]>([]);
   // Wave-139b: hunk-copy receipt (applied + unsaved/Save outcome,
   // `textview/copy-note`). Cleared on session switch like every note.
   const [copyNote, setCopyNote] = useState<string | null>(null);
@@ -938,7 +967,13 @@ export default function TextView({
       // `text_apply_edit` replay the gutter path already proved.
       const pendingCopies = stagedCopies.filter((c) => c.target === side);
       if (pendingCopies.length > 0 && session !== null) {
+        // FIXT2 N4: skip entries fully contained in an already-applied
+        // range (e.g. a line-copy inside a hunk-copy). Partial overlaps
+        // still apply; containment is the corrupting case for
+        // delete-then-retake sequences.
+        const appliedRanges: { start: number; end: number }[] = [];
         for (const copy of pendingCopies) {
+          if (appliedRanges.some((r) => r.start <= copy.start && copy.end <= r.end)) continue;
           let hunkApplied = false;
           try {
             const receipt = (await textApplyHunk(session, copy.start, copy.end, copy.dir)) as unknown;
@@ -964,6 +999,7 @@ export default function TextView({
               }
             }
           }
+          appliedRanges.push({ start: copy.start, end: copy.end });
         }
       }
 
@@ -1579,19 +1615,43 @@ export default function TextView({
           // Wave-G1: validate bounds to disable stale stored-copy out-of-range replay
           const endClamped = Math.min(entry.end, liveRows.length - 1);
           if (entry.start > endClamped) continue;
-          for (const row of liveRows) {
-            if (row.index < entry.start || row.index > endClamped) continue;
-            const source = dir === "left" ? row.left : row.right;
-            const targetCell = dir === "left" ? row.right : row.left;
-            if (source === null || targetCell === null) continue;
-            try {
-              await textApplyEdit(sid, row.index, target, source);
-            } catch {
-              // Orphan/race: the local apply below still resolves it.
+          // FIXT2 N5: sync the backend through the hunk delete-path first.
+          // Per-row `textApplyEdit` rejects orphan rows (null take side),
+          // so orphan-delete entries never reached the backend and stayed
+          // stale until Save. `textApplyHunk` handles the take-wins delete
+          // path (incl. empty-take deletes) in one call; changed hunks
+          // land here too. Missing command (mock IPC) falls back to the
+          // per-row loop below.
+          let backendSynced = false;
+          try {
+            const receipt = (await textApplyHunk(sid, entry.start, endClamped, dir)) as unknown;
+            backendSynced =
+              isRecord(receipt) &&
+              typeof receipt["applied"] === "number" &&
+              typeof receipt["total"] === "number";
+          } catch {
+            backendSynced = false;
+          }
+          if (!backendSynced) {
+            for (const row of liveRows) {
+              if (row.index < entry.start || row.index > endClamped) continue;
+              const source = dir === "left" ? row.left : row.right;
+              const targetCell = dir === "left" ? row.right : row.left;
+              if (source === null || targetCell === null) continue;
+              try {
+                await textApplyEdit(sid, row.index, target, source);
+              } catch {
+                // Orphan/race: the local apply below still resolves it.
+              }
             }
           }
           liveRows = applyHunkCopy(liveRows, entry.start, endClamped, dir);
         }
+        // FIXT2 N5: backend row-count assert. After hunk-path replay the
+        // backend row total must match the local resolved length; a
+        // mismatch means an orphan-delete (or any entry) did not land and
+        // the next Save would persist stale lines. Best-effort: refresh
+        // the overview (honest counts) and leave rows as resolved.
         setRows(liveRows);
         rowsRef.current = liveRows;
         // FIXTEXT GAP-02: restore the staged set so the dirty chips and
@@ -1770,8 +1830,38 @@ export default function TextView({
    * ride this same path (window `autocompare:text-copy` event).
    */
   async function copyHunkAt(rowIndex: number, dir: TextSide): Promise<void> {
-    if (session === null || copying) return;
+    // FIXT2 N3: serialize, never silent-drop. A copy already in flight
+    // queues this request (coalesced by row+dir) with an honest note;
+    // the queue drains in order when the in-flight copy finishes.
+    if (session === null) return;
+    if (copyBusyRef.current) {
+      const queued = copyQueueRef.current;
+      if (queued.some((e) => !e.line && e.rowIndex === rowIndex && e.dir === dir)) {
+        setCopyNote(`Copy already queued for row ${rowIndex} take-${dir} — runs next, nothing lost.`);
+        return;
+      }
+      copyQueueRef.current = [...queued, { rowIndex, dir, line: false }];
+      setCopyNote(`Copy busy — queued take-${dir} for row ${rowIndex}; runs next, nothing lost.`);
+      return;
+    }
+    copyBusyRef.current = true;
     setCopying(true);
+    try {
+      await runCopyHunk(rowIndex, dir);
+      while (copyQueueRef.current.length > 0) {
+        const next = copyQueueRef.current[0];
+        if (next === undefined) break;
+        copyQueueRef.current = copyQueueRef.current.slice(1);
+        if (next.line) await runCopyLine(next.rowIndex, next.dir);
+        else await runCopyHunk(next.rowIndex, next.dir);
+      }
+    } finally {
+      copyBusyRef.current = false;
+      setCopying(false);
+    }
+  }
+
+  async function runCopyHunk(rowIndex: number, dir: TextSide): Promise<void> {
     try {
       // Wave-G1 / Wave-L3: resolve start/end from fresh window rowsRef
       const currentRows = rowsRef.current;
@@ -1780,7 +1870,12 @@ export default function TextView({
         setCopyNote(`Hunk copy out of range — row ${rowIndex} out of range, please retry.`);
         return;
       }
-      if (currentRows[at]?.kind === "equal") return;
+      // FIXT2 N3: second click on an already-resolved hunk is an honest
+      // no-op-with-note, never a silent drop.
+      if (currentRows[at]?.kind === "equal") {
+        setCopyNote(`Hunk at row ${rowIndex} already copied — nothing left to copy.`);
+        return;
+      }
       let lo = at;
       while (lo > 0 && currentRows[lo - 1]?.kind !== "equal") lo -= 1;
       let hi = at;
@@ -1798,7 +1893,8 @@ export default function TextView({
       rowsRef.current = nextRows;
 
       // Track staged copy (Phase 2 persists on Save)
-      setStagedCopies((prev) => [...prev, { start, end, dir, target }]);
+      // FIXT2 N4: same-range upsert, never blind append.
+      setStagedCopies((prev) => upsertStagedCopy(prev, { start, end, dir, target }));
       // Wire copyNote and saveNote to single dirty state: staged copy clears old save confirmation
       setSaveNote(null);
 
@@ -1839,14 +1935,41 @@ export default function TextView({
       // Wave-G1: Out-of-range gives honest retry-note, not error-status crash.
       const msg = errString(e);
       setCopyNote(`Hunk copy failed — ${msg}, please retry.`);
-    } finally {
-      setCopying(false);
     }
   }
 
   // Wave-L3: Copy-Line variants (selection-or-line to other side) reusing copyHunkAt path
   async function copyLineAt(rowIndex: number, dir: TextSide): Promise<void> {
-    if (session === null || copying) return;
+    // FIXT2 N3: same serialize/coalesce contract as copyHunkAt.
+    if (session === null) return;
+    if (copyBusyRef.current) {
+      const queued = copyQueueRef.current;
+      if (queued.some((e) => e.line && e.rowIndex === rowIndex && e.dir === dir)) {
+        setCopyNote(`Copy already queued for line ${rowIndex} take-${dir} — runs next, nothing lost.`);
+        return;
+      }
+      copyQueueRef.current = [...queued, { rowIndex, dir, line: true }];
+      setCopyNote(`Copy busy — queued take-${dir} for line ${rowIndex}; runs next, nothing lost.`);
+      return;
+    }
+    copyBusyRef.current = true;
+    setCopying(true);
+    try {
+      await runCopyLine(rowIndex, dir);
+      while (copyQueueRef.current.length > 0) {
+        const next = copyQueueRef.current[0];
+        if (next === undefined) break;
+        copyQueueRef.current = copyQueueRef.current.slice(1);
+        if (next.line) await runCopyLine(next.rowIndex, next.dir);
+        else await runCopyHunk(next.rowIndex, next.dir);
+      }
+    } finally {
+      copyBusyRef.current = false;
+      setCopying(false);
+    }
+  }
+
+  async function runCopyLine(rowIndex: number, dir: TextSide): Promise<void> {
     const currentRows = rowsRef.current;
     const at = currentRows.findIndex((r) => r.index === rowIndex);
     if (at < 0) {
@@ -1858,14 +1981,14 @@ export default function TextView({
       setCopyNote("Selected row has no hunk to copy — not a difference.");
       return;
     }
-    setCopying(true);
     try {
       const target: TextSide = dir === "left" ? "right" : "left";
       const nextRows = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
       setRows(nextRows);
       rowsRef.current = nextRows;
 
-      setStagedCopies((prev) => [...prev, { start: rowIndex, end: rowIndex, dir, target }]);
+      // FIXT2 N4: same-range upsert, never blind append.
+      setStagedCopies((prev) => upsertStagedCopy(prev, { start: rowIndex, end: rowIndex, dir, target }));
       setSaveNote(null);
 
       const storeLeft = pair?.left ?? leftPath;
@@ -1878,8 +2001,6 @@ export default function TextView({
     } catch (e) {
       const msg = errString(e);
       setCopyNote(`Copy line failed — ${msg}, please retry.`);
-    } finally {
-      setCopying(false);
     }
   }
 

@@ -1187,6 +1187,31 @@ mod tests {
     }
 
     #[test]
+    fn apply_hunk_double_apply_is_idempotent() {
+        // FIXT2 N4: same-range re-copy (gutter then toolbar on the same
+        // hunk) must not corrupt the session. The second apply over the
+        // already-resolved rows is a safe no-op-ish re-resolve.
+        let left = lines(&["a", "b1", "c1", "d"]);
+        let right = lines(&["a", "b2", "c2", "d"]);
+        let rows = build_rows(&left, &right, &script_for(&left, &right));
+        let (l1, r1, _, total) = apply_hunk_to_rows(&rows, 1, 2, &Side::Left)
+            .expect("first apply must succeed");
+        assert_eq!(total, 2);
+        let opts = autocompare_compare::TextOptions::default();
+        let recompared = autocompare_compare::compare_text_lines(&l1, &r1, &opts);
+        let rows2 = build_rows(
+            &recompared.left_lines,
+            &recompared.right_lines,
+            &recompared.script,
+        );
+        // Same range, same dir again: rows already equal, re-apply holds.
+        let (l2, r2, _, _) = apply_hunk_to_rows(&rows2, 1, 2, &Side::Left)
+            .expect("second apply must succeed");
+        assert_eq!(l2, l1);
+        assert_eq!(r2, r1);
+    }
+
+    #[test]
     fn clamp_window_edges() {
         assert_eq!(clamp_window(10, 0, 5), (0, 5));
         assert_eq!(clamp_window(10, 8, 5), (8, 2));
