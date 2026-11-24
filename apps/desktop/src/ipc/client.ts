@@ -199,9 +199,332 @@ function mockMasksAllow(parsed: MockMasks, relPath: string, isDir: boolean): boo
 const mockTextEdits = new Map<number, { left?: string | null; right?: string | null }>();
 const mockSuppressedLines = new Set<number>();
 
+// ---------------------------------------------------------------------------
+// Wave-176: Real file diffing support for mock text_compare.
+//
+// When `text_compare` is given real readable paths, it reads their contents
+// (via Playwright binding __MOCK_READ_FILE__, window.__MOCK_FILES__,
+// localStorage file store, Node fs in node env, or fetch), splits lines
+// per Rust engine semantics (strip \r, trailing \n does not create phantom
+// empty line), runs difflib SequenceMatcher to produce identical row & hunk
+// counts as python difflib ground truth, and serves those rows via
+// `text_get_rows`, `text_find`, and `text_apply_edit`.
+//
+// When paths are fake or missing (or demo fixtures), it falls back 100% to
+// `dumped.textRows` preserving existing fixture behavior for all existing tests.
+// ---------------------------------------------------------------------------
+
+interface MockFileReadResult {
+  readonly content: string;
+  readonly bytes?: number;
+  readonly mtimeUnix?: number;
+}
+
+interface MockTextSession {
+  readonly session: string;
+  readonly rows: readonly DumpedTextRow[];
+  readonly leftLines: number;
+  readonly rightLines: number;
+  readonly opCount: number;
+  readonly leftPath: string;
+  readonly rightPath: string;
+  readonly leftMeta?: { readonly bytes?: number; readonly mtimeUnix?: number };
+  readonly rightMeta?: { readonly bytes?: number; readonly mtimeUnix?: number };
+}
+
+const mockTextSessions = new Map<string, MockTextSession>();
+let activeMockTextSessionId = "mock-text-1";
+
+// Wave-176b: the fixture session mirrors the real backend contract —
+// `text_get_rows` only serves sessions created by a prior `text_compare`.
+// Unknown ids reject so `tryReuseSession` falls through to a real compare
+// with the caller's (possibly new) paths instead of pinning stale fixture
+// rows. The fixture entry is (re)registered on every fixture compare and
+// lazily seeded for direct `mock-text-1` row reads (demo boot path).
+function registerFixtureTextSession(
+  rows: readonly DumpedTextRow[],
+  leftPath: string,
+  rightPath: string,
+): MockTextSession {
+  let leftLines = 0;
+  let rightLines = 0;
+  let opCount = 0;
+  let prevKind = "";
+  for (const row of rows) {
+    if (row.left !== null) leftLines += 1;
+    if (row.right !== null) rightLines += 1;
+    if (row.kind !== prevKind) {
+      opCount += 1;
+      prevKind = row.kind;
+    }
+  }
+  const sess: MockTextSession = {
+    session: "mock-text-1",
+    rows,
+    leftLines,
+    rightLines,
+    opCount,
+    leftPath,
+    rightPath,
+  };
+  mockTextSessions.set("mock-text-1", sess);
+  return sess;
+}
+
+function splitMockLines(text: string): string[] {
+  if (text.length === 0) return [];
+  const lines = text.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
+  if (text.endsWith("\n")) lines.pop();
+  return lines;
+}
+
+function mockSequenceMatcher(
+  a: readonly string[],
+  b: readonly string[],
+): Array<[string, number, number, number, number]> {
+  const b2j = new Map<string, number[]>();
+  for (let j = 0; j < b.length; j += 1) {
+    const elt = b[j];
+    let list = b2j.get(elt);
+    if (list === undefined) {
+      list = [];
+      b2j.set(elt, list);
+    }
+    list.push(j);
+  }
+
+  function findLongestMatch(alo: number, ahi: number, blo: number, bhi: number): [number, number, number] {
+    let besti = alo;
+    let bestj = blo;
+    let bestsize = 0;
+    let j2len = new Map<number, number>();
+    for (let i = alo; i < ahi; i += 1) {
+      const newj2len = new Map<number, number>();
+      const list = b2j.get(a[i]);
+      if (list !== undefined) {
+        for (const j of list) {
+          if (j < blo) continue;
+          if (j >= bhi) break;
+          const k = (j2len.get(j - 1) ?? 0) + 1;
+          newj2len.set(j, k);
+          if (k > bestsize) {
+            besti = i - k + 1;
+            bestj = j - k + 1;
+            bestsize = k;
+          }
+        }
+      }
+      j2len = newj2len;
+    }
+    while (besti > alo && bestj > blo && a[besti - 1] === b[bestj - 1]) {
+      besti -= 1;
+      bestj -= 1;
+      bestsize += 1;
+    }
+    while (besti + bestsize < ahi && bestj + bestsize < bhi && a[besti + bestsize] === b[bestj + bestsize]) {
+      bestsize += 1;
+    }
+    return [besti, bestj, bestsize];
+  }
+
+  const queue: Array<[number, number, number, number]> = [[0, a.length, 0, b.length]];
+  const matchingBlocks: Array<[number, number, number]> = [];
+  while (queue.length > 0) {
+    const [alo, ahi, blo, bhi] = queue.pop()!;
+    const [i, j, k] = findLongestMatch(alo, ahi, blo, bhi);
+    if (k > 0) {
+      matchingBlocks.push([i, j, k]);
+      if (alo < i && blo < j) queue.push([alo, i, blo, j]);
+      if (i + k < ahi && j + k < bhi) queue.push([i + k, ahi, j + k, bhi]);
+    }
+  }
+  matchingBlocks.sort((x, y) => (x[0] !== y[0] ? x[0] - y[0] : x[1] - y[1]));
+
+  let i1 = 0;
+  let j1 = 0;
+  let k1 = 0;
+  const nonAdjacent: Array<[number, number, number]> = [];
+  for (const [i2, j2, k2] of matchingBlocks) {
+    if (i1 + k1 === i2 && j1 + k1 === j2) {
+      k1 += k2;
+    } else {
+      if (k1 > 0) nonAdjacent.push([i1, j1, k1]);
+      i1 = i2;
+      j1 = j2;
+      k1 = k2;
+    }
+  }
+  if (k1 > 0) nonAdjacent.push([i1, j1, k1]);
+  nonAdjacent.push([a.length, b.length, 0]);
+
+  const opcodes: Array<[string, number, number, number, number]> = [];
+  let i = 0;
+  let j = 0;
+  for (const [ai, bj, size] of nonAdjacent) {
+    let tag = "";
+    if (i < ai && j < bj) tag = "replace";
+    else if (i < ai) tag = "delete";
+    else if (j < bj) tag = "insert";
+    if (tag) opcodes.push([tag, i, ai, j, bj]);
+    i = ai + size;
+    j = bj + size;
+    if (size > 0) opcodes.push(["equal", ai, i, bj, j]);
+  }
+  return opcodes;
+}
+
+function computeMockInlineSpans(
+  left: string,
+  right: string,
+): Array<{ aStart: number; aEnd: number; bStart: number; bEnd: number }> {
+  const ops = mockSequenceMatcher(left.split(""), right.split(""));
+  const spans: Array<{ aStart: number; aEnd: number; bStart: number; bEnd: number }> = [];
+  for (const [tag, i1, i2, j1, j2] of ops) {
+    if (tag !== "equal") {
+      spans.push({ aStart: i1, aEnd: i2, bStart: j1, bEnd: j2 });
+    }
+  }
+  return spans;
+}
+
+function buildMockDiffRows(
+  leftLines: readonly string[],
+  rightLines: readonly string[],
+  opts?: { ignoreWhitespace?: boolean; ignoreCase?: boolean; eol?: string },
+): { rows: DumpedTextRow[]; opCount: number } {
+  const normalize = (line: string): string => {
+    let s = line;
+    if (opts?.eol) s = s.replace(/\r/g, "");
+    if (opts?.ignoreWhitespace) s = s.trim().split(/\s+/).join(" ");
+    if (opts?.ignoreCase) s = s.toLowerCase();
+    return s;
+  };
+  const keysA = leftLines.map(normalize);
+  const keysB = rightLines.map(normalize);
+  const opcodes = mockSequenceMatcher(keysA, keysB);
+
+  const rows: DumpedTextRow[] = [];
+  for (const [tag, i1, i2, j1, j2] of opcodes) {
+    const len1 = i2 - i1;
+    const len2 = j2 - j1;
+    if (tag === "equal") {
+      for (let k = 0; k < len1; k += 1) {
+        const l = leftLines[i1 + k];
+        const r = rightLines[j1 + k];
+        const kind = l === r ? "equal" : "changed";
+        const inline = l === r ? [] : computeMockInlineSpans(l, r);
+        rows.push({ index: rows.length, kind, left: l, right: r, inline });
+      }
+    } else if (tag === "delete") {
+      for (let k = 0; k < len1; k += 1) {
+        rows.push({ index: rows.length, kind: "leftOnly", left: leftLines[i1 + k], right: null, inline: [] });
+      }
+    } else if (tag === "insert") {
+      for (let k = 0; k < len2; k += 1) {
+        rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
+      }
+    } else if (tag === "replace") {
+      const paired = Math.min(len1, len2);
+      for (let k = 0; k < paired; k += 1) {
+        const l = leftLines[i1 + k];
+        const r = rightLines[j1 + k];
+        rows.push({ index: rows.length, kind: "changed", left: l, right: r, inline: computeMockInlineSpans(l, r) });
+      }
+      for (let k = paired; k < len1; k += 1) {
+        rows.push({ index: rows.length, kind: "leftOnly", left: leftLines[i1 + k], right: null, inline: [] });
+      }
+      for (let k = paired; k < len2; k += 1) {
+        rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
+      }
+    }
+  }
+  return { rows, opCount: opcodes.length };
+}
+
+async function readMockFile(path: string): Promise<MockFileReadResult | null> {
+  if (!path || typeof path !== "string" || path.trim() === "") return null;
+  // Always preserve fixture behavior for demo fixture candidate paths
+  if (path.includes("fixtures/t_left.txt") || path.includes("fixtures/t_right.txt")) {
+    return null;
+  }
+
+  // 1. Playwright exposed function or window mock hooks
+  if (typeof window !== "undefined") {
+    const w = window as unknown as Record<string, unknown>;
+    const readerFn = w["__MOCK_READ_FILE__"] ?? w["__MOCK_FILE_READER__"];
+    if (typeof readerFn === "function") {
+      try {
+        const res = await (readerFn as (p: string) => Promise<unknown> | unknown)(path);
+        if (typeof res === "string") {
+          return { content: res, bytes: res.length, mtimeUnix: Math.floor(Date.now() / 1000) };
+        }
+        if (res && typeof res === "object") {
+          const r = res as Record<string, unknown>;
+          if (typeof r["content"] === "string") {
+            return {
+              content: r["content"] as string,
+              bytes: typeof r["bytes"] === "number" ? (r["bytes"] as number) : (r["content"] as string).length,
+              mtimeUnix: typeof r["mtimeUnix"] === "number" ? (r["mtimeUnix"] as number) : Math.floor(Date.now() / 1000),
+            };
+          }
+        }
+      } catch {}
+    }
+
+    if (w["__MOCK_FILES__"] && typeof w["__MOCK_FILES__"] === "object") {
+      const dict = w["__MOCK_FILES__"] as Record<string, unknown>;
+      const val = dict[path];
+      if (typeof val === "string") {
+        return { content: val, bytes: val.length, mtimeUnix: Math.floor(Date.now() / 1000) };
+      }
+      if (val && typeof val === "object" && typeof (val as Record<string, unknown>)["content"] === "string") {
+        const v = val as Record<string, unknown>;
+        return {
+          content: v["content"] as string,
+          bytes: typeof v["bytes"] === "number" ? (v["bytes"] as number) : (v["content"] as string).length,
+          mtimeUnix: typeof v["mtimeUnix"] === "number" ? (v["mtimeUnix"] as number) : Math.floor(Date.now() / 1000),
+        };
+      }
+    }
+
+    try {
+      if (window.localStorage) {
+        const raw = window.localStorage.getItem("autocompare:mockFileStore:v1");
+        if (raw) {
+          const dict = JSON.parse(raw) as Record<string, unknown>;
+          const val = dict[path];
+          if (typeof val === "string") {
+            return { content: val, bytes: val.length, mtimeUnix: Math.floor(Date.now() / 1000) };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Node.js environment (e.g. testing in Node or test harness)
+  try {
+    if (typeof process !== "undefined" && process.versions?.node) {
+      const fsMod = await import(/* @vite-ignore */ "node:fs");
+      if (fsMod && fsMod.existsSync && fsMod.existsSync(path)) {
+        const stat = fsMod.statSync(path);
+        const content = fsMod.readFileSync(path, "utf8");
+        return { content, bytes: stat.size, mtimeUnix: Math.floor(stat.mtimeMs / 1000) };
+      }
+    }
+  } catch {}
+
+  // NOTE (Wave-176b): no `fetch("/@fs/...")` fallback here. Under vite dev
+  // the SPA fallback serves index.html (or another substitute document)
+  // for missing files, so fake paths would read as identical content
+  // instead of falling back to the dumped fixture. Unreadable => null.
+  return null;
+}
+
 export function __mockTextEditResetForTests(): void {
   mockTextEdits.clear();
   mockSuppressedLines.clear();
+  mockTextSessions.clear();
+  activeMockTextSessionId = "mock-text-1";
 }
 
 async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Promise<T> {
@@ -253,28 +576,13 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       return true as unknown as T;
     }
     case "text_compare": {
-      const rows = dumped.textRows;
-      let leftLines = 0;
-      let rightLines = 0;
-      let opCount = 0;
-      let prevKind = "";
-      for (const row of rows) {
-        if (row.left !== null) leftLines += 1;
-        if (row.right !== null) rightLines += 1;
-        if (row.kind !== prevKind) {
-          opCount += 1;
-          prevKind = row.kind;
-        }
-      }
-      // Wave-75 + Wave-L1: echo appliedOptions for EITHER spelling (camelCase
-      // from the TextView probe path, snake_case from the typed
-      // wrapper path), mirroring the real Rust backend which accepts
-      // both and always echoes `appliedOptions`. Legacy `{left,
-      // right}` (no flags) stays byte-identical with no echo. The
-      // mock has no whitespace/case engine: rows are fixture rows, so
-      // the echo proves the flags round-tripped and the view hides
-      // the honest fallback note; real collapsing is covered by the
-      // Rust unit tests in `commands/text.rs`.
+      const leftPath = strArg(args, ["left"], "");
+      const rightPath = strArg(args, ["right"], "");
+      const [leftRes, rightRes] = await Promise.all([
+        readMockFile(leftPath),
+        readMockFile(rightPath),
+      ]);
+
       const hasIgnoreFlags =
         typeof args["ignore_whitespace"] === "boolean" ||
         typeof args["ignore_case"] === "boolean" ||
@@ -286,10 +594,72 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         typeof args["eol"] === "string" ||
         Array.isArray(args["suppressed_lines"]) ||
         Array.isArray(args["suppressedLines"]);
+
+      const ws = args["ignore_whitespace"] === true || args["ignoreWhitespace"] === true;
+      const cs = args["ignore_case"] === true || args["ignoreCase"] === true;
+      const minor = args["minor_unimportant"] === true || args["minorUnimportant"] === true;
+      const enc = typeof args["encoding"] === "string" ? args["encoding"] : undefined;
+      const eol = typeof args["eol"] === "string" ? args["eol"] : undefined;
+      const suppRaw = args["suppressedLines"] ?? args["suppressed_lines"];
+      const supp = Array.isArray(suppRaw) ? (suppRaw as number[]) : undefined;
+
+      mockSuppressedLines.clear();
+      if (supp !== undefined) {
+        for (const idx of supp) mockSuppressedLines.add(idx);
+      }
+
+      let rows: readonly DumpedTextRow[];
+      let leftLines = 0;
+      let rightLines = 0;
+      let opCount = 0;
+      let sessionId = "mock-text-1";
+      let leftMeta: { readonly bytes?: number; readonly mtimeUnix?: number } | undefined;
+      let rightMeta: { readonly bytes?: number; readonly mtimeUnix?: number } | undefined;
+
+      if (leftRes !== null && rightRes !== null) {
+        // Real files provided & readable -> compute real diff rows
+        const lLines = splitMockLines(leftRes.content);
+        const rLines = splitMockLines(rightRes.content);
+        leftLines = lLines.length;
+        rightLines = rLines.length;
+        leftMeta = { bytes: leftRes.bytes, mtimeUnix: leftRes.mtimeUnix };
+        rightMeta = { bytes: rightRes.bytes, mtimeUnix: rightRes.mtimeUnix };
+
+        const diffResult = buildMockDiffRows(lLines, rLines, {
+          ignoreWhitespace: ws,
+          ignoreCase: cs,
+          eol,
+        });
+        rows = diffResult.rows;
+        opCount = diffResult.opCount;
+        sessionId = `mock-text-real-${Date.now()}`;
+        mockTextSessions.set(sessionId, {
+          session: sessionId,
+          rows,
+          leftLines,
+          rightLines,
+          opCount,
+          leftPath,
+          rightPath,
+          leftMeta,
+          rightMeta,
+        });
+        activeMockTextSessionId = sessionId;
+      } else {
+        // Fallback to fixture rows (registered, so later row reads for
+        // this session resolve the same rows the summary reports).
+        const fixture = registerFixtureTextSession(dumped.textRows, leftPath, rightPath);
+        rows = fixture.rows;
+        leftLines = fixture.leftLines;
+        rightLines = fixture.rightLines;
+        opCount = fixture.opCount;
+        activeMockTextSessionId = "mock-text-1";
+      }
+
       const base = {
-        session: "mock-text-1",
-        leftPath: strArg(args, ["left"], ""),
-        rightPath: strArg(args, ["right"], ""),
+        session: sessionId,
+        leftPath,
+        rightPath,
         leftLines,
         rightLines,
         rows: rows.length,
@@ -297,20 +667,11 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         exact: true,
         truncated: false,
       } as unknown as Record<string, unknown>;
+
+      if (leftMeta !== undefined) base["leftMeta"] = leftMeta;
+      if (rightMeta !== undefined) base["rightMeta"] = rightMeta;
+
       if (hasIgnoreFlags) {
-        const ws = args["ignore_whitespace"] === true || args["ignoreWhitespace"] === true;
-        const cs = args["ignore_case"] === true || args["ignoreCase"] === true;
-        const minor = args["minor_unimportant"] === true || args["minorUnimportant"] === true;
-        const enc = typeof args["encoding"] === "string" ? args["encoding"] : undefined;
-        const eol = typeof args["eol"] === "string" ? args["eol"] : undefined;
-        const suppRaw = args["suppressedLines"] ?? args["suppressed_lines"];
-        const supp = Array.isArray(suppRaw) ? (suppRaw as number[]) : undefined;
-
-        mockSuppressedLines.clear();
-        if (supp !== undefined) {
-          for (const idx of supp) mockSuppressedLines.add(idx);
-        }
-
         const applied: Record<string, unknown> = {
           ignoreWhitespace: ws,
           ignoreCase: cs,
@@ -331,10 +692,22 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       return base as unknown as T;
     }
     case "text_get_rows": {
-      const total = dumped.textRows.length;
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const sess =
+        mockTextSessions.get(sessId) ??
+        (sessId === "mock-text-1"
+          ? registerFixtureTextSession(dumped.textRows, "", "")
+          : undefined);
+      if (sess === undefined) {
+        // Real-backend parity: unknown/stale ids reject so the view runs
+        // a fresh `text_compare` instead of rendering stale rows.
+        throw new Error(`unknown text session '${sessId}'`);
+      }
+      const sourceRows = sess.rows;
+      const total = sourceRows.length;
       const start = Math.min(numArg(args, ["start"], 0), total);
       const limit = Math.min(numArg(args, ["limit"], 200), 500);
-      const rows = dumped.textRows.slice(start, start + limit).map((row) => {
+      const rows = sourceRows.slice(start, start + limit).map((row) => {
         const patch = mockTextEdits.get(row.index);
         const left = patch !== undefined && patch.left !== undefined ? patch.left : row.left;
         const right = patch !== undefined && patch.right !== undefined ? patch.right : row.right;
@@ -351,11 +724,11 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
           left,
           right,
           kind,
-          inline: left !== null && right !== null && left === right ? [] : row.inline,
+          inline: left !== null && right !== null && left === right ? [] : (row.inline ?? []),
           suppressed,
         };
       });
-      return { session: "mock-text-1", start, total, rows } as unknown as T;
+      return { session: sessId, start, total, rows } as unknown as T;
     }
     case "text_find": {
       // Wave-127: full-fixture search mirroring backend `text_find`
@@ -365,11 +738,14 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       // right-then-left). Lets the TextView prove its beyond-loaded-
       // rows fallback under `VITE_MOCK_IPC=1`. Empty query resolves
       // null (the view never sends one; the real backend errors).
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const sess = mockTextSessions.get(sessId);
+      const sourceRows = sess !== undefined ? sess.rows : dumped.textRows;
       const query = strArg(args, ["query"], "");
       const direction = strArg(args, ["direction"], "down");
       if (query === "") return null as unknown as T;
       const ordered =
-        direction === "up" ? [...dumped.textRows].reverse() : dumped.textRows;
+        direction === "up" ? [...sourceRows].reverse() : sourceRows;
       for (const row of ordered) {
         const sides: ReadonlyArray<{ readonly side: string; readonly line: string | null }> =
           direction === "up"
@@ -390,16 +766,19 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       return null as unknown as T;
     }
     case "text_apply_edit": {
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const sess = mockTextSessions.get(sessId);
+      const sourceRows = sess !== undefined ? sess.rows : dumped.textRows;
       const index = numArg(args, ["index"], -1);
       const side = strArg(args, ["side"], "");
       const text = strArg(args, ["text"], "");
-      if (!Number.isInteger(index) || index < 0 || index >= dumped.textRows.length) {
+      if (!Number.isInteger(index) || index < 0 || index >= sourceRows.length) {
         throw new Error(`row index ${index} out of range`);
       }
       if (side !== "left" && side !== "right") {
         throw new Error(`unknown side '${side}'`);
       }
-      const row = dumped.textRows[index];
+      const row = sourceRows[index];
       if (row === undefined || row.index !== index) {
         throw new Error(`row index ${index} out of range`);
       }
@@ -417,11 +796,11 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       const kind =
         left !== null && right !== null && left === right ? "equal" : row.kind;
       return {
-        session: "mock-text-1",
+        session: sessId,
         index,
         side,
         kind,
-        rows: dumped.textRows.length,
+        rows: sourceRows.length,
       } as unknown as T;
     }
     case "folder_compare": {
