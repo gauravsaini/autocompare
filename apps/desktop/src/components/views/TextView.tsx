@@ -8,6 +8,9 @@ import { FindOverlay, GotoOverlay, IgnoreMenu, OverviewStrip, TextToolbar } from
 import { Button } from "../ui";
 import type { OverviewStripHunk } from "./text/controls/OverviewStrip";
 import { InlineSpans, sideRanges } from "./text/inline/InlineSpans";
+// Wave-161: bus event names shared with the top Toolbar (leaf module —
+// no chrome barrel import, so no view/chrome cycle).
+import { VIEW_COMMAND_EVENT, VIEW_MINOR_EVENT } from "../chrome/ViewCommandBus";
 
 /**
  * Side-by-side text comparison view (Wave 2B, real-data first paint Wave 5B).
@@ -2059,7 +2062,14 @@ export default function TextView({
     return () => window.removeEventListener("autocompare:text-copy", onCopyRequest);
   }, []);
 
-  // Wave-L3: ViewCommandBus hook for prev/next diff navigation (placed with hooks above early returns)
+  // Wave-161: ViewCommandBus hook for prev/next diff navigation (placed
+  // with hooks above early returns). The TextToolbar buttons call
+  // `handleBusCommand`, which rides the App `handleViewCommand` bus via
+  // the ViewRouter `onTextBusCommand` prop (SAME handler as the top
+  // Toolbar — no duplicate handlers). The window listener below stays a
+  // pure follow-effect (`jumpDiffRef` scroll/focus sync, identical to the
+  // old fallback path): it MUST NOT route through the prop, or the App
+  // jump's trailing bus dispatch would loop back into itself.
   const jumpDiffRef = useRef<(dir: -1 | 1) => void>(() => {});
   const handleBusCommand = useCallback(
     (cmd: "prev" | "next") => {
@@ -2079,14 +2089,37 @@ export default function TextView({
       if (typeof kind === "string" && kind !== "" && kind !== "text") return;
       const cmd = detail?.cmd;
       if (cmd === "prev" || cmd === "next") {
-        handleBusCommand(cmd);
+        jumpDiffRef.current(cmd === "prev" ? -1 : 1);
       }
     };
-    window.addEventListener("autocompare:view-command", onBusCmd);
+    window.addEventListener(VIEW_COMMAND_EVENT, onBusCmd);
     return () => {
-      window.removeEventListener("autocompare:view-command", onBusCmd);
+      window.removeEventListener(VIEW_COMMAND_EVENT, onBusCmd);
     };
-  }, [handleBusCommand]);
+  }, []);
+
+  // Wave-161: Minor toggle follow-effect. The top Toolbar dispatches
+  // `autocompare:view-minor` `{ on, viewKind: "text" }`; this applies it
+  // through the EXISTING text IPC ignore path (`recompareWithIgnores`
+  // with both flags — no engine change, no new IPC). FOREIGN kinds and
+  // malformed payloads are ignored, never a crash.
+  const minorRef = useRef<(on: boolean) => void>(() => {});
+  minorRef.current = (on: boolean): void => {
+    void recompareWithIgnores(on, on);
+  };
+  useEffect(() => {
+    const onMinor = (e: Event): void => {
+      const detail = (e as CustomEvent<{ on?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "text") return;
+      if (typeof detail?.on !== "boolean") return;
+      minorRef.current(detail.on);
+    };
+    window.addEventListener(VIEW_MINOR_EVENT, onMinor);
+    return () => {
+      window.removeEventListener(VIEW_MINOR_EVENT, onMinor);
+    };
+  }, []);
 
   /** Wave-81: BC-style path-bar meta line (per-side `timestamp · bytes ·
    * lines`, directly under the `PathBar` path inputs above this section).
