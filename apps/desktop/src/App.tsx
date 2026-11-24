@@ -272,6 +272,7 @@ export default function App(): React.JSX.Element {
   const handleSelectRow = useCallback((index: number | null, row: TextRowDto | null) => {
     setSelectedIndex(index);
     setSelectedRow(row);
+    if (index !== null) setRulerActive(index);
   }, []);
 
   // Tabs follow sessions; welcome tab only when empty.
@@ -596,13 +597,23 @@ export default function App(): React.JSX.Element {
           void handleOpenSession("merge", activePaths.left || null, activePaths.right || null, activePaths.base || null);
           break;
         case "session.take-left":
+        case "session.copy-left":
           handleMenuTake("left");
           break;
         case "session.take-right":
+        case "session.copy-right":
           handleMenuTake("right");
           break;
         case "session.take-both":
           handleMenuTake("both");
+          break;
+        case "session.copy":
+        case "edit.copy-hunk":
+          handleMenuTake(copyTakeSide ?? "left");
+          break;
+        case "session.swap":
+        case "view.swap":
+          handleSwapSides();
           break;
         case "view.toggle-theme":
           setStatusMessage("Theme follows the OS appearance (no in-app toggle yet)");
@@ -1504,34 +1515,51 @@ export default function App(): React.JSX.Element {
 
   const handleNextHunk = useCallback(() => {
     if (viewKind !== "text" || hunkStarts.length === 0) return;
-    const next = hunkStarts.find((s) => s > rulerActive) ?? hunkStarts[0];
+    const current = selectedIndex ?? rulerActive;
+    let currentHunkIndex = -1;
+    for (let i = hunkStarts.length - 1; i >= 0; i -= 1) {
+      if (hunkStarts[i]! <= current) {
+        currentHunkIndex = i;
+        break;
+      }
+    }
+    const next =
+      currentHunkIndex < 0
+        ? hunkStarts[0]
+        : hunkStarts[(currentHunkIndex + 1) % hunkStarts.length];
     if (next !== undefined) {
       handleRulerJump(next);
       setSelectedIndex(next);
+      setRulerActive(next);
       window.dispatchEvent(
         new CustomEvent("autocompare:view-command", { detail: { cmd: "next", viewKind: "text" } }),
       );
     }
-  }, [viewKind, hunkStarts, rulerActive, handleRulerJump]);
+  }, [viewKind, hunkStarts, selectedIndex, rulerActive, handleRulerJump]);
 
   const handlePrevHunk = useCallback(() => {
     if (viewKind !== "text" || hunkStarts.length === 0) return;
-    let prev = hunkStarts[hunkStarts.length - 1];
+    const current = selectedIndex ?? rulerActive;
+    let currentHunkIndex = -1;
     for (let i = hunkStarts.length - 1; i >= 0; i -= 1) {
-      const s = hunkStarts[i];
-      if (s !== undefined && s < rulerActive) {
-        prev = s;
+      if (hunkStarts[i]! <= current) {
+        currentHunkIndex = i;
         break;
       }
     }
+    const prev =
+      currentHunkIndex <= 0
+        ? hunkStarts[hunkStarts.length - 1]
+        : hunkStarts[currentHunkIndex - 1];
     if (prev !== undefined) {
       handleRulerJump(prev);
       setSelectedIndex(prev);
+      setRulerActive(prev);
       window.dispatchEvent(
         new CustomEvent("autocompare:view-command", { detail: { cmd: "prev", viewKind: "text" } }),
       );
     }
-  }, [viewKind, hunkStarts, rulerActive, handleRulerJump]);
+  }, [viewKind, hunkStarts, selectedIndex, rulerActive, handleRulerJump]);
 
   const hunkNavEnabled = viewKind === "text" && hunkStarts.length > 0;
   // FIXM GAP-13: merge conflict nav is bus-owned (MergeView wraps +
@@ -1636,12 +1664,18 @@ export default function App(): React.JSX.Element {
       ) {
         return;
       }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const isCmdAlt = (e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey;
+      const isPlain = !e.metaKey && !e.ctrlKey && !e.altKey;
+      if (!isPlain && !isCmdAlt) return;
+
       const keyKind = viewKindRef.current ?? viewKind;
       if (keyKind !== "text" && keyKind !== "merge") return;
 
       const key = e.key.toLowerCase();
-      if (key === "n") {
+      const isNext = (isPlain && key === "n") || (isCmdAlt && (e.key === "ArrowDown" || e.key === "Down"));
+      const isPrev = (isPlain && key === "p") || (isCmdAlt && (e.key === "ArrowUp" || e.key === "Up"));
+
+      if (isNext) {
         e.preventDefault();
         // FIXM: no `handleViewCommand` ref here (declared below; naming
         // it in the deps array would hit TDZ at render). Merge nav
@@ -1652,7 +1686,7 @@ export default function App(): React.JSX.Element {
           );
           setStatusMessage("Next conflict");
         } else handleNextHunk();
-      } else if (key === "p") {
+      } else if (isPrev) {
         e.preventDefault();
         if (keyKind === "merge") {
           window.dispatchEvent(
@@ -1660,11 +1694,11 @@ export default function App(): React.JSX.Element {
           );
           setStatusMessage("Previous conflict");
         } else handlePrevHunk();
-      } else if (key === "l") {
+      } else if (isPlain && key === "l") {
         e.preventDefault();
         setTakeSidePref("left");
         handleMenuTake("left");
-      } else if (key === "r") {
+      } else if (isPlain && key === "r") {
         e.preventDefault();
         setTakeSidePref("right");
         handleMenuTake("right");
@@ -1932,17 +1966,13 @@ export default function App(): React.JSX.Element {
         ? `Copy (take ${copyTakeSide})`
         : viewKind === "text" && selectedRow !== null
           ? "Copy (selected row is not a difference)"
-          : viewKind === "merge"
-            ? "Copy (use Take buttons in Merge view)"
-            : "Copy (select a row first)",
+          : "Copy (select a row first)",
       enabled: copyInHunk,
       disabledReason: copyInHunk
         ? null
         : viewKind === "text" && selectedRow !== null
           ? "selected row is not a difference"
-          : viewKind === "merge"
-            ? "use Take buttons in Merge view"
-            : "select a row first",
+          : "select a row first",
       // Wave-L2: bus-routed (text rides the staged text-copy path;
       // merge resolves the active conflict; other kinds park with the
       // L3-wiring reason).
@@ -1955,17 +1985,13 @@ export default function App(): React.JSX.Element {
         ? "Copy (take right)"
         : viewKind === "text" && selectedRow !== null
           ? "Copy (selected row is not a difference)"
-          : viewKind === "merge"
-            ? "Copy (use Take buttons in Merge view)"
-            : "Copy (select a row first)",
+          : "Copy (select a row first)",
       enabled: copyInHunk && selectedRow?.right !== null,
       disabledReason: copyInHunk
         ? null
         : viewKind === "text" && selectedRow !== null
           ? "selected row is not a difference"
-          : viewKind === "merge"
-            ? "use Take buttons in Merge view"
-            : "select a row first",
+          : "select a row first",
       onClick: () => handleViewCommand("copy-right"),
     },
     {
