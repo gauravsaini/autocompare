@@ -5,8 +5,8 @@
  * (mock `text_compare` over `dumped.json`: 644 rows, 200 loaded) and
  * proves the Beyond Compare style far-left overview strip:
  *  - the strip mounts at the far left of the text rows (`tv-body` flex:
- *    strip x sits left of every row cell, 5px wide within the 4-6px
- *    budget, full-height rail beside the list);
+ *    strip x sits left of every row cell, 4px wide within the 4-6px
+ *    budget (wave-196: was 5px), full-height rail beside the list);
  *  - one marker per hunk: `textview/overview-hunk-N` count equals the
  *    gutter `hunk-copy-left-N` count (same `collectTextHunks` grouping,
  *    1:1 ordinals), each marker exposing a `Jump to difference N of M`
@@ -18,14 +18,14 @@
  *  - first-row budget: `textview/row-0` still mounts at the top of its
  *    list container (`top <= 140px`, strip adds no vertical stack);
  *  - light + dark hold (markers keep their diff-token paint, strip
- *    stays 5px, zero alerts);
+ *    stays 4px (wave-196), zero alerts);
  *  - zero console errors / page errors throughout.
  *
  * Mock honesty: markers derive from the loaded rows' hunk grouping in
  * the view (no new IPC), so every assertion below reads the DOM /
  * computed styles, never the network. Skip policy matches the other
  * specs (infra failures skip). Overlap helper excludes the strip
- * markers (dense adjacent hunks paint touching 5px ticks by design).
+ * markers (dense adjacent hunks paint touching 4px ticks by design).
  */
 import { expect, test } from "@playwright/test";
 import { assertNoOverlap } from "../helpers/overlap";
@@ -128,11 +128,11 @@ test("overview strip sits far-left, one marker per hunk, click jumps", async ({ 
   await expect(page.getByRole("alert")).toHaveCount(0);
   await page.screenshot({ path: `${EVID_DIR}/textoverview-light.png` });
 
-  // Dark scheme holds: strip stays 5px far-left, markers keep paint.
+  // Dark scheme holds: strip stays 4px far-left (wave-196), markers keep paint.
   await page.emulateMedia({ colorScheme: "dark" });
   await page.waitForTimeout(300);
   const darkBox = await strip.evaluate((el) => el.getBoundingClientRect().toJSON());
-  expect(Math.round(darkBox.width), "strip stays 5px in dark").toBe(5);
+  expect(Math.round(darkBox.width), "strip stays 4px in dark").toBe(4);
   const darkBg = await page
     .getByTestId("textview/overview-hunk-0")
     .evaluate((el) => window.getComputedStyle(el).backgroundColor);

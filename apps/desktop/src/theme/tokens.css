@@ -1109,13 +1109,16 @@ samp {
 }
 
 /*
- * Wave 79: far-left overview strip (strip-scoped ONLY). A 5px relative
+ * Wave 79: far-left overview strip (strip-scoped ONLY). A 4px relative
  * rail at the far left of the text row flex (`.tv-body` adds the
  * side-by-side row with no vertical stack, so the first-row budget
  * holds); per-hunk markers are absolute buttons positioned by
  * (start/total, length/total) from the SAME hunk grouping the gutter
  * arrows use. Tints reuse existing diff-border tokens only (no new
  * hues); the active marker reuses the focus-ring token.
+ *
+ * Wave 196: 5px -> 4px (BC far-left truth, <=6px budget; position/width
+ * ONLY, no color/logic change).
  */
 .tv-body {
   display: flex;
@@ -1124,8 +1127,8 @@ samp {
 
 .tv-overview-strip {
   position: relative;
-  flex: 0 0 5px;
-  width: 5px;
+  flex: 0 0 4px;
+  width: 4px;
   min-height: 100px;
   align-self: stretch;
   background-color: var(--ac-ruler-track);

@@ -1255,8 +1255,9 @@ export default function MergeView({
         </p>
       )}
       {/* Wave-147: BC overview-ruler parity. The cards ride a flex row
-          with a far-right in-flow rail (zero vertical chrome: no new
-          stacked rows, firstCardTop untouched). One marker per
+          with a far-LEFT in-flow rail (wave-196: right edge -> far-left
+          `order-first`, 4px; zero vertical chrome: no new stacked rows,
+          firstCardTop untouched). One marker per
           conflict, positioned by ordinal fraction (text-79 idiom);
           clicking jumps through the existing selectConflict path (no
           new IPC). Marker ink reuses the existing chg/accent tokens. */}
@@ -1447,7 +1448,7 @@ export default function MergeView({
             data-testid="mergeview/overview-ruler"
             role="navigation"
             aria-label={`Overview: ${count} ${count === 1 ? "conflict" : "conflicts"} — activate a marker to jump`}
-            className="relative w-[var(--ac-space-2)] shrink-0 self-stretch rounded bg-[var(--ac-ruler-track)]"
+            className="relative order-first w-[4px] shrink-0 self-stretch rounded bg-[var(--ac-ruler-track)]"
           >
             {conflicts.map((c, index) => {
               const top = (index / count) * 100;
