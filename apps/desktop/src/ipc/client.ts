@@ -467,12 +467,15 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       } as unknown as T;
     }
     case "table_compare": {
-      const cells = dumped.tableCells;
+      const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+      const cells = ("_mockCells" in a && a["_mockCells"])
+        ? (a["_mockCells"] as DumpedTableCells)
+        : dumped.tableCells;
       // Wave-69: total diff rows over the FULL fixture tables
       // (positional: zipped full-row mismatches + length delta),
       // mirroring the Rust `diff_rows` so the status bar total is
       // truthful under `VITE_MOCK_IPC=1`.
-      // Wave-164: honor the W163c ignore flags (`ignoreCase` /
+      // Wave-164 + Wave-168: honor the W163c ignore flags (`ignoreCase` /
       // `ignore_case`, `ignoreSpace` / `ignore_space`, either
       // spelling). Mirrors `norm_cell` in
       // `src-tauri/src/commands/table.rs`: whitespace runs fold when
@@ -480,8 +483,8 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       // fixture this is a faithful no-op (no case/space-only diffs),
       // but unknown flags must never break the mock path — the e2e
       // gate drives this branch with flags set.
-      const ignoreCs = args["ignoreCase"] === true || args["ignore_case"] === true;
-      const ignoreWs = args["ignoreSpace"] === true || args["ignore_space"] === true;
+      const ignoreCs = a["ignoreCase"] === true || a["ignore_case"] === true;
+      const ignoreWs = a["ignoreSpace"] === true || a["ignore_space"] === true;
       const normCell = (cell: string): string => {
         let s = ignoreWs ? cell.replace(/\s+/g, " ").trim() : cell;
         if (ignoreCs) s = s.toLowerCase();
@@ -490,9 +493,9 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       const common = Math.min(cells.rowsL.length, cells.rowsR.length);
       let mismatches = 0;
       for (let i = 0; i < common; i += 1) {
-        const a = cells.rowsL[i];
-        const b = cells.rowsR[i];
-        if (a.length !== b.length || a.some((v, c) => normCell(v) !== normCell(b[c]))) mismatches += 1;
+        const rowA = cells.rowsL[i];
+        const rowB = cells.rowsR[i];
+        if (rowA.length !== rowB.length || rowA.some((v, c) => normCell(v) !== normCell(rowB[c]))) mismatches += 1;
       }
       const diffRows =
         mismatches + Math.abs(cells.rowsL.length - cells.rowsR.length);
@@ -502,7 +505,7 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         rightRows: cells.totalRowsR,
         leftCols: cells.leftCols,
         rightCols: cells.rightCols,
-        equal: cells.equal,
+        equal: diffRows === 0 && cells.rowsL.length === cells.rowsR.length,
         byKey: false,
         diffRows,
         keyColumns: [],

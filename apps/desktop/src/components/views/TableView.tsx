@@ -363,6 +363,11 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // path: `key_columns: []`); a column index requests it explicitly and
   // implies key mode. Clicking the keyed column clears back to `null`.
   const [pickedKey, setPickedKey] = useState<number | null>(null);
+  // Wave-168: table ignore flags (Beyond Compare parity). Both default
+  // false = exact cell match. Toggling either re-issues `table_compare`
+  // with `{ ignoreCase, ignoreSpace }` and updates cell diffs and totals.
+  const [ignoreWs, setIgnoreWs] = useState(false);
+  const [ignoreCase, setIgnoreCase] = useState(false);
   // Echo of the backend summary: effective mode + key columns. Empty
   // `keyColumns` with `byKey` requested means positional fallback.
   const [effectiveByKey, setEffectiveByKey] = useState(false);
@@ -580,6 +585,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           rightPath,
           byKey,
           pickedKey === null ? [] : [pickedKey],
+          {
+            ignoreCase,
+            ignoreSpace: ignoreWs,
+          },
         )) as unknown;
         if (!isRecord(raw) || typeof raw["sessionId"] !== "string") {
           if (!cancelled) setStatus("empty");
@@ -655,7 +664,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     return () => {
       cancelled = true;
     };
-  }, [leftPath, rightPath, byKey, pickedKey]);
+  }, [leftPath, rightPath, byKey, pickedKey, ignoreWs, ignoreCase]);
 
   async function loadMore(): Promise<void> {
     if (session === null || grid === null || loadingMore || grid.rowsL.length >= grid.totalRows)
@@ -857,6 +866,13 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     return n;
   }
 
+  /** Wave-168: normalises one cell for tolerant comparison when flags are active. */
+  function normCell(cell: string): string {
+    let s = ignoreWs ? cell.replace(/\s+/g, " ").trim() : cell;
+    if (ignoreCase) s = s.toLowerCase();
+    return s;
+  }
+
   /**
    * Wave-91: per-side diff rule. A cell pair diffs when both sides
    * carry a value and they disagree (missing side = empty, never a
@@ -864,11 +880,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
    * per-side so both grids tint the same changed coordinates.
    * Wave-TBL: the right value resolves through the column map, so a
    * remapped pair compares the PAIRED cells instead of positional ones.
+   * Wave-168: tolerant cell comparison honors active ignore flags.
    */
   function isDiffCell(r: number, c: number): boolean {
     const lv = grid?.rowsL[r]?.[c];
     const rv = grid?.rowsR[r]?.[mapR(c)];
-    return lv !== undefined && rv !== undefined && lv !== rv;
+    return lv !== undefined && rv !== undefined && normCell(lv) !== normCell(rv);
   }
 
   /**
@@ -1459,6 +1476,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           // too, so an unchecked toggle is always pure positional.
           if (!next) setPickedKey(null);
         }}
+        ignoreWs={ignoreWs}
+        onToggleIgnoreWs={(next) => setIgnoreWs(next)}
+        ignoreCase={ignoreCase}
+        onToggleIgnoreCase={(next) => setIgnoreCase(next)}
         colsOpen={colsOpen}
         onToggleCols={() => setColsOpen((o) => !o)}
         showAllDisabled={hiddenCount === 0}
