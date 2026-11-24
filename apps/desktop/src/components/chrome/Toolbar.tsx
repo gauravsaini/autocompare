@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Square, type LucideIcon } from "lucide-react";
 import { ToolbarButton } from "../ui";
+import { VIEW_FORMAT_EVENT } from "../views/text/controls/FormatMenu";
+import { VIEW_RULES_EVENT } from "../views/folder/controls/RulesPanel";
 
 export interface ToolbarAction {
   id: string;
@@ -227,6 +229,8 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
     >
       {actions.map((action) => {
         const isCompare = action.id === "compare";
+        const isRules = action.id === "rules";
+        const isFormat = action.id === "format";
         const actionBusy = action.busy ?? (isCompare && busy);
         const actionEnabled = action.enabled && !(isCompare && busy);
         const reason: string | null = isCompare
@@ -235,6 +239,22 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
             : (action.disabledReason ?? compareBlockedReasonOf(action))
           : (action.disabledReason ?? null);
         const title = isCompare && busy ? `Compare (${COMPARE_BUSY_REASON})` : actionTitle(action, reason);
+        // Wave-164: Rules/Format route through the view bus FIRST (the
+        // in-view Rules/Format panels open), then run the host handler
+        // (today a disabled-stub note; App.tsx handlers are off-limits
+        // and stay the source of truth). Minor is untouched (W161 live
+        // bus path). Disabled buttons never fire either path.
+        const handleActionClick = isRules
+          ? (): void => {
+              window.dispatchEvent(new CustomEvent(VIEW_RULES_EVENT));
+              action.onClick();
+            }
+          : isFormat
+            ? (): void => {
+                window.dispatchEvent(new CustomEvent(VIEW_FORMAT_EVENT));
+                action.onClick();
+              }
+            : action.onClick;
         // Wave-116: idle Prev/Next collapse out of the bar (testid stays
         // mounted, honestly hidden) instead of holding an always-on slot.
         const idleCollapsed =
@@ -250,7 +270,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp }: ToolbarProp
             aria-busy={isCompare && busy ? true : undefined}
             title={title}
             disabled={!actionEnabled}
-            onClick={isCompare ? () => void runCompare() : action.onClick}
+            onClick={isCompare ? () => void runCompare() : handleActionClick}
             className={actionClass}
             label={action.label}
           >

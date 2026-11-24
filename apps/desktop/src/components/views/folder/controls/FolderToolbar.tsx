@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { Code, Search } from "lucide-react";
 import { SegmentedControl, ToolbarButton } from "../../../ui";
 
 /**
@@ -24,6 +24,10 @@ export interface FolderToolbarProps {
   readonly sameCount: number;
   readonly nameFilterOpen: boolean;
   readonly onToggleNameFilter: () => void;
+  /** Wave-164: Rules (file-mask) popover toggle. Same collapse pattern
+      as the name filter; masks + re-compare owned by `FolderView`. */
+  readonly rulesOpen: boolean;
+  readonly onToggleRules: () => void;
 }
 
 export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Element {
@@ -37,6 +41,8 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
     sameCount,
     nameFilterOpen,
     onToggleNameFilter,
+    rulesOpen,
+    onToggleRules,
   } = props;
   return (
     <div
@@ -55,6 +61,16 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
         ]}
       />
       <span aria-hidden="true" className="tv-controls-sep" />
+      <ToolbarButton
+        data-testid="folderview/toolbar-rules"
+        label={rulesOpen ? "Hide rules (Esc)" : "Show rules"}
+        title="Rules: file masks for this compare"
+        icon={Code}
+        expanded={rulesOpen}
+        onClick={onToggleRules}
+      >
+        <span>Rules</span>
+      </ToolbarButton>
       <ToolbarButton
         data-testid="folderview/toolbar-namefilter"
         label={nameFilterOpen ? "Hide name filter (Esc)" : "Show name filter (Ctrl+F)"}

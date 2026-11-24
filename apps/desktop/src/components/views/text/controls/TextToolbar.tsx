@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ChevronDown, ChevronUp, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowDownToLine, ChevronDown, ChevronUp, Search, SlidersHorizontal, Type } from "lucide-react";
 import { Button, Checkbox, Select, ToolbarButton } from "../../../ui";
 
 /**
@@ -22,6 +22,10 @@ export interface TextToolbarProps {
   readonly onToggleFind: () => void;
   readonly onToggleGoto: () => void;
   readonly onToggleIgnore: () => void;
+  /** Wave-164: Format (encoding/EOL) popover toggle. Same collapse
+      pattern as Ignore; state + re-compare owned by `TextView`. */
+  readonly formatOpen: boolean;
+  readonly onToggleFormat: () => void;
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
   /**
@@ -67,6 +71,8 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
     onToggleFind,
     onToggleGoto,
     onToggleIgnore,
+    formatOpen,
+    onToggleFormat,
     onPrevDiff,
     onNextDiff,
     onBusCommand,
@@ -125,6 +131,16 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       >
         <SlidersHorizontal size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Ignore</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-testid="textview/toolbar-format"
+        label={formatOpen ? "Hide format options" : "Show format options"}
+        title="Encoding / line endings (backend honors them)"
+        expanded={formatOpen}
+        onClick={onToggleFormat}
+      >
+        <Type size={14} strokeWidth={1.75} aria-hidden="true" />
+        <span>Format</span>
       </ToolbarButton>
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
