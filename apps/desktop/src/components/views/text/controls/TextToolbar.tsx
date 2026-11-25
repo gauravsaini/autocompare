@@ -129,7 +129,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       <ToolbarButton
         data-testid="textview/toolbar-ignore"
         label={ignoreOpen ? "Hide ignore options" : "Show ignore options"}
-        title="Ignore whitespace / case (backend may not support them)"
+        title="Ignore whitespace / case (backend honors them)"
         expanded={ignoreOpen}
         onClick={onToggleIgnore}
       >

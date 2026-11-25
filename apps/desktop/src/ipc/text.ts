@@ -77,6 +77,12 @@ export interface TextCompareDto {
    * Absent on old backends / mock paths that predate ignores.
    */
   readonly appliedOptions?: AppliedTextOptions;
+  readonly encoding?: string;
+  readonly eol?: string;
+  readonly minorUnimportant?: boolean;
+  readonly ignoreWhitespace?: boolean;
+  readonly ignoreCase?: boolean;
+  readonly suppressedLines?: readonly number[];
 }
 
 /** Ignore flags for [`textCompare`] (both default `false` = exact diff). */
@@ -182,8 +188,8 @@ export function textCompare(
   const ws = opts?.ignoreWhitespace === true || opts?.ignore_whitespace === true;
   const cs = opts?.ignoreCase === true || opts?.ignore_case === true;
   const minor = opts?.minorUnimportant === true || opts?.minor_unimportant === true;
-  const enc = opts?.encoding;
-  const eol = opts?.eol;
+  const enc = opts?.encoding !== undefined && opts.encoding !== "" ? opts.encoding : undefined;
+  const eol = opts?.eol !== undefined && opts.eol !== "" ? opts.eol : undefined;
   const supp = opts?.suppressedLines ?? opts?.suppressed_lines;
 
   const hasOptions =

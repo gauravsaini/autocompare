@@ -133,4 +133,37 @@ test.describe("Text Contract L1: Minor / Format / Suppressed / Encoding / EOL", 
     expect(res.appliedOptions).toBeUndefined();
     expect(res.rows).toBeGreaterThan(0);
   });
+
+  test("6. audioCompare echoes numeric tolerance argument round-trip", async ({ page }) => {
+    const res = await page.evaluate(async () => {
+      const { audioCompare } = await import("../../src/ipc/media");
+      const explicit = await audioCompare("left.wav", "right.wav", 0.05);
+      const def = await audioCompare("left.wav", "right.wav");
+      return { explicit, def };
+    });
+
+    expect(res.explicit).toBeDefined();
+    expect(res.explicit.tolerance).toBe(0.05);
+    expect(res.def).toBeDefined();
+    expect(res.def.tolerance).toBe(0);
+  });
+
+  test("7. syncPlan honors direction option round-trip", async ({ page }) => {
+    const res = await page.evaluate(async () => {
+      const { syncPlan } = await import("../../src/ipc/sync");
+      const defaultPlan = await syncPlan("/path/left", "/path/right");
+      const rtlPlan = await syncPlan("/path/left", "/path/right", {
+        direction: "RightToLeft",
+      });
+      return { defaultPlan, rtlPlan };
+    });
+
+    expect(res.defaultPlan).toBeDefined();
+    expect(res.rtlPlan).toBeDefined();
+    expect(res.rtlPlan.steps.length).toBeGreaterThan(0);
+    const rtlActions = res.rtlPlan.steps.filter(
+      (s) => s.action === "CopyToLeft" || s.action === "DeleteLeft",
+    );
+    expect(rtlActions.length).toBeGreaterThan(0);
+  });
 });
