@@ -224,7 +224,7 @@
 
   /* Checkbox & Tab Chip Tokens (Light) */
   --ac-checkbox-size: 13px;
-  --ac-tab-chip-h: 32px;
+  --ac-tab-chip-h: 24px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -350,7 +350,7 @@
 
     /* Checkbox & Tab Chip Tokens (Dark) */
     --ac-checkbox-size: 13px;
-    --ac-tab-chip-h: 32px;
+    --ac-tab-chip-h: 24px;
   }
 }
 
@@ -640,9 +640,9 @@ samp {
      -> compact h-8 32, pathbar <= 36 ceiling holds); tab-chip is the 32px
      tab-row affordance (TabBar chips), distinct from the 22-26px controls. */
   --ac-toolbar-h: 44px;
-  --ac-tabbar-h: 40px;
+  --ac-tabbar-h: 32px;
   --ac-pathbar-h: 32px;
-  --ac-tab-chip-h: 32px;
+  --ac-tab-chip-h: 24px;
   --ac-statusbar-h: 28px;
 
   /* Row geometry: every diff row in every view measures the same (Wave-88 unified 22px) */

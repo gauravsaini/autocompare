@@ -93,7 +93,7 @@ test("shellchrome-116: slimmer shared shell, reduced per-view ceilings", async (
   expect(text.toolbarH as number).toBeLessThanOrEqual(CEIL.toolbarH);
   expect(text.pathbarH, `pathbar slimmer than baseline ${BASE.pathbarH}`).not.toBeNull();
   expect(text.pathbarH as number).toBeLessThanOrEqual(CEIL.pathbarH);
-  expect(text.tabbarH, "tabbar untouched (off limits)").toBe(40);
+  expect(text.tabbarH, "tabbar standardized (32)").toBe(32);
   expect(text.budget, "text budget measured").not.toBeNull();
   expect(text.budget as number, `text ceiling under baseline ${BASE.text}`).toBeLessThanOrEqual(
     CEIL.text,

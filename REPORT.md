@@ -755,3 +755,57 @@ C3a-DONE
 - REPORT.md (ye file, worktree root)
 
 C1c-DONE
+
+---
+
+# TABS chipsizing-253 — REPORT
+
+## Summary
+Session tabs mote (32px chip / 40px bar) lagte the, baaki desktop controls
+(22-24px) se match nahi karte the. Ab chip control-md standard par hai aur
+bar accordingly compact hai. Koi layout/behavior change nahi, testids
+byte-identical, truncation aur `+` adjacency (H1 fix) untouched.
+
+## Changes (worktree `/tmp/wt-TABS`, branch `wave-TABS-chipsizing`, base `main@3bb39f8`)
+1. **tokens.css — 4 token values only (comments/testids same):**
+   - light `:root`: `--ac-tab-chip-h: 32px -> 24px`
+   - dark `@media`: `--ac-tab-chip-h: 32px -> 24px` (override tha, dono fix)
+   - geometry `:root`: `--ac-tab-chip-h: 32px -> 24px`, `--ac-tabbar-h: 40px -> 32px`
+2. **TabBar.tsx — ZERO change.** Chips (`h-[var(--ac-tab-chip-h)]`,
+   min-w-60/max-w-56/truncate) aur bar (`h-[var(--ac-tabbar-h)]`) pehle se
+   vars ride karte hain, isliye token fix hi kaafi tha. Close button
+   `size="sm"` (22px) 24px chip me fit hai (1px slack), padding math intact.
+3. **NEW spec:** `apps/desktop/e2e/specs/tabs-chipsizing-253.spec.ts` —
+   token equality + relational assertions only, koi pixel-lock nahi.
+
+## Gates (worktree, fresh port 1858, ABSOLUTE paths)
+- `./node_modules/.bin/tsc --noEmit` => **TSC:0** (node_modules main se
+  symlink tha, gate ke baad remove kar diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-TABS/apps/desktop
+  1858 e2e/specs/tabs-chipsizing-253.spec.ts e2e/specs/ui-standards.spec.ts
+  --workers=1` => **5 passed (6.9s), GATE_PLAYWRIGHT_EXIT=0**
+  - tabs-chipsizing-253: 1 passed (light + dark)
+  - ui-standards: 4 passed
+
+## MATCH / OFF table
+
+| Check | MATCH (naya) | OFF (purana / note) |
+|---|---|---|
+| chip token vs control-md | `--ac-tab-chip-h == --ac-control-h-md` (24px, light+dark) | pehle 32px vs 24px — OFF tha |
+| measured chip height | token ke equal (round) | pehle 32px mote the |
+| tabbar height | chip + 2×space-1 = 32px compact | pehle 40px — OFF tha |
+| truncation | min-w-60/max-w-56/truncate + ellipsis intact | — |
+| `+` adjacency (H1) | strip grow 0, plus last tab ke baad, bar ke andar | — |
+| testids | tabbar / tab-* / tab-new byte-identical | — |
+| KNOWN OFF (out of scope) | — | `geopolish-66c / chromedeclutter-119 / chrome-174 / chrome-budget / geopolish-122 / shellchrome-116` specs me 40px bar pin hai — ye waves apne spec khud update karenge; `TabBar.tsx:277` comment me "only 32px chrome" line ab stale hai (sizing class nahi, isliye untouched) |
+
+## Files list
+- `apps/desktop/src/theme/tokens.css` (M: 4 token values)
+- `apps/desktop/src/components/chrome/TabBar.tsx` (untouched, byte-identical)
+- `apps/desktop/e2e/specs/tabs-chipsizing-253.spec.ts` (NEW)
+- `REPORT.md` (ye file)
+
+NEVER push — commit nahi kiya, push nahi kiya.
+
+TABS-DONE

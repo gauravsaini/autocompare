@@ -113,7 +113,7 @@ test("chrome-174: shell collapses to two chrome rows (band + pathbar), heights i
   expect(g.band, "chrome band measured").not.toBeNull();
   expect(g.band!.h, "band is one 44px row").toBe(44);
   expect(g.tabbar, "tabbar measured").not.toBeNull();
-  expect(g.tabbar!.h, "tabbar height intact (40)").toBe(40);
+  expect(g.tabbar!.h, "tabbar height intact (32)").toBe(32);
   expect(g.toolbar, "toolbar measured").not.toBeNull();
   expect(g.toolbar!.h, "toolbar height intact (44)").toBe(44);
   // Same row: tops align (tabbar centers its 40px in the 44px band).

@@ -93,7 +93,7 @@ test("chromedeclutter-119: shell geometry budget (toolbar <= 48px, pathbar <= 36
   expect(geometry.pathbarH, "pathbar height measured").not.toBeNull();
   expect(geometry.pathbarH as number, "pathbar height <= 36px").toBeLessThanOrEqual(36);
 
-  expect(geometry.tabbarH, "tabbar height is 40px").toBe(40);
+  expect(geometry.tabbarH, "tabbar height is 32px").toBe(32);
   expect(geometry.shellTop, "shell top (tabbar+toolbar+pathbar) measured").not.toBeNull();
   expect(geometry.shellTop as number, "shell top <= 120px").toBeLessThanOrEqual(120);
   expect(geometry.allButtonsSingleRow, "all visible toolbar buttons align in a single row").toBe(true);
