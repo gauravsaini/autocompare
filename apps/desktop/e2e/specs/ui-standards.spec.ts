@@ -16,6 +16,8 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const EVID_DIR = "/tmp/ui-standards-235";
 
@@ -94,8 +96,7 @@ test("modal is centered and Esc-dismissed", async ({ page }) => {
   assertClean(consoleErrors, pageErrors);
 });
 
-test("docked bar is in-flow and Esc-dismissed", async ({ page }) => {
-  const { consoleErrors, pageErrors } = collectErrors(page);
+test("docked bar is in-flow and Esc-dismissed", async ({ page }) => {  const { consoleErrors, pageErrors } = collectErrors(page);
   await page.goto("/?gallery=1", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("gallery/root")).toBeVisible({ timeout: 15000 });
 
@@ -109,14 +110,132 @@ test("docked bar is in-flow and Esc-dismissed", async ({ page }) => {
   await expect(dock).toBeHidden({ timeout: 15000 });
 
   // Reopen via toggle, dismiss via the close button.
+  // Wave-239: closeTestId is the explicit wave-234 contract id
+  // (`gallery/dock-close`), not the DockedBar default suffix.
   await page.getByTestId("gallery/toggle-dock").click();
   await expect(dock).toBeVisible({ timeout: 15000 });
-  await page.getByTestId("gallery/dock/close").click();
+  await page.getByTestId("gallery/dock-close").click();
   await expect(dock).toBeHidden({ timeout: 15000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
   assertClean(consoleErrors, pageErrors);
 });
 
+test("unified view controls: single nav/filter/copy source, Esc contract, no raw dupes", async ({ page }) => {
+  const { consoleErrors, pageErrors } = collectErrors(page);
+  const evidDir = "/tmp/unified-239";
+  try {
+    if (!fs.existsSync(evidDir)) fs.mkdirSync(evidDir, { recursive: true });
+  } catch {
+    // best-effort
+  }
+
+  // Gallery primitive: every cluster renders with byte-identical demo testids.
+  await page.goto("/?gallery=1", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("gallery/section-unified")).toBeVisible({ timeout: 15000 });
+  for (const id of [
+    "gallery/unified-nav-prev",
+    "gallery/unified-nav-next",
+    "gallery/unified-filter-all",
+    "gallery/unified-filter-diffs",
+    "gallery/unified-filter-same",
+    "gallery/unified-diffsonly",
+    "gallery/unified-context",
+    "gallery/unified-copy-left",
+    "gallery/unified-copy-right",
+  ]) {
+    await expect(page.getByTestId(id), `gallery primitive ${id}`).toBeVisible({ timeout: 15000 });
+  }
+
+  // Clusters are interactive through the single implementation.
+  await page.getByTestId("gallery/unified-nav-next").click();
+  await expect(page.getByTestId("gallery/unified-note")).toContainText("nav: next");
+  await page.getByTestId("gallery/unified-filter-diffs").click();
+  await expect(page.getByTestId("gallery/unified-note")).toContainText("filter: diffs");
+  await page.getByTestId("gallery/unified-copy-left").click();
+  await expect(page.getByTestId("gallery/unified-note")).toContainText("copy: left");
+
+  // Esc contract (DockedBar parity): Esc dismisses the closable cluster.
+  await expect(page.getByTestId("gallery/unified-dismissable")).toBeVisible({ timeout: 15000 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("gallery/unified-dismissable")).toBeHidden({ timeout: 15000 });
+  await page.getByTestId("gallery/unified-reopen").click();
+  await expect(page.getByTestId("gallery/unified-dismissable")).toBeVisible({ timeout: 15000 });
+  await page.getByTestId("gallery/unified-close").click();
+  await expect(page.getByTestId("gallery/unified-dismissable")).toBeHidden({ timeout: 15000 });
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.screenshot({ path: `${evidDir}/gallery-unified.png` });
+
+  // Text view: every nav/filter/copy dupe rides the primitive (inside
+  // [data-unified-cluster]); no raw duplicate survives outside it or the
+  // top toolbar.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("view-text")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByTestId("textview/toolbar-prev-diff")).toBeVisible({ timeout: 15000 });
+  const dupes = await page.evaluate(() => {
+    const ids = [
+      "textview/toolbar-prev-diff",
+      "textview/toolbar-next-diff",
+      "textview/toolbar-copy-line-left",
+      "textview/toolbar-copy-line-right",
+      "textview/diffsonly-toggle",
+      "textview/context-lines",
+    ];
+    return ids.map((id) => {
+      const el = document.querySelector(`[data-testid="${id}"]`);
+      if (!el) return { id, found: false, unified: false };
+      return { id, found: true, unified: el.closest('[data-unified-cluster="nav"],[data-unified-cluster="filter"],[data-unified-cluster="copy"]') !== null };
+    });
+  });
+  for (const d of dupes) {
+    expect(d.found, `${d.id} stays mounted (byte-identical testid)`).toBe(true);
+    expect(d.unified, `${d.id} rides UnifiedViewControls (no raw duplicate)`).toBe(true);
+  }
+
+  // Static pins: folder/table/hex/merge toolbars render through the
+  // primitive (shared cluster present, raw dupe blocks gone). The dupe
+  // testids survive only as props to the unified clusters.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const srcRoot = path.resolve(here, "../../src/components/views");
+  const readSrc = (rel: string): string => fs.readFileSync(path.join(srcRoot, rel), "utf8");
+  const folderSrc = readSrc("folder/controls/FolderToolbar.tsx");
+  expect(folderSrc, "folder filter rides UnifiedFilterSegment").toContain("UnifiedFilterSegment");
+  expect(folderSrc, "folder keeps zero raw SegmentedControl dupes").not.toContain("<SegmentedControl");
+  const tableSrc = readSrc("table/controls/TableToolbar.tsx");
+  expect(tableSrc, "table nav rides UnifiedNavCluster").toContain("UnifiedNavCluster");
+  expect(tableSrc, "table keeps zero raw nav ToolbarButtons").not.toMatch(/<ToolbarButton[\s\S]{0,300}tableview\/toolbar-prev-diff/);
+  const hexSrc = readSrc("hex/controls/HexToolbar.tsx");
+  expect(hexSrc, "hex nav rides UnifiedNavCluster").toContain("UnifiedNavCluster");
+  expect(hexSrc, "hex keeps zero raw diff ToolbarButtons").not.toMatch(/<ToolbarButton[\s\S]{0,300}hex-diff-prev/);
+  const mergeSrc = readSrc("merge/controls/MergeToolbar.tsx");
+  expect(mergeSrc, "merge nav rides UnifiedNavCluster").toContain('variant="button"');
+  expect(mergeSrc, "merge keeps zero raw nav Buttons").not.toMatch(/<Button size="sm" data-testid="merge-prev"/);
+  const textSrc = readSrc("text/controls/TextToolbar.tsx");
+  expect(textSrc, "text nav/copy/filter ride the unified clusters").toContain("UnifiedNavCluster");
+  expect(textSrc, "text keeps zero raw nav ToolbarButtons").not.toMatch(/<ToolbarButton[\s\S]{0,300}textview\/toolbar-prev-diff/);
+
+  // Boxes evidence for REPORT (cluster geometry, in-flow check).
+  const boxes = await page.evaluate(() => {
+    const out: Record<string, { x: number; y: number; w: number; h: number } | null> = {};
+    for (const id of ["textview/toolbar-prev-diff", "textview/diffsonly-toggle", "textview/toolbar-copy-line-left"]) {
+      const el = document.querySelector(`[data-testid="${id}"]`);
+      if (!el) {
+        out[id] = null;
+        continue;
+      }
+      const r = el.getBoundingClientRect();
+      out[id] = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+    }
+    return out;
+  });
+  try {
+    fs.writeFileSync(`${evidDir}/boxes.json`, `${JSON.stringify(boxes, null, 2)}\n`);
+  } catch {
+    // best-effort
+  }
+  await page.screenshot({ path: `${evidDir}/text-unified.png` });
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  assertClean(consoleErrors, pageErrors);
+});
 test("empty contract: blank kinds share one honest empty, states are uniform", async ({ page }) => {
   const { consoleErrors, pageErrors } = collectErrors(page);
 

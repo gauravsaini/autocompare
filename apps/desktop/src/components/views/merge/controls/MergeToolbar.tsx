@@ -12,7 +12,7 @@
  * text-arrow glyphs); labels and testids unchanged.
  */
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
-import { Button, DotButton, StatusText, ToolbarButton } from "../../../ui";
+import { Button, DotButton, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface MergeToolbarProps {
   readonly position: string;
@@ -58,12 +58,18 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       data-testid="mergeview/toolbar"
       className="tv-controls-bar"
     >
-      <Button size="sm" data-testid="merge-prev" onClick={onPrev}>
-        <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Prev conflict
-      </Button>
-      <Button size="sm" data-testid="merge-next" onClick={onNext}>
-        Next conflict <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
-      </Button>
+      {/* Wave-239: conflict nav rides the shared UnifiedNavCluster (Button chrome, same testids). */}
+      <UnifiedNavCluster
+        variant="button"
+        prevTestid="merge-prev"
+        nextTestid="merge-next"
+        prevLabel="Prev conflict"
+        nextLabel="Next conflict"
+        prevIcon={ChevronLeft}
+        nextIcon={ChevronRight}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
       <StatusText data-testid="merge-conflict-position">
         {position}
       </StatusText>

@@ -24,3 +24,5 @@ export { default as EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
 export { default as InlineNotice } from "./InlineNotice";
 export type { InlineNoticeProps } from "./InlineNotice";
+export { default as UnifiedViewControls, UnifiedNavCluster, UnifiedFilterSegment, UnifiedDiffOnlyCluster, UnifiedCopyCluster, useUnifiedEsc } from "./UnifiedViewControls";
+export type { UnifiedViewControlsProps, UnifiedNavClusterProps, UnifiedFilterSegmentProps, UnifiedDiffOnlyClusterProps, UnifiedCopyClusterProps } from "./UnifiedViewControls";

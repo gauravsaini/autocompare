@@ -13,6 +13,7 @@ import Modal from "./Modal";
 import DockedBar from "./DockedBar";
 import EmptyState from "./EmptyState";
 import InlineNotice from "./InlineNotice";
+import { UnifiedCopyCluster, UnifiedDiffOnlyCluster, UnifiedFilterSegment, UnifiedNavCluster, useUnifiedEsc } from "./UnifiedViewControls";
 
 /**
  * Wave-232: UI primitive gallery (dev-only, `/?gallery=1`).
@@ -23,6 +24,13 @@ export function Gallery(): React.JSX.Element {
   const [seg, setSeg] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(true);
+  // Wave-239: UnifiedViewControls showcase state (presentational only).
+  const [unifiedFilter, setUnifiedFilter] = useState("all");
+  const [unifiedDiffsOnly, setUnifiedDiffsOnly] = useState(false);
+  const [unifiedContext, setUnifiedContext] = useState(3);
+  const [unifiedNote, setUnifiedNote] = useState("Unified clusters idle.");
+  const [unifiedPanelOpen, setUnifiedPanelOpen] = useState(true);
+  useUnifiedEsc(unifiedPanelOpen ? () => setUnifiedPanelOpen(false) : undefined, unifiedPanelOpen);
   return (
     <main data-testid="gallery/root" className="mx-auto flex w-full max-w-3xl flex-col gap-6 bg-[var(--ac-bg)] px-8 py-10 text-[var(--ac-fg)]">
       <h1 data-testid="gallery/title" className="ac-display font-semibold">
@@ -149,6 +157,67 @@ export function Gallery(): React.JSX.Element {
       <section aria-label="InlineNotice" data-testid="gallery/section-notice" className="flex flex-col gap-2">
         <h2 className="ac-title font-medium">InlineNotice</h2>
         <InlineNotice testid="gallery/notice">Minor toggle applies to text and table only.</InlineNotice>
+      </section>
+
+      <section aria-label="UnifiedViewControls" data-testid="gallery/section-unified" className="flex flex-col gap-2">
+        <h2 className="ac-title font-medium">UnifiedViewControls</h2>
+        <div className="flex flex-wrap items-center gap-2" data-testid="gallery/unified-nav">
+          <UnifiedNavCluster
+            prevTestid="gallery/unified-nav-prev"
+            nextTestid="gallery/unified-nav-next"
+            onPrev={() => setUnifiedNote("Unified nav: prev")}
+            onNext={() => setUnifiedNote("Unified nav: next")}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2" data-testid="gallery/unified-filter">
+          <UnifiedFilterSegment
+            label="Unified filter"
+            testid="gallery/unified-filter-group"
+            options={[
+              { value: "all", label: "All", testid: "gallery/unified-filter-all", pressed: unifiedFilter === "all", onSelect: () => { setUnifiedFilter("all"); setUnifiedNote("Unified filter: all"); } },
+              { value: "diffs", label: "Diffs", testid: "gallery/unified-filter-diffs", pressed: unifiedFilter === "diffs", onSelect: () => { setUnifiedFilter("diffs"); setUnifiedNote("Unified filter: diffs"); } },
+              { value: "same", label: "Same", testid: "gallery/unified-filter-same", pressed: unifiedFilter === "same", onSelect: () => { setUnifiedFilter("same"); setUnifiedNote("Unified filter: same"); } },
+            ]}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2" data-testid="gallery/unified-diffonly">
+          <UnifiedDiffOnlyCluster
+            toggleTestid="gallery/unified-diffsonly"
+            checked={unifiedDiffsOnly}
+            onToggle={setUnifiedDiffsOnly}
+            contextTestid="gallery/unified-context"
+            contextValue={unifiedContext}
+            onContext={setUnifiedContext}
+            contextDisabled={!unifiedDiffsOnly}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2" data-testid="gallery/unified-copy">
+          <UnifiedCopyCluster
+            leftTestid="gallery/unified-copy-left"
+            rightTestid="gallery/unified-copy-right"
+            leftTitle="Copy left (demo)"
+            rightTitle="Copy right (demo)"
+            onCopyLeft={() => setUnifiedNote("Unified copy: left")}
+            onCopyRight={() => setUnifiedNote("Unified copy: right")}
+          />
+        </div>
+        <StatusText data-testid="gallery/unified-note" role="status">
+          {unifiedNote}
+        </StatusText>
+        {unifiedPanelOpen ? (
+          <div data-testid="gallery/unified-dismissable" className="flex items-center gap-2">
+            <StatusText data-testid="gallery/unified-dismissable-note">Esc dismisses this cluster (DockedBar contract).</StatusText>
+            <Button variant="secondary" size="sm" onClick={() => setUnifiedPanelOpen(false)} data-testid="gallery/unified-close">
+              Dismiss unified
+            </Button>
+          </div>
+        ) : (
+          <div>
+            <Button variant="secondary" size="sm" onClick={() => setUnifiedPanelOpen(true)} data-testid="gallery/unified-reopen">
+              Reopen unified
+            </Button>
+          </div>
+        )}
       </section>
     </main>
   );

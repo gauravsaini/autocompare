@@ -11,8 +11,8 @@
  * specs keep passing unmodified.
  */
 
-import { ArrowDownToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { Button, Checkbox, Field, Select, StatusText, ToolbarButton } from "../../../ui";
+import { ArrowDownToLine, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Button, Checkbox, Field, Select, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface HexToolbarProps {
   readonly pageLabel: string;
@@ -94,19 +94,18 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       {/* HEX2: diff-only navigation (BC next/previous difference).
-          Same row, honest busy disable; receipt rides `hex-diff-status`. */}
-      <ToolbarButton data-testid="hex-diff-prev" onClick={() => {
-        if (onBusCommand) onBusCommand("prev");
-        else onPrevDiff();
-      }} disabled={diffNavBusy} icon={ChevronUp} label="Prev diff">
-        Prev diff
-      </ToolbarButton>
-      <ToolbarButton data-testid="hex-diff-next" onClick={() => {
-        if (onBusCommand) onBusCommand("next");
-        else onNextDiff();
-      }} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
-        Next diff
-      </ToolbarButton>
+          Wave-239: rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="hex-diff-prev"
+        nextTestid="hex-diff-next"
+        prevLabel="Prev diff"
+        nextLabel="Next diff"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        prevDisabled={diffNavBusy}
+        nextDisabled={diffNavBusy}
+        onBusCommand={onBusCommand}
+      />
       <StatusText data-testid="hex-diff-status" role="status">
         {diffStatusText}
       </StatusText>

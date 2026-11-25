@@ -1,5 +1,5 @@
 import { Code, Columns3, Play, RefreshCw, Search } from "lucide-react";
-import { SegmentedControl, ToolbarButton } from "../../../ui";
+import { ToolbarButton, UnifiedFilterSegment } from "../../../ui";
 
 /**
  * Wave-67B / Wave-B3: single-row folder controls toolbar (Beyond Compare style).
@@ -78,7 +78,8 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       data-testid="folderview/toolbar"
       className="tv-controls-bar"
     >
-      <SegmentedControl<"all" | "diffs" | "same" | "changes-only">
+      {/* Wave-239: All/Diffs/Same + changes-only rides the shared UnifiedFilterSegment (same testids). */}
+      <UnifiedFilterSegment<"all" | "diffs" | "same" | "changes-only">
         size="sm"
         label="Row filter"
         options={[
