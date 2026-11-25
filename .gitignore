@@ -25,3 +25,6 @@ craft.json
 /checks/
 /inbox/
 /investigation.cany
+
+# fixD4 hygiene: one-off chromium preview scratch (never a source artifact)
+**/shot-preview.mjs
