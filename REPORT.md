@@ -1597,3 +1597,31 @@ GATE: PASS — install 2x EXIT 0, smoke 2x EXIT 0 (fixed script), screenshots me
 4. FAIL counter: same-fail 1x (fix ke baad do green) — BLOCKER nahi bana.
 
 ---
+# W-D Hex/Merge/Media Toolbar Parity — REPORT (Wave-WD)
+
+## UPDATED ON: 2026-11-25
+
+### WD toolbar parity (2026-11-25) — verify-only, naya spec + 2x green
+
+1. **Scope**: Hex, Merge, aur Media ke owned controls check kiye:
+   - Hex: `HexToolbar.tsx`, `HexFindPanel.tsx`, `HexGotoPanel.tsx`
+   - Merge: `MergeToolbar.tsx`, `MergeFindPanel.tsx`
+   - Media: `MediaToolbar.tsx`, `MediaTolerancePanel.tsx`, `index.ts`
+   Sabhi controls pehle se 100% shared UI primitives pe unified hain:
+   `Button`, `Checkbox`, `DockedBar`, `DotButton`, `Field`, `Input`, `Modal`, `Select`, `StatusText`, `ToolbarButton`, `UnifiedNavCluster`.
+   Toolbars `tv-controls-bar` aur `tv-controls-sep` use karte hain.
+   Hex aur Merge Find/Goto panels `DockedBar` in-flow collapsible panels pe hain.
+   Media Tolerance panel shared `Modal` primitive (`role="dialog"`, `aria-modal`, Esc/backdrop/close single `onClose`) pe hai.
+   Isliye styling edit ZERO — logic, testids, IPC wiring, Esc-contract, modal-shape byte-identical untouched.
+2. **Naya spec**: `apps/desktop/e2e/specs/hexmergemedia-WD.spec.ts`
+   - Test 1 (Hex): HexToolbar controls intact, page nav + diff nav `UnifiedNavCluster` + diffs-only + bytes/line + sync-scroll + copy group + find/goto toggles; `HexFindPanel` & `HexGotoPanel` DockedBar open/close via button + Esc; light+dark screenshot evidence; assertNoOverlap; clean console.
+   - Test 2 (Merge): MergeToolbar controls intact, conflict nav `UnifiedNavCluster` + conflict position + take all left/right + find toggle; `MergeFindPanel` DockedBar open/close via toggle, close button, Esc key; light+dark screenshot evidence; assertNoOverlap; clean console.
+   - Test 3 (Media): MediaToolbar picture mode vs audio mode controls; `MediaTolerancePanel` Modal open by default in audio mode, close via button, re-open via toggle, dismiss via Esc; tolerance coarse slider + precision input recompare round-trip; light+dark screenshot evidence; assertNoOverlap; clean console.
+   Light+dark PNGs sirf `/tmp/hexmergemedia-WD/` me save hue, repo me koi screenshot commit nahi.
+3. **Gate** (fresh PORT 1893, realpath DIR `/private/tmp/wt-WD/apps/desktop`, webkit, --workers=1):
+   `tsc 0` + `hexmergemedia-WD.spec.ts + ui-standards.spec.ts + chrome-budget.spec.ts`
+   = **9/9 ALL GREEN x2** consecutively (run1 11.8s, run2 11.6s, exit 0).
+4. **Guardrails**: NO commit/push/merge. NO testid change, NO existing spec edit. folder/sync/table/text + shared chrome untouched.
+5. **Blocker**: koi nahi. FAIL-count 0, stop-trigger nahi laga.
+
+---
