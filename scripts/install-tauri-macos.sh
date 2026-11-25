@@ -19,6 +19,18 @@ BUNDLES="${BUNDLES:-app}"
 TAURI_BIN="$(command -v cargo-tauri 2>/dev/null || echo "$HOME/.cargo/bin/cargo-tauri")"
 [ -x "$TAURI_BIN" ] || { echo "MISSING cargo-tauri ($TAURI_BIN)"; exit 1; }
 
+# 0. Frontend deps: fresh clones/worktrees lack node_modules; install once.
+# NOTE: npm (not pnpm) — apps/desktop tracks package-lock.json, and pnpm v11's
+# pre-build install check fails on ignored esbuild scripts (see step 1 NOTE).
+if [ ! -x "$DESK/node_modules/.bin/tsc" ]; then
+  echo "INSTALL_DEPS $DESK (node_modules missing)"
+  if [ -f "$DESK/package-lock.json" ]; then
+    (cd "$DESK" && npm ci --no-audit --no-fund)
+  else
+    (cd "$DESK" && npm install --no-audit --no-fund)
+  fi
+fi
+
 # 1. Frontend: typecheck + vite build via node_modules binaries directly.
 # NOTE: `pnpm build` is deliberately avoided — pnpm v11's pre-build install
 # check fails on ignored esbuild scripts (ERR_PNPM_IGNORED_BUILDS).
