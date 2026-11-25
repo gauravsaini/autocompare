@@ -225,6 +225,10 @@
   /* Checkbox & Tab Chip Tokens (Light) */
   --ac-checkbox-size: 13px;
   --ac-tab-chip-h: 24px;
+  /* TABS2: BC-standard uniform chip clamps (readable floor 96, ellipsis
+     cap 180; TabBar chips `flex-1 basis-0` share inside this band). */
+  --ac-tab-min-w: 96px;
+  --ac-tab-max-w: 180px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -351,6 +355,9 @@
     /* Checkbox & Tab Chip Tokens (Dark) */
     --ac-checkbox-size: 13px;
     --ac-tab-chip-h: 24px;
+    /* TABS2: BC-standard uniform chip clamps (dark mirror, values identical). */
+    --ac-tab-min-w: 96px;
+    --ac-tab-max-w: 180px;
   }
 }
 
