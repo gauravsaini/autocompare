@@ -64,6 +64,12 @@ export interface ChromeShellProps {
   onJump?: (index: number) => void;
   /** Wave-13: currently visible top row highlighted by the ruler. */
   activeIndex?: number;
+  /** Wave-206: optional file encoding label (e.g. UTF-8) */
+  encoding?: string;
+  /** Wave-206: optional line/column indicator (e.g. Ln 1, Col 1) */
+  lineCol?: string;
+  /** Wave-206: optional zoom level indicator (e.g. 100%) */
+  zoom?: string;
   /**
    * Wave-21: bottom detail zone (Beyond Compare style line detail pane).
    * Rendered between the view and the status bar; absent/null renders
@@ -96,6 +102,9 @@ export function ChromeShell({
   diffRows,
   onJump,
   activeIndex,
+  encoding,
+  lineCol,
+  zoom,
   detail,
   children,
 }: ChromeShellProps): React.JSX.Element {
@@ -152,7 +161,7 @@ export function ChromeShell({
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onNewTab={onNewTab}
-          className="min-w-0 max-w-[280px] shrink"
+          className="min-w-0 max-w-[280px] shrink border-r border-[var(--ac-border)]"
         />
         <Toolbar actions={toolbar.actions} className="min-w-0 flex-1" />
       </div>
@@ -174,7 +183,14 @@ export function ChromeShell({
         <main className="min-w-0 flex-1">{children}</main>
       </div>
       {detail}
-      <StatusBar left={status.left} right={status.right} message={displayMessage} />
+      <StatusBar
+        left={status.left}
+        right={status.right}
+        message={displayMessage}
+        encoding={encoding}
+        lineCol={lineCol}
+        zoom={zoom}
+      />
     </div>
   );
 }

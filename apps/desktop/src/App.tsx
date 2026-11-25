@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
+import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Home, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
 import { ChromeShell, rowIndexToScrollTop, textCompareKindToDiffKind } from "./components/chrome";
 import {
   dispatchViewCommand,
@@ -1985,56 +1985,14 @@ export default function App(): React.JSX.Element {
   const filterReason = filterEnabled ? null : "needs an open session";
 
   const toolbarActions: readonly ToolbarAction[] = [
+    {
+      id: "home",
+      icon: Home,
+      label: "Home",
+      enabled: true,
+      onClick: () => handleSelectTab(WELCOME_TAB.id),
+    },
     { id: "open", icon: FolderOpen, label: "Open session", enabled: true, onClick: () => setManagerOpen(true) },
-    {
-      id: "compare",
-      icon: Columns2,
-      label: compareBlockedReason ? `Compare (${compareBlockedReason})` : "Compare",
-      enabled: compareBlockedReason === null,
-      onClick: handleCompare,
-    },
-    {
-      id: "swap",
-      icon: ArrowLeftRight,
-      label: "Swap sides",
-      enabled: activeSession !== null,
-      disabledReason: activeSession !== null ? null : "needs an open session",
-      onClick: () => handleViewCommand("swap"),
-    },
-    {
-      // Wave-L2: bus-routed (text keeps the live hunk handlers; FIXM
-      // GAP-13: merge dispatches the conflict bus, staying enabled with
-      // conflict labels; other kinds park with the L3-wiring reason).
-      id: "prev-hunk",
-      icon: ChevronUp,
-      label:
-        hunkNavEnabled || viewKind === "text"
-          ? hunkNavEnabled
-            ? "Previous hunk"
-            : "Previous hunk (no hunks)"
-          : mergeNavActive
-            ? "Previous conflict"
-            : "Previous hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled || mergeNavActive,
-      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
-      onClick: () => handleViewCommand("prev"),
-    },
-    {
-      // Wave-L2: bus-routed, same per-kind honesty as prev-hunk.
-      id: "next-hunk",
-      icon: ChevronDown,
-      label:
-        hunkNavEnabled || viewKind === "text"
-          ? hunkNavEnabled
-            ? "Next hunk"
-            : "Next hunk (no hunks)"
-          : mergeNavActive
-            ? "Next conflict"
-            : "Next hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled || mergeNavActive,
-      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
-      onClick: () => handleViewCommand("next"),
-    },
     {
       // Wave-161: lifted BC View filters — the single dispatch point for
       // All/Diffs/Same/Context (every view listens on the bus; no
@@ -2128,6 +2086,55 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewCommand("copy"),
     },
     {
+      // Wave-L2: bus-routed, same per-kind honesty as prev-hunk.
+      id: "next-hunk",
+      icon: ChevronDown,
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Next hunk"
+            : "Next hunk (no hunks)"
+          : mergeNavActive
+            ? "Next conflict"
+            : "Next hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("next"),
+    },
+    {
+      // Wave-L2: bus-routed (text keeps the live hunk handlers; FIXM
+      // GAP-13: merge dispatches the conflict bus, staying enabled with
+      // conflict labels; other kinds park with the L3-wiring reason).
+      id: "prev-hunk",
+      icon: ChevronUp,
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Previous hunk"
+            : "Previous hunk (no hunks)"
+          : mergeNavActive
+            ? "Previous conflict"
+            : "Previous hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("prev"),
+    },
+    {
+      id: "swap",
+      icon: ArrowLeftRight,
+      label: "Swap sides",
+      enabled: activeSession !== null,
+      disabledReason: activeSession !== null ? null : "needs an open session",
+      onClick: () => handleViewCommand("swap"),
+    },
+    {
+      id: "compare",
+      icon: Columns2,
+      label: compareBlockedReason ? `Compare (${compareBlockedReason})` : "Compare",
+      enabled: compareBlockedReason === null,
+      onClick: handleCompare,
+    },
+    {
       id: "copy-right",
       icon: Copy,
       label: copyInHunk
@@ -2196,6 +2203,15 @@ export default function App(): React.JSX.Element {
         diffRows={rulerRows}
         onJump={handleRulerJump}
         activeIndex={rulerActive}
+        encoding={activeSession ? "UTF-8" : undefined}
+        lineCol={
+          selectedRow
+            ? `Ln ${selectedRow.index + 1}, Col 1`
+            : activeSession
+              ? "Ln 1, Col 1"
+              : undefined
+        }
+        zoom={activeSession ? "100%" : undefined}
         detail={viewKind === "text" ? <LineDetailPane row={selectedRow} /> : null}
       >
         {inlineError && (

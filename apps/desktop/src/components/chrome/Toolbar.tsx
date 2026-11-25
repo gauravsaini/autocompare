@@ -76,13 +76,44 @@ export const COMPARE_BUSY_REASON = "comparing…";
 /** Reason shown on Stop/Refresh when no compare is running. */
 export const COMPARE_IDLE_STOP_REASON = "no compare running";
 
+const BC_LABELS: Record<string, string> = {
+  home: "Home",
+  open: "Sessions",
+  "filter-all": "All",
+  "filter-diffs": "Diffs",
+  "filter-same": "Same",
+  "filter-context": "Context",
+  minor: "Minor",
+  rules: "Rules",
+  format: "Format",
+  copy: "Copy",
+  "next-hunk": "Next",
+  "prev-hunk": "Prev",
+  swap: "Swap",
+  compare: "Compare",
+};
+
 /**
- * Wave-52: short display label for icon-above-label buttons. Strips the
- * parenthesized reason suffix (`Compare (needs two paths)` -> `Compare`);
- * the full label always stays in `aria-label` + `title`.
+ * Wave-52 / Wave-206: short display label for icon-above-label buttons.
+ * Maps actions to concise Beyond Compare button labels (Home, Sessions,
+ * All, Diffs, Same, Context, Minor, Rules, Format, Copy, Next, Prev,
+ * Swap, Reload) preventing label truncation in compact buttons; strips
+ * parenthesized reason suffix; the full label stays in aria-label + title.
  */
-export function displayLabelOf(label: string): string {
-  return label.replace(/\s*\([^)]*\)\s*$/, "").trim() || label;
+export function displayLabelOf(label: string, id?: string): string {
+  if (id && BC_LABELS[id]) {
+    return BC_LABELS[id];
+  }
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim() || label;
+  if (/^open\s*session/i.test(stripped)) return "Sessions";
+  if (/^show\s*all/i.test(stripped)) return "All";
+  if (/^show\s*diff/i.test(stripped)) return "Diffs";
+  if (/^show\s*same/i.test(stripped)) return "Same";
+  if (/^prev(ious)?(\s*hunk|\s*conflict)?/i.test(stripped)) return "Prev";
+  if (/^next(\s*hunk|\s*conflict)?/i.test(stripped)) return "Next";
+  if (/^swap(\s*sides)?/i.test(stripped)) return "Swap";
+  if (/^refresh/i.test(stripped)) return "Reload";
+  return stripped;
 }
 
 /**
@@ -251,8 +282,16 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
         const handleActionClick = actionEnabled ? action.onClick : undefined;
         // Wave-116: idle Prev/Next collapse out of the bar (testid stays
         // mounted, honestly hidden) instead of holding an always-on slot.
+        // Wave-206: sync/merge also collapse when idle/disabled so toolbar
+        // stays clean and unbloated across views.
         const idleCollapsed =
-          !isCompare && !actionEnabled && (action.id === "prev-hunk" || action.id === "next-hunk" || action.id === "copy-right");
+          !isCompare &&
+          !actionEnabled &&
+          (action.id === "prev-hunk" ||
+            action.id === "next-hunk" ||
+            action.id === "copy-right" ||
+            action.id === "sync" ||
+            action.id === "merge");
         const actionClass = idleCollapsed ? `${buttonClass} !hidden` : buttonClass;
         const Icon = action.icon;
         const compareButton = (
@@ -276,7 +315,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
             )}
             <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">
-              {displayLabelOf(action.label)}
+              {displayLabelOf(action.label, action.id)}
             </span>
           </ToolbarButton>
         );
@@ -317,7 +356,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
             >
               <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" className={busy ? "animate-spin" : undefined} />
               <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">
-                Refresh
+                Reload
               </span>
             </ToolbarButton>
           </React.Fragment>
