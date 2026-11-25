@@ -152,16 +152,28 @@ export function ChromeShell({
        * tabs at a 60px floor (close inside, centers clear; strip scrolls,
        * invisible to view-scoped gates) while the merge toolbar still
        * ends ~1245px at 1280.
+       * Wave-223: BC parity ends the shared-band contract on purpose.
+       * Beyond Compare puts the tab strip on its own row and the toolbar
+       * actions on the NEXT row (tabs, toolbar, paths). The 15 icon+label
+       * actions leave the 44px tab band for their own full-width 44px row
+       * below the strip, so the merge toolbar fits 1280 without clip while
+       * the 520-cap tab strip keeps its internal scroll for 8 tabs. Shell
+       * above panes returns to 3 rows (40 tab + 44 toolbar + 32 path = 116,
+       * inside the 120 budget). A 1px column gap sits between the two band rows
+       * so the toolbar buttons' half-pixel bleed can never touch the tab strip
+       * (the full-page overlap gate measures boxes, not painted pixels).
+       * No new chrome row beyond the toolbar row.
        * Chips keep the W186 shrink-to-fit + ellipsis, so 3 tabs fit.
        * In-view toolbars (Text/Table/Hex/Merge) are views-owned (off
        * limits here) and already single-row + bus-unified (W161/W170);
-       * Find/Goto ride overlays, no new stacked row anywhere. All
+       * Find/Goto ride overlays, no new stacked row anywhere beyond the
+       * toolbar's own row. All
        * testids, heights-per-component, labels, wiring byte-identical —
        * placement only.
        */}
       <div
         data-testid="chrome/band"
-        className="flex h-[var(--ac-toolbar-h)] items-center border-b border-[var(--ac-border)] bg-[var(--ac-tab-bg)]"
+        className="flex flex-col gap-[1px] border-b border-[var(--ac-border)] bg-[var(--ac-tab-bg)]"
       >
         <TabBar
           tabs={tabs}
@@ -169,9 +181,9 @@ export function ChromeShell({
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onNewTab={onNewTab}
-          className="min-w-0 max-w-[520px] shrink border-r border-[var(--ac-border)]"
+          className="min-w-0 max-w-[520px] shrink-0 border-b border-[var(--ac-border)]"
         />
-        <Toolbar actions={toolbar.actions} className="min-w-0 flex-1" />
+        <Toolbar actions={toolbar.actions} className="min-w-0 w-full flex-none" />
       </div>
       <PathBar
         leftPath={leftPath}

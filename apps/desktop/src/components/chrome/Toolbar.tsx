@@ -27,10 +27,12 @@ export interface ToolbarAction {
 export interface ToolbarProps {
   actions: readonly ToolbarAction[];
   /**
-   * Wave-174: optional band-siting hook. `ChromeShell` renders Toolbar +
-   * TabBar side-by-side in ONE 44px chrome band (BC parity); the caller
-   * passes flex sizing (`min-w-0 flex-1` + internal `overflow-x-auto`
-   * keeps the single-row guarantee). Heights/testids/wiring untouched.
+   * Wave-174: optional band-siting hook. `ChromeShell` used to render Toolbar +
+   * TabBar side-by-side in ONE 44px chrome band; Wave-223 restores BC
+   * parity (tab strip on its own row, toolbar actions on the NEXT row),
+   * so the caller now passes full-width row sizing (`min-w-0 w-full` +
+   * internal `overflow-x-auto` keeps the single-row guarantee for the
+   * toolbar's own row). Heights/testids/wiring untouched.
    */
   className?: string;
   /**
