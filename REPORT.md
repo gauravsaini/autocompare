@@ -1463,3 +1463,34 @@ Blocker: koi nahi. FAIL 3x wala case aaya hi nahi.
     folder/sync/table/hex/merge untouched.
 
 ---
+# W-B Sync/Table Toolbar Parity — REPORT (Wave-WB)
+
+## UPDATED ON: 2026-11-25
+
+### WB toolbar parity (2026-11-25) — verify-only, naya spec + 2x green
+
+1. **Scope**: Sirf 3 owned files check kiye — `SyncToolbar.tsx`,
+   `SyncNamePanel.tsx`, `TableToolbar.tsx`. Teenon pehle se shared ui
+   primitives pe hain (base 6f35b38): direction `SegmentedControl`,
+   options `Button`/`Checkbox`/`Input`/`Select`, name filter
+   `DockedBar`, diff nav `UnifiedNavCluster`. Koi bespoke control nahi
+   bacha (bache hue 2 `<label>` sirf semantic label hain, control
+   `Select`/`Input` ui ke hain). Isliye styling edit ZERO — logic,
+   testid, IPC, localStorage wiring byte-identical untouched.
+2. **Persist**: Table options `ac.viewstate.v1.table` (ignoreWs,
+   ignoreCase, delimiter, epsilon) via `viewPersist.ts` — round-trip +
+   corrupt-fallback spec me pin. Sync direction/prune unpersisted
+   (boot defaults, no-opts wire) — waisa hi rakha, koi change nahi.
+3. **Naya spec**: `apps/desktop/e2e/specs/synctable-toolbar-WB.spec.ts`
+   (2 tests — sync segments flip + prune re-plan; table primitives +
+   persist round-trip + corrupt-defaults; light+dark PNGs sirf
+   `/tmp/synctable-WB/` me, repo me koi screenshot nahi).
+4. **Gate** (fresh PORT 1883, realpath DIR, webkit, --workers=1):
+   `tsc 0` + `synctable-toolbar-WB + ui-standards + chrome-budget`
+   = **8/8 ALL GREEN x2** (run1 11.7s, run2 11.2s, exit 0).
+5. **Guardrails**: NO commit/push/merge (worktree me sirf 2 untracked
+   files: naya spec + ye REPORT). NO testid change, NO existing spec
+   edit, folder/text/hex/merge + shared chrome untouched.
+6. **Blocker**: koi nahi. FAIL-count 0, stop-trigger nahi laga.
+
+---
