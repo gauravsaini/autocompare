@@ -7,6 +7,8 @@ import { Button, Checkbox, EmptyState, InlineNotice, Input, Select, StatusText }
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
+// Wave-C3a: per-view compare-option persistence (reload-proof controls).
+import { loadViewState, saveViewState } from "../../state/viewPersist";
 
 /**
  * Table (CSV) comparison grid (Wave 2B).
@@ -418,13 +420,30 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // Wave-168: table ignore flags (Beyond Compare parity). Both default
   // false = exact cell match. Toggling either re-issues `table_compare`
   // with `{ ignoreCase, ignoreSpace }` and updates cell diffs and totals.
-  const [ignoreWs, setIgnoreWs] = useState(false);
-  const [ignoreCase, setIgnoreCase] = useState(false);
+  // Wave-C3a: compare options reload-proof (localStorage
+  // `ac.viewstate.v1.table`, corrupt = defaults). Lazy-init restores the
+  // pre-reload values (the compare effect deps already re-issue
+  // `table_compare`, so restored values apply on mount); every change
+  // re-persists. No layout/testid change.
+  const [persistedTableOpts] = useState(() =>
+    loadViewState("table", {
+      ignoreWs: false,
+      ignoreCase: false,
+      delimiter: ",",
+      epsilon: "",
+    }),
+  );
+  const [ignoreWs, setIgnoreWs] = useState(persistedTableOpts.ignoreWs);
+  const [ignoreCase, setIgnoreCase] = useState(persistedTableOpts.ignoreCase);
   // Wave-C2c: engine-ready table options. `delimiter` is the field
   // separator (`","` default); `epsilon` is the numeric-tolerance text
   // (empty = exact). Both re-issue `table_compare` via the effect deps.
-  const [delimiter, setDelimiter] = useState(",");
-  const [epsilon, setEpsilon] = useState("");
+  const [delimiter, setDelimiter] = useState(persistedTableOpts.delimiter);
+  const [epsilon, setEpsilon] = useState(persistedTableOpts.epsilon);
+  // Wave-C3a: every option change re-persists (control state only).
+  useEffect(() => {
+    saveViewState("table", { ignoreWs, ignoreCase, delimiter, epsilon });
+  }, [ignoreWs, ignoreCase, delimiter, epsilon]);
   // Echo of the backend summary: effective mode + key columns. Empty
   // `keyColumns` with `byKey` requested means positional fallback.
   const [effectiveByKey, setEffectiveByKey] = useState(false);

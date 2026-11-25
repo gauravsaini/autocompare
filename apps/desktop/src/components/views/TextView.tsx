@@ -12,6 +12,8 @@ import { RowLine } from "./text/RowLine";
 // Wave-161: bus event names shared with the top Toolbar (leaf module —
 // no chrome barrel import, so no view/chrome cycle).
 import { VIEW_COMMAND_EVENT, VIEW_MINOR_EVENT } from "../chrome/ViewCommandBus";
+// Wave-C3a: per-view compare-option persistence (reload-proof controls).
+import { loadViewState, saveViewState } from "../../state/viewPersist";
 
 /**
  * Side-by-side text comparison view (Wave 2B, real-data first paint Wave 5B).
@@ -777,6 +779,10 @@ export default function TextView({
     readonly { start: number; end: number; dir: TextSide; target: TextSide }[]
   >([]);
   const copyHunkAtRef = useRef<(rowIndex: number, dir: TextSide) => Promise<void>>(async () => {});
+  // Wave-C3a: session key for the legacy session-switch option reset.
+  // First mount keeps the restored (persisted) options; a real path /
+  // session change still resets them to defaults.
+  const sessionKeyRef = useRef<string | null>(null);
   // Wave-21: row selection. `App` controls this (passing selectedIndex
   // + onSelectRow) so the bottom LineDetailPane reuses the already-loaded
   // row; uncontrolled fallback keeps standalone mounts clickable.
@@ -1153,8 +1159,22 @@ export default function TextView({
   // echo `appliedOptions` (mock + real) reload the re-diffed rows,
   // while a genuinely old backend with no echo keeps the current diff
   // with an honest inline note.
-  const [ignoreWs, setIgnoreWs] = useState(false);
-  const [ignoreCase, setIgnoreCase] = useState(false);
+  // Wave-C3a: compare options reload-proof (localStorage
+  // `ac.viewstate.v1.text`, corrupt = defaults). Lazy-init restores the
+  // pre-reload values; the session-switch effect below skips THESE resets
+  // on first mount, and every change re-persists. No layout/testid change.
+  const [persistedTextOpts] = useState(() =>
+    loadViewState("text", {
+      ignoreWs: false,
+      ignoreCase: false,
+      encoding: "",
+      eol: "",
+      algorithm: "myers",
+      ignoreBlank: false,
+    }),
+  );
+  const [ignoreWs, setIgnoreWs] = useState(persistedTextOpts.ignoreWs);
+  const [ignoreCase, setIgnoreCase] = useState(persistedTextOpts.ignoreCase);
   const [ignoreBusy, setIgnoreBusy] = useState(false);
   // Wave-34: Beyond Compare style word-wrap toggle (off by default = single
   // line with horizontal scroll, cleared on session switch in the effect
@@ -1207,10 +1227,14 @@ export default function TextView({
   // `"myers"` default (legacy exact wire when everything else is off),
   // `false` default; both ride the typed `textCompare` wrapper.
   const [formatOpen, setFormatOpen] = useState(false);
-  const [encoding, setEncoding] = useState("");
-  const [eol, setEol] = useState("");
-  const [algorithm, setAlgorithm] = useState("myers");
-  const [ignoreBlank, setIgnoreBlank] = useState(false);
+  const [encoding, setEncoding] = useState(persistedTextOpts.encoding);
+  const [eol, setEol] = useState(persistedTextOpts.eol);
+  const [algorithm, setAlgorithm] = useState(persistedTextOpts.algorithm);
+  const [ignoreBlank, setIgnoreBlank] = useState(persistedTextOpts.ignoreBlank);
+  // Wave-C3a: every option change re-persists (control state only).
+  useEffect(() => {
+    saveViewState("text", { ignoreWs, ignoreCase, encoding, eol, algorithm, ignoreBlank });
+  }, [ignoreWs, ignoreCase, encoding, eol, algorithm, ignoreBlank]);
   // Wave-66R: toolbar prev/next difference position note. Set only by
   // the toolbar diff nav; honest empty-backend note when no hunks.
   const [diffNote, setDiffNote] = useState<string | null>(null);
@@ -1481,8 +1505,19 @@ export default function TextView({
     setLeftMeta(null);
     setRightMeta(null);
     setInnerSelected(null);
-    setIgnoreWs(false);
-    setIgnoreCase(false);
+    // Wave-C3a: persisted compare options survive first mount (reload);
+    // only a real session switch resets them (legacy behavior).
+    const sessionKey = `${leftPath}${rightPath}${existingSession ?? ""}`;
+    const sessionChanged = sessionKeyRef.current !== null && sessionKeyRef.current !== sessionKey;
+    sessionKeyRef.current = sessionKey;
+    if (sessionChanged) {
+      setIgnoreWs(false);
+      setIgnoreCase(false);
+      setEncoding("");
+      setEol("");
+      setAlgorithm("myers");
+      setIgnoreBlank(false);
+    }
     setIgnoreBusy(false);
     setWrap(false);
     setShowLineNos(true);
@@ -1495,10 +1530,6 @@ export default function TextView({
     setGotoOpen(false);
     setIgnoreOpen(false);
     setFormatOpen(false);
-    setEncoding("");
-    setEol("");
-    setAlgorithm("myers");
-    setIgnoreBlank(false);
     setDiffNote(null);
     (async () => {
       try {
