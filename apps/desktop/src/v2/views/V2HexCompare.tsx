@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
@@ -172,57 +173,18 @@ export default function V2HexCompare({
     }
   };
 
-  const handleBrowse = async (side: "left" | "right"): Promise<void> => {
-    try {
-      const mod = await import("@tauri-apps/plugin-dialog");
-      const picked = await mod.open({ multiple: false, directory: false });
-      if (typeof picked === "string" && picked) {
-        const nextL = side === "left" ? picked : leftDraft;
-        const nextR = side === "right" ? picked : rightDraft;
-        setLeftDraft(nextL);
-        setRightDraft(nextR);
-        onPathsChange(nextL, nextR);
-      }
-    } catch {
-      // Browser fallback
-    }
-  };
-
   return (
     <div data-testid="v2/hex-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
-      {/* Dual-Pane Path Bars */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onPathsChange(leftDraft.trim(), rightDraft.trim());
-        }}
-        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
-        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
-      >
-        {(["left", "right"] as const).map((side) => {
-          const val = side === "left" ? leftDraft : rightDraft;
-          const setVal = side === "left" ? setLeftDraft : setRightDraft;
-          return (
-            <div
-              key={side}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 ${
-                side === "left" ? "border-r border-[var(--v2-border)]" : ""
-              }`}
-            >
-              <input
-                type="text"
-                value={val}
-                onChange={(e) => setVal(e.target.value)}
-                placeholder={side === "left" ? "Left binary path…" : "Right binary path…"}
-                className="v2-input v2-mono min-w-0 flex-1 text-[11.5px]"
-              />
-              <button type="button" onClick={() => void handleBrowse(side)} className="v2-btn px-2" title={`Browse ${side}`}>
-                <FolderOpen size={13} />
-              </button>
-            </div>
-          );
-        })}
-      </form>
+      <V2DualPathBar
+        leftValue={leftDraft}
+        rightValue={rightDraft}
+        onLeftChange={setLeftDraft}
+        onRightChange={setRightDraft}
+        onSubmit={onPathsChange}
+        leftPlaceholder="Left binary path…"
+        rightPlaceholder="Right binary path…"
+        splitPct={splitPct}
+      />
 
       {/* Docked Hex Find Bar */}
       {findOpen ? (

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Save, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   textApplyEdit,
   textApplyHunk,
@@ -11,6 +11,7 @@ import {
 import type { InlineSpanDto, TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2Modal from "../components/V2Modal";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2DualPathBar from "../components/V2DualPathBar";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
@@ -390,21 +391,7 @@ export default function V2TextCompare({
     }
   };
 
-  const handleBrowse = async (side: TextSide): Promise<void> => {
-    try {
-      const mod = await import("@tauri-apps/plugin-dialog");
-      const picked = await mod.open({ multiple: false, directory: false });
-      if (typeof picked === "string" && picked) {
-        const nextL = side === "left" ? picked : leftDraft;
-        const nextR = side === "right" ? picked : rightDraft;
-        setLeftDraft(nextL);
-        setRightDraft(nextR);
-        onPathsChange(nextL, nextR);
-      }
-    } catch {
-      setNotice("Native file picker requires the Tauri desktop app — type a path and press Enter.");
-    }
-  };
+
 
   const selectedRow = useMemo(
     () => (selectedIndex === null ? null : (rows.find((r) => r.index === selectedIndex) ?? null)),
@@ -475,67 +462,40 @@ export default function V2TextCompare({
     });
   }, [onStatusChange, hunks.length, notice, algorithm, encoding, eol, summary, rows.length]);
 
-  const submitPaths = (e: React.FormEvent): void => {
-    e.preventDefault();
-    onPathsChange(leftDraft.trim(), rightDraft.trim());
-  };
-
   return (
     <div data-testid="v2/text-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
-      {/* Per-pane 50/50 Path + Metadata Header (Beyond Compare alignment) */}
-      <form
-        onSubmit={submitPaths}
-        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
-        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
-      >
-        {(["left", "right"] as const).map((side) => {
-          const val = side === "left" ? leftDraft : rightDraft;
-          const setVal = side === "left" ? setLeftDraft : setRightDraft;
-          const meta = side === "left" ? summary?.leftMeta : summary?.rightMeta;
-          const lineCount = side === "left" ? summary?.leftLines : summary?.rightLines;
-          return (
-            <div
-              key={side}
-              className={`flex flex-col gap-1 px-2.5 py-1.5 ${
-                side === "left" ? "border-r border-[var(--v2-border)]" : ""
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  value={val}
-                  onChange={(e) => setVal(e.target.value)}
-                  placeholder={side === "left" ? "Left file path…" : "Right file path…"}
-                  className="v2-input v2-mono min-w-0 flex-1 text-[11.5px]"
-                />
-                <button
-                  type="button"
-                  title={`Browse ${side} file`}
-                  onClick={() => void handleBrowse(side)}
-                  className="v2-btn px-2"
-                >
-                  <FolderOpen size={13} />
-                </button>
-                <button
-                  type="button"
-                  title={`Save ${side} file`}
-                  onClick={() => void handleSaveSide(side)}
-                  className="v2-btn px-2"
-                >
-                  <Save size={13} />
-                </button>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-[var(--v2-fg-muted)]">
-                {meta?.mtimeUnix ? <span>{formatMtime(meta.mtimeUnix)}</span> : null}
-                {meta?.bytes !== undefined ? <span>{formatBytes(meta.bytes)}</span> : null}
-                {lineCount !== undefined ? <span>{lineCount} lines</span> : null}
-                <span>{encoding}</span>
-                <span>{eol}</span>
-              </div>
-            </div>
-          );
-        })}
-      </form>
+      <V2DualPathBar
+        leftValue={leftDraft}
+        rightValue={rightDraft}
+        onLeftChange={setLeftDraft}
+        onRightChange={setRightDraft}
+        onSubmit={onPathsChange}
+        leftPlaceholder="Left file path…"
+        rightPlaceholder="Right file path…"
+        splitPct={splitPct}
+        onSaveSide={(side) => void handleSaveSide(side)}
+        onBrowseUnavailable={() =>
+          setNotice("Native file picker requires the Tauri desktop app — type a path and press Enter.")
+        }
+        leftMeta={
+          <>
+            {summary?.leftMeta?.mtimeUnix ? <span>{formatMtime(summary.leftMeta.mtimeUnix)}</span> : null}
+            {summary?.leftMeta?.bytes !== undefined ? <span>{formatBytes(summary.leftMeta.bytes)}</span> : null}
+            {summary?.leftLines !== undefined ? <span>{summary.leftLines} lines</span> : null}
+            <span>{encoding}</span>
+            <span>{eol}</span>
+          </>
+        }
+        rightMeta={
+          <>
+            {summary?.rightMeta?.mtimeUnix ? <span>{formatMtime(summary.rightMeta.mtimeUnix)}</span> : null}
+            {summary?.rightMeta?.bytes !== undefined ? <span>{formatBytes(summary.rightMeta.bytes)}</span> : null}
+            {summary?.rightLines !== undefined ? <span>{summary.rightLines} lines</span> : null}
+            <span>{encoding}</span>
+            <span>{eol}</span>
+          </>
+        }
+      />
 
       {/* Docked Cmd+F Find Bar */}
       {findOpen ? (

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Folder, FolderOpen } from "lucide-react";
+import { FileText, Folder } from "lucide-react";
 import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
@@ -132,62 +133,19 @@ export default function V2FolderCompare({
     });
   }, [onStatusChange, visibleEntries.length, diffCount, filterMode, entries.length]);
 
-  const handleBrowse = async (side: "left" | "right"): Promise<void> => {
-    try {
-      const mod = await import("@tauri-apps/plugin-dialog");
-      const picked = await mod.open({ multiple: false, directory: true });
-      if (typeof picked === "string" && picked) {
-        const nextL = side === "left" ? picked : leftDraft;
-        const nextR = side === "right" ? picked : rightDraft;
-        setLeftDraft(nextL);
-        setRightDraft(nextR);
-        onPathsChange(nextL, nextR);
-      }
-    } catch {
-      // Browser fallback
-    }
-  };
-
   return (
     <div data-testid="v2/folder-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
-      {/* Dual-Pane Path Bars */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onPathsChange(leftDraft.trim(), rightDraft.trim());
-        }}
-        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
-        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
-      >
-        {(["left", "right"] as const).map((side) => {
-          const val = side === "left" ? leftDraft : rightDraft;
-          const setVal = side === "left" ? setLeftDraft : setRightDraft;
-          return (
-            <div
-              key={side}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 ${
-                side === "left" ? "border-r border-[var(--v2-border)]" : ""
-              }`}
-            >
-              <input
-                type="text"
-                value={val}
-                onChange={(e) => setVal(e.target.value)}
-                placeholder={side === "left" ? "Left folder path…" : "Right folder path…"}
-                className="v2-input v2-mono min-w-0 flex-1 text-[11.5px]"
-              />
-              <button
-                type="button"
-                title={`Browse ${side} folder`}
-                onClick={() => void handleBrowse(side)}
-                className="v2-btn px-2"
-              >
-                <FolderOpen size={13} />
-              </button>
-            </div>
-          );
-        })}
-      </form>
+      <V2DualPathBar
+        leftValue={leftDraft}
+        rightValue={rightDraft}
+        onLeftChange={setLeftDraft}
+        onRightChange={setRightDraft}
+        onSubmit={onPathsChange}
+        leftPlaceholder="Left folder path…"
+        rightPlaceholder="Right folder path…"
+        directory
+        splitPct={splitPct}
+      />
 
       {/* Dual-Pane Column Headers (True BC 2-Side Folder Tree!) */}
       <div
