@@ -178,7 +178,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         disabled={!canCopyLine}
         onClick={() => onCopyLine?.("right")}
       >
-        <span>Copy Line L</span>
+        <span>Copy line left</span>
       </ToolbarButton>
       <ToolbarButton
         data-testid="textview/toolbar-copy-line-right"
@@ -187,7 +187,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         disabled={!canCopyLine}
         onClick={() => onCopyLine?.("left")}
       >
-        <span>Copy Line R</span>
+        <span>Copy line right</span>
       </ToolbarButton>
       {/* Wave-199c: counts moved to the bottom status bar (BC "N
           difference sections" truth). `textview/toolbar-hunks` +

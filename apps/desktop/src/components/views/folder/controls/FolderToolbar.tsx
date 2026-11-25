@@ -9,6 +9,7 @@ import { SegmentedControl, ToolbarButton } from "../../../ui";
  * name-filter toggle. Purely presentational: every value and callback is
  * owned by `FolderView` (filter/changes-only/name logic untouched).
  * All legacy testids ride the same buttons so specs keep passing unmodified.
+ * Wave-216 R4: Minor/unimportant toggle is top-bar-owned (view-filter bus); no view-level toggle by design.
  */
 export interface FolderToolbarProps {
   // Wave-L3: widened for the L2 `view-filter` bus `context` state

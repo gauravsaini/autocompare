@@ -95,10 +95,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button size="sm" data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
-        <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take all left
+        <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take All Left
       </Button>
       <Button size="sm" data-testid="merge-take-all-right" onClick={onTakeAllRight}>
-        Take all right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
+        Take All Right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       {takeAllNote === null ? null : (
         <StatusText

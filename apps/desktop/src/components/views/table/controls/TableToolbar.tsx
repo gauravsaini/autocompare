@@ -52,6 +52,15 @@ export interface TableToolbarProps {
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
   /**
+   * Wave-216 R5: ViewCommandBus hook (Text/Merge `onBusCommand` parity).
+   * When provided, Prev/Next dispatch through the SAME App
+   * `handleViewCommand` bus as the top Toolbar — no duplicate handlers;
+   * without the prop the legacy `onPrevDiff`/`onNextDiff` props run.
+   * Testids stay byte-identical either way. Optional so existing
+   * `TableView` call sites compile unchanged.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+  /**
    * Wave-TBL: column-mapping panel state (Beyond Compare style left <->
    * right mapping). Purely presentational — `TableView` owns the map.
    */
@@ -92,6 +101,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
     diffPos,
     onPrevDiff,
     onNextDiff,
+    onBusCommand,
     mapOpen,
     onToggleMap,
     mapDisabled,
@@ -125,7 +135,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         <Checkbox
           id="table-ignore-ws"
           data-testid="tableview/ignore-ws"
-          label="Ignore ws"
+          label="Ignore whitespace"
           className="shrink-0"
           checked={ignoreWs}
           onChange={(e) => onToggleIgnoreWs(e.target.checked)}
@@ -245,7 +255,10 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
           label="Previous difference row"
           title="Previous difference row"
           icon={ChevronUp}
-          onClick={onPrevDiff}
+          onClick={() => {
+            if (onBusCommand) onBusCommand("prev");
+            else onPrevDiff();
+          }}
           disabled={diffCount === 0}
         >
           <span>Prev</span>
@@ -255,7 +268,10 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
           label="Next difference row"
           title="Next difference row"
           icon={ChevronDown}
-          onClick={onNextDiff}
+          onClick={() => {
+            if (onBusCommand) onBusCommand("next");
+            else onNextDiff();
+          }}
           disabled={diffCount === 0}
         >
           <span>Next</span>

@@ -51,6 +51,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
         />
         <Button
           data-testid="merge/find-prev"
+          aria-label="Previous find hit"
           onClick={onPrev}
           disabled={prevDisabled}
         >
@@ -58,6 +59,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
         </Button>
         <Button
           data-testid="merge/find-next"
+          aria-label="Next find hit"
           onClick={onNext}
           disabled={nextDisabled}
         >

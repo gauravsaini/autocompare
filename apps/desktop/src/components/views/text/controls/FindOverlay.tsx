@@ -50,10 +50,10 @@ export default function FindOverlay(props: FindOverlayProps): React.JSX.Element 
           spellCheck={false}
           className="ac-mono w-40 text-[length:var(--ac-font-size-code)]"
         />
-        <Button data-testid="textview/find-prev" onClick={onPrev} disabled={prevDisabled}>
+        <Button data-testid="textview/find-prev" aria-label="Previous find hit" onClick={onPrev} disabled={prevDisabled}>
           Prev
         </Button>
-        <Button data-testid="textview/find-next" onClick={onNext} disabled={nextDisabled}>
+        <Button data-testid="textview/find-next" aria-label="Next find hit" onClick={onNext} disabled={nextDisabled}>
           Next
         </Button>
         <ToolbarButton data-testid="textview/find-close" label="Dismiss find (Esc)" title="Dismiss find (Esc)" onClick={onClose}>

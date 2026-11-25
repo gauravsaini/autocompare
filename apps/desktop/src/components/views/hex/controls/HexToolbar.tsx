@@ -34,6 +34,12 @@ export interface HexToolbarProps {
   // (chrome budget: no new stacked rows, no popover chrome).
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
+  /**
+   * Wave-216 R5: ViewCommandBus hook for diff nav (Text/Merge
+   * `onBusCommand` parity). Page Prev/Next stay local; only the
+   * Prev/Next-DIFF buttons ride the bus when the prop is provided.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
   readonly diffNavBusy: boolean;
   readonly diffStatusText: string;
   readonly bytesPerRow: number;
@@ -62,6 +68,7 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
     onToggleGoto,
     onPrevDiff,
     onNextDiff,
+    onBusCommand,
     diffNavBusy,
     diffStatusText,
     bytesPerRow,
@@ -76,10 +83,10 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       data-testid="hexview/toolbar"
       className="tv-controls-bar"
     >
-      <ToolbarButton onClick={onPrevPage} disabled={prevDisabled} icon={ChevronLeft} label="Prev">
+      <ToolbarButton data-testid="hexview/toolbar-prev-page" onClick={onPrevPage} disabled={prevDisabled} icon={ChevronLeft} label="Prev">
         Prev
       </ToolbarButton>
-      <ToolbarButton onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
+      <ToolbarButton data-testid="hexview/toolbar-next-page" onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
         Next
       </ToolbarButton>
       <StatusText data-testid="hexview/page-label">
@@ -88,10 +95,16 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       <span aria-hidden="true" className="tv-controls-sep" />
       {/* HEX2: diff-only navigation (BC next/previous difference).
           Same row, honest busy disable; receipt rides `hex-diff-status`. */}
-      <ToolbarButton data-testid="hex-diff-prev" onClick={onPrevDiff} disabled={diffNavBusy} icon={ChevronUp} label="Prev diff">
+      <ToolbarButton data-testid="hex-diff-prev" onClick={() => {
+        if (onBusCommand) onBusCommand("prev");
+        else onPrevDiff();
+      }} disabled={diffNavBusy} icon={ChevronUp} label="Prev diff">
         Prev diff
       </ToolbarButton>
-      <ToolbarButton data-testid="hex-diff-next" onClick={onNextDiff} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
+      <ToolbarButton data-testid="hex-diff-next" onClick={() => {
+        if (onBusCommand) onBusCommand("next");
+        else onNextDiff();
+      }} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
         Next diff
       </ToolbarButton>
       <StatusText data-testid="hex-diff-status" role="status">
