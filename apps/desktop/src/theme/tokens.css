@@ -91,6 +91,12 @@
   --ac-focus-ring: var(--ac-focus);
   --ac-focus-ring-subtle: rgba(10, 132, 255, 0.25);
 
+  /* Wave-232 gallery: drop-fill rides the accent (no hardcoded blue —
+     dnd/PaneDropZone ACTIVE_FILL migrates in Wave B/C, testids intact);
+     take-arrow rides the golden-amber tab-dirty ink (TextView already does). */
+  --ac-drop-active-fill: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  --ac-take-arrow-fg: var(--ac-tab-dirty);
+
   /* Selection & Hover */
   --ac-selection-bg: #b3d7ff;
   --ac-selection-fg: #002b55;
@@ -263,6 +269,8 @@
     --ac-focus: #0a84ff;
     --ac-focus-ring: var(--ac-focus);
     --ac-focus-ring-subtle: rgba(10, 132, 255, 0.35);
+    --ac-drop-active-fill: color-mix(in srgb, var(--ac-accent) 12%, transparent);
+    --ac-take-arrow-fg: var(--ac-tab-dirty);
     --ac-selection-bg: #1a4f8b;
     --ac-selection-fg: #ffffff;
     --ac-row-hover-bg: rgba(255, 255, 255, 0.045);

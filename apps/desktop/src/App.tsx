@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Home, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
 import { ChromeShell, rowIndexToScrollTop, textCompareKindToDiffKind } from "./components/chrome";
+import { Gallery } from "./components/ui/Gallery";
 import {
   dispatchViewCommand,
   dispatchViewFilter,
@@ -2176,6 +2177,10 @@ export default function App(): React.JSX.Element {
   // Wave-10: demo banner shows only on the auto-opened demo tab.
   const isDemo = demoId !== null && activeSession?.id === demoId;
 
+  // Wave-232: dev-only ui gallery at /?gallery=1 (no views/chrome, no IPC).
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("gallery") === "1") {
+    return <Gallery />;
+  }
   return (
     <DiffStatsContext.Provider value={diffStats}>
       <ChromeShell
