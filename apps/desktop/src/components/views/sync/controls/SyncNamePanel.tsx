@@ -1,16 +1,11 @@
 /**
- * Wave-73 / Wave-B3: collapsible sync name-filter panel (Beyond Compare style).
- *
- * In-flow collapsible (never `position: absolute`, so the overlap gate
- * holds with the panel open): open on load for backward compat,
- * toggled from the toolbar, Ctrl+F, or Esc. Esc is two-stage: it clears
- * a non-empty query first (wave-64 refill contract keeps the box
- * mounted) and collapses the panel once the box is empty. Purely
- * presentational: query state and list-only match math live in
- * `SyncView` (wave-64 logic byte-identical, same testids/aria/ids).
+ * Wave-234: sync name filter migrated to ui/DockedBar.
+ * In-flow collapsible sync name filter bar (never absolute). Purely presentational:
+ * query state and step match math live in SyncView.
+ * Testids byte-identical, two-stage Esc preserved.
  */
-import { X } from "lucide-react";
-import { Input, ToolbarButton } from "../../../ui";
+import { useEffect } from "react";
+import { DockedBar, Input } from "../../../ui";
 
 export interface SyncNamePanelProps {
   readonly open: boolean;
@@ -21,47 +16,52 @@ export interface SyncNamePanelProps {
 
 export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Element | null {
   const { open, query, onQueryChange, onClose } = props;
-  if (!open) return null;
+
+  // Wave-64 / Wave-73 two-stage Esc contract:
+  // When query is non-empty, Esc clears query first without closing the panel.
+  // Esc on empty query falls through to DockedBar document keydown listener to close.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape" && query !== "") {
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        onQueryChange("");
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, query, onQueryChange]);
+
   return (
-    <section data-testid="syncview/name-panel" className="tv-controls-panel">
-      <div className="ac-control-group" role="search" aria-label="filter steps by name">
-        <label
-          htmlFor="sync-name-box"
-          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
-        >
-          Filter steps
-        </label>
-        <Input
-          id="sync-name-box"
-          controlSize="sm"
-          data-testid="syncview/name-filter"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            // Wave-64 contract first: Esc clears the query so the box
-            // stays mounted for an immediate refill; Esc on an empty box
-            // collapses the panel (wave-73 chrome collapse).
-            if (event.key === "Escape") {
+    <DockedBar
+      open={open}
+      onClose={onClose}
+      label="Filter steps"
+      testid="syncview/name-panel"
+      closeTestId="syncview/name-close"
+    >
+      <Input
+        id="sync-name-box"
+        controlSize="sm"
+        data-testid="syncview/name-filter"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            if (query !== "") {
               event.stopPropagation();
-              if (query !== "") onQueryChange("");
-              else onClose();
+              onQueryChange("");
+            } else {
+              onClose();
             }
-          }}
-          placeholder="file or folder name"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-64 ac-code"
-        />
-        <ToolbarButton
-          size="sm"
-          data-testid="syncview/name-close"
-          label="Dismiss name filter (Esc)"
-          aria-label="Dismiss name filter (Esc)"
-          title="Dismiss name filter (Esc)"
-          icon={X}
-          onClick={onClose}
-        />
-      </div>
-    </section>
+          }
+        }}
+        placeholder="file or folder name"
+        autoComplete="off"
+        spellCheck={false}
+        className="w-64 ac-code"
+      />
+    </DockedBar>
   );
 }

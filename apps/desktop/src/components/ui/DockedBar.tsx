@@ -8,6 +8,7 @@ export interface DockedBarProps {
   /** Accessible name for the region. */
   readonly label: string;
   readonly testid?: string;
+  readonly closeTestId?: string;
   readonly children: ReactNode;
 }
 
@@ -17,7 +18,7 @@ export interface DockedBarProps {
  * testids intact). In-flow by construction: no positioning classes, so
  * the overlap gate holds with every panel open.
  */
-export default function DockedBar({ open, onClose, label, testid, children }: DockedBarProps): React.JSX.Element | null {
+export default function DockedBar({ open, onClose, label, testid, closeTestId, children }: DockedBarProps): React.JSX.Element | null {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent): void => {
@@ -41,7 +42,7 @@ export default function DockedBar({ open, onClose, label, testid, children }: Do
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-[var(--ac-space-2)]">{children}</div>
       <button
         type="button"
-        data-testid={testid ? `${testid}/close` : undefined}
+        data-testid={closeTestId ?? (testid ? `${testid}/close` : undefined)}
         aria-label={`Dismiss ${label}`}
         onClick={onClose}
         className="inline-flex h-[var(--ac-control-h-sm)] items-center rounded-[5px] px-2 ac-chrome-label text-[var(--ac-fg-muted)] hover:bg-[var(--ac-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"

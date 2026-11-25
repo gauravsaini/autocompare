@@ -1,14 +1,11 @@
 /**
- * Wave-67B / Wave-B3: collapsible name-filter panel (Beyond Compare style).
- *
- * In-flow collapsible (never `position: absolute`, so the overlap gate
- * holds with the panel open): open by default for backward compat,
- * toggled from the toolbar, Ctrl+F, or Esc. Purely presentational:
- * query state and match math live in `FolderView` (wave-63 logic
- * byte-identical, same testids/aria).
+ * Wave-234: folder name filter migrated to ui/DockedBar.
+ * In-flow collapsible name filter bar (never absolute). Purely presentational:
+ * query state and match math live in FolderView.
+ * Testids byte-identical.
  */
-import { X } from "lucide-react";
-import { Input, ToolbarButton } from "../../../ui";
+import { useEffect } from "react";
+import { DockedBar, Input } from "../../../ui";
 
 export interface FolderNamePanelProps {
   readonly open: boolean;
@@ -19,37 +16,49 @@ export interface FolderNamePanelProps {
 
 export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.Element | null {
   const { open, query, onQueryChange, onClose } = props;
-  if (!open) return null;
+
+  // Wave-63 / Wave-182c contract:
+  // Esc with focus in the input box clears the query (63).
+  // Esc from outside (e.g. table rows) collapses without clearing (98/113b).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        const t = e.target;
+        if (t instanceof HTMLElement && t.id === "folder-name-box") {
+          onQueryChange("");
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onQueryChange]);
+
   return (
-    <section data-testid="folderview/name-panel" className="tv-controls-panel">
-      <div className="ac-control-group" role="search" aria-label="filter by name">
-        <label htmlFor="folder-name-box" className="ac-meta font-normal text-[var(--ac-fg-muted)]">
-          Filter by name
-        </label>
-        <Input
-          id="folder-name-box"
-          controlSize="sm"
-          data-testid="folder-name-filter"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
-          }}
-          placeholder="file or folder name"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-64 ac-code"
-        />
-        <ToolbarButton
-          size="sm"
-          data-testid="folderview/name-close"
-          label="Dismiss name filter (Esc)"
-          aria-label="Dismiss name filter (Esc)"
-          title="Dismiss name filter (Esc)"
-          icon={X}
-          onClick={onClose}
-        />
-      </div>
-    </section>
+    <DockedBar
+      open={open}
+      onClose={onClose}
+      label="Filter by name"
+      testid="folderview/name-panel"
+      closeTestId="folderview/name-close"
+    >
+      <Input
+        id="folder-name-box"
+        controlSize="sm"
+        data-testid="folder-name-filter"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onQueryChange("");
+            onClose();
+          }
+        }}
+        placeholder="file or folder name"
+        autoComplete="off"
+        spellCheck={false}
+        className="w-64 ac-code"
+      />
+    </DockedBar>
   );
 }

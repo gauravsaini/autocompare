@@ -127,7 +127,7 @@ export function Gallery(): React.JSX.Element {
             Toggle bar
           </Button>
         </div>
-        <DockedBar open={dockOpen} onClose={() => setDockOpen(false)} label="Gallery bar" testid="gallery/dock">
+        <DockedBar open={dockOpen} onClose={() => setDockOpen(false)} label="Gallery bar" testid="gallery/dock" closeTestId="gallery/dock-close">
           <Input aria-label="Docked find" placeholder="Find in bar" data-testid="gallery/dock-input" />
         </DockedBar>
       </section>
