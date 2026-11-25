@@ -2063,7 +2063,7 @@ export default function TextView({
   const leftMetaText = useMemo(() => formatTextMeta(leftMeta, leftLines), [leftMeta, leftLines]);
   const rightMetaText = useMemo(() => formatTextMeta(rightMeta, rightLines), [rightMeta, rightLines]);
 
-  if (status === "loading") return <p>Loading text comparison…</p>;
+  if (status === "loading") return <EmptyState title="Loading text comparison…" testid="textview/loading" />;
   if (status === "error") return <InlineNotice testid="textview/error">Text compare failed: {error}</InlineNotice>;
   if (status === "empty" || rows.length === 0) return <EmptyState title="No rows to display." testid="textview/empty" />;
 
@@ -2563,9 +2563,9 @@ export default function TextView({
   return (
     <section aria-label="text comparison" data-wrap={wrap ? "on" : "off"} data-linenos={showLineNos ? "on" : "off"} className="flex min-h-0 flex-1 flex-col">
       {demo === null ? null : (
-        <p data-testid="textview/demo" className="px-[var(--ac-space-4)] pt-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)]">
+        <InlineNotice testid="textview/demo">
           Demo pair (real compare): {demo.left} vs {demo.right}
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-81: BC-style path-bar meta line (per-side timestamp ·
           bytes · lines, directly under the PathBar path inputs above).
