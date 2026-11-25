@@ -30,7 +30,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use autocompare_compare::{TextOptions, compare_text_files, compare_text_lines};
-use autocompare_diff::{DiffScript, inline_diff};
+use autocompare_diff::DiffScript;
+use autocompare_diff::text_diff::DiffAlgorithm;
+use autocompare_diff::inline_diff;
 use serde::{Deserialize, Serialize};
 
 /// Maximum rows returned by one [`text_get_rows`] call. Bounds every IPC
@@ -127,6 +129,10 @@ pub struct AppliedTextOptions {
     pub ignore_case: bool,
     #[serde(default)]
     pub minor_unimportant: bool,
+    #[serde(default)]
+    pub ignore_blank_lines: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -276,6 +282,10 @@ struct StoredText {
     overview: Vec<OverviewChunk>,
     overview_truncated: bool,
     opts: TextOptions,
+    /// C2a engine-ready options (no `TextOptions` home upstream):
+    /// blank-line folding + diff algorithm for re-compare paths.
+    ignore_blank: bool,
+    algorithm: DiffAlgorithm,
 }
 
 fn text_store() -> &'static Mutex<HashMap<String, StoredText>> {
@@ -632,6 +642,91 @@ pub fn copy_section_of(
 /// encoding, and EOL flags with backward compat. Old callers send
 /// only `{left, right}` and get byte-identical comparison. New callers may
 /// send camelCase and/or snake_case spellings; either spelling wins.
+///
+/// Wave-C2a: optional `algorithm` (`"myers"` default | `"patience"`) and
+/// `ignoreBlankLines` / `ignore_blank_lines`. Both are engine-ready:
+/// `DiffAlgorithm::{Myers, Patience}` in `crates/diff` (`text_diff`,
+/// `merge.rs`) and blank-line folding mirroring `grammar::is_blank_line`.
+/// Unknown algorithm spellings fall back to Myers. Echoed honestly in
+/// `appliedOptions` (`algorithm` is `None` when the caller omits it).
+fn parse_text_algorithm(raw: Option<String>) -> (DiffAlgorithm, Option<String>) {
+    let norm = raw
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    match norm.as_str() {
+        "patience" => (DiffAlgorithm::Patience, Some("patience".to_string())),
+        "myers" => (DiffAlgorithm::Myers, Some("myers".to_string())),
+        "" => (DiffAlgorithm::Myers, None),
+        _ => (DiffAlgorithm::Myers, None),
+    }
+}
+
+/// Comparison key mirroring `crates/compare/src/text.rs` plus C2a
+/// blank-line folding: when `ignore_blank` is set, any whitespace-only
+/// line keys to `""` so blank-vs-blank aligns as equal.
+fn text_compare_key(line: &str, opts: &TextOptions, ignore_blank: bool) -> String {
+    let base = if opts.eol.is_some() {
+        line.strip_suffix('\r').unwrap_or(line)
+    } else {
+        line
+    };
+    if ignore_blank && base.trim().is_empty() {
+        return String::new();
+    }
+    let mut key = if opts.ignore_space_change {
+        base.split_whitespace().collect::<Vec<&str>>().join(" ")
+    } else {
+        base.to_owned()
+    };
+    if opts.ignore_case {
+        key = key.to_lowercase();
+    }
+    key
+}
+
+/// Re-diffs decoded display lines with the C2a options. Used by both
+/// `text_compare` and the `text_apply_edit` re-compare so sessions stay
+/// consistent across edits.
+fn diff_with_c2a(
+    left_lines: &[String],
+    right_lines: &[String],
+    opts: &TextOptions,
+    ignore_blank: bool,
+    algo: DiffAlgorithm,
+) -> DiffScript {
+    let left_keys: Vec<String> = left_lines
+        .iter()
+        .map(|l| text_compare_key(l, opts, ignore_blank))
+        .collect();
+    let right_keys: Vec<String> = right_lines
+        .iter()
+        .map(|l| text_compare_key(l, opts, ignore_blank))
+        .collect();
+    let left_refs: Vec<&str> = left_keys.iter().map(|s| s.as_str()).collect();
+    let right_refs: Vec<&str> = right_keys.iter().map(|s| s.as_str()).collect();
+    autocompare_diff::text_diff::diff(&left_refs, &right_refs, algo)
+}
+
+/// Folds blank-vs-blank pairs to `Equal` under `ignore_blank_lines`
+/// (whitespace-only difference on both sides is unimportant, mirroring
+/// `grammar::is_blank_line`). Display text is untouched; only the row
+/// kind/inline spans change.
+fn fold_blank_rows_equal(rows: &mut [TextRowDto], ignore_blank: bool) {
+    if !ignore_blank {
+        return;
+    }
+    for row in rows.iter_mut() {
+        let (Some(l), Some(r)) = (row.left.as_ref(), row.right.as_ref()) else {
+            continue;
+        };
+        if l.trim().is_empty() && r.trim().is_empty() && row.kind != RowKind::Equal {
+            row.kind = RowKind::Equal;
+            row.inline.clear();
+        }
+    }
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn text_compare(
@@ -647,6 +742,9 @@ pub fn text_compare(
     suppressed_lines: Option<Vec<u64>>,
     encoding: Option<String>,
     eol: Option<String>,
+    algorithm: Option<String>,
+    ignoreBlankLines: Option<bool>,
+    ignore_blank_lines: Option<bool>,
 ) -> Result<TextCompareDto, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
@@ -662,6 +760,8 @@ pub fn text_compare(
     let suppressed = suppressedLines.or(suppressed_lines).unwrap_or_default();
     let enc = encoding;
     let line_ending = eol;
+    let ignore_blank = ignoreBlankLines.or(ignore_blank_lines).unwrap_or(false);
+    let (algo, algo_echo) = parse_text_algorithm(algorithm);
 
     let opts = TextOptions {
         ignore_case: ignore_cs,
@@ -671,17 +771,32 @@ pub fn text_compare(
         encoding: enc.clone(),
         eol: line_ending.clone(),
     };
-    let compared = compare_text_files(
+    let mut compared = compare_text_files(
         std::path::Path::new(&left),
         std::path::Path::new(&right),
         &opts,
     )
     .map_err(|e| e.to_string())?;
+    // C2a engine-ready path: Patience and/or blank-line folding re-key
+    // over the decoded display lines and re-diff with the chosen
+    // algorithm. Display lines are untouched; only the script changes.
+    // Myers without blank folding keeps the legacy `compare_text_files`
+    // script byte-identical.
+    if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
+        compared.script = diff_with_c2a(
+            &compared.left_lines,
+            &compared.right_lines,
+            &opts,
+            ignore_blank,
+            algo,
+        );
+    }
     let mut rows = build_rows(
         &compared.left_lines,
         &compared.right_lines,
         &compared.script,
     );
+    fold_blank_rows_equal(&mut rows, ignore_blank);
     mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
     let dto = TextCompareDto {
@@ -698,6 +813,8 @@ pub fn text_compare(
             ignore_whitespace: ignore_ws,
             ignore_case: ignore_cs,
             minor_unimportant: minor,
+            ignore_blank_lines: ignore_blank,
+            algorithm: algo_echo,
             encoding: enc,
             eol: line_ending,
             suppressed_lines: suppressed,
@@ -715,6 +832,8 @@ pub fn text_compare(
             overview,
             overview_truncated,
             opts,
+            ignore_blank,
+            algorithm: algo,
         },
     );
     Ok(dto)
@@ -810,8 +929,20 @@ pub fn text_apply_edit(
     let (left_lines, right_lines) =
         apply_edit_to_rows(&cached.rows, index, &which, &text)?;
     let opts = cached.opts.clone();
-    let compared = compare_text_lines(&left_lines, &right_lines, &opts);
+    let ignore_blank = cached.ignore_blank;
+    let algo = cached.algorithm;
+    let compared = if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
+        let script = diff_with_c2a(&left_lines, &right_lines, &opts, ignore_blank, algo);
+        autocompare_compare::TextComparison {
+            left_lines,
+            right_lines,
+            script,
+        }
+    } else {
+        compare_text_lines(&left_lines, &right_lines, &opts)
+    };
     let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    fold_blank_rows_equal(&mut rows, ignore_blank);
     mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
     let at = usize::try_from(index).unwrap_or(usize::MAX);
@@ -826,6 +957,8 @@ pub fn text_apply_edit(
             overview,
             overview_truncated,
             opts,
+            ignore_blank,
+            algorithm: algo,
         },
     );
     Ok(AppliedEdit {
@@ -920,6 +1053,8 @@ pub fn text_apply_hunk(
     let (left_lines, right_lines, applied, total) =
         apply_hunk_to_rows(&cached.rows, start, end, &which)?;
     let opts = cached.opts.clone();
+    let ignore_blank = cached.ignore_blank;
+    let algo = cached.algorithm;
     let mut rows: Vec<TextRowDto> = Vec::new();
     for row in &cached.rows {
         if row.index < start || row.index > end {
@@ -954,6 +1089,8 @@ pub fn text_apply_hunk(
             overview,
             overview_truncated,
             opts,
+            ignore_blank,
+            algorithm: algo,
         },
     );
     Ok(AppliedHunk {
@@ -1356,7 +1493,8 @@ mod tests {
         cs_snake: Option<bool>,
     ) -> Result<TextCompareDto, String> {
         text_compare(
-            left, right, ws, cs, ws_snake, cs_snake, None, None, None, None, None, None,
+            left, right, ws, cs, ws_snake, cs_snake, None, None, None, None, None, None, None, None,
+            None,
         )
     }
 
@@ -1425,6 +1563,8 @@ mod tests {
                 ignore_whitespace: false,
                 ignore_case: false,
                 minor_unimportant: false,
+                ignore_blank_lines: false,
+                algorithm: None,
                 encoding: None,
                 eol: None,
                 suppressed_lines: Vec::new(),
@@ -1459,6 +1599,8 @@ mod tests {
                 ignore_whitespace: false,
                 ignore_case: false,
                 minor_unimportant: false,
+                ignore_blank_lines: false,
+                algorithm: None,
                 encoding: None,
                 eol: None,
                 suppressed_lines: Vec::new(),
@@ -1751,6 +1893,9 @@ mod tests {
             None,
             Some("utf-8".to_string()),
             Some("lf".to_string()),
+            None,
+            None,
+            None,
         )
         .expect("text_compare must succeed");
 
@@ -1780,6 +1925,9 @@ mod tests {
             Some(vec![2]),
             Some("windows-1252".to_string()),
             Some("crlf".to_string()),
+            None,
+            None,
+            None,
         )
         .expect("text_compare with snake_case must succeed");
 
@@ -1827,6 +1975,9 @@ mod tests {
             None,
             Some("utf-8".to_string()),
             Some("lf".to_string()),
+            None,
+            None,
+            None,
         )
         .expect("text_compare must succeed");
 
@@ -1849,6 +2000,65 @@ mod tests {
         assert_eq!(section.start, 1);
         assert_eq!(section.end, 1);
 
+        let _ = std::fs::remove_file(&left);
+        let _ = std::fs::remove_file(&right);
+    }
+
+    #[test]
+    fn c2a_algorithm_and_blank_lines_round_trip() {
+        // C2a: Patience parses case-insensitively, unknown/omitted falls
+        // back to Myers; blank-only lines fold to the same key.
+        let (patience, echo) = parse_text_algorithm(Some("Patience".to_string()));
+        assert!(matches!(patience, DiffAlgorithm::Patience));
+        assert_eq!(echo, Some("patience".to_string()));
+        let (myers, no_echo) = parse_text_algorithm(None);
+        assert!(matches!(myers, DiffAlgorithm::Myers));
+        assert_eq!(no_echo, None);
+        let (fallback, _) = parse_text_algorithm(Some("bogus".to_string()));
+        assert!(matches!(fallback, DiffAlgorithm::Myers));
+
+        let opts = TextOptions::default();
+        assert_eq!(text_compare_key("   ", &opts, true), String::new());
+        assert_eq!(text_compare_key("", &opts, true), String::new());
+        assert_ne!(text_compare_key("   ", &opts, false), String::new());
+
+        // End-to-end: blank-only whitespace diff collapses under the
+        // flag and echoes honestly; patience echoes its name.
+        use std::io::Write;
+        let dir = std::env::temp_dir();
+        let left = dir.join("c2a-blank-left.txt");
+        let right = dir.join("c2a-blank-right.txt");
+        {
+            let mut f = std::fs::File::create(&left).expect("create left");
+            f.write_all(b"a\n   \nb\n").expect("write left");
+            let mut f = std::fs::File::create(&right).expect("create right");
+            f.write_all(b"a\n\nb\n").expect("write right");
+        }
+        let ls = left.display().to_string();
+        let rs = right.display().to_string();
+        let exact = text_compare(
+            ls.clone(),
+            rs.clone(),
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
+        )
+        .expect("exact compare must succeed");
+        assert!(!exact.applied_options.ignore_blank_lines);
+        assert_eq!(exact.applied_options.algorithm, None);
+        let folded = text_compare(
+            ls.clone(),
+            rs.clone(),
+            None, None, None, None, None, None, None, None, None, None,
+            Some("patience".to_string()),
+            None,
+            Some(true),
+        )
+        .expect("folded compare must succeed");
+        assert!(folded.applied_options.ignore_blank_lines);
+        assert_eq!(folded.applied_options.algorithm, Some("patience".to_string()));
+        assert_eq!(folded.rows, 3);
+        let page = text_get_rows(folded.session.clone(), 0, 10).expect("rows");
+        assert_eq!(page.rows.len(), 3);
+        assert_eq!(page.rows.get(1).map(|r| r.kind), Some(RowKind::Equal));
         let _ = std::fs::remove_file(&left);
         let _ = std::fs::remove_file(&right);
     }

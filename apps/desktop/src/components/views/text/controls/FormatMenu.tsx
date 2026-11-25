@@ -2,9 +2,12 @@
  * Wave-233: Format options migrated onto ui/Modal primitive (centered card on scrim,
  * role=dialog aria-modal, autofocus, Esc+backdrop+close single onClose).
  * All testids byte-identical (textview/format-options, textview/format-encoding,
- * textview/format-eol).
+ * textview/format-eol). Wave-C2a adds engine-ready Patience toggle
+ * (textview/algorithm-patience); optional props so legacy callers keep
+ * working byte-identically.
  */
-import { Modal, Select } from "../../../ui";
+import { useState } from "react";
+import { Checkbox, Modal, Select } from "../../../ui";
 
 /** Window event carrying the top-bar Format request (BC parity). */
 export const VIEW_FORMAT_EVENT = "autocompare:view-format";
@@ -24,10 +27,17 @@ export interface FormatMenuProps {
   readonly busy: boolean;
   readonly onChange: (nextEncoding: string, nextEol: string) => void;
   readonly onClose?: () => void;
+  /** Wave-C2a: `"myers"` default | `"patience"` (optional for backward compat). */
+  readonly algorithm?: string;
+  /** Wave-C2a: algorithm toggle handler (optional for backward compat). */
+  readonly onAlgorithmChange?: (next: string) => void;
 }
 
 export default function FormatMenu(props: FormatMenuProps): React.JSX.Element | null {
   const { open, encoding, eol, busy, onChange, onClose } = props;
+  const [localAlgo, setLocalAlgo] = useState("myers");
+  const algo = props.algorithm ?? localAlgo;
+  const patience = algo === "patience";
 
   const handleClose = (): void => {
     if (onClose) {
@@ -37,6 +47,15 @@ export default function FormatMenu(props: FormatMenuProps): React.JSX.Element | 
     const btn = document.querySelector<HTMLButtonElement>('[data-testid="textview/toolbar-format"]');
     if (btn && btn.getAttribute("aria-expanded") === "true") {
       btn.click();
+    }
+  };
+
+  const handleAlgo = (next: boolean): void => {
+    const value = next ? "patience" : "myers";
+    if (props.onAlgorithmChange) {
+      props.onAlgorithmChange(value);
+    } else {
+      setLocalAlgo(value);
     }
   };
 
@@ -80,6 +99,13 @@ export default function FormatMenu(props: FormatMenuProps): React.JSX.Element | 
             <option value="cr">CR</option>
           </Select>
         </label>
+        <Checkbox
+          data-testid="textview/algorithm-patience"
+          label="Patience diff"
+          checked={patience}
+          disabled={busy}
+          onChange={(e) => handleAlgo(e.target.checked)}
+        />
       </div>
     </Modal>
   );

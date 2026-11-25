@@ -21,6 +21,9 @@ export type TextSide = "left" | "right";
 /** Search direction wire values from Rust `Direction`. */
 export type TextDirection = "up" | "down";
 
+/** Diff algorithm wire values for Wave-C2a (`DiffAlgorithm` in `crates/diff`). */
+export type TextAlgorithm = "myers" | "patience";
+
 import { invoke } from "./client";
 
 /** Applied ignore flags echoed by the backend (`appliedOptions` on the wire). */
@@ -29,6 +32,10 @@ export interface AppliedTextOptions {
   readonly ignoreCase: boolean;
   /** Wave-L1: minor / unimportant difference toggle. */
   readonly minorUnimportant?: boolean;
+  /** Wave-C2a: blank-line folding (`grammar::is_blank_line` mirror). */
+  readonly ignoreBlankLines?: boolean;
+  /** Wave-C2a: diff algorithm echo (`"myers"` default | `"patience"`). */
+  readonly algorithm?: TextAlgorithm | string;
   /** Wave-L1: encoding name passthrough. */
   readonly encoding?: string;
   /** Wave-L1: eol line ending format passthrough. */
@@ -93,11 +100,16 @@ export interface TextIgnoreOptions {
   readonly encoding?: string;
   readonly eol?: string;
   readonly suppressedLines?: readonly number[];
+  /** Wave-C2a: Patience vs Myers diff engine. */
+  readonly algorithm?: TextAlgorithm | string;
+  /** Wave-C2a: fold whitespace-only lines (both spellings accepted). */
+  readonly ignoreBlankLines?: boolean;
   // snake_case spellings:
   readonly ignore_whitespace?: boolean;
   readonly ignore_case?: boolean;
   readonly minor_unimportant?: boolean;
   readonly suppressed_lines?: readonly number[];
+  readonly ignore_blank_lines?: boolean;
 }
 
 /** Rust mirror: `commands::text::InlineSpanDto` (half-open char offsets). */
@@ -191,6 +203,10 @@ export function textCompare(
   const enc = opts?.encoding !== undefined && opts.encoding !== "" ? opts.encoding : undefined;
   const eol = opts?.eol !== undefined && opts.eol !== "" ? opts.eol : undefined;
   const supp = opts?.suppressedLines ?? opts?.suppressed_lines;
+  // Wave-C2a engine-ready options: Patience algorithm + blank-line folding.
+  const rawAlgo = typeof opts?.algorithm === "string" ? opts.algorithm.trim().toLowerCase() : "";
+  const algo = rawAlgo === "patience" || rawAlgo === "myers" ? rawAlgo : undefined;
+  const blank = opts?.ignoreBlankLines === true || opts?.ignore_blank_lines === true;
 
   const hasOptions =
     ws ||
@@ -198,7 +214,9 @@ export function textCompare(
     minor ||
     enc !== undefined ||
     eol !== undefined ||
-    (supp !== undefined && supp.length > 0);
+    (supp !== undefined && supp.length > 0) ||
+    algo !== undefined ||
+    blank;
 
   if (typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__TEXT_IGNORE_LAST__ = {
@@ -208,6 +226,8 @@ export function textCompare(
       encoding: enc,
       eol,
       suppressedLines: supp,
+      algorithm: algo,
+      ignoreBlankLines: blank,
     };
   }
   if (!hasOptions) return invoke<TextCompareDto>("text_compare", { left, right });
@@ -224,6 +244,9 @@ export function textCompare(
     eol,
     suppressedLines: supp,
     suppressed_lines: supp,
+    algorithm: algo,
+    ignoreBlankLines: blank,
+    ignore_blank_lines: blank,
   });
 }
 
