@@ -28,7 +28,7 @@
  */
 
 import { Search } from "lucide-react";
-import { Button, Checkbox, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
+import { Button, Checkbox, Input, Select, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface TableToolbarProps {
   readonly byKey: boolean;
@@ -38,6 +38,16 @@ export interface TableToolbarProps {
   readonly onToggleIgnoreWs: (v: boolean) => void;
   readonly ignoreCase: boolean;
   readonly onToggleIgnoreCase: (v: boolean) => void;
+  /**
+   * Wave-C2c: engine-ready table options (Beyond Compare parity).
+   * `delimiter` is the field separator (`","` default); `epsilon` is
+   * the numeric-tolerance text (empty = exact). Both are owned by
+   * `TableView` and re-fire `table_compare` on change.
+   */
+  readonly delimiter: string;
+  readonly onDelimiterChange: (v: string) => void;
+  readonly epsilon: string;
+  readonly onEpsilonChange: (v: string) => void;
   readonly colsOpen: boolean;
   readonly onToggleCols: () => void;
   readonly showAllDisabled: boolean;
@@ -89,6 +99,10 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
     onToggleIgnoreWs,
     ignoreCase,
     onToggleIgnoreCase,
+    delimiter,
+    onDelimiterChange,
+    epsilon,
+    onEpsilonChange,
     colsOpen,
     onToggleCols,
     showAllDisabled,
@@ -145,6 +159,46 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         checked={ignoreCase}
         onChange={(e) => onToggleIgnoreCase(e.target.checked)}
       />
+      {/* Wave-C2c: engine-ready table options. Delimiter select +
+          numeric-tolerance input ride the single toolbar row (same
+          `shrink-0` guard as the wave-168 checkboxes); both re-fire
+          `table_compare` via `TableView`. */}
+      <label
+        data-testid="tableview/delimiter-label"
+        className="ac-chrome-label inline-flex shrink-0 items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
+      >
+        Delimiter{" "}
+        <Select
+          controlSize="sm"
+          data-testid="tableview/delimiter-select"
+          value={delimiter}
+          onChange={(e) => onDelimiterChange(e.target.value)}
+          aria-label="field delimiter"
+        >
+          <option value=",">comma (,)</option>
+          <option value=";">semicolon (;)</option>
+          <option value="&#9;">tab</option>
+          <option value="|">pipe (|)</option>
+        </Select>
+      </label>
+      <label
+        data-testid="tableview/numeric-tolerance-label"
+        className="ac-chrome-label inline-flex shrink-0 items-center gap-[var(--ac-space-2)] font-normal text-[var(--ac-fg-muted)]"
+      >
+        Epsilon{" "}
+        <Input
+          controlSize="sm"
+          data-testid="tableview/numeric-tolerance"
+          value={epsilon}
+          onChange={(e) => onEpsilonChange(e.target.value)}
+          inputMode="decimal"
+          placeholder="exact"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="numeric tolerance"
+          className="ac-code w-20"
+        />
+      </label>
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button
         data-testid="table-cols-toggle"

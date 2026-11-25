@@ -420,6 +420,11 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // with `{ ignoreCase, ignoreSpace }` and updates cell diffs and totals.
   const [ignoreWs, setIgnoreWs] = useState(false);
   const [ignoreCase, setIgnoreCase] = useState(false);
+  // Wave-C2c: engine-ready table options. `delimiter` is the field
+  // separator (`","` default); `epsilon` is the numeric-tolerance text
+  // (empty = exact). Both re-issue `table_compare` via the effect deps.
+  const [delimiter, setDelimiter] = useState(",");
+  const [epsilon, setEpsilon] = useState("");
   // Echo of the backend summary: effective mode + key columns. Empty
   // `keyColumns` with `byKey` requested means positional fallback.
   const [effectiveByKey, setEffectiveByKey] = useState(false);
@@ -643,6 +648,14 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           {
             ignoreCase,
             ignoreSpace: ignoreWs,
+            // Wave-C2c: delimiter rides only when non-default (legacy
+            // `,` keeps the 4-field wire); epsilon rides only when it
+            // parses to a finite number (empty/garbage = exact).
+            ...(delimiter === "," ? {} : { delimiter }),
+            ...(() => {
+              const n = epsilon.trim() === "" ? NaN : Number(epsilon);
+              return Number.isFinite(n) ? { numericTolerance: n } : {};
+            })(),
           },
         )) as unknown;
         if (!isRecord(raw) || typeof raw["sessionId"] !== "string") {
@@ -719,7 +732,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     return () => {
       cancelled = true;
     };
-  }, [leftPath, rightPath, byKey, pickedKey, ignoreWs, ignoreCase]);
+  }, [leftPath, rightPath, byKey, pickedKey, ignoreWs, ignoreCase, delimiter, epsilon]);
 
   async function loadMore(): Promise<void> {
     if (session === null || grid === null || loadingMore || grid.rowsL.length >= grid.totalRows)
@@ -1578,6 +1591,10 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         onToggleIgnoreWs={(next) => setIgnoreWs(next)}
         ignoreCase={ignoreCase}
         onToggleIgnoreCase={(next) => setIgnoreCase(next)}
+        delimiter={delimiter}
+        onDelimiterChange={(next) => setDelimiter(next)}
+        epsilon={epsilon}
+        onEpsilonChange={(next) => setEpsilon(next)}
         colsOpen={colsOpen}
         onToggleCols={() => setColsOpen((o) => !o)}
         showAllDisabled={hiddenCount === 0}

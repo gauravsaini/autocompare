@@ -84,9 +84,22 @@ export interface AudioSummary {
 /**
  * Compare two picture files; resolves a bounded summary (scalar metrics
  * plus downsampled diff stats, never full bitmaps).
+ *
+ * Wave-C2c: optional `tolerance` (per-byte threshold, `None`/omitted =
+ * exact byte equality) mirrors the Rust `picture_compare` param. The
+ * mock adapter ignores it (fixed fixture); the headless proof hook
+ * below records the last requested value.
  */
-export function pictureCompare(left: string, right: string): Promise<PictureSummary> {
-  return invoke<PictureSummary>("picture_compare", { left, right });
+export function pictureCompare(left: string, right: string, tolerance?: number): Promise<PictureSummary> {
+  if (typeof window !== "undefined") {
+    (window as unknown as Record<string, unknown>)["__PICTURE_TOLERANCE_LAST__"] =
+      typeof tolerance === "number" && Number.isFinite(tolerance) ? tolerance : null;
+  }
+  return invoke<PictureSummary>("picture_compare", {
+    left,
+    right,
+    tolerance: tolerance ?? null,
+  });
 }
 
 /**

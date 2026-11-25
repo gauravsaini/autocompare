@@ -241,21 +241,49 @@ fn sniff_format(bytes: &[u8]) -> &'static str {
 /// Compares two picture files and returns a bounded summary: scalar
 /// metrics plus downsampled diff stats, never full bitmaps. Interim
 /// byte-level comparison; see the engine swap note above.
+///
+/// Wave-C2c: optional `tolerance` (per-byte threshold, `None`/omitted
+/// = exact byte equality). A set value must be finite and `>= 0`;
+/// bytes whose absolute difference is `<= tolerance` count as equal
+/// (score, `differing_bytes` and `samples` all honour it). Because
+/// the interim implementation compares raw file bytes (not decoded
+/// pixels), this is a byte-distance knob, not a perceptual threshold
+/// — the decoded-pixel engine swap keeps the same param meaning.
+/// Engine `heatmap` note: `PictureOptions.heatmap` needs a file-write
+/// path, which has no IPC DTO yet — tracked as a BLOCKER in the
+/// wave REPORT, not wired here.
 #[tauri::command]
-pub fn picture_compare(left: String, right: String) -> Result<PictureSummary, String> {
+pub fn picture_compare(
+    left: String,
+    right: String,
+    tolerance: Option<f32>,
+) -> Result<PictureSummary, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
     if right.is_empty() {
         return Err("right path must not be empty".to_string());
     }
+    let tol = tolerance.unwrap_or(0.0);
+    if tol < 0.0 || !tol.is_finite() {
+        return Err("tolerance must be a finite number >= 0".to_string());
+    }
     let left_bytes = read_bytes(Path::new(&left))?;
     let right_bytes = read_bytes(Path::new(&right))?;
-    Ok(summarize_picture(&left_bytes, &right_bytes))
+    Ok(summarize_picture(&left_bytes, &right_bytes, tol))
+}
+
+/// Byte distance under the wave-C2c tolerance: `0.0` is exact
+/// equality; anything `<= tol` counts as equal.
+fn bytes_differ(a: u8, b: u8, tol: f32) -> bool {
+    if a == b {
+        return false;
+    }
+    (f32::from(a) - f32::from(b)).abs() > tol
 }
 
 /// Bounded picture summary over two byte buffers.
-fn summarize_picture(left: &[u8], right: &[u8]) -> PictureSummary {
+fn summarize_picture(left: &[u8], right: &[u8], tol: f32) -> PictureSummary {
     let (width_l, height_l) = png_dimensions(left).unwrap_or((0, 0));
     let (width_r, height_r) = png_dimensions(right).unwrap_or((0, 0));
     let format = if sniff_format(left) == "png" && sniff_format(right) == "png" {
@@ -266,7 +294,7 @@ fn summarize_picture(left: &[u8], right: &[u8]) -> PictureSummary {
 
     let mut differing_overlap: u64 = 0;
     for pair in left.iter().zip(right.iter()) {
-        if pair.0 != pair.1 {
+        if bytes_differ(*pair.0, *pair.1, tol) {
             differing_overlap = differing_overlap.saturating_add(1);
         }
     }
@@ -284,7 +312,7 @@ fn summarize_picture(left: &[u8], right: &[u8]) -> PictureSummary {
     let mut seen: u64 = 0;
     let mut samples = Vec::new();
     for (index, pair) in left.iter().zip(right.iter()).enumerate() {
-        if pair.0 == pair.1 {
+        if !bytes_differ(*pair.0, *pair.1, tol) {
             continue;
         }
         if seen.is_multiple_of(stride)
@@ -682,6 +710,7 @@ mod tests {
         let err = picture_compare(
             "/definitely/missing/left-1d.png".to_string(),
             "/definitely/missing/right-1d.png".to_string(),
+            None,
         )
         .expect_err("missing files must fail");
         assert!(err.contains("path not found"), "unexpected: {err}");
@@ -689,8 +718,8 @@ mod tests {
 
     #[test]
     fn picture_empty_paths_rejected() {
-        assert!(picture_compare(String::new(), "b".to_string()).is_err());
-        assert!(picture_compare("a".to_string(), String::new()).is_err());
+        assert!(picture_compare(String::new(), "b".to_string(), None).is_err());
+        assert!(picture_compare("a".to_string(), String::new(), None).is_err());
     }
 
     #[test]
@@ -701,6 +730,7 @@ mod tests {
         let summary = picture_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
         )
         .expect("identical compare");
         assert!(summary.identical);
@@ -725,6 +755,7 @@ mod tests {
         let summary = picture_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
         )
         .expect("differing compare");
         assert!(!summary.identical);
@@ -736,6 +767,36 @@ mod tests {
         let json = serde_json::to_string(&summary).expect("serialize");
         let back: PictureSummary = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(summary, back);
+    }
+
+    #[test]
+    fn picture_tolerance_merges_near_bytes() {
+        // Same length, one byte off by 1: strict sees a diff, a
+        // tolerance of 1.0 merges it back to identical.
+        let mut right_bytes = fake_png(4, 4, 0xAB, 64);
+        let last = right_bytes.len() - 1;
+        right_bytes[last] = right_bytes[last].wrapping_add(1);
+        let left = write_temp("pic-tol-l.png", &fake_png(4, 4, 0xAB, 64));
+        let right = write_temp("pic-tol-r.png", &right_bytes);
+        let l = left.to_string_lossy().to_string();
+        let r = right.to_string_lossy().to_string();
+        let strict = picture_compare(l.clone(), r.clone(), None).expect("strict compare");
+        assert!(!strict.identical);
+        assert_eq!(strict.differing_bytes, 1);
+        let relaxed = picture_compare(l, r, Some(1.0)).expect("relaxed compare");
+        assert!(relaxed.identical);
+        assert_eq!(relaxed.differing_bytes, 0);
+        assert_eq!(relaxed.score, 1.0);
+    }
+
+    #[test]
+    fn picture_rejects_bad_tolerance() {
+        let bytes = fake_png(4, 4, 0xAB, 8);
+        let left = write_temp("pic-badtol.png", &bytes);
+        let l = left.to_string_lossy().to_string();
+        assert!(picture_compare(l.clone(), l.clone(), Some(-1.0)).is_err());
+        assert!(picture_compare(l.clone(), l.clone(), Some(f32::NAN)).is_err());
+        assert!(picture_compare(l.clone(), l, Some(f32::INFINITY)).is_err());
     }
 
     #[test]
