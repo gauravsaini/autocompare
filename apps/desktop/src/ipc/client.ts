@@ -1,4 +1,6 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import type { HexPage, HexSummary } from "./hex";
+import type { TextMergeApplyReport, TextMergePlan } from "./merge";
 import type { SessionDocument } from "./session";
 
 /**
@@ -1153,6 +1155,91 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         ],
         truncated: false,
       } as unknown as T;
+    }
+    case "hex_compare": {
+      const res: HexSummary = {
+        sessionId: "mock-hex-1",
+        leftSize: 64,
+        rightSize: 64,
+        equal: false,
+        firstDiff: 8,
+      };
+      return res as unknown as T;
+    }
+    case "hex_get_page": {
+      const sessionId = strArg(args, ["session", "sessionId"], "mock-hex-1");
+      const offset = numArg(args, ["offset"], 0);
+      const reqLen = numArg(args, ["len"], 64);
+      const len = Math.min(reqLen, 4096);
+      const fullLeft = Array.from({ length: 64 }, (_, i) => i);
+      const fullRight = Array.from({ length: 64 }, (_, i) => (i === 8 ? 0xff : i));
+      const left = offset >= 64 ? [] : fullLeft.slice(offset, offset + len);
+      const right = offset >= 64 ? [] : fullRight.slice(offset, offset + len);
+      const res: HexPage = {
+        sessionId,
+        offset,
+        len,
+        left,
+        right,
+        total: 64,
+        truncated: false,
+      };
+      return res as unknown as T;
+    }
+    case "hex_find": {
+      const fromOffset = numArg(args, ["from_offset", "fromOffset"], 0);
+      const needleHex = strArg(args, ["needle_hex", "needleHex", "needle"], "")
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      if (!needleHex) return null as unknown as T;
+      const fullLeft = Array.from({ length: 64 }, (_, i) => i);
+      const bytes: number[] = [];
+      for (let i = 0; i + 1 < needleHex.length; i += 2) {
+        const val = parseInt(needleHex.slice(i, i + 2), 16);
+        if (Number.isNaN(val)) return null as unknown as T;
+        bytes.push(val);
+      }
+      if (bytes.length === 0) return null as unknown as T;
+      outer: for (let i = Math.max(0, fromOffset); i + bytes.length <= fullLeft.length; i += 1) {
+        for (let j = 0; j < bytes.length; j += 1) {
+          if (fullLeft[i + j] !== bytes[j]) continue outer;
+        }
+        const res: number | null = i;
+        return res as unknown as T;
+      }
+      if (fromOffset <= 8 && (needleHex === "08" || needleHex === "ff" || bytes.includes(8) || bytes.includes(0xff))) {
+        const res: number | null = 8;
+        return res as unknown as T;
+      }
+      const res: number | null = null;
+      return res as unknown as T;
+    }
+    case "merge_text_plan": {
+      const res: TextMergePlan = {
+        conflicts: [
+          {
+            id: 1,
+            base: ["base line"],
+            left: ["left line"],
+            right: ["right line"],
+          },
+        ],
+        conflictCount: 1,
+        cleanBlockCount: 2,
+        hasConflicts: true,
+      };
+      return res as unknown as T;
+    }
+    case "merge_text_apply": {
+      const res: TextMergeApplyReport = {
+        outPath: strArg(args, ["outPath", "out_path"], "/tmp/merged.txt"),
+        writtenLines: 3,
+        conflictCount: 1,
+        resolvedCount: 1,
+        unresolvedCount: 0,
+        hasConflictMarkers: false,
+      };
+      return res as unknown as T;
     }
     default:
       return Promise.resolve([] as unknown as T);

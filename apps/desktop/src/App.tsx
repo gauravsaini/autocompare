@@ -89,7 +89,7 @@ const HOME_CARDS = [
  * errors) are NOT matched — they stay until the next action replaces them.
  */
 const TRANSIENT_STATUS_RE =
-  /^(Tab (closed|selected)|Session (active|opened|loaded)|Demo session ready|Blank session|Swapped left and right|Welcome|Session Manager opened|Find (focused|is not available)|Take |Copy take-|Merge take-|Merge view|Path set|Left set|Right set|Drop needs|2 files set|Submit needs|Theme follows|Layout toggle|Settings UI|.*drop the other side.*|.*no compare for kind.*|.*opened (folder|text) compare.*)$/;
+  /^(Tab (closed|selected)|Session (active|opened|loaded)|Demo session ready|Blank session|Swapped left and right|Welcome|Session Manager opened.*|Find (focused|is not available)|Take |Copy take-|Merge take-|Merge view|Path set|Left set|Right set|Drop needs|2 files set|Submit needs|Theme follows|Layout toggle|Settings UI|.*drop the other side.*|.*no compare for kind.*|.*opened (folder|text) compare.*)$/;
 
 function toViewKind(kind: string): DataViewKind | null {
   switch (kind) {
@@ -579,9 +579,14 @@ export default function App(): React.JSX.Element {
       const id = payload?.id ?? "";
       switch (id) {
         case "file.open-session":
-        case "file.open-workspace":
           setManagerOpen(true);
           setStatusMessage("Session Manager opened");
+          break;
+        case "file.open-workspace":
+          setManagerOpen(true);
+          setStatusMessage(
+            "Session Manager opened (open-workspace duplicates session manager; workspace mode pending backend)",
+          );
           break;
         case "file.open-folder":
           void handleOpenSession("folder");
