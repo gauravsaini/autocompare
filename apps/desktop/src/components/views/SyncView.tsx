@@ -387,7 +387,7 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
   }
 
   return (
-    <section aria-label="folder sync plan" data-filter={stepFilter}>
+    <section aria-label="folder sync plan" data-filter={stepFilter} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {status === "loading" && (
         <p data-testid="syncview/status" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
           Planning sync…

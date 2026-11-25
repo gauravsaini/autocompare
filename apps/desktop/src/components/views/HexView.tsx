@@ -770,6 +770,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
     <section
       aria-label="hex comparison"
       tabIndex={0}
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       data-testid={`hexview/page-${pageIdx}`}
       onKeyDown={(event) => {
         const target = event.target as HTMLElement | null;

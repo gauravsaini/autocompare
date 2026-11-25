@@ -1561,7 +1561,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   return (
-    <section aria-label="table comparison">
+    <section aria-label="table comparison" className="flex min-h-0 flex-1 flex-col">
       {/* Wave-68: single-row chrome (Beyond Compare style). One toolbar
           row owns the by-key toggle, Columns toggle, Export, Find
           toggle and difference nav; the find panel + cols menu collapse
@@ -1852,7 +1852,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           hatch + hover wash run seamless like the text view. */}
       <style data-testid="tableview/diff-style">{`.tc-diff{background-color:var(--ac-diff-del-bg);color:var(--ac-diff-del-fg);}.tc-row{border-bottom:1px solid var(--ac-border-subtle);}.tc-missing{background-color:var(--ac-bg);background-image:repeating-linear-gradient(-45deg, transparent 0 4.19px, var(--ac-hatch-line) 4.19px 5.19px);}.tc-drow>.tc-cell:not(.tc-diff):not(.tc-missing){background-color:color-mix(in srgb, var(--ac-diff-del-bg) 32%, transparent);}.tc-dcur>.tc-cell:not(.tc-diff):not(.tc-missing){background-color:color-mix(in srgb, var(--ac-diff-del-bg) 60%, transparent);}`}</style>
       {loadedRows > VIRTUALIZE_AFTER ? (
-        <div ref={parentRef} data-testid="tableview/grids-scroller" className="h-[var(--ac-scroll-h)] overflow-auto">
+        <div ref={parentRef} data-testid="tableview/grids-scroller" className="min-h-0 flex-1 overflow-auto">
           <div
             data-testid="tableview/grids"
             className="grid grid-cols-[1fr_6px_1fr] items-start gap-x-[var(--ac-space-2)]"
@@ -1913,7 +1913,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       ) : (
         <div
           data-testid="tableview/grids"
-          className="grid grid-cols-[1fr_6px_1fr] items-start gap-x-[var(--ac-space-2)]"
+          className="grid min-h-0 flex-1 grid-cols-[1fr_6px_1fr] items-start gap-x-[var(--ac-space-2)] overflow-y-auto"
         >
           <div data-testid="tableview/grid-left" className="min-w-0 overflow-x-auto">
             <table className={TABLE_CLASS}>

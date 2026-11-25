@@ -2561,7 +2561,7 @@ export default function TextView({
   const rightDirty = Object.keys(edits).some((k) => k.endsWith(":right")) || stagedCopies.some((c) => c.target === "right");
 
   return (
-    <section aria-label="text comparison" data-wrap={wrap ? "on" : "off"} data-linenos={showLineNos ? "on" : "off"}>
+    <section aria-label="text comparison" data-wrap={wrap ? "on" : "off"} data-linenos={showLineNos ? "on" : "off"} className="flex min-h-0 flex-1 flex-col">
       {demo === null ? null : (
         <p data-testid="textview/demo" className="px-[var(--ac-space-4)] pt-[var(--ac-space-2)] ac-chrome-label font-medium text-[var(--ac-fg)]">
           Demo pair (real compare): {demo.left} vs {demo.right}
@@ -2761,7 +2761,7 @@ export default function TextView({
           list) because soft-wrapped rows are taller than ROW_PX and would
           overlap at absolute positions. Scroll mode keeps virtualization. */}
       {!wrap && visibleRows.length > VIRTUALIZE_AFTER ? (
-        <div ref={parentRef} data-testid="textview/virtual" className="min-w-0 flex-1 h-[var(--ac-scroll-h)] overflow-auto">
+        <div ref={parentRef} data-testid="textview/virtual" className="min-h-0 min-w-0 flex-1 overflow-auto">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((v) => {
               const row = visibleRows[v.index];
@@ -2785,7 +2785,7 @@ export default function TextView({
       ) : (
         // Wave-34: scroll mode keeps horizontal scroll for long single-line
         // rows; wrap mode lets cells soft-wrap instead.
-        <div className={(wrap ? "" : "overflow-x-auto ") + "min-w-0 flex-1"}>{visibleRows.map(renderRow)}</div>
+        <div data-testid="textview/rows" className={(wrap ? "overflow-y-auto " : "overflow-x-auto overflow-y-auto ") + "min-h-0 min-w-0 flex-1"}>{visibleRows.map(renderRow)}</div>
       )}
         {/* Wave-79/90: overview strip ordered after row container in DOM so
             `[data-kind]` queries resolve to rows first, with `order-first`

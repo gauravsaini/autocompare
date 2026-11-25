@@ -1052,7 +1052,7 @@ export default function FolderView({
   }
 
   return (
-    <section aria-label="folder comparison">
+    <section aria-label="folder comparison" className="flex min-h-0 flex-1 flex-col">
       {/* Wave-67B: chrome collapse (Beyond Compare style). One toolbar row
           (all/diffs/same + changes-only + name-filter toggle) plus a
           collapsible in-flow name panel (closed by default, Ctrl+F/Esc).
@@ -1345,7 +1345,7 @@ export default function FolderView({
         )}
       </div>
       {visible.length > VIRTUALIZE_AFTER ? (
-        <div ref={parentRef} data-testid="folderview/scroller" className="h-[var(--ac-scroll-h)] overflow-auto">
+        <div ref={parentRef} data-testid="folderview/scroller" className="min-h-0 flex-1 overflow-auto">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((v) => {
               const entry = visible[v.index];
@@ -1368,7 +1368,7 @@ export default function FolderView({
           </div>
         </div>
       ) : (
-        <div data-testid="folderview/list">{visible.map(renderNode)}</div>
+        <div data-testid="folderview/list" className="min-h-0 flex-1 overflow-y-auto">{visible.map(renderNode)}</div>
       )}
       {hasMore && (
         <Button
