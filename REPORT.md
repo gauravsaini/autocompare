@@ -1625,3 +1625,86 @@ GATE: PASS — install 2x EXIT 0, smoke 2x EXIT 0 (fixed script), screenshots me
 5. **Blocker**: koi nahi. FAIL-count 0, stop-trigger nahi laga.
 
 ---
+# L3B copy-path wiring — REPORT (local, no commit)
+
+## GOAL
+Har comparable kind me Copy ek hi ViewCommandBus path par aaye: App
+`handleViewCommand("copy"/"copy-right")` table/folder/hex/sync ke liye
+`dispatchViewCommand("copy", kind, { dir })` forward kare; har view apne
+EXISTING local copy handler ko bus "copy" par route kare; jahan truly
+unwirable ho honest park + BLOCKER note.
+
+## Files changed (owns only)
+- apps/desktop/src/App.tsx — handleViewCommand "copy"/"copy-right"
+  branches: merge/text live jaise the waise; table/folder/hex/sync
+  `dispatchViewCommand("copy", kind, { dir: left|right })` + status
+  `Copy requested (${kind})`; media/none/unknown honest park
+  (`Copy is not available for kind "..."`, no dispatch).
+- apps/desktop/src/components/views/TableView.tsx — bus listener me
+  copy/copy-right: "copy"/dir-left -> copyCell(), "copy-right"/dir-right
+  -> copyRow() (refs, latest render closure); onBusCommand union +
+  TableToolbar fallback same route. NO visual change.
+- apps/desktop/src/components/views/FolderView.tsx — bus listener me
+  copy/copy-right: selected file row ka existing copyPath()
+  (copySelectedRef); no-selection honest parked hook
+  `__FOLDER_COPY_LAST__ = { relPath: null, ok: false, reason:
+  "no-selection" }`; copyPath success/fail ab same hook record karta
+  hai. onBusCommand union + FolderToolbar fallback same route.
+  NO visual change.
+- apps/desktop/src/components/views/HexView.tsx — bus listener me
+  copy/copy-right: "copy"/dir-left -> copyHex(), "copy-right"/dir-right
+  -> copyAscii() (refs); onBusCommand union + HexToolbar fallback same
+  route. NO visual change.
+- apps/desktop/src/components/views/SyncView.tsx — bus listener me
+  copy/copy-right HONEST PARK: `__SYNC_COPY_PARKED__` counter badhta
+  hai, plan/selection/visual kuch nahi badalta. NO visual change.
+- apps/desktop/e2e/specs/copy-L3B.spec.ts — NEW, 5 tests (mock IPC,
+  webkit): per kind App-forward (status message) + view follow-through
+  + foreign-kind isolation + no crash/pageerrors.
+- MediaView.tsx — untouched (pehle se honest no-op listener hai).
+
+## Gates
+- tsc --noEmit: 0 (worktree /tmp/wt-L3B, node_modules main se symlink).
+- bash tools/gate-run.sh <DIR> <PORT> e2e/specs/copy-L3B.spec.ts
+  e2e/specs/ui-standards.spec.ts e2e/specs/chrome-budget.spec.ts
+  --workers=1 — ALL GREEN 2x:
+  - PORT 4723: 11 passed (copy-L3B 5 + ui-standards 4 + chrome-budget 2).
+  - PORT 4724: 11 passed (same split).
+- Neeche diye gaye ek beech-run fail ka note: hex test me receipt
+  value ka hardcoded assume ("65") galat tha — mock yahan real 64-byte
+  fixture serve karta hai (receipt "copied hex: 01"), embedded 11-byte
+  fallback nahi. Spec ab footer `hex-detail-left` se honest value derive
+  karta hai (`/left ([0-9a-f]{2})/`); doosra fail nahi — same-fix category,
+  BLOCKER nahi.
+
+## Per-kind MATCH/OFF table
+| kind | App forward | view follow-through | MATCH/OFF | note |
+|------|-------------|---------------------|-----------|------|
+| text | live (gutter copyHunk path, unchanged) | live | MATCH | L3B untouched |
+| merge | live (take-left/right/both, unchanged) | live | MATCH | L3B untouched |
+| table | `Copy requested (table)` + bus dispatch | bus copy->copyCell, copy-right->copyRow | MATCH | dir mapping: left=cell, right=row (secondary affordance); REPORT decision |
+| folder | `Copy requested (folder)` + bus dispatch | bus copy->copyPath(selected file) | MATCH | no-selection honest parked hook |
+| hex | `Copy requested (hex)` + bus dispatch | bus copy->copyHex, copy-right->copyAscii | MATCH | no-selection -> page summary (existing honest fallback) |
+| sync | `Copy requested (sync)` + bus dispatch | HONEST PARK (counter only) | OFF (parked) | BLOCKER note neeche |
+| media | honest park, NO dispatch | no-op (pehle se) | OFF (parked) | summary view: score/metrics, koi cursor nahi |
+| none/unknown | honest park, NO dispatch | n/a | OFF (parked) | `Copy is not available for kind "..."` |
+
+## BLOCKER note (sync honest park)
+Sync plan rows par koi per-file clipboard copy affordance nahi hai
+(rows par Exclude toggle hai) aur engine me per-step copy hunk nahi hai
+(text `copyHunkAt` / merge take-both jaisa kuch nahi) — isliye bus
+"copy" ko view me copy karna force karna naya behavior invent karna
+hota (e.g. rel_path clipboard me daalna), jo BC parity claim ke bina
+dishonest hota. Isliye: App forward karta hai (unified path), view
+park karta hai + `__SYNC_COPY_PARKED__` hook se prove hota hai dispatch
+land hua. Agar BC me Sync pane me copy-path/copy-selection nikalta hai
+to wahi next wave ka scope hai — engine/IPC touch kiye bina is wave me
+aur kuch honestly wire nahi ho sakta tha.
+
+## Hinglish-roman summary
+Copy ab table/folder/hex/sync me ek hi bus path par hai, purane local
+handlers reuse hue, koi visual/testid change nahi, text/merge/engine/IPC
+untouched. Sync/media honestly parked hai (upar BLOCKER note). Gates 2x
+green.
+
+---
