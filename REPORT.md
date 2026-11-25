@@ -548,3 +548,70 @@ Naya spec:
 (reverted, list se bahar: `MediaToolbar.tsx`, `MediaView.tsx` — zero diff.)
 
 C2c-DONE
+
+---
+
+# H1 Homechrome Report (wave-H1-homechrome, worktree /tmp/wt-H1)
+
+Base: main f470b68. Worktree-first, main ya koi branch direct edit nahi. Commit/push nahi kiya.
+
+## Kya tha (live 1717 screenshot review, main code me verify)
+
+- P0-1 PathBar Home par mount tha — ChromeShell.tsx unconditional tha.
+- P0-2 OverviewRuler global mount tha — Home par bhi dikhta tha.
+- P1-3 Sessions card float kar raha tha — left sidebar full-height nahi tha.
+- P1-4 Canvas par monospace `sessions:N` stray tha (status bar ka hissa nahi).
+- P1-5 TabBar `+` last tab se ~200px door tha (inner `flex-1` poori row kha raha tha).
+- P2-6 Folder card subtitle `Directories and archives` lamba tha — ellipsis aata tha.
+- P2-7 Status bar Home par debug-copy `Tab selected: home` dikhata tha.
+
+## Kya kiya (OWNS only, minimal)
+
+1. `apps/desktop/src/components/chrome/ChromeShell.tsx` — conditional mount ONLY:
+   - `activeTabId/kind` se `isHomeTab` derive (props API same, koi naya prop nahi).
+   - `showPathBar = !isHomeTab` — PathBar sirf comparison tabs par, Home par kabhi nahi.
+   - `showRuler = !isHomeTab && kind in {text,hex,merge}` — ruler sirf Text/Hex/Merge diff views me, Home/folder/table/sync/media par nahi.
+2. `apps/desktop/src/components/chrome/TabBar.tsx` — `+` placement ONLY:
+   - Inner scroller `flex-1` -> `flex-initial` (grow 0, shrink 1, scroll intact) + comment.
+   - `+` ab last tab ke turant bagal me chipakta hai, tabbar ke andar rehta hai.
+3. `apps/desktop/src/components/home/controls/HomeSessionsPane.tsx` — layout ONLY:
+   - Section me `self-stretch` add — left Saved-Sessions sidebar full-height, right cards `items-start` se top-aligned (BC pattern). Parent App welcome untouched.
+4. `apps/desktop/src/App.tsx` — minimal 3 hunk:
+   - HOME_CARDS folder hint `Directories and archives` -> `Directories & archives` (ellipsis khatm).
+   - `handleSelectTab` me Home branch: `selectSession(home)` + `setStatusMessage("Ready")` — `Tab selected: home` debug-copy khatm. Comparison tabs ka message byte-identical.
+   - Welcome canvas `session-count` `<p>` visual classes -> `sr-only` (testid + text byte-identical, canvas clean; count status bar `status.right` me pehle se mirror hai).
+5. NEW `apps/desktop/e2e/specs/h1-homechrome-247.spec.ts` — Home: no PathBar, no ruler, no stray count (sr-only), `+` adjacent (flex-grow 0 + order), folder subtitle `&`, status Ready (empty par `Tab selected` nahi, session ke baad Home par `Ready`). Koi geometry pixel-lock nahi.
+
+DO NOT touch ka palan: views/**, session/**, ui/** primitives, tokens.css, ipc/**, src-tauri/**, text/table/folder/hex/merge/sync toolbars, doosre specs — kuch nahi chhua. Saare existing testid byte-identical (`session-count` sr-only allowed).
+
+## Gates (worktree, fresh port 1846, absolute paths)
+
+- `./node_modules/.bin/tsc --noEmit` (main node_modules symlink, baad me remove) => TSC:0
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-H1/apps/desktop 1846 h1-homechrome-247.spec.ts ui-standards.spec.ts --workers=1` => all green:
+  - h1-homechrome-247.spec.ts: 2/2 passed (6.2s + 5.8s)
+  - ui-standards.spec.ts: 4/4 passed
+  - `6 passed (17.0s), GATE_PLAYWRIGHT_EXIT=0`
+- Symlink remove kar diya, worktree me sirf 4 modified + 1 new spec + ye REPORT hai. Commit/push nahi kiya.
+
+## MATCH/OFF
+
+| # | Defect | Status |
+|---|--------|--------|
+| P0-1 | PathBar Home par nahi | MATCH |
+| P0-2 | Ruler Home par nahi, sirf Text/Hex/Merge | MATCH |
+| P1-3 | Sessions left full-height + cards top-aligned | MATCH |
+| P1-4 | Stray canvas count hata, testid sr-only + status bar mirror | MATCH |
+| P1-5 | `+` last tab ke bagal me | MATCH |
+| P2-6 | Folder subtitle `Directories & archives` | MATCH |
+| P2-7 | Home status `Ready`, debug-copy nahi | MATCH |
+
+## Files
+
+- apps/desktop/src/components/chrome/ChromeShell.tsx (conditional PathBar/OverviewRuler mount ONLY)
+- apps/desktop/src/components/chrome/TabBar.tsx (+ button placement ONLY)
+- apps/desktop/src/components/home/controls/HomeSessionsPane.tsx (layout self-stretch ONLY)
+- apps/desktop/src/App.tsx (HOME_CARDS hint `&`, handleSelectTab Home `Ready`, welcome session-count sr-only — minimal)
+- apps/desktop/e2e/specs/h1-homechrome-247.spec.ts (NEW)
+- REPORT.md (ye file, worktree root)
+
+H1-DONE

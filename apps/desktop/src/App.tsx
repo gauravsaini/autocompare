@@ -72,7 +72,7 @@ const WELCOME_TAB: ChromeTab = { id: "home", title: "Welcome", kind: "home", dir
  */
 const HOME_CARDS = [
   { kind: "text", icon: FileText, label: "Text Compare", hint: "Files, line by line" },
-  { kind: "folder", icon: Folder, label: "Folder Compare", hint: "Directories and archives" },
+  { kind: "folder", icon: Folder, label: "Folder Compare", hint: "Directories & archives" },
   { kind: "hex", icon: Binary, label: "Hex Compare", hint: "Bytes and offsets" },
   { kind: "table", icon: Table, label: "Table Compare", hint: "Rows and columns" },
   { kind: "merge", icon: GitMerge, label: "Merge", hint: "Three-way merge" },
@@ -374,6 +374,14 @@ export default function App(): React.JSX.Element {
     (id: string) => {
       if (id === WELCOME_TAB.id && visibleSessions.length === 0) {
         setStatusMessage("Welcome");
+        return;
+      }
+      // H1: Home par debug-copy nahi — `Tab selected: home` ki jagah
+      // honest `Ready` (BC jaisa neutral). Comparison tabs ka message
+      // byte-identical rehta hai.
+      if (id === WELCOME_TAB.id) {
+        selectSession(id);
+        setStatusMessage("Ready");
         return;
       }
       selectSession(id);
@@ -2313,7 +2321,12 @@ export default function App(): React.JSX.Element {
                   );
                 })}
               </div>
-              <p className="ac-mono self-stretch text-right text-[10px] leading-none text-[var(--ac-fg-muted)] opacity-60" data-testid="session-count">
+              {/* H1: Home canvas par stray monospace `sessions:N` nahi (BC
+                  jaisa clean canvas). Count status bar me pehle se mirror
+                  hai (`status.right` sessions:N); testid byte-identical
+                  rakhkar sr-only — specs `session-count` text se padh
+                  sakte hain, canvas par dikhta nahi. */}
+              <p className="sr-only" data-testid="session-count">
                 sessions: {visibleSessions.length}
               </p>
               </div>
