@@ -43,10 +43,12 @@ export interface MergeToolbarProps {
   readonly onTakeActiveCenter?: () => void;
   readonly onTakeActiveRight?: () => void;
   readonly takeActiveDisabled?: boolean;
+  /** Active conflict resolution choice ("left" | "right" | "base" | null) */
+  readonly activeChoice?: "base" | "left" | "right" | "bothLeftFirst" | "bothRightFirst" | null;
 }
 
 export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Element {
-  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId, activeId, activePosition, onTakeActiveLeft, onTakeActiveCenter, onTakeActiveRight, takeActiveDisabled } = props;
+  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId, activeId, activePosition, onTakeActiveLeft, onTakeActiveCenter, onTakeActiveRight, takeActiveDisabled, activeChoice } = props;
   const showActiveTakes = onTakeActiveLeft !== undefined || onTakeActiveCenter !== undefined || onTakeActiveRight !== undefined;
   const activeDisabled = takeActiveDisabled === true || activeId === null || activeId === undefined;
   return (
@@ -128,27 +130,33 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           <Button
             size="sm"
             data-testid="merge-take-active-left"
+            aria-pressed={activeChoice === "left"}
             onClick={onTakeActiveLeft}
             disabled={activeDisabled || onTakeActiveLeft === undefined}
             title="Take Left for the active conflict"
+            className={activeChoice === "left" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take Left
           </Button>
           <Button
             size="sm"
             data-testid="merge-take-active-center"
+            aria-pressed={activeChoice === "base"}
             onClick={onTakeActiveCenter}
             disabled={activeDisabled || onTakeActiveCenter === undefined}
             title="Take Center (common ancestor) for the active conflict"
+            className={activeChoice === "base" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             Take Center
           </Button>
           <Button
             size="sm"
             data-testid="merge-take-active-right"
+            aria-pressed={activeChoice === "right"}
             onClick={onTakeActiveRight}
             disabled={activeDisabled || onTakeActiveRight === undefined}
             title="Take Right for the active conflict"
+            className={activeChoice === "right" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             Take Right <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
           </Button>
@@ -157,6 +165,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
         data-testid="mergeview/toolbar-find"
+        size="sm"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in merge (Ctrl+F)"
         expanded={findOpen}

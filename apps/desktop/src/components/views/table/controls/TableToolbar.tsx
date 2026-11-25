@@ -230,6 +230,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
+        size="sm"
         data-testid="tableview/toolbar-find"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in table (Ctrl+F)"
@@ -240,6 +241,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         <span>Find</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="tableview/toolbar-prev-diff"
         label="Previous difference row"
         title="Previous difference row"
@@ -253,6 +255,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
         <span>Prev</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="tableview/toolbar-next-diff"
         label="Next difference row"
         title="Next difference row"

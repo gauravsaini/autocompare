@@ -12,7 +12,7 @@
  */
 
 import { ArrowDownToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { Checkbox, Field, Select, StatusText, ToolbarButton } from "../../../ui";
+import { Button, Checkbox, Field, Select, StatusText, ToolbarButton } from "../../../ui";
 
 export interface HexToolbarProps {
   readonly pageLabel: string;
@@ -144,12 +144,12 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       />
       <span aria-hidden="true" className="tv-controls-sep" />
       <span data-testid="hex-copy-bar" className="ac-control-group">
-        <ToolbarButton data-testid="hex-copy-hex" onClick={onCopyHex} label="Copy hex">
+        <Button data-testid="hex-copy-hex" size="sm" onClick={onCopyHex}>
           Copy hex
-        </ToolbarButton>
-        <ToolbarButton data-testid="hex-copy-ascii" onClick={onCopyAscii} label="Copy ASCII">
+        </Button>
+        <Button data-testid="hex-copy-ascii" size="sm" onClick={onCopyAscii}>
           Copy ASCII
-        </ToolbarButton>
+        </Button>
       </span>
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton

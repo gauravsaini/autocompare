@@ -171,6 +171,21 @@ test("mergesyncmedia-147 merge: chrome budget, edit-mode, gutter, overview in to
   await expect(edit).toHaveValue("base\nright\nleft");
   await page.getByTestId("merge-take-left-0").click();
   await expect(page.getByTestId("mergeview/status-note")).toContainText("1 resolved");
+
+  // Wave-229: toolbar active take Left / Center / Right wiring
+  await expect(page.getByTestId("merge-take-active-left")).toBeVisible();
+  await expect(page.getByTestId("merge-take-active-center")).toBeVisible();
+  await expect(page.getByTestId("merge-take-active-right")).toBeVisible();
+  await page.getByTestId("merge-take-active-right").click();
+  await expect(edit).toHaveValue("base\nright");
+  await expect(page.getByTestId("merge-take-active-right")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("merge-take-active-center").click();
+  await expect(edit).toHaveValue("base");
+  await expect(page.getByTestId("merge-take-active-center")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("merge-take-active-left").click();
+  await expect(edit).toHaveValue("base\nleft");
+  await expect(page.getByTestId("merge-take-active-left")).toHaveAttribute("aria-pressed", "true");
+
   await page.getByTestId("merge-out-path").fill(OUT_FILE);
   await page.getByTestId("merge-apply").click();
   await expect(page.getByTestId("merge-apply-report")).toContainText(OUT_FILE);

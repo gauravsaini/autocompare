@@ -11,7 +11,7 @@
  */
 
 import { SlidersHorizontal } from "lucide-react";
-import { Button, ToolbarButton } from "../../../ui";
+import { Button, StatusText, ToolbarButton } from "../../../ui";
 
 export interface MediaToolbarProps {
   readonly mode: "picture" | "audio";
@@ -30,12 +30,12 @@ export default function MediaToolbar(props: MediaToolbarProps): React.JSX.Elemen
       data-testid="mediaview/toolbar"
       className="tv-controls-bar"
     >
-      <span
+      <StatusText
         data-testid="mediaview/mode"
         className="ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
       >
         {mode === "picture" ? "Picture compare" : "Audio compare"}
-      </span>
+      </StatusText>
       {mode === "audio" ? (
         <>
           <span aria-hidden="true" className="tv-controls-sep" />

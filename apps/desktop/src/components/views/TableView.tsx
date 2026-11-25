@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit } from "../../ipc/table";
-import { Button, Checkbox, Input, Select } from "../ui";
+import { Button, Checkbox, Input, Select, StatusText } from "../ui";
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -564,9 +564,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   const sameCount = visibleRowOrder.length - diffRows.length;
   // Wave-69: FULL-table totals from the summary for the status bar
   // (null on old backends => fall back to the loaded scope above).
-  const shownDiffs = totalDiffRows ?? diffRows.length;
+  // When column mapping is active, backend summary totals reflect positional
+  // comparison, so fall back to loaded mapped diffs.
+  const isMapped = mappedPairs() > 0;
+  const shownDiffs = totalDiffRows !== null && !isMapped ? totalDiffRows : diffRows.length;
   const shownSame =
-    totalDiffRows === null || grid === null
+    totalDiffRows === null || grid === null || isMapped
       ? sameCount
       : Math.max(grid.totalRows - totalDiffRows, 0);
   const safeDiffPos = diffRows.length === 0 ? -1 : diffPos % diffRows.length;
@@ -783,7 +786,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         for (let c = 0; c < row.length; c += 1) {
           // Wave 32: find skips hidden columns (data stays loaded, just
           // not searched); the inline note keeps this honest.
-          if (hiddenCols.has(c)) continue;
+          if (side === "left") {
+            if (hiddenCols.has(c)) continue;
+          } else {
+            const dispCol = cols.find((dc) => mapR(dc) === c);
+            if (dispCol !== undefined && hiddenCols.has(dispCol)) continue;
+          }
           if (findCellMatches(row[c], query)) {
             if (out.length >= 100) return out;
             out.push({ side, row: r, col: c, value: row[c] });
@@ -830,7 +838,13 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       if (list.length === 0) list = localScan(query);
       // Wave 32: IPC knows nothing about visibility (no new IPC params),
       // so hits landing on hidden columns are filtered client-side.
-      if (hiddenCols.size > 0) list = list.filter((h) => !hiddenCols.has(h.col));
+      if (hiddenCols.size > 0) {
+        list = list.filter((h) => {
+          if (h.side === "left") return !hiddenCols.has(h.col);
+          const dispCol = cols.find((dc) => mapR(dc) === h.col);
+          return dispCol === undefined || !hiddenCols.has(dispCol);
+        });
+      }
       setHits(list.slice(0, 100));
       setHitPos(0);
     } finally {
@@ -1660,6 +1674,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
               </label>
               <Button
                 variant="secondary"
+                size="sm"
                 data-testid="table-map-reset"
                 onClick={resetMap}
                 disabled={colMap === null}
@@ -1780,6 +1795,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         <Input
           id="table-find-input"
           data-testid="table-find-input"
+          controlSize="sm"
           type="search"
           value={findInput}
           onChange={(e) => setFindInput(e.target.value)}
@@ -1792,6 +1808,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         />
         <Button
           variant="secondary"
+          size="sm"
           data-testid="table-find-search"
           onClick={() => void runFind(findInput)}
           disabled={finding}
@@ -1800,15 +1817,20 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="table-find-next"
           onClick={nextHit}
           disabled={hits.length === 0}
         >
           Next
         </Button>
-        <span data-testid="table-find-status" role="status" className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+        <StatusText
+          data-testid="table-find-status"
+          role="status"
+          variant="code"
+        >
           {findStatusText}
-        </span>
+        </StatusText>
       </div>
       )}
       {hiddenCount > 0 && findQuery !== "" && findOpen && (

@@ -106,9 +106,16 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     window.addEventListener("autocompare:view-filter", onViewFilter);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        setToleranceOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("autocompare:view-command", onBusCmd);
       window.removeEventListener("autocompare:view-filter", onViewFilter);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
 

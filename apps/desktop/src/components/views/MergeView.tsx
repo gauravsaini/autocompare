@@ -1129,6 +1129,7 @@ export default function MergeView({
         }}
         activeId={conflicts[selected]?.id ?? null}
         activePosition={position}
+        activeChoice={conflicts[selected] ? (choices[conflicts[selected].id] ?? null) : null}
         takeActiveDisabled={count === 0}
         onTakeActiveLeft={() => handleTakeRequest("left")}
         onTakeActiveCenter={() => handleTakeRequest("base")}
@@ -1501,6 +1502,7 @@ export default function MergeView({
         <Input
           id="merge-out-path"
           data-testid="merge-out-path"
+          controlSize="sm"
           value={outPath}
           onChange={(event) => setOutPath(event.target.value)}
           placeholder="/tmp/merge-12-out.txt"
@@ -1508,6 +1510,7 @@ export default function MergeView({
         />
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-out-browse"
           aria-label="Browse for output path (Save As)"
           title="Browse for output path (native Save dialog; typed path still works when no dialog is available)"
@@ -1529,6 +1532,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="primary"
+          size="sm"
           data-testid="merge-apply"
           onClick={() => void apply()}
           disabled={applying}
@@ -1537,6 +1541,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-compare-output-left"
           data-disabled-reason={compareLeftDisabledReason ?? undefined}
           disabled={compareLeftDisabledReason !== null || comparingOutput !== null}
@@ -1548,6 +1553,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-compare-output-right"
           data-disabled-reason={compareRightDisabledReason ?? undefined}
           disabled={compareRightDisabledReason !== null || comparingOutput !== null}

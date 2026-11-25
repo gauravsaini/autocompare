@@ -424,6 +424,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
     }, 0);
   }, [syncScroll, selectedOffset, pageIdx, page]);
+  useEffect(() => {
+    if (!syncScroll || match === null) return;
+    window.setTimeout(() => {
+      const el = document.querySelector(".hx-find-match");
+      if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
+    }, 0);
+  }, [syncScroll, match, pageIdx, page]);
 
   /** Parse a goto offset: `0x`-prefixed hex or plain decimal. */
   function parseGotoOffset(text: string): number | null {

@@ -38,6 +38,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
         <Input
           id="merge-find-box"
           data-testid="merge/find-input"
+          controlSize="sm"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => {
@@ -50,6 +51,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           className="ac-code w-40"
         />
         <Button
+          size="sm"
           data-testid="merge/find-prev"
           aria-label="Previous find hit"
           onClick={onPrev}
@@ -58,6 +60,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           Prev
         </Button>
         <Button
+          size="sm"
           data-testid="merge/find-next"
           aria-label="Next find hit"
           onClick={onNext}
@@ -66,6 +69,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           Next
         </Button>
         <ToolbarButton
+          size="sm"
           data-testid="merge/find-close"
           label="Dismiss find (Esc)"
           title="Dismiss find (Esc)"
