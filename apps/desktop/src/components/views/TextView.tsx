@@ -1333,7 +1333,12 @@ export default function TextView({
       // find/goto dismiss buttons on Esc and preventDefaults; the
       // guard would otherwise swallow this listener and leave the
       // button-less Ignore/Format popovers open (textcontrols-66r).
+      // Wave-66R: window-CAPTURE (see registration below). DockedBar
+      // registers a document-capture stopPropagation Esc, so a bubble
+      // listener never fires while find/goto is open — global collapse
+      // was dead and 66r stayed red. Dialogs own Esc (Modal contract).
       if (e.key === "Escape") {
+        if (document.querySelector('[role="dialog"]') !== null) return;
         setFindOpen(false);
         setGotoOpen(false);
         setIgnoreOpen(false);
@@ -1362,11 +1367,11 @@ export default function TextView({
       // drive the current `jumpDiffRef` — this stale `[]`-deps closure
       // must never call `jumpDiff` (empty-hunks note, double jump).
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     window.addEventListener("autocompare:session-find", onSessionFind);
     window.addEventListener("autocompare:session-goto", onSessionGoto);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("autocompare:session-find", onSessionFind);
       window.removeEventListener("autocompare:session-goto", onSessionGoto);
     };
