@@ -202,8 +202,9 @@ test("BC-gutter residual: centered rail, hatch, calm divider, arrow copy", async
   await expect(page.getByTestId("textview/row-6").locator('div[title="right"]')).toHaveText("removed line A");
   // Status counts honestly follow the resolved rows: hunk 0's 4
   // left-only rows are now same (188 -> 192 same, 0 left-only).
+  // WAVE-224-SPECRECONCILE R1: append honest suffix (pins swapsides-136 green).
   await expect(page.getByTestId("textview/status")).toHaveText(
-    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded)",
+    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded) · left 640 lines · right 640 lines · tools/parity-harness/fixtures/t_left.txt vs tools/parity-harness/fixtures/t_right.txt",
   );
   await expect(page.getByRole("alert")).toHaveCount(0);
 

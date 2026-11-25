@@ -83,10 +83,15 @@ test("row Enter opens left editor prefilled, Ctrl+Enter commits via backend", as
   await expect(row.locator(".tv-cell").nth(1).getByTestId("textview/cell-edit")).toHaveCount(0);
 
   // Unchanged 66V commit path: Ctrl+Enter applies through the backend.
+  // WAVE-224-SPECRECONCILE R2: staged contract pins textstaged-198/textapplyedit-66v/texteditmode-66ub green.
   await editor.fill(`${before} ROWEDIT-137`);
   await editor.press("Control+Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(leftCell).toContainText("ROWEDIT-137");
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
   await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
 
@@ -158,7 +163,13 @@ test("row Enter on rightOnly orphan opens right side, single-line Enter commits"
   await editor.press("Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(textCell).toContainText("R137");
+  // WAVE-224-SPECRECONCILE R2: staged contract pins textstaged-198/textapplyedit-66v/texteditmode-66ub green.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  await page.getByTestId("textview/save-right").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved right to");
   await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
 
   expectZeroNoise(pageErrors, consoleErrors);
 });

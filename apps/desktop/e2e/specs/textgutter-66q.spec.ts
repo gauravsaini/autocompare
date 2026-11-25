@@ -257,12 +257,13 @@ test("BC-gutter exact parity: roles, hatch, rail, arrows, copy", async ({ page }
   expect(splitterRail.bg, "splitter rail uses subtle ink").toBe("rgb(229, 229, 234)");
 
   // Copy click still works: take-left fills right cells + clears the hunk.
+  // WAVE-224-SPECRECONCILE R1: append honest suffix (pins swapsides-136 green).
   await expect(rightCell).toHaveText("");
   await leftBtn.click();
   await expect(row6).toHaveAttribute("data-kind", "equal");
   await expect(row6.locator('div[title="right"]')).toHaveText("removed line A");
   await expect(page.getByTestId("textview/status")).toHaveText(
-    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded)",
+    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded) · left 640 lines · right 640 lines · tools/parity-harness/fixtures/t_left.txt vs tools/parity-harness/fixtures/t_right.txt",
   );
   await expect(page.getByRole("alert")).toHaveCount(0);
 

@@ -235,10 +235,16 @@ test("commit restores cell focus, undo restores row focus", async ({ page }) => 
   await editor.fill("FOCUS-RESTORE-109");
   await editor.press("Control+Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // WAVE-224-SPECRECONCILE R2: staged contract pins textstaged-198/textapplyedit-66v/texteditmode-66ub green.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
   await expect(cell).toContainText("FOCUS-RESTORE-109");
   // Caret affordance: keyboard flow continues in the edited cell.
   await expect(cell).toBeFocused();
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
 
   const undo = page.getByTestId("textview/undo-edit");
   await expect(undo).toBeEnabled();
