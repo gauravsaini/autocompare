@@ -1401,3 +1401,65 @@ wahi shape rakha.
 Blocker: koi nahi. FAIL 3x wala case aaya hi nahi.
 
 ---
+# WC Text Toolbar Density — REPORT
+
+## UPDATED ON: 2026-11-25
+
+### WC density (2026-11-25) — button 22/24, DockedBar overlays, popover shape kept, gate 12/12 x2 green
+
+1. **Kaam kya tha**: TextToolbar + Find/Goto overlays + Ignore/Format popovers ko ui
+   primitives par pin kiya, chrome budget intact rakhte hue. Sirf styling-only changes —
+   koi logic, testid, ya Esc-contract change nahi.
+   - `TextToolbar.tsx`: dense bar (`tv-controls-bar--dense`, gap 2px) + 4 toggles par
+     explicit `size="sm"` (22px) + save buttons `size="sm"` (22px). Unified clusters
+     (nav/copy/filter) same testids par rahe.
+   - `FindOverlay.tsx` / `GotoOverlay.tsx`: DockedBar contract same (in-flow section,
+     Esc + close button single `onClose`); Prev/Next/Go par explicit `size="sm"` (22px),
+     inputs default 24px. Koi testid/Esc change nahi.
+   - `IgnoreMenu.tsx`: fieldset popover shape KEPT — fullscreen Modal regression nahi
+     (DEBTC root cause: scrim toolbar toggle ko cover kar deta hai, toggle-close marti).
+     Checkboxes ui/Checkbox (22px), testids same.
+   - `FormatMenu.tsx`: Modal shape KEPT (role=dialog, Esc+backdrop+close single onClose).
+     Selects default 24px + checkbox 22px, testids same.
+2. **Naya spec (NEW file only)**: `apps/desktop/e2e/specs/textdensity-WC.spec.ts` — 2 tests:
+   - density + chrome budget + light/dark (buttons 22px band 20-24, inputs/selects
+     24px band 22-26, toolbar single row <=48px, firstRowTop<=140 closed AND open,
+     DockedBar in-flow check, overlap gate, light+dark screenshots).
+   - overlays (Find/Goto toggle + close-button + Ctrl+F/G + Esc dismiss, Ignore
+     fieldset-no-dialog + whitespace/case recompare bina note ke + toggle-close,
+     Format role=dialog + Esc, phir firstRowTop<=140).
+3. **Gate (fresh PORT 1884, realpath DIR `/private/tmp/wt-WC`, webkit, --workers=1)**:
+   - `tsc --noEmit`: 0 errors.
+   - Run 1 (spec fix ke baad): 12 passed (chrome-budget 2 + d1-copycorrect-250 4 +
+     textdensity-WC 2 + ui-standards 4), `GATE_PLAYWRIGHT_EXIT=0`.
+   - Run 2 (consecutive): 12 passed, `GATE_PLAYWRIGHT_EXIT=0`. ALL GREEN 2x.
+   - Note: pehle run me 11/12 tha — ek spec bug (checkbox testid `<input>` 13px nap
+     raha tha, label 22px ke bajaye). Spec me parent `<label>` napne ka fix kiya;
+     code change nahi tha. Same-fail 3x kabhi nahi hua, isliye koi BLOCKER nahi.
+4. **Chrome budget intact**: toolbar single row (same top ±2px, height <=48px),
+   firstRowTop<=140 panels closed AND find+goto+ignore open (overlay stack rows ko
+   push nahi karta), `assertNoOverlap` green, zero console/page errors, zero
+   `role=alert`.
+5. **Esc contract intact**: `ui-standards.spec.ts` 4/4 green (Modal centered+Esc,
+   DockedBar in-flow+Esc, unified clusters, empty contract). Find/Goto Esc + close
+   button, Ignore toolbar-toggle + global Esc, Format Modal Esc — sab single onClose.
+6. **Ignore recompare intact**: whitespace + case check/uncheck par re-diff hota hai,
+   `textview/ignore-note` count 0 rehta hai, `textview/status` 200/644 rows intact,
+   `textview/row-0` visible.
+7. **Shape proof**: Ignore root tag `FIELDSET`, `role=dialog` nahi (koi Modal
+   regression nahi); Format root `role=dialog` (Modal contract).
+8. **Light+dark evidence (never in-repo)**: `/tmp/textdensity-WC-open-light.png`,
+   `/tmp/textdensity-WC-default-light.png`, `/tmp/textdensity-WC-default-dark.png`.
+9. **Files changed (owns ke andar hi)**:
+   - M `apps/desktop/src/components/views/text/controls/TextToolbar.tsx`
+   - M `apps/desktop/src/components/views/text/controls/FindOverlay.tsx`
+   - M `apps/desktop/src/components/views/text/controls/GotoOverlay.tsx`
+   - M `apps/desktop/src/components/views/text/controls/IgnoreMenu.tsx`
+   - M `apps/desktop/src/components/views/text/controls/FormatMenu.tsx`
+   - NEW `apps/desktop/e2e/specs/textdensity-WC.spec.ts`
+   - LOCAL `checks/textdensity-WC/REPORT.md` (ye file)
+10. **DO-NOT follow**: NO commit/push/merge kiya. NO testid change. NO Esc-contract
+    change (ui-standards green). NO Ignore fullscreen Modal. NO existing spec edit.
+    folder/sync/table/hex/merge untouched.
+
+---
