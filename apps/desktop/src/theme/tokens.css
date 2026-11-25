@@ -1142,6 +1142,8 @@ samp {
 .tv-body {
   display: flex;
   align-items: stretch;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .tv-overview-strip {

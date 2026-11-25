@@ -1105,7 +1105,7 @@ export default function MergeView({
       data-filter={mergeFilter}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="relative outline-none"
+      className="relative min-h-0 flex-1 overflow-y-auto outline-none"
     >
       {/* Wave-70: chrome collapse (Beyond Compare style). One toolbar row
           (conflict nav + take-all + find toggle) plus a collapsible

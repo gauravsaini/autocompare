@@ -127,7 +127,7 @@ export function ChromeShell({
       : statusMessage;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--ac-bg)] text-[var(--ac-fg)]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--ac-bg)] text-[var(--ac-fg)]">
       {/*
        * Wave-174: BC chrome budget — ONE shared band for tabs + toolbar
        * (was: tabbar row 40 + toolbar row 44 + pathbar row 32 = 3 stacked
@@ -200,7 +200,7 @@ export function ChromeShell({
       />
       <div className="flex min-h-0 flex-1">
         <OverviewRuler rows={diffRows} onJump={onJump} activeIndex={activeIndex} />
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
       </div>
       {detail}
       <StatusBar

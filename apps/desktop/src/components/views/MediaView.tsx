@@ -188,7 +188,7 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   return (
-    <section aria-label="media comparison">
+    <section aria-label="media comparison" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Wave-72: chrome collapse (Beyond Compare style). One toolbar row
           (mode indicator + audio tolerance toggle + recompute) plus a
           collapsible in-flow tolerance panel (open by default in audio

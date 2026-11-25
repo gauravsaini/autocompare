@@ -93,39 +93,39 @@ export default function ViewRouter({
   onTextBusCommand,
 }: ViewRouterProps): React.JSX.Element {
   return (
-    <div data-testid="view-router">
+    <div data-testid="view-router" className="flex min-h-0 flex-1 flex-col">
       {kind === "text" && (
-        <div data-testid="view-text">
+        <div data-testid="view-text" className="flex min-h-0 flex-1 flex-col">
           <TextView leftPath={leftPath} rightPath={rightPath} sessionId={sessionId} selectedIndex={selectedIndex} onSelectRow={onSelectRow} onBusCommand={onTextBusCommand} />
         </div>
       )}
       {kind === "folder" && (
-        <div data-testid="view-folder">
+        <div data-testid="view-folder" className="flex min-h-0 flex-1 flex-col">
           <FolderView leftPath={leftPath} rightPath={rightPath} onOpenPaths={onOpenPaths} />
         </div>
       )}
       {kind === "hex" && (
-        <div data-testid="view-hex">
+        <div data-testid="view-hex" className="flex min-h-0 flex-1 flex-col">
           <HexView leftPath={leftPath} rightPath={rightPath} />
         </div>
       )}
       {kind === "table" && (
-        <div data-testid="view-table">
+        <div data-testid="view-table" className="flex min-h-0 flex-1 flex-col">
           <TableView leftPath={leftPath} rightPath={rightPath} />
         </div>
       )}
       {kind === "merge" && (
-        <div data-testid="view-merge">
+        <div data-testid="view-merge" className="flex min-h-0 flex-1 flex-col">
           <MergeView leftPath={leftPath} rightPath={rightPath} basePath={basePath} onDropPaths={onDropPaths} onRequestCompare={onRequestCompare} onBusCommand={onBusCommand} />
         </div>
       )}
       {kind === "sync" && (
-        <div data-testid="view-sync">
+        <div data-testid="view-sync" className="flex min-h-0 flex-1 flex-col">
           <SyncView leftPath={leftPath} rightPath={rightPath} />
         </div>
       )}
       {kind === "media" && (
-        <div data-testid="view-media">
+        <div data-testid="view-media" className="flex min-h-0 flex-1 flex-col">
           <MediaView leftPath={leftPath} rightPath={rightPath} />
         </div>
       )}
