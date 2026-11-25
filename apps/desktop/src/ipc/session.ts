@@ -101,6 +101,15 @@ export function sessionSave(descriptor: SessionDocument): Promise<string> {
   return invoke<string>("session_save", { descriptor });
 }
 
+/**
+ * Deletes a saved session by id; resolves `true` when a stored document
+ * was removed, `false` when nothing was stored under the id (idempotent
+ * delete). Rust mirror: `commands::session::session_delete`.
+ */
+export function deleteSession(id: string): Promise<boolean> {
+  return invoke<boolean>("session_delete", { id });
+}
+
 /** Loads persisted settings, or defaults when nothing is stored yet. */
 export function settingsGet(): Promise<AppSettings> {
   return invoke<AppSettings>("settings_get");

@@ -206,3 +206,81 @@ B3-DONE
 - `REPORT.md`
 
 B1-DONE
+
+---
+
+# C1b-p0 REPORT — 2 tutey hue UI vaadey jode (audit Category-3)
+
+Base: main f470b68. Worktree: /tmp/wt-C1b (branch wave-C1b-p0).
+NEVER committed / NEVER pushed — sirf worktree me changes hain.
+
+## Kya tuta tha (2 P0)
+
+1. SessionManager Delete button `hook.deleteSession` -> `session_delete` IPC
+   bulata tha, par Rust backend me koi `session_delete` command tha hi nahi
+   (sirf session_list/load/save). Production me Delete chup-chaap fail hota tha.
+2. Top Toolbar Stop (`toolbar/action-compare-stop`) imaandaar no-op tha (idle
+   note ke saath). Rust `folder_cancel(session)` commands/folder.rs me MAUJOOD
+   tha + lib.rs me registered tha, par Stop usko kabhi bulata nahi tha.
+
+## Kya fix kiya (sirf OWNS files)
+
+- `apps/desktop/src-tauri/src/commands/session.rs`: naya `session_delete(id)`
+  command — `<tmp>/autocompare-desktop/sessions/<id>.json` hatata hai.
+  Galat id -> Err String; missing file -> Ok(false) (idempotent, folder_cancel
+  jaisa); delete hua -> Ok(true). Locked docs bhi delete hote hain (frontend
+  delete path `locked` check nahi karta — last-row guard only — isliye mana
+  karna rows ko phansa deta). Sirf iske liye unit tests jode.
+- `apps/desktop/src-tauri/src/lib.rs`: `COMMANDS` list + `generate_handler!`
+  me `session_delete` register kiya (string only, aur kuch nahi).
+- `apps/desktop/src/ipc/session.ts`: naya `deleteSession(id)` wrapper jo
+  `session_delete` IPC bulata hai. Iske alawa koi change nahi.
+- `apps/desktop/src/components/chrome/Toolbar.tsx` (SIRF Stop path):
+  `handleStop` busy hote hue, jab `folderSession` (naya optional prop) pata ho,
+  to `folder_cancel(session)` bulata hai — best-effort, kabhi throw nahi karta,
+  note me nateeja likhta hai (`compareFolderCancelSentNote`). Session pata na
+  ho to purana imaandaar note (`COMPARE_NO_ABORT_NOTE`). Idle note/title
+  byte-identical rakhe. Baaki Compare/Refresh paths untouched.
+- `apps/desktop/e2e/specs/c1-p0-243.spec.ts` (NAYA): delete round-trip
+  (save -> list me hai -> delete true -> re-list me nahi -> load reject ->
+  dobara delete idempotent) + Stop wiring pin (static `folderCancel(target)`
+  assert + mock `folder_cancel` cancelled:true proof + idle title regression).
+  Koi geometry assert nahi.
+
+## GATES (worktree, fresh ports, ABSOLUTE paths)
+
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (node_modules symlink hataya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-C1b/apps/desktop
+  1841 c1-p0-243.spec.ts ui-standards.spec.ts --workers=1`
+  => 6 passed (c1-p0-243: 2/2, ui-standards: 4/4), GATE_PLAYWRIGHT_EXIT=0
+- `cargo test -p autocompare-desktop session_delete` (from
+  /tmp/wt-C1b/apps/desktop/src-tauri) => 2 passed, 0 failed
+  (session_delete_round_trip_removes_file_and_relist_misses,
+  session_delete_rejects_bad_ids)
+
+## C1-DONE
+
+C1-DONE. Dono P0 vaadey ab wired hain: Delete asal me file mitata hai, Stop
+busy me asal me `folder_cancel` bulata hai. Koi commit/push nahi kiya.
+
+## MATCH/OFF table
+
+| Cheez | Haalat |
+|---|---|
+| Delete -> `session_delete` Rust command | MATCH (naya command + test) |
+| `deleteSession` typed wrapper | MATCH (session.ts me joda) |
+| Stop busy -> `folder_cancel(session)` | MATCH (folderSession milne par) |
+| Stop idle note/title | MATCH (byte-identical, purane specs green) |
+| Testids (`action-compare-stop`, `compare-note`, `compare-runs`) | MATCH (byte-identical) |
+| Mock `session_delete` missing par `true` vs Rust `false` | OFF (mock client.ts OWNS se bahar; dono success — UI par asar nahi; spec dono sehta hai) |
+| App/ChromeShell se `folderSession` plumbing | OFF (App.tsx/ChromeShell.tsx is wave ke OWNS me nahi; host abhi prop pass nahi karta to production path purana note rakhta hai — follow-up wave me plumb karna hai; jhootha daava nahi) |
+
+## Files list
+
+- apps/desktop/src-tauri/src/commands/session.rs (MOD: session_delete + 2 tests)
+- apps/desktop/src-tauri/src/lib.rs (MOD: COMMANDS + handler entry)
+- apps/desktop/src/components/chrome/Toolbar.tsx (MOD: Stop path only)
+- apps/desktop/src/ipc/session.ts (MOD: deleteSession only)
+- apps/desktop/e2e/specs/c1-p0-243.spec.ts (NEW)
+- REPORT.md (APPEND: yeh section)
