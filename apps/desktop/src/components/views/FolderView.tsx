@@ -110,8 +110,10 @@ export default function FolderView({
   readonly onOpenPaths?: (kind: "text", left: string, right: string) => void;
   /**
    * Wave-228: ViewCommandBus hook for diff nav parity.
+   * Wave-L3B: extended with "copy"/"copy-right" — both route to the
+   * existing `copyPath` of the selected file row (no duplicates).
    */
-  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+  readonly onBusCommand?: (cmd: "prev" | "next" | "copy" | "copy-right") => void;
 }): React.JSX.Element {
   const [baseLeft, setBaseLeft] = useState<string>(leftPath);
   const [baseRight, setBaseRight] = useState<string>(rightPath);
@@ -493,8 +495,12 @@ export default function FolderView({
      ViewCommandBus parity). prev/next step the file row selection via
      `stepSelectionRef` over the filtered visible files order. Kind-scoped
      so text/merge/table nav never leaks across views (`viewKind === "folder"`
-     or an unkinded event). Early bus event is an honest no-op, never a crash. */
+     or an unkinded event). Early bus event is an honest no-op, never a crash.
+     Wave-L3B: copy/copy-right reuse the existing `copyPath` for the
+     selected file row (no duplicates, no new IPC); no selection is an
+     honest no-op recorded on `__FOLDER_COPY_LAST__`, never a crash. */
   const stepSelectionRef = useRef<((dir: 1 | -1) => void) | null>(null);
+  const copySelectedRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const onBusCmd = (e: Event): void => {
       const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
@@ -504,6 +510,7 @@ export default function FolderView({
       const cmd = detail.cmd;
       if (cmd === "prev") stepSelectionRef.current?.(-1);
       else if (cmd === "next") stepSelectionRef.current?.(1);
+      else if (cmd === "copy" || cmd === "copy-right") copySelectedRef.current?.();
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     return () => {
@@ -755,6 +762,38 @@ export default function FolderView({
   stepSelectionRef.current = (dir: 1 | -1) => {
     stepSelection(selected ?? "", dir);
   };
+  // Wave-L3B: bus copy follow-through (latest render closure, same
+  // pattern as `stepSelectionRef`). Copies the selected file row's
+  // relPath via the existing `copyPath`; no selection (or a stale
+  // directory selection) records an honest parked hook, never throws.
+  copySelectedRef.current = () => {
+    if (selected === null) {
+      try {
+        (window as unknown as Record<string, unknown>)["__FOLDER_COPY_LAST__"] = {
+          relPath: null,
+          ok: false,
+          reason: "no-selection",
+        };
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const entry = entries.find((e) => !e.isDir && e.relPath === selected);
+    if (!entry) {
+      try {
+        (window as unknown as Record<string, unknown>)["__FOLDER_COPY_LAST__"] = {
+          relPath: selected,
+          ok: false,
+          reason: "no-selection",
+        };
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    void copyPath(entry);
+  };
 
   function jumpSelection(edge: "first" | "last"): void {
     const order = visibleFiles.map((e) => e.relPath);
@@ -801,14 +840,40 @@ export default function FolderView({
       if (!nav.clipboard || typeof nav.clipboard.writeText !== "function") {
         setCopied(null);
         setCopyNote(`clipboard unavailable in this browser (${entry.relPath})`);
+        try {
+          (window as unknown as Record<string, unknown>)["__FOLDER_COPY_LAST__"] = {
+            relPath: entry.relPath,
+            ok: false,
+            reason: "clipboard-unavailable",
+          };
+        } catch {
+          /* ignore */
+        }
         return;
       }
       await nav.clipboard.writeText(entry.relPath);
       setCopied(entry.relPath);
       setCopyNote(null);
+      try {
+        (window as unknown as Record<string, unknown>)["__FOLDER_COPY_LAST__"] = {
+          relPath: entry.relPath,
+          ok: true,
+        };
+      } catch {
+        /* ignore */
+      }
     } catch {
       setCopied(null);
       setCopyNote(`copy failed in this browser (${entry.relPath})`);
+      try {
+        (window as unknown as Record<string, unknown>)["__FOLDER_COPY_LAST__"] = {
+          relPath: entry.relPath,
+          ok: false,
+          reason: "copy-failed",
+        };
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -1105,6 +1170,7 @@ export default function FolderView({
           ((cmd) => {
             if (cmd === "prev") stepSelection(selected ?? "", -1);
             else if (cmd === "next") stepSelection(selected ?? "", 1);
+            else if (cmd === "copy" || cmd === "copy-right") copySelectedRef.current?.();
           })
         }
       />

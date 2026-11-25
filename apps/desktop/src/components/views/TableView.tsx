@@ -281,8 +281,11 @@ export default function TableView({
    * ride the SAME App `handleViewCommand` bus as the top Toolbar;
    * omitted leaves the direct `stepDiff` path (bus listener below
    * still owns top-bar forwards). Testids byte-identical either way.
+   * Wave-L3B: extended with "copy"/"copy-right" — the in-view copy
+   * buttons keep their direct handlers; the bus listener below routes
+   * top-bar forwards to the SAME `copyCell`/`copyRow` (no duplicates).
    */
-  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+  readonly onBusCommand?: (cmd: "prev" | "next" | "copy" | "copy-right") => void;
 }): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -378,22 +381,28 @@ export default function TableView({
   /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
      parity: NextSection/PrevSection). Table owns prev/next — they ride
      the same `stepDiff` path as the in-view Prev/Next diff buttons over
-     the FILTERED visible order. copy/swap are honest no-ops in table
-     kind (the toolbar parks those buttons, so this never fires by
-     click; the listener exists so a bus/programmatic dispatch can never
-     crash the view). Kind-scoped so text/merge nav never leaks across
-     views. `stepDiffRef` tracks the latest ready-render `stepDiff`
-     (null until the first page is ready, so an early bus event is an
-     honest no-op, never a crash). */
+     the FILTERED visible order. Wave-L3B: copy/copy-right ride the
+     SAME existing local handlers (copyCell for "copy"/dir-left,
+     copyRow for "copy-right"/dir-right — no duplicates, no new IPC).
+     Kind-scoped so text/merge nav never leaks across views.
+     `stepDiffRef`/`copyCellRef`/`copyRowRef` track the latest
+     ready-render closures (null until the first page is ready, so an
+     early bus event is an honest no-op, never a crash). */
   const stepDiffRef = useRef<((dir: 1 | -1) => void) | null>(null);
+  const copyCellRef = useRef<(() => Promise<void>) | null>(null);
+  const copyRowRef = useRef<(() => Promise<void>) | null>(null);
   useEffect(() => {
     const onBusCmd = (e: Event): void => {
-      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown; dir?: unknown }>).detail;
       const kind = detail?.viewKind;
       if (typeof kind === "string" && kind !== "" && kind !== "table") return;
       const cmd = detail?.cmd;
       if (cmd === "prev") stepDiffRef.current?.(-1);
       else if (cmd === "next") stepDiffRef.current?.(1);
+      else if (cmd === "copy" || cmd === "copy-right") {
+        if (cmd === "copy-right" || detail?.dir === "right") void copyRowRef.current?.();
+        else void copyCellRef.current?.();
+      }
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     return () => {
@@ -1211,7 +1220,10 @@ export default function TableView({
     scrollToDiffRow(diffRows[next]);
   }
   // Wave-180: keep the bus `stepDiffRef` on the latest ready render.
+  // Wave-L3B: same for the bus copy refs (existing handlers, no dupes).
   stepDiffRef.current = stepDiff;
+  copyCellRef.current = copyCell;
+  copyRowRef.current = copyRow;
   // Wave 24: honest fallback — the toggle always sends an explicit
   // `by_key` param, but a backend without key support echoes
   // `byKey: false` / empty `keyColumns`. Never a crash: just note it.
@@ -1644,6 +1656,8 @@ export default function TableView({
           ((cmd) => {
             if (cmd === "prev") stepDiff(-1);
             else if (cmd === "next") stepDiff(1);
+            else if (cmd === "copy") void copyCell();
+            else if (cmd === "copy-right") void copyRow();
           })
         }
         mapOpen={mapOpen}

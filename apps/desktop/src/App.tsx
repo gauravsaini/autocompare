@@ -1822,6 +1822,11 @@ export default function App(): React.JSX.Element {
   // bar forwards per active kind via the view bus instead of
   // parking. Media stays honestly parked (summary view: score +
   // metrics, no cursor, no row filter — no per-kind hunks to step).
+  // Wave-L3B: copy rides the SAME bus (BC unified-toolbar parity).
+  // table reuses copyCell/copyRow, folder reuses copyPath, hex reuses
+  // copyHex/copyAscii, sync parks honestly in-view (no per-file copy
+  // affordance — see checks/copy-L3B/REPORT.md BLOCKER note). Media /
+  // none / unknown park in App with an honest reason, never dispatched.
   const handleViewCommand = useCallback(
     (cmd: ViewCommand): void => {
       const kind = viewKindRef.current ?? viewKind;
@@ -1865,7 +1870,16 @@ export default function App(): React.JSX.Element {
             return;
           }
           if (kind !== "text") {
-            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            // Wave-L3B: table/folder/hex/sync copy rides the view bus
+            // (each view reuses its existing local copy handler; sync
+            // parks honestly in-view — REPORT note). Media / none /
+            // unknown park here with an honest reason, never dispatched.
+            if (kind === "table" || kind === "folder" || kind === "hex" || kind === "sync") {
+              dispatchViewCommand("copy", kind, { dir: "left" });
+              setStatusMessage(`Copy requested (${kind})`);
+              return;
+            }
+            setStatusMessage(`Copy is not available for kind "${kind ?? "none"}"`);
             return;
           }
           handleToolbarCopy();
@@ -1878,7 +1892,14 @@ export default function App(): React.JSX.Element {
             return;
           }
           if (kind !== "text") {
-            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            // Wave-L3B: same bus route as "copy" (dir right); views
+            // reuse their secondary copy affordance where one exists.
+            if (kind === "table" || kind === "folder" || kind === "hex" || kind === "sync") {
+              dispatchViewCommand("copy", kind, { dir: "right" });
+              setStatusMessage(`Copy requested (${kind})`);
+              return;
+            }
+            setStatusMessage(`Copy is not available for kind "${kind ?? "none"}"`);
             return;
           }
           handleToolbarCopy("right");

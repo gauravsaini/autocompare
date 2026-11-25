@@ -338,7 +338,13 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
   /* Wave-180 / Wave-228: `autocompare:view-command` bus (unified top Toolbar
      parity). Connects to ViewCommandBus: prev/next step through the
      planned diff steps without crashing. Kind-scoped so other view
-     commands do not leak. Never throws. */
+     commands do not leak. Never throws.
+     Wave-L3B: copy/copy-right park HONESTLY in-view (REPORT BLOCKER
+     note). Sync owns no per-file copy affordance — plan rows carry an
+     include/exclude toggle, not a clipboard copy — and the engine
+     exposes no per-step copy hunk to stage, so the listener records a
+     parked headless hook (`__SYNC_COPY_PARKED__`) and changes nothing
+     visual. No crash, no silent new behavior. */
   useEffect(() => {
     const onBusCmd = (e: Event): void => {
       const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
@@ -349,6 +355,13 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
         stepDiffRef.current?.(-1);
       } else if (cmd === "next") {
         stepDiffRef.current?.(1);
+      } else if (cmd === "copy" || cmd === "copy-right") {
+        try {
+          const w = window as unknown as Record<string, unknown>;
+          w["__SYNC_COPY_PARKED__"] = Number(w["__SYNC_COPY_PARKED__"] ?? 0) + 1;
+        } catch {
+          /* ignore */
+        }
       }
     };
     window.addEventListener("autocompare:view-command", onBusCmd);

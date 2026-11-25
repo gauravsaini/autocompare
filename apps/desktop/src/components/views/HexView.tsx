@@ -145,8 +145,10 @@ export default function HexView({
    * as the top Toolbar; omitted leaves the direct `stepDiff` path
    * (bus listener above still owns top-bar forwards). Testids
    * byte-identical either way.
+   * Wave-L3B: extended with "copy"/"copy-right" — "copy" reuses
+   * `copyHex`, "copy-right" reuses `copyAscii` (no duplicates).
    */
-  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+  readonly onBusCommand?: (cmd: "prev" | "next" | "copy" | "copy-right") => void;
 }): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -260,10 +262,15 @@ export default function HexView({
   // is ready, so an early bus event is an honest no-op, never a
   // crash). When no differences remain `stepDiff` parks honestly on
   // `hex-diff-status` ("no further/earlier differences").
+  // Wave-L3B: copy/copy-right ride the SAME existing handlers the
+  // toolbar buttons call (`copyHex` for "copy"/dir-left, `copyAscii`
+  // for "copy-right"/dir-right — no duplicates, no new IPC).
   const stepDiffRef = useRef<((dir: 1 | -1) => Promise<void>) | null>(null);
+  const copyHexRef = useRef<(() => void) | null>(null);
+  const copyAsciiRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const onBusCmd = (e: Event): void => {
-      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>)
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown; dir?: unknown }>)
         .detail;
       if (!detail) return;
       const kind = detail.viewKind;
@@ -271,6 +278,10 @@ export default function HexView({
       const cmd = detail.cmd;
       if (cmd === "prev") void stepDiffRef.current?.(-1);
       else if (cmd === "next") void stepDiffRef.current?.(1);
+      else if (cmd === "copy" || cmd === "copy-right") {
+        if (cmd === "copy-right" || detail.dir === "right") copyAsciiRef.current?.();
+        else copyHexRef.current?.();
+      }
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     return () => {
@@ -774,6 +785,10 @@ export default function HexView({
     }
     void copyValue(pageSummary(), "summary");
   }
+  // Wave-L3B: keep the bus copy refs on the latest ready render (the
+  // bus effect above stays a pure follow-effect, same as stepDiffRef).
+  copyHexRef.current = copyHex;
+  copyAsciiRef.current = copyAscii;
 
   function pageSummary(): string {
     const pages = Math.max(1, Math.ceil(total / PAGE_LEN));
@@ -828,6 +843,8 @@ export default function HexView({
           ((cmd) => {
             if (cmd === "prev") void stepDiff(-1);
             else if (cmd === "next") void stepDiff(1);
+            else if (cmd === "copy") copyHex();
+            else if (cmd === "copy-right") copyAscii();
           })
         }
         diffNavBusy={diffNavBusy}
