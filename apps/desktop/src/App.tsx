@@ -27,7 +27,8 @@ import { tableCompare } from "./ipc/table";
 import { mergeTextPlanForTriple } from "./ipc/merge";
 import { pictureCompare } from "./ipc/media";
 import { HomeSessionsPane } from "./components/home/controls";
-import { PaneDropZone, useTauriPaneDrop, isFolderishPath, type PaneSide } from "./components/dnd";
+import { PaneDropZone, isFolderishPath, type PaneSide } from "./components/dnd";
+import { useNativeFileDrop } from "./components/chrome/useNativeFileDrop";
 import { syncPlan } from "./ipc/sync";
 
 /**
@@ -1426,10 +1427,12 @@ export default function App(): React.JSX.Element {
     [activeSession, runComparePaths],
   );
 
-  // Wave-117: production-shell Tauri drag-drop subscription (no-op under
-  // `VITE_MOCK_IPC=1` / plain browser, where the HTML5 handlers own drops).
-  // Wave-120: dual-drop paths ride the same hook (third arg).
-  useTauriPaneDrop(true, handlePaneDrop, handlePaneDropPaths);
+  // Wave-211: native Finder/Explorer drops subscribe at the WINDOW level
+  // (`getCurrentWindow().onDragDropEvent`; v2 has no `onFileDropEvent`).
+  // Window events are a superset of the webview surface, so this replaces
+  // `useTauriPaneDrop` as the single owner — one drop, one auto-compare.
+  // No-op under `VITE_MOCK_IPC=1` / plain browser (HTML5 owns drops there).
+  useNativeFileDrop(true, handlePaneDrop, handlePaneDropPaths);
 
   const handleSync = useCallback(() => {
     void (async () => {
