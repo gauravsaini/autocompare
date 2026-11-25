@@ -899,3 +899,90 @@ phir RIGHT drop -> same. Zero console/page errors har test me.
   `dropPaths.ts`, `useNativeFileDrop.ts` (inspection-only; fix ki zaroorat wahin nahi thi).
 
 D2-DONE
+---
+
+# D1 copycorrect REPORT (EDIT wave, worktree-first, Hinglish-roman)
+
+Base: main (3bb39f8). Worktree: /tmp/wt-D1 (branch wave-D1-copycorrect).
+NEVER commit/push — sab changes uncommitted worktree me hain.
+
+## User complaint (asal shikayat)
+1. "copy l2r or r2l few sections -> text compare fails in midst" — kayi
+   hunk-copy lagatar karne par diff toot jata tha.
+2. "click karte hi save kyon kar raha hai" — copy click par lagta tha save
+   ho gaya.
+
+## Reproduce (pehle prove, phir fix)
+Scratch spec me 176-row/10-hunk real fixture par alternate l2r/r2l x4 +
+Save right + Save left chalaya. Mila:
+- copy1..4 tak sab consistent (176->166 rows, hunks 10->6, save-note kabhi
+  nahi, copy-note "unsaved; press Save X") — copy path khud sahi tha.
+- **Save right ke baad view TOOT gaya: `159 / 173 rows · 144 same ...
+  (loaded)`** — pre-save `166 / 166 rows · 151 same` tha. Merge khoye,
+  tail kata, hasMore jhootha jaga. Yahi "fails in midst" hai — copy nahi,
+  **Save ka refetch** doshi tha.
+
+## Root cause
+`saveSide` ka Wave-178 refetch `textGetRows(session, 0, rowsRef.length)`
+(local-length window) se karta tha. Multi-side staged drops ke baad local
+length (166) < backend total (173, sirf is side ka flush hua) hota hai —
+window tail kaat deta hai, phir doosri side ke staged copies us kate
+prefix par re-apply hote hain: rows ghate (159), total backend wala (173),
+merge gayab (144 vs 151). Rows/total/status teeno toot-te hain. Complaint
+#2 ke liye code me koi autosave MILA HI NAHI (copy kabhi `text_save_side`
+nahi bulata; dirty dots + "unsaved; press Save X" pehle se honest the) —
+isliye #2 ka jawab proof + spec hai, code change nahi.
+
+## Fix (sirf OWNS: copyHunkAt + serialize/coalesce + Save path)
+`apps/desktop/src/components/views/TextView.tsx` ONLY (drop-mount lines
+untouched, testids byte-identical):
+1. **Save refetch gate (D1 pin ka fix)**: `sawRegroupRisk` flag — per-row
+   fallback replay ya flushed cell edits par hi refetch; clean
+   `text_apply_hunk` flush par row-refetch SKIP (staged rows == backend
+   truth by construction: dono taraf same take-wins/drop rule, identity
+   preserved). Sirf coarse overview refresh hota hai (null-safe).
+2. **Regroup-risk refetch ab full-truth**: `textGetRows` loop `page.total`
+   tak (tail kabhi nahi kat-ti), phir doosri side ke staged re-apply, total
+   = backendTotal − reappliedDrops (staged-truth display barkarar).
+3. **Serialize drain me liveEdits threading**: `runCopyHunk`/`runCopyLine`
+   ab `baseEdits` lete + updated map return karte hain; `copyHunkAt`/
+   `copyLineAt` drain me `liveEdits` carry hota hai — rapid l2r/r2l burst me
+   stale render closure se pruned override resurrect nahi hota (FIXT2 N3/N4
+   contract harden; pure gutter flow me no-op).
+Save buttons/dirty-dots pehle se honest the (`dirty-left/right`, aria
+"(unsaved changes)") — isliye controls me ZERO change (tag: ONLY if needed).
+
+## Gates (worktree, fresh ports, ABSOLUTE paths)
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (main node_modules symlink
+  kiya tha, gate ke baad hata diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-D1/apps/desktop
+  1855 d1-copycorrect-250.spec.ts ui-standards.spec.ts --workers=1`
+  => **8/8 green** (D1 4/4 + ui-standards 4/4), GATE_PLAYWRIGHT_EXIT=0
+- Regression (same gate, port 1856): textfunc-178 + copy-persist-125 +
+  textgutter-139b + textinteract-109 => 15/16; 1 fail
+  (textinteract-109 caret-Esc `cell-edit` count) **clean main par bhi fail**
+  hota hai (port 1858, 4/5) — pre-existing, D1 OWNS ke bahar (cell editor
+  Esc path), is wave me untouched.
+- Strike 1: T3 me `expectConsistent` post-Save bhi save-note 0 mang raha
+  tha (spec bug — Save receipt hona sahi hai); `allowSaveNote` flag jodkar
+  same run me fix. Strike 2/3 nahi aaye.
+
+## MATCH/OFF
+| Cheez | Haal |
+|---|---|
+| 5x alternate l2r/r2l: rows==total, buttons==hunks, ordinal 0..N-1 gap-free | MATCH (T1, 10->5 hunks) |
+| Har copy par save-note 0 + copy-note unsaved + Save side | MATCH (T1 har step) |
+| Dono side dirty dots, disk byte-identical (no autosave, OS-level) | MATCH (T2) |
+| Save right/left: status byte-identical, staged per-side clear | MATCH (T3 — pre-fix 159/173 split ab 166/166 stable) |
+| Reload: unsaved staged drop, 176/176 + 10 hunks wapas, files identical | MATCH (T4, BC parity wave-172b) |
+| Save+reload ke baad disk me merged text (real disk round-trip) | OFF (mock IPC `text_save_side` no-op hai — pre-existing pin, textfunc-178 T2 jaisa; real-disk round-trip Rust unit test `save_side_persists_applied_hunk_to_disk` me pinned hai, is wave ke OWNS ke bahar) |
+| textinteract-109 caret-Esc 1 fail | OFF (clean main par bhi fail — pre-existing, cell-editor path untouched) |
+| `hunk-copy-left-N/right-N` + saare purane testids | MATCH (byte-identical; drop-mount lines untouched) |
+
+## Files list
+- apps/desktop/src/components/views/TextView.tsx (MOD: copyHunkAt + serialize/coalesce + Save path ONLY)
+- apps/desktop/e2e/specs/d1-copycorrect-250.spec.ts (NEW)
+- REPORT.md (yeh entry, append-only)
+
+D1-DONE

@@ -862,6 +862,13 @@ export default function TextView({
       // commands with `[]`) — fall through to the per-row
       // `text_apply_edit` replay the gutter path already proved.
       const pendingCopies = stagedCopies.filter((c) => c.target === side);
+      // D1: tracks whether the backend may have regrouped rows (per-row
+      // fallback replay or flushed cell edits both regroup). A clean
+      // `text_apply_hunk` flush preserves row identity/order exactly like
+      // the local `applyHunkCopy`, so the staged rows already ARE backend
+      // truth — no refetch needed (and the old local-length window
+      // truncated the tail: 159/173-style split after l2r/r2l x few).
+      let sawRegroupRisk = false;
       if (pendingCopies.length > 0 && session !== null) {
         // FIXT2 N4: skip entries fully contained in an already-applied
         // range (e.g. a line-copy inside a hunk-copy). Partial overlaps
@@ -882,6 +889,7 @@ export default function TextView({
           }
           if (!hunkApplied) {
             // Fallback: apply edit row-by-row for mock IPC / backend without text_apply_hunk
+            sawRegroupRisk = true;
             for (const r of rowsRef.current) {
               if (r.index >= copy.start && r.index <= copy.end) {
                 const src = copy.dir === "left" ? r.left : r.right;
@@ -941,29 +949,55 @@ export default function TextView({
 
       // Wave-178: converge the view to backend truth after the flush.
       // `text_apply_hunk` drops empty-take orphan rows (GAP-03), so the
-      // locally held rows/total can lag the session — refetch the loaded
-      // window + total + overview so follow-up copies compute from fresh
-      // indices instead of stale ones. Wave-198: the edit replay above
-      // regroups the edited rows the same way (mock recomputes a
-      // left==right row to equal), so the refetch also runs when only
-      // edits flushed. Skipped when nothing was staged.
-      if ((pendingCopies.length > 0 || appliedEdits > 0) && session !== null) {
+      // locally held rows/total can lag the session — refetch so
+      // follow-up copies compute from fresh indices instead of stale
+      // ones. Wave-198: the edit replay above regroups the edited rows
+      // the same way (mock recomputes a left==right row to equal), so
+      // the refetch also runs when only edits flushed. Skipped when
+      // nothing was staged. D1: a clean hunk flush skips the row refetch
+      // entirely (staged rows already equal backend truth, identity
+      // preserved both sides); only the coarse overview refreshes.
+      // When regroup risk exists (fallback replay / flushed edits), the
+      // refetch pages until the backend total — a local-length window
+      // truncated the tail after multi-side staged drops — then
+      // re-applies the other side's staged copies, and total stays
+      // staged-truth (backend total minus still-pending drops).
+      const needsRefetch = sawRegroupRisk || appliedEdits > 0;
+      if (needsRefetch && session !== null) {
         try {
-          const page = await textGetRows(session, 0, Math.max(rowsRef.current.length, 1));
-          let freshRows = page.rows;
+          let freshRows: readonly TextRowDto[] = [];
+          let backendTotal = 0;
+          for (let start = 0; ; start = freshRows.length) {
+            const page = await textGetRows(session, start, PAGE_SIZE);
+            backendTotal = page.total;
+            freshRows = [...freshRows, ...page.rows];
+            if (freshRows.length >= page.total || page.rows.length === 0) break;
+          }
           const remainingCopies = stagedCopies.filter((c) => c.target !== side);
+          let reappliedDrops = 0;
           for (const rem of remainingCopies) {
             const res = applyHunkCopy(freshRows, rem.start, rem.end, rem.dir, edits);
             freshRows = res.next;
+            reappliedDrops += res.removed;
           }
           setRows(freshRows);
           rowsRef.current = freshRows;
-          setTotal(page.total);
+          setTotal(Math.max(0, backendTotal - reappliedDrops));
           const over = await fetchOverviewCounts(session);
           if (over !== null) setOverview(over);
         } catch {
           // Keep the staged local rows on refetch failure — the Save
           // receipt below still reports the disk write honestly.
+        }
+      } else if (pendingCopies.length > 0 && session !== null) {
+        // Clean hunk flush: rows already match the session; refresh only
+        // the coarse overview (null-safe: mock without overview keeps the
+        // locally adjusted counts, which equal backend by construction).
+        try {
+          const over = await fetchOverviewCounts(session);
+          if (over !== null) setOverview(over);
+        } catch {
+          // Keep the locally adjusted overview on overview failure.
         }
       }
 
@@ -1869,13 +1903,15 @@ export default function TextView({
     copyBusyRef.current = true;
     setCopying(true);
     try {
-      await runCopyHunk(rowIndex, dir);
+      // D1: thread liveEdits through the drain (see runCopyHunk note).
+      let liveEdits: Readonly<Record<string, string>> = edits;
+      liveEdits = await runCopyHunk(rowIndex, dir, liveEdits);
       while (copyQueueRef.current.length > 0) {
         const next = copyQueueRef.current[0];
         if (next === undefined) break;
         copyQueueRef.current = copyQueueRef.current.slice(1);
-        if (next.line) await runCopyLine(next.rowIndex, next.dir);
-        else await runCopyHunk(next.rowIndex, next.dir);
+        if (next.line) liveEdits = await runCopyLine(next.rowIndex, next.dir, liveEdits);
+        else liveEdits = await runCopyHunk(next.rowIndex, next.dir, liveEdits);
       }
     } finally {
       copyBusyRef.current = false;
@@ -1883,20 +1919,28 @@ export default function TextView({
     }
   }
 
-  async function runCopyHunk(rowIndex: number, dir: TextSide): Promise<void> {
+  // D1: serialize drain threads `liveEdits` through every queued copy
+  // (copyHunkAt/copyLineAt carry it, run* return the updated map), so a
+  // rapid l2r/r2l burst never resurrects a pruned override from a stale
+  // render closure. Pure gutter flow me edits khali rehta hai — no-op.
+  async function runCopyHunk(
+    rowIndex: number,
+    dir: TextSide,
+    baseEdits: Readonly<Record<string, string>>,
+  ): Promise<Readonly<Record<string, string>>> {
     try {
       // Wave-G1 / Wave-L3: resolve start/end from fresh window rowsRef
       const currentRows = rowsRef.current;
       const at = currentRows.findIndex((row) => row.index === rowIndex);
       if (at < 0) {
         setCopyNote(`Hunk copy out of range — row ${rowIndex} out of range, please retry.`);
-        return;
+        return baseEdits;
       }
       // FIXT2 N3: second click on an already-resolved hunk is an honest
       // no-op-with-note, never a silent drop.
       if (currentRows[at]?.kind === "equal") {
         setCopyNote(`Hunk at row ${rowIndex} already copied — nothing left to copy.`);
-        return;
+        return baseEdits;
       }
       let lo = at;
       while (lo > 0 && currentRows[lo - 1]?.kind !== "equal") lo -= 1;
@@ -1910,7 +1954,7 @@ export default function TextView({
       const hunkRows = currentRows.slice(lo, hi + 1);
 
       // Phase 1: Local copy first! Apply hunk copy to locally held rows
-      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, start, end, dir, edits);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, start, end, dir, baseEdits);
       setRows(nextRows);
       rowsRef.current = nextRows;
       setEdits(nextEdits);
@@ -1940,10 +1984,12 @@ export default function TextView({
       setCopyNote(
         `Copied ${hunkLabel} take-${dir}: ${outcome} - unsaved; press Save ${target} to write to disk.`,
       );
+      return nextEdits;
     } catch (e) {
       // Wave-G1: Out-of-range gives honest retry-note, not error-status crash.
       const msg = errString(e);
       setCopyNote(`Hunk copy failed — ${msg}, please retry.`);
+      return baseEdits;
     }
   }
 
@@ -1964,13 +2010,15 @@ export default function TextView({
     copyBusyRef.current = true;
     setCopying(true);
     try {
-      await runCopyLine(rowIndex, dir);
+      // D1: same liveEdits threading as copyHunkAt.
+      let liveEdits: Readonly<Record<string, string>> = edits;
+      liveEdits = await runCopyLine(rowIndex, dir, liveEdits);
       while (copyQueueRef.current.length > 0) {
         const next = copyQueueRef.current[0];
         if (next === undefined) break;
         copyQueueRef.current = copyQueueRef.current.slice(1);
-        if (next.line) await runCopyLine(next.rowIndex, next.dir);
-        else await runCopyHunk(next.rowIndex, next.dir);
+        if (next.line) liveEdits = await runCopyLine(next.rowIndex, next.dir, liveEdits);
+        else liveEdits = await runCopyHunk(next.rowIndex, next.dir, liveEdits);
       }
     } finally {
       copyBusyRef.current = false;
@@ -1978,21 +2026,25 @@ export default function TextView({
     }
   }
 
-  async function runCopyLine(rowIndex: number, dir: TextSide): Promise<void> {
+  async function runCopyLine(
+    rowIndex: number,
+    dir: TextSide,
+    baseEdits: Readonly<Record<string, string>>,
+  ): Promise<Readonly<Record<string, string>>> {
     const currentRows = rowsRef.current;
     const at = currentRows.findIndex((r) => r.index === rowIndex);
     if (at < 0) {
       setCopyNote(`Copy line out of range — row ${rowIndex} not found in loaded window, please retry.`);
-      return;
+      return baseEdits;
     }
     const row = currentRows[at];
     if (!row || row.kind === "equal") {
       setCopyNote("Selected row has no hunk to copy — not a difference.");
-      return;
+      return baseEdits;
     }
     try {
       const target: TextSide = dir === "left" ? "right" : "left";
-      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir, edits);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir, baseEdits);
       setRows(nextRows);
       rowsRef.current = nextRows;
       setEdits(nextEdits);
@@ -2008,9 +2060,11 @@ export default function TextView({
       setCopyNote(
         `Copied line ${rowIndex} take-${dir} - unsaved; press Save ${target} to write to disk.`,
       );
+      return nextEdits;
     } catch (e) {
       const msg = errString(e);
       setCopyNote(`Copy line failed — ${msg}, please retry.`);
+      return baseEdits;
     }
   }
 
