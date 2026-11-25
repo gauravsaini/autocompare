@@ -17,6 +17,8 @@
  * unclickable while open. Closing rides the toolbar toggle
  * (`aria-expanded`) + the global TextView Escape collapse, same as
  * pre-233; the `onClose` prop stays for caller compat.
+ * Wave-WC: styling-only — fieldset popover shape KEPT (no fullscreen
+ * Modal regression); checkboxes ride ui/Checkbox (22px) byte-identical.
  */
 import { useState } from "react";
 import { Checkbox } from "../../../ui";

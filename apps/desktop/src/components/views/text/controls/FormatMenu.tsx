@@ -5,6 +5,9 @@
  * textview/format-eol). Wave-C2a adds engine-ready Patience toggle
  * (textview/algorithm-patience); optional props so legacy callers keep
  * working byte-identically.
+ * Wave-WC: styling-only — Modal shape KEPT (centered card, Esc+backdrop+
+ * close single onClose); selects ride ui/Select (default 24px) + checkbox
+ * 22px byte-identical. No testid / Esc-contract change.
  */
 import { useState } from "react";
 import { Checkbox, Modal, Select } from "../../../ui";

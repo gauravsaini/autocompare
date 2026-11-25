@@ -4,6 +4,13 @@ import { Button, Checkbox, ToolbarButton, UnifiedCopyCluster, UnifiedDiffOnlyClu
 /**
  * Wave-199c: single-row text controls toolbar (Beyond Compare style).
  *
+ * Wave-WC: button density pinned 22/24 via ui primitives (ToolbarButton
+ * sm=22 + Button sm=22 + Checkbox 22, inputs/selects 24) + dense bar
+ * (gap 2px, padding-x space-2) so the single row holds 1280 with margin.
+ * Primitives unchanged (UnifiedNavCluster/UnifiedCopyCluster/
+ * UnifiedDiffOnlyCluster ride the same testids); chrome budget intact
+ * (toolbar <=48, firstRowTop<=140 open AND closed).
+ *
  * One toolbar row: Find / Goto / Ignore / Format toggles (Ctrl+F,
  * Ctrl+G, menus), prev/next difference nav, display toggles (wrap,
  * line numbers, differences-only + context N), save overflow.
@@ -104,9 +111,10 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       role="toolbar"
       aria-label="Text controls"
       data-testid="textview/toolbar"
-      className="tv-controls-bar flex-nowrap overflow-x-auto whitespace-nowrap"
+      className="tv-controls-bar tv-controls-bar--dense flex-nowrap overflow-x-auto whitespace-nowrap"
     >
       <ToolbarButton
+        size="sm"
         data-testid="textview/toolbar-find"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in text (Ctrl+F)"
@@ -117,6 +125,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         <span>Find</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="textview/toolbar-goto"
         label={gotoOpen ? "Hide goto (Ctrl+G)" : "Show goto (Ctrl+G)"}
         title="Goto row (Ctrl+G)"
@@ -127,6 +136,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         <span>Goto</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="textview/toolbar-ignore"
         label={ignoreOpen ? "Hide ignore options" : "Show ignore options"}
         title="Ignore whitespace / case (backend honors them)"
@@ -137,6 +147,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         <span>Ignore</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="textview/toolbar-format"
         label={formatOpen ? "Hide format options" : "Show format options"}
         title="Encoding / line endings (backend honors them)"
@@ -188,6 +199,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       <span aria-hidden="true" className="tv-controls-sep" />
       <span data-testid="textview/toolbar-overflow" className="inline-flex items-center gap-[var(--ac-space-2)]">
         <Button
+          size="sm"
           data-testid="textview/save-left"
           aria-label={leftDirty ? "Save left side to disk (unsaved changes)" : "Save left side to disk"}
           title={leftDirty ? "Save left side to disk (unsaved changes)" : "Save left side to disk"}
@@ -207,6 +219,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
           {savingSide === "left" ? "Saving…" : "Save left"}
         </Button>
         <Button
+          size="sm"
           data-testid="textview/save-right"
           aria-label={rightDirty ? "Save right side to disk (unsaved changes)" : "Save right side to disk"}
           title={rightDirty ? "Save right side to disk (unsaved changes)" : "Save right side to disk"}

@@ -1,8 +1,8 @@
 /**
  * Wave-234: goto migrated to ui/DockedBar.
- * In-flow collapsible goto bar (never absolute). Purely presentational:
- * input state and paging jump live in TextView.
- * Testids byte-identical.
+ * Wave-WC: styling-only density pin (DockedBar contract kept byte-identical:
+ * in-flow section, Esc + close button ride the single onClose; Go explicit
+ * sm=22, input default 24). No testid / Esc-contract change.
  */
 import { Button, DockedBar, Input, StatusText } from "../../../ui";
 
@@ -41,7 +41,7 @@ export default function GotoOverlay(props: GotoOverlayProps): React.JSX.Element 
         spellCheck={false}
         className="ac-mono w-28 text-[length:var(--ac-font-size-code)]"
       />
-      <Button data-testid="textview/goto-go" variant="primary" onClick={onGo} disabled={busy}>
+      <Button size="sm" data-testid="textview/goto-go" variant="primary" onClick={onGo} disabled={busy}>
         {busy ? "Jumping…" : "Go"}
       </Button>
       <StatusText data-testid="textview/goto-status">
