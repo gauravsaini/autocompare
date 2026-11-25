@@ -206,3 +206,412 @@ B3-DONE
 - `REPORT.md`
 
 B1-DONE
+
+---
+
+# C1b-p0 REPORT — 2 tutey hue UI vaadey jode (audit Category-3)
+
+Base: main f470b68. Worktree: /tmp/wt-C1b (branch wave-C1b-p0).
+NEVER committed / NEVER pushed — sirf worktree me changes hain.
+
+## Kya tuta tha (2 P0)
+
+1. SessionManager Delete button `hook.deleteSession` -> `session_delete` IPC
+   bulata tha, par Rust backend me koi `session_delete` command tha hi nahi
+   (sirf session_list/load/save). Production me Delete chup-chaap fail hota tha.
+2. Top Toolbar Stop (`toolbar/action-compare-stop`) imaandaar no-op tha (idle
+   note ke saath). Rust `folder_cancel(session)` commands/folder.rs me MAUJOOD
+   tha + lib.rs me registered tha, par Stop usko kabhi bulata nahi tha.
+
+## Kya fix kiya (sirf OWNS files)
+
+- `apps/desktop/src-tauri/src/commands/session.rs`: naya `session_delete(id)`
+  command — `<tmp>/autocompare-desktop/sessions/<id>.json` hatata hai.
+  Galat id -> Err String; missing file -> Ok(false) (idempotent, folder_cancel
+  jaisa); delete hua -> Ok(true). Locked docs bhi delete hote hain (frontend
+  delete path `locked` check nahi karta — last-row guard only — isliye mana
+  karna rows ko phansa deta). Sirf iske liye unit tests jode.
+- `apps/desktop/src-tauri/src/lib.rs`: `COMMANDS` list + `generate_handler!`
+  me `session_delete` register kiya (string only, aur kuch nahi).
+- `apps/desktop/src/ipc/session.ts`: naya `deleteSession(id)` wrapper jo
+  `session_delete` IPC bulata hai. Iske alawa koi change nahi.
+- `apps/desktop/src/components/chrome/Toolbar.tsx` (SIRF Stop path):
+  `handleStop` busy hote hue, jab `folderSession` (naya optional prop) pata ho,
+  to `folder_cancel(session)` bulata hai — best-effort, kabhi throw nahi karta,
+  note me nateeja likhta hai (`compareFolderCancelSentNote`). Session pata na
+  ho to purana imaandaar note (`COMPARE_NO_ABORT_NOTE`). Idle note/title
+  byte-identical rakhe. Baaki Compare/Refresh paths untouched.
+- `apps/desktop/e2e/specs/c1-p0-243.spec.ts` (NAYA): delete round-trip
+  (save -> list me hai -> delete true -> re-list me nahi -> load reject ->
+  dobara delete idempotent) + Stop wiring pin (static `folderCancel(target)`
+  assert + mock `folder_cancel` cancelled:true proof + idle title regression).
+  Koi geometry assert nahi.
+
+## GATES (worktree, fresh ports, ABSOLUTE paths)
+
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (node_modules symlink hataya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-C1b/apps/desktop
+  1841 c1-p0-243.spec.ts ui-standards.spec.ts --workers=1`
+  => 6 passed (c1-p0-243: 2/2, ui-standards: 4/4), GATE_PLAYWRIGHT_EXIT=0
+- `cargo test -p autocompare-desktop session_delete` (from
+  /tmp/wt-C1b/apps/desktop/src-tauri) => 2 passed, 0 failed
+  (session_delete_round_trip_removes_file_and_relist_misses,
+  session_delete_rejects_bad_ids)
+
+## C1-DONE
+
+C1-DONE. Dono P0 vaadey ab wired hain: Delete asal me file mitata hai, Stop
+busy me asal me `folder_cancel` bulata hai. Koi commit/push nahi kiya.
+
+## MATCH/OFF table
+
+| Cheez | Haalat |
+|---|---|
+| Delete -> `session_delete` Rust command | MATCH (naya command + test) |
+| `deleteSession` typed wrapper | MATCH (session.ts me joda) |
+| Stop busy -> `folder_cancel(session)` | MATCH (folderSession milne par) |
+| Stop idle note/title | MATCH (byte-identical, purane specs green) |
+| Testids (`action-compare-stop`, `compare-note`, `compare-runs`) | MATCH (byte-identical) |
+| Mock `session_delete` missing par `true` vs Rust `false` | OFF (mock client.ts OWNS se bahar; dono success — UI par asar nahi; spec dono sehta hai) |
+| App/ChromeShell se `folderSession` plumbing | OFF (App.tsx/ChromeShell.tsx is wave ke OWNS me nahi; host abhi prop pass nahi karta to production path purana note rakhta hai — follow-up wave me plumb karna hai; jhootha daava nahi) |
+
+## Files list
+
+- apps/desktop/src-tauri/src/commands/session.rs (MOD: session_delete + 2 tests)
+- apps/desktop/src-tauri/src/lib.rs (MOD: COMMANDS + handler entry)
+- apps/desktop/src/components/chrome/Toolbar.tsx (MOD: Stop path only)
+- apps/desktop/src/ipc/session.ts (MOD: deleteSession only)
+- apps/desktop/e2e/specs/c1-p0-243.spec.ts (NEW)
+- REPORT.md (APPEND: yeh section)
+
+---
+
+# C2d folderopts REPORT (wave-C2d-folderopts, worktree-first, no commit/push)
+
+## Scope
+Engine me `FolderOptions.content_compare` pehle se tha (byte compare,
+symlink-safe), par Tauri `folder_compare` sirf `(left,right,masks)` leta
+tha aur RulesPanel me masks input hi tha. Is wave me content flag ko IPC
+se engine tak expose kiya + RulesPanel me toggle + dobara compare.
+
+## Changes (legacy testids byte-identical, 1 additive testid)
+- `apps/desktop/src-tauri/src/commands/folder.rs`: `folder_compare` me
+  4 optional params add — `contentCompare`/`content_compare` (either
+  spelling wins, text.rs pattern) + `quickCompare`/`quick_compare`
+  inverse alias (`true` = fast path). Explicit content flag quick par
+  jeetta hai; omitted = legacy mtime/size fast path. Engine
+  `FolderOptions { masks, content_compare, ..default }` me map hota hai.
+  Unit test ONLY: `content_compare_flag_byte_compares_same_size_files`
+  (same size+mtime+alag bytes => fast=Same, content=Different,
+  quick=true=Same).
+- `apps/desktop/src/ipc/folder.ts`: `folderCompare(left,right,masks?,
+  contentCompare?, quickCompare?)`. Flag na ho to legacy 3-field wire
+  byte-identical; flag ho to dono spellings bhejte hain. Wire probe
+  `window.__FOLDER_CONTENT_LAST__` record hota hai (spec proof ke liye).
+- `apps/desktop/src/components/views/folder/controls/RulesPanel.tsx`:
+  ADD content-compare checkbox ONLY
+  (`folderview/content-compare-toggle`, label "Compare contents
+  (byte-by-byte)"). Baaki testids/classes same.
+- `apps/desktop/src/components/views/FolderView.tsx` (folder wiring):
+  `contentCompare` state (default false, session switch par reset),
+  compare effect me `folderCompare(..., contentFlag)` + deps me shamil,
+  RulesPanel ko props pass. Toggle karte hi dobara compare hota hai.
+- NEW `apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts`: toggle
+  unchecked start, check karne par `__FOLDER_CONTENT_LAST__`
+  contentCompare=true + rows bane rehte hain, uncheck par false; dark
+  mode render; zero errors; koi geometry assert nahi.
+
+## Gates (worktree, fresh port, ABSOLUTE paths)
+- `/tmp/wt-C2d/apps/desktop ./node_modules/.bin/tsc --noEmit` => TSC:0
+  (main node_modules symlink kiya tha, gate ke baad hata diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh
+  /tmp/wt-C2d/apps/desktop 1842 c2b-folderopts-245.spec.ts
+  ui-standards.spec.ts --workers=1` => 5/5 green (webkit)
+- `cargo test -p autocompare-desktop --lib commands::folder` => 8/8
+  pass (naya content test samet)
+
+## MATCH/OFF
+| cheez | haal |
+|---|---|
+| MATCH | contentCompare=true same-size alag-bytes ko Different batata hai |
+| MATCH | toggle on/off dono par folder_compare dobara fire hota hai |
+| MATCH | legacy masks wire + saare purane testids same hain |
+| MATCH | ui-standards 4/4 samet 5/5 e2e green, tsc 0, rust 8/8 |
+| OFF | quickCompare ka alag UI toggle nahi (off = fast path hi quick hai) |
+| OFF | mock engine me content flag nodes nahi badalta (sirf wire probe) |
+
+## Files
+- apps/desktop/src-tauri/src/commands/folder.rs
+- apps/desktop/src/ipc/folder.ts
+- apps/desktop/src/components/views/folder/controls/RulesPanel.tsx
+- apps/desktop/src/components/views/FolderView.tsx
+- apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts (NEW)
+
+C2b-DONE
+
+---
+
+# C2a-textopts REPORT (Hinglish-roman)
+
+## Summary
+Kaam ho gaya: text compare me do engine-ready options expose ho gaye —
+Patience algorithm (`DiffAlgorithm::{Myers, Patience}`) aur ignore-blank-lines
+(`grammar::is_blank_line` mirror). Backend `text_compare` dono params accept
+karta hai, honestly `appliedOptions` me echo karta hai, aur UI me Ignore menu
+me "Ignore blank lines" checkbox + Format menu me "Patience diff" toggle hai.
+Dono toggle real `textCompare` re-trigger karte hain. Koi commit/push nahi kiya.
+
+## Kya-kya kiya
+1. **Backend (`commands/text.rs`)**: `algorithm: Option<String>` +
+   `ignoreBlankLines`/`ignore_blank_lines: Option<bool>` params add kiye.
+   `parse_text_algorithm` ("patience" case-insensitive -> Patience, "myers"/
+   unknown/omit -> Myers), `text_compare_key` (blank-only line -> `""` key),
+   `diff_with_c2a` (keys par chosen algorithm se re-diff), aur
+   `fold_blank_rows_equal` (blank-vs-blank rows -> `Equal`, display text same).
+   `StoredText` me `ignore_blank` + `algorithm` rakha taaki `text_apply_edit`
+   / `text_apply_hunk` session snapshot consistent rahe. `AppliedTextOptions`
+   me `ignore_blank_lines: bool` + `algorithm: Option<String>` echo.
+   Sirf unit test add kiya: `c2a_algorithm_and_blank_lines_round_trip`.
+2. **IPC wrapper (`ipc/text.ts`)**: `TextAlgorithm` type, `TextIgnoreOptions`
+   me `algorithm` + `ignoreBlankLines`/`ignore_blank_lines`, `textCompare`
+   dono spellings forward karta hai aur `__TEXT_IGNORE_LAST__` probe par
+   `algorithm` + `ignoreBlankLines` record karta hai. Sirf pass-through, koi
+   mock change nahi.
+3. **UI controls**: `IgnoreMenu` me `textview/ignore-blank-lines` checkbox,
+   `FormatMenu` me `textview/algorithm-patience` ("Patience diff") checkbox.
+   Purane props/testids byte-identical; naye props optional hain taaki purane
+   callers na tooten. Local fallback state rakha jab parent handler na de.
+4. **Wiring (`TextView.tsx`, OWNS ke bahar minimal)**: `algorithm` ("myers"
+   default) + `ignoreBlank` state, `recompareWithOptions` me 2 optional params,
+   `recompareBlank`/`recompareAlgorithm` handlers, menus ko pass kiye, session
+   switch par reset. Bina iske toggle re-compare trigger nahi hota — isliye
+   yeh extra file chhoona pada; baaki TextView logic same hai.
+5. **Naya spec `c2a-textopts-244.spec.ts`**: blank-lines check/uncheck probe
+   round-trip + status mounted, patience check/uncheck probe round-trip +
+   status mounted, typed wrapper dono spellings forward karta hai. Koi geometry
+   assert nahi, koi screenshot nahi, zero console/page errors.
+
+## Mushkil (3-strike note)
+- Pehla gate run timeout hua (120s): Ignore Modal ka scrim toolbar clicks
+  block karta hai, isliye panel band karne wala `toolbar-ignore.click()` kabhi
+  land nahi hua. Strike 1.
+- Fix: modal band karne ke liye `Escape` use kiya (Modal Esc contract +
+  toolbar fallback click). Dobara run par spec 1.5s me pass. Strike 2 nahi aaya.
+
+## Gates (worktree, fresh ports, absolute paths)
+- `./node_modules/.bin/tsc --noEmit` => **TSC:0** (main node_modules symlink karke, baad me hata diya)
+- `cargo test -p autocompare-desktop --lib commands::text` => **26 passed, 0 failed**
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-C2a/apps/desktop 1841 c2a-textopts-244.spec.ts ui-standards.spec.ts --workers=1` => **5 passed** (c2a 1.2s + ui-standards 4/4)
+
+## MATCH/OFF table (existing testids byte-identical)
+| Testid | Status |
+|---|---|
+| textview/toolbar-ignore | MATCH (unchanged) |
+| textview/toolbar-format | MATCH (unchanged) |
+| textview/ignore-options | MATCH (unchanged) |
+| textview/ignore-whitespace | MATCH (unchanged) |
+| textview/ignore-case | MATCH (unchanged) |
+| textview/format-options | MATCH (unchanged) |
+| textview/format-encoding | MATCH (unchanged) |
+| textview/format-eol | MATCH (unchanged) |
+| textview/ignore-blank-lines | NEW (C2a add) |
+| textview/algorithm-patience | NEW (C2a add) |
+
+OFF: koi purana testid change/remove nahi hua; `chrome/**`, `session/**`,
+`ui/**` primitives, `tokens.css`, folder/table/picture/hex/merge/sync
+commands ya views, aur koi doosra spec touch nahi kiya.
+
+## Files list
+- apps/desktop/src-tauri/src/commands/text.rs (params + mapping + unit test ONLY)
+- apps/desktop/src/ipc/text.ts (wrapper pass-through ONLY)
+- apps/desktop/src/components/views/text/controls/IgnoreMenu.tsx (blank-lines checkbox ONLY)
+- apps/desktop/src/components/views/text/controls/FormatMenu.tsx (patience toggle ONLY)
+- apps/desktop/src/components/views/TextView.tsx (minimal wiring: state + re-compare handlers)
+- apps/desktop/e2e/specs/c2a-textopts-244.spec.ts (NEW spec)
+- REPORT.md (yeh file, worktree root)
+
+C2a-DONE
+
+---
+
+# REPORT — C2c-tablepicopts (EDIT wave, worktree-first)
+
+Branch: `wave-C2c-tablepicopts` | Base: `main (f470b68)` | Worktree: `/tmp/wt-C2c`
+Commit/push: NAHI kiya (tag rule: NEVER commit/push). Sab changes uncommitted worktree me hain.
+
+## 1. Summary (ek line)
+
+Engine-ready table options (delimiter + numeric epsilon) aur picture tolerance Tauri/IPC/UI tak wire ho gaye; Rust 130 green, TSC:0, e2e gate 5/5 green.
+
+## 2. Kya-kya kiya (files)
+
+Backend (Tauri commands):
+
+- `apps/desktop/src-tauri/src/commands/table.rs`
+  - `table_compare` me 4 naye optional params: `delimiter: Option<String>`,
+    `numericTolerance / numeric_tolerance / epsilon: Option<f64>` (pehla `Some` jeetta hai).
+  - `resolve_delimiter`: omit/empty = `,` (legacy byte-identical); single char wins;
+    multi-char = honest error.
+  - `resolve_numeric_tolerance`: finite `>= 0` else error (engine
+    `cells_equal_with_tolerance` contract).
+  - `parse_csv`/`load_table` ab `delim: char` lete hain (dono files, ek format).
+  - `cells_equal`/`rows_equal`/`align_counts` me `numeric_tol: Option<f64>`:
+    exact win -> numeric `|a-b| <= eps` -> ignore flags. Header compare
+    tolerance-free (names hain, numbers nahi) — positional + key mode same.
+  - 6 naye unit tests: `;` col-count proof, multi-char reject, epsilon
+    equalize (camel + `epsilon` spelling), band-bahar unequal, bad values
+    reject, legacy byte-identical.
+- `apps/desktop/src-tauri/src/commands/media.rs`
+  - `picture_compare` me `tolerance: Option<f32>` (omit = exact byte match).
+    `summarize_picture` ab per-byte `|l-r| <= tol` ko equal manta hai
+    (score/differing/samples sab honored).
+  - 2 naye unit tests: tolerance merge (1-byte drift -> identical),
+    bad tolerance reject. Purane 2-arg call sites 3-arg kiye.
+
+IPC wrappers (wire pass-through ONLY):
+
+- `apps/desktop/src/ipc/table.ts` — `TableIgnoreOptions` me `delimiter`,
+  `numericTolerance/numeric_tolerance/epsilon`; unset = purana 4-field wire
+  (byte-identical); set hone par teeno spellings bheji jaati hain (Rust
+  `ignoreCase` pattern jaisa). Headless-proof hook: `__TABLE_PICOPTS_LAST__`.
+- `apps/desktop/src/ipc/media.ts` — `pictureCompare(left, right, tolerance?)`,
+  omit par `tolerance: null`; hook: `__PICTURE_TOLERANCE_LAST__`.
+
+UI controls:
+
+- `.../table/controls/TableToolbar.tsx` — delimiter select
+  (`tableview/delimiter-select`: `,`/`;`/tab/`|`) + epsilon input
+  (`tableview/numeric-tolerance`, `inputMode=decimal`, `exact` placeholder).
+  Dono `shrink-0`, single toolbar row barkarar; purane saare testids same.
+- `.../media/controls/MediaTolerancePanel.tsx` — coarse slider
+  (`mediaview/tolerance-slider`, 0–255, `aria-label="tolerance slider"`)
+  same tolerance state + same Recompare par wired; text box precise path
+  barkarar. Purane testids byte-identical.
+- `.../views/TableView.tsx` (plumbing, minimal) — `delimiter`/`epsilon`
+  state, `tableCompare` opts me pass (`,` omit / unparseable epsilon omit
+  = legacy wire), effect deps + toolbar props.
+- `MediaView.tsx` / `MediaToolbar.tsx` — ZERO diff (revert kiya): picture-mode
+  chrome audio-only rakha taaki mediachrome-72 / mediaparity-103 /
+  parity-media-147 / 154 green rahein (wo picture me "no tolerance chrome"
+  assert karte hain).
+
+Naya spec:
+
+- `apps/desktop/e2e/specs/c2c-tablepicopts-246.spec.ts` — delimiter + epsilon
+  + tolerance controls re-compare; koi geometry assert nahi (na overlap, na
+  screenshot, na barH).
+
+## 3. Engine mapping (MATCH/OFF)
+
+| Engine option | Engine jagah | Desktop status | Note |
+|---|---|---|---|
+| `TableOptions.delimiter: char` | `crates/compare/src/lib.rs:134` | MATCH | `table_compare(delimiter?)` + toolbar select + e2e |
+| `TableKeyOptions.numeric_tolerance: Option<f64>` | `crates/compare/src/table.rs:70` | MATCH | teeno spellings + epsilon input + e2e |
+| Picture tolerance | `PictureOptions` (`lib.rs:467`) me KOI tolerance field nahi (sirf `heatmap`) | OFF (backend-local) | Interim byte-compare me per-byte threshold joda; engine me pixel-tolerance concept hi nahi — knob engine-swap tak desktop-only rahega |
+| `PictureOptions.heatmap: Option<PathBuf>` | `lib.rs:468` | BLOCKER | Heatmap ko file-write path chahiye jiska koi IPC DTO nahi; is wave me wire nahi kiya (scope-bahar + DTO change hota). Follow-up me `heatmap_path` param + DTO field chahiye. |
+
+## 4. Verify (gates, worktree, fresh port 1843, absolute paths)
+
+- `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` => **130 passed, 0 failed**
+  (table 6 naye + media 2 naye samet).
+- `./node_modules/.bin/tsc --noEmit` (main `node_modules` symlink kiya tha, gate ke baad hata diya) => **TSC:0**.
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh
+  /tmp/wt-C2c/apps/desktop 1843 c2c-tablepicopts-246.spec.ts ui-standards.spec.ts --workers=1`
+  => **5 passed (c2c 1 + ui-standards 4), GATE_PLAYWRIGHT_EXIT=0**.
+  - Beech me 3 strike lage (documented): (1) slider click track-position jump (~128) — focus+arrows se fix;
+    (2) synthetic `input` event React state tak nahi pahuncha — focus+arrows se fix;
+    (3) toolbar Recompare modal backdrop ke peeche — panel ke Recompare (same handler) se fix.
+
+## 5. Deliberately NAHI kiya (scope discipline)
+
+- `chrome/**`, `session/**`, text/folder/hex/merge/sync views ya commands, `ui/` primitives,
+  `tokens.css`, doosre specs — zero touch.
+- `MediaToolbar.tsx` ka audio-gate khola tha, phir revert kiya (4 existing specs toot-te).
+- `client.ts` mock me koi change nahi (unknown args ignore karta hai — legacy path safe).
+- Koi geometry/screenshot assert nahi (tag rule).
+- Commit/push NAHI (tag rule).
+
+## 6. Files list (kaam wali)
+
+1. `apps/desktop/src-tauri/src/commands/table.rs`
+2. `apps/desktop/src-tauri/src/commands/media.rs`
+3. `apps/desktop/src/ipc/table.ts`
+4. `apps/desktop/src/ipc/media.ts`
+5. `apps/desktop/src/components/views/table/controls/TableToolbar.tsx`
+6. `apps/desktop/src/components/views/media/controls/MediaTolerancePanel.tsx`
+7. `apps/desktop/src/components/views/TableView.tsx`
+8. `apps/desktop/e2e/specs/c2c-tablepicopts-246.spec.ts` (NEW)
+9. `REPORT.md` (yeh entry, append-only — purani B1/B2 entries untouched)
+
+(reverted, list se bahar: `MediaToolbar.tsx`, `MediaView.tsx` — zero diff.)
+
+C2c-DONE
+
+---
+
+# H1 Homechrome Report (wave-H1-homechrome, worktree /tmp/wt-H1)
+
+Base: main f470b68. Worktree-first, main ya koi branch direct edit nahi. Commit/push nahi kiya.
+
+## Kya tha (live 1717 screenshot review, main code me verify)
+
+- P0-1 PathBar Home par mount tha — ChromeShell.tsx unconditional tha.
+- P0-2 OverviewRuler global mount tha — Home par bhi dikhta tha.
+- P1-3 Sessions card float kar raha tha — left sidebar full-height nahi tha.
+- P1-4 Canvas par monospace `sessions:N` stray tha (status bar ka hissa nahi).
+- P1-5 TabBar `+` last tab se ~200px door tha (inner `flex-1` poori row kha raha tha).
+- P2-6 Folder card subtitle `Directories and archives` lamba tha — ellipsis aata tha.
+- P2-7 Status bar Home par debug-copy `Tab selected: home` dikhata tha.
+
+## Kya kiya (OWNS only, minimal)
+
+1. `apps/desktop/src/components/chrome/ChromeShell.tsx` — conditional mount ONLY:
+   - `activeTabId/kind` se `isHomeTab` derive (props API same, koi naya prop nahi).
+   - `showPathBar = !isHomeTab` — PathBar sirf comparison tabs par, Home par kabhi nahi.
+   - `showRuler = !isHomeTab && kind in {text,hex,merge}` — ruler sirf Text/Hex/Merge diff views me, Home/folder/table/sync/media par nahi.
+2. `apps/desktop/src/components/chrome/TabBar.tsx` — `+` placement ONLY:
+   - Inner scroller `flex-1` -> `flex-initial` (grow 0, shrink 1, scroll intact) + comment.
+   - `+` ab last tab ke turant bagal me chipakta hai, tabbar ke andar rehta hai.
+3. `apps/desktop/src/components/home/controls/HomeSessionsPane.tsx` — layout ONLY:
+   - Section me `self-stretch` add — left Saved-Sessions sidebar full-height, right cards `items-start` se top-aligned (BC pattern). Parent App welcome untouched.
+4. `apps/desktop/src/App.tsx` — minimal 3 hunk:
+   - HOME_CARDS folder hint `Directories and archives` -> `Directories & archives` (ellipsis khatm).
+   - `handleSelectTab` me Home branch: `selectSession(home)` + `setStatusMessage("Ready")` — `Tab selected: home` debug-copy khatm. Comparison tabs ka message byte-identical.
+   - Welcome canvas `session-count` `<p>` visual classes -> `sr-only` (testid + text byte-identical, canvas clean; count status bar `status.right` me pehle se mirror hai).
+5. NEW `apps/desktop/e2e/specs/h1-homechrome-247.spec.ts` — Home: no PathBar, no ruler, no stray count (sr-only), `+` adjacent (flex-grow 0 + order), folder subtitle `&`, status Ready (empty par `Tab selected` nahi, session ke baad Home par `Ready`). Koi geometry pixel-lock nahi.
+
+DO NOT touch ka palan: views/**, session/**, ui/** primitives, tokens.css, ipc/**, src-tauri/**, text/table/folder/hex/merge/sync toolbars, doosre specs — kuch nahi chhua. Saare existing testid byte-identical (`session-count` sr-only allowed).
+
+## Gates (worktree, fresh port 1846, absolute paths)
+
+- `./node_modules/.bin/tsc --noEmit` (main node_modules symlink, baad me remove) => TSC:0
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-H1/apps/desktop 1846 h1-homechrome-247.spec.ts ui-standards.spec.ts --workers=1` => all green:
+  - h1-homechrome-247.spec.ts: 2/2 passed (6.2s + 5.8s)
+  - ui-standards.spec.ts: 4/4 passed
+  - `6 passed (17.0s), GATE_PLAYWRIGHT_EXIT=0`
+- Symlink remove kar diya, worktree me sirf 4 modified + 1 new spec + ye REPORT hai. Commit/push nahi kiya.
+
+## MATCH/OFF
+
+| # | Defect | Status |
+|---|--------|--------|
+| P0-1 | PathBar Home par nahi | MATCH |
+| P0-2 | Ruler Home par nahi, sirf Text/Hex/Merge | MATCH |
+| P1-3 | Sessions left full-height + cards top-aligned | MATCH |
+| P1-4 | Stray canvas count hata, testid sr-only + status bar mirror | MATCH |
+| P1-5 | `+` last tab ke bagal me | MATCH |
+| P2-6 | Folder subtitle `Directories & archives` | MATCH |
+| P2-7 | Home status `Ready`, debug-copy nahi | MATCH |
+
+## Files
+
+- apps/desktop/src/components/chrome/ChromeShell.tsx (conditional PathBar/OverviewRuler mount ONLY)
+- apps/desktop/src/components/chrome/TabBar.tsx (+ button placement ONLY)
+- apps/desktop/src/components/home/controls/HomeSessionsPane.tsx (layout self-stretch ONLY)
+- apps/desktop/src/App.tsx (HOME_CARDS hint `&`, handleSelectTab Home `Ready`, welcome session-count sr-only — minimal)
+- apps/desktop/e2e/specs/h1-homechrome-247.spec.ts (NEW)
+- REPORT.md (ye file, worktree root)
+
+H1-DONE

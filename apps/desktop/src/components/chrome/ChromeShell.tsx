@@ -121,6 +121,18 @@ export function ChromeShell({
 
   const comparing = Boolean(isComparing || pending || disabled);
 
+  // H1: Home chrome declutter — PathBar sirf comparison tabs par (BC
+  // jaisa), Home (id/kind `home`) par kabhi nahi. Ruler sirf
+  // Text/Hex/Merge diff views me (active tab kind se derive, props API
+  // unchanged — no new prop, no other chrome change).
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const isHomeTab = activeTabId === "home" || activeTab?.kind === "home" || activeTab?.id === "home";
+  const showPathBar = !isHomeTab;
+  const showRuler =
+    !isHomeTab &&
+    activeTab !== undefined &&
+    (activeTab.kind === "text" || activeTab.kind === "hex" || activeTab.kind === "merge");
+
   const displayMessage =
     submittedPath && !statusMessage.includes(submittedPath)
       ? `${statusMessage} • ${submittedPath}`
@@ -185,21 +197,25 @@ export function ChromeShell({
         />
         <Toolbar actions={toolbar.actions} className="min-w-0 w-full flex-none" />
       </div>
-      <PathBar
-        leftPath={leftPath}
-        rightPath={rightPath}
-        onSubmit={handleSubmit}
-        onSubmitPath={onSubmitPath}
-        isComparing={comparing}
-        pending={pending}
-        disabled={disabled}
-        note={note}
-        basePath={basePath}
-        showBase={showBase}
-        onDropPaths={onDropPaths}
-      />
+      {showPathBar ? (
+        <PathBar
+          leftPath={leftPath}
+          rightPath={rightPath}
+          onSubmit={handleSubmit}
+          onSubmitPath={onSubmitPath}
+          isComparing={comparing}
+          pending={pending}
+          disabled={disabled}
+          note={note}
+          basePath={basePath}
+          showBase={showBase}
+          onDropPaths={onDropPaths}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1">
-        <OverviewRuler rows={diffRows} onJump={onJump} activeIndex={activeIndex} />
+        {showRuler ? (
+          <OverviewRuler rows={diffRows} onJump={onJump} activeIndex={activeIndex} />
+        ) : null}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
       </div>
       {detail}

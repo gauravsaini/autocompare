@@ -143,13 +143,18 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
     // Wave-213: chips keep a 60px floor (pl-2 contract) with the close
     // `ml-auto` right-pinned, so the close stays inside its chip and tab
     // centers stay clickable even at 8 tabs (cap raised in ChromeShell).
+    // H1: `tab-new` last tab ke turant bagal me (BC jaisa). Pehle inner
+    // strip `flex-1` tha — kam tabs par poori row kha kar `+` ko door
+    // right edge par dhakel deta tha (~200px gap). Ab `flex-initial`
+    // (grow 0, shrink 1): content hug karta hai (`+` adjacent), zyada
+    // tabs par shrink + internal scroll (testid/role/sizing same).
     <div
       data-testid="tabbar"
       role="tablist"
       aria-label="Open tabs"
       className={`flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-hidden bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]${className ? ` ${className}` : ""}`}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-[var(--ac-space-1)] overflow-x-auto">
+      <div className="flex min-w-0 flex-initial items-center gap-[var(--ac-space-1)] overflow-x-auto">
       {visibleTabs.map((tab) => {
         const active = tab.id === activeTabId;
         const dirty = isTabDirty(tab);

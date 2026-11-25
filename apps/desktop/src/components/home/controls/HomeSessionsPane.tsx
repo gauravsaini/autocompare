@@ -29,7 +29,11 @@ export default function HomeSessionsPane(props: HomeSessionsPaneProps): React.JS
     <section
       aria-label="Open sessions"
       data-testid="home/sessions"
-      className="w-60 shrink-0 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-3 text-left"
+      // H1: BC pattern — left Saved-Sessions sidebar full-height
+      // (`self-stretch` parent `items-start` ko override karke container
+      // height tak kheenchta hai), right New-Session cards top-aligned
+      // rehte hain (parent `items-start` untouched, App.tsx OWNS-bahar).
+      className="w-60 shrink-0 self-stretch rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-3 text-left"
     >
       <h2 className="ac-chrome-label px-1 pb-2 font-medium text-[var(--ac-fg)]">
         Sessions{" "}
