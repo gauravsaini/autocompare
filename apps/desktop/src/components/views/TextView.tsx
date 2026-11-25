@@ -1203,9 +1203,14 @@ export default function TextView({
   const [ignoreOpen, setIgnoreOpen] = useState(false);
   // Wave-164: Format (encoding/EOL) menu state. `""` = auto = omitted
   // (legacy exact wire); cleared on session switch like every control.
+  // Wave-C2a: engine-ready Patience algorithm + ignore-blank-lines.
+  // `"myers"` default (legacy exact wire when everything else is off),
+  // `false` default; both ride the typed `textCompare` wrapper.
   const [formatOpen, setFormatOpen] = useState(false);
   const [encoding, setEncoding] = useState("");
   const [eol, setEol] = useState("");
+  const [algorithm, setAlgorithm] = useState("myers");
+  const [ignoreBlank, setIgnoreBlank] = useState(false);
   // Wave-66R: toolbar prev/next difference position note. Set only by
   // the toolbar diff nav; honest empty-backend note when no hunks.
   const [diffNote, setDiffNote] = useState<string | null>(null);
@@ -1492,6 +1497,8 @@ export default function TextView({
     setFormatOpen(false);
     setEncoding("");
     setEol("");
+    setAlgorithm("myers");
+    setIgnoreBlank(false);
     setDiffNote(null);
     (async () => {
       try {
@@ -1638,12 +1645,16 @@ export default function TextView({
     nextCase: boolean,
     nextEnc: string,
     nextEol: string,
+    nextAlgo: string = algorithm,
+    nextBlank: boolean = ignoreBlank,
   ): Promise<void> {
     setIgnoreWs(nextWs);
     setIgnoreCase(nextCase);
     setEncoding(nextEnc);
     setEol(nextEol);
-    if (!nextWs && !nextCase && nextEnc === "" && nextEol === "") {
+    setAlgorithm(nextAlgo);
+    setIgnoreBlank(nextBlank);
+    if (!nextWs && !nextCase && nextEnc === "" && nextEol === "" && nextAlgo === "myers" && !nextBlank) {
       // Both toggles off: the exact diff is the truth again. Best-effort
       // restore through the same typed path (legacy exact shape); the
       // mock serves the same fixture rows, the real backend rebuilds the
@@ -1699,6 +1710,9 @@ export default function TextView({
           // the W163c backend honors both, echoed as `appliedOptions`.
           encoding: nextEnc === "" ? undefined : nextEnc,
           eol: nextEol === "" ? undefined : nextEol,
+          // Wave-C2a: engine-ready Patience + blank-line folding.
+          algorithm: nextAlgo === "patience" ? "patience" : undefined,
+          ignoreBlankLines: nextBlank === true ? true : undefined,
         })) as unknown;
       } catch {
         raw = null;
@@ -1745,16 +1759,33 @@ export default function TextView({
    * Format menu rides `recompareFormat` below instead.
    */
   function recompareWithIgnores(nextWs: boolean, nextCase: boolean): Promise<void> {
-    return recompareWithOptions(nextWs, nextCase, encoding, eol);
+    return recompareWithOptions(nextWs, nextCase, encoding, eol, algorithm, ignoreBlank);
   }
 
   /**
    * Wave-164: Format menu entry — keeps the current ignore flags and
    * re-issues `text_compare` with the new encoding/EOL. `""` = auto =
    * omitted (legacy exact wire when ignores are off too).
+   * Wave-C2a: carries the current Patience + blank-line options through.
    */
   function recompareFormat(nextEnc: string, nextEol: string): Promise<void> {
-    return recompareWithOptions(ignoreWs, ignoreCase, nextEnc, nextEol);
+    return recompareWithOptions(ignoreWs, ignoreCase, nextEnc, nextEol, algorithm, ignoreBlank);
+  }
+
+  /**
+   * Wave-C2a: Ignore-menu blank-line entry — keeps every other option
+   * and re-issues `text_compare` with the new blank-line flag.
+   */
+  function recompareBlank(nextBlank: boolean): Promise<void> {
+    return recompareWithOptions(ignoreWs, ignoreCase, encoding, eol, algorithm, nextBlank);
+  }
+
+  /**
+   * Wave-C2a: Format-menu Patience entry — keeps every other option
+   * and re-issues `text_compare` with the new diff algorithm.
+   */
+  function recompareAlgorithm(nextAlgo: string): Promise<void> {
+    return recompareWithOptions(ignoreWs, ignoreCase, encoding, eol, nextAlgo, ignoreBlank);
   }
 
   /**
@@ -2689,6 +2720,8 @@ export default function TextView({
             ws={ignoreWs}
             ignoreCase={ignoreCase}
             busy={ignoreBusy}
+            blankLines={ignoreBlank}
+            onBlankChange={(nextBlank) => void recompareBlank(nextBlank)}
             onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
           />
           <FormatMenu
@@ -2696,6 +2729,8 @@ export default function TextView({
             encoding={encoding}
             eol={eol}
             busy={ignoreBusy}
+            algorithm={algorithm}
+            onAlgorithmChange={(nextAlgo) => void recompareAlgorithm(nextAlgo)}
             onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
           />
         </div>

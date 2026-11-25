@@ -350,3 +350,86 @@ se engine tak expose kiya + RulesPanel me toggle + dobara compare.
 - apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts (NEW)
 
 C2b-DONE
+
+---
+
+# C2a-textopts REPORT (Hinglish-roman)
+
+## Summary
+Kaam ho gaya: text compare me do engine-ready options expose ho gaye —
+Patience algorithm (`DiffAlgorithm::{Myers, Patience}`) aur ignore-blank-lines
+(`grammar::is_blank_line` mirror). Backend `text_compare` dono params accept
+karta hai, honestly `appliedOptions` me echo karta hai, aur UI me Ignore menu
+me "Ignore blank lines" checkbox + Format menu me "Patience diff" toggle hai.
+Dono toggle real `textCompare` re-trigger karte hain. Koi commit/push nahi kiya.
+
+## Kya-kya kiya
+1. **Backend (`commands/text.rs`)**: `algorithm: Option<String>` +
+   `ignoreBlankLines`/`ignore_blank_lines: Option<bool>` params add kiye.
+   `parse_text_algorithm` ("patience" case-insensitive -> Patience, "myers"/
+   unknown/omit -> Myers), `text_compare_key` (blank-only line -> `""` key),
+   `diff_with_c2a` (keys par chosen algorithm se re-diff), aur
+   `fold_blank_rows_equal` (blank-vs-blank rows -> `Equal`, display text same).
+   `StoredText` me `ignore_blank` + `algorithm` rakha taaki `text_apply_edit`
+   / `text_apply_hunk` session snapshot consistent rahe. `AppliedTextOptions`
+   me `ignore_blank_lines: bool` + `algorithm: Option<String>` echo.
+   Sirf unit test add kiya: `c2a_algorithm_and_blank_lines_round_trip`.
+2. **IPC wrapper (`ipc/text.ts`)**: `TextAlgorithm` type, `TextIgnoreOptions`
+   me `algorithm` + `ignoreBlankLines`/`ignore_blank_lines`, `textCompare`
+   dono spellings forward karta hai aur `__TEXT_IGNORE_LAST__` probe par
+   `algorithm` + `ignoreBlankLines` record karta hai. Sirf pass-through, koi
+   mock change nahi.
+3. **UI controls**: `IgnoreMenu` me `textview/ignore-blank-lines` checkbox,
+   `FormatMenu` me `textview/algorithm-patience` ("Patience diff") checkbox.
+   Purane props/testids byte-identical; naye props optional hain taaki purane
+   callers na tooten. Local fallback state rakha jab parent handler na de.
+4. **Wiring (`TextView.tsx`, OWNS ke bahar minimal)**: `algorithm` ("myers"
+   default) + `ignoreBlank` state, `recompareWithOptions` me 2 optional params,
+   `recompareBlank`/`recompareAlgorithm` handlers, menus ko pass kiye, session
+   switch par reset. Bina iske toggle re-compare trigger nahi hota — isliye
+   yeh extra file chhoona pada; baaki TextView logic same hai.
+5. **Naya spec `c2a-textopts-244.spec.ts`**: blank-lines check/uncheck probe
+   round-trip + status mounted, patience check/uncheck probe round-trip +
+   status mounted, typed wrapper dono spellings forward karta hai. Koi geometry
+   assert nahi, koi screenshot nahi, zero console/page errors.
+
+## Mushkil (3-strike note)
+- Pehla gate run timeout hua (120s): Ignore Modal ka scrim toolbar clicks
+  block karta hai, isliye panel band karne wala `toolbar-ignore.click()` kabhi
+  land nahi hua. Strike 1.
+- Fix: modal band karne ke liye `Escape` use kiya (Modal Esc contract +
+  toolbar fallback click). Dobara run par spec 1.5s me pass. Strike 2 nahi aaya.
+
+## Gates (worktree, fresh ports, absolute paths)
+- `./node_modules/.bin/tsc --noEmit` => **TSC:0** (main node_modules symlink karke, baad me hata diya)
+- `cargo test -p autocompare-desktop --lib commands::text` => **26 passed, 0 failed**
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-C2a/apps/desktop 1841 c2a-textopts-244.spec.ts ui-standards.spec.ts --workers=1` => **5 passed** (c2a 1.2s + ui-standards 4/4)
+
+## MATCH/OFF table (existing testids byte-identical)
+| Testid | Status |
+|---|---|
+| textview/toolbar-ignore | MATCH (unchanged) |
+| textview/toolbar-format | MATCH (unchanged) |
+| textview/ignore-options | MATCH (unchanged) |
+| textview/ignore-whitespace | MATCH (unchanged) |
+| textview/ignore-case | MATCH (unchanged) |
+| textview/format-options | MATCH (unchanged) |
+| textview/format-encoding | MATCH (unchanged) |
+| textview/format-eol | MATCH (unchanged) |
+| textview/ignore-blank-lines | NEW (C2a add) |
+| textview/algorithm-patience | NEW (C2a add) |
+
+OFF: koi purana testid change/remove nahi hua; `chrome/**`, `session/**`,
+`ui/**` primitives, `tokens.css`, folder/table/picture/hex/merge/sync
+commands ya views, aur koi doosra spec touch nahi kiya.
+
+## Files list
+- apps/desktop/src-tauri/src/commands/text.rs (params + mapping + unit test ONLY)
+- apps/desktop/src/ipc/text.ts (wrapper pass-through ONLY)
+- apps/desktop/src/components/views/text/controls/IgnoreMenu.tsx (blank-lines checkbox ONLY)
+- apps/desktop/src/components/views/text/controls/FormatMenu.tsx (patience toggle ONLY)
+- apps/desktop/src/components/views/TextView.tsx (minimal wiring: state + re-compare handlers)
+- apps/desktop/e2e/specs/c2a-textopts-244.spec.ts (NEW spec)
+- REPORT.md (yeh file, worktree root)
+
+C2a-DONE
