@@ -10,6 +10,11 @@ import { ToolbarButton, UnifiedFilterSegment } from "../../../ui";
  * owned by `FolderView` (filter/changes-only/name logic untouched).
  * All legacy testids ride the same buttons so specs keep passing unmodified.
  * Wave-216 R4: Minor/unimportant toggle is top-bar-owned (view-filter bus); no view-level toggle by design.
+ * Wave-WA (folder toolbar unify, BC parity): filter segment rides the
+ * shared ui/SegmentedControl path via UnifiedFilterSegment (size sm =
+ * 22px token, testids byte-identical); the name-filter text box itself
+ * lives in FolderNamePanel on shared ui/Input (controlSize sm = 22px
+ * token). This toolbar keeps zero raw buttons/inputs — toggle only.
  */
 export interface FolderToolbarProps {
   // Wave-L3: widened for the L2 `view-filter` bus `context` state
