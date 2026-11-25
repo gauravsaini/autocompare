@@ -75,13 +75,43 @@ export interface FolderCancelDto {
  * separated, `*`/`?` wildcards, `-` prefix excludes). `null`/omitted
  * disables mask filtering; masks apply at compare time, before any
  * `filter` used by `folderGetTree`.
+ *
+ * `contentCompare` maps to engine `FolderOptions.content_compare`
+ * (byte-compare same-size files; omitted/`false` = mtime/size fast
+ * path). `quickCompare` is the inverse alias (`true` = fast path);
+ * an explicit `contentCompare` wins. Both spellings ride the wire
+ * (camelCase + snake_case) like `textCompare`.
  */
 export function folderCompare(
   left: string,
   right: string,
   masks?: string | null,
+  contentCompare?: boolean | null,
+  quickCompare?: boolean | null,
 ): Promise<FolderCompareDto> {
-  return invoke<FolderCompareDto>("folder_compare", { left, right, masks: masks ?? null });
+  const hasContent =
+    contentCompare !== undefined && contentCompare !== null;
+  const hasQuick = quickCompare !== undefined && quickCompare !== null;
+  if (typeof window !== "undefined") {
+    (window as unknown as Record<string, unknown>)["__FOLDER_CONTENT_LAST__"] = {
+      contentCompare: hasContent ? contentCompare === true : false,
+      quickCompare: hasQuick ? quickCompare === true : false,
+    };
+  }
+  if (!hasContent && !hasQuick) {
+    return invoke<FolderCompareDto>("folder_compare", { left, right, masks: masks ?? null });
+  }
+  const cc = hasContent ? contentCompare === true : undefined;
+  const qq = hasQuick ? quickCompare === true : undefined;
+  return invoke<FolderCompareDto>("folder_compare", {
+    left,
+    right,
+    masks: masks ?? null,
+    contentCompare: cc,
+    content_compare: cc,
+    quickCompare: qq,
+    quick_compare: qq,
+  });
 }
 
 /** Fetch one `(start, limit)` window of snapshot entries. */

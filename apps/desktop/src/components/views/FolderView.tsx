@@ -335,6 +335,10 @@ export default function FolderView({
   // owns only the draft. Reset on session switch like every control.
   const [masks, setMasks] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
+  // Wave-C2d: engine content-compare flag (byte-compare same-size
+  // files; off = size/mtime fast path). Rides `folderCompare` like
+  // masks; reset on session switch.
+  const [contentCompare, setContentCompare] = useState(false);
   // Wave-98: goto entry (Beyond Compare style Ctrl+G, wave-89 text
   // pattern ported to folder). Decimal 1-based position in the
   // currently visible list; jumps focus (+selects file rows) with no
@@ -548,6 +552,7 @@ export default function FolderView({
   // drops the stale in-flight compare from the path change.
   useEffect(() => {
     setMasks("");
+    setContentCompare(false);
     setRulesOpen(false);
   }, [currentLeft, currentRight, fullSubDir]);
 
@@ -578,14 +583,16 @@ export default function FolderView({
     setOpenNote(null);
     (async () => {
       try {
-        // Wave-164: committed Rules masks ride the compare (`""` =
-        // omitted = legacy wire, the backend treats empty as no
-        // filtering). Masks apply at compare time, before the
-        // `filter` used by `folderGetTree`.
+        // Wave-C2d: committed Rules masks + content flag ride the
+        // compare (`""` = omitted = legacy wire, the backend treats
+        // empty as no filtering; content off = fast path). Masks +
+        // content apply at compare time, before the `filter` used by
+        // `folderGetTree`.
         const raw = (await folderCompare(
           currentLeft,
           currentRight,
           masks === "" ? undefined : masks,
+          contentCompare ? true : undefined,
         )) as unknown;
         if (
           !isRecord(raw) ||
@@ -623,7 +630,7 @@ export default function FolderView({
     return () => {
       cancelled = true;
     };
-  }, [currentLeft, currentRight, fullSubDir, masks]);
+  }, [currentLeft, currentRight, fullSubDir, masks, contentCompare]);
 
   async function loadMore(): Promise<void> {
     if (session === null || loadingMore || entries.length >= total) return;
@@ -1088,6 +1095,8 @@ export default function FolderView({
         busy={loadingMore}
         onApply={(next) => setMasks(next)}
         onClose={() => setRulesOpen(false)}
+        contentCompare={contentCompare}
+        onToggleContentCompare={(next) => setContentCompare(next)}
       />
       {masks !== "" ? (
         <InlineNotice testid="folderview/masks-note">

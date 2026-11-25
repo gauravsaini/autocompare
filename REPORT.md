@@ -206,3 +206,147 @@ B3-DONE
 - `REPORT.md`
 
 B1-DONE
+
+---
+
+# C1b-p0 REPORT — 2 tutey hue UI vaadey jode (audit Category-3)
+
+Base: main f470b68. Worktree: /tmp/wt-C1b (branch wave-C1b-p0).
+NEVER committed / NEVER pushed — sirf worktree me changes hain.
+
+## Kya tuta tha (2 P0)
+
+1. SessionManager Delete button `hook.deleteSession` -> `session_delete` IPC
+   bulata tha, par Rust backend me koi `session_delete` command tha hi nahi
+   (sirf session_list/load/save). Production me Delete chup-chaap fail hota tha.
+2. Top Toolbar Stop (`toolbar/action-compare-stop`) imaandaar no-op tha (idle
+   note ke saath). Rust `folder_cancel(session)` commands/folder.rs me MAUJOOD
+   tha + lib.rs me registered tha, par Stop usko kabhi bulata nahi tha.
+
+## Kya fix kiya (sirf OWNS files)
+
+- `apps/desktop/src-tauri/src/commands/session.rs`: naya `session_delete(id)`
+  command — `<tmp>/autocompare-desktop/sessions/<id>.json` hatata hai.
+  Galat id -> Err String; missing file -> Ok(false) (idempotent, folder_cancel
+  jaisa); delete hua -> Ok(true). Locked docs bhi delete hote hain (frontend
+  delete path `locked` check nahi karta — last-row guard only — isliye mana
+  karna rows ko phansa deta). Sirf iske liye unit tests jode.
+- `apps/desktop/src-tauri/src/lib.rs`: `COMMANDS` list + `generate_handler!`
+  me `session_delete` register kiya (string only, aur kuch nahi).
+- `apps/desktop/src/ipc/session.ts`: naya `deleteSession(id)` wrapper jo
+  `session_delete` IPC bulata hai. Iske alawa koi change nahi.
+- `apps/desktop/src/components/chrome/Toolbar.tsx` (SIRF Stop path):
+  `handleStop` busy hote hue, jab `folderSession` (naya optional prop) pata ho,
+  to `folder_cancel(session)` bulata hai — best-effort, kabhi throw nahi karta,
+  note me nateeja likhta hai (`compareFolderCancelSentNote`). Session pata na
+  ho to purana imaandaar note (`COMPARE_NO_ABORT_NOTE`). Idle note/title
+  byte-identical rakhe. Baaki Compare/Refresh paths untouched.
+- `apps/desktop/e2e/specs/c1-p0-243.spec.ts` (NAYA): delete round-trip
+  (save -> list me hai -> delete true -> re-list me nahi -> load reject ->
+  dobara delete idempotent) + Stop wiring pin (static `folderCancel(target)`
+  assert + mock `folder_cancel` cancelled:true proof + idle title regression).
+  Koi geometry assert nahi.
+
+## GATES (worktree, fresh ports, ABSOLUTE paths)
+
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (node_modules symlink hataya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-C1b/apps/desktop
+  1841 c1-p0-243.spec.ts ui-standards.spec.ts --workers=1`
+  => 6 passed (c1-p0-243: 2/2, ui-standards: 4/4), GATE_PLAYWRIGHT_EXIT=0
+- `cargo test -p autocompare-desktop session_delete` (from
+  /tmp/wt-C1b/apps/desktop/src-tauri) => 2 passed, 0 failed
+  (session_delete_round_trip_removes_file_and_relist_misses,
+  session_delete_rejects_bad_ids)
+
+## C1-DONE
+
+C1-DONE. Dono P0 vaadey ab wired hain: Delete asal me file mitata hai, Stop
+busy me asal me `folder_cancel` bulata hai. Koi commit/push nahi kiya.
+
+## MATCH/OFF table
+
+| Cheez | Haalat |
+|---|---|
+| Delete -> `session_delete` Rust command | MATCH (naya command + test) |
+| `deleteSession` typed wrapper | MATCH (session.ts me joda) |
+| Stop busy -> `folder_cancel(session)` | MATCH (folderSession milne par) |
+| Stop idle note/title | MATCH (byte-identical, purane specs green) |
+| Testids (`action-compare-stop`, `compare-note`, `compare-runs`) | MATCH (byte-identical) |
+| Mock `session_delete` missing par `true` vs Rust `false` | OFF (mock client.ts OWNS se bahar; dono success — UI par asar nahi; spec dono sehta hai) |
+| App/ChromeShell se `folderSession` plumbing | OFF (App.tsx/ChromeShell.tsx is wave ke OWNS me nahi; host abhi prop pass nahi karta to production path purana note rakhta hai — follow-up wave me plumb karna hai; jhootha daava nahi) |
+
+## Files list
+
+- apps/desktop/src-tauri/src/commands/session.rs (MOD: session_delete + 2 tests)
+- apps/desktop/src-tauri/src/lib.rs (MOD: COMMANDS + handler entry)
+- apps/desktop/src/components/chrome/Toolbar.tsx (MOD: Stop path only)
+- apps/desktop/src/ipc/session.ts (MOD: deleteSession only)
+- apps/desktop/e2e/specs/c1-p0-243.spec.ts (NEW)
+- REPORT.md (APPEND: yeh section)
+
+---
+
+# C2d folderopts REPORT (wave-C2d-folderopts, worktree-first, no commit/push)
+
+## Scope
+Engine me `FolderOptions.content_compare` pehle se tha (byte compare,
+symlink-safe), par Tauri `folder_compare` sirf `(left,right,masks)` leta
+tha aur RulesPanel me masks input hi tha. Is wave me content flag ko IPC
+se engine tak expose kiya + RulesPanel me toggle + dobara compare.
+
+## Changes (legacy testids byte-identical, 1 additive testid)
+- `apps/desktop/src-tauri/src/commands/folder.rs`: `folder_compare` me
+  4 optional params add — `contentCompare`/`content_compare` (either
+  spelling wins, text.rs pattern) + `quickCompare`/`quick_compare`
+  inverse alias (`true` = fast path). Explicit content flag quick par
+  jeetta hai; omitted = legacy mtime/size fast path. Engine
+  `FolderOptions { masks, content_compare, ..default }` me map hota hai.
+  Unit test ONLY: `content_compare_flag_byte_compares_same_size_files`
+  (same size+mtime+alag bytes => fast=Same, content=Different,
+  quick=true=Same).
+- `apps/desktop/src/ipc/folder.ts`: `folderCompare(left,right,masks?,
+  contentCompare?, quickCompare?)`. Flag na ho to legacy 3-field wire
+  byte-identical; flag ho to dono spellings bhejte hain. Wire probe
+  `window.__FOLDER_CONTENT_LAST__` record hota hai (spec proof ke liye).
+- `apps/desktop/src/components/views/folder/controls/RulesPanel.tsx`:
+  ADD content-compare checkbox ONLY
+  (`folderview/content-compare-toggle`, label "Compare contents
+  (byte-by-byte)"). Baaki testids/classes same.
+- `apps/desktop/src/components/views/FolderView.tsx` (folder wiring):
+  `contentCompare` state (default false, session switch par reset),
+  compare effect me `folderCompare(..., contentFlag)` + deps me shamil,
+  RulesPanel ko props pass. Toggle karte hi dobara compare hota hai.
+- NEW `apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts`: toggle
+  unchecked start, check karne par `__FOLDER_CONTENT_LAST__`
+  contentCompare=true + rows bane rehte hain, uncheck par false; dark
+  mode render; zero errors; koi geometry assert nahi.
+
+## Gates (worktree, fresh port, ABSOLUTE paths)
+- `/tmp/wt-C2d/apps/desktop ./node_modules/.bin/tsc --noEmit` => TSC:0
+  (main node_modules symlink kiya tha, gate ke baad hata diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh
+  /tmp/wt-C2d/apps/desktop 1842 c2b-folderopts-245.spec.ts
+  ui-standards.spec.ts --workers=1` => 5/5 green (webkit)
+- `cargo test -p autocompare-desktop --lib commands::folder` => 8/8
+  pass (naya content test samet)
+
+## MATCH/OFF
+| cheez | haal |
+|---|---|
+| MATCH | contentCompare=true same-size alag-bytes ko Different batata hai |
+| MATCH | toggle on/off dono par folder_compare dobara fire hota hai |
+| MATCH | legacy masks wire + saare purane testids same hain |
+| MATCH | ui-standards 4/4 samet 5/5 e2e green, tsc 0, rust 8/8 |
+| OFF | quickCompare ka alag UI toggle nahi (off = fast path hi quick hai) |
+| OFF | mock engine me content flag nodes nahi badalta (sirf wire probe) |
+
+## Files
+- apps/desktop/src-tauri/src/commands/folder.rs
+- apps/desktop/src/ipc/folder.ts
+- apps/desktop/src/components/views/folder/controls/RulesPanel.tsx
+- apps/desktop/src/components/views/FolderView.tsx
+- apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts (NEW)
+
+C2b-DONE

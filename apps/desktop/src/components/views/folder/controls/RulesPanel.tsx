@@ -3,6 +3,8 @@
  * role=dialog aria-modal, autofocus, Esc+backdrop+close single onClose).
  * All testids byte-identical (folderview/rules-panel, folderview/mask-input,
  * folderview/mask-apply, folderview/mask-clear, folderview/rules-close).
+ * Wave-C2d adds the engine content-compare toggle
+ * (testid folderview/content-compare-toggle) without touching legacy testids.
  */
 import { useEffect, useState } from "react";
 import { Button, Input, Modal } from "../../../ui";
@@ -21,10 +23,13 @@ export interface RulesPanelProps {
   readonly busy: boolean;
   readonly onApply: (masks: string) => void;
   readonly onClose: () => void;
+  /** Wave-C2d: engine content-compare flag (byte-compare same-size files). */
+  readonly contentCompare: boolean;
+  readonly onToggleContentCompare: (next: boolean) => void;
 }
 
 export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | null {
-  const { open, masks, busy, onApply, onClose } = props;
+  const { open, masks, busy, onApply, onClose, contentCompare, onToggleContentCompare } = props;
   const [draft, setDraft] = useState(masks);
 
   useEffect(() => {
@@ -66,6 +71,18 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
           className="w-full ac-code"
           autoFocus
         />
+        <label className="flex items-center gap-2 ac-meta font-normal text-[var(--ac-fg-muted)]">
+          <input
+            type="checkbox"
+            data-testid="folderview/content-compare-toggle"
+            checked={contentCompare}
+            disabled={busy}
+            onChange={(event) => onToggleContentCompare(event.target.checked)}
+            aria-label="Compare file contents (byte compare)"
+            title="Compare file contents byte-by-byte (off = size/mtime fast path)"
+          />
+          <span>Compare contents (byte-by-byte)</span>
+        </label>
         <div className="flex items-center justify-end gap-2">
           {masks !== "" ? (
             <Button
