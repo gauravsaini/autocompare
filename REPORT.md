@@ -284,3 +284,69 @@ busy me asal me `folder_cancel` bulata hai. Koi commit/push nahi kiya.
 - apps/desktop/src/ipc/session.ts (MOD: deleteSession only)
 - apps/desktop/e2e/specs/c1-p0-243.spec.ts (NEW)
 - REPORT.md (APPEND: yeh section)
+
+---
+
+# C2d folderopts REPORT (wave-C2d-folderopts, worktree-first, no commit/push)
+
+## Scope
+Engine me `FolderOptions.content_compare` pehle se tha (byte compare,
+symlink-safe), par Tauri `folder_compare` sirf `(left,right,masks)` leta
+tha aur RulesPanel me masks input hi tha. Is wave me content flag ko IPC
+se engine tak expose kiya + RulesPanel me toggle + dobara compare.
+
+## Changes (legacy testids byte-identical, 1 additive testid)
+- `apps/desktop/src-tauri/src/commands/folder.rs`: `folder_compare` me
+  4 optional params add — `contentCompare`/`content_compare` (either
+  spelling wins, text.rs pattern) + `quickCompare`/`quick_compare`
+  inverse alias (`true` = fast path). Explicit content flag quick par
+  jeetta hai; omitted = legacy mtime/size fast path. Engine
+  `FolderOptions { masks, content_compare, ..default }` me map hota hai.
+  Unit test ONLY: `content_compare_flag_byte_compares_same_size_files`
+  (same size+mtime+alag bytes => fast=Same, content=Different,
+  quick=true=Same).
+- `apps/desktop/src/ipc/folder.ts`: `folderCompare(left,right,masks?,
+  contentCompare?, quickCompare?)`. Flag na ho to legacy 3-field wire
+  byte-identical; flag ho to dono spellings bhejte hain. Wire probe
+  `window.__FOLDER_CONTENT_LAST__` record hota hai (spec proof ke liye).
+- `apps/desktop/src/components/views/folder/controls/RulesPanel.tsx`:
+  ADD content-compare checkbox ONLY
+  (`folderview/content-compare-toggle`, label "Compare contents
+  (byte-by-byte)"). Baaki testids/classes same.
+- `apps/desktop/src/components/views/FolderView.tsx` (folder wiring):
+  `contentCompare` state (default false, session switch par reset),
+  compare effect me `folderCompare(..., contentFlag)` + deps me shamil,
+  RulesPanel ko props pass. Toggle karte hi dobara compare hota hai.
+- NEW `apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts`: toggle
+  unchecked start, check karne par `__FOLDER_CONTENT_LAST__`
+  contentCompare=true + rows bane rehte hain, uncheck par false; dark
+  mode render; zero errors; koi geometry assert nahi.
+
+## Gates (worktree, fresh port, ABSOLUTE paths)
+- `/tmp/wt-C2d/apps/desktop ./node_modules/.bin/tsc --noEmit` => TSC:0
+  (main node_modules symlink kiya tha, gate ke baad hata diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh
+  /tmp/wt-C2d/apps/desktop 1842 c2b-folderopts-245.spec.ts
+  ui-standards.spec.ts --workers=1` => 5/5 green (webkit)
+- `cargo test -p autocompare-desktop --lib commands::folder` => 8/8
+  pass (naya content test samet)
+
+## MATCH/OFF
+| cheez | haal |
+|---|---|
+| MATCH | contentCompare=true same-size alag-bytes ko Different batata hai |
+| MATCH | toggle on/off dono par folder_compare dobara fire hota hai |
+| MATCH | legacy masks wire + saare purane testids same hain |
+| MATCH | ui-standards 4/4 samet 5/5 e2e green, tsc 0, rust 8/8 |
+| OFF | quickCompare ka alag UI toggle nahi (off = fast path hi quick hai) |
+| OFF | mock engine me content flag nodes nahi badalta (sirf wire probe) |
+
+## Files
+- apps/desktop/src-tauri/src/commands/folder.rs
+- apps/desktop/src/ipc/folder.ts
+- apps/desktop/src/components/views/folder/controls/RulesPanel.tsx
+- apps/desktop/src/components/views/FolderView.tsx
+- apps/desktop/e2e/specs/c2b-folderopts-245.spec.ts (NEW)
+
+C2b-DONE

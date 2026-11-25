@@ -248,14 +248,26 @@ pub fn entry_matches(status: FolderStatusDto, filter: &str) -> Result<bool, Stri
 /// filtering; masks apply at compare time, before any `filter` used
 /// by [`folder_get_tree`].
 ///
+/// `contentCompare` / `content_compare` (either spelling wins) maps to
+/// engine [`FolderOptions::content_compare`]: byte-compare files whose
+/// sizes match (symlink-aware, never follows links). Omitted (or both
+/// `false`) keeps the legacy mtime/size fast path. `quickCompare` /
+/// `quick_compare` is the inverse alias (`true` = fast path); an
+/// explicit `contentCompare` wins over `quickCompare`.
+///
 /// The walk runs through [`compare_folders_cancellable`] against a flag
 /// registered up front, so a concurrent [`folder_cancel`] for the returned
 /// session id can interrupt it.
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn folder_compare(
     left: String,
     right: String,
     masks: Option<String>,
+    contentCompare: Option<bool>,
+    content_compare: Option<bool>,
+    quickCompare: Option<bool>,
+    quick_compare: Option<bool>,
 ) -> Result<FolderCompareDto, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
@@ -280,6 +292,10 @@ pub fn folder_compare(
     }
     let options = FolderOptions {
         masks,
+        content_compare: contentCompare
+            .or(content_compare)
+            .or_else(|| quickCompare.or(quick_compare).map(|q| !q))
+            .unwrap_or(false),
         ..FolderOptions::default()
     };
     let outcome = compare_folders_cancellable(
@@ -461,19 +477,27 @@ mod tests {
 
     #[test]
     fn error_paths_on_missing_dirs_and_sessions() {
-        assert!(folder_compare(String::new(), "/b".to_string(), None).is_err());
-        assert!(folder_compare("/a".to_string(), String::new(), None).is_err());
+        assert!(folder_compare(String::new(), "/b".to_string(), None, None, None, None, None).is_err());
+        assert!(folder_compare("/a".to_string(), String::new(), None, None, None, None, None).is_err());
         let missing = "/definitely/not/here-wave1a-left".to_string();
         assert!(folder_compare(
             missing,
             "/definitely/not/here-wave1a-right".to_string(),
+            None,
+            None,
+            None,
+            None,
             None
         )
         .is_err());
         assert!(folder_compare(
             "/definitely/not/here-wave1a-left".to_string(),
             "/definitely/not/here-wave1a-right".to_string(),
-            Some("*.ts".to_string())
+            Some("*.ts".to_string()),
+            None,
+            None,
+            None,
+            None
         )
         .is_err());
         assert!(folder_get_tree("no-such-session".to_string(), 0, 10, "all".to_string()).is_err());
@@ -533,7 +557,7 @@ mod tests {
     fn masks_param_filters_before_status_filter() {
         // No masks: everything is listed (backward compatible).
         let (base_none, left, right) = mask_fixture_roots("none");
-        let dto = folder_compare(left.clone(), right.clone(), None).unwrap_or_else(|_| {
+        let dto = folder_compare(left.clone(), right.clone(), None, None, None, None, None).unwrap_or_else(|_| {
             panic!("compare without masks must succeed");
         });
         assert_eq!(dto.total, 3);
@@ -543,7 +567,7 @@ mod tests {
 
         // Include-only: only *.ts survives.
         let (base_inc, left, right) = mask_fixture_roots("inc");
-        let dto = folder_compare(left, right, Some("*.ts".to_string()))
+        let dto = folder_compare(left, right, Some("*.ts".to_string()), None, None, None, None)
             .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 1);
         assert_eq!(tree_paths(&dto.session), vec!["a.ts"]);
@@ -556,7 +580,7 @@ mod tests {
 
         // Exclude-only: the minified bundle is hidden.
         let (base_exc, left, right) = mask_fixture_roots("exc");
-        let dto = folder_compare(left, right, Some("-*.min.js".to_string()))
+        let dto = folder_compare(left, right, Some("-*.min.js".to_string()), None, None, None, None)
             .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 2);
         assert_eq!(tree_paths(&dto.session), vec!["a.ts", "b.js"]);
@@ -565,7 +589,7 @@ mod tests {
 
         // Mixed: include *.js but still drop the minified bundle.
         let (base_mix, left, right) = mask_fixture_roots("mix");
-        let dto = folder_compare(left, right, Some("*.js;-*.min.js".to_string()))
+        let dto = folder_compare(left, right, Some("*.js;-*.min.js".to_string()), None, None, None, None)
             .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 1);
         assert_eq!(tree_paths(&dto.session), vec!["b.js"]);
@@ -574,10 +598,71 @@ mod tests {
 
         // Empty masks string behaves like None.
         let (base_empty, left, right) = mask_fixture_roots("empty");
-        let dto = folder_compare(left, right, Some("  ".to_string()))
+        let dto = folder_compare(left, right, Some("  ".to_string()), None, None, None, None)
             .unwrap_or_else(|_| panic!("compare with empty masks must succeed"));
         assert_eq!(dto.total, 3);
         folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_empty).unwrap_or(());
+    }
+
+    #[test]
+    fn content_compare_flag_byte_compares_same_size_files() {
+        // Same size + same mtime + different bytes: fast path reports
+        // `Same`, content path reports `Different`.
+        let base = std::env::temp_dir().join(format!(
+            "autocompare-folder-content-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let left = base.join("left");
+        let right = base.join("right");
+        std::fs::create_dir_all(&left).unwrap_or(());
+        std::fs::create_dir_all(&right).unwrap_or(());
+        std::fs::write(left.join("same.bin"), b"aaaa").unwrap_or(());
+        std::fs::write(right.join("same.bin"), b"bbbb").unwrap_or(());
+        let stamp = std::time::UNIX_EPOCH
+            .checked_add(std::time::Duration::from_secs(1_700_000_000))
+            .unwrap_or(std::time::UNIX_EPOCH);
+        for root in [&left, &right] {
+            if let Ok(file) = std::fs::File::options()
+                .write(true)
+                .open(root.join("same.bin"))
+            {
+                let _ = file.set_times(
+                    std::fs::FileTimes::new().set_modified(stamp),
+                );
+            }
+        }
+        let l = left.display().to_string();
+        let r = right.display().to_string();
+        // Fast path (default): mtime equal => Same.
+        let dto = folder_compare(l.clone(), r.clone(), None, None, None, None, None)
+            .unwrap_or_else(|_| panic!("fast compare must succeed"));
+        assert_eq!(dto.total, 1);
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+            .unwrap_or_else(|_| panic!("tree fetch must succeed"));
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].status, FolderStatusDto::Same);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        // Content path (camelCase spelling): bytes differ => Different.
+        let dto = folder_compare(l.clone(), r.clone(), None, Some(true), None, None, None)
+            .unwrap_or_else(|_| panic!("content compare must succeed"));
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+            .unwrap_or_else(|_| panic!("tree fetch must succeed"));
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].status, FolderStatusDto::Different);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        // Quick alias (quick=true => fast path => Same again).
+        let dto = folder_compare(l, r, None, None, None, Some(true), None)
+            .unwrap_or_else(|_| panic!("quick compare must succeed"));
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+            .unwrap_or_else(|_| panic!("tree fetch must succeed"));
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].status, FolderStatusDto::Same);
+        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        std::fs::remove_dir_all(&base).unwrap_or(());
     }
 }
