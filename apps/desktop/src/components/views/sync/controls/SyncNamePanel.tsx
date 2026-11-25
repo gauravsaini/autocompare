@@ -33,6 +33,7 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
         </label>
         <Input
           id="sync-name-box"
+          controlSize="sm"
           data-testid="syncview/name-filter"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -52,6 +53,7 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
           className="w-64 ac-code"
         />
         <ToolbarButton
+          size="sm"
           data-testid="syncview/name-close"
           label="Dismiss name filter (Esc)"
           aria-label="Dismiss name filter (Esc)"

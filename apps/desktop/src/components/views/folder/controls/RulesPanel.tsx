@@ -51,6 +51,7 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
         </label>
         <Input
           id="folder-mask-box"
+          controlSize="sm"
           data-testid="folderview/mask-input"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -66,6 +67,7 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
           className="w-64 ac-code"
         />
         <Button
+          size="sm"
           variant="secondary"
           data-testid="folderview/mask-apply"
           title="Compare with these file masks"
@@ -76,6 +78,7 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
         </Button>
         {masks !== "" ? (
           <Button
+            size="sm"
             variant="secondary"
             data-testid="folderview/mask-clear"
             title="Clear file masks (compare everything)"
@@ -86,6 +89,7 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
           </Button>
         ) : null}
         <ToolbarButton
+          size="sm"
           data-testid="folderview/rules-close"
           label="Dismiss rules (Esc)"
           aria-label="Dismiss rules (Esc)"

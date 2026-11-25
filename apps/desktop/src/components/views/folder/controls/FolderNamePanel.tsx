@@ -28,6 +28,7 @@ export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.
         </label>
         <Input
           id="folder-name-box"
+          controlSize="sm"
           data-testid="folder-name-filter"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -40,6 +41,7 @@ export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.
           className="w-64 ac-code"
         />
         <ToolbarButton
+          size="sm"
           data-testid="folderview/name-close"
           label="Dismiss name filter (Esc)"
           aria-label="Dismiss name filter (Esc)"

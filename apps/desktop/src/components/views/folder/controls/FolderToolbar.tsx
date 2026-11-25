@@ -1,4 +1,4 @@
-import { Code, Search } from "lucide-react";
+import { Code, Columns3, Play, RefreshCw, Search } from "lucide-react";
 import { SegmentedControl, ToolbarButton } from "../../../ui";
 
 /**
@@ -28,6 +28,16 @@ export interface FolderToolbarProps {
       as the name filter; masks + re-compare owned by `FolderView`. */
   readonly rulesOpen: boolean;
   readonly onToggleRules: () => void;
+  /** Optional Columns panel toggle (Beyond Compare parity). */
+  readonly columnsOpen?: boolean;
+  readonly onToggleColumns?: () => void;
+  /** Optional Reload / Refresh compare action. */
+  readonly onReload?: () => void;
+  readonly onRefresh?: () => void;
+  readonly reloading?: boolean;
+  /** Optional Compare action. */
+  readonly onCompare?: () => void;
+  readonly comparing?: boolean;
 }
 
 export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Element {
@@ -43,7 +53,15 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
     onToggleNameFilter,
     rulesOpen,
     onToggleRules,
+    columnsOpen,
+    onToggleColumns,
+    onReload,
+    onRefresh,
+    reloading,
+    onCompare,
+    comparing,
   } = props;
+  const handleReload = onReload ?? onRefresh;
   return (
     <div
       role="toolbar"
@@ -52,6 +70,7 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       className="tv-controls-bar"
     >
       <SegmentedControl<"all" | "diffs" | "same" | "changes-only">
+        size="sm"
         label="Row filter"
         options={[
           { value: "all", label: `All (${loadedCount})`, testid: "folder-filter-all", pressed: rowFilter === "all", onSelect: () => onRowFilter("all") },
@@ -62,6 +81,7 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       />
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
+        size="sm"
         data-testid="folderview/toolbar-rules"
         label={rulesOpen ? "Hide rules (Esc)" : "Show rules"}
         title="Rules: file masks for this compare"
@@ -72,6 +92,7 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
         <span>Rules</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="folderview/toolbar-namefilter"
         label={nameFilterOpen ? "Hide name filter (Esc)" : "Show name filter (Ctrl+F)"}
         title="Filter by name (Ctrl+F)"
@@ -81,6 +102,45 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       >
         <span>Name filter</span>
       </ToolbarButton>
+      {onToggleColumns ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-columns"
+          label={columnsOpen ? "Hide columns panel" : "Show columns panel"}
+          title="Columns (Beyond Compare parity)"
+          icon={Columns3}
+          expanded={columnsOpen}
+          onClick={onToggleColumns}
+        >
+          <span>Columns</span>
+        </ToolbarButton>
+      ) : null}
+      {handleReload ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-reload"
+          label={reloading ? "Reloading…" : "Reload compare"}
+          title="Reload compare"
+          icon={RefreshCw}
+          disabled={reloading}
+          onClick={handleReload}
+        >
+          <span>Reload</span>
+        </ToolbarButton>
+      ) : null}
+      {onCompare ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-compare"
+          label={comparing ? "Comparing…" : "Compare"}
+          title="Compare folders"
+          icon={Play}
+          disabled={comparing}
+          onClick={onCompare}
+        >
+          <span>Compare</span>
+        </ToolbarButton>
+      ) : null}
     </div>
   );
 }
