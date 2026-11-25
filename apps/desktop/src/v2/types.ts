@@ -5,6 +5,7 @@ export type SessionKind =
   | "table"
   | "hex"
   | "merge"
+  | "folderMerge"
   | "sync"
   | "media";
 

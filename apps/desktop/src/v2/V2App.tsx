@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignJustify,
   ArrowLeftRight,
   ChevronDown,
   ChevronUp,
+  Command,
   Copy,
+  Download,
   Equal,
   Filter,
   FolderOpen,
@@ -14,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   SlidersHorizontal,
   Sparkles,
   Sun,
@@ -21,15 +24,20 @@ import {
   X,
 } from "lucide-react";
 import { sessionSave } from "../ipc/session";
-import MediaView from "../components/views/MediaView";
 import V2Modal from "./components/V2Modal";
+import V2SettingsModal from "./components/V2SettingsModal";
+import V2ReportExportModal from "./components/V2ReportExportModal";
+import V2CommandPalette from "./components/V2CommandPalette";
+import type { PaletteCommand } from "./components/V2CommandPalette";
 import V2Home from "./views/V2Home";
 import V2TextCompare from "./views/V2TextCompare";
 import V2FolderCompare from "./views/V2FolderCompare";
 import V2TableCompare from "./views/V2TableCompare";
 import V2HexCompare from "./views/V2HexCompare";
 import V2MergeCompare from "./views/V2MergeCompare";
+import V2FolderMerge from "./views/V2FolderMerge";
 import V2SyncCompare from "./views/V2SyncCompare";
+import V2MediaCompare from "./views/V2MediaCompare";
 import type { SessionKind, V2StatusInfo, V2Tab, V2ViewCommands } from "./types";
 
 const HOME_TAB: V2Tab = {
@@ -60,6 +68,12 @@ function inferDropKind(paths: readonly string[]): SessionKind {
     return "folder";
   }
   return "text";
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
 }
 
 interface ToolbarBtnProps {
@@ -109,6 +123,9 @@ export default function V2App(): React.JSX.Element {
   const [commands, setCommands] = useState<V2ViewCommands>({});
   const [status, setStatus] = useState<V2StatusInfo>({ left: "", center: "", right: "" });
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [draftKind, setDraftKind] = useState<SessionKind>("text");
   const [draftLeft, setDraftLeft] = useState("");
   const [draftRight, setDraftRight] = useState("");
@@ -132,11 +149,13 @@ export default function V2App(): React.JSX.Element {
         return;
       }
       const id = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const kindLabel =
+        kind === "folderMerge" ? "Folder Merge" : `${kind[0].toUpperCase()}${kind.slice(1)} Compare`;
       const baseTitle =
         customTitle ??
         (left && right
           ? `${left.split("/").pop() ?? left} ↔ ${right.split("/").pop() ?? right}`
-          : `${kind[0].toUpperCase()}${kind.slice(1)} Compare`);
+          : kindLabel);
       const next: V2Tab = {
         id,
         kind,
@@ -152,19 +171,22 @@ export default function V2App(): React.JSX.Element {
     [],
   );
 
-  const closeTab = (id: string, e?: React.MouseEvent): void => {
-    e?.stopPropagation();
-    if (id === "home") return;
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id);
-      const next = prev.filter((t) => t.id !== id);
-      if (activeId === id) {
-        const fallback = next[Math.max(0, idx - 1)] ?? HOME_TAB;
-        setActiveId(fallback.id);
-      }
-      return next;
-    });
-  };
+  const closeTab = useCallback(
+    (id: string, e?: React.MouseEvent): void => {
+      e?.stopPropagation();
+      if (id === "home") return;
+      setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.id === id);
+        const next = prev.filter((t) => t.id !== id);
+        if (activeId === id) {
+          const fallback = next[Math.max(0, idx - 1)] ?? HOME_TAB;
+          setActiveId(fallback.id);
+        }
+        return next;
+      });
+    },
+    [activeId],
+  );
 
   const updateActivePaths = useCallback(
     (left: string, right: string): void => {
@@ -221,6 +243,45 @@ export default function V2App(): React.JSX.Element {
     }
   }, []);
 
+  // Global keyboard shortcuts (Cmd+K palette, Cmd+, preferences, Cmd+W close tab, n/p diff nav, Cmd+D copy)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      if (mod && key === ",") {
+        e.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+      if (mod && key === "w" && activeTabRef.current.kind !== "home") {
+        e.preventDefault();
+        closeTab(activeTabRef.current.id);
+        return;
+      }
+      if (mod && key === "d" && commandsRef.current.canCopy) {
+        e.preventDefault();
+        commandsRef.current.copySelected?.();
+        return;
+      }
+      if (!mod && !isEditableTarget(e.target)) {
+        if (key === "n" && commandsRef.current.hasSections) {
+          e.preventDefault();
+          commandsRef.current.nextSection?.();
+        } else if (key === "p" && commandsRef.current.hasSections) {
+          e.preventDefault();
+          commandsRef.current.prevSection?.();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeTab]);
+
   // Apply dropped file path(s) to current tab or auto-open a matching comparison
   const handleDroppedPaths = useCallback(
     (paths: readonly string[], side: "left" | "right"): void => {
@@ -240,7 +301,6 @@ export default function V2App(): React.JSX.Element {
         return;
       }
 
-      // Single file drop
       const dropped = clean[0];
       if (cur.kind === "home") {
         const kind = inferDropKind([dropped]);
@@ -288,11 +348,8 @@ export default function V2App(): React.JSX.Element {
             setDropOverlay(null);
           }
         });
-        if (active) {
-          unlisten = fn;
-        } else {
-          fn();
-        }
+        if (active) unlisten = fn;
+        else fn();
       } catch {
         // Non-Tauri browser preview
       }
@@ -305,7 +362,7 @@ export default function V2App(): React.JSX.Element {
     };
   }, [handleDroppedPaths]);
 
-  // Native macOS menu-event listener (wired to all 18 menu IDs in src-tauri/src/menu.rs)
+  // Native macOS menu-event listener (all 18 menu IDs in src-tauri/src/menu.rs)
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let active = true;
@@ -363,17 +420,14 @@ export default function V2App(): React.JSX.Element {
               setTheme((t) => (t === "dark" ? "light" : "dark"));
               break;
             case "tools.settings":
-              commandsRef.current.openRules?.();
+              setSettingsOpen(true);
               break;
             default:
               break;
           }
         });
-        if (active) {
-          unlisten = fn;
-        } else {
-          fn();
-        }
+        if (active) unlisten = fn;
+        else fn();
       } catch {
         // Non-Tauri browser preview
       }
@@ -385,6 +439,35 @@ export default function V2App(): React.JSX.Element {
       unlisten?.();
     };
   }, [openSession, handleSaveWorkspaceSession]);
+
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const list: PaletteCommand[] = [
+      { id: "new-text", category: "Compare", label: "New Text Compare", shortcut: "⌘1", run: () => openSession("text") },
+      { id: "new-folder", category: "Compare", label: "New Folder Compare", shortcut: "⌘2", run: () => openSession("folder") },
+      { id: "new-hex", category: "Compare", label: "New Hex Compare", shortcut: "⌘3", run: () => openSession("hex") },
+      { id: "new-table", category: "Compare", label: "New Table Compare", shortcut: "⌘4", run: () => openSession("table") },
+      { id: "new-media", category: "Compare", label: "New Media Compare", shortcut: "⌘5", run: () => openSession("media") },
+      { id: "new-sync", category: "Compare", label: "New Folder Sync", shortcut: "⌘6", run: () => openSession("sync") },
+      { id: "new-merge", category: "Compare", label: "New 3-Way Text Merge", shortcut: "⌘7", run: () => openSession("merge") },
+      { id: "new-fmerge", category: "Compare", label: "New 3-Way Folder Merge", run: () => openSession("folderMerge") },
+      { id: "go-home", category: "Navigate", label: "Go to Home", run: () => setActiveId("home") },
+      { id: "toggle-theme", category: "View", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`, run: () => setTheme((t) => (t === "dark" ? "light" : "dark")) },
+      { id: "open-settings", category: "App", label: "Open Preferences", shortcut: "⌘,", run: () => setSettingsOpen(true) },
+    ];
+    if (activeTab.kind !== "home") {
+      list.push(
+        { id: "save-sess", category: "Session", label: "Save Active Session", shortcut: "⌘S", run: () => void handleSaveWorkspaceSession() },
+        { id: "export-rep", category: "Report", label: "Export HTML / Markdown / JSON Report", run: () => setExportOpen(true) },
+      );
+      if (commands.swapSides) {
+        list.push({ id: "swap", category: "Action", label: "Swap Left & Right Sides", run: () => commands.swapSides?.() });
+      }
+      if (commands.reload) {
+        list.push({ id: "reload", category: "Action", label: "Reload Comparison", run: () => commands.reload?.() });
+      }
+    }
+    return list;
+  }, [activeTab.kind, theme, openSession, handleSaveWorkspaceSession, commands]);
 
   return (
     <div
@@ -406,7 +489,7 @@ export default function V2App(): React.JSX.Element {
         if (files.length > 0) handleDroppedPaths(files, side);
       }}
     >
-      {/* 1. Crisp macOS Tab Strip — `+` hugs the last tab, theme toggle on far right */}
+      {/* 1. Crisp macOS Tab Strip */}
       <header className="flex h-[36px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {tabs.map((tab) => {
@@ -471,14 +554,43 @@ export default function V2App(): React.JSX.Element {
             <span className="text-[11px] font-medium text-[var(--v2-accent)]">{saveToast}</span>
           ) : null}
           {activeTab.kind !== "home" ? (
-            <button
-              type="button"
-              onClick={() => void handleSaveWorkspaceSession()}
-              className="v2-btn h-[22px] text-[11px]"
-            >
-              Save Session
-            </button>
+            <>
+              <button
+                type="button"
+                title="Export comparison report"
+                onClick={() => setExportOpen(true)}
+                className="v2-btn h-[22px] text-[11px]"
+              >
+                <Download size={11} />
+                Export
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveWorkspaceSession()}
+                className="v2-btn h-[22px] text-[11px]"
+              >
+                Save Session
+              </button>
+            </>
           ) : null}
+          <button
+            type="button"
+            title="Command Palette (Cmd+K)"
+            onClick={() => setPaletteOpen(true)}
+            className="v2-btn h-[22px] gap-1 px-2 text-[11px] text-[var(--v2-fg-secondary)]"
+          >
+            <Command size={11} />
+            <span>K</span>
+          </button>
+          <button
+            type="button"
+            title="Preferences (Cmd+,)"
+            aria-label="Preferences"
+            onClick={() => setSettingsOpen(true)}
+            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+          >
+            <Settings size={14} />
+          </button>
           <button
             type="button"
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -499,11 +611,7 @@ export default function V2App(): React.JSX.Element {
           className="flex h-[46px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-2.5"
         >
           <TopBarBtn icon={Home} label="Home" onClick={() => setActiveId("home")} />
-          <TopBarBtn
-            icon={FolderOpen}
-            label="Sessions"
-            onClick={() => setNewSessionOpen(true)}
-          />
+          <TopBarBtn icon={FolderOpen} label="Sessions" onClick={() => setNewSessionOpen(true)} />
           <BarSep />
           <TopBarBtn
             icon={List}
@@ -541,66 +649,23 @@ export default function V2App(): React.JSX.Element {
             disabled={!commands.toggleMinor}
             onClick={commands.toggleMinor}
           />
-          <TopBarBtn
-            icon={SlidersHorizontal}
-            label="Rules"
-            disabled={!commands.openRules}
-            onClick={commands.openRules}
-          />
-          <TopBarBtn
-            icon={Type}
-            label="Format"
-            disabled={!commands.openFormat}
-            onClick={commands.openFormat}
-          />
-          <TopBarBtn
-            icon={Search}
-            label="Find"
-            disabled={!commands.openFind}
-            onClick={commands.openFind}
-          />
+          <TopBarBtn icon={SlidersHorizontal} label="Rules" disabled={!commands.openRules} onClick={commands.openRules} />
+          <TopBarBtn icon={Type} label="Format" disabled={!commands.openFormat} onClick={commands.openFormat} />
+          <TopBarBtn icon={Search} label="Find" disabled={!commands.openFind} onClick={commands.openFind} />
           <BarSep />
-          <TopBarBtn
-            icon={Copy}
-            label="Copy"
-            disabled={!commands.canCopy}
-            onClick={commands.copySelected}
-          />
-          <TopBarBtn
-            icon={ChevronUp}
-            label="Prev"
-            disabled={!commands.hasSections}
-            onClick={commands.prevSection}
-          />
-          <TopBarBtn
-            icon={ChevronDown}
-            label="Next"
-            disabled={!commands.hasSections}
-            onClick={commands.nextSection}
-          />
+          <TopBarBtn icon={Copy} label="Copy" disabled={!commands.canCopy} onClick={commands.copySelected} />
+          <TopBarBtn icon={ChevronUp} label="Prev" disabled={!commands.hasSections} onClick={commands.prevSection} />
+          <TopBarBtn icon={ChevronDown} label="Next" disabled={!commands.hasSections} onClick={commands.nextSection} />
           <BarSep />
-          <TopBarBtn
-            icon={ArrowLeftRight}
-            label="Swap"
-            disabled={!commands.swapSides}
-            onClick={commands.swapSides}
-          />
-          <TopBarBtn
-            icon={RefreshCw}
-            label="Reload"
-            disabled={!commands.reload}
-            onClick={commands.reload}
-          />
+          <TopBarBtn icon={ArrowLeftRight} label="Swap" disabled={!commands.swapSides} onClick={commands.swapSides} />
+          <TopBarBtn icon={RefreshCw} label="Reload" disabled={!commands.reload} onClick={commands.reload} />
         </div>
       ) : null}
 
-      {/* 3. Main Content Surface */}
+      {/* 3. Main Content Surface (100% Native v2 Views — Zero Legacy Imports!) */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab.kind === "home" ? (
-          <V2Home
-            onNewSession={openSession}
-            onOpenSessionManager={() => setNewSessionOpen(true)}
-          />
+          <V2Home onNewSession={openSession} onOpenSessionManager={() => setNewSessionOpen(true)} />
         ) : activeTab.kind === "text" ? (
           <V2TextCompare
             key={activeTab.id}
@@ -648,6 +713,15 @@ export default function V2App(): React.JSX.Element {
             onRegisterCommands={setCommands}
             onStatusChange={setStatus}
           />
+        ) : activeTab.kind === "folderMerge" ? (
+          <V2FolderMerge
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
         ) : activeTab.kind === "sync" ? (
           <V2SyncCompare
             key={activeTab.id}
@@ -658,9 +732,14 @@ export default function V2App(): React.JSX.Element {
             onStatusChange={setStatus}
           />
         ) : (
-          <div className="h-full overflow-auto bg-[var(--v2-surface)] p-3">
-            <MediaView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-          </div>
+          <V2MediaCompare
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
         )}
       </div>
 
@@ -701,7 +780,7 @@ export default function V2App(): React.JSX.Element {
         </div>
       ) : null}
 
-      {/* Standardized Centered New Session Modal */}
+      {/* Centered New Session Modal */}
       <V2Modal
         open={newSessionOpen}
         title="New Comparison Session"
@@ -742,9 +821,10 @@ export default function V2App(): React.JSX.Element {
               <option value="folder">Folder Compare</option>
               <option value="table">Table Compare</option>
               <option value="hex">Hex Compare</option>
-              <option value="merge">3-Way Merge</option>
+              <option value="merge">3-Way Text Merge</option>
+              <option value="folderMerge">3-Way Folder Merge</option>
               <option value="sync">Folder Sync</option>
-              <option value="media">Media Compare</option>
+              <option value="media">Media Compare (Picture & Audio)</option>
             </select>
           </div>
           <div>
@@ -773,6 +853,26 @@ export default function V2App(): React.JSX.Element {
           </div>
         </div>
       </V2Modal>
+
+      {/* Centered Preferences & Report Export Modals */}
+      <V2SettingsModal
+        open={settingsOpen}
+        theme={theme}
+        onThemeChange={setTheme}
+        onClose={() => setSettingsOpen(false)}
+      />
+      <V2ReportExportModal
+        open={exportOpen}
+        tab={activeTab}
+        onClose={() => setExportOpen(false)}
+      />
+
+      {/* Cmd+K Command Palette */}
+      <V2CommandPalette
+        open={paletteOpen}
+        commands={paletteCommands}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }
