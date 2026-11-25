@@ -1327,3 +1327,26 @@ TABS2-DONE
 - PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-DEBTC/apps/desktop 1875 e2e/specs/textinteract-109.spec.ts e2e/specs/textinline-192.spec.ts e2e/specs/ui-standards.spec.ts --workers=1 => 10 passed (11.9s), GATE_PLAYWRIGHT_EXIT=0
 
 DEBTC-DONE
+# TABS3 — Tabs standard sizing (orchestrator-landed)
+
+GOAL: Tabs ko shared ui/ standard sizing do (BC uniform). TabBar bespoke inline classes -> ui/Tabs primitive + tokens, Gallery showcase.
+
+Files changed:
+- apps/desktop/src/components/ui/Tabs.tsx (NEW, 146 lines: TabList/Tab, sm/md, dirty/close/new slots)
+- apps/desktop/src/components/chrome/TabBar.tsx (styling-only migration, logic/handlers byte-identical)
+- apps/desktop/src/components/ui/index.ts (Tab exports)
+- apps/desktop/src/components/ui/Gallery.tsx (Tabs showcase: states + 8-tab strip)
+- apps/desktop/src/theme/tokens.css (+9: --ac-tab-chip-h-sm/md, --ac-tab-radius; styles/tokens.css symlink auto-mirrors)
+- apps/desktop/e2e/specs/tabs-standard-TABS3.spec.ts (NEW, 187 lines)
+
+Gates (orchestrator, worktree /private/tmp/wt-TABS3, port 1881, webkit, --workers=1):
+- tsc --noEmit: 0
+- run1: 10/10 green (tabs-chipsizing-253 2, tabs-standard-TABS3 2, ui-standards 4, chrome-budget 2)
+- run2 retry: infra OOM-killed mid-run (3/3 passed, 0 failures); run2b: 10/10 green, GATE_PLAYWRIGHT_EXIT=0
+- testids byte-identical: tabbar, tab-*, tab-dirty-*, tab-close-*, prompt/confirm/cancel, tab-new, tabbar/error
+- heights untouched: bar 32, chip 24 == --ac-control-h-md, flex-1 basis-0 + 96/180 clamps, 520px cap, close ml-auto
+
+MATCH: token equality + measured heights + flex pins + ellipsis + + adjacency + Gallery block, light+dark.
+OFF: none. Agent (agyx agentWTABS3) stalled 15min zero-output (1st strike); orchestrator verified + merged.
+
+---
