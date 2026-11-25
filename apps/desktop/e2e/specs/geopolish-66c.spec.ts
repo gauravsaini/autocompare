@@ -102,11 +102,17 @@ async function assertChromeGeometry(page: Page): Promise<void> {
   // PathBar input padding on the 4px scale: 8 (was 10).
   expect(await styleOf(page, "pathbar/left", "padding-left"), "pathbar input px = space-2 (8px)").toBe("8px");
 
-  // OverviewRuler: 16 wide (was 14), flush markers (gap 0), 4px markers (was 3).
+  // OverviewRuler: 16 wide (was 14), flush markers (gap 0). DEBTA-geom
+  // scale-to-fit: fixed 4px markers overflowed the track 2x on a 644-row
+  // diff (322 buckets) and painted under the statusbar zone, so markers
+  // ride min(4, avail/count) (small diffs stay byte-identical 4px).
   expect((await boxOf(page, "ruler")).width, "ruler w = space-4 (16)").toBe(16);
   expect(await styleOf(page, "ruler", "row-gap"), "ruler markers flush (gap 0)").toBe("0px");
   const markerH = await page.locator('[data-testid^="ruler/row-"]').first().evaluate((el) => el.getBoundingClientRect().height);
-  expect(markerH, "ruler marker h = space-1 (4px)").toBe(4);
+  expect(markerH, "ruler marker h within scale-to-fit 1..4px").toBeGreaterThanOrEqual(1);
+  expect(markerH, "ruler marker h within scale-to-fit 1..4px").toBeLessThanOrEqual(4);
+  const rulerOverflow = await page.getByTestId("ruler").evaluate((el) => el.scrollHeight - el.clientHeight);
+  expect(rulerOverflow, `ruler markers fit the track, no overflow (got ${rulerOverflow}px)`).toBeLessThanOrEqual(1);
 
   // History dropdown rides space-1/space-2 (empty state is deterministic:
   // each test gets a fresh context, so no persisted history exists yet).
