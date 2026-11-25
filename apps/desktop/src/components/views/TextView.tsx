@@ -370,6 +370,8 @@ interface HunkCopyResult {
   readonly merged: number;
   /** In-range rows dropped (take side absent, GAP-03 parity). */
   readonly removed: number;
+  /** Updated in-memory staged edits: prunes dropped rows and clears target-side overrides. */
+  readonly nextEdits: Readonly<Record<string, string>>;
 }
 
 function applyHunkCopy(
@@ -377,8 +379,11 @@ function applyHunkCopy(
   start: number,
   end: number,
   dir: TextSide,
+  edits: Readonly<Record<string, string>> = {},
 ): HunkCopyResult {
+  const target: TextSide = dir === "left" ? "right" : "left";
   const next: TextRowDto[] = [];
+  const nextEdits: Record<string, string> = { ...edits };
   let merged = 0;
   let removed = 0;
   for (const row of rows) {
@@ -386,15 +391,19 @@ function applyHunkCopy(
       next.push(row);
       continue;
     }
-    const take = dir === "left" ? row.left : row.right;
+    const editVal = edits[`${row.index}:${dir}`];
+    const take = editVal !== undefined ? editVal : dir === "left" ? row.left : row.right;
     if (take === null) {
       removed += 1;
+      delete nextEdits[`${row.index}:left`];
+      delete nextEdits[`${row.index}:right`];
       continue;
     }
     merged += 1;
+    delete nextEdits[`${row.index}:${target}`];
     next.push({ index: row.index, kind: "equal", left: take, right: take, inline: [] });
   }
-  return { next, merged, removed };
+  return { next, merged, removed, nextEdits };
 }
 
 /**
@@ -935,8 +944,14 @@ export default function TextView({
       if ((pendingCopies.length > 0 || appliedEdits > 0) && session !== null) {
         try {
           const page = await textGetRows(session, 0, Math.max(rowsRef.current.length, 1));
-          setRows(page.rows);
-          rowsRef.current = page.rows;
+          let freshRows = page.rows;
+          const remainingCopies = stagedCopies.filter((c) => c.target !== side);
+          for (const rem of remainingCopies) {
+            const res = applyHunkCopy(freshRows, rem.start, rem.end, rem.dir, edits);
+            freshRows = res.next;
+          }
+          setRows(freshRows);
+          rowsRef.current = freshRows;
           setTotal(page.total);
           const over = await fetchOverviewCounts(session);
           if (over !== null) setOverview(over);
@@ -1825,28 +1840,11 @@ export default function TextView({
       const hunkRows = currentRows.slice(lo, hi + 1);
 
       // Phase 1: Local copy first! Apply hunk copy to locally held rows
-      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, start, end, dir);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, start, end, dir, edits);
       setRows(nextRows);
       rowsRef.current = nextRows;
-      // Wave-178: dropped (null-take) rows must not linger as ghost
-      // edit overrides or as phantom total — prune both so Load more /
-      // goto / find page against the same shortened prefix the backend
-      // will hold after Save.
+      setEdits(nextEdits);
       if (removed > 0) {
-        const dropped = new Set<number>();
-        for (const r of currentRows) {
-          if (r.index >= start && r.index <= end && (dir === "left" ? r.left : r.right) === null) {
-            dropped.add(r.index);
-          }
-        }
-        setEdits((prevEdits) => {
-          const kept: Record<string, string> = {};
-          for (const [k, v] of Object.entries(prevEdits)) {
-            const sep = k.lastIndexOf(":");
-            if (!dropped.has(Number(k.slice(0, sep)))) kept[k] = v;
-          }
-          return kept;
-        });
         setTotal((t) => Math.max(0, t - removed));
       }
       if (selectedIndex !== null) {
@@ -1924,21 +1922,11 @@ export default function TextView({
     }
     try {
       const target: TextSide = dir === "left" ? "right" : "left";
-      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir, edits);
       setRows(nextRows);
       rowsRef.current = nextRows;
-      // Wave-178: same drop/total/overview accounting as the hunk path
-      // (shared `applyHunkCopy` + `adjustOverviewForCopy`) — the line
-      // path previously skipped all three and drifted from backend truth.
+      setEdits(nextEdits);
       if (removed > 0) {
-        setEdits((prevEdits) => {
-          const kept: Record<string, string> = {};
-          for (const [k, v] of Object.entries(prevEdits)) {
-            const sep = k.lastIndexOf(":");
-            if (Number(k.slice(0, sep)) !== rowIndex) kept[k] = v;
-          }
-          return kept;
-        });
         setTotal((t) => Math.max(0, t - removed));
       }
       setOverview((prev) => adjustOverviewForCopy(prev, row.kind === "equal" ? [] : [row], merged));
@@ -2828,7 +2816,7 @@ export default function TextView({
             : ` · left ${leftLines} lines · right ${rightLines} lines`}
           {pair === null || demo !== null ? "" : ` · ${pair.left} vs ${pair.right}`}
         </p>
-        <span data-testid="textview/toolbar-hunks" className="ac-meta text-[var(--ac-fg-muted)]">
+        <span data-testid="textview/toolbar-hunks" className="ac-meta inline-block min-w-[14ch] shrink-0 text-center tabular-nums text-[var(--ac-fg-muted)]">
           {hunksLabel}
         </span>
         {diffNote === null ? null : (
