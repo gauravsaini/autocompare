@@ -65,6 +65,53 @@ const WEB_SHORTCUT_COMMANDS: Record<WebShortcutMenuId, string> = {
   "session.take-right": "text_copy_right",
 };
 
+/**
+ * Wave-231: advertised-shortcut registry (single source of truth).
+ * Every chord a toolbar `title` advertises MUST be a truly wired
+ * chord — either a `matchWebShortcut` menu accelerator (Cmd/Ctrl+1..7,
+ * N/O/S/D/E), a chrome-bridge chord below (`F3`/`Shift+F3` find
+ * next/prev, `Cmd+Alt+Down/Up` hunk nav, `Ctrl+F` find focus,
+ * `Ctrl+G` goto focus), or a view-local chord the owning view handles
+ * (`Cmd+B` take-both + `j`/`k`/`n`/`p` conflict nav in MergeView,
+ * `n`/`p` nav + `l`/`r` copy on text rows). `Toolbar` imports
+ * `TOOLBAR_SHORTCUT_HINTS` from here so titles can never drift from
+ * the wired set. View-local keys (`j`/`k`/`n`/`p`/`l`/`r`) are
+ * documented here but deliberately NOT advertised on the global
+ * toolbar — globally `n` opens a session (menu `session.new`) and
+ * `j`/`k`/`l`/`r` are view-local pass-throughs, so a global hint
+ * would be dishonest outside the owning view.
+ */
+export const ADVERTISED_SHORTCUTS = {
+  find: "Ctrl+F",
+  goto: "Ctrl+G",
+  "find-next": "F3",
+  "find-prev": "Shift+F3",
+  "take-left": "Cmd+D",
+  "take-right": "Cmd+E",
+  "take-both": "Cmd+B",
+  "next-hunk": "Cmd+Alt+Down",
+  "prev-hunk": "Cmd+Alt+Up",
+  "next-conflict": "j",
+  "prev-conflict": "k",
+  open: "Cmd+O",
+} as const;
+
+export type AdvertisedShortcutId = keyof typeof ADVERTISED_SHORTCUTS;
+
+/**
+ * Wave-231: toolbar title hints derived from the registry above.
+ * `copy` rides the take-left path by default (`handleToolbarCopy`
+ * falls back to `"left"`); `copy-right` forces `"right"`. Single
+ * address per button — no overlapping `Cmd+D / Cmd+E` claim.
+ */
+export const TOOLBAR_SHORTCUT_HINTS: Record<string, string> = {
+  open: ADVERTISED_SHORTCUTS.open,
+  "next-hunk": ADVERTISED_SHORTCUTS["next-hunk"],
+  "prev-hunk": ADVERTISED_SHORTCUTS["prev-hunk"],
+  copy: ADVERTISED_SHORTCUTS["take-left"],
+  "copy-right": ADVERTISED_SHORTCUTS["take-right"],
+};
+
 export interface WebShortcutChord {
   readonly key: string;
   readonly metaKey: boolean;

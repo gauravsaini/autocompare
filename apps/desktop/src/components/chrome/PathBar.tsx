@@ -229,9 +229,9 @@ function PathField({
       ref={wrapRef}
       data-pathfield-side={side}
       className={`relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]${dropActive ? " ac-drop-highlight" : ""}`}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-      }}
+      // Wave-231: single dismiss contract — document-level `pointerdown`
+      // (click-outside) + document-level `keydown` Escape in the effect
+      // above. No per-div Esc handler (it would double the same close).
       onDragOver={(event) => {
         if (comparing) {
           event.preventDefault();

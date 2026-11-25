@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Square, type LucideIcon } from "lucide-react";
 import { ToolbarButton } from "../ui";
+import { TOOLBAR_SHORTCUT_HINTS } from "./shortcuts";
 
 export interface ToolbarAction {
   id: string;
@@ -146,13 +147,14 @@ export function compareBlockedReasonOf(action: ToolbarAction): string | null {
  * their titles stay exactly "Swap sides" / "Reload" per swapsides-136
  * and toolbar-compare).
  */
-const SHORTCUT_HINTS: Record<string, string> = {
-  open: "Cmd+O",
-  "next-hunk": "Cmd+Alt+Down / n",
-  "prev-hunk": "Cmd+Alt+Up / p",
-  copy: "Cmd+D / Cmd+E",
-  "copy-right": "Cmd+E",
-};
+/**
+ * Wave-231: shortcut hints ride the advertised-shortcut registry in
+ * `shortcuts.ts` (`TOOLBAR_SHORTCUT_HINTS`), the single source of
+ * truth for wired chords. Titles append the hint parenthetically;
+ * swap + reload carry no accelerator so their titles stay exactly
+ * "Swap sides" / "Reload" per swapsides-136 / toolbar-compare.
+ */
+const SHORTCUT_HINTS: Record<string, string> = TOOLBAR_SHORTCUT_HINTS;
 
 export function actionTitle(action: ToolbarAction, reason?: string | null): string {
   const r = reason ?? action.disabledReason ?? null;
