@@ -71,6 +71,12 @@ export interface TableHit {
  * camelCase and snake_case spellings, matching the Rust command which
  * accepts either; the backend applies them to every cell comparison
  * (positional + key mode).
+ *
+ * Wave-C2c: optional `delimiter` (single-char string; omitted/empty =
+ * `,`) plus numeric tolerance under three spellings
+ * (`numericTolerance` / `numeric_tolerance` / `epsilon`, first `Some`
+ * wins on the Rust side). A set tolerance lets near-equal numbers
+ * compare equal; unset keeps the legacy wire byte-identical.
  */
 export interface TableIgnoreOptions {
   readonly ignoreCase?: boolean;
@@ -78,6 +84,32 @@ export interface TableIgnoreOptions {
   // snake_case spellings:
   readonly ignore_case?: boolean;
   readonly ignore_space?: boolean;
+  // Wave-C2c engine-ready table options:
+  readonly delimiter?: string;
+  readonly numericTolerance?: number;
+  readonly numeric_tolerance?: number;
+  readonly epsilon?: number;
+}
+
+function tablePicOptsWire(opts: TableIgnoreOptions): {
+  delimiter: string | null;
+  numericTolerance: number | null;
+  numeric_tolerance: number | null;
+  epsilon: number | null;
+} {
+  const rawDelim = typeof opts.delimiter === "string" ? opts.delimiter : "";
+  const pickNum = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  // First Some wins on the Rust side; mirror that here so the last
+  // request hook shows exactly what the backend will honor.
+  const tol =
+    pickNum(opts.numericTolerance) ?? pickNum(opts.numeric_tolerance) ?? pickNum(opts.epsilon);
+  return {
+    delimiter: rawDelim === "" ? null : rawDelim,
+    numericTolerance: tol,
+    numeric_tolerance: tol,
+    epsilon: tol,
+  };
 }
 
 export function tableCompare(
@@ -91,13 +123,22 @@ export function tableCompare(
   // (or both `false`) keeps the legacy 4-field wire byte-identical.
   const cs = opts?.ignoreCase === true || opts?.ignore_case === true;
   const ws = opts?.ignoreSpace === true || opts?.ignore_space === true;
+  // Wave-C2c: delimiter + numeric tolerance ride the same optional
+  // `opts` (engine-ready, still omitted when unset).
+  const pic = opts === undefined ? null : tablePicOptsWire(opts);
+  const hasPic =
+    pic !== null && (pic.delimiter !== null || pic.numericTolerance !== null);
   if (typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>)["__TABLE_IGNORE_LAST__"] = {
       ignoreCase: cs,
       ignoreSpace: ws,
     };
+    (window as unknown as Record<string, unknown>)["__TABLE_PICOPTS_LAST__"] = {
+      delimiter: pic?.delimiter ?? null,
+      numericTolerance: pic?.numericTolerance ?? null,
+    };
   }
-  if (!cs && !ws) {
+  if (!cs && !ws && !hasPic) {
     return invoke<TableSummary>("table_compare", {
       left,
       right,
@@ -114,6 +155,14 @@ export function tableCompare(
     ignore_case: cs,
     ignoreSpace: ws,
     ignore_space: ws,
+    ...(hasPic
+      ? {
+          delimiter: pic.delimiter,
+          numericTolerance: pic.numericTolerance,
+          numeric_tolerance: pic.numeric_tolerance,
+          epsilon: pic.epsilon,
+        }
+      : {}),
   });
 }
 

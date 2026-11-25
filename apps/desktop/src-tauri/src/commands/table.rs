@@ -215,10 +215,10 @@ fn end_row(field: &mut String, row: &mut Vec<String>, rows: &mut Vec<Vec<String>
     }
 }
 
-/// Parses one delimited file: rows of cells with `,` separators,
+/// Parses one delimited file: rows of cells with `delim` separators,
 /// RFC-4180-lite quoting (doubled `""` escapes, delimiters and
 /// newlines inside quotes are data) and `\r\n` tolerance.
-fn parse_csv(text: &str) -> Vec<Vec<String>> {
+fn parse_csv(text: &str, delim: char) -> Vec<Vec<String>> {
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
@@ -241,7 +241,7 @@ fn parse_csv(text: &str) -> Vec<Vec<String>> {
             }
         } else if c == '"' && field.is_empty() {
             in_quotes = true;
-        } else if c == ',' {
+        } else if c == delim {
             row.push(std::mem::take(&mut field));
         } else if c == '\n' {
             end_row(&mut field, &mut row, &mut rows);
@@ -262,7 +262,9 @@ fn parse_csv(text: &str) -> Vec<Vec<String>> {
 
 /// Reads, size-caps and parses one table file into `(header, rows)`.
 /// The first row is the header (empty when the file has no rows).
-fn load_table(path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+/// `delim` is the resolved field separator (`,` when the caller sends
+/// no `delimiter`).
+fn load_table(path: &Path, delim: char) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
     let size = match std::fs::metadata(path) {
         Ok(meta) => meta.len(),
         Err(err) => return Err(open_msg(path, &err)),
@@ -278,7 +280,7 @@ fn load_table(path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         Err(err) => return Err(open_msg(path, &err)),
     };
     let text = String::from_utf8_lossy(bytes.as_slice());
-    let mut rows = parse_csv(text.as_ref());
+    let mut rows = parse_csv(text.as_ref(), delim);
     if rows.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
@@ -322,6 +324,58 @@ fn detect_key_column(rows: &[Vec<String>]) -> Option<usize> {
     None
 }
 
+/// Resolves the optional `delimiter` wire param to one separator
+/// char. Omitted or empty means `,` (legacy path byte-identical); a
+/// single char wins; anything longer is an honest error (prevents
+/// silent mis-splits).
+fn resolve_delimiter(raw: Option<String>) -> Result<char, String> {
+    match raw {
+        None => Ok(','),
+        Some(s) if s.is_empty() => Ok(','),
+        Some(s) => match s.chars().count() {
+            1 => Ok(s.chars().next().unwrap_or(',')),
+            _ => Err("delimiter must be a single character".to_string()),
+        },
+    }
+}
+
+/// Resolves the optional numeric tolerance from its three accepted
+/// spellings (`numericTolerance` / `numeric_tolerance` / `epsilon`,
+/// first `Some` wins). Omitted means exact numeric equality; a set
+/// value must be finite and `>= 0` (mirrors the engine
+/// `cells_equal_with_tolerance` contract).
+fn resolve_numeric_tolerance(
+    numeric_tolerance_camel: Option<f64>,
+    numeric_tolerance_snake: Option<f64>,
+    epsilon: Option<f64>,
+) -> Result<Option<f64>, String> {
+    let picked = numeric_tolerance_camel
+        .or(numeric_tolerance_snake)
+        .or(epsilon);
+    match picked {
+        None => Ok(None),
+        Some(v) if v.is_finite() && v >= 0.0 => Ok(Some(v)),
+        Some(_) => Err("numeric tolerance must be a finite number >= 0".to_string()),
+    }
+}
+
+/// Parses both cells as finite `f64` (surrounding whitespace ignored)
+/// and reports `|a - b| <= tol`. Non-numeric text, NaN/infinite
+/// values and invalid tolerances never match (mirrors the engine
+/// `cells_equal_with_tolerance` numeric half).
+fn numeric_cells_equal(a: &str, b: &str, tol: f64) -> bool {
+    if !(tol.is_finite() && tol >= 0.0) {
+        return false;
+    }
+    let (Ok(x), Ok(y)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) else {
+        return false;
+    };
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    (x - y).abs() <= tol
+}
+
 /// Normalises one cell for tolerant comparison: trims and collapses
 /// whitespace runs when `ignore_space`, case-folds when `ignore_case`.
 /// Displayed cells are untouched; only equality goes through here.
@@ -337,15 +391,38 @@ fn norm_cell(cell: &str, ignore_case: bool, ignore_space: bool) -> String {
     s
 }
 
-fn cells_equal(a: &str, b: &str, ignore_case: bool, ignore_space: bool) -> bool {
+fn cells_equal(
+    a: &str,
+    b: &str,
+    ignore_case: bool,
+    ignore_space: bool,
+    numeric_tol: Option<f64>,
+) -> bool {
+    // Exact win first, then the numeric-tolerance half (engine order:
+    // exact, case-fold via flags below, numeric). A set tolerance lets
+    // "1.001" equal "1.002" at 0.01 without touching text equality.
+    if a == b {
+        return true;
+    }
+    if let Some(tol) = numeric_tol
+        && numeric_cells_equal(a, b, tol)
+    {
+        return true;
+    }
     norm_cell(a, ignore_case, ignore_space) == norm_cell(b, ignore_case, ignore_space)
 }
 
-fn rows_equal(a: &[String], b: &[String], ignore_case: bool, ignore_space: bool) -> bool {
+fn rows_equal(
+    a: &[String],
+    b: &[String],
+    ignore_case: bool,
+    ignore_space: bool,
+    numeric_tol: Option<f64>,
+) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b.iter())
-            .all(|(x, y)| cells_equal(x, y, ignore_case, ignore_space))
+            .all(|(x, y)| cells_equal(x, y, ignore_case, ignore_space, numeric_tol))
 }
 
 /// Aligns rows by key column and counts `(matching, modified,
@@ -358,6 +435,7 @@ fn align_counts(
     key: usize,
     ignore_case: bool,
     ignore_space: bool,
+    numeric_tol: Option<f64>,
 ) -> (u64, u64, u64, u64) {
     let mut right_index: HashMap<String, usize> = HashMap::new();
     let mut right_no_key: u64 = 0;
@@ -390,7 +468,7 @@ fn align_counts(
                 Some(pos) => {
                     used.insert(*pos);
                     let same = match right.get(*pos) {
-                        Some(rrow) => rows_equal(rrow, row, ignore_case, ignore_space),
+                        Some(rrow) => rows_equal(rrow, row, ignore_case, ignore_space, numeric_tol),
                         None => false,
                     };
                     if same {
@@ -473,6 +551,14 @@ fn page_cells(cells: &[String], start_col: u64, col_limit: u64) -> Vec<String> {
 /// comparison (positional and key mode alike). Either spelling wins;
 /// omitted flags mean byte-identical cells. Old callers sending only
 /// `{left, right, by_key, key_columns}` are unaffected.
+///
+/// Wave-C2c: optional `delimiter` (single-char string, omitted/empty
+/// = `,`), plus optional numeric tolerance under three spellings
+/// (`numericTolerance` / `numeric_tolerance` / `epsilon`, first `Some`
+/// wins, must be finite `>= 0`). The tolerance lets near-equal numbers
+/// (`1.001` vs `1.002` at `0.01`) compare equal in positional and key
+/// mode alike (engine `cells_equal_with_tolerance` parity); text
+/// equality is untouched.
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn table_compare(
@@ -484,13 +570,19 @@ pub fn table_compare(
     ignore_case: Option<bool>,
     ignoreSpace: Option<bool>,
     ignore_space: Option<bool>,
+    delimiter: Option<String>,
+    numericTolerance: Option<f64>,
+    numeric_tolerance: Option<f64>,
+    epsilon: Option<f64>,
 ) -> Result<TableSummary, String> {
     let ignore_cs = ignoreCase.or(ignore_case).unwrap_or(false);
     let ignore_ws = ignoreSpace.or(ignore_space).unwrap_or(false);
+    let delim = resolve_delimiter(delimiter)?;
+    let num_tol = resolve_numeric_tolerance(numericTolerance, numeric_tolerance, epsilon)?;
     let left_path = Path::new(left.as_str());
     let right_path = Path::new(right.as_str());
-    let (header_l, rows_l) = load_table(left_path)?;
-    let (header_r, rows_r) = load_table(right_path)?;
+    let (header_l, rows_l) = load_table(left_path, delim)?;
+    let (header_r, rows_r) = load_table(right_path, delim)?;
 
     let left_w = width(rows_l.as_slice());
     let right_w = width(rows_r.as_slice());
@@ -515,16 +607,18 @@ pub fn table_compare(
     let (equal, diff_rows) = if keys.is_empty() {
         // Positional (requested or fallback): zipped full-row
         // mismatches plus the length delta. Cell equality honours the
-        // wave-163c ignore flags.
+        // wave-163c ignore flags plus the wave-C2c numeric tolerance.
         let mut mismatches: u64 = 0;
         for (row_l, row_r) in rows_l.iter().zip(rows_r.iter()) {
-            if !rows_equal(row_l, row_r, ignore_cs, ignore_ws) {
+            if !rows_equal(row_l, row_r, ignore_cs, ignore_ws, num_tol) {
                 mismatches = mismatches.saturating_add(1);
             }
         }
         let delta = rows_l.len().abs_diff(rows_r.len()) as u64;
         let diff_rows = mismatches.saturating_add(delta);
-        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws)
+        // Wave-C2c: numeric tolerance applies to body cells only;
+        // headers are names (exact-or-flagged), matching key mode.
+        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws, None)
             && rows_l.len() == rows_r.len()
             && diff_rows == 0;
         (equal, diff_rows)
@@ -534,11 +628,13 @@ pub fn table_compare(
             None => 0,
         };
         let (_, modified, left_only, right_only) =
-            align_counts(rows_l.as_slice(), rows_r.as_slice(), key, ignore_cs, ignore_ws);
+            align_counts(rows_l.as_slice(), rows_r.as_slice(), key, ignore_cs, ignore_ws, num_tol);
         let diff_rows = modified
             .saturating_add(left_only)
             .saturating_add(right_only);
-        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws)
+        // Wave-C2c: headers stay exact-or-flagged (no numeric tolerance
+        // on header names); body equality carries the tolerance.
+        let equal = rows_equal(&header_l, &header_r, ignore_cs, ignore_ws, None)
             && modified == 0
             && left_only == 0
             && right_only == 0;
@@ -729,6 +825,10 @@ mod tests {
             None,
             ignore_space,
             None,
+            None,
+            None,
+            None,
+            None,
         );
         remove_quiet(&l);
         remove_quiet(&r);
@@ -843,6 +943,10 @@ mod tests {
             "/tmp/wave1b-definitely-missing-right.csv".to_string(),
             false,
             Vec::new(),
+            None,
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -1197,7 +1301,7 @@ mod tests {
         }
         let ls = left.display().to_string();
         let rs = right.display().to_string();
-        let res = table_compare(ls.clone(), rs.clone(), false, Vec::new(), None, None, None, None)
+        let res = table_compare(ls.clone(), rs.clone(), false, Vec::new(), None, None, None, None, None, None, None, None)
             .expect("table_compare must succeed");
 
         let left_meta = res.left_meta.expect("left_meta should be populated");
@@ -1242,5 +1346,139 @@ mod tests {
         let back: Result<TableHit, _> = serde_json::from_str(json.as_str());
         assert!(back.is_ok());
         assert_eq!(back.ok(), Some(hit));
+    }
+
+    /// Wave-C2c helper: full 12-arg compare over temp fixtures.
+    fn open_session_with_pic_opts(
+        left: &str,
+        right: &str,
+        delimiter: Option<String>,
+        numeric_tolerance: Option<f64>,
+        epsilon: Option<f64>,
+    ) -> Result<TableSummary, String> {
+        let l = temp_path("picopt-l");
+        let r = temp_path("picopt-r");
+        if !write_text(&l, left) || !write_text(&r, right) {
+            remove_quiet(&l);
+            remove_quiet(&r);
+            return Err("test fixture write failed".to_string());
+        }
+        let res = table_compare(
+            l.display().to_string(),
+            r.display().to_string(),
+            false,
+            Vec::new(),
+            None,
+            None,
+            None,
+            None,
+            delimiter,
+            numeric_tolerance,
+            None,
+            epsilon,
+        );
+        remove_quiet(&l);
+        remove_quiet(&r);
+        res
+    }
+
+    #[test]
+    fn delimiter_semicolon_splits_columns() {
+        // The delimiter applies to BOTH files (one format per compare).
+        // A `;` file under the default parse is a single wide column;
+        // under `;` it splits into two — same content, honest col count.
+        let semi = "id;name\n1;amy\n";
+        let strict = open_session_with_pic_opts(semi, semi, None, None, None);
+        let strict_summary = match strict {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(strict_summary.equal);
+        assert_eq!(strict_summary.left_cols, 1);
+        let split = open_session_with_pic_opts(semi, semi, Some(";".to_string()), None, None);
+        let summary = match split {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!(summary.left_cols, 2);
+        assert_eq!(summary.diff_rows, 0);
+        // Cross-delimiter files genuinely differ (`,` side stays one col).
+        let mixed = open_session_with_pic_opts(semi, "id,name\n1,amy\n", Some(";".to_string()), None, None);
+        let mixed_summary = match mixed {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!mixed_summary.equal);
+    }
+
+    #[test]
+    fn delimiter_multi_char_is_rejected() {
+        let res = open_session_with_pic_opts("a\n1\n", "a\n1\n", Some(";;".to_string()), None, None);
+        assert!(res.is_err());
+        let msg = match res {
+            Ok(_) => return,
+            Err(e) => e,
+        };
+        assert!(msg.contains("single character"));
+    }
+
+    #[test]
+    fn numeric_tolerance_equalizes_near_numbers() {
+        let left = "id,val\n1,1.001\n";
+        let right = "id,val\n1,1.002\n";
+        let strict = open_session_with_pic_opts(left, right, None, None, None);
+        let strict_summary = match strict {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!strict_summary.equal);
+        let relaxed = open_session_with_pic_opts(left, right, None, Some(0.01), None);
+        let summary = match relaxed {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!(summary.diff_rows, 0);
+        // `epsilon` spelling wins identically.
+        let via_epsilon = open_session_with_pic_opts(left, right, None, None, Some(0.01));
+        let eps_summary = match via_epsilon {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(eps_summary.equal);
+    }
+
+    #[test]
+    fn numeric_tolerance_outside_band_stays_unequal() {
+        let left = "id,val\n1,1.001\n";
+        let right = "id,val\n1,1.02\n";
+        let res = open_session_with_pic_opts(left, right, None, Some(0.01), None);
+        let summary = match res {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(!summary.equal);
+    }
+
+    #[test]
+    fn numeric_tolerance_rejects_bad_values() {
+        for bad in [f64::NAN, f64::INFINITY, -0.5] {
+            let res = open_session_with_pic_opts("a\n1\n", "a\n1\n", None, Some(bad), None);
+            assert!(res.is_err(), "tolerance {bad} must fail");
+        }
+    }
+
+    #[test]
+    fn legacy_omitted_pic_opts_stay_byte_identical() {
+        // No delimiter / no tolerance = the pre-C2c path exactly.
+        let csv = "id,val\n1,1.5\n";
+        let res = open_session_with_pic_opts(csv, csv, None, None, None);
+        let summary = match res {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(summary.equal);
+        assert_eq!((summary.left_cols, summary.right_cols), (2, 2));
     }
 }

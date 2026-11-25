@@ -433,3 +433,118 @@ commands ya views, aur koi doosra spec touch nahi kiya.
 - REPORT.md (yeh file, worktree root)
 
 C2a-DONE
+
+---
+
+# REPORT — C2c-tablepicopts (EDIT wave, worktree-first)
+
+Branch: `wave-C2c-tablepicopts` | Base: `main (f470b68)` | Worktree: `/tmp/wt-C2c`
+Commit/push: NAHI kiya (tag rule: NEVER commit/push). Sab changes uncommitted worktree me hain.
+
+## 1. Summary (ek line)
+
+Engine-ready table options (delimiter + numeric epsilon) aur picture tolerance Tauri/IPC/UI tak wire ho gaye; Rust 130 green, TSC:0, e2e gate 5/5 green.
+
+## 2. Kya-kya kiya (files)
+
+Backend (Tauri commands):
+
+- `apps/desktop/src-tauri/src/commands/table.rs`
+  - `table_compare` me 4 naye optional params: `delimiter: Option<String>`,
+    `numericTolerance / numeric_tolerance / epsilon: Option<f64>` (pehla `Some` jeetta hai).
+  - `resolve_delimiter`: omit/empty = `,` (legacy byte-identical); single char wins;
+    multi-char = honest error.
+  - `resolve_numeric_tolerance`: finite `>= 0` else error (engine
+    `cells_equal_with_tolerance` contract).
+  - `parse_csv`/`load_table` ab `delim: char` lete hain (dono files, ek format).
+  - `cells_equal`/`rows_equal`/`align_counts` me `numeric_tol: Option<f64>`:
+    exact win -> numeric `|a-b| <= eps` -> ignore flags. Header compare
+    tolerance-free (names hain, numbers nahi) — positional + key mode same.
+  - 6 naye unit tests: `;` col-count proof, multi-char reject, epsilon
+    equalize (camel + `epsilon` spelling), band-bahar unequal, bad values
+    reject, legacy byte-identical.
+- `apps/desktop/src-tauri/src/commands/media.rs`
+  - `picture_compare` me `tolerance: Option<f32>` (omit = exact byte match).
+    `summarize_picture` ab per-byte `|l-r| <= tol` ko equal manta hai
+    (score/differing/samples sab honored).
+  - 2 naye unit tests: tolerance merge (1-byte drift -> identical),
+    bad tolerance reject. Purane 2-arg call sites 3-arg kiye.
+
+IPC wrappers (wire pass-through ONLY):
+
+- `apps/desktop/src/ipc/table.ts` — `TableIgnoreOptions` me `delimiter`,
+  `numericTolerance/numeric_tolerance/epsilon`; unset = purana 4-field wire
+  (byte-identical); set hone par teeno spellings bheji jaati hain (Rust
+  `ignoreCase` pattern jaisa). Headless-proof hook: `__TABLE_PICOPTS_LAST__`.
+- `apps/desktop/src/ipc/media.ts` — `pictureCompare(left, right, tolerance?)`,
+  omit par `tolerance: null`; hook: `__PICTURE_TOLERANCE_LAST__`.
+
+UI controls:
+
+- `.../table/controls/TableToolbar.tsx` — delimiter select
+  (`tableview/delimiter-select`: `,`/`;`/tab/`|`) + epsilon input
+  (`tableview/numeric-tolerance`, `inputMode=decimal`, `exact` placeholder).
+  Dono `shrink-0`, single toolbar row barkarar; purane saare testids same.
+- `.../media/controls/MediaTolerancePanel.tsx` — coarse slider
+  (`mediaview/tolerance-slider`, 0–255, `aria-label="tolerance slider"`)
+  same tolerance state + same Recompare par wired; text box precise path
+  barkarar. Purane testids byte-identical.
+- `.../views/TableView.tsx` (plumbing, minimal) — `delimiter`/`epsilon`
+  state, `tableCompare` opts me pass (`,` omit / unparseable epsilon omit
+  = legacy wire), effect deps + toolbar props.
+- `MediaView.tsx` / `MediaToolbar.tsx` — ZERO diff (revert kiya): picture-mode
+  chrome audio-only rakha taaki mediachrome-72 / mediaparity-103 /
+  parity-media-147 / 154 green rahein (wo picture me "no tolerance chrome"
+  assert karte hain).
+
+Naya spec:
+
+- `apps/desktop/e2e/specs/c2c-tablepicopts-246.spec.ts` — delimiter + epsilon
+  + tolerance controls re-compare; koi geometry assert nahi (na overlap, na
+  screenshot, na barH).
+
+## 3. Engine mapping (MATCH/OFF)
+
+| Engine option | Engine jagah | Desktop status | Note |
+|---|---|---|---|
+| `TableOptions.delimiter: char` | `crates/compare/src/lib.rs:134` | MATCH | `table_compare(delimiter?)` + toolbar select + e2e |
+| `TableKeyOptions.numeric_tolerance: Option<f64>` | `crates/compare/src/table.rs:70` | MATCH | teeno spellings + epsilon input + e2e |
+| Picture tolerance | `PictureOptions` (`lib.rs:467`) me KOI tolerance field nahi (sirf `heatmap`) | OFF (backend-local) | Interim byte-compare me per-byte threshold joda; engine me pixel-tolerance concept hi nahi — knob engine-swap tak desktop-only rahega |
+| `PictureOptions.heatmap: Option<PathBuf>` | `lib.rs:468` | BLOCKER | Heatmap ko file-write path chahiye jiska koi IPC DTO nahi; is wave me wire nahi kiya (scope-bahar + DTO change hota). Follow-up me `heatmap_path` param + DTO field chahiye. |
+
+## 4. Verify (gates, worktree, fresh port 1843, absolute paths)
+
+- `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib` => **130 passed, 0 failed**
+  (table 6 naye + media 2 naye samet).
+- `./node_modules/.bin/tsc --noEmit` (main `node_modules` symlink kiya tha, gate ke baad hata diya) => **TSC:0**.
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh
+  /tmp/wt-C2c/apps/desktop 1843 c2c-tablepicopts-246.spec.ts ui-standards.spec.ts --workers=1`
+  => **5 passed (c2c 1 + ui-standards 4), GATE_PLAYWRIGHT_EXIT=0**.
+  - Beech me 3 strike lage (documented): (1) slider click track-position jump (~128) — focus+arrows se fix;
+    (2) synthetic `input` event React state tak nahi pahuncha — focus+arrows se fix;
+    (3) toolbar Recompare modal backdrop ke peeche — panel ke Recompare (same handler) se fix.
+
+## 5. Deliberately NAHI kiya (scope discipline)
+
+- `chrome/**`, `session/**`, text/folder/hex/merge/sync views ya commands, `ui/` primitives,
+  `tokens.css`, doosre specs — zero touch.
+- `MediaToolbar.tsx` ka audio-gate khola tha, phir revert kiya (4 existing specs toot-te).
+- `client.ts` mock me koi change nahi (unknown args ignore karta hai — legacy path safe).
+- Koi geometry/screenshot assert nahi (tag rule).
+- Commit/push NAHI (tag rule).
+
+## 6. Files list (kaam wali)
+
+1. `apps/desktop/src-tauri/src/commands/table.rs`
+2. `apps/desktop/src-tauri/src/commands/media.rs`
+3. `apps/desktop/src/ipc/table.ts`
+4. `apps/desktop/src/ipc/media.ts`
+5. `apps/desktop/src/components/views/table/controls/TableToolbar.tsx`
+6. `apps/desktop/src/components/views/media/controls/MediaTolerancePanel.tsx`
+7. `apps/desktop/src/components/views/TableView.tsx`
+8. `apps/desktop/e2e/specs/c2c-tablepicopts-246.spec.ts` (NEW)
+9. `REPORT.md` (yeh entry, append-only — purani B1/B2 entries untouched)
+
+(reverted, list se bahar: `MediaToolbar.tsx`, `MediaView.tsx` — zero diff.)
+
+C2c-DONE
