@@ -23,10 +23,10 @@ export default function MediaTolerancePanel(props: MediaTolerancePanelProps): Re
   const { tolerance, onToleranceChange, onRecompare, onClose } = props;
   return (
     <section data-testid="mediaview/tolerance-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="audio tolerance">
+      <div className="ac-control-group" role="search" aria-label="audio tolerance">
         <label
           htmlFor="mediaview-tolerance"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
         >
           Tolerance
         </label>
@@ -45,13 +45,15 @@ export default function MediaTolerancePanel(props: MediaTolerancePanelProps): Re
           placeholder="exact"
           autoComplete="off"
           spellCheck={false}
-          className="w-24 ac-mono"
+          controlSize="sm"
+          className="w-24 ac-code"
         />
         <ToolbarButton
           data-testid="mediaview/tolerance-close"
           label="Dismiss tolerance (Esc)"
           onClick={onClose}
           icon={X}
+          size="sm"
         />
       </div>
     </section>

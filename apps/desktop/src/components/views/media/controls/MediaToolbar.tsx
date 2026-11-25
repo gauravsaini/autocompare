@@ -32,7 +32,7 @@ export default function MediaToolbar(props: MediaToolbarProps): React.JSX.Elemen
     >
       <span
         data-testid="mediaview/mode"
-        className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+        className="ac-meta font-normal text-[var(--ac-fg-muted)]"
       >
         {mode === "picture" ? "Picture compare" : "Audio compare"}
       </span>
@@ -44,6 +44,7 @@ export default function MediaToolbar(props: MediaToolbarProps): React.JSX.Elemen
             label={toleranceOpen ? "Hide tolerance (Esc)" : "Show tolerance"}
             title="Audio tolerance"
             icon={SlidersHorizontal}
+            size="sm"
             expanded={toleranceOpen}
             onClick={onToggleTolerance}
           >
