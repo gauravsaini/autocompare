@@ -98,6 +98,7 @@ export default function FolderView({
   leftPath,
   rightPath,
   onOpenPaths,
+  onBusCommand,
 }: ViewPaths & {
   /**
    * Wave-46 drilldown (optional): file-row double-click opens the pair
@@ -105,6 +106,10 @@ export default function FolderView({
    * the view is mounted directly.
    */
   readonly onOpenPaths?: (kind: "text", left: string, right: string) => void;
+  /**
+   * Wave-228: ViewCommandBus hook for diff nav parity.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }): React.JSX.Element {
   const [baseLeft, setBaseLeft] = useState<string>(leftPath);
   const [baseRight, setBaseRight] = useState<string>(rightPath);
@@ -469,17 +474,21 @@ export default function FolderView({
     };
   }, []);
 
-  /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
-     parity). Folder owns no command: prev/next have no hunk cursor here,
-     copy stages text hunks only, swap is App-owned (props reload). The
-     toolbar parks those buttons, so this never fires by click — the
-     kind-scoped listener exists so a bus/programmatic dispatch can never
-     crash the view. Never throws. */
+  /* Wave-228: `autocompare:view-command` bus (unified top Toolbar +
+     ViewCommandBus parity). prev/next step the file row selection via
+     `stepSelectionRef` over the filtered visible files order. Kind-scoped
+     so text/merge/table nav never leaks across views (`viewKind === "folder"`
+     or an unkinded event). Early bus event is an honest no-op, never a crash. */
+  const stepSelectionRef = useRef<((dir: 1 | -1) => void) | null>(null);
   useEffect(() => {
     const onBusCmd = (e: Event): void => {
-      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
-      const kind = detail?.viewKind;
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
+      if (!detail) return;
+      const kind = detail.viewKind;
       if (typeof kind === "string" && kind !== "" && kind !== "folder") return;
+      const cmd = detail.cmd;
+      if (cmd === "prev") stepSelectionRef.current?.(-1);
+      else if (cmd === "next") stepSelectionRef.current?.(1);
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     return () => {
@@ -655,7 +664,10 @@ export default function FolderView({
   if (status === "error") return <p role="alert">Folder compare failed: {error}</p>;
   if (status === "empty" || entries.length === 0)
     return (
-      <p className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+      <p
+        data-testid="folderview/empty"
+        className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
+      >
         No entries to display.
       </p>
     );
@@ -723,6 +735,10 @@ export default function FolderView({
     // selection and focus in the same frame for keyboard users.
     focusRow(next);
   }
+
+  stepSelectionRef.current = (dir: 1 | -1) => {
+    stepSelection(selected ?? "", dir);
+  };
 
   function jumpSelection(edge: "first" | "last"): void {
     const order = visibleFiles.map((e) => e.relPath);
@@ -1068,6 +1084,13 @@ export default function FolderView({
         onToggleNameFilter={() => setNameOpen((v) => !v)}
         rulesOpen={rulesOpen}
         onToggleRules={() => setRulesOpen((v) => !v)}
+        onBusCommand={
+          onBusCommand ??
+          ((cmd) => {
+            if (cmd === "prev") stepSelection(selected ?? "", -1);
+            else if (cmd === "next") stepSelection(selected ?? "", 1);
+          })
+        }
       />
       <RulesPanel
         open={rulesOpen}

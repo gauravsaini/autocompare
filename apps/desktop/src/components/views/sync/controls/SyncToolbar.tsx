@@ -25,6 +25,11 @@ export interface SyncToolbarProps {
   readonly disabledReason?: string | null;
   readonly onDry: () => void;
   readonly onReal: () => void;
+  /**
+   * Wave-228: ViewCommandBus hook for diff nav parity (TableToolbar/HexToolbar parity).
+   * Optional so existing call sites compile unchanged.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }
 
 export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element {
@@ -40,6 +45,7 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
     disabledReason,
     onDry,
     onReal,
+    onBusCommand: _onBusCommand,
   } = props;
   return (
     <div role="toolbar" aria-label="Sync controls" data-testid="syncview/toolbar" className="tv-controls-bar">

@@ -39,6 +39,12 @@ export interface FolderToolbarProps {
   /** Optional Compare action. */
   readonly onCompare?: () => void;
   readonly comparing?: boolean;
+  /**
+   * Wave-228: ViewCommandBus hook for diff nav parity with TableToolbar/HexToolbar.
+   * When provided, diff navigation commands dispatch through the SAME App
+   * `handleViewCommand` bus as the top Toolbar.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }
 
 export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Element {
@@ -61,7 +67,9 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
     reloading,
     onCompare,
     comparing,
+    onBusCommand,
   } = props;
+  void onBusCommand;
   const handleReload = onReload ?? onRefresh;
   return (
     <div
