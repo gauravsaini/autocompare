@@ -122,19 +122,17 @@ export default function V2Home({
       const doc = await sessionLoad(entry.id);
       const first = doc.tabs[0];
       const rawKind = (first?.session_type ?? "text").toLowerCase();
-      const validKinds: readonly SessionKind[] = [
-        "text",
-        "folder",
-        "table",
-        "hex",
-        "merge",
-        "folderMerge",
-        "sync",
-        "media",
-      ];
-      const kind: SessionKind = validKinds.includes(rawKind as SessionKind)
-        ? (rawKind as SessionKind)
-        : "text";
+      const kindMap: Record<string, SessionKind> = {
+        text: "text",
+        folder: "folder",
+        table: "table",
+        hex: "hex",
+        merge: "merge",
+        foldermerge: "folderMerge",
+        sync: "sync",
+        media: "media",
+      };
+      const kind: SessionKind = kindMap[rawKind] ?? "text";
       onNewSession(
         kind,
         first?.left_path ?? "",
@@ -180,7 +178,8 @@ export default function V2Home({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter sessions…"
-              className="v2-input w-full pl-6"
+              className="v2-input w-full"
+              style={{ paddingLeft: 26 }}
             />
           </div>
         </div>

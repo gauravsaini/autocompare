@@ -1,5 +1,5 @@
 import type { HexPage, HexSummary } from "./hex";
-import type { TextMergeApplyReport, TextMergePlan } from "./merge";
+import type { FolderMergeApplyReport, TextMergeApplyReport, TextMergePlan, TreeMergePlan, TreeMergeStep } from "./merge";
 import type { SessionDocument } from "./session";
 
 /**
@@ -1223,6 +1223,43 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         resolvedCount: 1,
         unresolvedCount: 0,
         hasConflictMarkers: false,
+      };
+      return res as unknown as T;
+    }
+    case "merge_folder_plan": {
+      const steps: TreeMergeStep[] = dumped.folderNodes
+        .filter((node) => node.status !== "same")
+        .map((node, idx) => ({
+          rel_path: node.relPath,
+          action: node.isDir
+            ? "MakeDir"
+            : node.left === null
+              ? "TakeRight"
+              : node.right === null
+                ? "TakeLeft"
+                : idx % 3 === 0
+                  ? "Conflict"
+                  : "MergedText",
+          merged: null,
+        }));
+      const conflicts = steps.filter((s) => s.action === "Conflict").map((s) => s.rel_path);
+      const res: TreeMergePlan = { steps, conflicts, skipped: [] };
+      return res as unknown as T;
+    }
+    case "merge_folder_apply": {
+      const outPath = strArg(args, ["out_path", "outPath"], "/tmp/merged-folder");
+      const rawPlan = args["plan"] as TreeMergePlan | undefined;
+      const steps = Array.isArray(rawPlan?.steps) ? rawPlan.steps : [];
+      const conflicts = Array.isArray(rawPlan?.conflicts) ? rawPlan.conflicts : [];
+      const dirsCreated = steps.filter((s) => s.action === "MakeDir").length;
+      const written = steps.filter((s) => s.action !== "MakeDir" && s.action !== "Conflict").length;
+      const res: FolderMergeApplyReport = {
+        outPath,
+        written,
+        dirsCreated,
+        conflictCount: conflicts.length,
+        conflictPaths: conflicts,
+        failed: [],
       };
       return res as unknown as T;
     }

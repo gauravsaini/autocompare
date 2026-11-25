@@ -61,7 +61,15 @@ export default function V2FolderMerge({
     const bEff = b || lEff;
     try {
       const p = await mergeFolderPlan(bEff, lEff, rEff);
-      setPlan(p);
+      if (p && Array.isArray(p.steps)) {
+        setPlan({
+          steps: p.steps,
+          conflicts: Array.isArray(p.conflicts) ? p.conflicts : [],
+          skipped: Array.isArray(p.skipped) ? p.skipped : [],
+        });
+      } else {
+        setPlan({ steps: [], conflicts: [], skipped: [] });
+      }
     } catch (e) {
       if (!b && !l && !r && isMissingFixtureError(e)) {
         setPlan(null);
@@ -78,10 +86,10 @@ export default function V2FolderMerge({
   }, [baseDraft, leftPath, rightPath, runPlan]);
 
   const visibleSteps = useMemo(() => {
-    if (!plan) return [];
-    if (filterMode === "all") return plan.steps;
-    if (filterMode === "diffs") return plan.steps.filter((s) => s.action === "Conflict" || s.action === "MergedText");
-    return plan.steps.filter((s) => s.action !== "Conflict");
+    const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+    if (filterMode === "all") return steps;
+    if (filterMode === "diffs") return steps.filter((s) => s.action === "Conflict" || s.action === "MergedText");
+    return steps.filter((s) => s.action !== "Conflict");
   }, [plan, filterMode]);
 
   useEffect(() => {
@@ -94,14 +102,15 @@ export default function V2FolderMerge({
   }, [onRegisterCommands, filterMode, onPathsChange, baseDraft, leftDraft, rightDraft, runPlan]);
 
   useEffect(() => {
-    const conflicts = plan?.conflicts.length ?? 0;
-    const steps = plan?.steps.length ?? 0;
+    const conflicts = Array.isArray(plan?.conflicts) ? plan.conflicts.length : 0;
+    const steps = Array.isArray(plan?.steps) ? plan.steps.length : 0;
+    const skipped = Array.isArray(plan?.skipped) ? plan.skipped.length : 0;
     onStatusChange({
       left: `${steps} planned steps · ${conflicts} conflicts`,
       center: report
         ? `Wrote ${report.written} files, ${report.dirsCreated} dirs → ${report.outPath}`
         : "3-Way Folder Merge",
-      right: `${plan?.skipped.length ?? 0} skipped`,
+      right: `${skipped} skipped`,
     });
   }, [onStatusChange, plan, report]);
 
