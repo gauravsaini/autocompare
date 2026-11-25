@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlignJustify,
   ArrowLeftRight,
@@ -21,15 +21,15 @@ import {
   X,
 } from "lucide-react";
 import { sessionSave } from "../ipc/session";
-import TableView from "../components/views/TableView";
-import HexView from "../components/views/HexView";
-import MergeView from "../components/views/MergeView";
-import SyncView from "../components/views/SyncView";
 import MediaView from "../components/views/MediaView";
 import V2Modal from "./components/V2Modal";
 import V2Home from "./views/V2Home";
 import V2TextCompare from "./views/V2TextCompare";
 import V2FolderCompare from "./views/V2FolderCompare";
+import V2TableCompare from "./views/V2TableCompare";
+import V2HexCompare from "./views/V2HexCompare";
+import V2MergeCompare from "./views/V2MergeCompare";
+import V2SyncCompare from "./views/V2SyncCompare";
 import type { SessionKind, V2StatusInfo, V2Tab, V2ViewCommands } from "./types";
 
 const HOME_TAB: V2Tab = {
@@ -39,6 +39,28 @@ const HOME_TAB: V2Tab = {
   leftPath: "",
   rightPath: "",
 };
+
+function inferDropKind(paths: readonly string[]): SessionKind {
+  const first = (paths[0] ?? "").toLowerCase();
+  if (first.endsWith(".csv") || first.endsWith(".tsv")) return "table";
+  if (
+    first.endsWith(".png") ||
+    first.endsWith(".jpg") ||
+    first.endsWith(".jpeg") ||
+    first.endsWith(".wav") ||
+    first.endsWith(".mp3")
+  ) {
+    return "media";
+  }
+  if (first.endsWith(".bin") || first.endsWith(".wasm") || first.endsWith(".exe") || first.endsWith(".dylib")) {
+    return "hex";
+  }
+  const base = first.split("/").pop() ?? "";
+  if (first.endsWith("/") || (base !== "" && !base.includes("."))) {
+    return "folder";
+  }
+  return "text";
+}
 
 interface ToolbarBtnProps {
   readonly icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
@@ -91,12 +113,17 @@ export default function V2App(): React.JSX.Element {
   const [draftLeft, setDraftLeft] = useState("");
   const [draftRight, setDraftRight] = useState("");
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [dropOverlay, setDropOverlay] = useState<"left" | "right" | "both" | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? HOME_TAB;
+  const activeTabRef = useRef<V2Tab>(activeTab);
+  activeTabRef.current = activeTab;
+  const commandsRef = useRef<V2ViewCommands>(commands);
+  commandsRef.current = commands;
 
   const openSession = useCallback(
     (kind: SessionKind, left = "", right = "", customTitle?: string): void => {
@@ -162,21 +189,22 @@ export default function V2App(): React.JSX.Element {
     [activeId],
   );
 
-  const handleSaveWorkspaceSession = async (): Promise<void> => {
-    if (activeTab.kind === "home") return;
+  const handleSaveWorkspaceSession = useCallback(async (): Promise<void> => {
+    const tab = activeTabRef.current;
+    if (tab.kind === "home") return;
     try {
       await sessionSave({
         schema_version: 1,
-        name: activeTab.title,
+        name: tab.title,
         locked: false,
         active_tab_index: 0,
         tabs: [
           {
-            id: activeTab.id,
-            title: activeTab.title,
-            session_type: activeTab.kind,
-            left_path: activeTab.leftPath || null,
-            right_path: activeTab.rightPath || null,
+            id: tab.id,
+            title: tab.title,
+            session_type: tab.kind,
+            left_path: tab.leftPath || null,
+            right_path: tab.rightPath || null,
             base_path: null,
             output_path: null,
             read_only: false,
@@ -191,10 +219,193 @@ export default function V2App(): React.JSX.Element {
       setSaveToast("Could not save session");
       setTimeout(() => setSaveToast(null), 2200);
     }
-  };
+  }, []);
+
+  // Apply dropped file path(s) to current tab or auto-open a matching comparison
+  const handleDroppedPaths = useCallback(
+    (paths: readonly string[], side: "left" | "right"): void => {
+      const clean = paths.map((p) => p.trim()).filter((p) => p.length > 0);
+      if (clean.length === 0) return;
+
+      const cur = activeTabRef.current;
+      if (clean.length >= 2) {
+        const kind = cur.kind === "home" ? inferDropKind(clean) : cur.kind;
+        if (cur.kind === "home") {
+          openSession(kind, clean[0], clean[1]);
+        } else {
+          updateActivePaths(clean[0], clean[1]);
+        }
+        setSaveToast(`Loaded 2 paths (${kind})`);
+        setTimeout(() => setSaveToast(null), 2200);
+        return;
+      }
+
+      // Single file drop
+      const dropped = clean[0];
+      if (cur.kind === "home") {
+        const kind = inferDropKind([dropped]);
+        openSession(kind, side === "left" ? dropped : "", side === "right" ? dropped : "");
+      } else {
+        const nextL = side === "left" ? dropped : cur.leftPath;
+        const nextR = side === "right" ? dropped : cur.rightPath;
+        updateActivePaths(nextL, nextR);
+      }
+      setSaveToast(`Dropped onto ${side} pane`);
+      setTimeout(() => setSaveToast(null), 1800);
+    },
+    [openSession, updateActivePaths],
+  );
+
+  // Native Tauri window-level file drag-and-drop listener
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let active = true;
+
+    const attach = async (): Promise<void> => {
+      const hasTauri =
+        typeof window !== "undefined" &&
+        ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+      if (!hasTauri) return;
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const fn = await getCurrentWindow().onDragDropEvent((event) => {
+          if (!active) return;
+          const payload = event.payload;
+          if (payload.type === "enter" || payload.type === "over") {
+            const x = payload.position?.x ?? 0;
+            const dpr = window.devicePixelRatio || 1;
+            const logicalX = x > window.innerWidth ? x / dpr : x;
+            const count = "paths" in payload && Array.isArray(payload.paths) ? payload.paths.length : 1;
+            setDropOverlay(count >= 2 ? "both" : logicalX >= window.innerWidth / 2 ? "right" : "left");
+          } else if (payload.type === "drop") {
+            setDropOverlay(null);
+            const x = payload.position?.x ?? 0;
+            const dpr = window.devicePixelRatio || 1;
+            const logicalX = x > window.innerWidth ? x / dpr : x;
+            const side = logicalX >= window.innerWidth / 2 ? "right" : "left";
+            handleDroppedPaths(payload.paths ?? [], side);
+          } else {
+            setDropOverlay(null);
+          }
+        });
+        if (active) {
+          unlisten = fn;
+        } else {
+          fn();
+        }
+      } catch {
+        // Non-Tauri browser preview
+      }
+    };
+
+    void attach();
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [handleDroppedPaths]);
+
+  // Native macOS menu-event listener (wired to all 18 menu IDs in src-tauri/src/menu.rs)
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let active = true;
+
+    const attach = async (): Promise<void> => {
+      const hasTauri =
+        typeof window !== "undefined" &&
+        ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+      if (!hasTauri) return;
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const fn = await listen<{ id: string; command: string }>("menu-event", (event) => {
+          if (!active) return;
+          const id = event.payload?.id ?? "";
+          switch (id) {
+            case "file.open-session":
+            case "file.open-workspace":
+            case "session.new":
+              setNewSessionOpen(true);
+              break;
+            case "file.open-folder":
+              openSession("folder");
+              break;
+            case "file.save-session":
+              void handleSaveWorkspaceSession();
+              break;
+            case "session.find":
+              commandsRef.current.openFind?.();
+              break;
+            case "session.take-left":
+              commandsRef.current.copySelected?.();
+              break;
+            case "view.kind-text":
+              openSession("text");
+              break;
+            case "view.kind-folder":
+              openSession("folder");
+              break;
+            case "view.kind-hex":
+              openSession("hex");
+              break;
+            case "view.kind-table":
+              openSession("table");
+              break;
+            case "view.kind-media":
+              openSession("media");
+              break;
+            case "view.kind-sync":
+              openSession("sync");
+              break;
+            case "view.kind-merge":
+              openSession("merge");
+              break;
+            case "view.toggle-theme":
+              setTheme((t) => (t === "dark" ? "light" : "dark"));
+              break;
+            case "tools.settings":
+              commandsRef.current.openRules?.();
+              break;
+            default:
+              break;
+          }
+        });
+        if (active) {
+          unlisten = fn;
+        } else {
+          fn();
+        }
+      } catch {
+        // Non-Tauri browser preview
+      }
+    };
+
+    void attach();
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [openSession, handleSaveWorkspaceSession]);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--v2-bg)] text-[var(--v2-fg)]">
+    <div
+      className="relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--v2-bg)] text-[var(--v2-fg)]"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropOverlay(e.clientX >= window.innerWidth / 2 ? "right" : "left");
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDropOverlay(null);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropOverlay(null);
+        const side = e.clientX >= window.innerWidth / 2 ? "right" : "left";
+        const files = Array.from(e.dataTransfer?.files ?? []).map(
+          (f) => (f as File & { path?: string }).path || f.name,
+        );
+        if (files.length > 0) handleDroppedPaths(files, side);
+      }}
+    >
       {/* 1. Crisp macOS Tab Strip — `+` hugs the last tab, theme toggle on far right */}
       <header className="flex h-[36px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
@@ -410,24 +621,50 @@ export default function V2App(): React.JSX.Element {
             onRegisterCommands={setCommands}
             onStatusChange={setStatus}
           />
+        ) : activeTab.kind === "table" ? (
+          <V2TableCompare
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
+        ) : activeTab.kind === "hex" ? (
+          <V2HexCompare
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
+        ) : activeTab.kind === "merge" ? (
+          <V2MergeCompare
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
+        ) : activeTab.kind === "sync" ? (
+          <V2SyncCompare
+            key={activeTab.id}
+            leftPath={activeTab.leftPath}
+            rightPath={activeTab.rightPath}
+            onPathsChange={updateActivePaths}
+            onRegisterCommands={setCommands}
+            onStatusChange={setStatus}
+          />
         ) : (
           <div className="h-full overflow-auto bg-[var(--v2-surface)] p-3">
-            {activeTab.kind === "table" ? (
-              <TableView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-            ) : activeTab.kind === "hex" ? (
-              <HexView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-            ) : activeTab.kind === "merge" ? (
-              <MergeView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-            ) : activeTab.kind === "sync" ? (
-              <SyncView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-            ) : (
-              <MediaView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
-            )}
+            <MediaView leftPath={activeTab.leftPath} rightPath={activeTab.rightPath} />
           </div>
         )}
       </div>
 
-      {/* 4. Clean 3-Zone Status Bar (No debug strings like "Tab selected: home") */}
+      {/* 4. Clean 3-Zone Status Bar */}
       <footer className="flex h-[24px] shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 text-[11px] text-[var(--v2-fg-muted)]">
         <span className="truncate">
           {activeTab.kind === "home" ? "Ready" : status.left || "Ready"}
@@ -439,6 +676,30 @@ export default function V2App(): React.JSX.Element {
             : status.right}
         </span>
       </footer>
+
+      {/* Native Drag-and-Drop Overlay Indicator */}
+      {dropOverlay !== null ? (
+        <div className="pointer-events-none fixed inset-0 z-40 grid grid-cols-2 gap-3 bg-black/15 p-6 backdrop-blur-[1px]">
+          <div
+            className={`flex items-center justify-center rounded-xl border-2 border-dashed text-[14px] font-semibold transition ${
+              dropOverlay === "left" || dropOverlay === "both"
+                ? "border-[var(--v2-accent)] bg-[var(--v2-accent-soft)] text-[var(--v2-accent)]"
+                : "border-[var(--v2-border)] bg-[var(--v2-surface)]/70 text-[var(--v2-fg-muted)]"
+            }`}
+          >
+            Drop onto Left Pane
+          </div>
+          <div
+            className={`flex items-center justify-center rounded-xl border-2 border-dashed text-[14px] font-semibold transition ${
+              dropOverlay === "right" || dropOverlay === "both"
+                ? "border-[var(--v2-accent)] bg-[var(--v2-accent-soft)] text-[var(--v2-accent)]"
+                : "border-[var(--v2-border)] bg-[var(--v2-surface)]/70 text-[var(--v2-fg-muted)]"
+            }`}
+          >
+            Drop onto Right Pane
+          </div>
+        </div>
+      ) : null}
 
       {/* Standardized Centered New Session Modal */}
       <V2Modal
