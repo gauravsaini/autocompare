@@ -8,6 +8,10 @@ import {
   dispatchViewMinor,
 } from "./components/chrome";
 import { dispatchViewFormat } from "./components/views/text/controls/FormatMenu";
+// Wave-201: app-root font wiring (typography ONLY). Owned polish sheet:
+// Inter/system-ui + JetBrains Mono/ui-monospace stacks, soft inline
+// accent, toolbar surfaces, hairlines — all per existing --ac-* tokens.
+import "./styles/typography-201.css";
 import { dispatchViewRules } from "./components/views/folder/controls/RulesPanel";
 import { DiffStatsContext, type DiffStats } from "./components/chrome/StatusBar";
 import type { ChromeTab, DiffRow, TextCompareRowKind, ToolbarAction } from "./components/chrome";
@@ -249,6 +253,13 @@ export default function App(): React.JSX.Element {
     }, 8000);
     return () => window.clearTimeout(timer);
   }, [statusMessage]);
+  // Wave-201: app-root font wiring (typography ONLY). Bundled Inter /
+  // JetBrains Mono stacks live in tokens.css; pin the root element to the
+  // UI stack so first paint + portals ride it even before the body rule
+  // applies. No DOM, testid, color, or geometry change.
+  useEffect(() => {
+    document.documentElement.style.setProperty("font-family", "var(--ac-font-ui)");
+  }, []);
   const [actionError, setActionError] = useState<string | null>(null);
   const [compareTick, setCompareTick] = useState(0);
   // Wave-13: live ruler rows for the text pane (same equal/del/ins/chg

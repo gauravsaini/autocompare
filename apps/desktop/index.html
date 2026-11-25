@@ -3,7 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>AutoCompare</title>
+    <!--
+      Wave-201: bundled offline-first fonts (repo woff2, no remote fetch).
+      Preloads mirror ../src/fonts/* consumed by the @font-face rules in
+      src/styles/tokens.css (== src/theme/tokens.css). Family stacks ONLY —
+      Inter -> system-ui fallback for UI, JetBrains Mono -> ui-monospace
+      fallback for code. Inline root style wires the app root before
+      tokens.css loads so first paint rides the same stacks (Light + Dark).
+    -->
+    <link rel="preload" href="/src/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/fonts/inter-500.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/fonts/jetbrains-mono-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/src/fonts/jetbrains-mono-500.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      html {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+          "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      code, pre, kbd, samp {
+        font-family: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo,
+          Consolas, monospace;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

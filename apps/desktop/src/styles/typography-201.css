@@ -1,0 +1,51 @@
+/*
+ * Wave-201 typography + light-mode polish (tokens ONLY, no new hues,
+ * no geometry, no Views/chrome edits).
+ *
+ * Loaded at the app root via `App.tsx` (`import "./styles/typography-201.css"`)
+ * so the owned file is runtime-effective without touching
+ * `src/theme/tokens.css` (symlink twin, W199-adjacent) or `main.tsx`.
+ * Family stacks + token values mirror the @font-face / :root contract:
+ * Inter -> system-ui fallback for UI, JetBrains Mono -> ui-monospace
+ * fallback for code; every paint references an existing `--ac-*` token.
+ *
+ * - App-root wiring: #root rides the UI stack so portals/first paint
+ *   match body (both schemes; verified Light + Dark).
+ * - Soft inline accent: subtle focus-ring wash + accent underline for
+ *   inline links/emphasis on light surfaces (dark inherits the same
+ *   token wash).
+ * - Toolbar surfaces: bg + hairline bottom border per existing chrome
+ *   tokens (toolbar-bg / border-subtle).
+ * - Hairline borders: 1px border-color helpers on the subtle token.
+ *
+ * Lucide contract reaffirmed (no new rule needed): chrome icons ride
+ * lucide-react size 14 / strokeWidth 1.75 via --ac-icon-size +
+ * --ac-icon-stroke-width; owned files carry zero hand-coded svg elements.
+ */
+#root {
+  font-family: var(--ac-font-ui);
+  background: var(--ac-bg);
+  color: var(--ac-fg);
+}
+
+.ac-inline-accent {
+  background-color: var(--ac-focus-ring-subtle);
+  color: var(--ac-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--ac-accent);
+  text-underline-offset: 2px;
+  border-radius: 2px;
+}
+
+.ac-toolbar-surface {
+  background-color: var(--ac-toolbar-bg);
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+.ac-hairline {
+  border-color: var(--ac-border-subtle);
+}
+
+.ac-hairline-b {
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
