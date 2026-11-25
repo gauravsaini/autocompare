@@ -1264,3 +1264,23 @@ kisi app change ke green honge; greens par zero risk (subset property).
 - apps/desktop/e2e/specs/geopolish-66c.spec.ts (marker scale-to-fit pins)
 
 DEBTA-DONE
+
+## UPDATED ON : 2026-11-25
+
+### DEBTC textinteract (2026-11-25) — 2 pre-existing red TextView tests green
+
+1. **Root causes (evidence-backed, dono REAL behavior bugs, kisi leaf ne nahi tode)**:
+   - 109 caret Esc: find/goto `DockedBar` document-CAPTURE Esc listeners event ko textarea tak pahunchne se pehle `stopPropagation` kar dete hain (capture document -> target order), isliye `RowLine` ka `cancelDraft` kabhi fire nahi hota (count 1 stuck) aur panels bhi band ho jate hain. Fix: `RowLine` me window-capture Esc (capture order window > document, isliye DockedBar se pehle) — cancel + stop, panels untouched; `TextView` me window-capture row-Esc exit — `rowKeyDown` parity (4 panels close + `selectRowAt(null)`), dialog-open ya input target par skip (Modal contract + editor/DockedBar ownership barkarar).
+   - 192 timeout: task ki poll theory galat nikli — probe + saare `__TEXT_IGNORE_LAST__` polls PASS hote hain; fail line 144 par hai — `IgnoreMenu` ka wave-233 fullscreen Modal scrim toolbar-toggle ko cover karta hai (`ignore-options/backdrop ... intercepts pointer events`), close-click 30s retry karke test timeout karta hai. C2a spec me ye pehle se documented hai ("Modal scrim blocks toolbar clicks"). `recompareWithIgnores`/`textCompare` plumbing sahi thi (C2a/C3a ne flag path nahi toda), isliye `ipc/text.ts` untouched. Fix: `IgnoreMenu` wapas pre-233 fieldset popover container (C2a blank-lines checkbox + testids + handlers same; closing toolbar-toggle + global TextView Esc se, pre-233 jaisa).
+2. **MATCH/OFF per failure**: 109 = app-fix (spec unchanged, editor Esc ab cancel karta hai + panels khule rehte hain); 192 = app-fix (spec unchanged, toggle-close ab clickable hai; flag plumbing me koi bug nahi tha — OFF against task theory, evidence: gate log me polls pass + line-144 scrim intercept).
+3. **Tests (before -> after)**: 109 caret red -> green; 192 red (30s timeout) -> green (1.6s); ui-standards 4/4 green. Regression (padosi Esc/panel specs, 1878): 25 passed, 1 failed — `textcontrols-66r` pristine-main par BHI red hai (verify kiya: patch hatakar 1879 par run, 30s timeout), isliye pre-existing, DEBTC scope se bahar; note: uska Wave-89 "global collapse" note DockedBar-capture era me stale hai, alag wave dekhe.
+4. **Files changed (3, testids byte-identical, zero spec edits, zero commits)**:
+   - apps/desktop/src/components/views/text/RowLine.tsx (+18: window-capture editor Esc)
+   - apps/desktop/src/components/views/TextView.tsx (+36: selectRowAtRef + window-capture row Esc)
+   - apps/desktop/src/components/views/text/controls/IgnoreMenu.tsx (Modal -> popover container, C2a checkbox barkarar)
+
+## Gates (worktree, fresh port, absolute paths)
+- ./node_modules/.bin/tsc --noEmit => TSC:0 (worktree me direct npm install; main me node_modules tha hi nahi, symlink ki zaroorat nahi padi)
+- PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-DEBTC/apps/desktop 1875 e2e/specs/textinteract-109.spec.ts e2e/specs/textinline-192.spec.ts e2e/specs/ui-standards.spec.ts --workers=1 => 10 passed (11.9s), GATE_PLAYWRIGHT_EXIT=0
+
+DEBTC-DONE
