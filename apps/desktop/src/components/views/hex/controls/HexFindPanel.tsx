@@ -9,7 +9,7 @@
  * All legacy `hex-find-*` testids ride the same inputs.
  */
 import { X } from "lucide-react";
-import { Button, Input, ToolbarButton } from "../../../ui";
+import { Button, Field, Input, StatusText, ToolbarButton } from "../../../ui";
 
 export interface HexFindPanelProps {
   readonly query: string;
@@ -25,28 +25,26 @@ export default function HexFindPanel(props: HexFindPanelProps): React.JSX.Elemen
   return (
     <section data-testid="hex/find-panel" className="tv-controls-panel">
       <div className="ac-control-group" role="search" aria-label="find bytes">
-        <label
-          htmlFor="hex-find-box"
-          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
-        >
-          Find hex
-        </label>
-        <Input
-          id="hex-find-box"
-          data-testid="hex-find-input"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onFindNext();
-            else if (event.key === "Escape") onClose();
-          }}
-          placeholder="de ad be ef"
-          autoComplete="off"
-          spellCheck={false}
-          className="ac-code min-w-48 flex-1"
-        />
+        <Field label="Find hex" htmlFor="hex-find-box" className="min-w-0 flex-1">
+          <Input
+            id="hex-find-box"
+            data-testid="hex-find-input"
+            controlSize="sm"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onFindNext();
+              else if (event.key === "Escape") onClose();
+            }}
+            placeholder="de ad be ef"
+            autoComplete="off"
+            spellCheck={false}
+            className="ac-code min-w-48 flex-1"
+          />
+        </Field>
         <Button
           data-testid="hex-find-next"
+          size="sm"
           onClick={onFindNext}
           disabled={finding}
         >
@@ -60,12 +58,13 @@ export default function HexFindPanel(props: HexFindPanelProps): React.JSX.Elemen
           onClick={onClose}
         />
       </div>
-      <p
+      <StatusText
         data-testid="hex-find-status"
-        className="ac-meta pt-[var(--ac-space-1)] font-normal text-[var(--ac-fg-muted)]"
+        role="status"
+        className="block pt-[var(--ac-space-1)]"
       >
         {statusText}
-      </p>
+      </StatusText>
     </section>
   );
 }

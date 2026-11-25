@@ -9,7 +9,7 @@
  * testids ride the same inputs.
  */
 import { X } from "lucide-react";
-import { Button, Input, ToolbarButton } from "../../../ui";
+import { Button, Field, Input, StatusText, ToolbarButton } from "../../../ui";
 
 export interface HexGotoPanelProps {
   readonly value: string;
@@ -24,28 +24,26 @@ export default function HexGotoPanel(props: HexGotoPanelProps): React.JSX.Elemen
   return (
     <section data-testid="hex/goto-panel" className="tv-controls-panel">
       <div className="ac-control-group" role="search" aria-label="goto offset">
-        <label
-          htmlFor="hex-goto-box"
-          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
-        >
-          Goto offset
-        </label>
-        <Input
-          id="hex-goto-box"
-          data-testid="hex-goto-input"
-          value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onGo();
-            else if (event.key === "Escape") onClose();
-          }}
-          placeholder="0x10 or 16"
-          autoComplete="off"
-          spellCheck={false}
-          className="ac-code min-w-32 flex-1"
-        />
+        <Field label="Goto offset" htmlFor="hex-goto-box" className="min-w-0 flex-1">
+          <Input
+            id="hex-goto-box"
+            data-testid="hex-goto-input"
+            controlSize="sm"
+            value={value}
+            onChange={(event) => onValueChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") onGo();
+              else if (event.key === "Escape") onClose();
+            }}
+            placeholder="0x10 or 16"
+            autoComplete="off"
+            spellCheck={false}
+            className="ac-code min-w-32 flex-1"
+          />
+        </Field>
         <Button
           data-testid="hex-goto-go"
+          size="sm"
           onClick={onGo}
         >
           Go
@@ -58,12 +56,13 @@ export default function HexGotoPanel(props: HexGotoPanelProps): React.JSX.Elemen
           onClick={onClose}
         />
       </div>
-      <p
+      <StatusText
         data-testid="hex-goto-status"
-        className="ac-meta pt-[var(--ac-space-1)] font-normal text-[var(--ac-fg-muted)]"
+        role="status"
+        className="block pt-[var(--ac-space-1)]"
       >
         {statusText}
-      </p>
+      </StatusText>
     </section>
   );
 }
