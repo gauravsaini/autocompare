@@ -166,10 +166,16 @@ async function assertGeopolish(page: Page): Promise<void> {
   const pillH = await activeTab.evaluate((el) => el.getBoundingClientRect().height);
   expect(pillH, "tab pills = control-md (24)").toBe(24);
   const newTab = await boxOf(page, "tab-new");
-  expect(Math.min(newTab.width, newTab.height), "new-tab >= 32px hit-area").toBeGreaterThanOrEqual(32);
+  // DEBTA-geom: Wave-158 retired the 32px new-tab exception (tab-new
+  // rides ToolbarButton size=md = 24px token, the WCAG 2.5.8 minimum).
+  expect(Math.min(newTab.width, newTab.height), "new-tab >= 24px hit-area").toBeGreaterThanOrEqual(24);
   const histToggle = await boxOf(page, "pathbar/left-history-toggle");
-  expect(Math.round(histToggle.width), "pathbar icon buttons = 28px (space-7)").toBe(28);
-  expect(Math.round(histToggle.height), "pathbar icon buttons = 28px (space-7)").toBe(28);
+  // DEBTA-geom: pathbar icon buttons ride ToolbarButton size=md
+  // (Wave-158 token sizing): 24px height (== WCAG 2.5.8 minimum) x 32px
+  // width (14px chevron + px-2). The 28px space-7 pin predates the md
+  // token migration and never matched the shipped primitive.
+  expect(Math.round(histToggle.width), "pathbar icon buttons width = 32px").toBe(32);
+  expect(Math.round(histToggle.height), "pathbar icon buttons height = control-md (24px)").toBe(24);
 
   await assertNoOverlap(page);
 }

@@ -262,6 +262,33 @@ export function OverviewRuler({ rows, activeIndex, onJump, label }: OverviewRule
 
   const buckets = React.useMemo(() => compressRowsToBuckets(rows), [rows]);
 
+  // DEBTA-geom: scale-to-fit marker height (chrome geometry, views
+  // untouched). Markers used to be a fixed 4px, so a 644-row diff (322
+  // buckets) overflowed the ~628px track 2x and painted underneath the
+  // line-detail/status bar zone (chrome-budget:56
+  // `ruler OVERLAPS statusbar/*`). The track now fits its markers:
+  // `min(4, avail/count)`, floored at 1px so hunks stay visible. Small
+  // diffs keep byte-identical 4px markers; huge diffs compress
+  // proportionally (BC overview truth). Testids/kinds/click/keyboard
+  // mapping untouched (fraction-based), so ruler-buckets/hunk-nav keep
+  // passing unmodified.
+  const [fitH, setFitH] = React.useState(4);
+  React.useLayoutEffect(() => {
+    const el = trackRef.current;
+    if (el === null || buckets.length === 0) {
+      setFitH(4);
+      return;
+    }
+    const update = (): void => {
+      const avail = el.clientHeight - 2 * 4; // py-[var(--ac-space-1)]
+      setFitH(Math.min(4, Math.max(1, avail / buckets.length)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [buckets.length]);
+
   const name = label ?? `Overview ruler: ${total} rows`;
 
   return (
@@ -349,7 +376,7 @@ export function OverviewRuler({ rows, activeIndex, onJump, label }: OverviewRule
           }
           style={{
             background: KIND_TO_TOKEN[bucket.kind],
-            height: 4,
+            height: fitH,
             outline:
               current >= bucket.start && current <= bucket.end && interactive
                 ? "1px solid var(--ac-focus-ring)"

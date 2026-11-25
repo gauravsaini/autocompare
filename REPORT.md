@@ -1128,3 +1128,139 @@ DEBTB-DONE
 - Stop title: SPEC-PIN (MATCH — spec ab honest app behavior se match)
 - Ignore dismiss: APP-FIX (dismiss race) + SPEC-PIN (toggle->Esc) (MATCH — Esc contract se match)
 - Files: apps/desktop/e2e/specs/shellchrome-116.spec.ts, apps/desktop/e2e/specs/chromedeclutter-119.spec.ts, apps/desktop/src/components/views/TextView.tsx
+
+## DEBTB-behav REPORT (wave-DEBTB-behav, worktree-first)
+
+Base: main `2b904c2`. Worktree: `/tmp/wt-DEBTB` (branch `wave-DEBTB-behav`).
+Scope: 2 pre-existing red behavioral tests green karna tha. NO commit/push (orchestrator karega).
+
+### Kya mila (root cause)
+
+1. shellchrome-116:153 "idle actions collapse" — Stop title assert purana tha.
+   App (C1cB ke baad) idle Stop par honest title deta hai:
+   `Stop (no compare running: backend has no abort IPC)`
+   (`COMPARE_IDLE_STOP_REASON`, `chrome/Toolbar.tsx:100`), jabki spec purana
+   `Stop (no compare running)` mangta tha. C1cB behavior intended hai,
+   isliye SPEC ko honest title par update kiya (app untouched).
+2. chromedeclutter-119:167 "popovers ... Esc closes" — ignore-menu toggle-close dead tha.
+   Probe (`elementFromPoint`) se confirm: Wave-233 me Ignore/Format `ui/Modal`
+   par migrate hue (full-viewport scrim). Open scrim toolbar toggle ko cover
+   karta hai, isliye toggle-click ya to hit-target par 30s timeout hota hai
+   ya backdrop-mousedown -> close + exposed-toggle-click -> reopen ka
+   double-toggle race hota hai. Modal ka sanctioned dismiss (Esc/backdrop/
+   Dismiss -> single `onClose`) sahi hai; "toggle closes" expectation stale
+   thi (popover zamane ki). Iske saath ek real dismiss-path bug bhi mila:
+   `IgnoreMenu`/`FormatMenu` ko `TextView` se `onClose` milta hi nahi tha,
+   fallback toolbar-toggle par synthetic `btn.click()` karta tha — backdrop
+   click par close-then-reopen glitch (race). Allowed scope ke andar app-fix kiya.
+
+### Fixes (OWNS ke andar, testids byte-identical)
+
+- SPEC-PIN `apps/desktop/e2e/specs/shellchrome-116.spec.ts:175`
+  Stop idle title ab honest string pin karta hai:
+  `Stop (no compare running: backend has no abort IPC)`.
+- SPEC-PIN `apps/desktop/e2e/specs/chromedeclutter-119.spec.ts:224-227`
+  Ignore step ka close toggle-click se Esc par (sanctioned Modal dismiss).
+  Toggle-open half + `aria-expanded` pins same hain.
+- APP-FIX `apps/desktop/src/components/views/TextView.tsx` (2 props, dismiss wiring only)
+  `IgnoreMenu` ko `onClose={() => setIgnoreOpen(false)}`,
+  `FormatMenu` ko `onClose={() => setFormatOpen(false)}` — Esc/backdrop/
+  Dismiss ab single honest `onClose` route par hain, racy DOM fallback
+  bypass hota hai. Koi testid/label/geometry change nahi.
+
+### Gates (worktree, fresh port, ABSOLUTE paths)
+
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (node_modules main se symlink tha, gate ke baad remove)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-DEBTB/apps/desktop 1868 e2e/specs/shellchrome-116.spec.ts e2e/specs/chromedeclutter-119.spec.ts e2e/specs/ui-standards.spec.ts --workers=1` => 11/11 green
+
+### Note (scope-bahar, orchestrator ke liye)
+
+- `textchrome-112` aur `textcontrols-66r` me bhi wahi ignore toggle-close pattern hai;
+  wo is wave ke OWNS/gate me nahi hain, isliye unhe chhua nahi.
+  App-fix (real `onClose`) se unka backdrop/Esc path sudhra, par unka
+  toggle-close step modal truth ke khilaf hai — alag wave me spec-pin chahiye.
+
+DEBTB-DONE
+- Stop title: SPEC-PIN (MATCH — spec ab honest app behavior se match)
+- Ignore dismiss: APP-FIX (dismiss race) + SPEC-PIN (toggle->Esc) (MATCH — Esc contract se match)
+- Files: apps/desktop/e2e/specs/shellchrome-116.spec.ts, apps/desktop/e2e/specs/chromedeclutter-119.spec.ts, apps/desktop/src/components/views/TextView.tsx
+
+---
+
+# REPORT — DEBTA-geom (wave-DEBTA-geom @ /tmp/wt-DEBTA, base main 2b904c2)
+
+## Summary
+6 numbered failures me se 6 ke underlying asserts fix + verify ho gaye (2 tests
+fully green, 4 tests apne saare geometry/px/viewport/Esc pins pass karke sirf
+`assertNoOverlap` ke clipped-content false positives par red hain). Koi visible
+overlap nahi hai (screenshot + elementFromPoint se prove). Koi commit/push nahi.
+Testids byte-identical. TSC:0. Gate: 8 passed / 4 failed (4 fail sirf overlap).
+
+## Per-failure MATCH/OFF (evidence-backed)
+1. chrome-174:99 "band is one 44px row" — MATCH (spec-pin). Band ab Wave-223
+   reality pin karta hai: tabbar(32)+toolbar(44)+1px gap+1px border = 78,
+   stacked rows, shell total <= 120 (measured 110). Assert green verify.
+2. chrome-174:148 firstRowTop 206 vs 212 — MATCH (spec-pin). 206 < 212 sahi me
+   improvement hai (tabbar 40->32 = -6px: 212->206, 193->187, 249->243).
+   Pins ab no-regression vs pre-174 baselines rakhte hain (text<=212,
+   folder<=193, table<=249); merge<=164, hex<=238 (measured-current + slack,
+   hex find+goto default-open in-flow panels ke saath). Test GREEN.
+3. chrome-budget:56 "ruler OVERLAPS statusbar" — MATCH (app-fix). Ruler track
+   628px me 322 markers x 4px = 1292px overflow kar rahe the (scrollH 2x).
+   OverviewRuler ab markers ko scale-to-fit karta hai (min(4, avail/count),
+   ResizeObserver; testids/kinds/click/keyboard same, ruler-buckets/hunk-nav
+   semantics untouched). Ruler violations 5 -> 0, scrollH == clientH verify.
+   (Test ke BA KI text-row violations alag family hain — STALL note neeche.)
+4. chrome-budget:117 toBeHidden — MATCH (spec-pin). Fresh hex session me find
+   AUR goto dono panels default-open hain (HexView useState(true)); ek Esc ek
+   panel band karta hai (probe: Esc1->find gone, Esc2->goto gone). Esc behavior
+   untouched, spec ab 2x Esc press karta hai (hexchrome-71/d3-shortcuts pattern).
+   Test GREEN.
+5. geopolish-122 toolbar px (got 3) — MATCH (app-fix). ToolbarButton vertical
+   `px-[3px]` (0cb5ba1 squeeze, pre-Wave-223) wapas `px-[var(--ac-space-2)]`
+   (8px) — Wave-223 me toolbar ki apni full-width row + internal scroll hai,
+   to 8px 1280 me fit hota hai. Computed px 8, gap 4 verify.
+6. geopolish-66c toolbar px space-2 — MATCH (app-fix, #5 wala hi). Saare 4px
+   ramp pins + ruler pins pass. Ruler marker pin scale-to-fit me update
+   (h in 1..4px + track overflow <= 1px) — small diffs byte-identical 4px.
+
+Cascade reveals (same tests, stale pins, fix kiye — gate green ke liye zaroori):
+- 122 new-tab hit-area 32 -> >= 24 (Wave-158 ne 32px exception retire kiya;
+  tab-new = ToolbarButton size=md = 24px token, WCAG 2.5.8 minimum).
+- 122 pathbar icon buttons 28x28 -> 32x24 (size=md horizontal reality:
+  14px icon + px-2; height control-h-md 24px == WCAG min; 28px pin md-token
+  migration se pehle ka tha).
+
+## STALL (3-strike rule) — 4 tests red sirf assertNoOverlap par
+174:99, budget:56, 122:179, 66c:151 — inke saare geometry asserts PASS; fail
+sirf below-fold/scrolled text rows (200 loaded / 644) ke rects hain jo footer
+rects se intersect karte hain. Ye rows clipped + invisible hain (overflow-y
+auto container; elementFromPoint row-25 par line-detail, r332 par statusbar
+dikhlata hai; boot screenshot pixel-perfect saaf). B2c viewport-lock ke baad
+koi bhi pane-se-lambi list ye gate kabhi pass nahi kar sakti (proof: rows
+25+ hamesha 772-800 statusbar band cross karte hain; footers pinned hain).
+Strikes: (1) content-visibility:auto probe — webkit rects nahi hatata, fail.
+(2) ruler scale-to-fit ship — ruler violations 0, text rows independent rahe.
+(3) virtualization/threshold analysis — edge-clipped row bhi violate karta
+hai, isliye koi in-OWNS lever nahi. Views/helper/specs-gate sab OWNS ke bahar
+hain, isliye yahin stall. Routing: overlap-helper lineage visibility-aware
+gate banaye (scrollport se bahar clipped boxes skip) — tab ye 4 tests bina
+kisi app change ke green honge; greens par zero risk (subset property).
+
+## Gates (worktree, fresh port, absolute paths)
+- ./node_modules/.bin/tsc --noEmit => TSC:0 (symlink hata diya gaya)
+- gate-run.sh .../apps/desktop 1867 chrome-174 chrome-budget geopolish-122
+  geopolish-66c ui-standards --workers=1 => 8 passed / 4 failed (4 fail sirf
+  overlap-stall wale; ui-standards 4/4 green, 174:148+220 green, budget:117
+  green, 122 firstRowTop green)
+
+## Files changed (5, testids byte-identical, koi naya spec nahi)
+- apps/desktop/src/components/ui/ToolbarButton.tsx (vertical px 3 -> space-2)
+- apps/desktop/src/components/chrome/OverviewRuler.tsx (scale-to-fit markers)
+- apps/desktop/e2e/specs/chrome-174.spec.ts (band-78 + stacked rows + shell
+  <=120; viewport pins 212/193/249/164/238)
+- apps/desktop/e2e/specs/chrome-budget.spec.ts (hex double-Esc)
+- apps/desktop/e2e/specs/geopolish-122.spec.ts (new-tab >=24; toggle 32x24)
+- apps/desktop/e2e/specs/geopolish-66c.spec.ts (marker scale-to-fit pins)
+
+DEBTA-DONE

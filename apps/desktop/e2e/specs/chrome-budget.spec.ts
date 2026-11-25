@@ -172,9 +172,14 @@ test("chrome-budget: firstRowTop <= 140px enforced across text, folder, table, m
   expect(mergeDelta, "merge firstRowTop measured").not.toBeNull();
   expect(mergeDelta!, `merge firstRowTop <= 140px (got ${mergeDelta})`).toBeLessThanOrEqual(140);
 
-  // 5. Hex View (with panels closed per BC chrome spec)
+  // 5. Hex View (with panels closed per BC chrome spec). Fresh hex
+  // sessions default BOTH find and goto panels open (HexView
+  // `useState(true)`); one Esc dismisses one in-flow panel, so two
+  // Escapes close both (Esc behavior itself untouched — two presses,
+  // one per open panel).
   await createSession(page, "hex", "/tmp/cb-h-left.bin", "/tmp/cb-h-right.bin", "view-hex");
   await expect(page.locator(".hx-row").first()).toBeVisible({ timeout: 15000 });
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("hex-find-input")).toBeHidden();
   await expect(page.getByTestId("hex-goto-input")).toBeHidden();

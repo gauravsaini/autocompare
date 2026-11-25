@@ -60,9 +60,43 @@ export async function snapshotBoxes(page: Page, selectors = OVERLAP_SELECTORS): 
         const r = el.getBoundingClientRect();
         const sel = el.getAttribute("data-testid") ?? el.tagName.toLowerCase();
         const overlay = el instanceof HTMLElement && el.closest("[data-overlay]") !== null;
-        return { sel, x: r.x, y: r.y, width: r.width, height: r.height, overlay };
+        // Orchestrator clip-fix: intersect with the VISIBLE rect (viewport +
+        // scroll/clip ancestors). Scrollport children report full content
+        // boxes; without clipping, folded rows geometrically "overlap" the
+        // footer while pixel-clean. Fixed elements skip ancestor clipping
+        // (they escape scroll containers) but still clip to the viewport.
+        let vx = r.x;
+        let vy = r.y;
+        let vw = r.width;
+        let vh = r.height;
+        const clip = (cx: number, cy: number, cw: number, ch: number) => {
+          const x1 = Math.max(vx, cx);
+          const y1 = Math.max(vy, cy);
+          const x2 = Math.min(vx + vw, cx + cw);
+          const y2 = Math.min(vy + vh, cy + ch);
+          vx = x1;
+          vy = y1;
+          vw = Math.max(0, x2 - x1);
+          vh = Math.max(0, y2 - y1);
+        };
+        clip(0, 0, window.innerWidth, window.innerHeight);
+        if (el instanceof HTMLElement) {
+          const fixed = window.getComputedStyle(el).position === "fixed";
+          if (!fixed) {
+            let p: HTMLElement | null = el.parentElement;
+            while (p) {
+              const cs = window.getComputedStyle(p);
+              if (cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+                const pr = p.getBoundingClientRect();
+                clip(pr.x + p.clientLeft, pr.y + p.clientTop, p.clientWidth, p.clientHeight);
+              }
+              p = p.parentElement;
+            }
+          }
+        }
+        return { sel, x: vx, y: vy, width: vw, height: vh, overlay };
       })
-      .filter((b) => b.width > 0 && b.height > 0),
+      .filter((b) => b.width > 1 && b.height > 1),
   );
 }
 
