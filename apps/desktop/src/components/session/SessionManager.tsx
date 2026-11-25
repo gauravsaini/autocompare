@@ -523,6 +523,13 @@ export function SessionManager({
     setConfirmToolbarDelete(false);
   }, [activeId]);
 
+  // Wave-fixA1: reset search filter whenever dialog closes or is dismissed.
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch("");
+    }
+  }, [isOpen]);
+
   if (!isOpen) {
     return null;
   }
@@ -774,7 +781,10 @@ export function SessionManager({
     }
   };
 
-  const handleClose = onClose ?? (() => {});
+  const handleClose = () => {
+    setSearch("");
+    onClose?.();
+  };
 
   return (
     <Modal
@@ -805,7 +815,7 @@ export function SessionManager({
               <ToolbarButton
                 data-testid="session/close"
                 label="Close dialog"
-                onClick={onClose}
+                onClick={handleClose}
               >
                 <X size={14} strokeWidth={1.75} aria-hidden="true" />
               </ToolbarButton>
@@ -930,6 +940,7 @@ export function SessionManager({
               <div className="relative">
                 <Input
                   id="session-search-input"
+                  testid="session/search"
                   data-testid="session/search"
                   type="text"
                   role="searchbox"
@@ -941,13 +952,7 @@ export function SessionManager({
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
-                      // fixA1 dismiss contract: first Esc clears a non-empty
-                      // filter (stopPropagation), empty-filter Esc bubbles to
-                      // Modal root-Esc so the dialog still closes.
-                      if (search !== "") {
-                        e.stopPropagation();
-                        handleClearSearch();
-                      }
+                      handleClearSearch();
                     }
                   }}
                   className="w-full pr-8"
