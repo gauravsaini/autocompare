@@ -120,62 +120,56 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       data-testid="tableview/toolbar"
       className="tv-controls-bar tv-controls-bar--dense ac-chrome-label"
     >
-      <span className="ac-control-group ac-control-group--tight">
-        <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
-        <StatusText
-          data-testid="table-bykey-status"
-          role="status"
-          variant="code"
-        >
-          {byKey ? "by-key" : "positional"}
-        </StatusText>
-      </span>
+      <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
+      <StatusText
+        data-testid="table-bykey-status"
+        role="status"
+        variant="code"
+      >
+        {byKey ? "by-key" : "positional"}
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span className="ac-control-group ac-control-group--tight">
-        <Checkbox
-          id="table-ignore-ws"
-          data-testid="tableview/ignore-ws"
-          label="Ignore whitespace"
-          className="shrink-0"
-          checked={ignoreWs}
-          onChange={(e) => onToggleIgnoreWs(e.target.checked)}
-        />
-        <Checkbox
-          id="table-ignore-case"
-          data-testid="tableview/ignore-case"
-          label="Ignore case"
-          className="shrink-0"
-          checked={ignoreCase}
-          onChange={(e) => onToggleIgnoreCase(e.target.checked)}
-        />
-      </span>
+      <Checkbox
+        id="table-ignore-ws"
+        data-testid="tableview/ignore-ws"
+        label="Ignore whitespace"
+        className="shrink-0"
+        checked={ignoreWs}
+        onChange={(e) => onToggleIgnoreWs(e.target.checked)}
+      />
+      <Checkbox
+        id="table-ignore-case"
+        data-testid="tableview/ignore-case"
+        label="Ignore case"
+        className="shrink-0"
+        checked={ignoreCase}
+        onChange={(e) => onToggleIgnoreCase(e.target.checked)}
+      />
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span className="ac-control-group ac-control-group--tight">
-        <Button
-          data-testid="table-cols-toggle"
-          size="sm"
-          aria-expanded={colsOpen}
-          aria-controls="table-cols-menu"
-          onClick={onToggleCols}
-        >
-          {colsOpen ? "Hide columns panel" : "Columns"}
-        </Button>
-        <Button
-          data-testid="table-cols-show-all"
-          size="sm"
-          onClick={onShowAll}
-          disabled={showAllDisabled}
-        >
-          Show all
-        </Button>
-        <StatusText
-          data-testid="table-cols-visible"
-          role="status"
-          variant="code"
-        >
-          {hiddenCount === 0 ? "all columns shown" : `${hiddenCount} hidden`}
-        </StatusText>
-      </span>
+      <Button
+        data-testid="table-cols-toggle"
+        size="sm"
+        aria-expanded={colsOpen}
+        aria-controls="table-cols-menu"
+        onClick={onToggleCols}
+      >
+        {colsOpen ? "Hide columns panel" : "Columns"}
+      </Button>
+      <Button
+        data-testid="table-cols-show-all"
+        size="sm"
+        onClick={onShowAll}
+        disabled={showAllDisabled}
+      >
+        Show all
+      </Button>
+      <StatusText
+        data-testid="table-cols-visible"
+        role="status"
+        variant="code"
+      >
+        {hiddenCount === 0 ? "all columns shown" : `${hiddenCount} hidden`}
+      </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button data-testid="table-export" size="sm" onClick={onExport}>
         Export CSV
@@ -185,103 +179,97 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
           collapses in-flow below (closed by default, like the cols menu)
           so the collapsed-chrome budget holds. */}
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span className="ac-control-group ac-control-group--tight">
-        <Button
-          data-testid="table-map-toggle"
-          size="sm"
-          aria-expanded={mapOpen}
-          aria-controls="table-map-panel"
-          onClick={onToggleMap}
-          disabled={mapDisabled}
-          title={mapDisabledReason ?? "Map left columns to right columns"}
-        >
-          {mapOpen ? "Hide column mapping" : "Map columns"}
-        </Button>
-        <StatusText
-          data-testid="table-map-status"
-          role="status"
-          variant="code"
-        >
-          {mapSummary}
-        </StatusText>
-      </span>
+      <Button
+        data-testid="table-map-toggle"
+        size="sm"
+        aria-expanded={mapOpen}
+        aria-controls="table-map-panel"
+        onClick={onToggleMap}
+        disabled={mapDisabled}
+        title={mapDisabledReason ?? "Map left columns to right columns"}
+      >
+        {mapOpen ? "Hide column mapping" : "Map columns"}
+      </Button>
+      <StatusText
+        data-testid="table-map-status"
+        role="status"
+        variant="code"
+      >
+        {mapSummary}
+      </StatusText>
       {/* Wave-TBL: per-cell/row clipboard copy of the selected grid cell.
           Toolbar-only (no new stacked chrome rows); disabled with an
           honest reason until a cell is selected. */}
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span className="ac-control-group ac-control-group--tight">
-        <Button
-          data-testid="table-copy-cell"
-          size="sm"
-          onClick={onCopyCell}
-          disabled={copyCellDisabled}
-          title={copyCellDisabled ? "select a cell first" : "Copy selected cell to clipboard"}
+      <Button
+        data-testid="table-copy-cell"
+        size="sm"
+        onClick={onCopyCell}
+        disabled={copyCellDisabled}
+        title={copyCellDisabled ? "select a cell first" : "Copy selected cell to clipboard"}
+      >
+        Copy cell
+      </Button>
+      <Button
+        data-testid="table-copy-row"
+        size="sm"
+        onClick={onCopyRow}
+        disabled={copyRowDisabled}
+        title={copyRowDisabled ? "select a cell first" : "Copy selected row to clipboard"}
+      >
+        Copy row
+      </Button>
+      {copyNote !== null && (
+        <StatusText
+          data-testid="table-copy-status"
+          role="status"
+          variant="code"
         >
-          Copy cell
-        </Button>
-        <Button
-          data-testid="table-copy-row"
-          size="sm"
-          onClick={onCopyRow}
-          disabled={copyRowDisabled}
-          title={copyRowDisabled ? "select a cell first" : "Copy selected row to clipboard"}
-        >
-          Copy row
-        </Button>
-        {copyNote !== null && (
-          <StatusText
-            data-testid="table-copy-status"
-            role="status"
-            variant="code"
-          >
-            {copyNote}
-          </StatusText>
-        )}
-      </span>
-      <span aria-hidden="true" className="tv-controls-sep" />
-      <span className="ac-control-group ac-control-group--tight">
-        <ToolbarButton
-          data-testid="tableview/toolbar-find"
-          label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
-          title="Find in table (Ctrl+F)"
-          expanded={findOpen}
-          icon={Search}
-          onClick={onToggleFind}
-        >
-          <span>Find</span>
-        </ToolbarButton>
-        <ToolbarButton
-          data-testid="tableview/toolbar-prev-diff"
-          label="Previous difference row"
-          title="Previous difference row"
-          icon={ChevronUp}
-          onClick={() => {
-            if (onBusCommand) onBusCommand("prev");
-            else onPrevDiff();
-          }}
-          disabled={diffCount === 0}
-        >
-          <span>Prev</span>
-        </ToolbarButton>
-        <ToolbarButton
-          data-testid="tableview/toolbar-next-diff"
-          label="Next difference row"
-          title="Next difference row"
-          icon={ChevronDown}
-          onClick={() => {
-            if (onBusCommand) onBusCommand("next");
-            else onNextDiff();
-          }}
-          disabled={diffCount === 0}
-        >
-          <span>Next</span>
-        </ToolbarButton>
-        <StatusText data-testid="tableview/toolbar-diffs" variant="meta">
-          {diffCount === 0
-            ? "no differences"
-            : `difference ${diffPos + 1} of ${diffCount}`}
+          {copyNote}
         </StatusText>
-      </span>
+      )}
+      <span aria-hidden="true" className="tv-controls-sep" />
+      <ToolbarButton
+        data-testid="tableview/toolbar-find"
+        label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
+        title="Find in table (Ctrl+F)"
+        expanded={findOpen}
+        icon={Search}
+        onClick={onToggleFind}
+      >
+        <span>Find</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-testid="tableview/toolbar-prev-diff"
+        label="Previous difference row"
+        title="Previous difference row"
+        icon={ChevronUp}
+        onClick={() => {
+          if (onBusCommand) onBusCommand("prev");
+          else onPrevDiff();
+        }}
+        disabled={diffCount === 0}
+      >
+        <span>Prev</span>
+      </ToolbarButton>
+      <ToolbarButton
+        data-testid="tableview/toolbar-next-diff"
+        label="Next difference row"
+        title="Next difference row"
+        icon={ChevronDown}
+        onClick={() => {
+          if (onBusCommand) onBusCommand("next");
+          else onNextDiff();
+        }}
+        disabled={diffCount === 0}
+      >
+        <span>Next</span>
+      </ToolbarButton>
+      <StatusText data-testid="tableview/toolbar-diffs" variant="meta">
+        {diffCount === 0
+          ? "no differences"
+          : `difference ${diffPos + 1} of ${diffCount}`}
+      </StatusText>
     </div>
   );
 }

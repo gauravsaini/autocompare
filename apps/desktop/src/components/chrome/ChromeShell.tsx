@@ -144,6 +144,14 @@ export function ChromeShell({
        * `chrome/band OVERLAPS toolbar/action-merge`. 280px leaves the
        * toolbar 1000px at 1280 (27px slack, no clip, no scroll); chips
        * keep the W186 shrink-to-fit + ellipsis, so 3 tabs fit.
+       * Wave-213: cap 280px -> 520px. The 280px cap shrank 4+-tab chips
+       * below their fixed content (close + dot + padding), so close
+       * buttons overflowed their chips and covered neighboring tab
+       * centers (fontsize-58 overlap; folder-drill/typo-unify tab clicks
+       * arming close-confirm instead of selecting). 520px fits 8 dirty
+       * tabs at a 60px floor (close inside, centers clear; strip scrolls,
+       * invisible to view-scoped gates) while the merge toolbar still
+       * ends ~1245px at 1280.
        * Chips keep the W186 shrink-to-fit + ellipsis, so 3 tabs fit.
        * In-view toolbars (Text/Table/Hex/Merge) are views-owned (off
        * limits here) and already single-row + bus-unified (W161/W170);
@@ -161,7 +169,7 @@ export function ChromeShell({
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onNewTab={onNewTab}
-          className="min-w-0 max-w-[280px] shrink border-r border-[var(--ac-border)]"
+          className="min-w-0 max-w-[520px] shrink border-r border-[var(--ac-border)]"
         />
         <Toolbar actions={toolbar.actions} className="min-w-0 flex-1" />
       </div>

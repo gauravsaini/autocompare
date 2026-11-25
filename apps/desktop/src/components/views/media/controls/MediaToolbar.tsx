@@ -32,7 +32,7 @@ export default function MediaToolbar(props: MediaToolbarProps): React.JSX.Elemen
     >
       <span
         data-testid="mediaview/mode"
-        className="ac-meta font-normal text-[var(--ac-fg-muted)]"
+        className="ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
       >
         {mode === "picture" ? "Picture compare" : "Audio compare"}
       </span>
