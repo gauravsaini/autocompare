@@ -77,7 +77,7 @@ export const COMPARE_NO_ABORT_NOTE =
 export const COMPARE_BUSY_REASON = "comparing…";
 
 /** Reason shown on Stop/Refresh when no compare is running. */
-export const COMPARE_IDLE_STOP_REASON = "no compare running";
+export const COMPARE_IDLE_STOP_REASON = "no compare running: backend has no abort IPC";
 
 const BC_LABELS: Record<string, string> = {
   home: "Home",
@@ -156,9 +156,44 @@ export function compareBlockedReasonOf(action: ToolbarAction): string | null {
  */
 const SHORTCUT_HINTS: Record<string, string> = TOOLBAR_SHORTCUT_HINTS;
 
+const SCOPE_LOCK_DISABLED_REASONS: Record<string, string> = {
+  "prev-hunk": "no hunks",
+  "next-hunk": "no hunks",
+  sync: "needs folder session",
+  merge: "use Merge view",
+  rules: "needs folder compare",
+  format: "needs text compare",
+  copy: "select a row first",
+  "copy-right": "select a row first",
+};
+
+/**
+ * Wave-241: derive the honest blocked/disabled reason for a toolbar action.
+ * Prefers the explicit `action.disabledReason`, then falls back to any
+ * parenthesized suffix in `action.label`, then falls back to known scope
+ * locks (prev-hunk, next-hunk, sync, merge, rules, format, copy).
+ */
+export function actionDisabledReasonOf(action: ToolbarAction): string | null {
+  if (action.enabled) return null;
+  if (action.disabledReason !== undefined && action.disabledReason !== null) {
+    return action.disabledReason;
+  }
+  const match = action.label.match(/\(([^)]+)\)\s*$/);
+  if (match?.[1]) return match[1];
+  return SCOPE_LOCK_DISABLED_REASONS[action.id] ?? null;
+}
+
 export function actionTitle(action: ToolbarAction, reason?: string | null): string {
-  const r = reason ?? action.disabledReason ?? null;
-  const base = !r || action.label.includes(r) ? action.label : `${action.label} (${r})`;
+  const r = reason !== undefined ? reason : (action.enabled ? null : actionDisabledReasonOf(action));
+  let base: string;
+  if (!r) {
+    base = action.label;
+  } else if (action.label.includes(r)) {
+    base = action.label;
+  } else {
+    const stripped = action.label.replace(/\s*\([^)]*\)\s*$/, "").trim() || action.label;
+    base = `${stripped} (${r})`;
+  }
   const hint = SHORTCUT_HINTS[action.id];
   if (!hint || base.includes(hint)) return base;
   return `${base} (${hint})`;
@@ -291,7 +326,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
           ? busy
             ? COMPARE_BUSY_REASON
             : (action.disabledReason ?? compareBlockedReasonOf(action))
-          : (action.disabledReason ?? null);
+          : actionDisabledReasonOf(action);
         const title = isCompare && busy ? `Compare (${COMPARE_BUSY_REASON})` : actionTitle(action, reason);
         // Wave-180: single bus source — Rules/Format events dispatch
         // ONLY from the host `onClick` (App `handleRulesToggle` /
