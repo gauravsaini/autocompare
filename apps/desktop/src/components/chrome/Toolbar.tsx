@@ -230,7 +230,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
     <div
       role="toolbar"
       aria-label="Compare actions"
-      className={`flex h-[var(--ac-toolbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto border-b border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]${className ? ` ${className}` : ""}`}
+      className={`flex h-[var(--ac-toolbar-h)] items-center gap-[2px] overflow-x-auto overflow-y-hidden whitespace-nowrap border-b [&>*]:shrink-0 border-[var(--ac-border)] bg-[var(--ac-toolbar-bg)] px-[var(--ac-space-2)]${className ? ` ${className}` : ""}`}
     >
       {actions.map((action) => {
         const isCompare = action.id === "compare";
@@ -275,7 +275,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
             ) : (
               <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
             )}
-            <span aria-hidden="true" className="ac-meta max-w-24 truncate leading-none">
+            <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">
               {displayLabelOf(action.label)}
             </span>
           </ToolbarButton>
@@ -300,7 +300,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               label="Stop"
             >
               <Square size={14} strokeWidth={1.75} aria-hidden="true" />
-              <span aria-hidden="true" className="ac-meta max-w-24 truncate leading-none">
+              <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">
                 Stop
               </span>
             </ToolbarButton>
@@ -316,7 +316,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               label="Refresh"
             >
               <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" className={busy ? "animate-spin" : undefined} />
-              <span aria-hidden="true" className="ac-meta max-w-24 truncate leading-none">
+              <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">
                 Refresh
               </span>
             </ToolbarButton>

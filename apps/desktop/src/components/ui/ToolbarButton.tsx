@@ -33,7 +33,7 @@ export default function ToolbarButton({
       data-pressed={expanded === true ? "true" : undefined}
       className={
         (vertical
-          ? "inline-flex min-h-[38px] min-w-[44px] flex-col items-center justify-center gap-[var(--ac-space-1)] rounded-[5px] px-[var(--ac-space-2)] py-1 "
+          ? "inline-flex min-h-[38px] min-w-[40px] shrink-0 flex-col items-center justify-center gap-[var(--ac-space-1)] rounded-[5px] px-[3px] py-1 "
           : `inline-flex ${h} items-center gap-1 rounded-[5px] `) +
         "ac-chrome-label font-medium text-[var(--ac-fg)] border border-transparent hover:border-[var(--ac-border-subtle)] hover:bg-[var(--ac-btn-hover-bg)] " +
         "active:bg-[var(--ac-btn-active-bg)] focus-visible:outline-hidden focus-visible:ring-1 " +
