@@ -48,6 +48,24 @@ export function RowLine({ label, value, wrap, tint, spans, side, editKey, edited
     if (prevDraft.current !== null && draft === null) cellRef.current?.focus();
     prevDraft.current = draft;
   }, [draft]);
+  // Wave-109 (DEBTC fix): the editor owns Escape even while find/goto
+  // DockedBars are open. Those bars register document-CAPTURE Escape
+  // listeners that stopPropagation before the event reaches this
+  // textarea (capture descends document -> target), so the bubble
+  // onKeyDown below never fires and the draft would stick open. A
+  // window-capture listener runs before document capture: cancel the
+  // draft here and stop the descent so the panels stay open too.
+  useEffect(() => {
+    if (draft === null) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDraft(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [draft]);
   const startEdit = (): void => {
     if (editable && value !== null && draft === null) setDraft(value);
   };

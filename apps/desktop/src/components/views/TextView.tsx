@@ -779,6 +779,10 @@ export default function TextView({
     readonly { start: number; end: number; dir: TextSide; target: TextSide }[]
   >([]);
   const copyHunkAtRef = useRef<(rowIndex: number, dir: TextSide) => Promise<void>>(async () => {});
+  // Wave-109 (DEBTC fix): fresh `selectRowAt` for the window-capture
+  // row-Esc exit below (avoids a stale closure; same pattern as
+  // `jumpDiffRef`).
+  const selectRowAtRef = useRef<(index: number | null) => void>(() => {});
   // Wave-C3a: session key for the legacy session-switch option reset.
   // First mount keeps the restored (persisted) options; a real path /
   // session change still resets them to defaults.
@@ -1366,6 +1370,37 @@ export default function TextView({
       window.removeEventListener("autocompare:session-find", onSessionFind);
       window.removeEventListener("autocompare:session-goto", onSessionGoto);
     };
+  }, []);
+
+  /* Wave-109 (DEBTC fix): row-level Escape exit that survives open
+   * DockedBars. Find/goto bars register document-CAPTURE Escape
+   * listeners that stopPropagation before row targets ever receive
+   * the event, so `rowKeyDown`'s Escape branch (close panels + clear
+   * selection) never runs while a panel is open (`row.press(Escape)`
+   * would leave the selection stuck). A window-capture listener runs
+   * before document capture and replicates exactly that branch.
+   * Dialogs own Esc (centered Modal contract, e.g. C3a ignore/format:
+   * skip while any role=dialog is mounted); inputs own Esc (cell
+   * editor via RowLine's own capture, find/goto inputs via their
+   * bars); anything outside a textview row falls through to the
+   * bubble handler above, unchanged. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector('[role="dialog"]') !== null) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) return;
+      if (!(t instanceof HTMLElement) || t.closest('[data-testid^="textview/row-"]') === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFindOpen(false);
+      setGotoOpen(false);
+      setIgnoreOpen(false);
+      setFormatOpen(false);
+      selectRowAtRef.current(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
   /* Wave-L3: L2 `autocompare:view-filter` bus (Beyond Compare View menu
@@ -2195,6 +2230,7 @@ export default function TextView({
     if (controlledSelected === undefined) setInnerSelected(index);
     onSelectRow?.(index, row);
   }
+  selectRowAtRef.current = selectRowAt;
 
   /**
    * Wave-43: jump to row N (1-based position in the full `total`).
