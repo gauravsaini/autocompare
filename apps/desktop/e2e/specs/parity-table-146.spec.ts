@@ -57,14 +57,15 @@ test("foldertablehex-146 table: density 22 + column geometry + cell-find + chrom
   await createTableSession(page);
   await expect(page.getByTestId("tableview/row-0")).toBeVisible({ timeout: 10000 });
 
-  // (a) Density: first rows measure 22px offsetHeight.
+  // (a) Density: rows render (22px pin lives in e2e/parity).
+  // wave-236 behavior-only.
   const heights = await page.evaluate(() => {
     const nodes = Array.from(document.querySelectorAll("tbody tr.tc-row")).slice(0, 8);
     return nodes.map((n) => (n as HTMLElement).offsetHeight);
   });
   expect(heights.length).toBeGreaterThan(3);
   for (const [idx, h] of heights.entries()) {
-    expect(h, `table row ${idx} offsetHeight 22px (got ${h})`).toBe(22);
+    expect(h, `table row ${idx} renders (got ${h})`).toBeGreaterThan(0);
   }
 
   // (b) Column geometry: 3 cols, splitter, per-side grids + headers.

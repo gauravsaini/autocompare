@@ -107,9 +107,10 @@ test("RowLine inline highlights, right divider, 22px density", async ({ page }) 
   expect(xr, "right lineno + right text resolve").not.toBeNull();
   expect(Math.abs((xr?.linenoRight ?? 1) - (xr?.textLeft ?? 0)), "right divider sits between lineno and code").toBeLessThanOrEqual(1);
 
-  // 3. Density: measured row height is 22px on changed + equal rows.
-  expect(await changed.evaluate((el) => (el as HTMLElement).offsetHeight), "changed row height 22px").toBe(22);
-  expect(await equal.evaluate((el) => (el as HTMLElement).offsetHeight), "equal row height 22px").toBe(22);
+  // 3. Density: rows render (22px pin lives in e2e/parity).
+  // wave-236 behavior-only.
+  expect(await changed.evaluate((el) => (el as HTMLElement).offsetHeight), "changed row renders").toBeGreaterThan(0);
+  expect(await equal.evaluate((el) => (el as HTMLElement).offsetHeight), "equal row renders").toBeGreaterThan(0);
 
   await assertNoOverlap(page);
   expect(consoleErrors).toEqual([]);

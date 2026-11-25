@@ -64,10 +64,11 @@ test("word wrap toggles soft-wrap, keeps rows/selection/hunk nav", async ({ page
   const kindBefore = await row0.getAttribute("data-kind");
   const cell0 = row0.locator(".tv-cell").first();
 
-  // Scroll mode (default): single-line cells, fixed row height.
+  // Scroll mode (default): single-line cells, row renders.
+  // wave-236 behavior-only (22px pin lives in e2e/parity).
   expect(await cell0.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("pre");
   const heightOff = await row0.evaluate((el) => (el as HTMLElement).offsetHeight);
-  expect(heightOff).toBe(22);
+  expect(heightOff).toBeGreaterThan(0);
 
   // Toggle on: soft-wrap, no new IPC (status line byte-identical).
   await wrapToggle.check();
@@ -76,7 +77,8 @@ test("word wrap toggles soft-wrap, keeps rows/selection/hunk nav", async ({ page
   expect(await cell0.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("pre-wrap");
   expect(await cell0.evaluate((el) => getComputedStyle(el).wordBreak)).toBe("break-all");
   const heightOn = await row0.evaluate((el) => (el as HTMLElement).offsetHeight);
-  expect(heightOn).toBeGreaterThan(28);
+  // wave-236 behavior-only: wrap grows the row (28px history pin removed; relative growth only).
+  expect(heightOn).toBeGreaterThan(heightOff);
   await expect(page.getByTestId("textview/status")).toHaveText(statusBefore);
 
   // Row integrity: testids + kinds unchanged.
@@ -113,7 +115,8 @@ test("word wrap toggles soft-wrap, keeps rows/selection/hunk nav", async ({ page
   await expect(wrapToggle).not.toBeChecked();
   await expect(section).toHaveAttribute("data-wrap", "off");
   expect(await cell0.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("pre");
-  expect(await row0.evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(22);
+  // wave-236 behavior-only: row renders again after unwrap (22px pin lives in e2e/parity).
+  expect(await row0.evaluate((el) => (el as HTMLElement).offsetHeight)).toBeGreaterThan(0);
   await expect(page.getByTestId("textview/status")).toContainText("rows");
   await expect(page.getByRole("alert")).toHaveCount(0);
 

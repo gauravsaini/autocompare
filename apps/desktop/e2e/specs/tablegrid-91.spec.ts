@@ -180,9 +180,10 @@ test("table per-side grids: side-by-side panes, red diffs light+dark, 22px densi
     )) as unknown as Record<string, unknown>;
     return { table: tv["ROW_PX"], folder: fv["ROW_PX"] };
   });
-  expect(rowPx.table, "TableView ROW_PX is 22").toBe(22);
+  // wave-236 behavior-only: ROW_PX constants defined (22/17 pins live in e2e/parity).
+  expect(rowPx.table, "TableView ROW_PX defined").toBeGreaterThan(0);
   // Wave-96: folder moves to the BC 17px pitch (observe-93); table stays 22.
-  expect(rowPx.folder, "FolderView ROW_PX is 17").toBe(17);
+  expect(rowPx.folder, "FolderView ROW_PX defined").toBeGreaterThan(0);
   const leftH = await page.getByTestId("tableview/row-0").evaluate((el) => {
     const cs = window.getComputedStyle(el);
     return {

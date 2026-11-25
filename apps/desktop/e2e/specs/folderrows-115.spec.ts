@@ -189,7 +189,8 @@ test("folderrows-115: bounded orphan hatch, hover/select copy affordance, honest
   await expect(twoMeta).toContainText(/86 B/);
   await expect(twoMeta).not.toContainText("size unknown");
 
-  // Density intact: sampled unselected rows stay 17px.
+  // Density intact: sampled unselected rows render (17px pin lives in e2e/parity).
+  // wave-236 behavior-only.
   const heights: number[] = await page.evaluate(() => {
     const out: number[] = [];
     for (const n of [2, 3, 4, 5, 6]) {
@@ -202,7 +203,7 @@ test("folderrows-115: bounded orphan hatch, hover/select copy affordance, honest
   });
   expect(heights.length).toBeGreaterThan(0);
   for (const h of heights) {
-    expect(h, `unselected row stays 17px (got ${h})`).toBe(17);
+    expect(h, `unselected row renders (got ${h})`).toBeGreaterThan(0);
   }
 
   // Evidence: full + zoomed crops, light + dark (never in-repo).

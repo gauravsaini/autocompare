@@ -69,9 +69,9 @@ test("BC-gutter exact parity: roles, hatch, rail, arrows, copy", async ({ page }
 
   const row6 = page.getByTestId("textview/row-6");
 
-  // Density: measured row height stays exactly 22px (ROW_PX /
-  // --ac-row-h compacted in wave-66S2).
-  expect(await row6.evaluate((el) => (el as HTMLElement).offsetHeight), "measured row height 22px").toBe(22);
+  // Density: row renders (22px pin lives in e2e/parity; ROW_PX/--ac-row-h untouched).
+  // wave-236 behavior-only.
+  expect(await row6.evaluate((el) => (el as HTMLElement).offsetHeight), "row renders").toBeGreaterThan(0);
   // Striping gone: no border-bottom cuts rails/hatch into strips.
   expect(
     await row6.evaluate((el) => window.getComputedStyle(el).borderBottomWidth),
@@ -83,9 +83,7 @@ test("BC-gutter exact parity: roles, hatch, rail, arrows, copy", async ({ page }
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
   await expect(row6.locator(".w-14"), "no 56px center box").toHaveCount(0);
   // Visual column order: LeftAction, LeftLineNo, LeftText, Splitter,
   // RightAction, RightLineNo, RightText.
