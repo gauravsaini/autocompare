@@ -309,9 +309,28 @@ export function OverviewRuler({ rows, activeIndex, onJump, label }: OverviewRule
       }
       className="flex w-[var(--ac-space-4)] shrink-0 cursor-pointer flex-col gap-0 self-stretch border-l border-[var(--ac-border)] bg-[var(--ac-ruler-track)] py-[var(--ac-space-1)]"
     >
-      {/* Wave-130: zero-row honest affordance — no fake differences. */}
+      {/* Wave-130: zero-row honest affordance — no fake differences.
+          Wave-225: the track is a 16px column, so the "0 rows" label
+          rides `vertical-rl` (no squeezed wrapping in 8px of content
+          width) — testid + text + aria-label byte-identical, still
+          zero `[data-kind]` markers. */}
       {total === 0 ? (
-        <span data-testid="ruler/empty" className="px-1 text-[10px] leading-tight text-[var(--ac-fg-muted)]">
+        <span
+          data-testid="ruler/empty"
+          style={{
+            writingMode: "vertical-rl",
+            whiteSpace: "nowrap",
+            alignSelf: "center",
+            marginTop: "auto",
+            marginBottom: "auto",
+            padding: "8px 0",
+            fontSize: "10px",
+            lineHeight: 1,
+            letterSpacing: "0.04em",
+            color: "var(--ac-fg-muted)",
+            userSelect: "none",
+          }}
+        >
           0 rows
         </span>
       ) : null}

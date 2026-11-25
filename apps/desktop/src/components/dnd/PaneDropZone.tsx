@@ -35,7 +35,9 @@ import { pickOpenDialog } from "../session/useSession";
  * the caller's className, and the affordance halves are
  * `pointer-events-none` absolute overlays (outline only, `outline` never
  * shifts layout). Halves carry `data-panedrop` so synthetic test drops on a
- * half resolve the side even with `clientX: 0`.
+ * half resolve the side even with `clientX: 0`; Wave-225 promotes them to
+ * named sections (`panedrop/section-left|right`, `data-overlay` so the
+ * shared `assertNoOverlap` helper skips them) for BC two-pane parity.
  */
 
 export type PaneSide = "left" | "right";
@@ -232,10 +234,10 @@ export function PaneDropZone({
       style={{ position: "relative" }}
     >
       {children}
-      {/* Affordance halves intentionally carry NO data-testid: the shared
-          `assertNoOverlap` helper selects every `[data-testid]` box, and
-          these pointer-events-none overlays legitimately cover the panes
-          they highlight. Specs reach them via `[data-panedrop]` instead. */}
+      {/* Wave-225: sections ARE testid-addressable (`panedrop/section-*`
+          below); `data-overlay` keeps the shared `assertNoOverlap`
+          helper honest for these pane-covering overlays. `[data-panedrop]`
+          selectors keep working exactly as before. */}
       {enabled && canBrowse && (
         <>
           {(["left", "right"] as const).map((side) => (
@@ -273,6 +275,16 @@ export function PaneDropZone({
           ))}
         </>
       )}
+      {/* Wave-225: the halves ARE the two per-side drop sections
+          (BC two-pane parity) — `panedrop/section-left|right` with the
+          same `data-panedrop` side identity, so a drop dispatched on a
+          section resolves via `closest` even with `clientX: 0`, while a
+          real positioned drop resolves by half exactly as before.
+          `data-overlay` keeps the shared `assertNoOverlap` helper
+          honest (overlays cover panes by design); `pointer-events`
+          stays none so clicks/drags pass through to the panes and the
+          root keeps owning every drop/dragover (busy/bubble intact).
+          `panedrop/root` stays as the compat wrapper. */}
       {enabled && (
         <>
           {(["left", "right"] as const).map((side) => {
@@ -280,8 +292,10 @@ export function PaneDropZone({
             return (
               <div
                 key={side}
+                data-testid={`panedrop/section-${side}`}
                 data-panedrop={side}
                 data-active={active ? "true" : "false"}
+                data-overlay="true"
                 aria-hidden="true"
                 style={{
                   position: "absolute",
