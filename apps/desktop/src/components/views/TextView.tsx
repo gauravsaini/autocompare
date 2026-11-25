@@ -2808,6 +2808,7 @@ export default function TextView({
             blankLines={ignoreBlank}
             onBlankChange={(nextBlank) => void recompareBlank(nextBlank)}
             onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
+            onClose={() => setIgnoreOpen(false)}
           />
           <FormatMenu
             open={formatOpen}
@@ -2817,6 +2818,7 @@ export default function TextView({
             algorithm={algorithm}
             onAlgorithmChange={(nextAlgo) => void recompareAlgorithm(nextAlgo)}
             onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
+            onClose={() => setFormatOpen(false)}
           />
         </div>
       )}

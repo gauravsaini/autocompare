@@ -1072,3 +1072,59 @@ bina wiring wale views me hidden + reason-title sahit disabled rehte hain
   teenon assert hote hain.
 
 D3-DONE
+
+## DEBTB-behav REPORT (wave-DEBTB-behav, worktree-first)
+
+Base: main `2b904c2`. Worktree: `/tmp/wt-DEBTB` (branch `wave-DEBTB-behav`).
+Scope: 2 pre-existing red behavioral tests green karna tha. NO commit/push (orchestrator karega).
+
+### Kya mila (root cause)
+
+1. shellchrome-116:153 "idle actions collapse" — Stop title assert purana tha.
+   App (C1cB ke baad) idle Stop par honest title deta hai:
+   `Stop (no compare running: backend has no abort IPC)`
+   (`COMPARE_IDLE_STOP_REASON`, `chrome/Toolbar.tsx:100`), jabki spec purana
+   `Stop (no compare running)` mangta tha. C1cB behavior intended hai,
+   isliye SPEC ko honest title par update kiya (app untouched).
+2. chromedeclutter-119:167 "popovers ... Esc closes" — ignore-menu toggle-close dead tha.
+   Probe (`elementFromPoint`) se confirm: Wave-233 me Ignore/Format `ui/Modal`
+   par migrate hue (full-viewport scrim). Open scrim toolbar toggle ko cover
+   karta hai, isliye toggle-click ya to hit-target par 30s timeout hota hai
+   ya backdrop-mousedown -> close + exposed-toggle-click -> reopen ka
+   double-toggle race hota hai. Modal ka sanctioned dismiss (Esc/backdrop/
+   Dismiss -> single `onClose`) sahi hai; "toggle closes" expectation stale
+   thi (popover zamane ki). Iske saath ek real dismiss-path bug bhi mila:
+   `IgnoreMenu`/`FormatMenu` ko `TextView` se `onClose` milta hi nahi tha,
+   fallback toolbar-toggle par synthetic `btn.click()` karta tha — backdrop
+   click par close-then-reopen glitch (race). Allowed scope ke andar app-fix kiya.
+
+### Fixes (OWNS ke andar, testids byte-identical)
+
+- SPEC-PIN `apps/desktop/e2e/specs/shellchrome-116.spec.ts:175`
+  Stop idle title ab honest string pin karta hai:
+  `Stop (no compare running: backend has no abort IPC)`.
+- SPEC-PIN `apps/desktop/e2e/specs/chromedeclutter-119.spec.ts:224-227`
+  Ignore step ka close toggle-click se Esc par (sanctioned Modal dismiss).
+  Toggle-open half + `aria-expanded` pins same hain.
+- APP-FIX `apps/desktop/src/components/views/TextView.tsx` (2 props, dismiss wiring only)
+  `IgnoreMenu` ko `onClose={() => setIgnoreOpen(false)}`,
+  `FormatMenu` ko `onClose={() => setFormatOpen(false)}` — Esc/backdrop/
+  Dismiss ab single honest `onClose` route par hain, racy DOM fallback
+  bypass hota hai. Koi testid/label/geometry change nahi.
+
+### Gates (worktree, fresh port, ABSOLUTE paths)
+
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (node_modules main se symlink tha, gate ke baad remove)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-DEBTB/apps/desktop 1868 e2e/specs/shellchrome-116.spec.ts e2e/specs/chromedeclutter-119.spec.ts e2e/specs/ui-standards.spec.ts --workers=1` => 11/11 green
+
+### Note (scope-bahar, orchestrator ke liye)
+
+- `textchrome-112` aur `textcontrols-66r` me bhi wahi ignore toggle-close pattern hai;
+  wo is wave ke OWNS/gate me nahi hain, isliye unhe chhua nahi.
+  App-fix (real `onClose`) se unka backdrop/Esc path sudhra, par unka
+  toggle-close step modal truth ke khilaf hai — alag wave me spec-pin chahiye.
+
+DEBTB-DONE
+- Stop title: SPEC-PIN (MATCH — spec ab honest app behavior se match)
+- Ignore dismiss: APP-FIX (dismiss race) + SPEC-PIN (toggle->Esc) (MATCH — Esc contract se match)
+- Files: apps/desktop/e2e/specs/shellchrome-116.spec.ts, apps/desktop/e2e/specs/chromedeclutter-119.spec.ts, apps/desktop/src/components/views/TextView.tsx

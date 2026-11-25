@@ -172,7 +172,7 @@ test("shellchrome-116: idle actions collapse, wiring intact", async ({ page }) =
   const stop = page.getByTestId("toolbar/action-compare-stop");
   await expect(stop).toHaveCount(1);
   await expect(stop).toBeDisabled();
-  await expect(stop).toHaveAttribute("title", "Stop (no compare running)");
+  await expect(stop).toHaveAttribute("title", "Stop (no compare running: backend has no abort IPC)");
   await expect(stop).toBeHidden();
 
   // Running a compare brings Stop back; settling collapses it again.
