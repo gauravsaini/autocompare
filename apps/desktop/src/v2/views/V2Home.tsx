@@ -5,6 +5,7 @@ import {
   Folder,
   GitMerge,
   Image,
+  Lock,
   RefreshCw,
   Search,
   Sparkles,
@@ -18,6 +19,22 @@ import type { SessionKind } from "../types";
 export interface V2HomeProps {
   readonly onNewSession: (kind: SessionKind, left?: string, right?: string, title?: string) => void;
   readonly onOpenSessionManager: () => void;
+  readonly refreshSignal?: number;
+}
+
+function inferSessionBadge(name: string): {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  accent: string;
+} {
+  const n = name.toLowerCase();
+  if (n.includes("folder merge")) return { icon: Folder, accent: "#ea580c" };
+  if (n.includes("folder")) return { icon: Folder, accent: "#d97706" };
+  if (n.includes("table") || n.includes("csv")) return { icon: Table2, accent: "#059669" };
+  if (n.includes("hex") || n.includes("bin")) return { icon: Binary, accent: "#7c3aed" };
+  if (n.includes("merge")) return { icon: GitMerge, accent: "#dc2626" };
+  if (n.includes("sync")) return { icon: RefreshCw, accent: "#0891b2" };
+  if (n.includes("media") || n.includes("image") || n.includes("audio")) return { icon: Image, accent: "#db2777" };
+  return { icon: FileText, accent: "#2563eb" };
 }
 
 interface SessionCardDef {
@@ -90,6 +107,7 @@ const SESSION_CARDS: readonly SessionCardDef[] = [
 export default function V2Home({
   onNewSession,
   onOpenSessionManager,
+  refreshSignal = 0,
 }: V2HomeProps): React.JSX.Element {
   const [sessions, setSessions] = useState<readonly SessionEntry[]>([]);
   const [query, setQuery] = useState("");
@@ -109,7 +127,7 @@ export default function V2Home({
 
   useEffect(() => {
     void refreshSessions();
-  }, []);
+  }, [refreshSignal]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -200,37 +218,55 @@ export default function V2Home({
             </div>
           ) : (
             <ul className="space-y-0.5">
-              {filtered.map((entry) => (
-                <li key={entry.id}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => void handleOpenSaved(entry)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        void handleOpenSaved(entry);
-                      }
-                    }}
-                    className="group flex cursor-pointer items-center justify-between rounded-[6px] px-2.5 py-1.5 text-[12px] text-[var(--v2-fg)] hover:bg-[var(--v2-btn-hover)]"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{entry.name ?? entry.id}</div>
-                      <div className="text-[10px] text-[var(--v2-fg-muted)]">
-                        {entry.tabs} {entry.tabs === 1 ? "tab" : "tabs"}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      title="Delete session"
-                      onClick={(e) => void handleDeleteSaved(e, entry.id)}
-                      className="ml-2 hidden h-5 w-5 items-center justify-center rounded text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-active)] hover:text-red-600 group-hover:inline-flex"
+              {filtered.map((entry) => {
+                const badge = inferSessionBadge(entry.name ?? entry.id);
+                const BadgeIcon = badge.icon;
+                return (
+                  <li key={entry.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void handleOpenSaved(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void handleOpenSaved(entry);
+                        }
+                      }}
+                      className="group flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-1.5 text-[12px] text-[var(--v2-fg)] hover:bg-[var(--v2-btn-hover)]"
                     >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      <span
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px]"
+                        style={{ backgroundColor: `${badge.accent}18`, color: badge.accent }}
+                      >
+                        <BadgeIcon size={13} strokeWidth={1.8} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 truncate font-medium">
+                          {entry.locked ? (
+                            <Lock size={10} className="shrink-0 text-[var(--v2-amber)]" />
+                          ) : null}
+                          <span className="truncate">{entry.name ?? entry.id}</span>
+                        </div>
+                        <div className="text-[10px] text-[var(--v2-fg-muted)]">
+                          {entry.tabs} {entry.tabs === 1 ? "tab" : "tabs"}
+                          {entry.locked ? " · Locked" : ""}
+                        </div>
+                      </div>
+                      {!entry.locked ? (
+                        <button
+                          type="button"
+                          title="Delete session"
+                          onClick={(e) => void handleDeleteSaved(e, entry.id)}
+                          className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-del-fg)] group-hover:inline-flex"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

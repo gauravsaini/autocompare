@@ -130,6 +130,8 @@ export default function V2TextCompare({
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const undoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
+  const redoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
@@ -168,6 +170,8 @@ export default function V2TextCompare({
         }
         setSummary(dto);
         const fetched = await fetchSessionRows(dto.session, dto.rows);
+        undoStackRef.current = [];
+        redoStackRef.current = [];
         setRows(fetched);
         if (dto.encoding && dto.encoding !== encodingRef.current) setEncoding(dto.encoding);
         if (dto.eol && dto.eol !== eolRef.current) setEol(dto.eol);
@@ -301,12 +305,63 @@ export default function V2TextCompare({
     [hunks, selectedIndex, scrollToRow],
   );
 
+  const pushUndoSnapshot = useCallback((snapshotRows: readonly TextRowDto[], label: string): void => {
+    undoStackRef.current = [...undoStackRef.current.slice(-29), { rows: snapshotRows, label }];
+    redoStackRef.current = [];
+  }, []);
+
+  const handleUndo = useCallback((): void => {
+    const prev = undoStackRef.current.pop();
+    if (!prev) return;
+    redoStackRef.current = [...redoStackRef.current.slice(-29), { rows, label: prev.label }];
+    setRows(prev.rows);
+    onDirtyChange(undoStackRef.current.length > 0);
+    setNotice(`Undid ${prev.label}`);
+  }, [rows, onDirtyChange]);
+
+  const handleRedo = useCallback((): void => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current = [...undoStackRef.current.slice(-29), { rows, label: next.label }];
+    setRows(next.rows);
+    onDirtyChange(true);
+    setNotice(`Redid ${next.label}`);
+  }, [rows, onDirtyChange]);
+
+  useEffect(() => {
+    const onUndoKey = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const target = e.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        if (undoStackRef.current.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        if (redoStackRef.current.length > 0) {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+    };
+    window.addEventListener("keydown", onUndoKey);
+    return () => window.removeEventListener("keydown", onUndoKey);
+  }, [handleUndo, handleRedo]);
+
   const handleCopyHunk = useCallback(
     async (hunk: TextHunk, dir: TextSide): Promise<void> => {
       if (!summary) return;
+      const label = `copy section ${hunk.ordinal + 1} (${dir === "left" ? "L → R" : "R → L"})`;
+      const snapshot = rows;
       try {
         await textApplyHunk(summary.session, hunk.start, hunk.end, dir);
         const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+        pushUndoSnapshot(snapshot, label);
         setRows(fetched);
         onDirtyChange(true);
         setNotice(`Copied section ${hunk.ordinal + 1} (${dir === "left" ? "L → R" : "R → L"})`);
@@ -314,21 +369,24 @@ export default function V2TextCompare({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [summary, rows.length, onDirtyChange],
+    [summary, rows, onDirtyChange, pushUndoSnapshot],
   );
 
   const handleCommitEdit = useCallback(async (): Promise<void> => {
     if (!editing || !summary) return;
+    const label = `edit line ${editing.index + 1} (${editing.side})`;
+    const snapshot = rows;
     try {
       await textApplyEdit(summary.session, editing.index, editing.side, editing.text);
       const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+      pushUndoSnapshot(snapshot, label);
       setRows(fetched);
       onDirtyChange(true);
       setEditing(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [editing, summary, rows.length, onDirtyChange]);
+  }, [editing, summary, rows, onDirtyChange, pushUndoSnapshot]);
 
   const handleSaveSide = useCallback(
     async (side: TextSide): Promise<void> => {

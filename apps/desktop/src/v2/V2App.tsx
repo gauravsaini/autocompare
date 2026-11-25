@@ -17,7 +17,9 @@ const V2FolderMerge = lazy(() => import("./views/V2FolderMerge"));
 const V2SyncCompare = lazy(() => import("./views/V2SyncCompare"));
 const V2MediaCompare = lazy(() => import("./views/V2MediaCompare"));
 
+const V2Modal = lazy(() => import("./components/V2Modal"));
 const V2NewSessionModal = lazy(() => import("./components/V2NewSessionModal"));
+const V2SessionManagerModal = lazy(() => import("./components/V2SessionManagerModal"));
 const V2SettingsModal = lazy(() => import("./components/V2SettingsModal"));
 const V2ReportExportModal = lazy(() => import("./components/V2ReportExportModal"));
 const V2CommandPalette = lazy(() => import("./components/V2CommandPalette"));
@@ -87,9 +89,12 @@ export default function V2App(): React.JSX.Element {
   const [commands, setCommands] = useState<V2ViewCommands>({});
   const [status, setStatus] = useState<V2StatusInfo>({ left: "", center: "", right: "" });
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [sessionManagerOpen, setSessionManagerOpen] = useState(false);
+  const [sessionRefresh, setSessionRefresh] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
 
   const resetCommands = useCallback(() => setCommands({}), []);
 
@@ -136,11 +141,24 @@ export default function V2App(): React.JSX.Element {
   const openNewSession = useCallback(() => setNewSessionOpen(true), []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
 
+  const requestCloseTab = useCallback(
+    (id: string, e?: React.MouseEvent): void => {
+      e?.stopPropagation();
+      const target = tabs.find((t) => t.id === id);
+      if (target?.dirty) {
+        setPendingCloseTabId(id);
+        return;
+      }
+      closeTab(id);
+    },
+    [tabs, closeTab],
+  );
+
   const { dropOverlay, setDropOverlay } = useV2Shortcuts({
     activeTabRef,
     commandsRef,
     openSession,
-    closeTab,
+    closeTab: requestCloseTab,
     onSaveSession: handleSaveWorkspaceSession,
     onDroppedPaths: handleDroppedPaths,
     onTogglePalette: togglePalette,
@@ -242,7 +260,7 @@ export default function V2App(): React.JSX.Element {
                   <button
                     type="button"
                     aria-label={`Close ${tab.title}`}
-                    onClick={(e) => closeTab(tab.id, e)}
+                    onClick={(e) => requestCloseTab(tab.id, e)}
                     className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded text-[var(--v2-fg-muted)] opacity-60 hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-fg)] hover:opacity-100"
                   >
                     <X size={11} />
@@ -338,7 +356,11 @@ export default function V2App(): React.JSX.Element {
         <V2ViewErrorBoundary resetKey={activeTab.id}>
           <Suspense fallback={<ViewLoadingFallback />}>
             {activeTab.kind === "home" ? (
-              <V2Home onNewSession={openSession} onOpenSessionManager={openNewSession} />
+              <V2Home
+                onNewSession={openSession}
+                onOpenSessionManager={() => setSessionManagerOpen(true)}
+                refreshSignal={sessionRefresh}
+              />
             ) : activeTab.kind === "text" ? (
               <V2TextCompare
                 key={activeTab.id}
@@ -392,6 +414,7 @@ export default function V2App(): React.JSX.Element {
                 leftPath={activeTab.leftPath}
                 rightPath={activeTab.rightPath}
                 onPathsChange={updateActivePaths}
+                onOpenTextMerge={(l, r, title) => openSession("merge", l, r, title)}
                 onRegisterCommands={setCommands}
                 onStatusChange={setStatus}
               />
@@ -466,6 +489,49 @@ export default function V2App(): React.JSX.Element {
             onClose={() => setNewSessionOpen(false)}
             onCreate={openSession}
           />
+        ) : null}
+        {sessionManagerOpen ? (
+          <V2SessionManagerModal
+            open={sessionManagerOpen}
+            onClose={() => setSessionManagerOpen(false)}
+            onOpenSession={openSession}
+            onSessionsChanged={() => setSessionRefresh((n) => n + 1)}
+          />
+        ) : null}
+        {pendingCloseTabId !== null ? (
+          <V2Modal
+            open={true}
+            title="Unsaved Changes"
+            subtitle="This comparison tab has unsaved edits."
+            widthClass="max-w-sm"
+            onClose={() => setPendingCloseTabId(null)}
+            footer={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPendingCloseTabId(null)}
+                  className="v2-btn"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = pendingCloseTabId;
+                    setPendingCloseTabId(null);
+                    closeTab(id);
+                  }}
+                  className="v2-btn v2-btn-primary"
+                >
+                  Discard & Close
+                </button>
+              </>
+            }
+          >
+            <p className="text-[12px] text-[var(--v2-fg-secondary)]">
+              Closing this tab will discard unsaved text edits. Save the modified file side first if you want to keep your changes.
+            </p>
+          </V2Modal>
         ) : null}
         {settingsOpen ? (
           <V2SettingsModal
