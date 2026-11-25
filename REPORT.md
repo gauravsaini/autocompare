@@ -755,3 +755,93 @@ C3a-DONE
 - REPORT.md (ye file, worktree root)
 
 C1c-DONE
+
+---
+
+# D2-pathdrop REPORT (Hinglish-roman)
+
+## 1. Summary (2 lines)
+User complaint: "Left and right path areas BC me droppable hain, hamare case me nahi."
+Inspection me web-fallback drop infra (PathBar fields/strip + App-level PaneDropZone halves +
+Tauri hooks) har view me wired mila, lekin ek asli toot mili: khaali session me do alag-alag
+single-side PathBar drops kabhi re-compare trigger nahi karte the (pehla staged side App tak
+pahunchta hi nahi tha) — dono paths bhare dikhne par bhi compare atka rehta tha. BC me ye
+flow seedha kaam karta hai. Fix PathBar me, pin spec 8 tests, saare gates green.
+
+## 2. Kya wired tha (inspection)
+- `PathBar` field-level `onDrop` (left/right/base) + whole-strip `onDrop` (clientX vs midpoint,
+  `resolveStripSideFromRect`) + `useTauriPathBarDrop` (production shell, strip-only owner).
+- App-level `PaneDropZone`: `[data-panedrop]` halves overlay + `useNativeFileDrop` (window-level,
+  pane-only owner, pathbar band skip) — har comparison view isi se cover hota hai.
+- `MergeView` ke 3 pane zones (`data-mergedrop`) apne drops khud own karte hain (stopPropagation
+  sahi hai — double-compare nahi hota), triple App ko `onDropPaths`/`onRequestCompare` se jaata hai.
+- Tauri vs web fallback ownership single-owner hai (strip PathBar ka, pane window hook ka,
+  unknown-position pane ka) — isme koi change nahi kiya.
+
+## 3. Kya toota tha (root cause)
+`PathBar.handleFieldSubmit`: single-side stage LOCAL rehta hai (Wave-173, by design — App ko
+submit nahi hota). Khaali/half-staged session me pehle LEFT drop ke baad App ke paas left=""
+rehta hai; phir RIGHT drop par `otherPath` draft se bhara milta hai isliye submit hota hai,
+lekin App apne stale `live` (`left:""`) se `next` banata hai -> "needs two paths", compare
+kabhi fire nahi hota. Dono fields bhare dikhte hain, view half-staged mount hota hai, par
+re-compare zero. Repro: blank text session -> left drop -> right drop -> `__AC_COMPARE_COUNT__`
+delta 0, status "Path set ... needs two paths" (fix se pehle scratch spec se confirm kiya;
+fix ke baad delta 1, "Compare finished").
+
+## 4. Fix (PathBar.tsx, drop handling ONLY — 25 lines add)
+`handleFieldSubmit` me, jab single submit par dono drafts bhare hon AUR dusre side ka PROP
+(App state) abhi bhi blank ho, to pehle dusri side stage karo (App-only stage, compare nahi
+ho sakta kyunki ye side wahan missing hai), phir ye side submit karo -> App ke paas dono sides
+-> EXACTLY ONE compare. Multi-drop (`overrideOtherPath`) pehle se paired hai, isliye skip;
+non-blank prop par purana single-submit behavior untouched (typing semantics same).
+Per-view mounts ki zaroorat nahi padi — pane drops App-level zone se sab views me kaam karte
+hain (spec se prove), isliye views/** me koi edit nahi (mount one-liner bhi nahi chahiye tha).
+
+## 5. Spec: `apps/desktop/e2e/specs/d2-pathdrop-251.spec.ts` (NEW, 8 tests, no geometry asserts)
+Har test: LEFT drop -> us side ka path set + `__AC_COMPARE_COUNT__` +1 + "Compare finished";
+phir RIGHT drop -> same. Zero console/page errors har test me.
+- text / folder / table / hex / sync / media: pathbar left+right drops, phir pane-half
+  (`panedrop/section-left|right`) drops. Folder/sync me folderish (`/`-suffixed) paths taaki
+  kind auto-switch na ho (file-vs-folder class rule).
+- blank session: left-first + right-first dono orders me do single drops -> exactly 1 recompute
+  (yehi D2 fix ka regression pin hai).
+- merge: pathbar left/right drops (base untouched) + `merge-pane-left|right` zone drops ->
+  triple staged + re-plan compare.
+
+## 6. Gates (worktree `/tmp/wt-D2`, fresh port 1856)
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (main node_modules symlink, gates ke baad remove kiya).
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash .../tools/gate-run.sh
+  /tmp/wt-D2/apps/desktop 1856 e2e/specs/d2-pathdrop-251.spec.ts e2e/specs/ui-standards.spec.ts
+  --workers=1` => all green: **12 passed** (d2-pathdrop-251: 8/8, ui-standards: 4/4),
+  GATE_PLAYWRIGHT_EXIT=0.
+- Related regression (dev server): pathdrop-193 (6) + folderdnd-159 (6) + pathbar-submit-124 (4)
+  + pathbar-history (3) + finderdrop-143 (4) = 23 passed, zero fail.
+- Existing testids byte-identical (koi testid add/remove/rename nahi; spec sirf existing
+  `pathbar/left|right`, `panedrop/section-*`, `merge-pane-*`, `statusbar/message` use karta hai).
+- NEVER commit/push: sirf worktree me changes, `wave-D2-pathdrop` branch unpushed.
+
+## 7. MATCH/OFF table (har view, dono sides)
+
+| View | PathBar L/R drop | Pane L/R drop | Recompute | Verdict |
+|---|---|---|---|---|
+| Text | path set | path set | +1 per drop | MATCH |
+| Folder | path set | path set | +1 per drop | MATCH |
+| Table | path set | path set | +1 per drop | MATCH |
+| Hex | path set | path set | +1 per drop | MATCH |
+| Sync | path set | path set | +1 per drop | MATCH |
+| Media | path set | path set | +1 per drop | MATCH |
+| Merge | path set (base untouched) | L/R zones -> triple | +1 per drop | MATCH |
+| Blank session (koi bhi kind) | 2x single drops -> 1 compare | App-level stage -> compare | exactly 1 | MATCH (D2 fix) |
+| Per-view extra mounts | zaroorat nahi (App zone covers all) | — | — | OFF (no edit) |
+| Tauri native shell drops | code unchanged (single-owner intact) | manual live-drop check pending | — | OFF (mock-only gate) |
+
+## 8. Files list (OWNS ke andar ONLY)
+- `apps/desktop/src/components/chrome/PathBar.tsx` — `handleFieldSubmit` me stale-other
+  stage-first convergence (drop handling ONLY, +25 lines, koi testid/API change nahi).
+- `apps/desktop/e2e/specs/d2-pathdrop-251.spec.ts` — NEW, 8 tests (upar section 5).
+- `REPORT.md` (yeh file, worktree root — append-only, purani entries intact).
+- Touch nahi kiya: `views/**` (mount bhi nahi chahiye tha), `session/**`, `ui/**` primitives,
+  `tokens.css`, `ipc/**`, `src-tauri/**`, koi aur spec, aur `chrome/PaneDropZone.tsx`,
+  `dropPaths.ts`, `useNativeFileDrop.ts` (inspection-only; fix ki zaroorat wahin nahi thi).
+
+D2-DONE

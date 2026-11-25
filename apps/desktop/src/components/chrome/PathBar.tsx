@@ -591,6 +591,31 @@ export function PathBar({
       syncedRightRef.current = thisPath;
     }
 
+    // D2-pathdrop: blank-session single-drop convergence (BC parity). The
+    // stage-local branch above never tells App about a lone staged side,
+    // so when the SECOND side drops with both drafts filled, App still
+    // holds the other side as "" and answers "needs two paths" — the
+    // first drop is silently lost and no compare ever fires. When the
+    // other draft is filled but the other PROP (App state) is still
+    // blank, stage the other side first (App-only stage, no compare —
+    // this side is still missing there), then the submit below finds
+    // both sides and fires exactly one compare. Multi-drop
+    // (`overrideOtherPath`) already pairs both sides, so it skips this.
+    // Typed-but-unsubmitted edits over a non-blank prop keep the old
+    // single-submit behavior (out of scope).
+    if (overrideOtherPath === undefined) {
+      const otherProp = (side === "left" ? rightPath : leftPath).trim();
+      if (otherPath !== "" && otherProp === "") {
+        const otherSide = side === "left" ? "right" : "left";
+        if (otherSide === "left") {
+          syncedLeftRef.current = otherPath;
+        } else {
+          syncedRightRef.current = otherPath;
+        }
+        submitAsync(effectiveSubmit?.(otherSide, otherPath));
+      }
+    }
+
     setLocalNote(null);
     submitAsync(effectiveSubmit?.(side, thisPath));
   };
