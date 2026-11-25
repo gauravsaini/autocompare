@@ -194,7 +194,16 @@ function applyStoredCopiesToDiffRows(
  * Wave-169: Minor extends to table kind (dispatchViewMinor with kind table
  * through existing view bus + table IPC ignore flags; text behavior unchanged).
  */
-export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
+export type ViewCommand =
+  | "prev"
+  | "next"
+  | "copy"
+  | "copy-right"
+  | "swap"
+  | "merge"
+  | "take-left"
+  | "take-right"
+  | "take-both";
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";
 
 /**
@@ -292,6 +301,8 @@ export default function App(): React.JSX.Element {
   // (`handleMenuTake` is defined above the `hunkStarts` memo, so it reads
   // the ref — fresh at call time, no stale closure).
   const hunkStartsRef = useRef<number[]>([]);
+  // Wave-203: ViewCommandBus forward ref to avoid TDZ in menu handlers
+  const handleViewCommandRef = useRef<(cmd: ViewCommand) => void>(() => {});
 
   const handleSelectRow = useCallback((index: number | null, row: TextRowDto | null) => {
     setSelectedIndex(index);
@@ -481,14 +492,8 @@ export default function App(): React.JSX.Element {
     (dir: TextSide | "both") => {
       const activeKind = viewKindRef.current ?? viewKind;
       if (activeKind === "merge") {
-        const takeEvent = new CustomEvent("autocompare:merge-take", {
-          detail: { dir },
-          cancelable: true,
-        });
-        window.dispatchEvent(takeEvent);
-        if (!takeEvent.defaultPrevented) {
-          setStatusMessage(`Take ${dir} needs a conflict selected`);
-        }
+        dispatchViewCommand("copy", "merge", { dir });
+        setStatusMessage(`Copy take-${dir} requested (merge)`);
         return;
       }
       if (dir === "both") {
@@ -638,18 +643,18 @@ export default function App(): React.JSX.Element {
           break;
         case "session.take-left":
         case "session.copy-left":
-          handleMenuTake("left");
+          handleViewCommandRef.current("take-left");
           break;
         case "session.take-right":
         case "session.copy-right":
-          handleMenuTake("right");
+          handleViewCommandRef.current("take-right");
           break;
         case "session.take-both":
-          handleMenuTake("both");
+          handleViewCommandRef.current("take-both");
           break;
         case "session.copy":
         case "edit.copy-hunk":
-          handleMenuTake(copyTakeSide ?? "left");
+          handleViewCommandRef.current("copy");
           break;
         case "session.swap":
         case "view.swap":
@@ -1847,10 +1852,50 @@ export default function App(): React.JSX.Element {
           handleSwapSides();
           return;
         }
+        case "merge": {
+          handleMergeJump();
+          return;
+        }
+        case "take-left": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "left" });
+            setStatusMessage("Copy take-left requested (merge)");
+            return;
+          }
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleMenuTake("left");
+          return;
+        }
+        case "take-right": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "right" });
+            setStatusMessage("Copy take-right requested (merge)");
+            return;
+          }
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleMenuTake("right");
+          return;
+        }
+        case "take-both": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "both" });
+            setStatusMessage("Copy take-both requested (merge)");
+            return;
+          }
+          setStatusMessage("Take both is only available in Merge view");
+          return;
+        }
       }
     },
-    [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleSwapSides],
+    [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleMenuTake, handleSwapSides, handleMergeJump],
   );
+  handleViewCommandRef.current = handleViewCommand;
 
   // Wave-161: unified filter dispatch (BC View: Show All/Differences/Same/
   // Context) through the ViewCommandBus. Every view listens for
@@ -2113,7 +2158,7 @@ export default function App(): React.JSX.Element {
       label: mergeLive ? "Merge" : "Merge (use Merge view)",
       enabled: mergeLive,
       disabledReason: mergeLive ? null : "use Merge view",
-      onClick: handleMergeJump,
+      onClick: () => handleViewCommand("merge"),
     },
   ];
 

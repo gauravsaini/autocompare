@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { dispatchViewCommand } from "./ViewCommandBus";
 
 /**
  * Wave-142: web fallback for native menu accelerators (BC parity).
@@ -277,22 +278,22 @@ export function triggerGoTo(): boolean {
 }
 
 /**
- * Wave-157: Trigger Next Difference across mounted views (Text, Merge).
- * Dispatches `autocompare:view-command` with cmd "next".
+ * Wave-157 / Wave-203: Trigger Next Difference across mounted views (Text, Merge, Hex, Table).
+ * Dispatches `autocompare:view-command` with cmd "next" via the unified ViewCommandBus.
  */
 export function triggerNextDiff(): boolean {
   if (typeof window === "undefined") return false;
-  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "next" } }));
+  dispatchViewCommand("next");
   return true;
 }
 
 /**
- * Wave-157: Trigger Previous Difference across mounted views (Text, Merge).
- * Dispatches `autocompare:view-command` with cmd "prev".
+ * Wave-157 / Wave-203: Trigger Previous Difference across mounted views (Text, Merge, Hex, Table).
+ * Dispatches `autocompare:view-command` with cmd "prev" via the unified ViewCommandBus.
  */
 export function triggerPrevDiff(): boolean {
   if (typeof window === "undefined") return false;
-  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "prev" } }));
+  dispatchViewCommand("prev");
   return true;
 }
 

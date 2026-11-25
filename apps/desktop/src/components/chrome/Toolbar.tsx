@@ -248,7 +248,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
         // `dispatchViewFormat`). The bar never fires a parallel raw
         // event, so the in-view panel opens exactly once per click.
         // Disabled buttons never fire either path.
-        const handleActionClick = action.onClick;
+        const handleActionClick = actionEnabled ? action.onClick : undefined;
         // Wave-116: idle Prev/Next collapse out of the bar (testid stays
         // mounted, honestly hidden) instead of holding an always-on slot.
         const idleCollapsed =
@@ -293,7 +293,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               aria-label={stopEnabled ? "Stop" : `Stop (${COMPARE_IDLE_STOP_REASON})`}
               title={stopEnabled ? "Stop" : `Stop (${COMPARE_IDLE_STOP_REASON})`}
               disabled={!stopEnabled}
-              onClick={handleStop}
+              onClick={stopEnabled ? handleStop : undefined}
               // Wave-116: idle Stop collapses out (testid stays mounted,
               // honestly hidden); it reappears while a run is in flight.
               className={stopEnabled ? buttonClass : `${buttonClass} !hidden`}
@@ -311,7 +311,7 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               aria-label={refreshEnabled ? "Refresh" : `Refresh (${refreshReason ?? "unavailable"})`}
               title={refreshEnabled ? "Refresh" : `Refresh (${refreshReason ?? "unavailable"})`}
               disabled={!refreshEnabled}
-              onClick={() => void runCompare()}
+              onClick={refreshEnabled ? () => void runCompare() : undefined}
               className={buttonClass}
               label="Refresh"
             >
