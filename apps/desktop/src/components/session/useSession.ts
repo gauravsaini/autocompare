@@ -29,6 +29,16 @@ declare global {
 }
 
 /**
+ * D4 hygiene: dev-only warn sink for dialog/IPC fallbacks.
+ * Zero behavior change: all callers keep their exact resolve/continue
+ * flow; production builds skip the console call, dev keeps diagnostics.
+ */
+function devWarn(...args: unknown[]): void {
+  if (typeof import.meta !== "undefined" && import.meta.env?.PROD) return;
+  console.warn(...args);
+}
+
+/**
  * Native file open dialog helper with mock fallbacks.
  * Never throws to callers; returns null if cancelled or unavailable.
  */
@@ -42,7 +52,7 @@ export async function pickOpenDialog(
     try {
       return await window.__MOCK_DIALOG_OPEN__(options);
     } catch (err: unknown) {
-      console.warn("Mock open dialog error:", err);
+      devWarn("Mock open dialog error:", err);
       return null;
     }
   }
@@ -53,7 +63,7 @@ export async function pickOpenDialog(
   try {
     return await tauriOpen(options);
   } catch (err: unknown) {
-    console.warn("Dialog open error:", err);
+    devWarn("Dialog open error:", err);
     return null;
   }
 }
@@ -72,7 +82,7 @@ export async function pickSaveDialog(
     try {
       return await window.__MOCK_DIALOG_SAVE__(options);
     } catch (err: unknown) {
-      console.warn("Mock save dialog error:", err);
+      devWarn("Mock save dialog error:", err);
       return null;
     }
   }
@@ -82,7 +92,7 @@ export async function pickSaveDialog(
   try {
     return await tauriSave(options);
   } catch (err: unknown) {
-    console.warn("Dialog save error:", err);
+    devWarn("Dialog save error:", err);
     return null;
   }
 }
@@ -293,7 +303,8 @@ export interface UseSessionReturn {
    * present it overwrites the active tab's kind/paths/options so save
    * persists what is on screen, never stale nulls. `path` (save dialog)
    * is honored when the backend supports it; the current `session_save`
-   * mints an id and ignores the path, which is noted via console.warn.
+   * mints an id and ignores the path, which is noted via devWarn
+   * (dev-only console.warn).
    * Resolves the saved session id or path, or null on error.
    */
   readonly saveSession: (
@@ -807,7 +818,7 @@ export function useSession(): UseSessionReturn {
         if (targetPath) {
           // Honestly ignored: session_save mints an id and takes no path.
           // Note it instead of pretending the file landed at targetPath.
-          console.warn(`session_save ignores dialog path, persisted under minted id: ${targetPath}`);
+          devWarn(`session_save ignores dialog path, persisted under minted id: ${targetPath}`);
         }
 
         // Call sessionSave IPC command
@@ -1013,7 +1024,7 @@ export function useSession(): UseSessionReturn {
         } catch (ipcErr: unknown) {
           // session_delete command may not be registered in backend yet;
           // recorded as gap for Wave 2R.
-          console.warn("session_delete IPC not available or failed:", ipcErr);
+          devWarn("session_delete IPC not available or failed:", ipcErr);
         }
 
         delete docCacheRef.current[id];
