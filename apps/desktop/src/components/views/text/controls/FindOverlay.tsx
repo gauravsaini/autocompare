@@ -1,8 +1,9 @@
 /**
  * Wave-234: find migrated to ui/DockedBar.
- * In-flow collapsible find bar (never absolute). Purely presentational:
- * query state, hit math and activation live in TextView.
- * Testids byte-identical.
+ * Wave-WC: styling-only density pin (DockedBar contract kept byte-identical:
+ * in-flow section, Esc + close button ride the single onClose; Prev/Next
+ * explicit sm=22, input default 24). No testid / Esc-contract change.
+ * In-flow by construction (never absolute/fixed on the bar itself).
  */
 import { Button, DockedBar, Input, StatusText } from "../../../ui";
 
@@ -43,10 +44,10 @@ export default function FindOverlay(props: FindOverlayProps): React.JSX.Element 
         spellCheck={false}
         className="ac-mono w-40 text-[length:var(--ac-font-size-code)]"
       />
-      <Button data-testid="textview/find-prev" aria-label="Previous find hit" onClick={onPrev} disabled={prevDisabled}>
+      <Button size="sm" data-testid="textview/find-prev" aria-label="Previous find hit" onClick={onPrev} disabled={prevDisabled}>
         Prev
       </Button>
-      <Button data-testid="textview/find-next" aria-label="Next find hit" onClick={onNext} disabled={nextDisabled}>
+      <Button size="sm" data-testid="textview/find-next" aria-label="Next find hit" onClick={onNext} disabled={nextDisabled}>
         Next
       </Button>
       <StatusText data-testid="textview/find-status">
