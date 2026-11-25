@@ -7,7 +7,10 @@ import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
+
+const TABLE_ROW_HEIGHT = 22;
 
 export interface V2TableCompareProps {
   readonly leftPath: string;
@@ -48,6 +51,7 @@ export default function V2TableCompare({
   const [findHits, setFindHits] = useState<readonly TableHit[]>([]);
   const [findIdx, setFindIdx] = useState(0);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
@@ -145,22 +149,45 @@ export default function V2TableCompare({
     return out;
   }, [rowCount, diffRowIndices, filterMode]);
 
+  const { startIndex, endIndex, totalHeight, offsetTop, scrollToPosition } = useVirtualRows({
+    count: visibleRowIndices.length,
+    rowHeight: TABLE_ROW_HEIGHT,
+    overscan: 16,
+    scrollRef,
+  });
+
+  const windowedRowIndices = useMemo(
+    () => visibleRowIndices.slice(startIndex, endIndex),
+    [visibleRowIndices, startIndex, endIndex],
+  );
+
+  const selectAndScrollRow = useCallback(
+    (rowIdx: number): void => {
+      setSelectedRow(rowIdx);
+      const pos = visibleRowIndices.indexOf(rowIdx);
+      if (pos >= 0) scrollToPosition(pos);
+    },
+    [visibleRowIndices, scrollToPosition],
+  );
+
   const diffList = useMemo(() => Array.from(diffRowIndices).sort((a, b) => a - b), [diffRowIndices]);
 
   const stepDiff = useCallback(
     (delta: 1 | -1): void => {
       if (diffList.length === 0) return;
       if (selectedRow === null) {
-        setSelectedRow(delta === 1 ? diffList[0] : diffList[diffList.length - 1]);
+        selectAndScrollRow(delta === 1 ? diffList[0] : diffList[diffList.length - 1]);
         return;
       }
       if (delta === 1) {
-        setSelectedRow(diffList.find((r) => r > selectedRow) ?? diffList[0]);
+        selectAndScrollRow(diffList.find((r) => r > selectedRow) ?? diffList[0]);
       } else {
-        setSelectedRow([...diffList].reverse().find((r) => r < selectedRow) ?? diffList[diffList.length - 1]);
+        selectAndScrollRow(
+          [...diffList].reverse().find((r) => r < selectedRow) ?? diffList[diffList.length - 1],
+        );
       }
     },
-    [diffList, selectedRow],
+    [diffList, selectedRow, selectAndScrollRow],
   );
 
   useEffect(() => {
@@ -270,7 +297,13 @@ export default function V2TableCompare({
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Dual-Pane Table Grid */}
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-auto">
+      <div
+        ref={(el) => {
+          scrollRef.current = el;
+          (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        }}
+        className="min-h-0 flex-1 overflow-auto"
+      >
         {loading ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--v2-fg-muted)]">
             Comparing tables…
@@ -322,8 +355,10 @@ export default function V2TableCompare({
               </div>
             </div>
 
-            {/* Rows */}
-            {visibleRowIndices.map((rIdx) => {
+            {/* Virtualized Rows */}
+            <div className="relative" style={{ height: totalHeight }}>
+              <div style={{ transform: `translateY(${offsetTop}px)` }}>
+            {windowedRowIndices.map((rIdx) => {
               const rl = page.rowsL[rIdx];
               const rr = page.rowsR[rIdx];
               const isSelected = selectedRow === rIdx;
@@ -416,6 +451,8 @@ export default function V2TableCompare({
                 </div>
               );
             })}
+              </div>
+            </div>
           </div>
         )}
       </div>

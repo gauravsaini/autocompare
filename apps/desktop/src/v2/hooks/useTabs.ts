@@ -2,6 +2,9 @@ import { useCallback, useRef, useState } from "react";
 import type React from "react";
 import { sessionSave } from "../../ipc/session";
 import type { SessionKind, V2Tab } from "../types";
+import { inferDropKind } from "../utils/dropKind";
+
+export { inferDropKind };
 
 export const HOME_TAB: V2Tab = {
   id: "home",
@@ -10,33 +13,6 @@ export const HOME_TAB: V2Tab = {
   leftPath: "",
   rightPath: "",
 };
-
-export function inferDropKind(paths: readonly string[]): SessionKind {
-  const first = (paths[0] ?? "").toLowerCase();
-  if (first.endsWith(".csv") || first.endsWith(".tsv")) return "table";
-  if (
-    first.endsWith(".png") ||
-    first.endsWith(".jpg") ||
-    first.endsWith(".jpeg") ||
-    first.endsWith(".wav") ||
-    first.endsWith(".mp3")
-  ) {
-    return "media";
-  }
-  if (
-    first.endsWith(".bin") ||
-    first.endsWith(".wasm") ||
-    first.endsWith(".exe") ||
-    first.endsWith(".dylib")
-  ) {
-    return "hex";
-  }
-  const base = first.split("/").pop() ?? "";
-  if (first.endsWith("/") || (base !== "" && !base.includes("."))) {
-    return "folder";
-  }
-  return "text";
-}
 
 export interface UseTabsOptions {
   readonly onResetCommands: () => void;

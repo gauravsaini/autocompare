@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Folder } from "lucide-react";
 import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
@@ -6,7 +6,10 @@ import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
+
+const FOLDER_ROW_HEIGHT = 22;
 
 export interface V2FolderCompareProps {
   readonly leftPath: string;
@@ -69,6 +72,7 @@ export default function V2FolderCompare({
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
@@ -110,6 +114,18 @@ export default function V2FolderCompare({
     if (filterMode === "same") return entries.filter((e) => e.status === "same");
     return entries.filter((e) => e.status !== "same");
   }, [entries, filterMode]);
+
+  const { startIndex, endIndex, totalHeight, offsetTop } = useVirtualRows({
+    count: visibleEntries.length,
+    rowHeight: FOLDER_ROW_HEIGHT,
+    overscan: 16,
+    scrollRef,
+  });
+
+  const windowedEntries = useMemo(
+    () => visibleEntries.slice(startIndex, endIndex),
+    [visibleEntries, startIndex, endIndex],
+  );
 
   const diffCount = useMemo(
     () => entries.filter((e) => e.status !== "same").length,
@@ -170,8 +186,14 @@ export default function V2FolderCompare({
 
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Synchronized Dual-Pane Tree Rows */}
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto text-[12px]">
+      {/* Synchronized Dual-Pane Virtualized Tree Rows */}
+      <div
+        ref={(el) => {
+          scrollRef.current = el;
+          (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto text-[12px]"
+      >
         {loading ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
             Comparing folders…
@@ -181,7 +203,9 @@ export default function V2FolderCompare({
             No matching folder entries.
           </div>
         ) : (
-          visibleEntries.map((entry) => {
+          <div className="relative" style={{ height: totalHeight }}>
+            <div style={{ transform: `translateY(${offsetTop}px)` }}>
+          {windowedEntries.map((entry) => {
             const hasLeft = entry.left !== null || entry.status !== "rightOnly";
             const hasRight = entry.right !== null || entry.status !== "leftOnly";
             const isSelected = selectedPath === entry.relPath;
@@ -271,7 +295,9 @@ export default function V2FolderCompare({
                 )}
               </div>
             );
-          })
+          })}
+            </div>
+          </div>
         )}
       </div>
 

@@ -8,16 +8,38 @@ export interface UseVirtualRowsOptions {
   readonly scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export interface VirtualWindow {
+export interface VirtualWindowRange {
   readonly startIndex: number;
   readonly endIndex: number;
   readonly totalHeight: number;
   readonly offsetTop: number;
+}
+
+export interface VirtualWindow extends VirtualWindowRange {
   readonly scrollToPosition: (position: number) => void;
 }
 
+/** Pure window math (unit-tested in Node without DOM). */
+export function computeVirtualWindow(
+  count: number,
+  rowHeight: number,
+  scrollTop: number,
+  viewportHeight: number,
+  overscan = 16,
+): VirtualWindowRange {
+  const safeCount = Math.max(0, Math.floor(count));
+  const safeRowHeight = Math.max(1, rowHeight);
+  const totalHeight = safeCount * safeRowHeight;
+  const visibleCount = Math.ceil(Math.max(0, viewportHeight) / safeRowHeight);
+  const rawStart = Math.floor(Math.max(0, scrollTop) / safeRowHeight) - overscan;
+  const startIndex = Math.max(0, Math.min(safeCount, rawStart));
+  const endIndex = Math.min(safeCount, startIndex + visibleCount + overscan * 2);
+  const offsetTop = startIndex * safeRowHeight;
+  return { startIndex, endIndex, totalHeight, offsetTop };
+}
+
 /**
- * Lightweight fixed-row-height virtualizer for 10k+ line text diffs.
+ * Lightweight fixed-row-height virtualizer for 10k+ line diffs, tables, and folder trees.
  * Renders only the visible viewport slice plus `overscan` rows above/below.
  */
 export function useVirtualRows({
@@ -61,12 +83,13 @@ export function useVirtualRows({
     };
   }, [scrollRef]);
 
-  const totalHeight = count * rowHeight;
-  const visibleCount = Math.ceil(viewportHeight / rowHeight);
-  const rawStart = Math.floor(scrollTop / rowHeight) - overscan;
-  const startIndex = Math.max(0, Math.min(count, rawStart));
-  const endIndex = Math.min(count, startIndex + visibleCount + overscan * 2);
-  const offsetTop = startIndex * rowHeight;
+  const { startIndex, endIndex, totalHeight, offsetTop } = computeVirtualWindow(
+    count,
+    rowHeight,
+    scrollTop,
+    viewportHeight,
+    overscan,
+  );
 
   const scrollToPosition = useCallback(
     (position: number): void => {

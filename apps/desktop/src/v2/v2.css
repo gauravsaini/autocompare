@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
 
 /*
  * AutoCompare v2 — Clean-Slate Native macOS / Beyond Compare Design System.
