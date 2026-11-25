@@ -273,6 +273,10 @@ export default function App(): React.JSX.Element {
   }, []);
   const [actionError, setActionError] = useState<string | null>(null);
   const [compareTick, setCompareTick] = useState(0);
+  // C1c: last real folder-compare session id. `runComparePaths` sets it
+  // from the `folder_compare` receipt; the ChromeShell forwards it to the
+  // Toolbar Stop path so `folder_cancel(session)` fires for real.
+  const [folderSessionId, setFolderSessionId] = useState<string | null>(null);
   // Wave-13: live ruler rows for the text pane (same equal/del/ins/chg
   // mapping TextView paints, so markers line up 1:1 with the pane).
   // Non-text kinds resolve [] (ruler empty, visual-only as before).
@@ -1110,9 +1114,12 @@ export default function App(): React.JSX.Element {
           case "text":
             await textCompare(left, right);
             break;
-          case "folder":
-            await folderCompare(left, right);
+          case "folder": {
+            // C1c: keep the real session handle for Toolbar Stop.
+            const fc = await folderCompare(left, right);
+            setFolderSessionId(fc.session);
             break;
+          }
           case "hex":
             await hexCompare(left, right);
             break;
@@ -2205,6 +2212,9 @@ export default function App(): React.JSX.Element {
         onCloseTab={handleCloseTab}
         onNewTab={handleNewTab}
         toolbar={{ actions: toolbarActions }}
+        // C1c: Stop cancels ONLY the live folder session — other kinds
+        // (or no run yet) pass null so Stop keeps the honest-note path.
+        folderSession={sessionKind === "folder" ? folderSessionId : null}
         leftPath={activePaths.left}
         rightPath={activePaths.right}
         onSubmitPath={handlePathSubmit}

@@ -55,6 +55,13 @@ export interface ChromeShellProps {
   onDropPaths?: (paths: readonly string[]) => void;
   status: ChromeShellStatus;
   statusMessage: string;
+  /**
+   * C1c: last real folder-compare session id (App `runComparePaths`
+   * receipt). Forwarded to the Toolbar Stop path ONLY; null/absent =
+   * the pre-C1b wiring (Stop stays the honest no-op). Never read by
+   * Compare/Refresh/PathBar.
+   */
+  folderSession?: string | null;
   diffRows: readonly DiffRow[];
   /**
    * Wave-13: ruler click/drag/keyboard target owned by the scroller
@@ -99,6 +106,7 @@ export function ChromeShell({
   onDropPaths,
   status,
   statusMessage,
+  folderSession,
   diffRows,
   onJump,
   activeIndex,
@@ -195,7 +203,7 @@ export function ChromeShell({
           onNewTab={onNewTab}
           className="min-w-0 max-w-[520px] shrink-0 border-b border-[var(--ac-border)]"
         />
-        <Toolbar actions={toolbar.actions} className="min-w-0 w-full flex-none" />
+        <Toolbar actions={toolbar.actions} folderSession={folderSession ?? null} className="min-w-0 w-full flex-none" />
       </div>
       {showPathBar ? (
         <PathBar
