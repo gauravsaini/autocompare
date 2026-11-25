@@ -4,7 +4,6 @@ members = [
     "crates/diff",
     "crates/compare",
     "crates/cli",
-    "crates/gui",
     "crates/evidence",
     "crates/vfs",
     "crates/sessions",
