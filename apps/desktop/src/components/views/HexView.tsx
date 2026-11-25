@@ -520,7 +520,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
     }
   }
 
-  if (status === "loading") return <p>Loading hex comparison…</p>;
+  if (status === "loading") return <EmptyState title="Loading hex comparison…" testid="hexview/loading" />;
   if (status === "error") return <InlineNotice testid="hexview/error">Hex compare failed: {error}</InlineNotice>;
   if (status === "empty" || session === null) return <EmptyState title="No bytes to display." testid="hexview/empty" />;
 
@@ -875,9 +875,9 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         </div>
       </div>
       {total === 0 ? (
-        <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Both files are empty.</p>
+        <EmptyState title="Both files are empty." testid="hexview/both-empty" />
       ) : pageLoading || page === null ? (
-        <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Loading page {pageIdx + 1}…</p>
+        <EmptyState title={`Loading page ${pageIdx + 1}…`} testid="hexview/page-loading" />
       ) : (
         <div className="ac-mono overflow-x-auto text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
           {visibleRows.map((r) => {

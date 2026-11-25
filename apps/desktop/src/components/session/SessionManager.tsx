@@ -941,8 +941,13 @@ export function SessionManager({
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
-                      e.stopPropagation();
-                      handleClearSearch();
+                      // fixA1 dismiss contract: first Esc clears a non-empty
+                      // filter (stopPropagation), empty-filter Esc bubbles to
+                      // Modal root-Esc so the dialog still closes.
+                      if (search !== "") {
+                        e.stopPropagation();
+                        handleClearSearch();
+                      }
                     }
                   }}
                   className="w-full pr-8"
@@ -1048,7 +1053,12 @@ export function SessionManager({
                                 onChange={(e) => setDraftName(e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") handleSaveRename(session);
-                                  if (e.key === "Escape") handleCancelRename();
+                                  if (e.key === "Escape") {
+                                    // fixA1: rename Esc cancels inline edit only,
+                                    // never bubbles to Modal root-Esc.
+                                    e.stopPropagation();
+                                    handleCancelRename();
+                                  }
                                 }}
                                 aria-label="Session name"
                                 className="min-w-0 flex-1"

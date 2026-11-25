@@ -1082,7 +1082,7 @@ export default function MergeView({
     return conflicts;
   }, [conflicts, choices, clearedConflicts, mergeFilter]);
 
-  if (status === "loading") return <p>Loading merge plan…</p>;
+  if (status === "loading") return <EmptyState title="Loading merge plan…" testid="mergeview/loading" />;
   if (status === "error") return <InlineNotice testid="mergeview/error">Merge plan failed: {error}</InlineNotice>;
   if (status === "empty") return <EmptyState title="No conflicts — merge is clean." testid="mergeview/empty" />;
 

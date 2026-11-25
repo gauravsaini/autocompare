@@ -655,7 +655,7 @@ export default function FolderView({
     return (
       <EmptyState title="Pick two folders to compare — needs two paths." testid="folderview/empty" />
     );
-  if (status === "loading") return <p>Loading folder comparison…</p>;
+  if (status === "loading") return <EmptyState title="Loading folder comparison…" testid="folderview/loading" />;
   if (status === "error") return <InlineNotice testid="folderview/error">Folder compare failed: {error}</InlineNotice>;
   if (status === "empty" || entries.length === 0)
     return (

@@ -874,7 +874,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           ? "No matches"
           : `Hit ${hitPos + 1} of ${hits.length}`;
 
-  if (status === "loading") return <p>Loading table comparison…</p>;
+  if (status === "loading") return <EmptyState title="Loading table comparison…" testid="tableview/loading" />;
   if (status === "error") return <InlineNotice testid="tableview/error">Table compare failed: {error}</InlineNotice>;
   if (status === "empty" || grid === null) return <EmptyState title="No cells to display." testid="tableview/empty" />;
 
