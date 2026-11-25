@@ -140,7 +140,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
     // and `tab-new` is pinned OUTSIDE the scroller (shrink-0) so it is
     // always visible and always contained. No new chrome row, no new
     // primitive, heights/testids/wiring untouched.
-    // Wave-213: chips keep a 60px floor (pl-2 contract) with the close
+    // Wave-213: chips keep a token floor (--ac-tab-min-w, 96px) with the close
     // `ml-auto` right-pinned, so the close stays inside its chip and tab
     // centers stay clickable even at 8 tabs (cap raised in ChromeShell).
     // H1: `tab-new` last tab ke turant bagal me (BC jaisa). Pehle inner
@@ -148,6 +148,11 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
     // right edge par dhakel deta tha (~200px gap). Ab `flex-initial`
     // (grow 0, shrink 1): content hug karta hai (`+` adjacent), zyada
     // tabs par shrink + internal scroll (testid/role/sizing same).
+    // TABS2: chips `flex-1 basis-0` (equal share, basis content se free)
+    // + min/max-w tokens (96/180 BC clamps): kam tabs par saare chips
+    // barabar width lete hain, zyada tabs par uniformly shrink hokar
+    // min floor par internal scroll (strip/scroll/heights untouched,
+    // close `ml-auto` still right-pinned).
     <div
       data-testid="tabbar"
       role="tablist"
@@ -182,8 +187,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
             tabIndex={0}
             className={
               active
-                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[60px] max-w-56 shrink cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
-                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[60px] max-w-56 shrink cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[var(--ac-tab-min-w)] max-w-[var(--ac-tab-max-w)] flex-1 basis-0 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[var(--ac-tab-min-w)] max-w-[var(--ac-tab-max-w)] flex-1 basis-0 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
             }
           >
             <span className="min-w-0 truncate">{tab.title}</span>

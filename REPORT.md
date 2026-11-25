@@ -1264,3 +1264,44 @@ kisi app change ke green honge; greens par zero risk (subset property).
 - apps/desktop/e2e/specs/geopolish-66c.spec.ts (marker scale-to-fit pins)
 
 DEBTA-DONE
+
+## TABS2-tabsizing — uniform BC-standard chip widths (worktree /tmp/wt-TABS2, port 1876)
+
+GOAL: TabBar chips content-hug (min 60px/max 224px, flex-initial) se equal-width
+BC-style uniform sizing par. 2-tab fixture dono chips equal (±2px), 8-tab
+uniform shrink + internal scroll.
+
+## Files changed (4, testids byte-identical, heights/wiring/cap untouched)
+- apps/desktop/src/components/chrome/TabBar.tsx (chip width classes only:
+  dono chip class-strings `min-w-[60px] max-w-56 shrink` ->
+  `min-w-[var(--ac-tab-min-w)] max-w-[var(--ac-tab-max-w)] flex-1 basis-0`;
+  bar 32px/chip 24px/close `ml-auto`/dirty-dot/tab-new adjacency/border-b-0
+  sab untouched; ChromeShell 520px cap untouched)
+- apps/desktop/src/theme/tokens.css (= src/styles/tokens.css symlink twin):
+  `--ac-tab-min-w: 96px; --ac-tab-max-w: 180px;` light :root + dark mirror
+  (chip-h 24px ke saath, Checkbox & Tab Chip Tokens block me)
+- apps/desktop/e2e/specs/tabs-chipsizing-253.spec.ts (purane assertions intact —
+  sirf 2 class-name expectations naye token classes par update; adds: 96/180
+  token pins light+dark, flex-1/basis-0 class pins, naya harness test
+  `TABS2: 2-tab equal widths, 8-tab uniform >= min-w + scroll` — 520px
+  container me mount, uneven titles equal ±2px, 8-tab sab >= 96px − 2,
+  spread <= 2px, strip scrollWidth > clientWidth; light+dark)
+- REPORT.md (append-only, ye section)
+
+## Gates (worktree, fresh port, absolute paths, node_modules real copy)
+- NOTE: tools/gate-run.sh repo me maujood nahi — barabar playwright call:
+  `PLAYWRIGHT_BROWSERS_PATH=... PORT=1876 playwright test
+  e2e/specs/tabs-chipsizing-253.spec.ts e2e/specs/ui-standards.spec.ts
+  --project=webkit --workers=1`
+- Their node_modules me self-referential symlink tha
+  (`node_modules/node_modules -> <main>/node_modules`) jo cp -R me worktree
+  me aa gaya tha aur dohra @playwright/test load kara raha tha (beforeEach/
+  setTimeout "two versions" error) — worktree copy se hataya, phir green.
+  Main repo untouched.
+- TSC: `tsc --noEmit` => 0
+- Gate run 1: 6 passed (chipsizing 2/2 + ui-standards 4/4), run 2: 6 passed
+  (stability repeat, zero fail => koi BLOCKER nahi)
+- Sibling check: `min-w-[60px]` / `max-w-56` ke zero references bache
+  (e2e + src me), Chrome budget firstRowTop / 520px cap untouched
+
+TABS2-DONE
