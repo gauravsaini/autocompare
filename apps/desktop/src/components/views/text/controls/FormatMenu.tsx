@@ -4,7 +4,9 @@
  *
  * Absolute popover (never in-flow): floats over the rows via the
  * `tv-chrome` relative wrapper, so an open format panel never pushes
- * `textview/row-0` down. Purely presentational: encoding/eol state
+ * `textview/row-0` down. Wave-220: `data-overlay` marks this popover
+ * as floating by design (e2e overlap gate skips it explicitly).
+ * Purely presentational: encoding/eol state
  * and the re-compare probe live in `TextView` (wave-30 ignore logic
  * pattern); the typed `textCompare` wrapper already sends both
  * spellings and the W163c backend honors them, echoed as
@@ -37,6 +39,7 @@ export default function FormatMenu(props: FormatMenuProps): React.JSX.Element | 
   return (
     <fieldset
       data-testid="textview/format-options"
+      data-overlay="true"
       className="tv-controls-panel flex flex-wrap items-center gap-x-[var(--ac-space-4)] gap-y-[var(--ac-space-1)] rounded-md border border-[var(--ac-border-subtle)] px-[var(--ac-space-3)] py-[var(--ac-space-2)] shadow-lg"
     >
       <legend className="px-1 ac-chrome-label font-medium text-[var(--ac-fg-muted)]">

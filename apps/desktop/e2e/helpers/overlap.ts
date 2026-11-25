@@ -10,6 +10,17 @@
  *
  * Ancestor/descendant nesting is NOT a violation (parents contain
  * children); only non-containing boxes with intersecting area fail.
+ *
+ * Wave-220 overlay opt-out (explicit, honest, NOT a global weakening):
+ * elements inside a `[data-overlay]` subtree float above content BY
+ * DESIGN (Beyond Compare style absolute popovers — TextView
+ * Find/Goto/Ignore/Format ride the `tv-chrome` overlay stack, so an
+ * open panel covers rows instead of pushing them down). Such boxes are
+ * excluded from the gate: any pair where EITHER side lives inside a
+ * `[data-overlay]` container is skipped. In-flow panels (hex/merge/
+ * folder find+goto, folder name/rules) carry NO such marker and are
+ * still gated exactly as before. Opt-out is per-element via the
+ * `data-overlay` attribute — removing the marker re-arms the gate.
  */
 import { expect, type Page } from "@playwright/test";
 
@@ -21,6 +32,8 @@ export interface Box {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /** Wave-220: true when the element lives inside a `[data-overlay]` popover. */
+  readonly overlay: boolean;
 }
 
 export function intersectArea(a: Box, b: Box): number {
@@ -46,7 +59,8 @@ export async function snapshotBoxes(page: Page, selectors = OVERLAP_SELECTORS): 
       .map((el) => {
         const r = el.getBoundingClientRect();
         const sel = el.getAttribute("data-testid") ?? el.tagName.toLowerCase();
-        return { sel, x: r.x, y: r.y, width: r.width, height: r.height };
+        const overlay = el instanceof HTMLElement && el.closest("[data-overlay]") !== null;
+        return { sel, x: r.x, y: r.y, width: r.width, height: r.height, overlay };
       })
       .filter((b) => b.width > 0 && b.height > 0),
   );
@@ -60,6 +74,10 @@ export async function assertNoOverlap(page: Page, selectors = OVERLAP_SELECTORS)
     for (let j = i + 1; j < boxes.length; j++) {
       const a = boxes[i];
       const b = boxes[j];
+      // Wave-220: dedicated overlay layer floats above content by design
+      // (explicit `[data-overlay]` opt-out). Skip pairs where either side
+      // is an overlay or lives inside one — in-flow boxes gate unchanged.
+      if (a.overlay || b.overlay) continue;
       if (containsBox(a, b) || containsBox(b, a)) continue;
       if (intersectArea(a, b) > 1) violations.push(`${a.sel} OVERLAPS ${b.sel}`);
     }

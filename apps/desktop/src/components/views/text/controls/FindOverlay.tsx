@@ -6,6 +6,8 @@
  * `TextView` is relative and hosts an absolute overlay column, so an
  * open find panel floats over the rows instead of pushing
  * `textview/row-0` down (firstRowTop<=140 holds open AND closed).
+ * Wave-220: `data-overlay` marks this popover as floating by design,
+ * so the e2e `assertNoOverlap` gate skips it explicitly.
  * Purely presentational: query state, hit math and activation live
  * in `TextView` (wave-61 logic byte-identical). All testids/aria
  * unchanged.
@@ -30,6 +32,7 @@ export default function FindOverlay(props: FindOverlayProps): React.JSX.Element 
   return (
     <section
       data-testid="textview/find-panel"
+      data-overlay="true"
       className="tv-controls-panel rounded-md border border-[var(--ac-border-subtle)] shadow-lg"
     >
       <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="find in text">

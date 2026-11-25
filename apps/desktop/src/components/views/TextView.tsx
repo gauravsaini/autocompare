@@ -2643,9 +2643,16 @@ export default function TextView({
           (firstRowTop<=140 open AND closed). Panels keep their own
           open flags/testids/logic byte-identical; the column only
           mounts while at least one panel is open, so closed chrome
-          is exactly one toolbar row. */}
+          is exactly one toolbar row.
+          Wave-220: dedicated overlay layer — `data-overlay` marks the
+          stack (and each panel root) as floating above rows by design,
+          so the e2e `assertNoOverlap` gate skips it explicitly (no
+          global weakening). Geometry/logic unchanged. */}
       {(findOpen || gotoOpen || ignoreOpen || formatOpen) && (
-        <div className="absolute left-[var(--ac-space-4)] top-full z-30 flex w-[min(480px,calc(100%-2rem))] flex-col gap-[var(--ac-space-2)] pt-[var(--ac-space-1)]">
+        <div
+          data-overlay="true"
+          className="tv-overlay-stack absolute left-[var(--ac-space-4)] top-full z-30 flex w-[min(480px,calc(100%-2rem))] flex-col gap-[var(--ac-space-2)] pt-[var(--ac-space-1)]"
+        >
           {findOpen ? (
             <FindOverlay
               query={findQuery}

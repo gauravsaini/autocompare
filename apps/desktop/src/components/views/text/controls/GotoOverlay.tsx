@@ -4,7 +4,9 @@
  *
  * Absolute popover (never in-flow): floats over the rows via the
  * `tv-chrome` relative wrapper, so an open goto panel never pushes
- * `textview/row-0` down. Purely presentational: input state and the
+ * `textview/row-0` down. Wave-220: `data-overlay` marks this popover
+ * as floating by design (e2e overlap gate skips it explicitly).
+ * Purely presentational: input state and the
  * paging jump live in `TextView` (wave-43 logic byte-identical).
  * All testids/aria unchanged.
  */
@@ -26,6 +28,7 @@ export default function GotoOverlay(props: GotoOverlayProps): React.JSX.Element 
   return (
     <section
       data-testid="textview/goto-panel"
+      data-overlay="true"
       className="tv-controls-panel rounded-md border border-[var(--ac-border-subtle)] shadow-lg"
     >
       <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="goto row">
