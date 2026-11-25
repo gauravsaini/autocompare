@@ -22,8 +22,8 @@ export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.
   if (!open) return null;
   return (
     <section data-testid="folderview/name-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="filter by name">
-        <label htmlFor="folder-name-box" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+      <div className="ac-control-group" role="search" aria-label="filter by name">
+        <label htmlFor="folder-name-box" className="ac-meta font-normal text-[var(--ac-fg-muted)]">
           Filter by name
         </label>
         <Input
@@ -37,7 +37,7 @@ export default function FolderNamePanel(props: FolderNamePanelProps): React.JSX.
           placeholder="file or folder name"
           autoComplete="off"
           spellCheck={false}
-          className="w-64 ac-mono text-[length:var(--ac-font-size-code)]"
+          className="w-64 ac-code"
         />
         <ToolbarButton
           data-testid="folderview/name-close"

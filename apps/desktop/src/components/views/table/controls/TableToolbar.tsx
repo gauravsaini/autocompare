@@ -108,8 +108,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       role="toolbar"
       aria-label="Table controls"
       data-testid="tableview/toolbar"
-      style={{ flexWrap: "nowrap", gap: "2px" }}
-      className="tv-controls-bar flex-nowrap overflow-x-auto whitespace-nowrap !gap-[2px] !px-2 [&>*]:min-w-0"
+      className="tv-controls-bar tv-controls-bar--dense"
     >
       <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
       <StatusText

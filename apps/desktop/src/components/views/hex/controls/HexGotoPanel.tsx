@@ -23,10 +23,10 @@ export default function HexGotoPanel(props: HexGotoPanelProps): React.JSX.Elemen
   const { value, onValueChange, onGo, onClose, statusText } = props;
   return (
     <section data-testid="hex/goto-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="goto offset">
+      <div className="ac-control-group" role="search" aria-label="goto offset">
         <label
           htmlFor="hex-goto-box"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
         >
           Goto offset
         </label>
@@ -42,7 +42,7 @@ export default function HexGotoPanel(props: HexGotoPanelProps): React.JSX.Elemen
           placeholder="0x10 or 16"
           autoComplete="off"
           spellCheck={false}
-          className="ac-mono min-w-32 flex-1 text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]"
+          className="ac-code min-w-32 flex-1"
         />
         <Button
           data-testid="hex-goto-go"
@@ -54,14 +54,13 @@ export default function HexGotoPanel(props: HexGotoPanelProps): React.JSX.Elemen
           data-testid="hex-goto-close"
           label="Dismiss goto (Esc)"
           title="Dismiss goto (Esc)"
+          icon={X}
           onClick={onClose}
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden="true" />
-        </ToolbarButton>
+        />
       </div>
       <p
         data-testid="hex-goto-status"
-        className="pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+        className="ac-meta pt-[var(--ac-space-1)] font-normal text-[var(--ac-fg-muted)]"
       >
         {statusText}
       </p>

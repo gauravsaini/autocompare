@@ -45,8 +45,8 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
   };
   return (
     <section data-testid="folderview/rules-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="rules file masks">
-        <label htmlFor="folder-mask-box" className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+      <div className="ac-control-group" role="search" aria-label="rules file masks">
+        <label htmlFor="folder-mask-box" className="ac-meta font-normal text-[var(--ac-fg-muted)]">
           File masks
         </label>
         <Input
@@ -63,7 +63,7 @@ export default function RulesPanel(props: RulesPanelProps): React.JSX.Element | 
           autoComplete="off"
           spellCheck={false}
           disabled={busy}
-          className="w-64 ac-mono text-[length:var(--ac-font-size-code)]"
+          className="w-64 ac-code"
         />
         <Button
           variant="secondary"

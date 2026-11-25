@@ -28,10 +28,10 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
     props;
   return (
     <section data-testid="merge/find-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="find in merge">
+      <div className="ac-control-group" role="search" aria-label="find in merge">
         <label
           htmlFor="merge-find-box"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
         >
           Find
         </label>
@@ -47,7 +47,7 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           placeholder="text to find"
           autoComplete="off"
           spellCheck={false}
-          className="ac-mono w-40 text-[length:var(--ac-font-size-code)]"
+          className="ac-code w-40"
         />
         <Button
           data-testid="merge/find-prev"
@@ -67,14 +67,13 @@ export default function MergeFindPanel(props: MergeFindPanelProps): React.JSX.El
           data-testid="merge/find-close"
           label="Dismiss find (Esc)"
           title="Dismiss find (Esc)"
+          icon={X}
           onClick={onClose}
-        >
-          <X size={14} strokeWidth={1.75} aria-hidden="true" />
-        </ToolbarButton>
+        />
       </div>
       <p
         data-testid="merge/find-status"
-        className="pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+        className="ac-meta pt-[var(--ac-space-1)] font-normal text-[var(--ac-fg-muted)]"
       >
         {statusText}
       </p>

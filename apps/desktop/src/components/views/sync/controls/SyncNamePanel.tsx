@@ -24,10 +24,10 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
   if (!open) return null;
   return (
     <section data-testid="syncview/name-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="filter steps by name">
+      <div className="ac-control-group" role="search" aria-label="filter steps by name">
         <label
           htmlFor="sync-name-box"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
         >
           Filter steps
         </label>
@@ -49,7 +49,7 @@ export default function SyncNamePanel(props: SyncNamePanelProps): React.JSX.Elem
           placeholder="file or folder name"
           autoComplete="off"
           spellCheck={false}
-          className="w-64 ac-mono text-[length:var(--ac-font-size-code)]"
+          className="w-64 ac-code"
         />
         <ToolbarButton
           data-testid="syncview/name-close"

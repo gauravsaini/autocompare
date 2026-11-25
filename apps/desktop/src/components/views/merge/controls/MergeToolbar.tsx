@@ -75,7 +75,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           data-testid="merge-overview"
           role="group"
           aria-label="conflict overview"
-          className="inline-flex items-center gap-[var(--ac-space-1)]"
+          className="ac-control-group--tight"
         >
           {(conflictIds ?? []).map((id) => {
             const active = selectedId === id;
@@ -165,7 +165,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       >
         <span>Find</span>
       </ToolbarButton>
-      <StatusText className="inline-flex items-center gap-[var(--ac-space-1)]">
+      <StatusText className="ac-control-group--tight">
         (keys: j/k, n/p, <ArrowUp size={14} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={14} strokeWidth={1.75} aria-hidden="true" />)
       </StatusText>
     </div>

@@ -1230,3 +1230,39 @@ samp {
 [role="tab"][aria-selected="true"] {
   border-radius: 8px;
 }
+
+/*
+ * Wave-205 UIKit (additive ONLY, no existing token value touched).
+ * Shared control-bar group idioms so folder/sync/table/hex/merge
+ * control bars stop hand-rolling `inline-flex items-center gap-*`
+ * trios at call-site. Geometry byte-identical to the inlined
+ * utilities they replace (gap space-2 wrap / gap space-1 nowrap /
+ * dense 2px toolbar with min-w-0 shrink); colors/type ride existing
+ * tokens (ac-meta/ac-code) at call-site, untouched here.
+ */
+.ac-control-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.ac-control-group--tight {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+.tv-controls-bar--dense {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding-left: var(--ac-space-2);
+  padding-right: var(--ac-space-2);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.tv-controls-bar--dense > * {
+  min-width: 0;
+}

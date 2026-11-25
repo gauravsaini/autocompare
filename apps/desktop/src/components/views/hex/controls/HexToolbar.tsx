@@ -130,7 +130,7 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
         onChange={(e) => onToggleSyncScroll(e.target.checked)}
       />
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span data-testid="hex-copy-bar" className="inline-flex flex-wrap items-center gap-[var(--ac-space-2)]">
+      <span data-testid="hex-copy-bar" className="ac-control-group">
         <ToolbarButton data-testid="hex-copy-hex" onClick={onCopyHex} label="Copy hex">
           Copy hex
         </ToolbarButton>
