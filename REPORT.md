@@ -1494,3 +1494,16 @@ Blocker: koi nahi. FAIL 3x wala case aaya hi nahi.
 6. **Blocker**: koi nahi. FAIL-count 0, stop-trigger nahi laga.
 
 ---
+# 66R Esc global collapse — REPORT (orchestrator pickup)
+
+GOAL: textcontrols-66r pre-existing red fix karna.
+
+ROOT CAUSE: TextView ka Wave-219 Esc listener `window.addEventListener("keydown", onKey)` (BUBBLE) me register tha, jabki DockedBar `document.addEventListener("keydown", onKey, true)` (CAPTURE) par `stopPropagation` karta hai. Event path window-capture -> document-capture (stop) -> TextView bubble kabhi fire nahi hota. Global Esc collapse dead tha: Esc sirf khula DockedBar band karta tha, goto/ignore/format khule rehte the. 66r section 4 assume karta hai Esc ne sab band kiya, isliye pehla ignore click CLOSE kar deta tha (whitespace toggle not found).
+
+FIX (TextView.tsx only, 7+/2-): listener ko window-CAPTURE par register kiya (comment ke stated intent ke mutabiq) + `role="dialog"` guard taaki Modal contract bane rahe. DockedBar sirf Escape rokta hai, isliye Meta+f/g behavior unchanged.
+
+GATE (orchestrator, worktree, port 1891, webkit, --workers=1): tsc 0; run1+run2 12/12 green (66r, textinline-192, textchrome-112, textchrome-89, textdensity-WC, ui-standards, chrome-budget). Pre-existing red ab green.
+
+OWNS: views/TextView.tsx only. NO testid/logic change (listener phase + guard only).
+
+---
