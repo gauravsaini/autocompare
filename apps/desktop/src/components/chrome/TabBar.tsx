@@ -131,12 +131,25 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
   };
 
   return (
+    // Wave-186: overflow-proof strip (BC parity, chrome-only). The tab
+    // chips used to keep intrinsic width (flex min-width:auto), so 3+
+    // long mock titles overflowed the 42% strip and their rects landed
+    // on the toolbar (tabletree-54 / folderfilter-113b / foldernamefilter-63
+    // overlap gate). Now: outer keeps testid/role/sizing, the chips ride
+    // an inner scroll strip with `min-w-0` (shrink-to-fit + ellipsis),
+    // and `tab-new` is pinned OUTSIDE the scroller (shrink-0) so it is
+    // always visible and always contained. No new chrome row, no new
+    // primitive, heights/testids/wiring untouched.
+    // Wave-213: chips keep a 60px floor (pl-2 contract) with the close
+    // `ml-auto` right-pinned, so the close stays inside its chip and tab
+    // centers stay clickable even at 8 tabs (cap raised in ChromeShell).
     <div
       data-testid="tabbar"
       role="tablist"
       aria-label="Open tabs"
-      className={`flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-x-auto bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]${className ? ` ${className}` : ""}`}
+      className={`flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-hidden bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]${className ? ` ${className}` : ""}`}
     >
+      <div className="flex min-w-0 flex-1 items-center gap-[var(--ac-space-1)] overflow-x-auto">
       {visibleTabs.map((tab) => {
         const active = tab.id === activeTabId;
         const dirty = isTabDirty(tab);
@@ -164,11 +177,11 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
             tabIndex={0}
             className={
               active
-                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] px-[var(--ac-space-2)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
-                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] max-w-56 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] px-[var(--ac-space-2)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[60px] max-w-56 shrink cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[60px] max-w-56 shrink cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
             }
           >
-            <span className="truncate">{tab.title}</span>
+            <span className="min-w-0 truncate">{tab.title}</span>
             {dirty && (
               <span
                 data-testid={`tab-dirty-${tab.id}`}
@@ -227,13 +240,21 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
                     e.stopPropagation();
                     requestClose(tab);
                   }}
-                  className="shrink-0"
+                  // Wave-213: px-1 via inline style (className px-1 loses
+                  // to the primitive's px-1.5 in the utilities layer).
+                  // 24px close keeps 8-tab chips' centers clear of the
+                  // button so tab clicks select instead of arming
+                  // close-confirm; hit-area specs pin chip/new-tab, not
+                  // the close affordance.
+                  style={{ paddingInline: "var(--ac-space-1)" }}
+                  className="ml-auto shrink-0"
                 />
               )
             ) : null}
           </div>
         );
       })}
+      </div>
       <ToolbarButton
         data-testid="tab-new"
         label="New tab"

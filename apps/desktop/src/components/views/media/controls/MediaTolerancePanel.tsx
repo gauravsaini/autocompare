@@ -1,34 +1,37 @@
 /**
- * Wave-72: collapsible audio tolerance panel (Beyond Compare style).
- *
- * In-flow collapsible (never `position: absolute`, so the wave-7
- * overlap gate holds with the panel open): open by default in audio
- * mode for backward compat (the wave-48 spec fills the tolerance box
- * on load), toggled from the toolbar or Esc. Purely presentational:
- * tolerance state and the recompute activation live in `MediaView`
- * (wave-48 logic byte-identical). The legacy `mediaview/tolerance`
- * testid rides the same input.
+ * Wave-233: Media audio tolerance panel migrated onto ui/Modal primitive (centered card on scrim,
+ * role=dialog aria-modal, autofocus, Esc+backdrop+close single onClose).
+ * All testids byte-identical (mediaview/tolerance-panel, mediaview/tolerance,
+ * mediaview/tolerance-close).
  */
-import { X } from "lucide-react";
-import { Input, ToolbarButton } from "../../../ui";
+import { Button, Input, Modal } from "../../../ui";
 
 export interface MediaTolerancePanelProps {
+  readonly open?: boolean;
   readonly tolerance: string;
   readonly onToleranceChange: (v: string) => void;
   readonly onRecompare: () => void;
   readonly onClose: () => void;
 }
 
-export default function MediaTolerancePanel(props: MediaTolerancePanelProps): React.JSX.Element {
-  const { tolerance, onToleranceChange, onRecompare, onClose } = props;
+export default function MediaTolerancePanel(props: MediaTolerancePanelProps): React.JSX.Element | null {
+  const { open = true, tolerance, onToleranceChange, onRecompare, onClose } = props;
+
   return (
-    <section data-testid="mediaview/tolerance-panel" className="tv-controls-panel">
-      <div className="flex flex-wrap items-center gap-[var(--ac-space-2)]" role="search" aria-label="audio tolerance">
+    <Modal
+      open={open}
+      onClose={onClose}
+      label="Audio tolerance"
+      testid="mediaview/tolerance-panel"
+      closeTestid="mediaview/tolerance-close"
+      closeAriaLabel="Dismiss tolerance (Esc)"
+    >
+      <div className="flex flex-col gap-3 pt-1">
         <label
           htmlFor="mediaview-tolerance"
-          className="text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
+          className="ac-meta font-normal text-[var(--ac-fg-muted)]"
         >
-          Tolerance
+          Tolerance (decimal threshold for audio diffing)
         </label>
         <Input
           id="mediaview-tolerance"
@@ -45,15 +48,20 @@ export default function MediaTolerancePanel(props: MediaTolerancePanelProps): Re
           placeholder="exact"
           autoComplete="off"
           spellCheck={false}
-          className="w-24 ac-mono"
+          controlSize="sm"
+          className="w-full ac-code"
+          autoFocus
         />
-        <ToolbarButton
-          data-testid="mediaview/tolerance-close"
-          label="Dismiss tolerance (Esc)"
-          onClick={onClose}
-          icon={X}
-        />
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onRecompare}
+          >
+            Recompare
+          </Button>
+        </div>
       </div>
-    </section>
+    </Modal>
   );
 }

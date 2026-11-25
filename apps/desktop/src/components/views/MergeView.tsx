@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { mergeCompareToOutput, mergeTextApply, mergeTextPlanForTriple } from "../../ipc/merge";
 import type { TextConflict, TextResolution } from "../../ipc/merge";
 import { pickSaveDialog } from "../session/useSession";
-import { Button, Input } from "../ui";
+import { Button, EmptyState, InlineNotice, Input } from "../ui";
 import { MergeFindPanel, MergeToolbar } from "./merge/controls";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -1083,8 +1083,8 @@ export default function MergeView({
   }, [conflicts, choices, clearedConflicts, mergeFilter]);
 
   if (status === "loading") return <p>Loading merge plan…</p>;
-  if (status === "error") return <p role="alert">Merge plan failed: {error}</p>;
-  if (status === "empty") return <p>No conflicts — merge is clean.</p>;
+  if (status === "error") return <InlineNotice testid="mergeview/error">Merge plan failed: {error}</InlineNotice>;
+  if (status === "empty") return <EmptyState title="No conflicts — merge is clean." testid="mergeview/empty" />;
 
   const position = count === 0 ? "No conflicts" : `Conflict ${selected + 1} of ${count}`;
   // Wave-70 / Wave-MRG: bottom status bar counts reuse existing merge state:
@@ -1129,6 +1129,7 @@ export default function MergeView({
         }}
         activeId={conflicts[selected]?.id ?? null}
         activePosition={position}
+        activeChoice={conflicts[selected] ? (choices[conflicts[selected].id] ?? null) : null}
         takeActiveDisabled={count === 0}
         onTakeActiveLeft={() => handleTakeRequest("left")}
         onTakeActiveCenter={() => handleTakeRequest("base")}
@@ -1159,18 +1160,33 @@ export default function MergeView({
           fabricated). One flex row: title left, meta right, so the
           pane header stays one compact line and the wave-70 chrome
           budget (firstCardTop <= 140px) holds. */}
-      <div className="grid grid-cols-3 gap-[var(--ac-space-2)] mx-[var(--ac-space-4)] mt-[var(--ac-space-2)] mb-[var(--ac-space-2)]" role="group" aria-label="merge sides">
+      {/* Wave-188: per-pane gutters + thin splitters (BC 3-way truth:
+          every merge pane carries a line-number gutter; panes are split
+          by a 1px rail, not an 8px gap). Each pane keeps its exact
+          title/meta testids and text; the gutter is aria-hidden,
+          1-based within the pane, same mono/line-height as the pre so
+          rows align. Margins tighten 8->4px so the chrome budget gains
+          headroom (toolbar + one-line headers only above the cards). */}
+      <div className="flex items-stretch gap-[var(--ac-space-1)] mx-[var(--ac-space-4)] mt-[var(--ac-space-1)] mb-[var(--ac-space-1)]" role="group" aria-label="merge sides">
         {(
           [
             { key: "left", title: "Left", testid: "merge-pane-left", metaTestid: "mergeview/meta-left", path: leftPath, lines: sideLines.left },
             { key: "base", title: "Base (ancestor)", testid: "merge-pane-base", metaTestid: "mergeview/meta-base", path: base, lines: sideLines.base },
             { key: "right", title: "Right", testid: "merge-pane-right", metaTestid: "mergeview/meta-right", path: rightPath, lines: sideLines.right },
           ] as const
-        ).map((pane) => {
+        ).map((pane, paneIndex) => {
           const name = baseNameOf(pane.path);
           const meta = name === "" ? linesMeta(pane.lines.length) : `${name} · ${linesMeta(pane.lines.length)}`;
           const dropSide = pane.key as MergeDropSide;
           return (
+          <Fragment key={pane.key}>
+          {paneIndex > 0 && (
+            <div
+              aria-hidden="true"
+              data-testid={`merge-splitter-${pane.key}`}
+              className="mv-splitter"
+            />
+          )}
           <div
             key={pane.key}
             data-testid={pane.testid}
@@ -1197,16 +1213,33 @@ export default function MergeView({
               if (dropped) handleMergePaneDrop(dropSide, dropped);
             }}
             style={dropActive === dropSide ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-2px" } : undefined}
-            className="mv-pane rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]"
+            className="mv-pane min-w-0 flex-1 rounded-lg border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)]"
           >
             <div className="flex items-baseline justify-between gap-[var(--ac-space-2)] mb-[var(--ac-space-1)]">
               <p className="ac-mono text-[length:var(--ac-font-size-code)] font-semibold leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">{pane.title}</p>
               <p data-testid={pane.metaTestid} title={pane.path === "" ? undefined : pane.path} className="ac-mono truncate text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">{meta}</p>
             </div>
-            <pre className="whitespace-pre-wrap rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] p-[var(--ac-space-2)] font-normal text-[var(--ac-fg)]">
-              {pane.lines.length > 0 ? pane.lines.join("\n") : "(no lines)"}
-            </pre>
+            <div className="flex items-stretch rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] p-[var(--ac-space-2)]">
+              <span
+                aria-hidden="true"
+                data-testid={`merge-pane-gutter-${pane.key}`}
+                title={`${pane.title} pane: line numbers within this pane (1-based)`}
+                className="ac-mono shrink-0 border-r border-[var(--ac-border-subtle)] pr-[var(--ac-space-1)] mr-[var(--ac-space-2)] text-right text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)] select-none"
+              >
+                {pane.lines.length === 0 ? (
+                  <span className="block">·</span>
+                ) : (
+                  pane.lines.map((_, i) => (
+                    <span key={i} className="block">{i + 1}</span>
+                  ))
+                )}
+              </span>
+              <pre className="whitespace-pre-wrap flex-1 min-w-0 font-normal text-[var(--ac-fg)]">
+                {pane.lines.length > 0 ? pane.lines.join("\n") : "(no lines)"}
+              </pre>
+            </div>
           </div>
+          </Fragment>
           );
         })}
       </div>
@@ -1214,17 +1247,14 @@ export default function MergeView({
           drop (null otherwise), so the wave-70 chrome budget (first card
           top <= 140px) and every legacy testid stay untouched. */}
       {dropNote !== null && (
-        <p
-          data-testid="merge-drop-note"
-          role="status"
-          className="mx-[var(--ac-space-4)] mt-[var(--ac-space-2)] rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]"
-        >
+        <InlineNotice testid="merge-drop-note">
           {dropNote}
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-147: BC overview-ruler parity. The cards ride a flex row
-          with a far-right in-flow rail (zero vertical chrome: no new
-          stacked rows, firstCardTop untouched). One marker per
+          with a far-LEFT in-flow rail (wave-196: right edge -> far-left
+          `order-first`, 4px; zero vertical chrome: no new stacked rows,
+          firstCardTop untouched). One marker per
           conflict, positioned by ordinal fraction (text-79 idiom);
           clicking jumps through the existing selectConflict path (no
           new IPC). Marker ink reuses the existing chg/accent tokens. */}
@@ -1236,12 +1266,10 @@ export default function MergeView({
             8px rhythm with zero collapse surprise. */}
         <div className="flex min-w-0 flex-1 flex-col gap-[var(--ac-space-2)]">
         {visibleConflicts.length === 0 && (
-          <p
-            data-testid="merge-filter-empty"
-            className="mx-[var(--ac-space-4)] p-[var(--ac-space-3)] rounded border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] ac-meta text-[var(--ac-fg-muted)]"
-          >
-            No conflicts match view filter &ldquo;{mergeFilter}&rdquo;.
-          </p>
+          <EmptyState
+            title={`No conflicts match view filter \u201C${mergeFilter}\u201D.`}
+            testid="merge-filter-empty"
+          />
         )}
         {visibleConflicts.map((c, index) => {
         const chosen = choices[c.id];
@@ -1289,7 +1317,7 @@ export default function MergeView({
               cardRefs.current.set(c.id, el);
             }}
             onClick={() => setSelected(index)}
-            className={`mv-conflict mv-rail mx-[var(--ac-space-4)] rounded-lg border bg-[var(--ac-bg-raised)] p-[var(--ac-space-4)] shadow-xs ${active ? "border-[var(--ac-accent)]" : "border-[var(--ac-border)]"}`}
+            className={`mv-conflict mv-rail mx-[var(--ac-space-4)] rounded-lg border bg-[var(--ac-bg-raised)] p-[var(--ac-space-3)] shadow-xs ${active ? "border-[var(--ac-accent)]" : "border-[var(--ac-border)]"}`}
           >
             <div className="flex items-baseline justify-between gap-[var(--ac-space-2)] mb-[var(--ac-space-2)]">
               <p className="ac-mono text-[length:var(--ac-font-size-code)] font-semibold leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg)]">conflict {c.id}</p>
@@ -1402,9 +1430,9 @@ export default function MergeView({
               </Button>
             </div>
             {bothNotes[c.id] !== undefined && (
-              <p data-testid={`merge-take-both-note-${c.id}`} className="mt-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]">
+              <InlineNotice testid={`merge-take-both-note-${c.id}`}>
                 {bothNotes[c.id]}
-              </p>
+              </InlineNotice>
             )}
           </article>
         );
@@ -1415,7 +1443,7 @@ export default function MergeView({
             data-testid="mergeview/overview-ruler"
             role="navigation"
             aria-label={`Overview: ${count} ${count === 1 ? "conflict" : "conflicts"} — activate a marker to jump`}
-            className="relative w-[var(--ac-space-2)] shrink-0 self-stretch rounded bg-[var(--ac-ruler-track)]"
+            className="relative order-first w-[4px] shrink-0 self-stretch rounded bg-[var(--ac-ruler-track)]"
           >
             {conflicts.map((c, index) => {
               const top = (index / count) * 100;
@@ -1468,6 +1496,7 @@ export default function MergeView({
         <Input
           id="merge-out-path"
           data-testid="merge-out-path"
+          controlSize="sm"
           value={outPath}
           onChange={(event) => setOutPath(event.target.value)}
           placeholder="/tmp/merge-12-out.txt"
@@ -1475,6 +1504,7 @@ export default function MergeView({
         />
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-out-browse"
           aria-label="Browse for output path (Save As)"
           title="Browse for output path (native Save dialog; typed path still works when no dialog is available)"
@@ -1496,6 +1526,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="primary"
+          size="sm"
           data-testid="merge-apply"
           onClick={() => void apply()}
           disabled={applying}
@@ -1504,6 +1535,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-compare-output-left"
           data-disabled-reason={compareLeftDisabledReason ?? undefined}
           disabled={compareLeftDisabledReason !== null || comparingOutput !== null}
@@ -1515,6 +1547,7 @@ export default function MergeView({
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="merge-compare-output-right"
           data-disabled-reason={compareRightDisabledReason ?? undefined}
           disabled={compareRightDisabledReason !== null || comparingOutput !== null}
@@ -1526,12 +1559,12 @@ export default function MergeView({
         </Button>
       </div>
       {compareOutputReport !== null && (
-        <p data-testid="merge-compare-output-report" className="ac-meta font-normal px-4 py-1 text-[var(--ac-fg)]">
+        <InlineNotice testid="merge-compare-output-report">
           <span data-testid="merge-compare-to-output-report" className="sr-only" aria-hidden="true" />
           {compareOutputReport}
-        </p>
+        </InlineNotice>
       )}
-      {report !== null && <p data-testid="merge-apply-report" className="ac-meta font-normal px-4 py-2 text-[var(--ac-fg)]">{report}</p>}
+      {report !== null && <InlineNotice testid="merge-apply-report">{report}</InlineNotice>}
       {/* Wave-70: counts live in the bottom status bar (BC truth:
           counts in the status bar). Legacy `merge-conflict-count`
           testid rides the same string so wave-12/22/45 specs keep

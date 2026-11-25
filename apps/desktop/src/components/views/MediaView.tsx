@@ -7,6 +7,7 @@ import {
   type PictureSummary,
 } from "../../ipc/media";
 import { MediaTolerancePanel, MediaToolbar } from "./media/controls";
+import { EmptyState, InlineNotice } from "../ui";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 
@@ -106,9 +107,16 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
     };
     window.addEventListener("autocompare:view-command", onBusCmd);
     window.addEventListener("autocompare:view-filter", onViewFilter);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        setToleranceOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("autocompare:view-command", onBusCmd);
       window.removeEventListener("autocompare:view-filter", onViewFilter);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
 
@@ -212,9 +220,7 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
         />
       )}
       {status === "empty" && (
-        <p data-testid="mediaview/empty" className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          Pick two files to compare (picture or audio) — needs two paths.
-        </p>
+        <EmptyState title="Pick two files to compare (picture or audio) — needs two paths." testid="mediaview/empty" />
       )}
       {status === "loading" && (
         <p data-testid="mediaview/status" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
@@ -222,21 +228,28 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
         </p>
       )}
       {status === "error" && (
-        <p data-testid="mediaview/error" role="alert" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg)]">
+        <InlineNotice testid="mediaview/error">
           {error ?? "media compare failed"}
-        </p>
+        </InlineNotice>
       )}
       {status === "ready" && picture !== null && (
         <div data-testid="mediaview/summary" className="flex flex-col gap-[var(--ac-space-2)] px-[var(--ac-space-4)] py-[var(--ac-space-3)]">
           <p data-testid="mediaview/score" className="ac-chrome-label font-medium text-[var(--ac-fg)]">
             {picture.identical ? "Identical pictures" : `${pct(picture.score)} equal`} — {picture.differingBytes} / {picture.totalBytes} bytes differ
           </p>
-          <p className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-            <span data-testid="mediaview/meta-left" title={leftPath}>
+          {/* Wave-185: two-pane meta (BC Picture Compare pane-header echo:
+              one pane per file, path in `title`, basename + honest scalar
+              dims in words). Single flex line, no new chrome rows; testids,
+              titles and words byte-identical so 147/154 pins hold. */}
+          <p className="mw-row flex flex-nowrap items-baseline gap-x-[var(--ac-space-4)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+            <span data-testid="mediaview/meta-left" title={leftPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Left</span>
+              {" · "}
               {baseName(leftPath)} · {picture.widthL}×{picture.heightL} ({picture.sizeL} bytes, {picture.format})
-            </span>{" "}
-            ·{" "}
-            <span data-testid="mediaview/meta-right" title={rightPath}>
+            </span>
+            <span data-testid="mediaview/meta-right" title={rightPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Right</span>
+              {" · "}
               {baseName(rightPath)} · {picture.widthR}×{picture.heightR} ({picture.sizeR} bytes)
             </span>
             {picture.truncated ? " · samples truncated" : ""}
@@ -249,11 +262,11 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
                   data-testid="mediaview/row"
                   className="mw-row flex items-center gap-[var(--ac-space-2)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
                 >
-                  <span>offset {s.offset}</span>
+                  <span className="font-medium">offset {s.offset}</span>
                   <span className="inline-flex items-center gap-[var(--ac-space-1)]">
-                    <span>{s.left}</span>
+                    <span className="font-medium text-[var(--ac-fg)]">{s.left}</span>
                     <ArrowRight size={12} aria-hidden="true" />
-                    <span>{s.right}</span>
+                    <span className="font-medium text-[var(--ac-fg)]">{s.right}</span>
                   </span>
                 </div>
               ))}
@@ -266,9 +279,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
               ONLY when the rows block is absent, so row counts and
               chrome are untouched. */}
           {picture.samples.length === 0 && (
-            <p data-testid="mediaview/empty-rows" className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-              {picture.identical ? "No differences — files are identical." : "No diff samples within the summary cap."}
-            </p>
+            <EmptyState
+              title={picture.identical ? "No differences — files are identical." : "No diff samples within the summary cap."}
+              testid="mediaview/empty-rows"
+            />
           )}
         </div>
       )}
@@ -278,12 +292,15 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
             {audio.identical ? "Identical audio" : `${pct(audio.score)} equal`} — {audio.windowsDiffering} / {audio.windowsTotal} windows differ
             {audio.firstDiffAt !== null ? `, first at ${audio.firstDiffAt.toFixed(2)}s` : ""}
           </p>
-          <p className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-            <span data-testid="mediaview/meta-left" title={leftPath}>
+          <p className="mw-row flex flex-nowrap items-baseline gap-x-[var(--ac-space-4)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+            <span data-testid="mediaview/meta-left" title={leftPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Left</span>
+              {" · "}
               {baseName(leftPath)} · {audio.sampleRateL}Hz×{audio.channelsL} {audio.durationL.toFixed(2)}s
-            </span>{" "}
-            ·{" "}
-            <span data-testid="mediaview/meta-right" title={rightPath}>
+            </span>
+            <span data-testid="mediaview/meta-right" title={rightPath} className="min-w-0 flex-1 truncate">
+              <span aria-hidden="true" className="ac-chrome-label font-medium text-[var(--ac-fg)]">Right</span>
+              {" · "}
               {baseName(rightPath)} · {audio.sampleRateR}Hz×{audio.channelsR} {audio.durationR.toFixed(2)}s
             </span>
             {audio.configMismatch ? " · config mismatch" : ""}
@@ -297,7 +314,7 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
                   data-testid="mediaview/row"
                   className="mw-row flex items-center gap-[var(--ac-space-2)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]"
                 >
-                  <span>window {w.window}</span>
+                  <span className="font-medium">window {w.window}</span>
                   <span>@{w.atSeconds.toFixed(2)}s</span>
                 </div>
               ))}
@@ -305,9 +322,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
           )}
           {/* Wave-147: audio diff empty state (picture twin above). */}
           {audio.diffWindows.length === 0 && (
-            <p data-testid="mediaview/empty-rows" className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-              {audio.identical ? "No differences — files are identical." : "No diff windows within the summary cap."}
-            </p>
+            <EmptyState
+              title={audio.identical ? "No differences — files are identical." : "No diff windows within the summary cap."}
+              testid="mediaview/empty-rows"
+            />
           )}
         </div>
       )}
@@ -317,14 +335,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
           samples / 3 audio windows) never hit it and wave-48/72/103 specs
           hold byte-identical. Same in-flow line, no new chrome rows. */}
       {status === "ready" && picture !== null && (picture.identical || picture.samples.length === 0) && (
-        <p data-testid="mediaview/empty-diff" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          no differing samples — files identical
-        </p>
+        <EmptyState title="no differing samples — files identical" testid="mediaview/empty-diff" />
       )}
       {status === "ready" && audio !== null && (audio.identical || audio.diffWindows.length === 0) && (
-        <p data-testid="mediaview/empty-diff" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          no differing windows — files identical
-        </p>
+        <EmptyState title="no differing windows — files identical" testid="mediaview/empty-diff" />
       )}
       {/* Wave-72 bottom status bar (Beyond Compare style). Honest scope:
           reuses the existing ready summary state only -- "same" when the

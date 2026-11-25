@@ -27,8 +27,17 @@
  * honestly where the command does not apply (see contract table).
  */
 
-/** Bus-routed nav/copy/swap commands (top bar + TextToolbar share them). */
-export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
+/** Bus-routed nav/copy/swap/merge commands (top bar + TextToolbar + menus share them). */
+export type ViewCommand =
+  | "prev"
+  | "next"
+  | "copy"
+  | "copy-right"
+  | "swap"
+  | "merge"
+  | "take-left"
+  | "take-right"
+  | "take-both";
 
 /** Bus-routed view filters (top bar All/Diffs/Same/Context). */
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";

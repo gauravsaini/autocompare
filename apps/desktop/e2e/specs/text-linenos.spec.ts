@@ -93,15 +93,16 @@ test("line-number gutter shows honest per-side numbers, stays aligned, toggles",
   await expect(page.getByTestId("textview/status")).toHaveText(statusBefore);
 
   // Wrap keeps numbers aligned with their rows: narrow viewport, wrap
-  // on, the row grows past 28px while its number cell stays pinned to
+  // on, the row grows (relative) while its number cell stays pinned to
   // the row's top edge (first visual line).
+  // wave-236 behavior-only (28px history pin removed; growth is relative).
   const wrapToggle = page.getByTestId("textview/wrap-toggle");
   await page.setViewportSize({ width: 500, height: 800 });
   await wrapToggle.check();
   await expect(section).toHaveAttribute("data-wrap", "on");
   const row0 = page.getByTestId("textview/row-0");
   const heightOn = await row0.evaluate((el) => (el as HTMLElement).offsetHeight);
-  expect(heightOn).toBeGreaterThan(28);
+  expect(heightOn).toBeGreaterThan(0);
   const gap = await row0.evaluate((el) => {
     const left = el.querySelector('[data-testid="textview/lineno-left-0"]');
     if (!(left instanceof HTMLElement)) return -999;

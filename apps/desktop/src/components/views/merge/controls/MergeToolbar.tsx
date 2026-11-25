@@ -12,7 +12,7 @@
  * text-arrow glyphs); labels and testids unchanged.
  */
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
-import { Button, DotButton, StatusText, ToolbarButton } from "../../../ui";
+import { Button, DotButton, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface MergeToolbarProps {
   readonly position: string;
@@ -43,10 +43,12 @@ export interface MergeToolbarProps {
   readonly onTakeActiveCenter?: () => void;
   readonly onTakeActiveRight?: () => void;
   readonly takeActiveDisabled?: boolean;
+  /** Active conflict resolution choice ("left" | "right" | "base" | null) */
+  readonly activeChoice?: "base" | "left" | "right" | "bothLeftFirst" | "bothRightFirst" | null;
 }
 
 export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Element {
-  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId, activeId, activePosition, onTakeActiveLeft, onTakeActiveCenter, onTakeActiveRight, takeActiveDisabled } = props;
+  const { position, onPrev, onNext, onTakeAllLeft, onTakeAllRight, takeAllNote, findOpen, onToggleFind, conflictIds, selectedId, onSelectId, activeId, activePosition, onTakeActiveLeft, onTakeActiveCenter, onTakeActiveRight, takeActiveDisabled, activeChoice } = props;
   const showActiveTakes = onTakeActiveLeft !== undefined || onTakeActiveCenter !== undefined || onTakeActiveRight !== undefined;
   const activeDisabled = takeActiveDisabled === true || activeId === null || activeId === undefined;
   return (
@@ -56,12 +58,18 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       data-testid="mergeview/toolbar"
       className="tv-controls-bar"
     >
-      <Button size="sm" data-testid="merge-prev" onClick={onPrev}>
-        <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Prev conflict
-      </Button>
-      <Button size="sm" data-testid="merge-next" onClick={onNext}>
-        Next conflict <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
-      </Button>
+      {/* Wave-239: conflict nav rides the shared UnifiedNavCluster (Button chrome, same testids). */}
+      <UnifiedNavCluster
+        variant="button"
+        prevTestid="merge-prev"
+        nextTestid="merge-next"
+        prevLabel="Prev conflict"
+        nextLabel="Next conflict"
+        prevIcon={ChevronLeft}
+        nextIcon={ChevronRight}
+        onPrev={onPrev}
+        onNext={onNext}
+      />
       <StatusText data-testid="merge-conflict-position">
         {position}
       </StatusText>
@@ -75,7 +83,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           data-testid="merge-overview"
           role="group"
           aria-label="conflict overview"
-          className="inline-flex items-center gap-[var(--ac-space-1)]"
+          className="ac-control-group--tight"
         >
           {(conflictIds ?? []).map((id) => {
             const active = selectedId === id;
@@ -95,10 +103,10 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <Button size="sm" data-testid="merge-take-all-left" onClick={onTakeAllLeft}>
-        <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take all left
+        <ChevronsLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take All Left
       </Button>
       <Button size="sm" data-testid="merge-take-all-right" onClick={onTakeAllRight}>
-        Take all right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
+        Take All Right <ChevronsRight size={14} strokeWidth={1.75} aria-hidden="true" />
       </Button>
       {takeAllNote === null ? null : (
         <StatusText
@@ -128,27 +136,33 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
           <Button
             size="sm"
             data-testid="merge-take-active-left"
+            aria-pressed={activeChoice === "left"}
             onClick={onTakeActiveLeft}
             disabled={activeDisabled || onTakeActiveLeft === undefined}
             title="Take Left for the active conflict"
+            className={activeChoice === "left" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" /> Take Left
           </Button>
           <Button
             size="sm"
             data-testid="merge-take-active-center"
+            aria-pressed={activeChoice === "base"}
             onClick={onTakeActiveCenter}
             disabled={activeDisabled || onTakeActiveCenter === undefined}
             title="Take Center (common ancestor) for the active conflict"
+            className={activeChoice === "base" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             Take Center
           </Button>
           <Button
             size="sm"
             data-testid="merge-take-active-right"
+            aria-pressed={activeChoice === "right"}
             onClick={onTakeActiveRight}
             disabled={activeDisabled || onTakeActiveRight === undefined}
             title="Take Right for the active conflict"
+            className={activeChoice === "right" ? "aria-pressed:border-[var(--ac-accent)] aria-pressed:bg-[var(--ac-selection-bg)] aria-pressed:text-[var(--ac-selection-fg)]" : ""}
           >
             Take Right <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
           </Button>
@@ -157,6 +171,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
         data-testid="mergeview/toolbar-find"
+        size="sm"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in merge (Ctrl+F)"
         expanded={findOpen}
@@ -165,7 +180,7 @@ export default function MergeToolbar(props: MergeToolbarProps): React.JSX.Elemen
       >
         <span>Find</span>
       </ToolbarButton>
-      <StatusText className="inline-flex items-center gap-[var(--ac-space-1)]">
+      <StatusText className="ac-control-group--tight">
         (keys: j/k, n/p, <ArrowUp size={14} strokeWidth={1.75} aria-hidden="true" />/<ArrowDown size={14} strokeWidth={1.75} aria-hidden="true" />)
       </StatusText>
     </div>

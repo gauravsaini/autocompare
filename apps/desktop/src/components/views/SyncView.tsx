@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Trash2 } from "lucide-react";
 import { syncApply, syncPlan, type SyncDirection, type SyncPlan, type SyncStep } from "../../ipc/sync";
+import { Button, EmptyState, InlineNotice } from "../ui";
 import { SyncNamePanel, SyncToolbar } from "./sync/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -119,6 +120,8 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
   // session). List-only until apply: `runApply` sends the included
   // subset, so dry-run/real counts stay honest.
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
+  // Wave-228: diff selection cursor for prev/next ViewCommandBus stepping.
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   // Wave-73: collapsible name-filter panel (BC Folder Sync style).
   // Boots open for backward compat (the wave-64 filter box stays visible
   // on load, mirroring folder-67B/media-72); an effect below reopens it
@@ -146,6 +149,7 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
     setReceipt(null);
     if (pathsChanged) setNameQuery("");
     if (pathsChanged) setExcluded(new Set());
+    if (pathsChanged) setSelectedPath(null);
     if (pathsChanged) setStepFilter("all");
     // Defaults (left-wins, no prune) send NO opts: byte-identical IPC to
     // the pre-66N wire. Anything else sends explicit opts.
@@ -292,24 +296,6 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
     (window as unknown as Record<string, unknown>)["__SYNC_FILTER_LAST__"] = stepFilter;
   }, [stepFilter]);
 
-  /* Wave-180: `autocompare:view-command` bus (unified top Toolbar
-     parity). Sync owns no command: plan steps have no section cursor
-     (prev/next no-op), copy stages text hunks only, swap is App-owned
-     (props reload). The toolbar parks those buttons, so this never
-     fires by click — the kind-scoped listener exists so a
-     bus/programmatic dispatch can never crash the view. Never throws. */
-  useEffect(() => {
-    const onBusCmd = (e: Event): void => {
-      const detail = (e as CustomEvent<{ viewKind?: unknown }>).detail;
-      const kind = detail?.viewKind;
-      if (typeof kind === "string" && kind !== "" && kind !== "sync") return;
-    };
-    window.addEventListener("autocompare:view-command", onBusCmd);
-    return () => {
-      window.removeEventListener("autocompare:view-command", onBusCmd);
-    };
-  }, []);
-
   /* Wave-73: an active filter is never hidden by default -- if a filter
      value lands while the panel is collapsed (e.g. kept across a
      direction/prune re-plan after the user collapsed it), reopen. */
@@ -325,6 +311,51 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
   const nameNeedle = nameQuery.trim().toLowerCase();
   const visibleSteps =
     nameNeedle === "" ? stepFiltered : stepFiltered.filter((s) => s.rel_path.toLowerCase().includes(nameNeedle));
+
+  const stepDiffRef = useRef<((dir: 1 | -1) => void) | null>(null);
+  stepDiffRef.current = (dir: 1 | -1) => {
+    if (visibleSteps.length === 0) return;
+    const currentIdx = selectedPath ? visibleSteps.findIndex((s) => s.rel_path === selectedPath) : -1;
+    let nextIdx: number;
+    if (currentIdx === -1) {
+      nextIdx = dir === 1 ? 0 : visibleSteps.length - 1;
+    } else {
+      nextIdx = Math.min(visibleSteps.length - 1, Math.max(0, currentIdx + dir));
+    }
+    const next = visibleSteps[nextIdx];
+    if (next) {
+      setSelectedPath(next.rel_path);
+      const el =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? document.querySelector(`[data-path="${CSS.escape(next.rel_path)}"]`)
+          : null;
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ block: "nearest" });
+      }
+    }
+  };
+
+  /* Wave-180 / Wave-228: `autocompare:view-command` bus (unified top Toolbar
+     parity). Connects to ViewCommandBus: prev/next step through the
+     planned diff steps without crashing. Kind-scoped so other view
+     commands do not leak. Never throws. */
+  useEffect(() => {
+    const onBusCmd = (e: Event): void => {
+      const detail = (e as CustomEvent<{ cmd?: unknown; viewKind?: unknown }>).detail;
+      const kind = detail?.viewKind;
+      if (typeof kind === "string" && kind !== "" && kind !== "sync") return;
+      const cmd = detail?.cmd;
+      if (cmd === "prev") {
+        stepDiffRef.current?.(-1);
+      } else if (cmd === "next") {
+        stepDiffRef.current?.(1);
+      }
+    };
+    window.addEventListener("autocompare:view-command", onBusCmd);
+    return () => {
+      window.removeEventListener("autocompare:view-command", onBusCmd);
+    };
+  }, []);
   // Agent-SYNC honest counts: apply runs the included subset only, so
   // the preview counts below (and the dry-run line) are computed over
   // included steps, never the raw plan.
@@ -363,14 +394,20 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
         </p>
       )}
       {status === "error" && (
-        <p data-testid="syncview/error" role="alert" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg)]">
+        <InlineNotice testid="syncview/error">
           {error ?? "sync plan failed"}
-        </p>
+        </InlineNotice>
       )}
-      {status === "empty" && (
-        <p data-testid="syncview/empty" className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          {leftPath === "" || rightPath === "" ? "Pick two folders to sync — needs two paths." : "Folders are in sync — no steps planned."}
-        </p>
+      {status === "empty" && (leftPath === "" || rightPath === "") && (
+        <div
+          data-testid="workspace/blank-empty"
+          className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-8 py-16 text-center"
+        >
+          <EmptyState title="Pick two folders to sync — needs two paths." testid="syncview/empty" />
+        </div>
+      )}
+      {status === "empty" && leftPath !== "" && rightPath !== "" && (
+        <EmptyState title="Folders are in sync — no steps planned." testid="syncview/empty" />
       )}
       {(status === "ready" || status === "empty") && plan !== null && (
         <>
@@ -400,6 +437,10 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
             disabledReason={applyDisabledReason}
             onDry={() => void runApply(true)}
             onReal={() => void runApply(false)}
+            onBusCommand={(cmd) => {
+              if (cmd === "prev") stepDiffRef.current?.(-1);
+              else if (cmd === "next") stepDiffRef.current?.(1);
+            }}
           />
           <p data-testid="syncview/totals" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
             {excluded.size === 0
@@ -407,13 +448,13 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
               : `${includedSteps.length} of ${steps.length} steps included (${copies} copies, ${deletes} deletes, ${excluded.size} excluded)`}
             {plan.truncated ? " — truncated" : ""}
           </p>
-          <p data-testid="syncview/mode-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+          <InlineNotice testid="syncview/mode-note">
             direction: {directionLabel(direction)} &middot; prune: {prune ? "on" : "off"} &middot; mode: {bcModeName(direction, prune)}{stepFilter !== "all" ? ` \u00b7 filter: ${stepFilter}` : ""}
-          </p>
+          </InlineNotice>
           {receipt !== null && (
-            <p data-testid="syncview/receipt" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="syncview/receipt">
               {receipt}
-            </p>
+            </InlineNotice>
           )}
           <SyncNamePanel
             open={filterOpen}
@@ -422,18 +463,16 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
             onClose={closeNamePanel}
           />
           {nameNeedle !== "" && (
-            <p data-testid="syncview/name-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="syncview/name-note">
               {visibleSteps.length} of {steps.length} steps match &ldquo;{nameQuery.trim()}&rdquo; — list only, apply runs the full plan.
-            </p>
+            </InlineNotice>
           )}
           <div data-testid="syncview/list" data-filter={stepFilter}>
             {visibleSteps.length === 0 && stepFilter === "same" && (
-              <p
-                data-testid="syncview/filter-empty"
-                className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-              >
-                No sync steps match view filter &ldquo;same&rdquo; &mdash; sync plan only contains differences to reconcile.
-              </p>
+              <EmptyState
+                title={`No sync steps match view filter \u201C${stepFilter}\u201D — sync plan only contains differences to reconcile.`}
+                testid="syncview/filter-empty"
+              />
             )}
             {visibleSteps.map((step, index) => {
               const glyph = actionGlyph(step.action);
@@ -455,7 +494,9 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
                   data-side={side}
                   data-bracket="single"
                   data-included={included ? "true" : "false"}
-                  className={`sv-row fv-cell-empty fv-rail font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]${included ? "" : " opacity-50"}`}
+                  data-selected={selectedPath === step.rel_path ? "true" : "false"}
+                  onClick={() => setSelectedPath(step.rel_path)}
+                  className={`sv-row fv-cell-empty fv-rail font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]${included ? "" : " opacity-50"}${selectedPath === step.rel_path ? " is-selected" : ""}`}
                 >
                   <div
                     style={sidePlace}
@@ -479,24 +520,32 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
                     <span className="min-w-0 flex-1 truncate" title={step.rel_path}>
                       {step.rel_path}
                     </span>
-                    <span
-                      data-testid="syncview/row-action"
-                      data-action={step.action}
-                      className="text-[var(--ac-fg-muted)]"
-                    >
-                      [{actionLabel(step.action)}]
+                    {/* Wave-185: right-pinned action cluster (BC Folder Sync
+                        center-action-column echo). The badge + include toggle
+                        ride one nowrap group at the row end so narrow windows
+                        keep them together on the row line (uniform-height
+                        gate); testids/aria/words byte-identical. */}
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-[var(--ac-space-2)]">
+                      <span
+                        data-testid="syncview/row-action"
+                        data-action={step.action}
+                        className="whitespace-nowrap text-[var(--ac-fg-muted)]"
+                      >
+                        [{actionLabel(step.action)}]
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`sync-include-${index}`}
+                        aria-pressed={included}
+                        aria-label={`${included ? "Exclude" : "Include"} ${step.rel_path} ${included ? "from" : "in"} apply`}
+                        title={included ? "Exclude from apply (preview keeps it listed)" : "Include in apply"}
+                        onClick={() => toggleInclude(step.rel_path)}
+                      >
+                        {included ? "Exclude" : "Include"}
+                      </Button>
                     </span>
-                    <button
-                      type="button"
-                      data-testid={`sync-include-${index}`}
-                      aria-pressed={included}
-                      aria-label={`${included ? "Exclude" : "Include"} ${step.rel_path} ${included ? "from" : "in"} apply`}
-                      title={included ? "Exclude from apply (preview keeps it listed)" : "Include in apply"}
-                      onClick={() => toggleInclude(step.rel_path)}
-                      className="shrink-0 underline text-[var(--ac-fg-muted)]"
-                    >
-                      {included ? "Exclude" : "Include"}
-                    </button>
                   </div>
                 </div>
               );

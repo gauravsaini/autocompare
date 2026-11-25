@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit } from "../../ipc/table";
-import { Button, Checkbox, Input, Select } from "../ui";
+import { Button, Checkbox, EmptyState, InlineNotice, Input, Select, StatusText } from "../ui";
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -161,6 +161,15 @@ import type { ViewPaths } from "./types";
  *   walks the filtered visible order via the existing toolbar route
  *   (`stepDiff`); the status bar keeps the FULL-table summary totals.
  *   All legacy testids byte-identical.
+ *
+ * Wave-183 (BC Table parity batch, TableView-only): closed visual
+ * loop against the BC Data Compare truth - row-level diff wash
+ * (`tr.tc-drow` tints the whole diff row, changed cells keep the
+ * full `.tc-diff` wash), current diff-nav cursor (`tc-dcur` +
+ * `data-current-diff`), BC column-letter prefix + persistent sort
+ * glyph in every header (display-only; sort/export/aria keep bare
+ * names), and sticky headers in the non-virtualized branch. No new
+ * chrome rows, no palette (existing del tokens).
  */
 
 const ROW_PAGE = 100;
@@ -555,9 +564,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   const sameCount = visibleRowOrder.length - diffRows.length;
   // Wave-69: FULL-table totals from the summary for the status bar
   // (null on old backends => fall back to the loaded scope above).
-  const shownDiffs = totalDiffRows ?? diffRows.length;
+  // When column mapping is active, backend summary totals reflect positional
+  // comparison, so fall back to loaded mapped diffs.
+  const isMapped = mappedPairs() > 0;
+  const shownDiffs = totalDiffRows !== null && !isMapped ? totalDiffRows : diffRows.length;
   const shownSame =
-    totalDiffRows === null || grid === null
+    totalDiffRows === null || grid === null || isMapped
       ? sameCount
       : Math.max(grid.totalRows - totalDiffRows, 0);
   const safeDiffPos = diffRows.length === 0 ? -1 : diffPos % diffRows.length;
@@ -774,7 +786,12 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         for (let c = 0; c < row.length; c += 1) {
           // Wave 32: find skips hidden columns (data stays loaded, just
           // not searched); the inline note keeps this honest.
-          if (hiddenCols.has(c)) continue;
+          if (side === "left") {
+            if (hiddenCols.has(c)) continue;
+          } else {
+            const dispCol = cols.find((dc) => mapR(dc) === c);
+            if (dispCol !== undefined && hiddenCols.has(dispCol)) continue;
+          }
           if (findCellMatches(row[c], query)) {
             if (out.length >= 100) return out;
             out.push({ side, row: r, col: c, value: row[c] });
@@ -821,7 +838,13 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       if (list.length === 0) list = localScan(query);
       // Wave 32: IPC knows nothing about visibility (no new IPC params),
       // so hits landing on hidden columns are filtered client-side.
-      if (hiddenCols.size > 0) list = list.filter((h) => !hiddenCols.has(h.col));
+      if (hiddenCols.size > 0) {
+        list = list.filter((h) => {
+          if (h.side === "left") return !hiddenCols.has(h.col);
+          const dispCol = cols.find((dc) => mapR(dc) === h.col);
+          return dispCol === undefined || !hiddenCols.has(dispCol);
+        });
+      }
       setHits(list.slice(0, 100));
       setHitPos(0);
     } finally {
@@ -852,8 +875,8 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           : `Hit ${hitPos + 1} of ${hits.length}`;
 
   if (status === "loading") return <p>Loading table comparison…</p>;
-  if (status === "error") return <p role="alert">Table compare failed: {error}</p>;
-  if (status === "empty" || grid === null) return <p>No cells to display.</p>;
+  if (status === "error") return <InlineNotice testid="tableview/error">Table compare failed: {error}</InlineNotice>;
+  if (status === "empty" || grid === null) return <EmptyState title="No cells to display." testid="tableview/empty" />;
 
   /**
    * Wave-68: loaded-scope difference rows for prev/next nav. Same
@@ -986,7 +1009,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // widths on data cols) pins the equal split per pane so both grids
   // divide the row identically even when cell content differs.
   const CELL_BASE =
-    "tc-cell px-[var(--ac-space-2)] py-0 ac-mono font-normal tabular-nums whitespace-nowrap overflow-hidden text-ellipsis";
+    "tc-cell px-[var(--ac-space-2)] py-0 ac-mono font-normal tabular-nums whitespace-nowrap overflow-hidden text-ellipsis border-b border-[var(--ac-border-subtle)] border-r border-[var(--ac-border-subtle)]";
   const TABLE_CLASS =
     "w-full border-collapse table-fixed ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)]";
 
@@ -1068,8 +1091,9 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   // reference) so `table-fixed` keeps the number column narrow and
   // data columns share the rest identically on both panes.
   const ROW_NUM_CLASS =
-    "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)] overflow-hidden px-[var(--ac-space-2)] py-0 text-right ac-mono tabular-nums whitespace-nowrap text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]";
-  const ROW_NUM_HEAD_CLASS = "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)]";
+    "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)] overflow-hidden px-[var(--ac-space-2)] py-0 text-right ac-mono tabular-nums whitespace-nowrap text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] border-r border-[var(--ac-border-subtle)]";
+  const ROW_NUM_HEAD_CLASS =
+    "w-[var(--ac-gutter-w)] max-w-[var(--ac-gutter-w)] border-b border-[var(--ac-border)] border-r border-[var(--ac-border-subtle)]";
 
   /**
    * Wave-160: explicit column widths for the `table-fixed` grids. The
@@ -1092,11 +1116,17 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   function renderLeftRow(r: number, style?: React.CSSProperties): React.JSX.Element {
+    // Wave-183: BC row wash + nav cursor. `tc-drow` tints the whole
+    // diff row (BC paints rows, not just cells); `tc-dcur` deepens the
+    // current diff-nav row so Prev/Next has a visible cursor.
+    const drow = isDiffRow(r);
+    const dcur = drow && diffRows[safeDiffPos] === r;
     return (
       <tr
         key={r}
         data-testid={`tableview/row-${r}`}
-        className="tc-row"
+        className={dcur ? "tc-row tc-drow tc-dcur" : drow ? "tc-row tc-drow" : "tc-row"}
+        data-current-diff={dcur ? "true" : undefined}
         style={style}
       >
         <th className={ROW_NUM_CLASS}>{r + 1}</th>
@@ -1106,11 +1136,15 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
   }
 
   function renderRightRow(r: number, style?: React.CSSProperties): React.JSX.Element {
+    // Wave-183: mirrors the left row wash/cursor (shared diff rule).
+    const drow = isDiffRow(r);
+    const dcur = drow && diffRows[safeDiffPos] === r;
     return (
       <tr
         key={r}
         data-testid={`tableview/row-right-${r}`}
-        className="tc-row"
+        className={dcur ? "tc-row tc-drow tc-dcur" : drow ? "tc-row tc-drow" : "tc-row"}
+        data-current-diff={dcur ? "true" : undefined}
         style={style}
       >
         <th className={ROW_NUM_CLASS}>{r + 1}</th>
@@ -1457,44 +1491,63 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
     const right = side === "right";
     const sortId = right ? `table-sort-right-${c}` : `table-sort-${c}`;
     const keyId = right ? `table-key-right-${c}` : `table-key-${c}`;
+    // Wave-183: BC column-letter prefix (A/B/C) + always-visible sort
+    // glyph. BC headers name every column with its letter and keep a
+    // persistent sort affordance; ours showed the bare name with a
+    // glyph only while sorted. The letter is display-only (sort
+    // status, export CSV, aria-labels keep the bare header name).
+    const letter = c < 26 ? String.fromCharCode(65 + c) : `#${c + 1}`;
     return (
       <th
         key={c}
         data-key={key ? "true" : undefined}
         data-testid={key ? (right ? `tableview/key-col-right-${c}` : `tableview/key-col-${c}`) : undefined}
         aria-sort={active ? (sortDir === 1 ? "ascending" : "descending") : "none"}
-        className={key ? "tc-head tc-key px-[var(--ac-space-2)] py-[var(--ac-space-1)]" : "tc-head px-[var(--ac-space-2)] py-[var(--ac-space-1)]"}
+        className={key ? "tc-head tc-key px-[var(--ac-space-2)] py-[var(--ac-space-1)] border-b border-[var(--ac-border)] border-r border-[var(--ac-border-subtle)]" : "tc-head px-[var(--ac-space-2)] py-[var(--ac-space-1)] border-b border-[var(--ac-border)] border-r border-[var(--ac-border-subtle)]"}
         title={key ? "key column" : undefined}
       >
-        <Button
-          variant="ghost"
-          size="sm"
-          data-testid={sortId}
-          onClick={() => cycleSort(c)}
-          aria-label={`sort by ${name}${right ? " (right)" : ""}${active ? (sortDir === 1 ? " (ascending, activate for descending)" : " (descending, activate to clear)") : ""}`}
-          className="rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-        >
-          {name}
-          {active ? (
-            sortDir === 1 ? (
-              <ChevronUp size={12} aria-hidden="true" className="inline" />
+        <div className="flex items-center justify-between gap-1 w-full">
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid={sortId}
+            onClick={() => cycleSort(c)}
+            aria-label={`sort by ${name}${right ? " (right)" : ""}${active ? (sortDir === 1 ? " (ascending, activate for descending)" : " (descending, activate to clear)") : ""}`}
+            className="rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] inline-flex items-center gap-1.5 h-[22px] px-1 text-[length:var(--ac-font-size-sm)] font-semibold"
+          >
+            <span className="font-mono text-[11px] text-[var(--ac-fg-muted)]">{letter}</span>{" "}
+            <span>{name}</span>
+            {active ? (
+              sortDir === 1 ? (
+                <ChevronUp size={12} aria-hidden="true" className="inline shrink-0" />
+              ) : (
+                <ChevronDown size={12} aria-hidden="true" className="inline shrink-0" />
+              )
             ) : (
-              <ChevronDown size={12} aria-hidden="true" className="inline" />
-            )
-          ) : null}
-        </Button>{" "}
-        <Button
-          variant="ghost"
-          size="sm"
-          data-testid={keyId}
-          aria-pressed={pickedKey === c}
-          aria-label={pickedKey === c ? `remove key column ${name}` : `use ${name} as key column`}
-          title={pickedKey === c ? "key column (activate to clear)" : "use as key column"}
-          onClick={() => toggleKeyColumn(c)}
-          className="tb-key-btn rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)]"
-        >
-          key
-        </Button>
+              <ChevronsUpDown
+                size={12}
+                aria-hidden="true"
+                className="inline opacity-40 shrink-0"
+              />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid={keyId}
+            aria-pressed={pickedKey === c}
+            aria-label={pickedKey === c ? `remove key column ${name}` : `use ${name} as key column`}
+            title={pickedKey === c ? "key column (activate to clear)" : "use as key column"}
+            onClick={() => toggleKeyColumn(c)}
+            className={`tb-key-btn rounded-[var(--ac-control-radius-sm)] font-inherit focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--ac-focus-ring)] h-[18px] px-1 text-[10px] tracking-wider uppercase font-mono ${
+              pickedKey === c
+                ? "bg-[var(--ac-focus-ring)] text-black font-bold"
+                : "text-[var(--ac-fg-muted)] hover:text-[var(--ac-fg)] opacity-70 hover:opacity-100"
+            }`}
+          >
+            key
+          </Button>
+        </div>
       </th>
     );
   }
@@ -1566,9 +1619,9 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           className="flex flex-wrap items-center gap-[var(--ac-space-3)] px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]"
         >
           {mapDisabledReason !== null ? (
-            <p data-testid="table-map-disabled-note" className="ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="table-map-disabled-note">
               Column mapping unavailable — {mapDisabledReason}.
-            </p>
+            </InlineNotice>
           ) : (
             <>
               {cols.map((c) => {
@@ -1621,6 +1674,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
               </label>
               <Button
                 variant="secondary"
+                size="sm"
                 data-testid="table-map-reset"
                 onClick={resetMap}
                 disabled={colMap === null}
@@ -1685,19 +1739,19 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         )}
       </div>
       {exportNote !== null && (
-        <p data-testid="table-export-receipt" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-export-receipt">
           {exportNote}
-        </p>
+        </InlineNotice>
       )}
       {showFallbackNote && (
-        <p data-testid="table-bykey-note" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-bykey-note">
           By-key requested — backend returned positional alignment (no key columns); showing positional rows.
-        </p>
+        </InlineNotice>
       )}
       {sortNoteText() === null ? null : (
-        <p data-testid="table-sort-status" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-sort-status">
           {sortNoteText()}
-        </p>
+        </InlineNotice>
       )}
       <p data-testid="table-cols-count" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
         {loadedRows} / {grid.totalRows} rows ·{" "}
@@ -1741,6 +1795,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         <Input
           id="table-find-input"
           data-testid="table-find-input"
+          controlSize="sm"
           type="search"
           value={findInput}
           onChange={(e) => setFindInput(e.target.value)}
@@ -1753,6 +1808,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         />
         <Button
           variant="secondary"
+          size="sm"
           data-testid="table-find-search"
           onClick={() => void runFind(findInput)}
           disabled={finding}
@@ -1761,21 +1817,26 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         </Button>
         <Button
           variant="secondary"
+          size="sm"
           data-testid="table-find-next"
           onClick={nextHit}
           disabled={hits.length === 0}
         >
           Next
         </Button>
-        <span data-testid="table-find-status" role="status" className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
+        <StatusText
+          data-testid="table-find-status"
+          role="status"
+          variant="code"
+        >
           {findStatusText}
-        </span>
+        </StatusText>
       </div>
       )}
       {hiddenCount > 0 && findQuery !== "" && findOpen && (
-        <p data-testid="table-find-hidden-note" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-find-hidden-note">
           Find skips {hiddenCount} hidden column{hiddenCount === 1 ? "" : "s"} — unhide or Show all to include {hiddenCount === 1 ? "it" : "them"}.
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-91: BC-table red diff cells in both schemes via the
           existing del tokens (no new palette; tokens.css untouched).
@@ -1789,7 +1850,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           tile boundary-to-boundary; `.tc-row` drops its 1px
           border-bottom (box-sizing keeps the 22px ROW_PX pin) so the
           hatch + hover wash run seamless like the text view. */}
-      <style data-testid="tableview/diff-style">{`.tc-diff{background-color:var(--ac-diff-del-bg);color:var(--ac-diff-del-fg);}.tc-row{border-bottom:none;}.tc-missing{background-color:var(--ac-bg);background-image:repeating-linear-gradient(-45deg, transparent 0 4.19px, var(--ac-hatch-line) 4.19px 5.19px);}`}</style>
+      <style data-testid="tableview/diff-style">{`.tc-diff{background-color:var(--ac-diff-del-bg);color:var(--ac-diff-del-fg);}.tc-row{border-bottom:1px solid var(--ac-border-subtle);}.tc-missing{background-color:var(--ac-bg);background-image:repeating-linear-gradient(-45deg, transparent 0 4.19px, var(--ac-hatch-line) 4.19px 5.19px);}.tc-drow>.tc-cell:not(.tc-diff):not(.tc-missing){background-color:color-mix(in srgb, var(--ac-diff-del-bg) 32%, transparent);}.tc-dcur>.tc-cell:not(.tc-diff):not(.tc-missing){background-color:color-mix(in srgb, var(--ac-diff-del-bg) 60%, transparent);}`}</style>
       {loadedRows > VIRTUALIZE_AFTER ? (
         <div ref={parentRef} data-testid="tableview/grids-scroller" className="h-[var(--ac-scroll-h)] overflow-auto">
           <div
@@ -1857,7 +1918,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           <div data-testid="tableview/grid-left" className="min-w-0 overflow-x-auto">
             <table className={TABLE_CLASS}>
               {renderColGroup()}
-              <thead>
+              <thead className="sticky top-0 bg-[var(--ac-bg)]">
                 <tr>
                   <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                   {visibleCols.map((c) => renderLeftHeadCell(c))}
@@ -1870,7 +1931,7 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           <div data-testid="tableview/grid-right" className="min-w-0 overflow-x-auto">
             <table className={TABLE_CLASS}>
               {renderColGroup()}
-              <thead>
+              <thead className="sticky top-0 bg-[var(--ac-bg)]">
                 <tr>
                   <th aria-label="row number" className={ROW_NUM_HEAD_CLASS} />
                   {visibleCols.map((c) => renderRightHeadCell(c))}

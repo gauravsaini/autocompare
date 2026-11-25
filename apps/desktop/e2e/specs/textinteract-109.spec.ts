@@ -150,9 +150,12 @@ test("keyboard take: l takes left, focused take button + Enter takes right", asy
   await page.screenshot({ path: "/tmp/interact-109-after-take.png" });
 
   // The take arrows stay keyboard-operable: focus + Enter takes hunk 0
-  // (one-sided rows 6-9: take-right fills the missing side per
-  // wave-131 BC merge, so all four rows stay mounted, flip to equal,
-  // and the take-button pairs shrink by one — never dropped).
+  // (left-only rows 6-9: take-right has an EMPTY take side, so BC
+  // parity deletes the orphan lines — Rust `apply_hunk_to_rows`
+  // FIXTEXT GAP-03 `apply_hunk_empty_take_deletes_orphan_lines`, the
+  // mock `text_apply_hunk`, and the view `applyHunkCopy` all drop
+  // null-take rows. Rows 6-9 unmount, the take-button pairs shrink by
+  // one, and no orphan tint lingers).
   const takeRight = page.getByTestId("hunk-copy-right-0");
   await expect(takeRight).toBeVisible();
   const pairsBefore = await page.locator('[data-testid^="hunk-copy-left-"]').count();
@@ -160,7 +163,8 @@ test("keyboard take: l takes left, focused take button + Enter takes right", asy
   await takeRight.focus();
   await expect(takeRight).toBeFocused();
   await takeRight.press("Enter");
-  await expect(page.getByTestId("textview/row-6")).toHaveAttribute("data-kind", "equal");
+  await expect(page.getByTestId("textview/row-6")).toHaveCount(0);
+  await expect(page.getByTestId("textview/row-9")).toHaveCount(0);
   await expect
     .poll(() => page.locator('[data-testid^="hunk-copy-left-"]').count())
     .toBe(pairsBefore - 1);
@@ -231,10 +235,16 @@ test("commit restores cell focus, undo restores row focus", async ({ page }) => 
   await editor.fill("FOCUS-RESTORE-109");
   await editor.press("Control+Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // WAVE-224-SPECRECONCILE R2: staged contract pins textstaged-198/textapplyedit-66v/texteditmode-66ub green.
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
   await expect(cell).toContainText("FOCUS-RESTORE-109");
   // Caret affordance: keyboard flow continues in the edited cell.
   await expect(cell).toBeFocused();
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
 
   const undo = page.getByTestId("textview/undo-edit");
   await expect(undo).toBeEnabled();

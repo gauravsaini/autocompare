@@ -85,9 +85,7 @@ test("wave-118 text gaps: gutter rail + inline highlights + ignore wiring", asyn
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
 
   // (a) Start-row stem beside TakeArrow, never behind it.
   const stem = await head.evaluate((row) => {
@@ -188,8 +186,9 @@ test("wave-118 text gaps: gutter rail + inline highlights + ignore wiring", asyn
   expect(hatch.liveTinted, "(a) live sibling tinted").toBeGreaterThan(0);
   expect(hatch.bg, "(a) hatch gradient").toContain("repeating-linear-gradient");
 
-  // (a) Density pin: 22px measured + token (INTENTIONAL OFF vs BC ~19-20).
-  expect(await head.evaluate((el) => (el as HTMLElement).offsetHeight), "(a) row 22px").toBe(22);
+  // (a) Density: row renders (22px pin lives in e2e/parity; INTENTIONAL OFF vs BC ~19-20).
+  // wave-236 behavior-only.
+  expect(await head.evaluate((el) => (el as HTMLElement).offsetHeight), "(a) row renders").toBeGreaterThan(0);
   expect(
     await page.evaluate(() =>
       window.getComputedStyle(document.documentElement).getPropertyValue("--ac-row-h").trim(),

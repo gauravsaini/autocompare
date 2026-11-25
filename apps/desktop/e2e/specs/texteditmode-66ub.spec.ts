@@ -1,16 +1,20 @@
 /**
- * Wave-66U-b cell edit-mode proof, backend-applied form (wave-66V).
- * MOCK IPC ONLY (`VITE_MOCK_IPC=1`).
+ * Wave-66U-b cell edit-mode proof, wave-198 staged form. MOCK IPC ONLY
+ * (`VITE_MOCK_IPC=1`).
  *
  * Drives the REAL `App` workspace over the auto-boot demo text diff
  * (real engine rows) and proves in-place editing end to end:
  *  - double-click (or Enter on a focused cell) swaps a non-null cell
  *    for an input prefilled with the cell text;
- *  - Enter applies through `text_apply_edit` (mock serves the patched
- *    row on refetch), the override clears, `applied-note` counts it;
+ *  - Enter stages the edit LOCALLY (wave-198: no backend apply at
+ *    commit time — `edit-note` counts it, `applied-note` stays empty,
+ *    the row keeps its kind);
+ *  - Save flushes the staged edit through `text_apply_edit` (mock
+ *    serves the patched row on refetch), the override clears,
+ *    `applied-note` counts it, the save receipt lands;
  *  - Esc cancels with zero change and no notes;
  *  - orphan (null) cells are a no-op at the UI level;
- *  - reload clears the mock overlay (module state, never storage).
+ *  - reload clears staged (module state, never storage).
  * New file only, no existing spec touched. Skip policy matches the
  * other specs.
  */
@@ -32,7 +36,7 @@ async function firstChangedLeftCell(page: import("@playwright/test").Page) {
   return { row, cell: row.locator(".tv-cell").first() };
 }
 
-test("dblclick opens a prefilled input, Enter applies via backend, note counts", async ({ page }) => {
+test("dblclick opens a prefilled input, Enter stages, Save applies via backend", async ({ page }) => {
   const { cell } = await firstChangedLeftCell(page);
   const before = (await cell.textContent()) ?? "";
   expect(before.length).toBeGreaterThan(0);
@@ -44,8 +48,16 @@ test("dblclick opens a prefilled input, Enter applies via backend, note counts",
   await input.press("Enter");
   await expect(page.getByTestId("textview/cell-edit")).toHaveCount(0);
   await expect(cell).toContainText("EDITED");
-  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  // Wave-198 staged: the commit is session-local (row kind untouched,
+  // nothing applied yet).
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
+  await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
+  // Save flushes the staged edit through `text_apply_edit`, then writes.
+  await page.getByTestId("textview/save-left").click();
+  await expect(page.getByTestId("textview/save-note")).toContainText("Saved left to");
   await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
+  await expect(page.getByTestId("textview/applied-note")).toContainText("1 edit applied");
+  await expect(page.getByTestId("textview/save-error")).toHaveCount(0);
 });
 
 test("Esc cancels with zero change and no notes", async ({ page }) => {
@@ -71,7 +83,7 @@ test("orphan null cell is a no-op", async ({ page }) => {
   await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
 });
 
-test("reload clears applied mock edits", async ({ page }) => {
+test("reload clears staged edits", async ({ page }) => {
   const { cell } = await firstChangedLeftCell(page);
   const before = (await cell.textContent()) ?? "";
   await cell.dblclick();
@@ -79,8 +91,9 @@ test("reload clears applied mock edits", async ({ page }) => {
   await expect(input).toBeVisible();
   await input.fill(`${before} TEMP`);
   await input.press("Enter");
-  await expect(page.getByTestId("textview/applied-note")).toHaveCount(1);
+  await expect(page.getByTestId("textview/edit-note")).toContainText("1 local edit");
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("session-count")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("textview/edit-note")).toHaveCount(0);
   await expect(page.getByTestId("textview/applied-note")).toHaveCount(0);
 });

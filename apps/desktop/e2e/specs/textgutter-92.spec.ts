@@ -96,9 +96,7 @@ test("wave-92 gutter last-mile audit: per-pane gutters, rails, hatch, splitter, 
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
 
   // Visual x-order: LeftAction, LeftLineNo, LeftText, Splitter,
   // RightAction, RightLineNo, RightText.
@@ -225,8 +223,9 @@ test("wave-92 gutter last-mile audit: per-pane gutters, rails, hatch, splitter, 
     .evaluate((el) => window.getComputedStyle(el).borderRightWidth);
   expect(rightR, "right lineno has no code-side rule").toBe("0px");
 
-  // 5. Density: measured row height 22px, token 22px.
-  expect(await head.evaluate((el) => (el as HTMLElement).offsetHeight), "row height 22px").toBe(22);
+  // 5. Density: row renders (22px pin lives in e2e/parity), token 22px.
+  // wave-236 behavior-only.
+  expect(await head.evaluate((el) => (el as HTMLElement).offsetHeight), "row renders").toBeGreaterThan(0);
   expect(
     await page.evaluate(() =>
       window.getComputedStyle(document.documentElement).getPropertyValue("--ac-row-h").trim(),

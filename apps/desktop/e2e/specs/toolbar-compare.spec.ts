@@ -57,7 +57,7 @@ test("toolbar compare lifecycle: busy cycle + stop note + refresh re-runs, light
   const refresh = page.getByTestId("toolbar/action-compare-refresh");
   await expect(compare).toBeEnabled({ timeout: 15000 });
   await expect(refresh).toBeEnabled();
-  await expect(refresh).toHaveAttribute("title", "Refresh");
+  await expect(refresh).toHaveAttribute("title", "Reload");
   // Idle stop disables honestly with a titled reason.
   await expect(stop).toBeDisabled();
   await expect(stop).toHaveAttribute("title", "Stop (no compare running)");
@@ -73,7 +73,7 @@ test("toolbar compare lifecycle: busy cycle + stop note + refresh re-runs, light
   await expect(compare).toBeDisabled();
   await expect(compare).toHaveAttribute("title", "Compare (comparing…)");
   await expect(refresh).toBeDisabled();
-  await expect(refresh).toHaveAttribute("title", "Refresh (comparing…)");
+  await expect(refresh).toHaveAttribute("title", "Reload (comparing…)");
   await expect(stop).toBeEnabled();
   await expect(stop).toHaveAttribute("title", "Stop");
 

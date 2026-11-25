@@ -143,6 +143,11 @@ test("mergesyncmedia-147 media: chrome budget, diff chrome, empty states, wiring
   await expect(page.getByTestId("mediaview/score")).toContainText(/windows differ/);
   await expect(page.getByTestId("mediaview/statusbar-counts")).toContainText(/windows differ/);
 
+  // Enter in tolerance input triggers recompare round-trip
+  await page.getByTestId("mediaview/tolerance").fill("6");
+  await page.getByTestId("mediaview/tolerance").press("Enter");
+  await expect(page.getByTestId("mediaview/score")).toContainText(/windows differ/);
+
   await assertNoOverlap(page);
 
   // Chrome budget with the tolerance panel closed.

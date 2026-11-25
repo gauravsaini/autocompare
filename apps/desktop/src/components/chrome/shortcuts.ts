@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { dispatchViewCommand } from "./ViewCommandBus";
 
 /**
  * Wave-142: web fallback for native menu accelerators (BC parity).
@@ -62,6 +63,53 @@ const WEB_SHORTCUT_COMMANDS: Record<WebShortcutMenuId, string> = {
   "file.save-session": "session_save",
   "session.take-left": "text_copy_left",
   "session.take-right": "text_copy_right",
+};
+
+/**
+ * Wave-231: advertised-shortcut registry (single source of truth).
+ * Every chord a toolbar `title` advertises MUST be a truly wired
+ * chord — either a `matchWebShortcut` menu accelerator (Cmd/Ctrl+1..7,
+ * N/O/S/D/E), a chrome-bridge chord below (`F3`/`Shift+F3` find
+ * next/prev, `Cmd+Alt+Down/Up` hunk nav, `Ctrl+F` find focus,
+ * `Ctrl+G` goto focus), or a view-local chord the owning view handles
+ * (`Cmd+B` take-both + `j`/`k`/`n`/`p` conflict nav in MergeView,
+ * `n`/`p` nav + `l`/`r` copy on text rows). `Toolbar` imports
+ * `TOOLBAR_SHORTCUT_HINTS` from here so titles can never drift from
+ * the wired set. View-local keys (`j`/`k`/`n`/`p`/`l`/`r`) are
+ * documented here but deliberately NOT advertised on the global
+ * toolbar — globally `n` opens a session (menu `session.new`) and
+ * `j`/`k`/`l`/`r` are view-local pass-throughs, so a global hint
+ * would be dishonest outside the owning view.
+ */
+export const ADVERTISED_SHORTCUTS = {
+  find: "Ctrl+F",
+  goto: "Ctrl+G",
+  "find-next": "F3",
+  "find-prev": "Shift+F3",
+  "take-left": "Cmd+D",
+  "take-right": "Cmd+E",
+  "take-both": "Cmd+B",
+  "next-hunk": "Cmd+Alt+Down",
+  "prev-hunk": "Cmd+Alt+Up",
+  "next-conflict": "j",
+  "prev-conflict": "k",
+  open: "Cmd+O",
+} as const;
+
+export type AdvertisedShortcutId = keyof typeof ADVERTISED_SHORTCUTS;
+
+/**
+ * Wave-231: toolbar title hints derived from the registry above.
+ * `copy` rides the take-left path by default (`handleToolbarCopy`
+ * falls back to `"left"`); `copy-right` forces `"right"`. Single
+ * address per button — no overlapping `Cmd+D / Cmd+E` claim.
+ */
+export const TOOLBAR_SHORTCUT_HINTS: Record<string, string> = {
+  open: ADVERTISED_SHORTCUTS.open,
+  "next-hunk": ADVERTISED_SHORTCUTS["next-hunk"],
+  "prev-hunk": ADVERTISED_SHORTCUTS["prev-hunk"],
+  copy: ADVERTISED_SHORTCUTS["take-left"],
+  "copy-right": ADVERTISED_SHORTCUTS["take-right"],
 };
 
 export interface WebShortcutChord {
@@ -277,22 +325,22 @@ export function triggerGoTo(): boolean {
 }
 
 /**
- * Wave-157: Trigger Next Difference across mounted views (Text, Merge).
- * Dispatches `autocompare:view-command` with cmd "next".
+ * Wave-157 / Wave-203: Trigger Next Difference across mounted views (Text, Merge, Hex, Table).
+ * Dispatches `autocompare:view-command` with cmd "next" via the unified ViewCommandBus.
  */
 export function triggerNextDiff(): boolean {
   if (typeof window === "undefined") return false;
-  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "next" } }));
+  dispatchViewCommand("next");
   return true;
 }
 
 /**
- * Wave-157: Trigger Previous Difference across mounted views (Text, Merge).
- * Dispatches `autocompare:view-command` with cmd "prev".
+ * Wave-157 / Wave-203: Trigger Previous Difference across mounted views (Text, Merge, Hex, Table).
+ * Dispatches `autocompare:view-command` with cmd "prev" via the unified ViewCommandBus.
  */
 export function triggerPrevDiff(): boolean {
   if (typeof window === "undefined") return false;
-  window.dispatchEvent(new CustomEvent("autocompare:view-command", { detail: { cmd: "prev" } }));
+  dispatchViewCommand("prev");
   return true;
 }
 
@@ -370,9 +418,15 @@ export function useWebShortcuts(): void {
           handled = true;
         }
 
-        // 3. Active find/goto/chrome overlays with dismiss buttons
+        // 3. Active find/goto/chrome overlays with dismiss buttons.
+        // Wave-186: `folderview/name-close` is EXCLUDED on purpose. Its
+        // `onClose` clears the query, but the folder contract (98/113b)
+        // is global-Esc = collapse WITHOUT clearing — FolderView's own
+        // window Esc handler already closes it from any focus, and the
+        // input-level Esc keeps the legacy clear+close. Clicking the X
+        // here ran in the same task and always wiped the query.
         const overlayCloseButtons = document.querySelectorAll<HTMLButtonElement>(
-          '[data-testid="textview/find-close"], [data-testid="textview/goto-close"], [data-testid="hex-find-close"], [data-testid="hex-goto-close"], [data-testid="merge/find-close"], [data-testid="folderview/name-close"], [data-testid="folderview/goto-close"], [data-testid="folderview/rules-close"], [data-testid="syncview/name-close"], [data-testid="mediaview/tolerance-close"]',
+          '[data-testid="textview/find-close"], [data-testid="textview/goto-close"], [data-testid="hex-find-close"], [data-testid="hex-goto-close"], [data-testid="merge/find-close"], [data-testid="folderview/goto-close"], [data-testid="folderview/rules-close"], [data-testid="syncview/name-close"], [data-testid="mediaview/tolerance-close"]',
         );
         overlayCloseButtons.forEach((btn) => {
           if (!btn.disabled && btn.offsetParent !== null) {

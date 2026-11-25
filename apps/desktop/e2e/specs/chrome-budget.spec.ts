@@ -1,12 +1,15 @@
 /**
  * Chrome Budget Living Spec (MOCK IPC ONLY, VITE_MOCK_IPC=1).
  *
- * Enforces Beyond Compare chrome discipline:
- * 1. No stacked control rows above panes:
- *    - Single compact toolbar row (height <= 48px, buttons single horizontal row, no wrapping);
+ * Enforces Beyond Compare chrome discipline (Wave-223 BC order: tab strip on its
+ * own row, toolbar actions on the NEXT row, then path bars):
+ * 1. Three shell rows above panes, no other stacked control rows:
+ *    - Tab strip row (height 40px, internal scroll);
+ *    - Single compact toolbar row of its own (height <= 48px, buttons single
+ *      horizontal row within that band, no wrapping);
  *    - Single compact PathBar row (height <= 36px);
  *    - Combined shell top (TabBar + Toolbar + PathBar) <= 120px;
- *    - No duplicate or stacked control rows above comparison panes.
+ *    - No duplicate control rows above comparison panes.
  * 2. firstRowTop <= 140px section-relative strictly enforced across all major views:
  *    - Text View (first row <= 140px)
  *    - Folder View (first tree row <= 140px)

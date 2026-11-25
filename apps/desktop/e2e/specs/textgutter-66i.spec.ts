@@ -121,16 +121,15 @@ test("per-pane hunk gutters, bracket rail, orphan hatch, copy parity", async ({ 
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
   const splitterW = await page
     .getByTestId("textview/row-6")
     .locator(".tv-splitter")
     .evaluate((el) => el.getBoundingClientRect().width);
   expect(splitterW, "splitter measures 6px").toBeGreaterThan(5);
   expect(splitterW, "splitter measures 6px").toBeLessThan(7);
-  expect(await page.getByTestId("textview/row-6").evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(22);
+  // wave-236 behavior-only: row renders (22px pin lives in e2e/parity).
+  expect(await page.getByTestId("textview/row-6").evaluate((el) => (el as HTMLElement).offsetHeight)).toBeGreaterThan(0);
 
   // Arrows live in the per-pane gutters (hunk 0 = left-only rows 6..9).
   const leftBtn = page.getByTestId("hunk-copy-left-0");

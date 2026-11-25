@@ -1,13 +1,13 @@
 /**
  * Wave-79: BC-style far-left overview strip (presentational ONLY).
  *
- * A 5px far-left rail beside the text rows with one per-hunk marker.
+ * Wave-196: 4px far-left rail beside the text rows with one per-hunk marker.
  * Markers derive from the SAME `hunks` array the per-pane gutter arrows
  * use (`collectTextHunks` over the loaded rows), so strip markers line up
  * 1:1 with gutter hunk ordinals. Clicking marker N jumps through the SAME
  * `onJump` hunk-nav path the toolbar prev/next buttons use (select +
  * scroll + focus, no new IPC). Colors reuse existing diff/ruler tokens
- * (no new hues); geometry is a 5px relative rail with absolute markers.
+ * (no new hues); geometry is a 4px relative rail with absolute markers.
  */
 
 export interface OverviewStripHunk {

@@ -228,10 +228,10 @@ function PathField({
     <div
       ref={wrapRef}
       data-pathfield-side={side}
-      className="relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-      }}
+      className={`relative flex min-w-0 flex-1 items-center gap-[var(--ac-space-2)]${dropActive ? " ac-drop-highlight" : ""}`}
+      // Wave-231: single dismiss contract — document-level `pointerdown`
+      // (click-outside) + document-level `keydown` Escape in the effect
+      // above. No per-div Esc handler (it would double the same close).
       onDragOver={(event) => {
         if (comparing) {
           event.preventDefault();
@@ -394,6 +394,7 @@ function PathField({
         className="shrink-0"
       />
       <ToolbarButton
+        data-testid={`${testId}-copy`}
         label={`Copy ${label}`}
         disabled={comparing}
         size="md"
@@ -756,7 +757,7 @@ export function PathBar({
           ? { outline: "2px dashed var(--ac-accent)", outlineOffset: "-1px" }
           : undefined
       }
-      className="flex h-[var(--ac-pathbar-h)] items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]"
+      className={`flex h-[var(--ac-pathbar-h)] items-center gap-[var(--ac-space-2)] border-b border-[var(--ac-border)] bg-[var(--ac-bg-raised)] px-[var(--ac-space-2)]${stripDropActive ? " ac-drop-highlight" : ""}`}
     >
       <PathField
         testId="pathbar/left"

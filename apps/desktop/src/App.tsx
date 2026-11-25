@@ -1,13 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
+import { AlignJustify, ArrowLeftRight, Binary, ChevronDown, ChevronUp, Code, Columns2, Copy, Equal, FileText, Filter, Folder, FolderOpen, GitMerge, Home, Image, List, Minus, RefreshCw, Table, Type } from "lucide-react";
 import { ChromeShell, rowIndexToScrollTop, textCompareKindToDiffKind } from "./components/chrome";
+import { Gallery } from "./components/ui/Gallery";
 import {
   dispatchViewCommand,
   dispatchViewFilter,
   dispatchViewMinor,
 } from "./components/chrome";
 import { dispatchViewFormat } from "./components/views/text/controls/FormatMenu";
+// Wave-201: app-root font wiring (typography ONLY). Owned polish sheet:
+// Inter/system-ui + JetBrains Mono/ui-monospace stacks, soft inline
+// accent, toolbar surfaces, hairlines — all per existing --ac-* tokens.
+import "./styles/typography-201.css";
 import { dispatchViewRules } from "./components/views/folder/controls/RulesPanel";
 import { DiffStatsContext, type DiffStats } from "./components/chrome/StatusBar";
 import type { ChromeTab, DiffRow, TextCompareRowKind, ToolbarAction } from "./components/chrome";
@@ -23,7 +28,8 @@ import { tableCompare } from "./ipc/table";
 import { mergeTextPlanForTriple } from "./ipc/merge";
 import { pictureCompare } from "./ipc/media";
 import { HomeSessionsPane } from "./components/home/controls";
-import { PaneDropZone, useTauriPaneDrop, isFolderishPath, type PaneSide } from "./components/dnd";
+import { PaneDropZone, isFolderishPath, type PaneSide } from "./components/dnd";
+import { useNativeFileDrop } from "./components/chrome/useNativeFileDrop";
 import { syncPlan } from "./ipc/sync";
 
 /**
@@ -190,7 +196,16 @@ function applyStoredCopiesToDiffRows(
  * Wave-169: Minor extends to table kind (dispatchViewMinor with kind table
  * through existing view bus + table IPC ignore flags; text behavior unchanged).
  */
-export type ViewCommand = "prev" | "next" | "copy" | "copy-right" | "swap";
+export type ViewCommand =
+  | "prev"
+  | "next"
+  | "copy"
+  | "copy-right"
+  | "swap"
+  | "merge"
+  | "take-left"
+  | "take-right"
+  | "take-both";
 export type ViewFilterKind = "all" | "diffs" | "same" | "context";
 
 /**
@@ -249,6 +264,13 @@ export default function App(): React.JSX.Element {
     }, 8000);
     return () => window.clearTimeout(timer);
   }, [statusMessage]);
+  // Wave-201: app-root font wiring (typography ONLY). Bundled Inter /
+  // JetBrains Mono stacks live in tokens.css; pin the root element to the
+  // UI stack so first paint + portals ride it even before the body rule
+  // applies. No DOM, testid, color, or geometry change.
+  useEffect(() => {
+    document.documentElement.style.setProperty("font-family", "var(--ac-font-ui)");
+  }, []);
   const [actionError, setActionError] = useState<string | null>(null);
   const [compareTick, setCompareTick] = useState(0);
   // Wave-13: live ruler rows for the text pane (same equal/del/ins/chg
@@ -281,6 +303,8 @@ export default function App(): React.JSX.Element {
   // (`handleMenuTake` is defined above the `hunkStarts` memo, so it reads
   // the ref — fresh at call time, no stale closure).
   const hunkStartsRef = useRef<number[]>([]);
+  // Wave-203: ViewCommandBus forward ref to avoid TDZ in menu handlers
+  const handleViewCommandRef = useRef<(cmd: ViewCommand) => void>(() => {});
 
   const handleSelectRow = useCallback((index: number | null, row: TextRowDto | null) => {
     setSelectedIndex(index);
@@ -470,14 +494,8 @@ export default function App(): React.JSX.Element {
     (dir: TextSide | "both") => {
       const activeKind = viewKindRef.current ?? viewKind;
       if (activeKind === "merge") {
-        const takeEvent = new CustomEvent("autocompare:merge-take", {
-          detail: { dir },
-          cancelable: true,
-        });
-        window.dispatchEvent(takeEvent);
-        if (!takeEvent.defaultPrevented) {
-          setStatusMessage(`Take ${dir} needs a conflict selected`);
-        }
+        dispatchViewCommand("copy", "merge", { dir });
+        setStatusMessage(`Copy take-${dir} requested (merge)`);
         return;
       }
       if (dir === "both") {
@@ -627,18 +645,18 @@ export default function App(): React.JSX.Element {
           break;
         case "session.take-left":
         case "session.copy-left":
-          handleMenuTake("left");
+          handleViewCommandRef.current("take-left");
           break;
         case "session.take-right":
         case "session.copy-right":
-          handleMenuTake("right");
+          handleViewCommandRef.current("take-right");
           break;
         case "session.take-both":
-          handleMenuTake("both");
+          handleViewCommandRef.current("take-both");
           break;
         case "session.copy":
         case "edit.copy-hunk":
-          handleMenuTake(copyTakeSide ?? "left");
+          handleViewCommandRef.current("copy");
           break;
         case "session.swap":
         case "view.swap":
@@ -1410,10 +1428,12 @@ export default function App(): React.JSX.Element {
     [activeSession, runComparePaths],
   );
 
-  // Wave-117: production-shell Tauri drag-drop subscription (no-op under
-  // `VITE_MOCK_IPC=1` / plain browser, where the HTML5 handlers own drops).
-  // Wave-120: dual-drop paths ride the same hook (third arg).
-  useTauriPaneDrop(true, handlePaneDrop, handlePaneDropPaths);
+  // Wave-211: native Finder/Explorer drops subscribe at the WINDOW level
+  // (`getCurrentWindow().onDragDropEvent`; v2 has no `onFileDropEvent`).
+  // Window events are a superset of the webview surface, so this replaces
+  // `useTauriPaneDrop` as the single owner — one drop, one auto-compare.
+  // No-op under `VITE_MOCK_IPC=1` / plain browser (HTML5 owns drops there).
+  useNativeFileDrop(true, handlePaneDrop, handlePaneDropPaths);
 
   const handleSync = useCallback(() => {
     void (async () => {
@@ -1836,10 +1856,50 @@ export default function App(): React.JSX.Element {
           handleSwapSides();
           return;
         }
+        case "merge": {
+          handleMergeJump();
+          return;
+        }
+        case "take-left": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "left" });
+            setStatusMessage("Copy take-left requested (merge)");
+            return;
+          }
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleMenuTake("left");
+          return;
+        }
+        case "take-right": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "right" });
+            setStatusMessage("Copy take-right requested (merge)");
+            return;
+          }
+          if (kind !== "text") {
+            setStatusMessage(`Copy needs view wiring in L3 for kind "${kind ?? "none"}"`);
+            return;
+          }
+          handleMenuTake("right");
+          return;
+        }
+        case "take-both": {
+          if (kind === "merge") {
+            dispatchViewCommand("copy", "merge", { dir: "both" });
+            setStatusMessage("Copy take-both requested (merge)");
+            return;
+          }
+          setStatusMessage("Take both is only available in Merge view");
+          return;
+        }
       }
     },
-    [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleSwapSides],
+    [viewKind, hunkStarts, handlePrevHunk, handleNextHunk, handleToolbarCopy, handleMenuTake, handleSwapSides, handleMergeJump],
   );
+  handleViewCommandRef.current = handleViewCommand;
 
   // Wave-161: unified filter dispatch (BC View: Show All/Differences/Same/
   // Context) through the ViewCommandBus. Every view listens for
@@ -1929,56 +1989,14 @@ export default function App(): React.JSX.Element {
   const filterReason = filterEnabled ? null : "needs an open session";
 
   const toolbarActions: readonly ToolbarAction[] = [
+    {
+      id: "home",
+      icon: Home,
+      label: "Home",
+      enabled: true,
+      onClick: () => handleSelectTab(WELCOME_TAB.id),
+    },
     { id: "open", icon: FolderOpen, label: "Open session", enabled: true, onClick: () => setManagerOpen(true) },
-    {
-      id: "compare",
-      icon: Columns2,
-      label: compareBlockedReason ? `Compare (${compareBlockedReason})` : "Compare",
-      enabled: compareBlockedReason === null,
-      onClick: handleCompare,
-    },
-    {
-      id: "swap",
-      icon: ArrowLeftRight,
-      label: "Swap sides",
-      enabled: activeSession !== null,
-      disabledReason: activeSession !== null ? null : "needs an open session",
-      onClick: () => handleViewCommand("swap"),
-    },
-    {
-      // Wave-L2: bus-routed (text keeps the live hunk handlers; FIXM
-      // GAP-13: merge dispatches the conflict bus, staying enabled with
-      // conflict labels; other kinds park with the L3-wiring reason).
-      id: "prev-hunk",
-      icon: ChevronUp,
-      label:
-        hunkNavEnabled || viewKind === "text"
-          ? hunkNavEnabled
-            ? "Previous hunk"
-            : "Previous hunk (no hunks)"
-          : mergeNavActive
-            ? "Previous conflict"
-            : "Previous hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled || mergeNavActive,
-      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
-      onClick: () => handleViewCommand("prev"),
-    },
-    {
-      // Wave-L2: bus-routed, same per-kind honesty as prev-hunk.
-      id: "next-hunk",
-      icon: ChevronDown,
-      label:
-        hunkNavEnabled || viewKind === "text"
-          ? hunkNavEnabled
-            ? "Next hunk"
-            : "Next hunk (no hunks)"
-          : mergeNavActive
-            ? "Next conflict"
-            : "Next hunk (needs view wiring in L3)",
-      enabled: hunkNavEnabled || mergeNavActive,
-      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
-      onClick: () => handleViewCommand("next"),
-    },
     {
       // Wave-161: lifted BC View filters — the single dispatch point for
       // All/Diffs/Same/Context (every view listens on the bus; no
@@ -2072,6 +2090,56 @@ export default function App(): React.JSX.Element {
       onClick: () => handleViewCommand("copy"),
     },
     {
+      // Wave-L2: bus-routed, same per-kind honesty as prev-hunk.
+      id: "next-hunk",
+      icon: ChevronDown,
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Next hunk"
+            : "Next hunk (no hunks)"
+          : mergeNavActive
+            ? "Next conflict"
+            : "Next hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("next"),
+    },
+    {
+      // Wave-L2: bus-routed (text keeps the live hunk handlers; FIXM
+      // GAP-13: merge dispatches the conflict bus, staying enabled with
+      // conflict labels; other kinds park with the L3-wiring reason).
+      id: "prev-hunk",
+      icon: ChevronUp,
+      label:
+        hunkNavEnabled || viewKind === "text"
+          ? hunkNavEnabled
+            ? "Previous hunk"
+            : "Previous hunk (no hunks)"
+          : mergeNavActive
+            ? "Previous conflict"
+            : "Previous hunk (needs view wiring in L3)",
+      enabled: hunkNavEnabled || mergeNavActive,
+      disabledReason: hunkNavEnabled || mergeNavActive ? null : viewKind === "text" ? "no hunks" : "needs view wiring in L3",
+      onClick: () => handleViewCommand("prev"),
+    },
+    {
+      id: "swap",
+      icon: ArrowLeftRight,
+      label: "Swap sides",
+      enabled: activeSession !== null,
+      disabledReason: activeSession !== null ? null : "needs an open session",
+      onClick: () => handleViewCommand("swap"),
+    },
+    {
+      id: "compare",
+      icon: Columns2,
+      label: compareBlockedReason ? `Compare (${compareBlockedReason})` : "Compare",
+      enabled: compareBlockedReason === null,
+      disabledReason: compareBlockedReason,
+      onClick: handleCompare,
+    },
+    {
       id: "copy-right",
       icon: Copy,
       label: copyInHunk
@@ -2092,6 +2160,7 @@ export default function App(): React.JSX.Element {
       icon: RefreshCw,
       label: syncEnabled ? "Sync" : "Sync (needs folder session)",
       enabled: syncEnabled,
+      disabledReason: syncEnabled ? null : "needs folder session",
       onClick: handleSync,
     },
     {
@@ -2102,7 +2171,7 @@ export default function App(): React.JSX.Element {
       label: mergeLive ? "Merge" : "Merge (use Merge view)",
       enabled: mergeLive,
       disabledReason: mergeLive ? null : "use Merge view",
-      onClick: handleMergeJump,
+      onClick: () => handleViewCommand("merge"),
     },
   ];
 
@@ -2110,6 +2179,10 @@ export default function App(): React.JSX.Element {
   // Wave-10: demo banner shows only on the auto-opened demo tab.
   const isDemo = demoId !== null && activeSession?.id === demoId;
 
+  // Wave-232: dev-only ui gallery at /?gallery=1 (no views/chrome, no IPC).
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("gallery") === "1") {
+    return <Gallery />;
+  }
   return (
     <DiffStatsContext.Provider value={diffStats}>
       <ChromeShell
@@ -2140,6 +2213,15 @@ export default function App(): React.JSX.Element {
         diffRows={rulerRows}
         onJump={handleRulerJump}
         activeIndex={rulerActive}
+        encoding={activeSession ? "UTF-8" : undefined}
+        lineCol={
+          selectedRow
+            ? `Ln ${selectedRow.index + 1}, Col 1`
+            : activeSession
+              ? "Ln 1, Col 1"
+              : undefined
+        }
+        zoom={activeSession ? "100%" : undefined}
         detail={viewKind === "text" ? <LineDetailPane row={selectedRow} /> : null}
       >
         {inlineError && (

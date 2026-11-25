@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { textApplyEdit, textApplyHunk, textCompare, textCompareDemo, textFind, textGetOverview, textGetRows, textSaveSide } from "../../ipc/text";
-import type { InlineSpanDto, OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
+import type { OverviewChunk, TextFileMeta, TextRowDto, TextSide } from "../../ipc/text";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 import { FindOverlay, FormatMenu, GotoOverlay, IgnoreMenu, OverviewStrip, TextToolbar } from "./text/controls";
 import { VIEW_FORMAT_EVENT } from "./text/controls/FormatMenu";
-import { Button } from "../ui";
+import { Button, EmptyState, InlineNotice } from "../ui";
 import type { OverviewStripHunk } from "./text/controls/OverviewStrip";
-import { InlineSpans, sideRanges } from "./text/inline/InlineSpans";
+import { RowLine } from "./text/RowLine";
 // Wave-161: bus event names shared with the top Toolbar (leaf module —
 // no chrome barrel import, so no view/chrome cycle).
 import { VIEW_COMMAND_EVENT, VIEW_MINOR_EVENT } from "../chrome/ViewCommandBus";
@@ -371,6 +370,8 @@ interface HunkCopyResult {
   readonly merged: number;
   /** In-range rows dropped (take side absent, GAP-03 parity). */
   readonly removed: number;
+  /** Updated in-memory staged edits: prunes dropped rows and clears target-side overrides. */
+  readonly nextEdits: Readonly<Record<string, string>>;
 }
 
 function applyHunkCopy(
@@ -378,8 +379,11 @@ function applyHunkCopy(
   start: number,
   end: number,
   dir: TextSide,
+  edits: Readonly<Record<string, string>> = {},
 ): HunkCopyResult {
+  const target: TextSide = dir === "left" ? "right" : "left";
   const next: TextRowDto[] = [];
+  const nextEdits: Record<string, string> = { ...edits };
   let merged = 0;
   let removed = 0;
   for (const row of rows) {
@@ -387,15 +391,19 @@ function applyHunkCopy(
       next.push(row);
       continue;
     }
-    const take = dir === "left" ? row.left : row.right;
+    const editVal = edits[`${row.index}:${dir}`];
+    const take = editVal !== undefined ? editVal : dir === "left" ? row.left : row.right;
     if (take === null) {
       removed += 1;
+      delete nextEdits[`${row.index}:left`];
+      delete nextEdits[`${row.index}:right`];
       continue;
     }
     merged += 1;
+    delete nextEdits[`${row.index}:${target}`];
     next.push({ index: row.index, kind: "equal", left: take, right: take, inline: [] });
   }
-  return { next, merged, removed };
+  return { next, merged, removed, nextEdits };
 }
 
 /**
@@ -594,10 +602,35 @@ function LineNo({
  * byte-for-byte at the same testids / aria-labels.
  */
 function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
-  return dir === "left" ? (
-    <ChevronsRight size={12} strokeWidth={2} aria-hidden="true" />
-  ) : (
-    <ChevronsLeft size={12} strokeWidth={2} aria-hidden="true" />
+  // Inline (no lucide class): the wave-66O spec probes the svg
+  // directly for 12px currentColor stroke-width 2 with mirrored
+  // paths per direction.
+  const paths =
+    dir === "left" ? (
+      <>
+        <path d="m6 17 5-5-5-5" />
+        <path d="m13 17 5-5-5-5" />
+      </>
+    ) : (
+      <>
+        <path d="m11 17-5-5 5-5" />
+        <path d="m18 17-5-5 5-5" />
+      </>
+    );
+  return (
+    <svg
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths}
+    </svg>
   );
 }
 
@@ -671,126 +704,6 @@ function ActionGutter({
         </button>
       ) : null}
     </span>
-  );
-}
-
-function RowLine({ label, value, wrap, tint, spans, side, editKey, edited, onCommitEdit }: { label: string; value: string | null; wrap: boolean; tint: "tv-del" | "tv-ins" | "tv-chg" | null; spans?: readonly InlineSpanDto[]; side?: "left" | "right"; editKey: string | null; edited: boolean; onCommitEdit: ((key: string, text: string, prevText: string) => void) | null }): React.JSX.Element {
-  // Wave-66S2: inline word highlights ride the non-null cells of
-  // changed/inserted/deleted rows (`spans` = `row.inline` half-open ops,
-  // per-side ranges via the 66S `sideRanges` helper, paint via the 66S
-  // `InlineSpans` + `.tv-w-hl` token). A null (orphan) cell has no text
-  // to highlight so it keeps `.tv-cell-empty` (hatch, no tint); equal
-  // rows pass no spans and render byte-identical plain text.
-  // Wave-109: cell edit-mode + focus restore (caret affordance).
-  // Double-click (or Enter on the focused cell) swaps a non-null cell
-  // for an editor prefilled with its text. Esc cancels with zero
-  // change; committed text renders plain (backend spans no longer
-  // align) with a `data-edited` marker; edits are session-local until
-  // 66V backend. When the editor closes (commit OR cancel) focus
-  // returns to the cell so keyboard flow continues (Esc always exits
-  // back to the cell, never to <body>); Esc also stops propagation
-  // so the global chrome handler does not collapse find/goto/ignore
-  // while an edit cancels.
-  // Wave-107: the editor is an auto-sized `<textarea>` (GAP-B:
-  // multiline paste/typing). Commit on Ctrl/Cmd+Enter; plain Enter
-  // inserts a newline once the draft is already multiline, but commits
-  // a still-single-line draft so the 66ub/66v/67a single-line
-  // Enter-commit specs keep passing unchanged; Shift+Enter always
-  // inserts a newline; Esc still cancels. Blur no longer cancels
-  // (GAP-D: clicking away keeps the draft open, cancel is Esc only);
-  // the editor `title` tooltip documents the keys. Orphan (null)
-  // cells stay a no-op.
-  const [draft, setDraft] = useState<string | null>(null);
-  const editable = editKey !== null && onCommitEdit !== null && value !== null;
-  // Wave-109: focus restore target. The effect below returns focus to
-  // the cell whenever the editor closes (commit or cancel).
-  const cellRef = useRef<HTMLDivElement | null>(null);
-  const prevDraft = useRef<string | null>(null);
-  useEffect(() => {
-    if (prevDraft.current !== null && draft === null) cellRef.current?.focus();
-    prevDraft.current = draft;
-  }, [draft]);
-  const startEdit = (): void => {
-    if (editable && value !== null && draft === null) setDraft(value);
-  };
-  const commitDraft = (prevText: string): void => {
-    if (draft !== null && onCommitEdit !== null && editKey !== null) onCommitEdit(editKey, draft, prevText);
-    setDraft(null);
-  };
-  const cancelDraft = (): void => setDraft(null);
-  const body =
-    draft !== null ? (
-      <textarea
-        data-testid="textview/cell-edit"
-        className="tv-cell-edit w-full min-w-0 bg-transparent"
-        // eslint-disable-next-line jsx-a11y/no-autofocus
-        autoFocus
-        rows={Math.min(8, Math.max(1, draft.split("\n").length))}
-        style={{ resize: "none", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-        title="Multiline edit — Ctrl+Enter (Cmd+Enter on Mac) applies, Enter adds a line, Esc cancels. Clicking away keeps this draft."
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            commitDraft(value ?? draft);
-          } else if (e.key === "Enter" && !e.shiftKey && !draft.includes("\n")) {
-            // Legacy single-line fast path: a still-single-line draft
-            // commits on plain Enter so the 66ub/66v/67a specs (fill +
-            // Enter) keep passing unchanged. Once multiline, plain
-            // Enter falls through to the newline default.
-            e.preventDefault();
-            commitDraft(value ?? draft);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            // Wave-109: Esc cancels the edit ONLY — stop propagation so
-            // the global chrome handler does not collapse the
-            // find/goto/ignore panels while an edit cancels.
-            e.stopPropagation();
-            cancelDraft();
-          }
-        }}
-      />
-    ) : value === null || spans === undefined || side === undefined ? (
-      (value ?? "")
-    ) : (
-      <InlineSpans
-        text={value}
-        ranges={sideRanges(
-          spans,
-          side === "left"
-            ? (op) => [op.aStart, op.aEnd] as const
-            : (op) => [op.bStart, op.bEnd] as const,
-          value.length,
-        )}
-        side={side}
-      />
-    );
-  return (
-    <div
-      ref={cellRef}
-      className={
-        (wrap
-          ? "tv-cell min-w-0 flex-1 overflow-visible whitespace-pre-wrap break-all px-[var(--ac-space-2)]"
-          : "tv-cell min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-pre px-[var(--ac-space-2)]") +
-        // Wave-66I: kind tints live on non-null cells only; a null
-        // (orphan) cell paints `.tv-cell-empty` (base bg + hatch, no
-        // tint) so the missing side stays honest.
-        (value === null ? " tv-cell-empty" : tint === null ? "" : ` ${tint}`)
-      }
-      title={label}
-      data-edited={edited ? "true" : undefined}
-      tabIndex={editable ? 0 : undefined}
-      onDoubleClick={startEdit}
-      onKeyDown={editable ? (e) => {
-        if (e.key === "Enter" && draft === null) {
-          e.preventDefault();
-          startEdit();
-        }
-      } : undefined}
-    >
-      {body}
-    </div>
   );
 }
 
@@ -868,13 +781,18 @@ export default function TextView({
   // + onSelectRow) so the bottom LineDetailPane reuses the already-loaded
   // row; uncontrolled fallback keeps standalone mounts clickable.
   const [innerSelected, setInnerSelected] = useState<number | null>(null);
-  // Wave-66U-b: session-local cell edits (`"<rowIndex>:<side>"` ->
+  // Wave-66U-b: session-local staged cell edits (`"<rowIndex>:<side>"` ->
   // committed text). Cleared on session switch in the effect below.
-  // Wave-66V: commits go through the `text_apply_edit` backend (patch +
-  // re-compare with the session's own ignore options), then the loaded
-  // window is re-fetched so hunk grouping, inline spans and the ruler
-  // reflect the edit. Backend failures keep the text as a local-only
-  // override with an honest note; applied edits clear their override.
+  // Wave-198 (full staged-edit parity, was 66V immediate-apply):
+  // commits stage ONLY in this map — no `text_apply_edit` at commit
+  // time, so the `edit-note` ("session-local until save lands") is the
+  // honest dirty marker and the row kind/highlights stay backend-truth
+  // until Save. `saveSide` replays each staged edit for its side via
+  // `text_apply_edit` (Phase-2, same pattern as `stagedCopies`) and
+  // only then runs `text_save_side`; a replay reject keeps the staged
+  // text with an honest `edit-error`, a Save failure keeps staged.
+  // Backend-applied edits clear their override; `appliedCount` counts
+  // edits the Save flush applied (not commits).
   const [edits, setEdits] = useState<Readonly<Record<string, string>>>({});
   const [appliedCount, setAppliedCount] = useState(0);
   // Wave-107: one-level undo for the most recently APPLIED cell edit
@@ -975,17 +893,65 @@ export default function TextView({
         }
       }
 
+      // Wave-198: Phase-2 edit flush. Staged cell edits targeting
+      // `side` replay through `text_apply_edit` (same per-row path the
+      // gutter fallback proved) BEFORE the disk write, so the session
+      // the receipt names actually holds the staged text. Copies flush
+      // first and edits replay second, matching the local display
+      // (the `renderRow` override paints staged edits over copied
+      // rows). The test-only `__TEXT_APPLY_EDIT_NEXT__` failure
+      // override is honored once per replayed edit: a reject keeps the
+      // staged text with an honest `edit-error` and pauses the Save
+      // (no disk write, staged kept for retry). A Save failure below
+      // likewise keeps staged edits — clearing happens only on
+      // success.
+      const pendingEdits = Object.entries(edits).filter(([k]) => k.endsWith(`:${side}`));
+      let appliedEdits = 0;
+      if (pendingEdits.length > 0 && session !== null) {
+        for (const [key, text] of pendingEdits) {
+          const sep = key.lastIndexOf(":");
+          const index = Number(key.slice(0, sep));
+          if (!Number.isInteger(index) || index < 0) continue;
+          try {
+            const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
+            if (isRecord(forced) && forced["mode"] === "failure") {
+              w["__TEXT_APPLY_EDIT_NEXT__"] = null;
+              throw new Error(
+                typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
+              );
+            }
+            await textApplyEdit(session, index, side, text);
+            appliedEdits += 1;
+          } catch (err) {
+            setEditError(
+              `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+            );
+            setSaveNote(null);
+            setSaveError(`Save ${side} paused — row ${index} edit failed to apply, staged edits kept.`);
+            return;
+          }
+        }
+      }
+
       // Wave-178: converge the view to backend truth after the flush.
       // `text_apply_hunk` drops empty-take orphan rows (GAP-03), so the
       // locally held rows/total can lag the session — refetch the loaded
       // window + total + overview so follow-up copies compute from fresh
-      // indices instead of stale ones. Skipped when nothing was staged
-      // (pure cell-edit saves keep the existing rows byte-identical).
-      if (pendingCopies.length > 0 && session !== null) {
+      // indices instead of stale ones. Wave-198: the edit replay above
+      // regroups the edited rows the same way (mock recomputes a
+      // left==right row to equal), so the refetch also runs when only
+      // edits flushed. Skipped when nothing was staged.
+      if ((pendingCopies.length > 0 || appliedEdits > 0) && session !== null) {
         try {
           const page = await textGetRows(session, 0, Math.max(rowsRef.current.length, 1));
-          setRows(page.rows);
-          rowsRef.current = page.rows;
+          let freshRows = page.rows;
+          const remainingCopies = stagedCopies.filter((c) => c.target !== side);
+          for (const rem of remainingCopies) {
+            const res = applyHunkCopy(freshRows, rem.start, rem.end, rem.dir, edits);
+            freshRows = res.next;
+          }
+          setRows(freshRows);
+          rowsRef.current = freshRows;
           setTotal(page.total);
           const over = await fetchOverviewCounts(session);
           if (over !== null) setOverview(over);
@@ -1025,6 +991,13 @@ export default function TextView({
           receiptBytes = raw["bytes"] as number;
         }
       }
+      // Wave-198: flushed edits applied to the session — count them
+      // (the `applied-note` now means session-applied, honest only
+      // after this flush) and drop their staged overrides for `side`.
+      // A prior `edit-error` clears once nothing is staged anywhere.
+      if (appliedEdits > 0) {
+        setAppliedCount((c) => c + appliedEdits);
+      }
       setEdits((prev) => {
         const kept: Record<string, string> = {};
         for (const [k, v] of Object.entries(prev)) {
@@ -1032,6 +1005,9 @@ export default function TextView({
         }
         return kept;
       });
+      if (Object.keys(edits).filter((k) => !k.endsWith(`:${side}`)).length === 0) {
+        setEditError(null);
+      }
       // Clear saved staged copies for this side and wire copyNote/saveNote to single dirty-state
       setStagedCopies((prev) => {
         const remaining = prev.filter((c) => c.target !== side);
@@ -1050,74 +1026,95 @@ export default function TextView({
       setSavingSide(null);
     }
   }
+  /**
+   * Wave-198: stage a cell commit LOCALLY (no backend IPC at commit
+   * time — the 66V immediate `text_apply_edit` + refetch is retired).
+   * The staged text renders at once (the `renderRow` override +
+   * `edit-note` dirty marker), the `lastUndo` entry is recorded for
+   * one-level undo, and any stale save receipt is cleared (dirty
+   * again). The test-only `__TEXT_APPLY_EDIT_NEXT__` failure override
+   * is still honored once here so the mock-IPC specs can stage a
+   * backend-rejected edit deterministically: staged text kept with an
+   * honest `edit-error` (the same note a Save-flush replay failure
+   * raises). A clean commit leaves a prior `edit-error` untouched —
+   * it names a still-staged failure, cleared when nothing is staged.
+   */
   const commitEdit = (key: string, text: string, prevText: string): void => {
-    void (async () => {
-      const sep = key.lastIndexOf(":");
-      const index = Number(key.slice(0, sep));
-      const side = key.slice(sep + 1) === "right" ? "right" : "left";
-      if (session === null || !Number.isInteger(index) || index < 0) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        return;
-      }
-      // Test-only apply override (mock-IPC spec): force the failure
-      // branch once so a dirty staged edit exists to save/clear.
-      try {
-        const w = window as unknown as Record<string, unknown>;
-        const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
-        if (isRecord(forced) && forced["mode"] === "failure") {
-          w["__TEXT_APPLY_EDIT_NEXT__"] = null;
-          throw new Error(
-            typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
-          );
-        }
-      } catch (err) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        setEditError(
-          `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
-        );
-        return;
-      }
-      try {
-        await textApplyEdit(session, index, side, text);
-        setEdits((prev) => {
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        setEditError(null);
-        // Wave-107: record the pre-edit text for one-level undo. The
-        // entry is replaced by every new applied edit.
-        setLastUndo({ key, index, side, prevText });
-        setUndoNote(null);
-        setAppliedCount((c) => c + 1);
-        const window = await textGetRows(session, 0, Math.max(rows.length, 1));
-        setRows(window.rows);
-        const over = await fetchOverviewCounts(session);
-        if (over !== null) setOverview(over);
-      } catch (err) {
-        setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
-        setEditError(
-          `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+    const sep = key.lastIndexOf(":");
+    const index = Number(key.slice(0, sep));
+    const side = key.slice(sep + 1) === "right" ? "right" : "left";
+    if (!Number.isInteger(index) || index < 0) {
+      setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+      return;
+    }
+    try {
+      const w = window as unknown as Record<string, unknown>;
+      const forced = w["__TEXT_APPLY_EDIT_NEXT__"];
+      if (isRecord(forced) && forced["mode"] === "failure") {
+        w["__TEXT_APPLY_EDIT_NEXT__"] = null;
+        throw new Error(
+          typeof forced["error"] === "string" ? (forced["error"] as string) : "mock apply failed",
         );
       }
-    })();
+    } catch (err) {
+      setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+      setLastUndo({ key, index, side, prevText });
+      setUndoNote(null);
+      setSaveNote(null);
+      setEditError(
+        `Edit kept locally — backend apply failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+      return;
+    }
+    setEdits((prev) => (prev[key] === text ? prev : { ...prev, [key]: text }));
+    // Wave-107: record the pre-edit text for one-level undo. The entry
+    // is replaced by every new commit; a staged undo reverts locally
+    // (no IPC), an applied undo re-applies via `textApplyEdit`.
+    setLastUndo({ key, index, side, prevText });
+    setUndoNote(null);
+    setSaveNote(null);
   };
   const dirtyCount = Object.keys(edits).length;
   /**
-   * Wave-107: undo the most recently applied cell edit (GAP-C, one
-   * level). Re-applies the recorded pre-edit text through the same
-   * `textApplyEdit` backend path as a commit, then refetches the
-   * loaded window + overview so hunk grouping and highlights reflect
-   * the restore. No-op while empty or already undoing; success clears
-   * the entry with a receipt note, failure keeps the entry (retryable)
-   * with an honest error note. The test-only
-   * `__TEXT_APPLY_EDIT_NEXT__` failure override is honored once so the
-   * mock-IPC spec can drive the failure branch deterministically.
+   * Wave-107: undo the most recently committed cell edit (GAP-C, one
+   * level). Wave-198: two paths. A STAGED (unsaved) edit reverts
+   * locally with no IPC — the override drops back to the recorded
+   * pre-edit text (or vanishes when that text is the backend text),
+   * so a planted backend failure is never consumed and the undo
+   * cannot fail. An APPLIED edit (Save already flushed it) re-applies
+   * the recorded pre-edit text through `textApplyEdit`, then refetches
+   * the loaded window + overview; success clears the entry with a
+   * receipt note, failure keeps the entry (retryable) with an honest
+   * error note. The test-only `__TEXT_APPLY_EDIT_NEXT__` failure
+   * override is honored once on the backend path so the mock-IPC spec
+   * can drive the failure branch deterministically.
    */
   async function undoLastEdit(): Promise<void> {
     const entry = lastUndo;
-    if (entry === null || undoing || session === null) return;
+    if (entry === null || undoing) return;
+    // Staged path: the key is still in the dirty map, so the backend
+    // never saw the text — revert the override in place. `rowsRef`
+    // holds backend truth (edits never mutate local rows), so a
+    // pre-edit text equal to the backend text drops the override
+    // entirely while a chained pre-edit (itself staged) is restored.
+    if (Object.prototype.hasOwnProperty.call(edits, entry.key)) {
+      const row = rowsRef.current.find((r) => r.index === entry.index);
+      const backendText = row === undefined ? null : entry.side === "left" ? row.left : row.right;
+      const next: Record<string, string> = { ...edits };
+      if (backendText !== null && entry.prevText === backendText) delete next[entry.key];
+      else next[entry.key] = entry.prevText;
+      setEdits(next);
+      setLastUndo(null);
+      // Same "Undid last edit" lead as the backend path so the 107/109
+      // receipt pins hold for both paths; the tail names the path.
+      setUndoNote("Undid last edit — staged text restored.");
+      if (Object.keys(next).length === 0) setEditError(null);
+      // Wave-109: focus restore (caret affordance) — keyboard focus
+      // returns to the restored row.
+      focusRowWhenMounted(entry.index);
+      return;
+    }
+    if (session === null) return;
     setUndoing(true);
     setUndoNote(null);
     try {
@@ -1263,6 +1260,19 @@ export default function TextView({
       openGoto();
     };
     const onKey = (e: KeyboardEvent): void => {
+      // Wave-219: Escape closes the view chrome popovers idempotently
+      // (set-false, never a toggle), so it runs BEFORE the
+      // defaultPrevented guard below. The chrome bridge clicks the
+      // find/goto dismiss buttons on Esc and preventDefaults; the
+      // guard would otherwise swallow this listener and leave the
+      // button-less Ignore/Format popovers open (textcontrols-66r).
+      if (e.key === "Escape") {
+        setFindOpen(false);
+        setGotoOpen(false);
+        setIgnoreOpen(false);
+        setFormatOpen(false);
+        return;
+      }
       // Wave-178: a row-level handler that already consumed the chord
       // (row `l`/`r`/`n`/`p`/Cmd+Alt-arrows preventDefault) wins — this
       // window listener must not double-process it. The row `jumpDiff`
@@ -1277,11 +1287,6 @@ export default function TextView({
       } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G") && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         openGoto();
-      } else if (e.key === "Escape") {
-        setFindOpen(false);
-        setGotoOpen(false);
-        setIgnoreOpen(false);
-        setFormatOpen(false);
       }
       // NOTE (wave-178): no Cmd+Alt+Arrow branch here. Difference nav
       // rides the single routing point: the focused row handles it with
@@ -1843,28 +1848,11 @@ export default function TextView({
       const hunkRows = currentRows.slice(lo, hi + 1);
 
       // Phase 1: Local copy first! Apply hunk copy to locally held rows
-      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, start, end, dir);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, start, end, dir, edits);
       setRows(nextRows);
       rowsRef.current = nextRows;
-      // Wave-178: dropped (null-take) rows must not linger as ghost
-      // edit overrides or as phantom total — prune both so Load more /
-      // goto / find page against the same shortened prefix the backend
-      // will hold after Save.
+      setEdits(nextEdits);
       if (removed > 0) {
-        const dropped = new Set<number>();
-        for (const r of currentRows) {
-          if (r.index >= start && r.index <= end && (dir === "left" ? r.left : r.right) === null) {
-            dropped.add(r.index);
-          }
-        }
-        setEdits((prevEdits) => {
-          const kept: Record<string, string> = {};
-          for (const [k, v] of Object.entries(prevEdits)) {
-            const sep = k.lastIndexOf(":");
-            if (!dropped.has(Number(k.slice(0, sep)))) kept[k] = v;
-          }
-          return kept;
-        });
         setTotal((t) => Math.max(0, t - removed));
       }
       if (selectedIndex !== null) {
@@ -1942,21 +1930,11 @@ export default function TextView({
     }
     try {
       const target: TextSide = dir === "left" ? "right" : "left";
-      const { next: nextRows, merged, removed } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir);
+      const { next: nextRows, merged, removed, nextEdits } = applyHunkCopy(currentRows, rowIndex, rowIndex, dir, edits);
       setRows(nextRows);
       rowsRef.current = nextRows;
-      // Wave-178: same drop/total/overview accounting as the hunk path
-      // (shared `applyHunkCopy` + `adjustOverviewForCopy`) — the line
-      // path previously skipped all three and drifted from backend truth.
+      setEdits(nextEdits);
       if (removed > 0) {
-        setEdits((prevEdits) => {
-          const kept: Record<string, string> = {};
-          for (const [k, v] of Object.entries(prevEdits)) {
-            const sep = k.lastIndexOf(":");
-            if (Number(k.slice(0, sep)) !== rowIndex) kept[k] = v;
-          }
-          return kept;
-        });
         setTotal((t) => Math.max(0, t - removed));
       }
       setOverview((prev) => adjustOverviewForCopy(prev, row.kind === "equal" ? [] : [row], merged));
@@ -2086,8 +2064,8 @@ export default function TextView({
   const rightMetaText = useMemo(() => formatTextMeta(rightMeta, rightLines), [rightMeta, rightLines]);
 
   if (status === "loading") return <p>Loading text comparison…</p>;
-  if (status === "error") return <p role="alert">Text compare failed: {error}</p>;
-  if (status === "empty" || rows.length === 0) return <p>No rows to display.</p>;
+  if (status === "error") return <InlineNotice testid="textview/error">Text compare failed: {error}</InlineNotice>;
+  if (status === "empty" || rows.length === 0) return <EmptyState title="No rows to display." testid="textview/empty" />;
 
   const hasMore = rows.length < total;
 
@@ -2609,15 +2587,21 @@ export default function TextView({
           </span>
         </div>
       )}
-      {/* Wave-66R: controls collapse (Beyond Compare style). One
-          toolbar row (find / goto / ignore toggles, prev-next
-          difference nav + position, wrap / line-numbers /
-          differences-only / context, save overflow) plus collapsible
-          ignore, find and goto panels below. All legacy testids ride
-          the same inputs; logic (recompare/find/goto/save) untouched.
-          Wave-89: save lives in the toolbar overflow, counts live in
-          the bottom status bar. */}
-      <TextToolbar
+      {/* Wave-199c: chrome collapse (Beyond Compare single-row +
+          overlay truth). One toolbar row (find / goto / ignore /
+          format toggles, prev-next nav, wrap / line-numbers /
+          differences-only / context, save overflow) inside a relative
+          `tv-chrome` wrapper; Find/Goto/Ignore/Format float in an
+          absolute overlay column over the rows (never in-flow), so
+          open panels never push `textview/row-0` down
+          (firstRowTop<=140 open AND closed). Counts live in the
+          bottom status bar (`textview/toolbar-hunks` +
+          `textview/diffnav-note` render there, BC "N difference
+          sections" truth). All legacy testids ride the same inputs;
+          logic (recompare/find/goto/save) untouched. Rows/RowLine/
+          OverviewStrip below untouched (W196/W198 own those). */}
+      <div className="tv-chrome relative">
+        <TextToolbar
         findOpen={findOpen}
         gotoOpen={gotoOpen}
         ignoreOpen={ignoreOpen}
@@ -2652,102 +2636,121 @@ export default function TextView({
           }
         }}
       />
-      <IgnoreMenu
-        open={ignoreOpen}
-        ws={ignoreWs}
-        ignoreCase={ignoreCase}
-        busy={ignoreBusy}
-        onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
-      />
-      <FormatMenu
-        open={formatOpen}
-        encoding={encoding}
-        eol={eol}
-        busy={ignoreBusy}
-        onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
-      />
+      {/* Wave-199c: Find/Goto/Ignore/Format float in one absolute
+          overlay column (BC popover truth). The `tv-chrome` wrapper
+          above is relative; this stack is absolute so open panels
+          cover rows instead of pushing `textview/row-0` down
+          (firstRowTop<=140 open AND closed). Panels keep their own
+          open flags/testids/logic byte-identical; the column only
+          mounts while at least one panel is open, so closed chrome
+          is exactly one toolbar row.
+          Wave-220: dedicated overlay layer — `data-overlay` marks the
+          stack (and each panel root) as floating above rows by design,
+          so the e2e `assertNoOverlap` gate skips it explicitly (no
+          global weakening). Geometry/logic unchanged. */}
+      {(findOpen || gotoOpen || ignoreOpen || formatOpen) && (
+        <div
+          data-overlay="true"
+          className="tv-overlay-stack absolute left-[var(--ac-space-4)] top-full z-30 flex w-[min(480px,calc(100%-2rem))] flex-col gap-[var(--ac-space-2)] pt-[var(--ac-space-1)]"
+        >
+          {findOpen ? (
+            <FindOverlay
+              query={findQuery}
+              onQueryChange={(q) => {
+                setFindQuery(q);
+                setFindActive(-1);
+                setFindNote(null);
+              }}
+              prevDisabled={findHits.length === 0}
+              nextDisabled={findQuery.trim() === ""}
+              onPrev={() => activateHit(findActive - 1)}
+              onNext={() => (findActive < 0 ? runFind() : activateHit(findActive + 1))}
+              onRun={runFind}
+              onClose={() => setFindOpen(false)}
+              statusText={findStatusText}
+            />
+          ) : null}
+          {gotoOpen ? (
+            <GotoOverlay
+              value={gotoInput}
+              placeholder={total > 0 ? `1-${total}` : "row"}
+              onValueChange={(v) => {
+                setGotoInput(v);
+                setGotoNote(null);
+              }}
+              busy={gotoBusy}
+              onGo={() => void gotoRow()}
+              onClose={() => setGotoOpen(false)}
+              statusText={gotoStatusText}
+            />
+          ) : null}
+          <IgnoreMenu
+            open={ignoreOpen}
+            ws={ignoreWs}
+            ignoreCase={ignoreCase}
+            busy={ignoreBusy}
+            onChange={(nextWs, nextCase) => void recompareWithIgnores(nextWs, nextCase)}
+          />
+          <FormatMenu
+            open={formatOpen}
+            encoding={encoding}
+            eol={eol}
+            busy={ignoreBusy}
+            onChange={(nextEnc, nextEol) => void recompareFormat(nextEnc, nextEol)}
+          />
+        </div>
+      )}
+      </div>
       {/* Wave-112: undo docks into the bottom status bar (was its own
           row above the list even while disabled). Same testid/behavior,
           owned by `TextView`; the standalone row is gone so the idle
           chrome is one toolbar row + pathbar. */}
       {undoNote !== null ? (
-        <p data-testid="textview/undo-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/undo-note">
           {undoNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {saveNote !== null ? (
-        <p data-testid="textview/save-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/save-note">
           {saveNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {saveError !== null ? (
-        <p data-testid="textview/save-error" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/save-error">
           {saveError}
-        </p>
+        </InlineNotice>
       ) : null}
       {/* Wave-139b: hunk-copy receipt (applied + unsaved/Save
           outcome). Same note styling as the save line above. */}
       {copyNote !== null ? (
-        <p data-testid="textview/copy-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/copy-note">
           {copyNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {dirtyCount > 0 ? (
-        <p data-testid="textview/edit-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/edit-note">
           {dirtyCount} local {dirtyCount === 1 ? "edit" : "edits"} — session-local until save lands.
-        </p>
+        </InlineNotice>
       ) : null}
       {appliedCount > 0 ? (
-        <p data-testid="textview/applied-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/applied-note">
           {appliedCount} {appliedCount === 1 ? "edit" : "edits"} applied to the compare session.
-        </p>
+        </InlineNotice>
       ) : null}
       {editError !== null ? (
-        <p data-testid="textview/edit-error" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/edit-error">
           {editError}
-        </p>
+        </InlineNotice>
       ) : null}
       {viewFilter !== "all" || diffsOnly ? (
-        <p data-testid="textview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/diffsonly-note">
           Hiding {hiddenSameCount} same {hiddenSameCount === 1 ? "row" : "rows"}
           {contextClause} — toggle off to restore.
-        </p>
+        </InlineNotice>
       ) : null}
-      {/* Wave-66R: find lives in the collapsible overlay above
-          (wave-61 logic untouched, same testids/aria). */}
-      {findOpen ? (
-        <FindOverlay
-          query={findQuery}
-          onQueryChange={(q) => {
-            setFindQuery(q);
-            setFindActive(-1);
-            setFindNote(null);
-          }}
-          prevDisabled={findHits.length === 0}
-          nextDisabled={findQuery.trim() === ""}
-          onPrev={() => activateHit(findActive - 1)}
-          onNext={() => (findActive < 0 ? runFind() : activateHit(findActive + 1))}
-          onRun={runFind}
-          onClose={() => setFindOpen(false)}
-          statusText={findStatusText}
-        />
-      ) : null}
-      {/* Wave-66R: goto lives in the collapsible overlay above
-          (wave-43 logic untouched, same testids/aria). */}
-      {gotoOpen ? (
-        <GotoOverlay
-          value={gotoInput}
-          placeholder={total > 0 ? `1-${total}` : "row"}
-          onValueChange={(v) => {
-            setGotoInput(v);
-            setGotoNote(null);
-          }}
-          busy={gotoBusy}
-          onGo={() => void gotoRow()}
-          onClose={() => setGotoOpen(false)}
-          statusText={gotoStatusText}
-        />
-      ) : null}
+      {/* Wave-199c: find/goto now ride the `tv-chrome` overlay stack
+          above (same testids/logic, absolute popovers). Old in-flow
+          slots removed so open panels never push rows. */}
       {/* Wave-79: far-left overview strip (BC-style section markers).
           Mounts FIRST in the row flex so it paints at the far left; the
           rows list keeps its testids/selection/scroll behavior untouched.
@@ -2798,8 +2801,12 @@ export default function TextView({
       )}
       {/* Wave-89: counts merge into the bottom status bar (BC truth:
           counts in the status bar, like FolderView). Same testid/text
-          as the old top line so every legacy spec keeps passing. */}
-      <div className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-t border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] flex items-center">
+          as the old top line so every legacy spec keeps passing.
+          Wave-199c: difference position joins them (BC "N difference
+          sections" truth). `textview/toolbar-hunks` +
+          `textview/diffnav-note` render here with byte-identical
+          testids/text — the toolbar stays one compact row. */}
+      <div className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-t border-[var(--ac-border-subtle)] bg-[var(--ac-bg)] flex flex-wrap items-center gap-x-[var(--ac-space-3)] gap-y-[var(--ac-space-1)]">
         {/* Wave-112B: one-level undo docked in the status bar (was its
             own row above the list even while disabled). Sibling of the
             counts so `textview/status` keeps its exact legacy text and
@@ -2824,6 +2831,14 @@ export default function TextView({
             : ` · left ${leftLines} lines · right ${rightLines} lines`}
           {pair === null || demo !== null ? "" : ` · ${pair.left} vs ${pair.right}`}
         </p>
+        <span data-testid="textview/toolbar-hunks" className="ac-meta inline-block min-w-[14ch] shrink-0 text-center tabular-nums text-[var(--ac-fg-muted)]">
+          {hunksLabel}
+        </span>
+        {diffNote === null ? null : (
+          <span data-testid="textview/diffnav-note" role="note" className="ac-meta text-[var(--ac-fg-muted)]">
+            {diffNote}
+          </span>
+        )}
       </div>
     </section>
   );

@@ -11,6 +11,12 @@ export interface StatusBarProps {
    * to the honest `message` default (`Ready`) without layout breakage.
    */
   diffStats?: DiffStats | null;
+  /** Wave-206: optional file encoding label (e.g. UTF-8) */
+  encoding?: string;
+  /** Wave-206: optional line/column indicator (e.g. Ln 1, Col 1) */
+  lineCol?: string;
+  /** Wave-206: optional zoom level indicator (e.g. 100%) */
+  zoom?: string;
 }
 
 /**
@@ -61,7 +67,15 @@ function normalizeStats(stats: DiffStats | null | undefined): DiffStats | null {
   }
 }
 
-export function StatusBar({ left, right, message, diffStats }: StatusBarProps): React.JSX.Element {
+export function StatusBar({
+  left,
+  right,
+  message,
+  diffStats,
+  encoding,
+  lineCol,
+  zoom,
+}: StatusBarProps): React.JSX.Element {
   const ambient = useContext(DiffStatsContext);
   const stats = normalizeStats(diffStats ?? ambient ?? null);
   const statsLabel =
@@ -73,16 +87,30 @@ export function StatusBar({ left, right, message, diffStats }: StatusBarProps): 
       data-testid="statusbar"
       className="ac-meta flex h-[var(--ac-statusbar-h)] select-none items-center justify-between gap-[var(--ac-space-4)] border-t border-[var(--ac-border)] bg-[var(--ac-statusbar-bg)] px-[var(--ac-space-3)] font-normal text-[var(--ac-statusbar-fg)]"
     >
-      <span className="truncate" title={left}>
+      <span className="truncate" title={left} data-testid="statusbar/left">
         {left}
       </span>
       <span data-testid="statusbar/message" className="min-w-0 flex-1 truncate text-center" title={message}>
         {message}
       </span>
-      {/* Wave-122: counts stay right-anchored (shrink-0) so long paths
-          never compress the stats block; alignment only. */}
-      <span className="shrink-0 truncate text-right" title={statsLabel ?? right}>
-        {right}
+      {/* Wave-122 / Wave-206: metrics stay right-anchored (shrink-0); alignment only */}
+      <span className="shrink-0 truncate text-right flex items-center justify-end gap-[var(--ac-space-2)]" title={statsLabel ?? right}>
+        <span data-testid="statusbar/right">{right}</span>
+        {encoding && (
+          <span data-testid="statusbar/encoding" className="text-[var(--ac-fg-muted)]">
+            {encoding}
+          </span>
+        )}
+        {lineCol && (
+          <span data-testid="statusbar/line-col" className="text-[var(--ac-fg-muted)]">
+            {lineCol}
+          </span>
+        )}
+        {zoom && (
+          <span data-testid="statusbar/zoom" className="text-[var(--ac-fg-muted)]">
+            {zoom}
+          </span>
+        )}
         {stats !== null && (
           <span data-testid="statusbar/stats" aria-label={statsLabel}>
             {" \u2022 "}

@@ -9,6 +9,11 @@ import { assertNoOverlap } from "../helpers/overlap";
  * New file only, no existing spec touched.
  */
 async function createSession(page: Page, kind: string, viewTestId: string): Promise<void> {
+  const banner = page.getByTestId("workspace/demo-banner");
+  if (await banner.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
+    await page.getByTestId("workspace/demo-clear").click();
+    await expect(page.getByTestId("session-count")).toContainText("sessions: 0");
+  }
   await page.getByTestId("toolbar/action-open").click();
   await expect(page.getByTestId("session/dialog")).toBeVisible();
   await page.getByTestId("session/kind-select").selectOption(kind);

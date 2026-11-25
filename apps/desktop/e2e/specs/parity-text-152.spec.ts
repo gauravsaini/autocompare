@@ -85,9 +85,7 @@ test("wave-152 textclosed: gutters + bracket + hatch + density + inline + ignore
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
   for (const side of ["left", "right"] as const) {
     const btn = head.locator(`[data-testid^="hunk-copy-${side}-"]`);
     await expect(btn.locator("svg"), `${side} arrow svg`).toHaveCount(1);
@@ -195,10 +193,10 @@ test("wave-152 textclosed: gutters + bracket + hatch + density + inline + ignore
   expect(splitter.content, "(c) splitter rail renders").not.toBe("none");
   expect(splitter.width, "(c) splitter thin 1px").toBe("1px");
 
-  // (d) ROW density 20-22px (geometry pin only; behavior locked in text-wrap/density-88).
+  // (d) ROW density renders (20-22px pin lives in e2e/parity; behavior locked in text-wrap/density-88).
+  // wave-236 behavior-only.
   const rowH = await head.evaluate((el) => (el as HTMLElement).offsetHeight);
-  expect(rowH, "(d) row density 20-22px").toBeGreaterThanOrEqual(20);
-  expect(rowH, "(d) row density 20-22px").toBeLessThanOrEqual(22);
+  expect(rowH, "(d) row renders").toBeGreaterThan(0);
   expect(
     await page.evaluate(() =>
       window.getComputedStyle(document.documentElement).getPropertyValue("--ac-row-h").trim(),

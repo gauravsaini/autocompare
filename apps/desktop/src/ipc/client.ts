@@ -583,6 +583,44 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         readMockFile(rightPath),
       ]);
 
+      const rawOpts = (args["opts"] && typeof args["opts"] === "object" ? args["opts"] : undefined) as
+        | Record<string, unknown>
+        | undefined;
+
+      const ws =
+        args["ignore_whitespace"] === true ||
+        args["ignoreWhitespace"] === true ||
+        rawOpts?.["ignore_whitespace"] === true ||
+        rawOpts?.["ignoreWhitespace"] === true;
+      const cs =
+        args["ignore_case"] === true ||
+        args["ignoreCase"] === true ||
+        rawOpts?.["ignore_case"] === true ||
+        rawOpts?.["ignoreCase"] === true;
+      const minor =
+        args["minor_unimportant"] === true ||
+        args["minorUnimportant"] === true ||
+        rawOpts?.["minor_unimportant"] === true ||
+        rawOpts?.["minorUnimportant"] === true;
+      const enc =
+        typeof args["encoding"] === "string" && args["encoding"] !== ""
+          ? (args["encoding"] as string)
+          : typeof rawOpts?.["encoding"] === "string" && rawOpts["encoding"] !== ""
+            ? (rawOpts["encoding"] as string)
+            : undefined;
+      const eol =
+        typeof args["eol"] === "string" && args["eol"] !== ""
+          ? (args["eol"] as string)
+          : typeof rawOpts?.["eol"] === "string" && rawOpts["eol"] !== ""
+            ? (rawOpts["eol"] as string)
+            : undefined;
+      const suppRaw =
+        args["suppressedLines"] ??
+        args["suppressed_lines"] ??
+        rawOpts?.["suppressedLines"] ??
+        rawOpts?.["suppressed_lines"];
+      const supp = Array.isArray(suppRaw) ? (suppRaw as number[]) : undefined;
+
       const hasIgnoreFlags =
         typeof args["ignore_whitespace"] === "boolean" ||
         typeof args["ignore_case"] === "boolean" ||
@@ -590,18 +628,12 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         typeof args["ignoreCase"] === "boolean" ||
         typeof args["minor_unimportant"] === "boolean" ||
         typeof args["minorUnimportant"] === "boolean" ||
-        typeof args["encoding"] === "string" ||
-        typeof args["eol"] === "string" ||
+        (typeof args["encoding"] === "string" && args["encoding"] !== "") ||
+        (typeof args["eol"] === "string" && args["eol"] !== "") ||
         Array.isArray(args["suppressed_lines"]) ||
-        Array.isArray(args["suppressedLines"]);
-
-      const ws = args["ignore_whitespace"] === true || args["ignoreWhitespace"] === true;
-      const cs = args["ignore_case"] === true || args["ignoreCase"] === true;
-      const minor = args["minor_unimportant"] === true || args["minorUnimportant"] === true;
-      const enc = typeof args["encoding"] === "string" ? args["encoding"] : undefined;
-      const eol = typeof args["eol"] === "string" ? args["eol"] : undefined;
-      const suppRaw = args["suppressedLines"] ?? args["suppressed_lines"];
-      const supp = Array.isArray(suppRaw) ? (suppRaw as number[]) : undefined;
+        Array.isArray(args["suppressedLines"]) ||
+        (rawOpts !== undefined &&
+          (ws || cs || minor || enc !== undefined || eol !== undefined || (supp !== undefined && supp.length > 0)));
 
       mockSuppressedLines.clear();
       if (supp !== undefined) {
@@ -1038,12 +1070,20 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       // fixtures (engine default direction: left wins). Real semantics
       // belong to the Rust engine; this branch only lets the SyncView
       // spec prove the full plan -> apply loop without touching disk.
+      const rawOpts = (args["opts"] && typeof args["opts"] === "object" ? args["opts"] : args) as
+        | Record<string, unknown>
+        | undefined;
+      const direction = typeof rawOpts?.["direction"] === "string" ? rawOpts["direction"] : "LeftToRight";
+      const isRightToLeft = direction === "RightToLeft";
+
       const steps = dumped.folderNodes
         .filter((node) => node.status !== "same")
         .map((node) => ({
           rel_path: node.relPath,
           is_dir: node.isDir,
-          action: node.left === null ? "CopyToLeft" : "CopyToRight",
+          action: isRightToLeft
+            ? (node.right === null ? "DeleteLeft" : "CopyToLeft")
+            : (node.left === null ? "CopyToLeft" : "CopyToRight"),
         }));
       return { steps, skipped: [], truncated: false } as unknown as T;
     }
@@ -1090,6 +1130,7 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
       } as unknown as T;
     }
     case "audio_compare": {
+      const tol = typeof args["tolerance"] === "number" ? args["tolerance"] : 0;
       return {
         receipt: "mock-audio-1",
         identical: false,
@@ -1100,7 +1141,7 @@ async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>): Prom
         channelsR: 2,
         durationL: 1.0,
         durationR: 1.0,
-        tolerance: 0,
+        tolerance: tol,
         windowsTotal: 100,
         windowsDiffering: 3,
         firstDiffAt: 0.12,

@@ -6,7 +6,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   readonly controlSize?: InputSize;
 }
 
-/** Uniform desktop input with macOS density (22/24/26px), inset hairline border + blue focus ring. Testids pass through. */
+/** Uniform desktop input with macOS density (22px/24px), inset hairline border + blue focus ring. Testids pass through. */
 export default function Input({ controlSize, className = "", ...rest }: InputProps): React.JSX.Element {
   const h =
     controlSize === "sm"

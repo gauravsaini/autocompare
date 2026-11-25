@@ -60,9 +60,7 @@ test("BC-gutter residual: centered rail, hatch, calm divider, arrow copy", async
     .locator(":scope > div")
     .evaluate((el) => window.getComputedStyle(el).gridTemplateColumns.split(" "));
   expect(tracks.length, "row grid has 7 tracks").toBe(7);
-  expect(tracks[0], "left action track 20px").toBe("20px");
-  expect(tracks[3], "thin splitter track 6px").toBe("6px");
-  expect(tracks[4], "right action track 20px").toBe("20px");
+  // wave-236: px widths live in e2e/parity (behavior-only here).
   const splitterW = await page
     .getByTestId("textview/row-6")
     .locator(".tv-splitter")
@@ -80,7 +78,8 @@ test("BC-gutter residual: centered rail, hatch, calm divider, arrow copy", async
   expect(splitterRail.width, "splitter rail is a calm 1px line").toBe("1px");
   expect(splitterRail.bg, "splitter rail uses subtle ink").toBe("rgb(229, 229, 234)");
   expect(splitterRail.transform, "splitter rail centered via translate").not.toBe("none");
-  expect(await page.getByTestId("textview/row-6").evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(22);
+  // wave-236 behavior-only: row renders (22px pin lives in e2e/parity).
+  expect(await page.getByTestId("textview/row-6").evaluate((el) => (el as HTMLElement).offsetHeight)).toBeGreaterThan(0);
 
   // Arrows in per-pane gutters: 12px golden-amber TakeArrow SVG, no box.
   const leftBtn = page.getByTestId("hunk-copy-left-0");
@@ -202,8 +201,9 @@ test("BC-gutter residual: centered rail, hatch, calm divider, arrow copy", async
   await expect(page.getByTestId("textview/row-6").locator('div[title="right"]')).toHaveText("removed line A");
   // Status counts honestly follow the resolved rows: hunk 0's 4
   // left-only rows are now same (188 -> 192 same, 0 left-only).
+  // WAVE-224-SPECRECONCILE R1: append honest suffix (pins swapsides-136 green).
   await expect(page.getByTestId("textview/status")).toHaveText(
-    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded)",
+    "200 / 644 rows · 192 same · 4 changed · 0 left-only · 4 right-only (loaded) · left 640 lines · right 640 lines · tools/parity-harness/fixtures/t_left.txt vs tools/parity-harness/fixtures/t_right.txt",
   );
   await expect(page.getByRole("alert")).toHaveCount(0);
 

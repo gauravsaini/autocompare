@@ -22,6 +22,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { assertNoOverlap } from "../helpers/overlap";
 
+/** Wave-187 unscope: full-page overlap gate (W186 chrome root-cause fixed). */
+
 test.setTimeout(120_000);
 
 test.beforeEach(async ({ page }) => {
@@ -35,8 +37,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function createHexSession(page: Page): Promise<void> {
-  if (await page.getByTestId("workspace/demo-banner").isVisible().catch(() => false)) {
+  const banner = page.getByTestId("workspace/demo-banner");
+  if (await banner.waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false)) {
     await page.getByTestId("workspace/demo-clear").click();
+    await expect(page.getByTestId("session-count")).toContainText("sessions: 0");
   }
   await page.getByTestId("toolbar/action-open").click();
   await expect(page.getByTestId("session/dialog")).toBeVisible();

@@ -1,5 +1,5 @@
-import { Code, Search } from "lucide-react";
-import { SegmentedControl, ToolbarButton } from "../../../ui";
+import { Code, Columns3, Play, RefreshCw, Search } from "lucide-react";
+import { ToolbarButton, UnifiedFilterSegment } from "../../../ui";
 
 /**
  * Wave-67B / Wave-B3: single-row folder controls toolbar (Beyond Compare style).
@@ -9,6 +9,7 @@ import { SegmentedControl, ToolbarButton } from "../../../ui";
  * name-filter toggle. Purely presentational: every value and callback is
  * owned by `FolderView` (filter/changes-only/name logic untouched).
  * All legacy testids ride the same buttons so specs keep passing unmodified.
+ * Wave-216 R4: Minor/unimportant toggle is top-bar-owned (view-filter bus); no view-level toggle by design.
  */
 export interface FolderToolbarProps {
   // Wave-L3: widened for the L2 `view-filter` bus `context` state
@@ -28,6 +29,22 @@ export interface FolderToolbarProps {
       as the name filter; masks + re-compare owned by `FolderView`. */
   readonly rulesOpen: boolean;
   readonly onToggleRules: () => void;
+  /** Optional Columns panel toggle (Beyond Compare parity). */
+  readonly columnsOpen?: boolean;
+  readonly onToggleColumns?: () => void;
+  /** Optional Reload / Refresh compare action. */
+  readonly onReload?: () => void;
+  readonly onRefresh?: () => void;
+  readonly reloading?: boolean;
+  /** Optional Compare action. */
+  readonly onCompare?: () => void;
+  readonly comparing?: boolean;
+  /**
+   * Wave-228: ViewCommandBus hook for diff nav parity with TableToolbar/HexToolbar.
+   * When provided, diff navigation commands dispatch through the SAME App
+   * `handleViewCommand` bus as the top Toolbar.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }
 
 export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Element {
@@ -43,7 +60,17 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
     onToggleNameFilter,
     rulesOpen,
     onToggleRules,
+    columnsOpen,
+    onToggleColumns,
+    onReload,
+    onRefresh,
+    reloading,
+    onCompare,
+    comparing,
+    onBusCommand,
   } = props;
+  void onBusCommand;
+  const handleReload = onReload ?? onRefresh;
   return (
     <div
       role="toolbar"
@@ -51,7 +78,9 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       data-testid="folderview/toolbar"
       className="tv-controls-bar"
     >
-      <SegmentedControl<"all" | "diffs" | "same" | "changes-only">
+      {/* Wave-239: All/Diffs/Same + changes-only rides the shared UnifiedFilterSegment (same testids). */}
+      <UnifiedFilterSegment<"all" | "diffs" | "same" | "changes-only">
+        size="sm"
         label="Row filter"
         options={[
           { value: "all", label: `All (${loadedCount})`, testid: "folder-filter-all", pressed: rowFilter === "all", onSelect: () => onRowFilter("all") },
@@ -62,6 +91,7 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       />
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
+        size="sm"
         data-testid="folderview/toolbar-rules"
         label={rulesOpen ? "Hide rules (Esc)" : "Show rules"}
         title="Rules: file masks for this compare"
@@ -72,6 +102,7 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
         <span>Rules</span>
       </ToolbarButton>
       <ToolbarButton
+        size="sm"
         data-testid="folderview/toolbar-namefilter"
         label={nameFilterOpen ? "Hide name filter (Esc)" : "Show name filter (Ctrl+F)"}
         title="Filter by name (Ctrl+F)"
@@ -81,6 +112,45 @@ export default function FolderToolbar(props: FolderToolbarProps): React.JSX.Elem
       >
         <span>Name filter</span>
       </ToolbarButton>
+      {onToggleColumns ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-columns"
+          label={columnsOpen ? "Hide columns panel" : "Show columns panel"}
+          title="Columns (Beyond Compare parity)"
+          icon={Columns3}
+          expanded={columnsOpen}
+          onClick={onToggleColumns}
+        >
+          <span>Columns</span>
+        </ToolbarButton>
+      ) : null}
+      {handleReload ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-reload"
+          label={reloading ? "Reloading…" : "Reload compare"}
+          title="Reload compare"
+          icon={RefreshCw}
+          disabled={reloading}
+          onClick={handleReload}
+        >
+          <span>Reload</span>
+        </ToolbarButton>
+      ) : null}
+      {onCompare ? (
+        <ToolbarButton
+          size="sm"
+          data-testid="folderview/toolbar-compare"
+          label={comparing ? "Comparing…" : "Compare"}
+          title="Compare folders"
+          icon={Play}
+          disabled={comparing}
+          onClick={onCompare}
+        >
+          <span>Compare</span>
+        </ToolbarButton>
+      ) : null}
     </div>
   );
 }

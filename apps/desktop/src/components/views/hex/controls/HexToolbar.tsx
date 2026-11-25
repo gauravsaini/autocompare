@@ -11,8 +11,8 @@
  * specs keep passing unmodified.
  */
 
-import { ArrowDownToLine, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { Checkbox, Field, Select, StatusText, ToolbarButton } from "../../../ui";
+import { ArrowDownToLine, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Button, Checkbox, Field, Select, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface HexToolbarProps {
   readonly pageLabel: string;
@@ -34,6 +34,12 @@ export interface HexToolbarProps {
   // (chrome budget: no new stacked rows, no popover chrome).
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
+  /**
+   * Wave-216 R5: ViewCommandBus hook for diff nav (Text/Merge
+   * `onBusCommand` parity). Page Prev/Next stay local; only the
+   * Prev/Next-DIFF buttons ride the bus when the prop is provided.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
   readonly diffNavBusy: boolean;
   readonly diffStatusText: string;
   readonly bytesPerRow: number;
@@ -62,6 +68,7 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
     onToggleGoto,
     onPrevDiff,
     onNextDiff,
+    onBusCommand,
     diffNavBusy,
     diffStatusText,
     bytesPerRow,
@@ -76,10 +83,10 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       data-testid="hexview/toolbar"
       className="tv-controls-bar"
     >
-      <ToolbarButton onClick={onPrevPage} disabled={prevDisabled} icon={ChevronLeft} label="Prev">
+      <ToolbarButton data-testid="hexview/toolbar-prev-page" onClick={onPrevPage} disabled={prevDisabled} icon={ChevronLeft} label="Prev">
         Prev
       </ToolbarButton>
-      <ToolbarButton onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
+      <ToolbarButton data-testid="hexview/toolbar-next-page" onClick={onNextPage} disabled={nextDisabled} icon={ChevronRight} label="Next">
         Next
       </ToolbarButton>
       <StatusText data-testid="hexview/page-label">
@@ -87,13 +94,18 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
       </StatusText>
       <span aria-hidden="true" className="tv-controls-sep" />
       {/* HEX2: diff-only navigation (BC next/previous difference).
-          Same row, honest busy disable; receipt rides `hex-diff-status`. */}
-      <ToolbarButton data-testid="hex-diff-prev" onClick={onPrevDiff} disabled={diffNavBusy} icon={ChevronUp} label="Prev diff">
-        Prev diff
-      </ToolbarButton>
-      <ToolbarButton data-testid="hex-diff-next" onClick={onNextDiff} disabled={diffNavBusy} icon={ChevronDown} label="Next diff">
-        Next diff
-      </ToolbarButton>
+          Wave-239: rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="hex-diff-prev"
+        nextTestid="hex-diff-next"
+        prevLabel="Prev diff"
+        nextLabel="Next diff"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        prevDisabled={diffNavBusy}
+        nextDisabled={diffNavBusy}
+        onBusCommand={onBusCommand}
+      />
       <StatusText data-testid="hex-diff-status" role="status">
         {diffStatusText}
       </StatusText>
@@ -130,13 +142,13 @@ export default function HexToolbar(props: HexToolbarProps): React.JSX.Element {
         onChange={(e) => onToggleSyncScroll(e.target.checked)}
       />
       <span aria-hidden="true" className="tv-controls-sep" />
-      <span data-testid="hex-copy-bar" className="inline-flex flex-wrap items-center gap-[var(--ac-space-2)]">
-        <ToolbarButton data-testid="hex-copy-hex" onClick={onCopyHex} label="Copy hex">
+      <span data-testid="hex-copy-bar" className="ac-control-group">
+        <Button data-testid="hex-copy-hex" size="sm" onClick={onCopyHex}>
           Copy hex
-        </ToolbarButton>
-        <ToolbarButton data-testid="hex-copy-ascii" onClick={onCopyAscii} label="Copy ASCII">
+        </Button>
+        <Button data-testid="hex-copy-ascii" size="sm" onClick={onCopyAscii}>
           Copy ASCII
-        </ToolbarButton>
+        </Button>
       </span>
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton

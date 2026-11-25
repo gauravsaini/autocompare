@@ -25,6 +25,11 @@ export interface SyncToolbarProps {
   readonly disabledReason?: string | null;
   readonly onDry: () => void;
   readonly onReal: () => void;
+  /**
+   * Wave-228: ViewCommandBus hook for diff nav parity (TableToolbar/HexToolbar parity).
+   * Optional so existing call sites compile unchanged.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
 }
 
 export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element {
@@ -40,10 +45,12 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
     disabledReason,
     onDry,
     onReal,
+    onBusCommand: _onBusCommand,
   } = props;
   return (
     <div role="toolbar" aria-label="Sync controls" data-testid="syncview/toolbar" className="tv-controls-bar">
       <SegmentedControl<SyncDirection>
+        size="sm"
         label="Sync direction"
         options={[
           { value: "LeftToRight", label: "Update right (left wins)", testid: "syncview/dir-left", pressed: direction === "LeftToRight", onSelect: () => onDirection("LeftToRight") },
@@ -56,6 +63,7 @@ export default function SyncToolbar(props: SyncToolbarProps): React.JSX.Element 
       </span>
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
+        size="sm"
         data-testid="syncview/toolbar-filter"
         label={filterOpen ? "Hide name filter (Esc)" : "Show name filter (Ctrl+F)"}
         title="Filter steps by name (Ctrl+F)"

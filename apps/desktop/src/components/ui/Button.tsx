@@ -38,7 +38,7 @@ const variants: Record<ButtonVariant, string> = {
     "active:shadow-[var(--ac-btn-danger-active-shadow,none)]",
 };
 
-/** Shared desktop button: 4 variants, 2 macOS sizes (22px/26px), hairline border + bevel. Testids pass through untouched. */
+/** Shared desktop button: 4 variants, 2 macOS sizes (22px/24px), hairline border + bevel. Testids pass through untouched. */
 export default function Button({ variant = "secondary", size = "sm", fullWidth = false, className = "", children, ...rest }: ButtonProps): React.JSX.Element {
   const sizeClass = fullWidth
     ? "h-auto w-full justify-start px-2 py-[var(--ac-space-2)] text-[12px]"

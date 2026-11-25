@@ -1,19 +1,21 @@
-import { ArrowDownToLine, ChevronDown, ChevronUp, Search, SlidersHorizontal, Type } from "lucide-react";
-import { Button, Checkbox, Select, ToolbarButton } from "../../../ui";
+import { ArrowDownToLine, Search, SlidersHorizontal, Type } from "lucide-react";
+import { Button, Checkbox, ToolbarButton, UnifiedCopyCluster, UnifiedDiffOnlyCluster, UnifiedNavCluster } from "../../../ui";
 
 /**
- * Wave-66R: single-row text controls toolbar (Beyond Compare style).
+ * Wave-199c: single-row text controls toolbar (Beyond Compare style).
  *
- * Replaces the ~180px stacked control block (ignore fieldset + toggle
- * row + always-visible find/goto rows) with one toolbar row: Find /
- * Goto / Ignore toggle buttons (Ctrl+F, Ctrl+G, menu), prev/next
- * difference nav, the difference position, and the compact display
- * toggles (wrap, line numbers, differences-only + context N).
+ * One toolbar row: Find / Goto / Ignore / Format toggles (Ctrl+F,
+ * Ctrl+G, menus), prev/next difference nav, display toggles (wrap,
+ * line numbers, differences-only + context N), save overflow.
+ * Find/Goto/Ignore/Format panels float in the `tv-chrome` overlay
+ * stack (absolute popovers, never in-flow) so open panels never push
+ * `textview/row-0` down. Difference counts live in the bottom status
+ * bar (`textview/toolbar-hunks` + `textview/diffnav-note` render
+ * there, BC "N difference sections" truth) — same testids/text,
+ * new address.
  *
  * Purely presentational: every value and callback is owned by
- * `TextView` (existing find/goto/ignore logic untouched). All legacy
- * testids ride the same inputs so wave-30/34/39/59/61/62/66H specs
- * keep passing unmodified.
+ * `TextView`. All legacy testids ride the same inputs.
  */
 export interface TextToolbarProps {
   readonly findOpen: boolean;
@@ -37,9 +39,13 @@ export interface TextToolbarProps {
    * either way; view-level controls are never removed.
    */
   readonly onBusCommand?: (cmd: "prev" | "next") => void;
-  /** e.g. "hunk 2 of 5", "3 hunks", or "no differences". */
-  readonly hunksLabel: string;
-  readonly diffNote: string | null;
+  /** Wave-199c: moved to the bottom status bar (BC "N difference
+      sections" truth). Kept in the props interface so `TextView`
+      call sites compile unchanged; the toolbar no longer renders
+      them — `TextView` renders the same testids in `textview/status`.
+      @deprecated toolbar no longer renders; read from status bar. */
+  readonly hunksLabel?: string;
+  readonly diffNote?: string | null;
   readonly wrap: boolean;
   readonly onToggleWrap: (v: boolean) => void;
   readonly showLineNos: boolean;
@@ -76,8 +82,6 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
     onPrevDiff,
     onNextDiff,
     onBusCommand,
-    hunksLabel,
-    diffNote,
     wrap,
     onToggleWrap,
     showLineNos,
@@ -125,7 +129,7 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
       <ToolbarButton
         data-testid="textview/toolbar-ignore"
         label={ignoreOpen ? "Hide ignore options" : "Show ignore options"}
-        title="Ignore whitespace / case (backend may not support them)"
+        title="Ignore whitespace / case (backend honors them)"
         expanded={ignoreOpen}
         onClick={onToggleIgnore}
       >
@@ -143,79 +147,42 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         <span>Format</span>
       </ToolbarButton>
       <span aria-hidden="true" className="tv-controls-sep" />
-      <ToolbarButton
-        data-testid="textview/toolbar-prev-diff"
-        label="Previous difference"
-        title="Previous difference"
-        onClick={() => {
-          if (onBusCommand) onBusCommand("prev");
-          else onPrevDiff();
-        }}
-      >
-        <ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>Prev</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-next-diff"
-        label="Next difference"
-        title="Next difference"
-        onClick={() => {
-          if (onBusCommand) onBusCommand("next");
-          else onNextDiff();
-        }}
-      >
-        <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>Next</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-copy-line-left"
-        label="Copy line left"
-        title={copyLineDisabledReason ?? "Copy line to left (take right line)"}
+      {/* Wave-239: nav rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="textview/toolbar-prev-diff"
+        nextTestid="textview/toolbar-next-diff"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        onBusCommand={onBusCommand}
+      />
+      {/* Wave-239: copy addressing rides the shared UnifiedCopyCluster (same testids). */}
+      <UnifiedCopyCluster
+        leftTestid="textview/toolbar-copy-line-left"
+        rightTestid="textview/toolbar-copy-line-right"
+        leftTitle="Copy line to left (take right line)"
+        rightTitle="Copy line to right (take left line)"
         disabled={!canCopyLine}
-        onClick={() => onCopyLine?.("right")}
-      >
-        <span>Copy Line L</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-copy-line-right"
-        label="Copy line right"
-        title={copyLineDisabledReason ?? "Copy line to right (take left line)"}
-        disabled={!canCopyLine}
-        onClick={() => onCopyLine?.("left")}
-      >
-        <span>Copy Line R</span>
-      </ToolbarButton>
-      <span data-testid="textview/toolbar-hunks" className="ac-meta text-[var(--ac-fg-muted)]">
-        {hunksLabel}
-      </span>
-      {diffNote === null ? null : (
-        <span data-testid="textview/diffnav-note" role="note" className="ac-meta text-[var(--ac-fg-muted)]">
-          {diffNote}
-        </span>
-      )}
+        disabledReason={copyLineDisabledReason}
+        onCopyLeft={() => onCopyLine?.("right")}
+        onCopyRight={() => onCopyLine?.("left")}
+      />
+      {/* Wave-199c: counts moved to the bottom status bar (BC "N
+          difference sections" truth). `textview/toolbar-hunks` +
+          `textview/diffnav-note` render in `textview/status` with the
+          same testids/text — the toolbar stays one compact row. */}
       <span aria-hidden="true" className="tv-controls-sep" />
+      {/* Wave-239: All/Diffs/Same + context rides the shared UnifiedDiffOnlyCluster (same testids). */}
       <Checkbox data-testid="textview/wrap-toggle" label="Word wrap" checked={wrap} onChange={(e) => onToggleWrap(e.target.checked)} />
       <Checkbox data-testid="textview/linenos-toggle" label="Line numbers" checked={showLineNos} onChange={(e) => onToggleLineNos(e.target.checked)} />
-      <Checkbox data-testid="textview/diffsonly-toggle" label="Differences only" checked={diffsOnly} onChange={(e) => onToggleDiffsOnly(e.target.checked)} />
-      <label className="inline-flex cursor-pointer items-center gap-2 text-[length:var(--ac-font-size-ui)] font-normal text-[var(--ac-fg)]">
-        Context
-        <Select
-          data-testid="textview/context-lines"
-          aria-label="Context lines around differences"
-          title={diffsOnly ? "Unchanged rows shown on each side of every difference" : "Enable Differences only to choose context lines"}
-          value={String(contextLines)}
-          disabled={!diffsOnly}
-          onChange={(e) => {
-            const n = Number.parseInt(e.target.value, 10);
-            if (n === 0 || n === 1 || n === 3 || n === 5) onContextLines(n);
-          }}
-        >
-          <option value="0">0</option>
-          <option value="1">1</option>
-          <option value="3">3</option>
-          <option value="5">5</option>
-        </Select>
-      </label>
+      <UnifiedDiffOnlyCluster
+        toggleTestid="textview/diffsonly-toggle"
+        checked={diffsOnly}
+        onToggle={onToggleDiffsOnly}
+        contextTestid="textview/context-lines"
+        contextValue={contextLines}
+        onContext={onContextLines}
+        contextDisabled={!diffsOnly}
+      />
       {/* Wave-89: save rides the toolbar overflow (right-aligned group,
           always mounted so legacy testids stay visible on load). */}
       <span aria-hidden="true" className="tv-controls-sep" />

@@ -58,10 +58,18 @@
 
 :root {
   /* Typography (Wave-144: bundled Inter/JetBrains Mono first,
-     system stacks stay as fallback) */
-  --ac-font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+     system stacks stay as fallback; Wave-189: system-ui pinned
+     right after Inter so Linux/Windows sans falls back without
+     layout shift) */
+  --ac-font-ui: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Helvetica Neue", Helvetica, Arial, sans-serif;
   --ac-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Wave-189 icon unify (typography/chrome ONLY, no color/geometry):
+     Lucide-only 14px / strokeWidth 1.75; ToolbarButton is the single
+     renderer. Tokens here so e2e can pin drift without Views edits. */
+  --ac-icon-size: 14px;
+  --ac-icon-stroke-width: 1.75;
 
   /* Surfaces & Backgrounds */
   --ac-bg: #f5f5f7;
@@ -82,6 +90,12 @@
   --ac-focus: #0a84ff;
   --ac-focus-ring: var(--ac-focus);
   --ac-focus-ring-subtle: rgba(10, 132, 255, 0.25);
+
+  /* Wave-232 gallery: drop-fill rides the accent (no hardcoded blue —
+     dnd/PaneDropZone ACTIVE_FILL migrates in Wave B/C, testids intact);
+     take-arrow rides the golden-amber tab-dirty ink (TextView already does). */
+  --ac-drop-active-fill: color-mix(in srgb, var(--ac-accent) 8%, transparent);
+  --ac-take-arrow-fg: var(--ac-tab-dirty);
 
   /* Selection & Hover */
   --ac-selection-bg: #b3d7ff;
@@ -255,6 +269,8 @@
     --ac-focus: #0a84ff;
     --ac-focus-ring: var(--ac-focus);
     --ac-focus-ring-subtle: rgba(10, 132, 255, 0.35);
+    --ac-drop-active-fill: color-mix(in srgb, var(--ac-accent) 12%, transparent);
+    --ac-take-arrow-fg: var(--ac-tab-dirty);
     --ac-selection-bg: #1a4f8b;
     --ac-selection-fg: #ffffff;
     --ac-row-hover-bg: rgba(255, 255, 255, 0.045);
@@ -383,6 +399,9 @@ samp {
   font-size: var(--ac-font-size-ui);
   line-height: var(--ac-line-height-ui);
   letter-spacing: var(--ac-letter-spacing-ui-tight);
+  /* Wave-189: tabular numerals for totals/counts riding chrome-label
+     (typography only, no size/line-height/color change). */
+  font-variant-numeric: tabular-nums;
 }
 
 .ac-meta {
@@ -390,6 +409,16 @@ samp {
   font-size: var(--ac-font-size-meta);
   line-height: var(--ac-line-height-meta);
   letter-spacing: var(--ac-letter-spacing-ui-tight);
+  /* Wave-189: totals/counts tabular so 11px meta numerals align. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wave-189 icon utility (opt-in ONLY, never global `svg` override so
+   Views density stays untouched): ui chrome icons ride 14px. */
+.ac-icon {
+  width: var(--ac-icon-size);
+  height: var(--ac-icon-size);
+  flex-shrink: 0;
 }
 
 /*
@@ -680,6 +709,9 @@ samp {
   font-size: var(--ac-font-size-code);
   line-height: var(--ac-line-height-code);
   letter-spacing: var(--ac-letter-spacing-code);
+  /* Wave-189: tabular numerals for code cells (gutter already had it;
+     typography only, no size/height/color change). */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Table view: same row height; sans UI header, mono code cells */
@@ -851,6 +883,21 @@ samp {
 }
 
 /*
+ * Wave-188: merge thin splitter (merge-scoped ONLY). 1px vertical rail
+ * between the three top panes, reusing the existing --ac-rail-line ink
+ * (same token as the 66O text splitter rail, no new palette, both
+ * schemes). Pure geometry: full-height flex stretch, never intercepts
+ * clicks, no grid-track change.
+ */
+.mv-splitter {
+  width: 1px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background-color: var(--ac-rail-line);
+  pointer-events: none;
+}
+
+/*
  * Wave 66K: folder one-sided row BC-parity additions (folder-scoped
  * ONLY). `.fv-cell-empty` reuses the exact 66I orphan-hatch gradient
  * values (base surface + 45-degree hatch in the existing subtle-border
@@ -970,12 +1017,19 @@ samp {
 
 /*
  * Wave 66S: BC-style intra-line word highlights (text-scoped ONLY).
- * Reuses existing chg tokens, no new hues. RowLine wiring lands in
- * the integration wave; this only defines the paint.
+ * Wave-192: BC-exact paint — changed word bright red on pink, both
+ * schemes (no layout change, no new palette outside this rule).
  */
 .tv-w-hl {
-  background-color: var(--ac-diff-chg-bg);
-  color: var(--ac-diff-chg-fg);
+  background-color: #ffd7db;
+  color: #c81e1e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tv-w-hl {
+    background-color: #5c1a22;
+    color: #ff8a8a;
+  }
 }
 
 /*
@@ -1001,9 +1055,20 @@ samp {
  */
 .tv-controls-bar {
   display: flex;
-  flex-wrap: wrap;
+  /* Wave-195: nowrap (the component's own `flex-nowrap overflow-x-auto`
+     intent). `wrap` let the selection-driven hunks label ("8 hunks" ->
+     "hunk 3 of 8", +18px at zero slack) wrap the Save group onto a
+     second line, shifting every row 19px mid-gesture so a dblclick on a
+     row opened the WRONG row's editor. Single row + horizontal scroll:
+     the bar height never moves, so row positions are gesture-stable. */
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--ac-space-2);
+  /* Wave-195: 4px gaps (was 8px). The bar sits at zero slack at the
+     1280px gate viewport, and selection ("hunk 3 of 8") + dirty dots
+     add ~22px; 16 gaps × 4px buys 64px so every state fits on one
+     line with margin — no overflow for the wave-7 overlap probe to
+     flag, no wrap for gestures to race. Token-clean (space-1). */
+  gap: var(--ac-space-1);
   min-height: var(--ac-toolbar-h);
   padding: var(--ac-space-1) var(--ac-space-4);
   background-color: var(--ac-toolbar-bg);
@@ -1063,13 +1128,16 @@ samp {
 }
 
 /*
- * Wave 79: far-left overview strip (strip-scoped ONLY). A 5px relative
+ * Wave 79: far-left overview strip (strip-scoped ONLY). A 4px relative
  * rail at the far left of the text row flex (`.tv-body` adds the
  * side-by-side row with no vertical stack, so the first-row budget
  * holds); per-hunk markers are absolute buttons positioned by
  * (start/total, length/total) from the SAME hunk grouping the gutter
  * arrows use. Tints reuse existing diff-border tokens only (no new
  * hues); the active marker reuses the focus-ring token.
+ *
+ * Wave 196: 5px -> 4px (BC far-left truth, <=6px budget; position/width
+ * ONLY, no color/logic change).
  */
 .tv-body {
   display: flex;
@@ -1078,8 +1146,8 @@ samp {
 
 .tv-overview-strip {
   position: relative;
-  flex: 0 0 5px;
-  width: 5px;
+  flex: 0 0 4px;
+  width: 4px;
   min-height: 100px;
   align-self: stretch;
   background-color: var(--ac-ruler-track);
@@ -1143,4 +1211,66 @@ samp {
 .hx-find-match {
   background-color: var(--ac-find-hit-bg);
   color: var(--ac-find-hit-fg);
+}
+
+/*
+ * Wave-193 drop-highlight affordance (BC path-drop parity, affordance ONLY).
+ * PathBar strip + Left/Right field wrappers toggle this on dragover so the
+ * drop target reads as droppable before the drop lands. `outline` never
+ * shifts layout (HOLD: pathbar <= 36px intact); negative offset keeps the
+ * dashes inside the 32px strip. Unlayered rule wins over the Tailwind
+ * utility layer without touching chrome structure.
+ */
+.ac-drop-highlight {
+  outline: 2px dashed var(--ac-accent);
+  outline-offset: -1px;
+}
+
+/*
+ * Wave-189 pill polish (radius ONLY, no layout/color/type change).
+ * typo-100 pins the active tab as a pill (radius >= 6px, medium
+ * weight, tight tracking); the chip rides rounded-[5px] from the
+ * shared control ramp. This unlayered rule lifts ONLY the selected
+ * tab to an 8px pill so the pin holds light + dark. Unlayered rules
+ * win over the Tailwind utility layer without touching chrome
+ * structure (TabBar.tsx stays read-only).
+ */
+[role="tab"][aria-selected="true"] {
+  border-radius: 8px;
+}
+
+/*
+ * Wave-205 UIKit (additive ONLY, no existing token value touched).
+ * Shared control-bar group idioms so folder/sync/table/hex/merge
+ * control bars stop hand-rolling `inline-flex items-center gap-*`
+ * trios at call-site. Geometry byte-identical to the inlined
+ * utilities they replace (gap space-2 wrap / gap space-1 nowrap /
+ * dense 2px toolbar with min-w-0 shrink); colors/type ride existing
+ * tokens (ac-meta/ac-code) at call-site, untouched here.
+ */
+.ac-control-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.ac-control-group--tight {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+.tv-controls-bar--dense {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding-left: var(--ac-space-2);
+  padding-right: var(--ac-space-2);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.tv-controls-bar--dense > * {
+  min-width: 0;
 }

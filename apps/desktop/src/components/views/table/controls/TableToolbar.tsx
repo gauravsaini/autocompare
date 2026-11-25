@@ -27,8 +27,8 @@
  * wave-168 additions never compress away.
  */
 
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
-import { Button, Checkbox, StatusText, ToolbarButton } from "../../../ui";
+import { Search } from "lucide-react";
+import { Button, Checkbox, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface TableToolbarProps {
   readonly byKey: boolean;
@@ -51,6 +51,15 @@ export interface TableToolbarProps {
   readonly diffPos: number;
   readonly onPrevDiff: () => void;
   readonly onNextDiff: () => void;
+  /**
+   * Wave-216 R5: ViewCommandBus hook (Text/Merge `onBusCommand` parity).
+   * When provided, Prev/Next dispatch through the SAME App
+   * `handleViewCommand` bus as the top Toolbar — no duplicate handlers;
+   * without the prop the legacy `onPrevDiff`/`onNextDiff` props run.
+   * Testids stay byte-identical either way. Optional so existing
+   * `TableView` call sites compile unchanged.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
   /**
    * Wave-TBL: column-mapping panel state (Beyond Compare style left <->
    * right mapping). Purely presentational — `TableView` owns the map.
@@ -92,6 +101,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
     diffPos,
     onPrevDiff,
     onNextDiff,
+    onBusCommand,
     mapOpen,
     onToggleMap,
     mapDisabled,
@@ -108,8 +118,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       role="toolbar"
       aria-label="Table controls"
       data-testid="tableview/toolbar"
-      style={{ flexWrap: "nowrap", gap: "2px" }}
-      className="tv-controls-bar flex-nowrap overflow-x-auto whitespace-nowrap !gap-[2px] !px-2 [&>*]:min-w-0"
+      className="tv-controls-bar tv-controls-bar--dense ac-chrome-label"
     >
       <Checkbox id="table-bykey-toggle" data-testid="table-bykey-toggle" label="Align by key" checked={byKey} onChange={(e) => onToggleByKey(e.target.checked)} />
       <StatusText
@@ -123,7 +132,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       <Checkbox
         id="table-ignore-ws"
         data-testid="tableview/ignore-ws"
-        label="Ignore ws"
+        label="Ignore whitespace"
         className="shrink-0"
         checked={ignoreWs}
         onChange={(e) => onToggleIgnoreWs(e.target.checked)}
@@ -221,6 +230,7 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       )}
       <span aria-hidden="true" className="tv-controls-sep" />
       <ToolbarButton
+        size="sm"
         data-testid="tableview/toolbar-find"
         label={findOpen ? "Hide find (Ctrl+F)" : "Show find (Ctrl+F)"}
         title="Find in table (Ctrl+F)"
@@ -230,26 +240,18 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       >
         <span>Find</span>
       </ToolbarButton>
-      <ToolbarButton
-        data-testid="tableview/toolbar-prev-diff"
-        label="Previous difference row"
-        title="Previous difference row"
-        icon={ChevronUp}
-        onClick={onPrevDiff}
-        disabled={diffCount === 0}
-      >
-        <span>Prev</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="tableview/toolbar-next-diff"
-        label="Next difference row"
-        title="Next difference row"
-        icon={ChevronDown}
-        onClick={onNextDiff}
-        disabled={diffCount === 0}
-      >
-        <span>Next</span>
-      </ToolbarButton>
+      {/* Wave-239: diff nav rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="tableview/toolbar-prev-diff"
+        nextTestid="tableview/toolbar-next-diff"
+        prevLabel="Previous difference row"
+        nextLabel="Next difference row"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        prevDisabled={diffCount === 0}
+        nextDisabled={diffCount === 0}
+        onBusCommand={onBusCommand}
+      />
       <StatusText data-testid="tableview/toolbar-diffs" variant="meta">
         {diffCount === 0
           ? "no differences"

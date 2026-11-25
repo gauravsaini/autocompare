@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
+import { EmptyState, InlineNotice } from "../ui";
 import { HexFindPanel, HexGotoPanel, HexToolbar } from "./hex/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -109,6 +111,16 @@ interface PageData {
 function hex2(b: number): string {
   return b.toString(16).padStart(2, "0");
 }
+
+/** Wave-184: solid selection fill (BC parity). `tokens.css` is view-owned
+ * elsewhere, so the fill rides an inline style over existing selection
+ * tokens (theme-aware light+dark): the kept `hx-diff` class preserves
+ * legacy specs while the inline fill wins the paint, exactly like BC's
+ * solid selection block over a diff byte. */
+const SEL_FILL: CSSProperties = {
+  backgroundColor: "var(--ac-selection-bg)",
+  color: "var(--ac-selection-fg)",
+};
 
 function ascii(b: number): string {
   return b >= 32 && b <= 126 ? String.fromCharCode(b) : ".";
@@ -413,6 +425,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
     }, 0);
   }, [syncScroll, selectedOffset, pageIdx, page]);
+  useEffect(() => {
+    if (!syncScroll || match === null) return;
+    window.setTimeout(() => {
+      const el = document.querySelector(".hx-find-match");
+      if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
+    }, 0);
+  }, [syncScroll, match, pageIdx, page]);
 
   /** Parse a goto offset: `0x`-prefixed hex or plain decimal. */
   function parseGotoOffset(text: string): number | null {
@@ -502,8 +521,8 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
   }
 
   if (status === "loading") return <p>Loading hex comparison…</p>;
-  if (status === "error") return <p role="alert">Hex compare failed: {error}</p>;
-  if (status === "empty" || session === null) return <p>No bytes to display.</p>;
+  if (status === "error") return <InlineNotice testid="hexview/error">Hex compare failed: {error}</InlineNotice>;
+  if (status === "empty" || session === null) return <EmptyState title="No bytes to display." testid="hexview/empty" />;
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_LEN));
   const base = pageIdx * PAGE_LEN;
@@ -763,7 +782,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         }
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
-        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
         moveSelection(delta);
       }}
     >
@@ -860,7 +879,7 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
       ) : pageLoading || page === null ? (
         <p className="ac-meta px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[var(--ac-fg-muted)]">Loading page {pageIdx + 1}…</p>
       ) : (
-        <div className="ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
+        <div className="ac-mono overflow-x-auto text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] p-[var(--ac-space-3)]">
           {visibleRows.map((r) => {
             const cells: React.JSX.Element[] = [];
             const rcells: React.JSX.Element[] = [];
@@ -942,12 +961,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       }
                       if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
                         event.preventDefault();
-                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
                         moveSelection(delta);
                         return;
                       }
                     }}
                     className={`${tone}${hl}${selCls}`}
+                    style={isSel ? SEL_FILL : undefined}
                   >
                     {hex2(lb)}
                   </span>,
@@ -1003,12 +1023,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
                       }
                       if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
                         event.preventDefault();
-                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 16 : -16;
+                        const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? bytesPerRow : -bytesPerRow;
                         moveSelection(delta);
                         return;
                       }
                     }}
                     className={`${rtone}${selCls}`}
+                    style={isSel ? SEL_FILL : undefined}
                   >
                     {hex2(rb)}
                   </span>,
@@ -1071,13 +1092,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         )}
       </div>
       {viewFilter !== "all" ? (
-        <p data-testid="hexview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="hexview/diffsonly-note">
           {viewFilter === "diffs"
             ? `Hiding ${hiddenSameCount} ${hiddenSameCount === 1 ? "row" : "rows"} without differences — toggle off to restore.`
             : viewFilter === "same"
               ? `Hiding ${hiddenSameCount} differing ${hiddenSameCount === 1 ? "row" : "rows"} — toggle off to restore.`
               : `Showing differences with one neighbor row — ${visibleRows.length} of ${rows.length} rows.`}
-        </p>
+        </InlineNotice>
       ) : null}
       <p
         data-testid="hex-copy-status"
