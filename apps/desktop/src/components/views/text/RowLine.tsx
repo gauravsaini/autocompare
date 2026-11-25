@@ -89,7 +89,7 @@ export function RowLine({ label, value, wrap, tint, spans, side, editKey, edited
           }
         }}
       />
-    ) : value === null || spans === undefined || side === undefined ? (
+    ) : value === null || !spans || spans.length === 0 || side === undefined ? (
       (value ?? "")
     ) : (
       <InlineSpans
@@ -97,8 +97,14 @@ export function RowLine({ label, value, wrap, tint, spans, side, editKey, edited
         ranges={sideRanges(
           spans,
           side === "left"
-            ? (op) => [op.aStart, op.aEnd] as const
-            : (op) => [op.bStart, op.bEnd] as const,
+            ? (op) => [
+                op.aStart ?? (op as unknown as { a_start?: number }).a_start ?? 0,
+                op.aEnd ?? (op as unknown as { a_end?: number }).a_end ?? 0,
+              ] as const
+            : (op) => [
+                op.bStart ?? (op as unknown as { b_start?: number }).b_start ?? 0,
+                op.bEnd ?? (op as unknown as { b_end?: number }).b_end ?? 0,
+              ] as const,
           value.length,
         )}
         side={side}
