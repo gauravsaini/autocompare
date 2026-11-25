@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, Square, type LucideIcon } from "lucide-react";
+import { folderCancel } from "../../ipc/folder";
 import { ToolbarButton } from "../ui";
 import { TOOLBAR_SHORTCUT_HINTS } from "./shortcuts";
 
@@ -47,6 +48,14 @@ export interface ToolbarProps {
    * thrown.
    */
   note?: string | null;
+  /**
+   * C1b-P0: in-flight folder-compare session id the Stop button may
+   * cancel via `folder_cancel`. Optional (absent = the host passes no
+   * session, e.g. the current `App` wiring) so every pre-C1b caller
+   * keeps compiling and behaving exactly as before. Used ONLY by the
+   * Stop path; Compare/Refresh never read it.
+   */
+  folderSession?: string | null;
 }
 
 /**
@@ -65,13 +74,24 @@ export const COMPARE_MIN_BUSY_MS = 600;
 export const COMPARE_SETTLE_TIMEOUT_MS = 6000;
 
 /**
- * Wave-29: honest stop note. The existing compare IPC surface
- * (`text_compare`, `folder_compare`, …) exposes no cancel command,
- * so Stop is a best-effort no-op: the running compare finishes on its
- * own and the busy state clears when the view settles.
+ * Wave-29: honest stop note. The text/other compare IPC surface
+ * exposes no cancel command, so Stop without a known folder session
+ * stays a best-effort no-op: the running compare finishes on its own
+ * and the busy state clears when the view settles. (C1b-P0: when the
+ * host passes `folderSession`, Stop calls `folder_cancel` instead —
+ * see `COMPARE_FOLDER_CANCEL_SENT_NOTE`.)
  */
 export const COMPARE_NO_ABORT_NOTE =
   "Stop is best-effort: the compare IPC cannot be cancelled once sent — the running compare finishes on its own.";
+
+/**
+ * C1b-P0: honest note after Stop asks the backend to cancel a known
+ * folder-compare session via `folder_cancel`. The running compare
+ * still settles the view on its own; busy clears on settle as before.
+ */
+export function compareFolderCancelSentNote(session: string): string {
+  return `Stop sent: folder compare cancel requested (session ${session}) — the running compare settles on its own.`;
+}
 
 /** Reason shown while a compare run is in flight. */
 export const COMPARE_BUSY_REASON = "comparing…";
@@ -242,13 +262,15 @@ function waitForViewSettle(timeoutMs: number): Promise<void> {
  * - Compare: runs the active compare, shows a spinner (`busy`) and
  *   disables itself with a `(comparing…)` reason while the run is in
  *   flight; keyboard reachable via the native button.
- * - Stop: enabled only while busy; honest no-op with an inline note
- *   because the backend cannot abort a sent compare.
+ * - Stop: enabled only while busy; with a known `folderSession` it
+ *   calls `folder_cancel` (best-effort, inline note carries the
+ *   outcome), otherwise an honest no-op with an inline note because
+ *   the text/other compare IPC cannot abort a sent compare.
  * - Refresh: re-runs the current compare; disabled with the compare's
  *   own blocked reason (or `comparing…` while busy).
  * - Empty sessions: all three disable honestly with titled reasons.
  */
-export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: ToolbarProps): React.JSX.Element {
+export function Toolbar({ actions, busy: busyProp, note: noteProp, folderSession, className }: ToolbarProps): React.JSX.Element {
   const [internalBusy, setInternalBusy] = useState(false);
   const [internalNote, setInternalNote] = useState<string | null>(null);
   const [runs, setRuns] = useState(0);
@@ -300,10 +322,31 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
 
   const handleStop = useCallback((): void => {
     if (!(busyProp ?? internalBusy)) return;
-    // No abort IPC exists: honest no-op with an inline note. Busy
-    // stays until the running compare settles the view on its own.
-    setInternalNote(COMPARE_NO_ABORT_NOTE);
-  }, [busyProp, internalBusy]);
+    const target = folderSession ?? null;
+    if (target === null || target === "") {
+      // No cancellable session handle: honest no-op with an inline note.
+      // Busy stays until the running compare settles the view on its own.
+      setInternalNote(COMPARE_NO_ABORT_NOTE);
+      return;
+    }
+    // C1b-P0: a folder-compare session is known — ask the backend to
+    // cancel it via `folder_cancel`. Best-effort and never throwing:
+    // failures render inline, busy still clears when the view settles.
+    void (async (): Promise<void> => {
+      try {
+        const receipt = await folderCancel(target);
+        if (mountedRef.current) {
+          setInternalNote(
+            receipt.cancelled ? compareFolderCancelSentNote(target) : COMPARE_NO_ABORT_NOTE,
+          );
+        }
+      } catch (e: unknown) {
+        if (mountedRef.current) {
+          setInternalNote(e instanceof Error ? e.message : String(e));
+        }
+      }
+    })();
+  }, [busyProp, internalBusy, folderSession]);
 
   // Wave-116: slimmer shared bar (token --ac-toolbar-h, 44px) with tighter
   // side padding. Testids, labels, and wiring untouched — heights/padding only.

@@ -469,6 +469,25 @@ pub fn session_save(descriptor: SessionDocument) -> Result<String, String> {
     Ok(id)
 }
 
+/// Deletes a saved session by id. Returns `true` when a stored document
+/// was removed, `false` when nothing was stored under the id (idempotent
+/// delete, never an error). Invalid ids are an error; other IO failures
+/// travel back as [`String`]. Locked documents are removed like any other
+/// row: the SessionManager delete path never checks `locked` (last-row
+/// guard only), so refusing here would silently strand undeletable rows.
+#[tauri::command]
+pub fn session_delete(id: String) -> Result<bool, String> {
+    if !valid_id(&id) {
+        return Err(format!("unknown session id '{id}'"));
+    }
+    let path = sessions_dir().join(format!("{id}.json"));
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(true),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(format!("deleting session '{id}' failed: {source}")),
+    }
+}
+
 /// Loads persisted settings, or defaults when nothing is stored yet.
 /// A corrupt store is an error, never a silent default.
 #[tauri::command]
@@ -807,6 +826,30 @@ mod tests {
         let mut doc = sample_doc();
         doc.schema_version = CURRENT_SESSION_SCHEMA_VERSION + 1;
         assert!(session_save(doc).is_err());
+    }
+
+    #[test]
+    fn session_delete_round_trip_removes_file_and_relist_misses() {
+        let doc = sample_doc();
+        let id = session_save(doc).expect("save");
+        let path = sessions_dir().join(format!("{id}.json"));
+        assert!(path.is_file(), "saved doc must exist on disk");
+        assert_eq!(session_delete(id.clone()).expect("delete"), true);
+        assert!(!path.exists(), "deleted doc must be gone from disk");
+        assert!(
+            session_list().iter().all(|e| e.id != id),
+            "re-list must miss the deleted id"
+        );
+        // Idempotent second delete: missing file is Ok(false), never error.
+        assert_eq!(session_delete(id.clone()).expect("re-delete"), false);
+        assert!(session_load(id).is_err(), "load after delete must fail");
+    }
+
+    #[test]
+    fn session_delete_rejects_bad_ids() {
+        for bad in ["", "../evil", "a/b", "a\\b", "..", "."] {
+            assert!(session_delete(bad.to_string()).is_err(), "id: {bad}");
+        }
     }
 
     #[test]
