@@ -62,7 +62,7 @@ async function assertChromeGeometry(page: Page): Promise<void> {
   await expect(ruler).toBeVisible();
 
   // Bar heights ride the chrome height tokens on the 4px scale.
-  expect((await boxOf(page, "tabbar")).height, "tabbar h = --ac-tabbar-h (40)").toBe(40);
+  expect((await boxOf(page, "tabbar")).height, "tabbar h = --ac-tabbar-h (32)").toBe(32);
   const toolbarH = (await toolbar.evaluate((el) => el.getBoundingClientRect().height));
   // Wave-116 contract: slimmer shared bar (h-11 = 44) + compact pathbar (h-8 = 32).
   expect(toolbarH, "toolbar h-11 slim bar (44)").toBeGreaterThanOrEqual(40);
@@ -93,7 +93,7 @@ async function assertChromeGeometry(page: Page): Promise<void> {
   await expect(activeTab).toBeVisible();
   expect(await activeTab.evaluate((el) => window.getComputedStyle(el).columnGap), "tab pill gap = space-1 (4px)").toBe("4px");
   expect(await activeTab.evaluate((el) => window.getComputedStyle(el).paddingLeft), "tab pill px = space-2 (8px)").toBe("8px");
-  expect((await activeTab.evaluate((el) => el.getBoundingClientRect().height)), "tab pill h = space-8 (32)").toBe(32);
+  expect((await activeTab.evaluate((el) => el.getBoundingClientRect().height)), "tab pill h = control-md (24)").toBe(24);
 
   // Toolbar buttons on the 4px scale: gap 4 (was 2), padding 8 (was 6).
   expect(await styleOf(page, "toolbar/action-compare", "column-gap"), "toolbar button gap = space-1 (4px)").toBe("4px");

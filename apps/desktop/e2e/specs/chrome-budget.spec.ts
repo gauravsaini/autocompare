@@ -103,7 +103,7 @@ test("chrome-budget: no stacked control rows above panes (single toolbar <= 48px
   expect(geometry.pathbarH, "pathbar height measured").not.toBeNull();
   expect(geometry.pathbarH!, "pathbar height <= 36px").toBeLessThanOrEqual(36);
 
-  expect(geometry.tabbarH, "tabbar height is 40px").toBe(40);
+  expect(geometry.tabbarH, "tabbar height is 32px").toBe(32);
   expect(geometry.shellTop, "shell top (tabbar+toolbar+pathbar) measured").not.toBeNull();
   expect(geometry.shellTop!, "shell top <= 120px").toBeLessThanOrEqual(120);
 

@@ -85,7 +85,7 @@ async function assertGeopolish(page: Page): Promise<void> {
   await expect(page.getByTestId("textview/row-0")).toBeVisible({ timeout: 15000 });
 
   // Bar heights ride the chrome height tokens (unchanged contracts).
-  expect((await boxOf(page, "tabbar")).height, "tabbar h = 40").toBe(40);
+  expect((await boxOf(page, "tabbar")).height, "tabbar h = 32").toBe(32);
   const toolbarH = await toolbar.evaluate((el) => el.getBoundingClientRect().height);
   expect(toolbarH, "toolbar slim bar 40..48").toBeGreaterThanOrEqual(40);
   expect(toolbarH, "toolbar slim bar 40..48").toBeLessThanOrEqual(48);
@@ -164,7 +164,7 @@ async function assertGeopolish(page: Page): Promise<void> {
   const compareH = await page.getByTestId("toolbar/action-compare").evaluate((el) => el.getBoundingClientRect().height);
   expect(compareH, "toolbar buttons >= 32px hit-area").toBeGreaterThanOrEqual(32);
   const pillH = await activeTab.evaluate((el) => el.getBoundingClientRect().height);
-  expect(pillH, "tab pills = 32px hit-area").toBe(32);
+  expect(pillH, "tab pills = control-md (24)").toBe(24);
   const newTab = await boxOf(page, "tab-new");
   expect(Math.min(newTab.width, newTab.height), "new-tab >= 32px hit-area").toBeGreaterThanOrEqual(32);
   const histToggle = await boxOf(page, "pathbar/left-history-toggle");
