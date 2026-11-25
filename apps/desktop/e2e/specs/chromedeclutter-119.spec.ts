@@ -221,8 +221,10 @@ test("chromedeclutter-119: popovers and overlays default closed, toggles in tool
   await page.getByTestId("textview/toolbar-ignore").click();
   await expect(page.getByTestId("textview/ignore-whitespace")).toBeVisible();
   await expect(page.getByTestId("textview/toolbar-ignore")).toHaveAttribute("aria-expanded", "true");
-  // Toggle closes
-  await page.getByTestId("textview/toolbar-ignore").click();
+  // Wave-233 ui/Modal truth: the open scrim covers the toolbar, so the
+  // toggle underneath is not pointer-reachable while open — sanctioned
+  // dismiss is Esc (backdrop/Dismiss twin routes). Toggle-close is stale.
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId("textview/ignore-whitespace")).toHaveCount(0);
   await expect(page.getByTestId("textview/toolbar-ignore")).toHaveAttribute("aria-expanded", "false");
 
