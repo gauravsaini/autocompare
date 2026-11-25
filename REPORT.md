@@ -986,3 +986,89 @@ Save buttons/dirty-dots pehle se honest the (`dirty-left/right`, aria
 - REPORT.md (yeh entry, append-only)
 
 D1-DONE
+# D3 Shortcuts — dead shortcut audit + wiring REPORT (Hinglish-roman)
+
+Worktree: `/tmp/wt-D3` (branch `wave-D3-shortcuts`, base `main@3bb39f8`). NO commit, NO push.
+
+## 1. Masla (user complaint)
+
+UI me advertised saare shortcuts (menu labels, toolbar titles, tooltips) asal me kaam karein.
+"Shortcuts not working" — kuch advertised chords dead the ya sirf ek focus se chalte the.
+
+## 2. Inventory (UI text scan — poora shortcut suchi)
+
+Native menu (`src-tauri/src/menu.rs`): CmdOrCtrl+1..7 (View kinds), N (New Session),
+O (Open Session), Shift+O (Open Folder), S (Save Session), F (Find Session),
+D (Take Left), E (Take Right). Theme/Layout/Settings = honestly unsupported (koi accelerator nahi).
+
+Toolbar titles (`TOOLBAR_SHORTCUT_HINTS` se): open (Cmd+O), Next/Prev hunk
+(Cmd+Alt+Down/Up), Copy (Cmd+D), Copy-right (Cmd+E).
+
+Per-view toolbar labels: Ctrl+F (text/table/hex/merge find, folder name-filter,
+sync step-filter), Ctrl+G (text/hex goto, folder go-to-entry), Esc dismiss labels,
+folder Back/Forward (Alt+Left/Right), merge footer `j/k ... Cmd+B`, merge toolbar
+`(keys: j/k, n/p, arrows)`, merge take-both (Cmd+B).
+
+Chrome bridge: F3 (find next), Shift+F3 (find prev). View-local: text `n/p/l/r`,
+arrows, Enter, Esc; merge `j/k/n/p`, arrows.
+
+## 3. Keyboard verify — har chord ko asal key-press bheja (spec D3)
+
+Spec: `apps/desktop/e2e/specs/d3-shortcuts-252.spec.ts` (14 tests, koi geometry assert nahi).
+Har test me zero console/page errors assert hai.
+
+## 4. Mila hua dead (1 asli bug) + fix
+
+BUG: Merge `j`/`k` footer + toolbar me advertised tha, lekin sirf tab chalta tha jab
+merge section khud focused ho (`onKeyDown` section-level). Toolbar/body/ruler focus se
+`j`/`k` dead tha — bus me koi event nahi, koi nav nahi.
+FIX (`MergeView.tsx`, handler wiring ONLY, koi layout/testid change nahi): window-level
+`keydown` me `j`/`k` branch — input/textarea/contentEditable me type karne par ignore,
+`defaultPrevented` ka respect, phir SAME `autocompare:view-command` bus
+(`viewKind: "merge"`) jisse toolbar prev/next buttons bhi chalte hain. App GAP-09 `j`/`k`
+ko ignore karta hai, isliye double-step impossible. Bonus: Cmd+B branch me
+`defaultPrevented` guard (section + window double-take rokta hai; 30ms tick-dedupe
+ke saath belt-and-braces).
+`shortcuts.ts` (registry ONLY): values same (sab wired nikle), sirf D3 audit comment
+joda — per-view coverage + honest-disabled suchi, taaki agli wave ko dobara scan na karna pade.
+
+## 5. MATCH (wired — spec me green) vs OFF (honest-disabled, fake label nahi)
+
+MATCH: Cmd+O/N/S, Cmd+1/2/3/4/6/7 kind switch, Shift+Cmd+O, Cmd+D/E (text+merge take,
+bina selection honest note), Cmd+B (merge take-both, bahar "only in Merge" note),
+Ctrl+F (text/table/hex/merge/folder/sync), Ctrl+G (text/hex/folder), F3/Shift+F3
+(next/prev jahan prev button hai, baaki jagah focus-fallback), text n/p/l/r/arrows/
+Cmd+Alt-arrows/Enter/Esc, merge j/k/n/p/arrows, folder Alt+Left/Right/Up + Esc
+(query clear NAHI hota — contract), hex/table/merge/sync Esc, media Esc.
+OFF (honest, spec me no-crash assert): Table/Merge/Sync me Ctrl+G (koi goto nahi —
+browser Find Next suppress, koi nav nahi), Media me Ctrl+F/G + F3 (koi find/goto nahi —
+menu-find "Find is not available for this view" park karta hai). Toolbar Copy/Next/Prev
+bina wiring wale views me hidden + reason-title sahit disabled rehte hain
+(`needs view wiring in L3` kabhi fake hint ke saath visible nahi).
+
+## 6. Files (sirf OWNS, testids byte-identical)
+
+- `apps/desktop/src/components/views/MergeView.tsx` — window j/k wiring + Cmd+B guard.
+- `apps/desktop/src/components/chrome/shortcuts.ts` — registry values unchanged, D3 audit comments.
+- `apps/desktop/e2e/specs/d3-shortcuts-252.spec.ts` — NEW (14 tests).
+- Native menu (`src-tauri/src/menu.rs`): audit me MATCH, koi drift nahi, change nahi.
+- Touch nahi kiya: session/**, ui/** primitives, tokens.css, engines, ipc shape, baaki specs.
+
+## 7. GATES (1857, ABSOLUTE paths, fresh port)
+
+- `cd /tmp/wt-D3/apps/desktop && ./node_modules/.bin/tsc --noEmit` => **TSC:0**
+  (node_modules main se symlink karke, gate ke baad symlink hata diya).
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-D3/apps/desktop 1857 e2e/specs/d3-shortcuts-252.spec.ts e2e/specs/ui-standards.spec.ts --workers=1`
+  => **18 passed (13.9s), GATE_PLAYWRIGHT_EXIT=0** — d3 14/14 + ui-standards 4/4, webkit.
+  Note: pehli 1857 koshish D2 wave ke vite se takrayi (strike 1, kill nahi kiya);
+  probe 1861 par 11 pass + 3 spec-bug mile (neeche), fix karke 1861 par 18/18,
+  phir free hote hi pinned 1857 par 18/18 official.
+- Spec-fix trail (product me koi change nahi, sirf test expectations honest kiye):
+  (a) text nav: row-6 pehle hunk ki pehli row — pehla `n` wrap karke wahin rehta,
+  ab diffnav-note assert + doosra `n` move assert karta hai;
+  (b) merge j/k: listener-attach race — ab attach-await-press-poll pattern;
+  (c) folder Esc: stacked name+goto LIFO dismiss hota hai (DockedBar capture
+  `stopPropagation` by design, ui primitive untouched) — ab alag-alag + LIFO
+  teenon assert hote hain.
+
+D3-DONE

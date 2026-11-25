@@ -80,6 +80,29 @@ const WEB_SHORTCUT_COMMANDS: Record<WebShortcutMenuId, string> = {
  * toolbar — globally `n` opens a session (menu `session.new`) and
  * `j`/`k`/`l`/`r` are view-local pass-throughs, so a global hint
  * would be dishonest outside the owning view.
+ *
+ * Wave-D3 audit (252) — per-view coverage (verified by key-press in
+ * the D3 spec, owning view's handler only, no layout change):
+ * - Text: Ctrl+F/G open+focus find/goto, F3/Shift+F3 next/prev hit,
+ *   Cmd+Alt+Down/Up + `n`/`p` + arrows walk hunks, `l`/`r` take
+ *   left/right on the focused hunk row, Enter opens the cell editor,
+ *   Esc clears selection + closes panels.
+ * - Folder: Ctrl+F opens the name filter, Ctrl+G the goto box,
+ *   Alt+Left/Right/Up walk history/up, F3 focuses the filter,
+ *   Esc collapses chrome WITHOUT clearing the query.
+ * - Hex/Table: Ctrl+F opens find (F3/Shift+F3 next/focus), Hex
+ *   Ctrl+G opens goto; Table Ctrl+G is an honest no-op (no goto in
+ *   tables — browser Find Next suppressed, no crash, no navigation).
+ * - Merge: Ctrl+F opens find, Cmd+B takes both on the selected
+ *   conflict (window-level, any focus), Cmd+D/E take left/right via
+ *   the menu bus, `j`/`k`/`n`/`p`/arrows step conflicts (D3 wires
+ *   `j`/`k` at window level — the section handler needed focus).
+ *   Ctrl+G is an honest no-op (no goto in merge).
+ * - Sync: Ctrl+F opens the step filter, F3 focuses it; Ctrl+G is an
+ *   honest no-op (no goto in sync).
+ * - Media: Esc closes tolerance; Ctrl+F/G + F3 are honest no-ops
+ *   (no find/goto in media — browser defaults suppressed, App parks
+ *   with "Find is not available for this view" on menu-find).
  */
 export const ADVERTISED_SHORTCUTS = {
   find: "Ctrl+F",
@@ -103,6 +126,16 @@ export type AdvertisedShortcutId = keyof typeof ADVERTISED_SHORTCUTS;
  * `copy` rides the take-left path by default (`handleToolbarCopy`
  * falls back to `"left"`); `copy-right` forces `"right"`. Single
  * address per button — no overlapping `Cmd+D / Cmd+E` claim.
+ *
+ * Wave-D3 audit (252): every hint above was keyboard-verified in
+ * `e2e/specs/d3-shortcuts-252.spec.ts` — `open` (Cmd+O opens the
+ * Session Manager), `copy`/`copy-right` (Cmd+D/E take-left/right on
+ * the selected hunk, honest parked note otherwise), `next-hunk` /
+ * `prev-hunk` (Cmd+Alt+Down/Up ride the view-command bus; text jumps
+ * hunks, folder/hex/table/sync step their selection/diff cursor,
+ * merge steps conflicts). No value changed — titles already match
+ * the wired chords; per-view coverage lives in the owning view's
+ * key handler, not here.
  */
 export const TOOLBAR_SHORTCUT_HINTS: Record<string, string> = {
   open: ADVERTISED_SHORTCUTS.open,

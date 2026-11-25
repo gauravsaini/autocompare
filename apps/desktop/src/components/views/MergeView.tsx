@@ -476,8 +476,29 @@ export default function MergeView({
       } else if (e.key === "Escape") {
         setFindOpen(false);
       } else if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        // D3: container onKeyDown already consumed Cmd/Ctrl+B when the
+        // merge section has focus (preventDefault) — don't take twice.
+        if (e.defaultPrevented) return;
         e.preventDefault();
         handleTakeRequestRef.current?.("both");
+      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "j" || e.key === "J" || e.key === "k" || e.key === "K")) {
+        // D3: footer-advertised `j`/`k` conflict nav from ANY focus
+        // (toolbar/body/ruler). The section `onKeyDown` only fires when
+        // the merge section itself has focus, so body-level `j`/`k` was
+        // dead despite the footer + toolbar hint advertising it. Route
+        // through the SAME bus the toolbar prev/next buttons use (fresh
+        // `selected` in the bus listener, wrap-around in selectConflict);
+        // typing in inputs/textareas stays untouched. App GAP-09 owns
+        // `n`/`p` for merge and ignores `j`/`k`, so no double-step.
+        const t = e.target as HTMLElement | null;
+        if (t !== null && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent("autocompare:view-command", {
+            detail: { cmd: e.key.toLowerCase() === "j" ? "next" : "prev", viewKind: "merge" },
+          }),
+        );
       }
     };
     window.addEventListener("keydown", onKey);
