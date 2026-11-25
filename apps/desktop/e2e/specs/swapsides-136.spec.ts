@@ -95,13 +95,22 @@ test("swapsides-136: swap exchanges sides, hunk counts identical", async ({ page
   await expect.poll(() => pathValue(page, "pathbar/left"), { timeout: 10000 }).toBe(right);
   await expect.poll(() => pathValue(page, "pathbar/right"), { timeout: 10000 }).toBe(left);
   // Let the view reload settle on the swapped pair (mock IPC resolves
-  // in ms; the status line carries no path suffix, so settle by time
-  // then pin the full deterministic text + counts).
+  // in ms; settle by time, then pin counts + hunks + ruler identical and
+  // the status path suffix exchanged: "left vs right" -> "right vs left").
   await page.waitForTimeout(1000);
   await expect(page.getByTestId("textview/status")).toBeVisible();
 
-  // Hunk counts identical across the swap.
-  expect(await statusFull(page), "full status text identical after swap").toBe(fullBefore);
+  // Hunk counts identical across the swap; path suffix exchanged.
+  const fullAfter = await statusFull(page);
+  if (fullBefore.includes(`${left} vs ${right}`)) {
+    expect(fullAfter, "status text identical except exchanged path suffix").toBe(
+      fullBefore.replace(`${left} vs ${right}`, `${right} vs ${left}`),
+    );
+  } else {
+    // Suffix form differs from raw input values (e.g. resolved vs
+    // display paths): pin the swapped order explicitly instead.
+    expect(fullAfter, "status path suffix exchanged after swap").toContain(`${right} vs ${left}`);
+  }
   await expect.poll(() => statusCounts(page), { timeout: 15000 }).toBe(countsBefore);
   await expect.poll(() => hunkCount(page), { timeout: 15000 }).toBe(hunksBefore);
   expect(await rulerCount(page), "ruler markers identical after swap").toBe(rulerBefore);

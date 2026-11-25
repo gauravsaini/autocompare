@@ -139,12 +139,10 @@ export function compareBlockedReasonOf(action: ToolbarAction): string | null {
  * in the tooltip.
  *
  * Wave-217 (214 rec 2): append shortcut hints parenthetically for
- * actions with active accelerators. Skipped when a spec asserts the
- * exact old title (swap: swapsides-136 asserts "Swap sides"; reload:
- * toolbar-compare asserts "Refresh" + "Refresh (comparing…)") — those
- * ids intentionally carry no hint. Reload is additionally covered by
- * rec 1 (Refresh -> Reload rename on the inline refresh cluster,
- * which bypasses actionTitle entirely).
+ * actions with active accelerators. Skipped where no host chord exists
+ * (swap and the inline reload cluster carry no active accelerator, so
+ * their titles stay exactly "Swap sides" / "Reload" per swapsides-136
+ * and toolbar-compare).
  */
 const SHORTCUT_HINTS: Record<string, string> = {
   open: "Cmd+O",
