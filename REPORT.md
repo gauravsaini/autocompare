@@ -615,3 +615,52 @@ DO NOT touch ka palan: views/**, session/**, ui/** primitives, tokens.css, ipc/*
 - REPORT.md (ye file, worktree root)
 
 H1-DONE
+
+---
+
+# C3a view-state — Hinglish-roman REPORT
+
+## Goal
+Per-view compare options reload ke baad survive karein (view-state persist).
+Pehle har reload par reset ho jate the.
+
+## Changes (testids byte-identical, koi nayi dependency nahi)
+- NEW `apps/desktop/src/state/viewPersist.ts`: load/save helpers ONLY
+  (key `ac.viewstate.v1.<view>`, JSON, try/catch, corrupt = defaults).
+- `apps/desktop/src/components/views/TextView.tsx`: ignoreWs/ignoreCase/
+  encoding/eol/algorithm/ignoreBlank lazy-init restore + change par persist;
+  session-switch reset ab sirf real path/session change par (first mount
+  keep = reload survival). Layout/testid/IPC untouched.
+- `apps/desktop/src/components/views/TableView.tsx`: ignoreWs/ignoreCase/
+  delimiter/epsilon lazy-init restore + persist (compare effect deps se
+  mount par auto-apply). Layout/testid/IPC untouched.
+- `apps/desktop/src/components/views/FolderView.tsx`: masks lazy-init
+  restore + persist; paths/subdir reset ab sirf real change par (first
+  mount keep). Layout/testid/IPC untouched.
+- NEW `apps/desktop/e2e/specs/c3a-viewstate-248.spec.ts`: 3 tests —
+  set option -> reload -> option still set; corrupt storage -> defaults;
+  koi geometry assert nahi.
+
+## Gates (worktree, fresh port 1851, absolute paths)
+- `./node_modules/.bin/tsc --noEmit` (main node_modules symlink, baad me
+  hataya) => TSC:0
+- `PLAYWRIGHT_BROWSERS_PATH=... bash tools/gate-run.sh
+  /tmp/wt-C3a/apps/desktop 1851 e2e/specs/c3a-viewstate-248.spec.ts
+  e2e/specs/ui-standards.spec.ts --workers=1` => 7 passed (11.8s),
+  GATE_PLAYWRIGHT_EXIT=0
+
+## MATCH/OFF
+| Spec | Result |
+| ---- | ------ |
+| c3a-viewstate-248 (3 tests: text/table/folder) | MATCH (3/3 green) |
+| ui-standards (4 tests) | MATCH (4/4 green, zero regressions) |
+| OFF (known limit) | Text demo-boot path (`textCompareDemo`, empty paths) ke paas opts wire nahi — control state restore hoti hai, diff exact rehta hai jab tak user toggle na kare. Table/folder mount compare me auto-apply hota hai. |
+
+## Files
+- NEW `apps/desktop/src/state/viewPersist.ts`
+- EDIT `apps/desktop/src/components/views/TextView.tsx`
+- EDIT `apps/desktop/src/components/views/TableView.tsx`
+- EDIT `apps/desktop/src/components/views/FolderView.tsx`
+- NEW `apps/desktop/e2e/specs/c3a-viewstate-248.spec.ts`
+
+C3a-DONE

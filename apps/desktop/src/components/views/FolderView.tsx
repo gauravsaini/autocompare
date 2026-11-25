@@ -21,6 +21,8 @@ import type { ViewPaths } from "./types";
 import { FolderNamePanel, FolderToolbar, RulesPanel } from "./folder/controls";
 import { VIEW_RULES_EVENT } from "./folder/controls/RulesPanel";
 import { Button, EmptyState, InlineNotice, Input, ToolbarButton } from "../ui";
+// Wave-C3a: per-view compare-option persistence (reload-proof controls).
+import { loadViewState, saveViewState } from "../../state/viewPersist";
 
 /**
  * Folder comparison tree view (Wave 2B).
@@ -333,7 +335,16 @@ export default function FolderView({
   // Wave-164: Rules file masks (BC parity). Committed mask string sent
   // to `folderCompare` (`""` = no filtering, legacy wire); the panel
   // owns only the draft. Reset on session switch like every control.
-  const [masks, setMasks] = useState("");
+  // Wave-C3a: reload-proof (localStorage `ac.viewstate.v1.folder`,
+  // corrupt = defaults). Lazy-init restores the pre-reload value (the
+  // compare effect dep re-issues `folderCompare`, so it applies on
+  // mount); every change re-persists. No layout/testid change.
+  const [persistedFolderOpts] = useState(() => loadViewState("folder", { masks: "" }));
+  const [masks, setMasks] = useState(persistedFolderOpts.masks);
+  // Wave-C3a: every mask change re-persists (control state only).
+  useEffect(() => {
+    saveViewState("folder", { masks });
+  }, [masks]);
   const [rulesOpen, setRulesOpen] = useState(false);
   // Wave-C2d: engine content-compare flag (byte-compare same-size
   // files; off = size/mtime fast path). Rides `folderCompare` like
@@ -550,7 +561,15 @@ export default function FolderView({
   // `masks` is a compare-effect dep, so resetting it there would
   // self-wipe an applied mask. The compare effect's `cancelled` guard
   // drops the stale in-flight compare from the path change.
+  // Wave-C3a: first mount keeps the restored (persisted) masks (reload
+  // survival); only a real paths change resets them (legacy behavior).
+  const prevFolderPathsKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const pathsKey = `${currentLeft}${currentRight}${fullSubDir}`;
+    const pathsChanged =
+      prevFolderPathsKeyRef.current !== null && prevFolderPathsKeyRef.current !== pathsKey;
+    prevFolderPathsKeyRef.current = pathsKey;
+    if (!pathsChanged) return;
     setMasks("");
     setContentCompare(false);
     setRulesOpen(false);
