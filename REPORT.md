@@ -615,3 +615,66 @@ DO NOT touch ka palan: views/**, session/**, ui/** primitives, tokens.css, ipc/*
 - REPORT.md (ye file, worktree root)
 
 H1-DONE
+
+---
+
+# INST-install REPORT (Hinglish-roman)
+
+Worktree: /tmp/wt-INST (branch wave-INST-install, base main 41a9d43). Koi commit/push nahi kiya.
+
+## Summary
+
+Reusable script `scripts/install-tauri-macos.sh --install --open` se real macOS .app
+build + /Applications me install + launch verify — FULL GREEN, exit 0.
+
+- Strike 1: pehla run `EXIT=127` hua — fresh worktree me `apps/desktop/node_modules`
+  tha hi nahi, `tsc` binary missing. Ye environment gap tha, product/config bug nahi.
+- Fix (sirf build layer, OWNS ke andar): script ab step 0 me khud deps install karta
+  hai — `node_modules/.bin/tsc` na mile to `npm ci` (lockfile ho to) warna
+  `npm install`. npm isliye kyunki `apps/desktop/package-lock.json` track hota hai,
+  aur pnpm v11 ka pre-build install check esbuild par fail hota hai (script me pehle
+  se documented NOTE hai).
+- Dusra full run: TSC_OK + FRONTEND_OK + BUNDLE_OK + STAMP_OK + INSTALLED + OPENED,
+  EXIT=0. Dobara full script run karke green prove kiya (koi shortcut nahi).
+
+## Verify evidence
+
+- Bundle: /tmp/wt-INST/target/release/bundle/macos/AutoCompare.app (BUNDLE_OK)
+- Installed: /Applications/AutoCompare.app (default APP_DIR writable tha,
+  `$HOME/Applications` fallback ki zaroorat nahi padi)
+- Stamp file `dist/AutoCompare-0.5.0-macos-arm64.tauri.txt` contents:
+  ```
+  tauri 0.5.0 41a9d43
+  app /Applications/AutoCompare.app
+  ```
+- Launch: `open` ke baad process alive — PID 43951
+  `/Applications/AutoCompare.app/Contents/MacOS/autocompare-desktop`,
+  ELAPSED 00:47 (10s+ gate pass, crash-at-launch nahi).
+- Crash logs: `~/Library/Logs/DiagnosticReports/` me install ke baad koi naya
+  AutoCompare report nahi — sirf 00:19–00:24 ke purane `autocompare-gui-*.ips`
+  (crash-at-launch history wahi purani hai, is build me repeat nahi hui).
+- Main window: System Events se `process "autocompare-desktop"` ki window list me
+  `AutoCompare` window on-screen mili — window dikhta hai, blank/crash nahi.
+
+## Files changed (worktree, 1 file, +12 lines)
+
+- scripts/install-tauri-macos.sh — step 0 INSTALL_DEPS guard (node_modules missing
+  ho to npm ci / npm install). Product source, tauri.conf, Cargo.toml ko chhua tak
+  nahi (zaroorat nahi padi — bundle/signing aur build flags pehle se sahi the).
+- (untracked, build artifacts — commit nahi honge) apps/desktop/node_modules/,
+  apps/desktop/dist/, target/, dist/*.tauri.txt, REPORT.md (ye file).
+
+DO-NOT-touch list se kuch nahi chhua: crates/*, commands logic, views/**,
+chrome/**, ipc/**, e2e specs, tokens.css.
+
+## Environment
+
+- arch: arm64 (Apple Silicon), macOS 27.2.1
+- Xcode CLT: /Library/Developer/CommandLineTools
+- rustc: 1.99.1 (Homebrew)
+- node: v24.18.0, npm: 11.16.0, cargo-tauri: $HOME/.cargo/bin/cargo-tauri
+- Tauri release build time: ~2m 01s (fresh worktree target dir)
+
+Gate command (worktree copy, ABSOLUTE path): sab green, exit 0.
+
+INST-DONE
