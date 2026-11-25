@@ -1815,6 +1815,13 @@ export default function App(): React.JSX.Element {
   // (forwarded to TextView `onBusCommand`) — no duplicate handlers.
   // TextView's internal window listener stays a pure follow-effect
   // (scroll/focus sync), never a second invocation.
+  // Wave-L3A: folder/table/hex/sync hunk-nav (BC unified-toolbar
+  // parity). Each of these views owns an `autocompare:view-command`
+  // listener (folder steps file selection, table steps diff rows,
+  // hex steps differing offsets, sync steps plan rows), so the top
+  // bar forwards per active kind via the view bus instead of
+  // parking. Media stays honestly parked (summary view: score +
+  // metrics, no cursor, no row filter — no per-kind hunks to step).
   const handleViewCommand = useCallback(
     (cmd: ViewCommand): void => {
       const kind = viewKindRef.current ?? viewKind;
@@ -1824,6 +1831,11 @@ export default function App(): React.JSX.Element {
           if (kind === "merge") {
             dispatchViewCommand(cmd, "merge");
             setStatusMessage(cmd === "prev" ? "Previous conflict" : "Next conflict");
+            return;
+          }
+          if (kind === "folder" || kind === "table" || kind === "hex" || kind === "sync") {
+            dispatchViewCommand(cmd, kind);
+            setStatusMessage(cmd === "prev" ? `Previous diff (${kind})` : `Next diff (${kind})`);
             return;
           }
           if (kind !== "text") {
