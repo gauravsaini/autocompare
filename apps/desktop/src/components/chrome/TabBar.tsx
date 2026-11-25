@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
-import { Button, ToolbarButton } from "../ui";
+import { Button, Tab, TabList, ToolbarButton } from "../ui";
 
 export interface ChromeTab {
   id: string;
@@ -153,24 +153,130 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
     // barabar width lete hain, zyada tabs par uniformly shrink hokar
     // min floor par internal scroll (strip/scroll/heights untouched,
     // close `ml-auto` still right-pinned).
-    <div
+    // TABS3: STYLING-ONLY migration onto ui/Tabs primitive + tokens.
+    <TabList
+      testid="tabbar"
       data-testid="tabbar"
-      role="tablist"
       aria-label="Open tabs"
-      className={`flex h-[var(--ac-tabbar-h)] items-center gap-[var(--ac-space-1)] overflow-hidden bg-[var(--ac-tab-bg)] px-[var(--ac-space-3)]${className ? ` ${className}` : ""}`}
+      className={className}
+      newTab={
+        <ToolbarButton
+          data-testid="tab-new"
+          label="New tab"
+          title="New tab"
+          size="md"
+          icon={Plus}
+          onClick={() => {
+            try {
+              onNewTab("home");
+            } catch (err: unknown) {
+              setCloseError(err instanceof Error ? err.message : String(err));
+            }
+          }}
+          // Wave-158: token size md (26px) via ToolbarButton; the 32px
+          // hit-area exception is retired (tab-chip --ac-tab-chip-h documents
+          // the only 32px chrome left). Testid/aria/wiring untouched.
+          className="shrink-0"
+        />
+      }
+      extra={
+        closeError && (
+          <span
+            role="alert"
+            data-testid="tabbar/error"
+            className="ml-1 flex max-w-72 shrink-0 items-center gap-1 truncate rounded border border-[var(--ac-alert-border)] bg-[var(--ac-alert-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--ac-alert-fg)]"
+          >
+            <span className="truncate">{closeError}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Dismiss tab error"
+              onClick={() => setCloseError(null)}
+              className="shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
+            >
+              Dismiss
+            </Button>
+          </span>
+        )
+      }
     >
-      <div className="flex min-w-0 flex-initial items-center gap-[var(--ac-space-1)] overflow-x-auto">
       {visibleTabs.map((tab) => {
         const active = tab.id === activeTabId;
         const dirty = isTabDirty(tab);
         const closable = isTabClosable(tab);
         const confirming = armedConfirmId === tab.id && dirty;
         return (
-          <div
+          <Tab
             key={tab.id}
-            role="tab"
-            aria-selected={active}
+            testid={`tab-${tab.id}`}
             data-testid={`tab-${tab.id}`}
+            active={active}
+            title={tab.title}
+            dirty={dirty}
+            dirtyTestId={`tab-dirty-${tab.id}`}
+            close={
+              closable ? (
+                confirming ? (
+                  <span
+                    data-testid={`tab-close-prompt-${tab.id}`}
+                    role="group"
+                    aria-label={`Unsaved changes in ${tab.title}. Confirm close?`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        cancelClose();
+                      }
+                    }}
+                    className="flex shrink-0 items-center gap-[var(--ac-space-1)]"
+                  >
+                    <ToolbarButton
+                      data-testid={`tab-close-confirm-${tab.id}`}
+                      label={`Discard changes and close ${tab.title}`}
+                      title={`Discard changes and close ${tab.title}`}
+                      size="sm"
+                      icon={Check}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDiscard(tab);
+                      }}
+                      className="shrink-0"
+                    />
+                    <ToolbarButton
+                      data-testid={`tab-close-cancel-${tab.id}`}
+                      label={`Keep ${tab.title} open`}
+                      title={`Keep ${tab.title} open`}
+                      size="sm"
+                      icon={X}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cancelClose();
+                      }}
+                      className="shrink-0"
+                    />
+                  </span>
+                ) : (
+                  <ToolbarButton
+                    data-testid={`tab-close-${tab.id}`}
+                    label={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
+                    title={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
+                    size="sm"
+                    icon={X}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      requestClose(tab);
+                    }}
+                    // Wave-213: px-1 via inline style (className px-1 loses
+                    // to the primitive's px-1.5 in the utilities layer).
+                    // 24px close keeps 8-tab chips' centers clear of the
+                    // button so tab clicks select instead of arming
+                    // close-confirm; hit-area specs pin chip/new-tab, not
+                    // the close affordance.
+                    style={{ paddingInline: "var(--ac-space-1)" }}
+                    className="ml-auto shrink-0"
+                  />
+                )
+              ) : null
+            }
             onClick={() => safeSelect(tab.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") safeSelect(tab.id);
@@ -184,123 +290,9 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab, c
             onAuxClick={(e) => {
               if (e.button === 1) handleMiddleClick(tab);
             }}
-            tabIndex={0}
-            className={
-              active
-                ? "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[var(--ac-tab-min-w)] max-w-[var(--ac-tab-max-w)] flex-1 basis-0 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] border border-b-0 border-[var(--ac-border)] bg-[var(--ac-tab-active-bg)] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-medium text-[var(--ac-tab-active-fg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_1px_2px_rgb(0_0_0/0.05)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
-                : "ac-chrome-label flex h-[var(--ac-tab-chip-h)] min-w-[var(--ac-tab-min-w)] max-w-[var(--ac-tab-max-w)] flex-1 basis-0 cursor-pointer select-none items-center gap-[var(--ac-space-1)] rounded-[5px] pl-[var(--ac-space-2)] pr-[var(--ac-space-1)] font-normal text-[var(--ac-tab-fg)] hover:bg-[var(--ac-toolbar-btn-hover-bg)] hover:text-[var(--ac-fg)] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
-            }
-          >
-            <span className="min-w-0 truncate">{tab.title}</span>
-            {dirty && (
-              <span
-                data-testid={`tab-dirty-${tab.id}`}
-                aria-label="unsaved changes"
-                title="Unsaved changes"
-                className="inline-block size-1.5 shrink-0 rounded-full bg-[var(--ac-tab-dirty)]"
-              />
-            )}
-            {closable ? (
-              confirming ? (
-                <span
-                  data-testid={`tab-close-prompt-${tab.id}`}
-                  role="group"
-                  aria-label={`Unsaved changes in ${tab.title}. Confirm close?`}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      e.stopPropagation();
-                      cancelClose();
-                    }
-                  }}
-                  className="flex shrink-0 items-center gap-[var(--ac-space-1)]"
-                >
-                  <ToolbarButton
-                    data-testid={`tab-close-confirm-${tab.id}`}
-                    label={`Discard changes and close ${tab.title}`}
-                    title={`Discard changes and close ${tab.title}`}
-                    size="sm"
-                    icon={Check}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmDiscard(tab);
-                    }}
-                    className="shrink-0"
-                  />
-                  <ToolbarButton
-                    data-testid={`tab-close-cancel-${tab.id}`}
-                    label={`Keep ${tab.title} open`}
-                    title={`Keep ${tab.title} open`}
-                    size="sm"
-                    icon={X}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      cancelClose();
-                    }}
-                    className="shrink-0"
-                  />
-                </span>
-              ) : (
-                <ToolbarButton
-                  data-testid={`tab-close-${tab.id}`}
-                  label={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
-                  title={dirty ? `Close ${tab.title} (unsaved changes)` : `Close ${tab.title}`}
-                  size="sm"
-                  icon={X}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    requestClose(tab);
-                  }}
-                  // Wave-213: px-1 via inline style (className px-1 loses
-                  // to the primitive's px-1.5 in the utilities layer).
-                  // 24px close keeps 8-tab chips' centers clear of the
-                  // button so tab clicks select instead of arming
-                  // close-confirm; hit-area specs pin chip/new-tab, not
-                  // the close affordance.
-                  style={{ paddingInline: "var(--ac-space-1)" }}
-                  className="ml-auto shrink-0"
-                />
-              )
-            ) : null}
-          </div>
+          />
         );
       })}
-      </div>
-      <ToolbarButton
-        data-testid="tab-new"
-        label="New tab"
-        title="New tab"
-        size="md"
-        icon={Plus}
-        onClick={() => {
-          try {
-            onNewTab("home");
-          } catch (err: unknown) {
-            setCloseError(err instanceof Error ? err.message : String(err));
-          }
-        }}
-        // Wave-158: token size md (26px) via ToolbarButton; the 32px
-        // hit-area exception is retired (tab-chip --ac-tab-chip-h documents
-        // the only 32px chrome left). Testid/aria/wiring untouched.
-        className="shrink-0"
-      />
-      {closeError && (
-        <span
-          role="alert"
-          data-testid="tabbar/error"
-          className="ml-1 flex max-w-72 shrink-0 items-center gap-1 truncate rounded border border-[var(--ac-alert-border)] bg-[var(--ac-alert-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--ac-alert-fg)]"
-        >
-          <span className="truncate">{closeError}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Dismiss tab error"
-            onClick={() => setCloseError(null)}
-            className="shrink-0 underline hover:no-underline text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-[var(--ac-focus)]"
-          >
-            Dismiss
-          </Button>
-        </span>
-      )}
-    </div>
+    </TabList>
   );
 }

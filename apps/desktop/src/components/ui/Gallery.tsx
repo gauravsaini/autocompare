@@ -14,6 +14,7 @@ import DockedBar from "./DockedBar";
 import EmptyState from "./EmptyState";
 import InlineNotice from "./InlineNotice";
 import { UnifiedCopyCluster, UnifiedDiffOnlyCluster, UnifiedFilterSegment, UnifiedNavCluster, useUnifiedEsc } from "./UnifiedViewControls";
+import { Tab, TabList } from "./Tabs";
 
 /**
  * Wave-232: UI primitive gallery (dev-only, `/?gallery=1`).
@@ -31,6 +32,8 @@ export function Gallery(): React.JSX.Element {
   const [unifiedNote, setUnifiedNote] = useState("Unified clusters idle.");
   const [unifiedPanelOpen, setUnifiedPanelOpen] = useState(true);
   useUnifiedEsc(unifiedPanelOpen ? () => setUnifiedPanelOpen(false) : undefined, unifiedPanelOpen);
+  // Wave-TABS3: Tabs showcase state (presentational only).
+  const [activeShowcaseTab, setActiveShowcaseTab] = useState(0);
   return (
     <main data-testid="gallery/root" className="mx-auto flex w-full max-w-3xl flex-col gap-6 bg-[var(--ac-bg)] px-8 py-10 text-[var(--ac-fg)]">
       <h1 data-testid="gallery/title" className="ac-display font-semibold">
@@ -218,6 +221,44 @@ export function Gallery(): React.JSX.Element {
             </Button>
           </div>
         )}
+      </section>
+
+      <section aria-label="Tabs" data-testid="gallery/section-tabs" className="flex flex-col gap-3">
+        <h2 className="ac-title font-medium">Tabs</h2>
+        <div className="flex flex-col gap-2">
+          <StatusText data-testid="gallery/tabs-states-note">Tab states (active, inactive, dirty):</StatusText>
+          <TabList
+            aria-label="Tab states showcase"
+            scrollClassName="flex-1"
+            className="w-full rounded border border-[var(--ac-border)]"
+          >
+            <Tab active title="Active tab" testid="gallery/tabs-active" />
+            <Tab active={false} title="Inactive tab" testid="gallery/tabs-inactive" />
+            <Tab active={false} title="Dirty tab" dirty testid="gallery/tabs-dirty" />
+          </TabList>
+        </div>
+        <div className="flex flex-col gap-2">
+          <StatusText data-testid="gallery/tabs-8strip-note">
+            8-tab uniform strip (flex-1 basis-0 min 96px max 180px):
+          </StatusText>
+          <TabList
+            aria-label="8-tab uniform strip"
+            testid="gallery/tabs-8strip"
+            scrollClassName="flex-1"
+            className="w-full rounded border border-[var(--ac-border)]"
+          >
+            {Array.from({ length: 8 }, (_, i) => (
+              <Tab
+                key={i}
+                active={activeShowcaseTab === i}
+                dirty={i === 2}
+                title={`Tab ${i + 1}`}
+                testid={`gallery/tabs-8strip-tab-${i + 1}`}
+                onClick={() => setActiveShowcaseTab(i)}
+              />
+            ))}
+          </TabList>
+        </div>
       </section>
     </main>
   );

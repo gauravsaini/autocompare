@@ -225,6 +225,9 @@
   /* Checkbox & Tab Chip Tokens (Light) */
   --ac-checkbox-size: 13px;
   --ac-tab-chip-h: 24px;
+  --ac-tab-chip-h-sm: 22px;
+  --ac-tab-chip-h-md: 24px;
+  --ac-tab-radius: 5px;
   /* TABS2: BC-standard uniform chip clamps (readable floor 96, ellipsis
      cap 180; TabBar chips `flex-1 basis-0` share inside this band). */
   --ac-tab-min-w: 96px;
@@ -355,6 +358,9 @@
     /* Checkbox & Tab Chip Tokens (Dark) */
     --ac-checkbox-size: 13px;
     --ac-tab-chip-h: 24px;
+    --ac-tab-chip-h-sm: 22px;
+    --ac-tab-chip-h-md: 24px;
+    --ac-tab-radius: 5px;
     /* TABS2: BC-standard uniform chip clamps (dark mirror, values identical). */
     --ac-tab-min-w: 96px;
     --ac-tab-max-w: 180px;
@@ -650,6 +656,9 @@ samp {
   --ac-tabbar-h: 32px;
   --ac-pathbar-h: 32px;
   --ac-tab-chip-h: 24px;
+  --ac-tab-chip-h-sm: 22px;
+  --ac-tab-chip-h-md: 24px;
+  --ac-tab-radius: 5px;
   --ac-statusbar-h: 28px;
 
   /* Row geometry: every diff row in every view measures the same (Wave-88 unified 22px) */

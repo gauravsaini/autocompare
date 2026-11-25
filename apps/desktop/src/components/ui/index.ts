@@ -26,3 +26,6 @@ export { default as InlineNotice } from "./InlineNotice";
 export type { InlineNoticeProps } from "./InlineNotice";
 export { default as UnifiedViewControls, UnifiedNavCluster, UnifiedFilterSegment, UnifiedDiffOnlyCluster, UnifiedCopyCluster, useUnifiedEsc } from "./UnifiedViewControls";
 export type { UnifiedViewControlsProps, UnifiedNavClusterProps, UnifiedFilterSegmentProps, UnifiedDiffOnlyClusterProps, UnifiedCopyClusterProps } from "./UnifiedViewControls";
+export { default as Tab, Tab as TabComponent, TabList } from "./Tabs";
+export type { TabProps, TabListProps, TabSize } from "./Tabs";
+
