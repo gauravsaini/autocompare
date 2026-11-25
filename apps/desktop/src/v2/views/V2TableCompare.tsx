@@ -3,6 +3,8 @@ import { FolderOpen, KeyRound, Search, X } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit, TablePage, TableSummary } from "../../ipc/table";
 import V2Modal from "../components/V2Modal";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
@@ -70,7 +72,12 @@ export default function V2TableCompare({
         const pg = await tableGetPage(dto.sessionId, 0, 200, 0, 32);
         setPage(pg);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (!l && !r && isMissingFixtureError(e)) {
+          setSummary(null);
+          setPage(null);
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         setLoading(false);
       }
@@ -219,7 +226,7 @@ export default function V2TableCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/table-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Dual-Pane Path Bars */}
       <form
         onSubmit={(e) => {
@@ -298,9 +305,7 @@ export default function V2TableCompare({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Dual-Pane Table Grid */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-auto">

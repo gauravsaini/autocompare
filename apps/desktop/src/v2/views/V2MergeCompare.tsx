@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, FolderOpen } from "lucide-react";
 import { mergeTextApply, mergeTextPlan } from "../../ipc/merge";
 import type { TextChoice, TextMergePlan, TextResolution } from "../../ipc/merge";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2MergeCompareProps {
@@ -74,7 +76,11 @@ export default function V2MergeCompare({
       setManualOutputEdited(false);
       setSelectedConflict(0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!b && !l && !r && isMissingFixtureError(e)) {
+        setPlan(null);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setLoading(false);
     }
@@ -174,7 +180,7 @@ export default function V2MergeCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/merge-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* 3-Pane Path Header: Left | Base (Center) | Right */}
       <form
         onSubmit={(e) => {
@@ -216,9 +222,7 @@ export default function V2MergeCompare({
         ))}
       </form>
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Top Bank: 3-Way Conflict Cards */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--v2-bg)] p-3">

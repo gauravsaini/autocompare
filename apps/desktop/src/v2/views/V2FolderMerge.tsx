@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderOpen, Play } from "lucide-react";
 import { mergeFolderApply, mergeFolderPlan } from "../../ipc/merge";
 import type { FolderMergeApplyReport, TreeMergeAction, TreeMergePlan } from "../../ipc/merge";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2FolderMergeProps {
@@ -61,7 +63,11 @@ export default function V2FolderMerge({
       const p = await mergeFolderPlan(bEff, lEff, rEff);
       setPlan(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!b && !l && !r && isMissingFixtureError(e)) {
+        setPlan(null);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setLoading(false);
     }
@@ -141,7 +147,7 @@ export default function V2FolderMerge({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/foldermerge-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* 3-Pane Folder Path Header */}
       <form
         onSubmit={(e) => {
@@ -211,9 +217,7 @@ export default function V2FolderMerge({
         </button>
       </div>
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Merge Steps Table */}
       <div className="min-h-0 flex-1 overflow-y-auto text-[12px]">

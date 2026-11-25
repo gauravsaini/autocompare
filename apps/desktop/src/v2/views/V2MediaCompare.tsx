@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { AudioWaveform, FolderOpen, Image as ImageIcon } from "lucide-react";
 import { audioCompare, pictureCompare } from "../../ipc/media";
 import type { AudioSummary, PictureSummary } from "../../ipc/media";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2MediaCompareProps {
@@ -60,7 +62,12 @@ export default function V2MediaCompare({
           setPic(null);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (!l && !r && isMissingFixtureError(e)) {
+          setPic(null);
+          setAud(null);
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         setLoading(false);
       }
@@ -120,7 +127,7 @@ export default function V2MediaCompare({
   const scorePct = kind === "picture" && pic ? pic.score * 100 : kind === "audio" && aud ? aud.score * 100 : 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/media-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Dual-Pane Path Bars */}
       <form
         onSubmit={(e) => {
@@ -199,9 +206,7 @@ export default function V2MediaCompare({
         </label>
       </div>
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Main Media Analysis Surface */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--v2-bg)] p-5">

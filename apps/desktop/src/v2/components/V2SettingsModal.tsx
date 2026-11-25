@@ -156,7 +156,11 @@ export default function V2SettingsModal({
           </div>
         ) : null}
 
-        {note ? <p className="text-[11px] text-red-600">{note}</p> : null}
+        {note ? (
+          <p className="text-[11px]" style={{ color: "var(--v2-del-fg)" }}>
+            {note}
+          </p>
+        ) : null}
       </div>
     </V2Modal>
   );

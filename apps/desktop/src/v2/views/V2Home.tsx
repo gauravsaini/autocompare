@@ -157,7 +157,7 @@ export default function V2Home({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-[var(--v2-bg)]">
+    <div data-testid="v2/home" className="flex h-full min-h-0 w-full overflow-hidden bg-[var(--v2-bg)]">
       {/* Left Saved Sessions Sidebar (Beyond Compare style) */}
       <aside className="flex w-[260px] shrink-0 flex-col border-r border-[var(--v2-border)] bg-[var(--v2-sidebar)]">
         <div className="flex items-center justify-between border-b border-[var(--v2-border-subtle)] px-3.5 py-2.5">
@@ -285,6 +285,7 @@ export default function V2Home({
                 <button
                   key={card.kind}
                   type="button"
+                  data-testid={`v2/home-card-${card.kind}`}
                   onClick={() => onNewSession(card.kind)}
                   className="group flex items-start gap-3 rounded-[9px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[var(--v2-accent)] hover:shadow-[0_2px_8px_rgba(10,132,255,0.12)]"
                 >

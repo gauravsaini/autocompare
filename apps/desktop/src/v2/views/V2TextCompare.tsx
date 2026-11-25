@@ -10,6 +10,7 @@ import {
 } from "../../ipc/text";
 import type { InlineSpanDto, TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2Modal from "../components/V2Modal";
+import V2ErrorBanner from "../components/V2ErrorBanner";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
@@ -168,6 +169,10 @@ export default function V2TextCompare({
   const [algorithm, setAlgorithm] = useState<"myers" | "patience">("myers");
   const [encoding, setEncoding] = useState("UTF-8");
   const [eol, setEol] = useState("UNIX");
+  const encodingRef = useRef(encoding);
+  const eolRef = useRef(eol);
+  encodingRef.current = encoding;
+  eolRef.current = eol;
 
   // Selection, editing, modals, find
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -214,22 +219,22 @@ export default function V2TextCompare({
             ignoreBlankLines: ignoreBlank,
             minorUnimportant: minorEnabled,
             algorithm,
-            encoding,
-            eol,
+            encoding: encodingRef.current,
+            eol: eolRef.current,
           });
         }
         setSummary(dto);
         const page = await textGetRows(dto.session, 0, 400);
         setRows(page.rows);
-        if (dto.encoding) setEncoding(dto.encoding);
-        if (dto.eol) setEol(dto.eol);
+        if (dto.encoding && dto.encoding !== encodingRef.current) setEncoding(dto.encoding);
+        if (dto.eol && dto.eol !== eolRef.current) setEol(dto.eol);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
     },
-    [ignoreWs, ignoreCase, ignoreBlank, minorEnabled, algorithm, encoding, eol],
+    [ignoreWs, ignoreCase, ignoreBlank, minorEnabled, algorithm],
   );
 
   useEffect(() => {
@@ -430,6 +435,9 @@ export default function V2TextCompare({
       copySelected: () => {
         if (selectedHunk) void handleCopyHunk(selectedHunk, "left");
       },
+      copySelectedRight: () => {
+        if (selectedHunk) void handleCopyHunk(selectedHunk, "right");
+      },
       hasSections: hunks.length > 0,
       prevSection: () => stepSection(-1),
       nextSection: () => stepSection(1),
@@ -473,7 +481,7 @@ export default function V2TextCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/text-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Per-pane 50/50 Path + Metadata Header (Beyond Compare alignment) */}
       <form
         onSubmit={submitPaths}
@@ -593,15 +601,8 @@ export default function V2TextCompare({
         </div>
       ) : null}
 
-      {/* Inline Error Notice */}
-      {error ? (
-        <div className="flex shrink-0 items-center justify-between border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300">
-          <span>{error}</span>
-          <button type="button" onClick={() => setError(null)} className="text-[11px] underline">
-            Dismiss
-          </button>
-        </div>
-      ) : null}
+      {/* Pure-Token Inline Error Notice */}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Main Workspace: Far-Left Overview Minimap + 7-Column BC Diff Grid */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -721,6 +722,7 @@ export default function V2TextCompare({
                 return (
                   <div
                     key={row.index}
+                    data-testid={`v2/text-row-${row.index}`}
                     data-row-index={row.index}
                     onClick={() => setSelectedIndex(row.index)}
                     style={{

@@ -37,6 +37,7 @@ export interface V2ViewCommands {
   readonly openFormat?: () => void;
   readonly openFind?: () => void;
   readonly copySelected?: () => void;
+  readonly copySelectedRight?: () => void;
   readonly canCopy?: boolean;
   readonly prevSection?: () => void;
   readonly nextSection?: () => void;

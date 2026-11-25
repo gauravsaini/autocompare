@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, Folder, FolderOpen } from "lucide-react";
 import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
@@ -88,7 +90,11 @@ export default function V2FolderCompare({
         `${ts}  Loaded ${page.entries.length} entries (${lEff} <-> ${rEff})`,
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!l && !r && isMissingFixtureError(e)) {
+        setEntries([]);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setLoading(false);
     }
@@ -143,7 +149,7 @@ export default function V2FolderCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/folder-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Dual-Pane Path Bars */}
       <form
         onSubmit={(e) => {
@@ -204,11 +210,7 @@ export default function V2FolderCompare({
         <div className="px-2 py-1 text-right">Modified</div>
       </div>
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">
-          {error}
-        </div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Synchronized Dual-Pane Tree Rows */}
       <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto text-[12px]">

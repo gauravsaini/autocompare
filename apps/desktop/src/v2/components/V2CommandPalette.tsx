@@ -58,6 +58,7 @@ export default function V2CommandPalette({
   return (
     <div
       role="dialog"
+      data-testid="v2/command-palette"
       aria-modal="true"
       aria-label="Command palette"
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-[14vh] backdrop-blur-[1px]"

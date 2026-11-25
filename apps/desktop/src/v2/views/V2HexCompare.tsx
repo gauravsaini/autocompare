@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FolderOpen, Search, X } from "lucide-react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
@@ -67,7 +69,12 @@ export default function V2HexCompare({
         setSummary(dto);
         await loadPage(dto.sessionId, 0);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (!l && !r && isMissingFixtureError(e)) {
+          setSummary(null);
+          setPage(null);
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         setLoading(false);
       }
@@ -182,7 +189,7 @@ export default function V2HexCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/hex-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Dual-Pane Path Bars */}
       <form
         onSubmit={(e) => {
@@ -247,9 +254,7 @@ export default function V2HexCompare({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Dual-Pane Hex + ASCII Table */}
       <div ref={containerRef} className="v2-mono min-h-0 flex-1 overflow-auto text-[11.5px] leading-[21px]">

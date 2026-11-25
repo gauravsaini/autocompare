@@ -41,6 +41,7 @@ export default function V2Modal({
   return (
     <div
       role="dialog"
+      data-testid="v2/modal"
       aria-modal="true"
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1px]"

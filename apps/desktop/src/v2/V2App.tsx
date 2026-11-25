@@ -94,6 +94,7 @@ function TopBarBtn({
   return (
     <button
       type="button"
+      data-testid={`v2/toolbar-${label.toLowerCase()}`}
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex h-[38px] min-w-[44px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-[6px] px-2 text-[10.5px] font-medium transition select-none ${
@@ -118,6 +119,7 @@ export default function V2App(): React.JSX.Element {
       ? "dark"
       : "light",
   );
+  const [layoutDensity, setLayoutDensity] = useState<"standard" | "compact">("standard");
   const [tabs, setTabs] = useState<V2Tab[]>([HOME_TAB]);
   const [activeId, setActiveId] = useState<string>("home");
   const [commands, setCommands] = useState<V2ViewCommands>({});
@@ -135,6 +137,10 @@ export default function V2App(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.layout = layoutDensity;
+  }, [layoutDensity]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? HOME_TAB;
   const activeTabRef = useRef<V2Tab>(activeTab);
@@ -243,7 +249,7 @@ export default function V2App(): React.JSX.Element {
     }
   }, []);
 
-  // Global keyboard shortcuts (Cmd+K palette, Cmd+, preferences, Cmd+W close tab, n/p diff nav, Cmd+D copy)
+  // Global keyboard shortcuts (aligned 1:1 with src-tauri/src/menu.rs + BC ergonomics)
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const mod = e.metaKey || e.ctrlKey;
@@ -251,6 +257,32 @@ export default function V2App(): React.JSX.Element {
       if (mod && key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
+      }
+      if (mod && key === "s") {
+        e.preventDefault();
+        if (activeTabRef.current.kind !== "home") {
+          void handleSaveWorkspaceSession();
+        }
+        return;
+      }
+      if (mod && key === "o") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          openSession("folder");
+        } else {
+          setNewSessionOpen(true);
+        }
+        return;
+      }
+      if (mod && key === "n") {
+        e.preventDefault();
+        setNewSessionOpen(true);
+        return;
+      }
+      if (mod && key === "f" && commandsRef.current.openFind) {
+        e.preventDefault();
+        commandsRef.current.openFind();
         return;
       }
       if (mod && key === ",") {
@@ -268,6 +300,28 @@ export default function V2App(): React.JSX.Element {
         commandsRef.current.copySelected?.();
         return;
       }
+      if (mod && key === "e" && commandsRef.current.canCopy) {
+        e.preventDefault();
+        commandsRef.current.copySelectedRight?.();
+        return;
+      }
+      if (mod && !e.shiftKey && !e.altKey) {
+        const kindByDigit: Record<string, SessionKind> = {
+          "1": "text",
+          "2": "folder",
+          "3": "hex",
+          "4": "table",
+          "5": "media",
+          "6": "sync",
+          "7": "merge",
+        };
+        const targetKind = kindByDigit[key];
+        if (targetKind) {
+          e.preventDefault();
+          openSession(targetKind);
+          return;
+        }
+      }
       if (!mod && !isEditableTarget(e.target)) {
         if (key === "n" && commandsRef.current.hasSections) {
           e.preventDefault();
@@ -280,7 +334,7 @@ export default function V2App(): React.JSX.Element {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closeTab]);
+  }, [closeTab, handleSaveWorkspaceSession, openSession]);
 
   // Apply dropped file path(s) to current tab or auto-open a matching comparison
   const handleDroppedPaths = useCallback(
@@ -395,6 +449,9 @@ export default function V2App(): React.JSX.Element {
             case "session.take-left":
               commandsRef.current.copySelected?.();
               break;
+            case "session.take-right":
+              commandsRef.current.copySelectedRight?.();
+              break;
             case "view.kind-text":
               openSession("text");
               break;
@@ -418,6 +475,14 @@ export default function V2App(): React.JSX.Element {
               break;
             case "view.toggle-theme":
               setTheme((t) => (t === "dark" ? "light" : "dark"));
+              break;
+            case "view.toggle-layout":
+              setLayoutDensity((d) => {
+                const next = d === "standard" ? "compact" : "standard";
+                setSaveToast(`Layout: ${next}`);
+                setTimeout(() => setSaveToast(null), 1800);
+                return next;
+              });
               break;
             case "tools.settings":
               setSettingsOpen(true);
@@ -471,6 +536,7 @@ export default function V2App(): React.JSX.Element {
 
   return (
     <div
+      data-testid="v2/shell"
       className="relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--v2-bg)] text-[var(--v2-fg)]"
       onDragOver={(e) => {
         e.preventDefault();
@@ -490,7 +556,7 @@ export default function V2App(): React.JSX.Element {
       }}
     >
       {/* 1. Crisp macOS Tab Strip */}
-      <header className="flex h-[36px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2">
+      <header data-testid="v2/tabbar" className="flex h-[36px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTab.id;
@@ -551,12 +617,13 @@ export default function V2App(): React.JSX.Element {
 
         <div className="ml-2 flex shrink-0 items-center gap-1.5">
           {saveToast ? (
-            <span className="text-[11px] font-medium text-[var(--v2-accent)]">{saveToast}</span>
+            <span data-testid="v2/toast" className="text-[11px] font-medium text-[var(--v2-accent)]">{saveToast}</span>
           ) : null}
           {activeTab.kind !== "home" ? (
             <>
               <button
                 type="button"
+                data-testid="v2/export-report"
                 title="Export comparison report"
                 onClick={() => setExportOpen(true)}
                 className="v2-btn h-[22px] text-[11px]"
@@ -566,6 +633,7 @@ export default function V2App(): React.JSX.Element {
               </button>
               <button
                 type="button"
+                data-testid="v2/save-session"
                 onClick={() => void handleSaveWorkspaceSession()}
                 className="v2-btn h-[22px] text-[11px]"
               >
@@ -575,6 +643,7 @@ export default function V2App(): React.JSX.Element {
           ) : null}
           <button
             type="button"
+            data-testid="v2/open-palette"
             title="Command Palette (Cmd+K)"
             onClick={() => setPaletteOpen(true)}
             className="v2-btn h-[22px] gap-1 px-2 text-[11px] text-[var(--v2-fg-secondary)]"
@@ -584,6 +653,7 @@ export default function V2App(): React.JSX.Element {
           </button>
           <button
             type="button"
+            data-testid="v2/open-settings"
             title="Preferences (Cmd+,)"
             aria-label="Preferences"
             onClick={() => setSettingsOpen(true)}
@@ -593,6 +663,7 @@ export default function V2App(): React.JSX.Element {
           </button>
           <button
             type="button"
+            data-testid="v2/toggle-theme"
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -607,6 +678,7 @@ export default function V2App(): React.JSX.Element {
       {activeTab.kind !== "home" ? (
         <div
           role="toolbar"
+          data-testid="v2/toolbar"
           aria-label="Comparison actions"
           className="flex h-[46px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-2.5"
         >
@@ -744,7 +816,7 @@ export default function V2App(): React.JSX.Element {
       </div>
 
       {/* 4. Clean 3-Zone Status Bar */}
-      <footer className="flex h-[24px] shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 text-[11px] text-[var(--v2-fg-muted)]">
+      <footer data-testid="v2/statusbar" className="flex h-[24px] shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 text-[11px] text-[var(--v2-fg-muted)]">
         <span className="truncate">
           {activeTab.kind === "home" ? "Ready" : status.left || "Ready"}
         </span>

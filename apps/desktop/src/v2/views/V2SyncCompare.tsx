@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowLeftRight, FolderOpen, Play, Trash2 } from "lucide-react";
 import { syncApply, syncPlan } from "../../ipc/sync";
 import type { SyncApplyReport, SyncDirection, SyncPlan, SyncStep } from "../../ipc/sync";
+import V2ErrorBanner from "../components/V2ErrorBanner";
+import { isMissingFixtureError } from "../utils/demoGuard";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2SyncCompareProps {
@@ -58,7 +60,11 @@ export default function V2SyncCompare({
         const p = await syncPlan(lEff, rEff, { direction, prune });
         setPlan(p);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (!l && !r && isMissingFixtureError(e)) {
+          setPlan(null);
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         setLoading(false);
       }
@@ -125,7 +131,7 @@ export default function V2SyncCompare({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div data-testid="v2/sync-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
       {/* Dual-Pane Folder Paths */}
       <form
         onSubmit={(e) => {
@@ -222,9 +228,7 @@ export default function V2SyncCompare({
         </div>
       </div>
 
-      {error ? (
-        <div className="border-b border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{error}</div>
-      ) : null}
+      <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Planned Sync Steps Table */}
       <div className="min-h-0 flex-1 overflow-y-auto text-[12px]">

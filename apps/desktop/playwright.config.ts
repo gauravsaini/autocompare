@@ -20,6 +20,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.PORT,
     env: {
       VITE_MOCK_IPC: "1",
+      VITE_UI_VERSION: process.env.VITE_UI_VERSION || "v1",
     },
   },
   projects: [

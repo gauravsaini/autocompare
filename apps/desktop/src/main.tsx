@@ -5,9 +5,11 @@ import "./v2/v2.css";
 import "./theme/tokens.css";
 
 const root = document.getElementById("root");
+const params =
+  typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+const envVersion = import.meta.env.VITE_UI_VERSION;
 const useV1 =
-  typeof window !== "undefined" &&
-  new URLSearchParams(window.location.search).get("v1") === "1";
+  params?.get("v2") !== "1" && (params?.get("v1") === "1" || envVersion === "v1");
 
 const LazyV1App = React.lazy(() => import("./App"));
 
