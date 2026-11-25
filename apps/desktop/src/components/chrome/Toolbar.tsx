@@ -137,11 +137,29 @@ export function compareBlockedReasonOf(action: ToolbarAction): string | null {
  * reason is known and not already embedded in the label, it is
  * appended parenthetically so every disabled state carries its reason
  * in the tooltip.
+ *
+ * Wave-217 (214 rec 2): append shortcut hints parenthetically for
+ * actions with active accelerators. Skipped when a spec asserts the
+ * exact old title (swap: swapsides-136 asserts "Swap sides"; reload:
+ * toolbar-compare asserts "Refresh" + "Refresh (comparing…)") — those
+ * ids intentionally carry no hint. Reload is additionally covered by
+ * rec 1 (Refresh -> Reload rename on the inline refresh cluster,
+ * which bypasses actionTitle entirely).
  */
+const SHORTCUT_HINTS: Record<string, string> = {
+  open: "Cmd+O",
+  "next-hunk": "Cmd+Alt+Down / n",
+  "prev-hunk": "Cmd+Alt+Up / p",
+  copy: "Cmd+D / Cmd+E",
+  "copy-right": "Cmd+E",
+};
+
 export function actionTitle(action: ToolbarAction, reason?: string | null): string {
   const r = reason ?? action.disabledReason ?? null;
-  if (!r || action.label.includes(r)) return action.label;
-  return `${action.label} (${r})`;
+  const base = !r || action.label.includes(r) ? action.label : `${action.label} (${r})`;
+  const hint = SHORTCUT_HINTS[action.id];
+  if (!hint || base.includes(hint)) return base;
+  return `${base} (${hint})`;
 }
 
 /**
@@ -347,12 +365,12 @@ export function Toolbar({ actions, busy: busyProp, note: noteProp, className }: 
               key="compare-refresh"
               orientation="vertical"
               data-testid="toolbar/action-compare-refresh"
-              aria-label={refreshEnabled ? "Refresh" : `Refresh (${refreshReason ?? "unavailable"})`}
-              title={refreshEnabled ? "Refresh" : `Refresh (${refreshReason ?? "unavailable"})`}
+              aria-label={refreshEnabled ? "Reload" : `Reload (${refreshReason ?? "unavailable"})`}
+              title={refreshEnabled ? "Reload" : `Reload (${refreshReason ?? "unavailable"})`}
               disabled={!refreshEnabled}
               onClick={refreshEnabled ? () => void runCompare() : undefined}
               className={buttonClass}
-              label="Refresh"
+              label="Reload"
             >
               <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" className={busy ? "animate-spin" : undefined} />
               <span aria-hidden="true" className="ac-meta w-full max-w-24 truncate text-center leading-none">

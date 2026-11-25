@@ -394,6 +394,7 @@ function PathField({
         className="shrink-0"
       />
       <ToolbarButton
+        data-testid={`${testId}-copy`}
         label={`Copy ${label}`}
         disabled={comparing}
         size="md"
