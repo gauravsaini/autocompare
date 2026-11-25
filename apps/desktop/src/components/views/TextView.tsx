@@ -1260,6 +1260,19 @@ export default function TextView({
       openGoto();
     };
     const onKey = (e: KeyboardEvent): void => {
+      // Wave-219: Escape closes the view chrome popovers idempotently
+      // (set-false, never a toggle), so it runs BEFORE the
+      // defaultPrevented guard below. The chrome bridge clicks the
+      // find/goto dismiss buttons on Esc and preventDefaults; the
+      // guard would otherwise swallow this listener and leave the
+      // button-less Ignore/Format popovers open (textcontrols-66r).
+      if (e.key === "Escape") {
+        setFindOpen(false);
+        setGotoOpen(false);
+        setIgnoreOpen(false);
+        setFormatOpen(false);
+        return;
+      }
       // Wave-178: a row-level handler that already consumed the chord
       // (row `l`/`r`/`n`/`p`/Cmd+Alt-arrows preventDefault) wins — this
       // window listener must not double-process it. The row `jumpDiff`
@@ -1274,11 +1287,6 @@ export default function TextView({
       } else if ((e.metaKey || e.ctrlKey) && (e.key === "g" || e.key === "G") && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         openGoto();
-      } else if (e.key === "Escape") {
-        setFindOpen(false);
-        setGotoOpen(false);
-        setIgnoreOpen(false);
-        setFormatOpen(false);
       }
       // NOTE (wave-178): no Cmd+Alt+Arrow branch here. Difference nav
       // rides the single routing point: the focused row handles it with

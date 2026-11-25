@@ -62,5 +62,12 @@ test("find cycles hits, selects, misses honestly", async ({ page }) => {
   await input.press("Enter");
   await expect(status).toContainText(/no matches in \d+ loaded rows/);
 
+  // Wave-219: the find panel floats in the `tv-chrome` overlay stack
+  // (absolute popover over the rows by design, so open chrome never
+  // pushes `textview/row-0` down). Overlap-gate the settled CLOSED
+  // chrome: collapse first, then assert no overlap.
+  if ((await findToggle112.getAttribute("aria-expanded")) === "true") await findToggle112.click();
+  await expect(input).toBeHidden();
+
   await assertNoOverlap(page);
 });
