@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit } from "../../ipc/table";
-import { Button, Checkbox, Input, Select, StatusText } from "../ui";
+import { Button, Checkbox, EmptyState, InlineNotice, Input, Select, StatusText } from "../ui";
 import { TableToolbar } from "./table/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -875,8 +875,8 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           : `Hit ${hitPos + 1} of ${hits.length}`;
 
   if (status === "loading") return <p>Loading table comparison…</p>;
-  if (status === "error") return <p role="alert">Table compare failed: {error}</p>;
-  if (status === "empty" || grid === null) return <p>No cells to display.</p>;
+  if (status === "error") return <InlineNotice testid="tableview/error">Table compare failed: {error}</InlineNotice>;
+  if (status === "empty" || grid === null) return <EmptyState title="No cells to display." testid="tableview/empty" />;
 
   /**
    * Wave-68: loaded-scope difference rows for prev/next nav. Same
@@ -1619,9 +1619,9 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
           className="flex flex-wrap items-center gap-[var(--ac-space-3)] px-[var(--ac-space-4)] py-[var(--ac-space-2)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]"
         >
           {mapDisabledReason !== null ? (
-            <p data-testid="table-map-disabled-note" className="ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="table-map-disabled-note">
               Column mapping unavailable — {mapDisabledReason}.
-            </p>
+            </InlineNotice>
           ) : (
             <>
               {cols.map((c) => {
@@ -1739,19 +1739,19 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         )}
       </div>
       {exportNote !== null && (
-        <p data-testid="table-export-receipt" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-mono text-[length:var(--ac-font-size-code)] font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-export-receipt">
           {exportNote}
-        </p>
+        </InlineNotice>
       )}
       {showFallbackNote && (
-        <p data-testid="table-bykey-note" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-bykey-note">
           By-key requested — backend returned positional alignment (no key columns); showing positional rows.
-        </p>
+        </InlineNotice>
       )}
       {sortNoteText() === null ? null : (
-        <p data-testid="table-sort-status" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-sort-status">
           {sortNoteText()}
-        </p>
+        </InlineNotice>
       )}
       <p data-testid="table-cols-count" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
         {loadedRows} / {grid.totalRows} rows ·{" "}
@@ -1834,9 +1834,9 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
       </div>
       )}
       {hiddenCount > 0 && findQuery !== "" && findOpen && (
-        <p data-testid="table-find-hidden-note" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] ac-chrome-label font-normal text-[var(--ac-fg-muted)] border-b border-[var(--ac-border-subtle)] bg-[var(--ac-bg)]">
+        <InlineNotice testid="table-find-hidden-note">
           Find skips {hiddenCount} hidden column{hiddenCount === 1 ? "" : "s"} — unhide or Show all to include {hiddenCount === 1 ? "it" : "them"}.
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-91: BC-table red diff cells in both schemes via the
           existing del tokens (no new palette; tokens.css untouched).

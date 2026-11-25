@@ -20,7 +20,7 @@ import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 import { FolderNamePanel, FolderToolbar, RulesPanel } from "./folder/controls";
 import { VIEW_RULES_EVENT } from "./folder/controls/RulesPanel";
-import { Button, Input, ToolbarButton } from "../ui";
+import { Button, EmptyState, InlineNotice, Input, ToolbarButton } from "../ui";
 
 /**
  * Folder comparison tree view (Wave 2B).
@@ -653,23 +653,13 @@ export default function FolderView({
   // live status bar). Text + testids byte-identical, classes only.
   if (leftPath === "" || rightPath === "")
     return (
-      <p
-        data-testid="folderview/empty"
-        className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
-      >
-        Pick two folders to compare — needs two paths.
-      </p>
+      <EmptyState title="Pick two folders to compare — needs two paths." testid="folderview/empty" />
     );
   if (status === "loading") return <p>Loading folder comparison…</p>;
-  if (status === "error") return <p role="alert">Folder compare failed: {error}</p>;
+  if (status === "error") return <InlineNotice testid="folderview/error">Folder compare failed: {error}</InlineNotice>;
   if (status === "empty" || entries.length === 0)
     return (
-      <p
-        data-testid="folderview/empty"
-        className="mx-auto max-w-md px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center ac-chrome-label font-normal text-[var(--ac-fg-muted)]"
-      >
-        No entries to display.
-      </p>
+      <EmptyState title="No entries to display." testid="folderview/empty" />
     );
   const hasMore = entries.length < total;
 
@@ -1100,9 +1090,9 @@ export default function FolderView({
         onClose={() => setRulesOpen(false)}
       />
       {masks !== "" ? (
-        <p data-testid="folderview/masks-note" role="note" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="folderview/masks-note">
           Masks: {masks} — clear to compare everything.
-        </p>
+        </InlineNotice>
       ) : null}
       <FolderNamePanel
         open={nameOpen}
@@ -1156,21 +1146,21 @@ export default function FolderView({
             </ToolbarButton>
           </div>
           {gotoNote !== null && (
-            <p data-testid="folder-goto-note" role="status" className="pt-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="folder-goto-note">
               {gotoNote}
-            </p>
+            </InlineNotice>
           )}
         </section>
       )}
       {copyNote !== null && (
-        <p data-testid="folder-copy-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="folder-copy-note">
           {copyNote}
-        </p>
+        </InlineNotice>
       )}
       {openNote !== null && (
-        <p data-testid="folder-open-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] ac-chrome-label font-normal text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="folder-open-note">
           {openNote}
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-FNAV: folder navigation bar with Back, Forward, Up variants, Set-as-Base, and Breadcrumbs */}
       <div

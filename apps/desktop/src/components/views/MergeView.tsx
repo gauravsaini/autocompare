@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight } from "lucide-
 import { mergeCompareToOutput, mergeTextApply, mergeTextPlanForTriple } from "../../ipc/merge";
 import type { TextConflict, TextResolution } from "../../ipc/merge";
 import { pickSaveDialog } from "../session/useSession";
-import { Button, Input } from "../ui";
+import { Button, EmptyState, InlineNotice, Input } from "../ui";
 import { MergeFindPanel, MergeToolbar } from "./merge/controls";
 import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -1083,8 +1083,8 @@ export default function MergeView({
   }, [conflicts, choices, clearedConflicts, mergeFilter]);
 
   if (status === "loading") return <p>Loading merge plan…</p>;
-  if (status === "error") return <p role="alert">Merge plan failed: {error}</p>;
-  if (status === "empty") return <p>No conflicts — merge is clean.</p>;
+  if (status === "error") return <InlineNotice testid="mergeview/error">Merge plan failed: {error}</InlineNotice>;
+  if (status === "empty") return <EmptyState title="No conflicts — merge is clean." testid="mergeview/empty" />;
 
   const position = count === 0 ? "No conflicts" : `Conflict ${selected + 1} of ${count}`;
   // Wave-70 / Wave-MRG: bottom status bar counts reuse existing merge state:
@@ -1247,13 +1247,9 @@ export default function MergeView({
           drop (null otherwise), so the wave-70 chrome budget (first card
           top <= 140px) and every legacy testid stay untouched. */}
       {dropNote !== null && (
-        <p
-          data-testid="merge-drop-note"
-          role="status"
-          className="mx-[var(--ac-space-4)] mt-[var(--ac-space-2)] rounded border border-[var(--ac-border-subtle)] bg-[var(--ac-bg-raised)] p-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]"
-        >
+        <InlineNotice testid="merge-drop-note">
           {dropNote}
-        </p>
+        </InlineNotice>
       )}
       {/* Wave-147: BC overview-ruler parity. The cards ride a flex row
           with a far-LEFT in-flow rail (wave-196: right edge -> far-left
@@ -1270,12 +1266,10 @@ export default function MergeView({
             8px rhythm with zero collapse surprise. */}
         <div className="flex min-w-0 flex-1 flex-col gap-[var(--ac-space-2)]">
         {visibleConflicts.length === 0 && (
-          <p
-            data-testid="merge-filter-empty"
-            className="mx-[var(--ac-space-4)] p-[var(--ac-space-3)] rounded border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] ac-meta text-[var(--ac-fg-muted)]"
-          >
-            No conflicts match view filter &ldquo;{mergeFilter}&rdquo;.
-          </p>
+          <EmptyState
+            title={`No conflicts match view filter \u201C${mergeFilter}\u201D.`}
+            testid="merge-filter-empty"
+          />
         )}
         {visibleConflicts.map((c, index) => {
         const chosen = choices[c.id];
@@ -1436,9 +1430,9 @@ export default function MergeView({
               </Button>
             </div>
             {bothNotes[c.id] !== undefined && (
-              <p data-testid={`merge-take-both-note-${c.id}`} className="mt-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] text-[var(--ac-fg-muted)]">
+              <InlineNotice testid={`merge-take-both-note-${c.id}`}>
                 {bothNotes[c.id]}
-              </p>
+              </InlineNotice>
             )}
           </article>
         );
@@ -1565,12 +1559,12 @@ export default function MergeView({
         </Button>
       </div>
       {compareOutputReport !== null && (
-        <p data-testid="merge-compare-output-report" className="ac-meta font-normal px-4 py-1 text-[var(--ac-fg)]">
+        <InlineNotice testid="merge-compare-output-report">
           <span data-testid="merge-compare-to-output-report" className="sr-only" aria-hidden="true" />
           {compareOutputReport}
-        </p>
+        </InlineNotice>
       )}
-      {report !== null && <p data-testid="merge-apply-report" className="ac-meta font-normal px-4 py-2 text-[var(--ac-fg)]">{report}</p>}
+      {report !== null && <InlineNotice testid="merge-apply-report">{report}</InlineNotice>}
       {/* Wave-70: counts live in the bottom status bar (BC truth:
           counts in the status bar). Legacy `merge-conflict-count`
           testid rides the same string so wave-12/22/45 specs keep

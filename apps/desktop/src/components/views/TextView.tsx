@@ -6,7 +6,7 @@ import { arrayField, errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 import { FindOverlay, FormatMenu, GotoOverlay, IgnoreMenu, OverviewStrip, TextToolbar } from "./text/controls";
 import { VIEW_FORMAT_EVENT } from "./text/controls/FormatMenu";
-import { Button } from "../ui";
+import { Button, EmptyState, InlineNotice } from "../ui";
 import type { OverviewStripHunk } from "./text/controls/OverviewStrip";
 import { RowLine } from "./text/RowLine";
 // Wave-161: bus event names shared with the top Toolbar (leaf module —
@@ -2064,8 +2064,8 @@ export default function TextView({
   const rightMetaText = useMemo(() => formatTextMeta(rightMeta, rightLines), [rightMeta, rightLines]);
 
   if (status === "loading") return <p>Loading text comparison…</p>;
-  if (status === "error") return <p role="alert">Text compare failed: {error}</p>;
-  if (status === "empty" || rows.length === 0) return <p>No rows to display.</p>;
+  if (status === "error") return <InlineNotice testid="textview/error">Text compare failed: {error}</InlineNotice>;
+  if (status === "empty" || rows.length === 0) return <EmptyState title="No rows to display." testid="textview/empty" />;
 
   const hasMore = rows.length < total;
 
@@ -2706,47 +2706,47 @@ export default function TextView({
           owned by `TextView`; the standalone row is gone so the idle
           chrome is one toolbar row + pathbar. */}
       {undoNote !== null ? (
-        <p data-testid="textview/undo-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/undo-note">
           {undoNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {saveNote !== null ? (
-        <p data-testid="textview/save-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/save-note">
           {saveNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {saveError !== null ? (
-        <p data-testid="textview/save-error" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/save-error">
           {saveError}
-        </p>
+        </InlineNotice>
       ) : null}
       {/* Wave-139b: hunk-copy receipt (applied + unsaved/Save
           outcome). Same note styling as the save line above. */}
       {copyNote !== null ? (
-        <p data-testid="textview/copy-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/copy-note">
           {copyNote}
-        </p>
+        </InlineNotice>
       ) : null}
       {dirtyCount > 0 ? (
-        <p data-testid="textview/edit-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/edit-note">
           {dirtyCount} local {dirtyCount === 1 ? "edit" : "edits"} — session-local until save lands.
-        </p>
+        </InlineNotice>
       ) : null}
       {appliedCount > 0 ? (
-        <p data-testid="textview/applied-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/applied-note">
           {appliedCount} {appliedCount === 1 ? "edit" : "edits"} applied to the compare session.
-        </p>
+        </InlineNotice>
       ) : null}
       {editError !== null ? (
-        <p data-testid="textview/edit-error" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/edit-error">
           {editError}
-        </p>
+        </InlineNotice>
       ) : null}
       {viewFilter !== "all" || diffsOnly ? (
-        <p data-testid="textview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="textview/diffsonly-note">
           Hiding {hiddenSameCount} same {hiddenSameCount === 1 ? "row" : "rows"}
           {contextClause} — toggle off to restore.
-        </p>
+        </InlineNotice>
       ) : null}
       {/* Wave-199c: find/goto now ride the `tv-chrome` overlay stack
           above (same testids/logic, absolute popovers). Old in-flow

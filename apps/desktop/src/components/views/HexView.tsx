@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
+import { EmptyState, InlineNotice } from "../ui";
 import { HexFindPanel, HexGotoPanel, HexToolbar } from "./hex/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -520,8 +521,8 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
   }
 
   if (status === "loading") return <p>Loading hex comparison…</p>;
-  if (status === "error") return <p role="alert">Hex compare failed: {error}</p>;
-  if (status === "empty" || session === null) return <p>No bytes to display.</p>;
+  if (status === "error") return <InlineNotice testid="hexview/error">Hex compare failed: {error}</InlineNotice>;
+  if (status === "empty" || session === null) return <EmptyState title="No bytes to display." testid="hexview/empty" />;
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_LEN));
   const base = pageIdx * PAGE_LEN;
@@ -1091,13 +1092,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         )}
       </div>
       {viewFilter !== "all" ? (
-        <p data-testid="hexview/diffsonly-note" role="note" className="px-[var(--ac-space-4)] pt-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+        <InlineNotice testid="hexview/diffsonly-note">
           {viewFilter === "diffs"
             ? `Hiding ${hiddenSameCount} ${hiddenSameCount === 1 ? "row" : "rows"} without differences — toggle off to restore.`
             : viewFilter === "same"
               ? `Hiding ${hiddenSameCount} differing ${hiddenSameCount === 1 ? "row" : "rows"} — toggle off to restore.`
               : `Showing differences with one neighbor row — ${visibleRows.length} of ${rows.length} rows.`}
-        </p>
+        </InlineNotice>
       ) : null}
       <p
         data-testid="hex-copy-status"

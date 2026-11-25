@@ -7,6 +7,7 @@ import {
   type PictureSummary,
 } from "../../ipc/media";
 import { MediaTolerancePanel, MediaToolbar } from "./media/controls";
+import { EmptyState, InlineNotice } from "../ui";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
 
@@ -219,9 +220,7 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
         />
       )}
       {status === "empty" && (
-        <p data-testid="mediaview/empty" className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          Pick two files to compare (picture or audio) — needs two paths.
-        </p>
+        <EmptyState title="Pick two files to compare (picture or audio) — needs two paths." testid="mediaview/empty" />
       )}
       {status === "loading" && (
         <p data-testid="mediaview/status" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
@@ -229,9 +228,9 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
         </p>
       )}
       {status === "error" && (
-        <p data-testid="mediaview/error" role="alert" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg)]">
+        <InlineNotice testid="mediaview/error">
           {error ?? "media compare failed"}
-        </p>
+        </InlineNotice>
       )}
       {status === "ready" && picture !== null && (
         <div data-testid="mediaview/summary" className="flex flex-col gap-[var(--ac-space-2)] px-[var(--ac-space-4)] py-[var(--ac-space-3)]">
@@ -280,9 +279,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
               ONLY when the rows block is absent, so row counts and
               chrome are untouched. */}
           {picture.samples.length === 0 && (
-            <p data-testid="mediaview/empty-rows" className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-              {picture.identical ? "No differences — files are identical." : "No diff samples within the summary cap."}
-            </p>
+            <EmptyState
+              title={picture.identical ? "No differences — files are identical." : "No diff samples within the summary cap."}
+              testid="mediaview/empty-rows"
+            />
           )}
         </div>
       )}
@@ -322,9 +322,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
           )}
           {/* Wave-147: audio diff empty state (picture twin above). */}
           {audio.diffWindows.length === 0 && (
-            <p data-testid="mediaview/empty-rows" className="mw-row font-normal leading-[var(--ac-line-height-code)] tracking-[var(--ac-letter-spacing-code)] text-[var(--ac-fg-muted)]">
-              {audio.identical ? "No differences — files are identical." : "No diff windows within the summary cap."}
-            </p>
+            <EmptyState
+              title={audio.identical ? "No differences — files are identical." : "No diff windows within the summary cap."}
+              testid="mediaview/empty-rows"
+            />
           )}
         </div>
       )}
@@ -334,14 +335,10 @@ export default function MediaView({ leftPath, rightPath }: ViewPaths): React.JSX
           samples / 3 audio windows) never hit it and wave-48/72/103 specs
           hold byte-identical. Same in-flow line, no new chrome rows. */}
       {status === "ready" && picture !== null && (picture.identical || picture.samples.length === 0) && (
-        <p data-testid="mediaview/empty-diff" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          no differing samples — files identical
-        </p>
+        <EmptyState title="no differing samples — files identical" testid="mediaview/empty-diff" />
       )}
       {status === "ready" && audio !== null && (audio.identical || audio.diffWindows.length === 0) && (
-        <p data-testid="mediaview/empty-diff" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
-          no differing windows — files identical
-        </p>
+        <EmptyState title="no differing windows — files identical" testid="mediaview/empty-diff" />
       )}
       {/* Wave-72 bottom status bar (Beyond Compare style). Honest scope:
           reuses the existing ready summary state only -- "same" when the

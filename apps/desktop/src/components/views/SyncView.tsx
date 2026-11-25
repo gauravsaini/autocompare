@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Trash2 } from "lucide-react";
 import { syncApply, syncPlan, type SyncDirection, type SyncPlan, type SyncStep } from "../../ipc/sync";
-import { Button } from "../ui";
+import { Button, EmptyState, InlineNotice } from "../ui";
 import { SyncNamePanel, SyncToolbar } from "./sync/controls";
 import { errString, isRecord } from "./types";
 import type { ViewPaths } from "./types";
@@ -394,30 +394,20 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
         </p>
       )}
       {status === "error" && (
-        <p data-testid="syncview/error" role="alert" className="px-[var(--ac-space-4)] py-[var(--ac-space-2)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg)]">
+        <InlineNotice testid="syncview/error">
           {error ?? "sync plan failed"}
-        </p>
+        </InlineNotice>
       )}
       {status === "empty" && (leftPath === "" || rightPath === "") && (
         <div
           data-testid="workspace/blank-empty"
           className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-8 py-16 text-center"
         >
-          <p
-            data-testid="syncview/empty"
-            className="ac-body text-[var(--ac-fg-muted)]"
-          >
-            Pick two folders to sync — needs two paths.
-          </p>
+          <EmptyState title="Pick two folders to sync — needs two paths." testid="syncview/empty" />
         </div>
       )}
       {status === "empty" && leftPath !== "" && rightPath !== "" && (
-        <p
-          data-testid="syncview/empty"
-          className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-        >
-          Folders are in sync — no steps planned.
-        </p>
+        <EmptyState title="Folders are in sync — no steps planned." testid="syncview/empty" />
       )}
       {(status === "ready" || status === "empty") && plan !== null && (
         <>
@@ -458,13 +448,13 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
               : `${includedSteps.length} of ${steps.length} steps included (${copies} copies, ${deletes} deletes, ${excluded.size} excluded)`}
             {plan.truncated ? " — truncated" : ""}
           </p>
-          <p data-testid="syncview/mode-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+          <InlineNotice testid="syncview/mode-note">
             direction: {directionLabel(direction)} &middot; prune: {prune ? "on" : "off"} &middot; mode: {bcModeName(direction, prune)}{stepFilter !== "all" ? ` \u00b7 filter: ${stepFilter}` : ""}
-          </p>
+          </InlineNotice>
           {receipt !== null && (
-            <p data-testid="syncview/receipt" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="syncview/receipt">
               {receipt}
-            </p>
+            </InlineNotice>
           )}
           <SyncNamePanel
             open={filterOpen}
@@ -473,18 +463,16 @@ export default function SyncView({ leftPath, rightPath }: ViewPaths): React.JSX.
             onClose={closeNamePanel}
           />
           {nameNeedle !== "" && (
-            <p data-testid="syncview/name-note" role="status" className="px-[var(--ac-space-4)] py-[var(--ac-space-1)] text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]">
+            <InlineNotice testid="syncview/name-note">
               {visibleSteps.length} of {steps.length} steps match &ldquo;{nameQuery.trim()}&rdquo; — list only, apply runs the full plan.
-            </p>
+            </InlineNotice>
           )}
           <div data-testid="syncview/list" data-filter={stepFilter}>
             {visibleSteps.length === 0 && stepFilter === "same" && (
-              <p
-                data-testid="syncview/filter-empty"
-                className="px-[var(--ac-space-4)] py-[var(--ac-space-8)] text-center text-[length:var(--ac-font-size-ui)] font-normal leading-[var(--ac-line-height-ui)] tracking-[var(--ac-letter-spacing-ui-tight)] text-[var(--ac-fg-muted)]"
-              >
-                No sync steps match view filter &ldquo;same&rdquo; &mdash; sync plan only contains differences to reconcile.
-              </p>
+              <EmptyState
+                title={`No sync steps match view filter \u201C${stepFilter}\u201D — sync plan only contains differences to reconcile.`}
+                testid="syncview/filter-empty"
+              />
             )}
             {visibleSteps.map((step, index) => {
               const glyph = actionGlyph(step.action);
