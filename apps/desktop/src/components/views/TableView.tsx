@@ -270,7 +270,20 @@ function toRowMatrix(v: unknown): ReadonlyArray<readonly string[]> {
   );
 }
 
-export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX.Element {
+export default function TableView({
+  leftPath,
+  rightPath,
+  onBusCommand,
+}: ViewPaths & {
+  /**
+   * Wave-L3A: ViewCommandBus hook for diff nav parity (FolderView
+   * Wave-228 twin). When provided, the in-view Prev/Next diff buttons
+   * ride the SAME App `handleViewCommand` bus as the top Toolbar;
+   * omitted leaves the direct `stepDiff` path (bus listener below
+   * still owns top-bar forwards). Testids byte-identical either way.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+}): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<string | null>(null);
@@ -1626,6 +1639,13 @@ export default function TableView({ leftPath, rightPath }: ViewPaths): React.JSX
         diffPos={safeDiffPos}
         onPrevDiff={() => stepDiff(-1)}
         onNextDiff={() => stepDiff(1)}
+        onBusCommand={
+          onBusCommand ??
+          ((cmd) => {
+            if (cmd === "prev") stepDiff(-1);
+            else if (cmd === "next") stepDiff(1);
+          })
+        }
         mapOpen={mapOpen}
         onToggleMap={() => setMapOpen((v) => !v)}
         mapDisabled={mapDisabledReason !== null}

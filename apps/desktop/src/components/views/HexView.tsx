@@ -133,7 +133,21 @@ function baseName(p: string): string {
   return i >= 0 ? s.slice(i + 1) : s;
 }
 
-export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.Element {
+export default function HexView({
+  leftPath,
+  rightPath,
+  onBusCommand,
+}: ViewPaths & {
+  /**
+   * Wave-L3A: ViewCommandBus hook for diff nav parity (FolderView
+   * Wave-228 / TableView L3A twin). When provided, the in-view
+   * Prev/Next-diff buttons ride the SAME App `handleViewCommand` bus
+   * as the top Toolbar; omitted leaves the direct `stepDiff` path
+   * (bus listener above still owns top-bar forwards). Testids
+   * byte-identical either way.
+   */
+  readonly onBusCommand?: (cmd: "prev" | "next") => void;
+}): React.JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<string | null>(null);
@@ -809,6 +823,13 @@ export default function HexView({ leftPath, rightPath }: ViewPaths): React.JSX.E
         onToggleGoto={() => setGotoOpen((v) => !v)}
         onPrevDiff={() => void stepDiff(-1)}
         onNextDiff={() => void stepDiff(1)}
+        onBusCommand={
+          onBusCommand ??
+          ((cmd) => {
+            if (cmd === "prev") void stepDiff(-1);
+            else if (cmd === "next") void stepDiff(1);
+          })
+        }
         diffNavBusy={diffNavBusy}
         diffStatusText={diffNote ?? "Prev/Next diff walks differing bytes."}
         bytesPerRow={bytesPerRow}
