@@ -1551,3 +1551,49 @@ OWNS: views/TextView.tsx only. NO testid/logic change (listener phase + guard on
    (NEW), `checks/hunknav-L3A/REPORT.md` (ye file).
 
 ---
+# W-E Local install/smoke — REPORT
+
+Worktree: `/tmp/wt-WE` @ `8bdec8b` (main HEAD). No commit/push (orchestrator review pending).
+Sirf owned files touch hue — koi src change nahi, koi existing file edit nahi.
+
+## Files (NEW, uncommitted)
+
+- `scripts/local-install.sh` — tauri build/bundle + copy to `$APP_DIR/AutoCompare.app` + version stamp; idempotent; andar koi sudo nahi (APP_DIR writable nahi to hint + exit 1)
+- `scripts/smoke-local.sh` — launch, boot wait (poll proc+window), screenshot `OUT_DIR` (/tmp/smoke-WE/), window assert, quit; fail par exit non-zero
+- `docs/LOCAL-RUN.md` — prereqs, commands, binary/stamp/smoke paths (note: `docs/` gitignored hai, file disk par hai)
+- `checks/local-WE/REPORT.md` — ye file (note: `checks/` bhi gitignored hai, file disk par hai)
+
+## Steps + timings
+
+1. `scripts/local-install.sh` run-1 → EXIT 0, 137s (cold: tsc + vite + full tauri release build 2m12s)
+2. `scripts/local-install.sh` run-2 → EXIT 0, 85s (warm cache) — consecutive-clean #2
+3. `scripts/smoke-local.sh` pre-fix run → EXIT 1: process mila, window-detect fail (sirf `"AutoCompare"` naam check tha; Tauri process naam `autocompare-desktop` hai). Screenshots phir bhi bane, window+diff rows dikhe.
+4. Fix (apni nayi file me): window poll me dono naam (`AutoCompare`, `autocompare-desktop`); stale/final quit me dono `pkill`.
+5. `scripts/smoke-local.sh` fixed run-1 → EXIT 0, 5s, `SMOKE_WINDOW_OK windows=1`
+6. `scripts/smoke-local.sh` fixed run-2 → EXIT 0, 7s, `SMOKE_WINDOW_OK windows=1` — consecutive-clean #2
+
+GATE: PASS — install 2x EXIT 0, smoke 2x EXIT 0 (fixed script), screenshots me app window + diff rows visible.
+
+## Install proof
+
+- Bundle: `/tmp/wt-WE/target/release/bundle/macos/AutoCompare.app`
+- Installed: `/Applications/AutoCompare.app` (`Contents/MacOS/autocompare-desktop`)
+- Stamp: `/tmp/wt-WE/dist/AutoCompare-0.5.0-macos-arm64.tauri.txt` → `tauri 0.5.0 8bdec8b`
+- Full logs: `/tmp/install-WE-run1.log`, `/tmp/install-WE-run2.log`
+
+## Smoke proof (screenshots)
+
+- `/tmp/smoke-WE/smoke-boot-20261125-180240.png` (369K) + `/tmp/smoke-WE/smoke-window-20261125-180240.png` (856K) — run-1
+- `/tmp/smoke-WE/smoke-boot-20261125-180254.png` (363K) + `/tmp/smoke-WE/smoke-window-20261125-180254.png` (850K) — run-2
+- Dikh raha hai: AutoCompare window foreground, text compare File 1.txt vs File 2.txt, `176 / 176 rows · 147 same · 6 changed · 17 left-only · 6 right-only`, `10 hunks`, status `Ready`.
+- Note: app ne user ke saved sessions restore kiye (3 sessions), demo first-paint nahi aaya — diff rows phir bhi visible, isliye visual gate pass.
+- Run logs: `/tmp/smoke-WE-run1.log`, `/tmp/smoke-WE-run2.log`
+
+## Issues
+
+1. Window-detect naam mismatch (1x fail, fix ho gaya) — Tauri binary naam `autocompare-desktop`, System Events process naam wahi; ab dono naam check hote hain.
+2. `docs/` aur `checks/` gitignore me hain — files disk par hain, commit ke liye orchestrator ko `git add -f` karna padega.
+3. Smoke full-screen `screencapture` leta hai (peeche browser window bhi dikhta hai) — app window foreground/clear hai; chaaho to baad me `-l windowID` crop add kar sakte hain.
+4. FAIL counter: same-fail 1x (fix ke baad do green) — BLOCKER nahi bana.
+
+---
