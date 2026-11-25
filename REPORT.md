@@ -755,3 +755,323 @@ C3a-DONE
 - REPORT.md (ye file, worktree root)
 
 C1c-DONE
+
+---
+
+# TABS chipsizing-253 — REPORT
+
+## Summary
+Session tabs mote (32px chip / 40px bar) lagte the, baaki desktop controls
+(22-24px) se match nahi karte the. Ab chip control-md standard par hai aur
+bar accordingly compact hai. Koi layout/behavior change nahi, testids
+byte-identical, truncation aur `+` adjacency (H1 fix) untouched.
+
+## Changes (worktree `/tmp/wt-TABS`, branch `wave-TABS-chipsizing`, base `main@3bb39f8`)
+1. **tokens.css — 4 token values only (comments/testids same):**
+   - light `:root`: `--ac-tab-chip-h: 32px -> 24px`
+   - dark `@media`: `--ac-tab-chip-h: 32px -> 24px` (override tha, dono fix)
+   - geometry `:root`: `--ac-tab-chip-h: 32px -> 24px`, `--ac-tabbar-h: 40px -> 32px`
+2. **TabBar.tsx — ZERO change.** Chips (`h-[var(--ac-tab-chip-h)]`,
+   min-w-60/max-w-56/truncate) aur bar (`h-[var(--ac-tabbar-h)]`) pehle se
+   vars ride karte hain, isliye token fix hi kaafi tha. Close button
+   `size="sm"` (22px) 24px chip me fit hai (1px slack), padding math intact.
+3. **NEW spec:** `apps/desktop/e2e/specs/tabs-chipsizing-253.spec.ts` —
+   token equality + relational assertions only, koi pixel-lock nahi.
+
+## Gates (worktree, fresh port 1858, ABSOLUTE paths)
+- `./node_modules/.bin/tsc --noEmit` => **TSC:0** (node_modules main se
+  symlink tha, gate ke baad remove kar diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-TABS/apps/desktop
+  1858 e2e/specs/tabs-chipsizing-253.spec.ts e2e/specs/ui-standards.spec.ts
+  --workers=1` => **5 passed (6.9s), GATE_PLAYWRIGHT_EXIT=0**
+  - tabs-chipsizing-253: 1 passed (light + dark)
+  - ui-standards: 4 passed
+
+## MATCH / OFF table
+
+| Check | MATCH (naya) | OFF (purana / note) |
+|---|---|---|
+| chip token vs control-md | `--ac-tab-chip-h == --ac-control-h-md` (24px, light+dark) | pehle 32px vs 24px — OFF tha |
+| measured chip height | token ke equal (round) | pehle 32px mote the |
+| tabbar height | chip + 2×space-1 = 32px compact | pehle 40px — OFF tha |
+| truncation | min-w-60/max-w-56/truncate + ellipsis intact | — |
+| `+` adjacency (H1) | strip grow 0, plus last tab ke baad, bar ke andar | — |
+| testids | tabbar / tab-* / tab-new byte-identical | — |
+| KNOWN OFF (out of scope) | — | `geopolish-66c / chromedeclutter-119 / chrome-174 / chrome-budget / geopolish-122 / shellchrome-116` specs me 40px bar pin hai — ye waves apne spec khud update karenge; `TabBar.tsx:277` comment me "only 32px chrome" line ab stale hai (sizing class nahi, isliye untouched) |
+
+## Files list
+- `apps/desktop/src/theme/tokens.css` (M: 4 token values)
+- `apps/desktop/src/components/chrome/TabBar.tsx` (untouched, byte-identical)
+- `apps/desktop/e2e/specs/tabs-chipsizing-253.spec.ts` (NEW)
+- `REPORT.md` (ye file)
+
+NEVER push — commit nahi kiya, push nahi kiya.
+
+TABS-DONE
+
+---
+
+# D2-pathdrop REPORT (Hinglish-roman)
+
+## 1. Summary (2 lines)
+User complaint: "Left and right path areas BC me droppable hain, hamare case me nahi."
+Inspection me web-fallback drop infra (PathBar fields/strip + App-level PaneDropZone halves +
+Tauri hooks) har view me wired mila, lekin ek asli toot mili: khaali session me do alag-alag
+single-side PathBar drops kabhi re-compare trigger nahi karte the (pehla staged side App tak
+pahunchta hi nahi tha) — dono paths bhare dikhne par bhi compare atka rehta tha. BC me ye
+flow seedha kaam karta hai. Fix PathBar me, pin spec 8 tests, saare gates green.
+
+## 2. Kya wired tha (inspection)
+- `PathBar` field-level `onDrop` (left/right/base) + whole-strip `onDrop` (clientX vs midpoint,
+  `resolveStripSideFromRect`) + `useTauriPathBarDrop` (production shell, strip-only owner).
+- App-level `PaneDropZone`: `[data-panedrop]` halves overlay + `useNativeFileDrop` (window-level,
+  pane-only owner, pathbar band skip) — har comparison view isi se cover hota hai.
+- `MergeView` ke 3 pane zones (`data-mergedrop`) apne drops khud own karte hain (stopPropagation
+  sahi hai — double-compare nahi hota), triple App ko `onDropPaths`/`onRequestCompare` se jaata hai.
+- Tauri vs web fallback ownership single-owner hai (strip PathBar ka, pane window hook ka,
+  unknown-position pane ka) — isme koi change nahi kiya.
+
+## 3. Kya toota tha (root cause)
+`PathBar.handleFieldSubmit`: single-side stage LOCAL rehta hai (Wave-173, by design — App ko
+submit nahi hota). Khaali/half-staged session me pehle LEFT drop ke baad App ke paas left=""
+rehta hai; phir RIGHT drop par `otherPath` draft se bhara milta hai isliye submit hota hai,
+lekin App apne stale `live` (`left:""`) se `next` banata hai -> "needs two paths", compare
+kabhi fire nahi hota. Dono fields bhare dikhte hain, view half-staged mount hota hai, par
+re-compare zero. Repro: blank text session -> left drop -> right drop -> `__AC_COMPARE_COUNT__`
+delta 0, status "Path set ... needs two paths" (fix se pehle scratch spec se confirm kiya;
+fix ke baad delta 1, "Compare finished").
+
+## 4. Fix (PathBar.tsx, drop handling ONLY — 25 lines add)
+`handleFieldSubmit` me, jab single submit par dono drafts bhare hon AUR dusre side ka PROP
+(App state) abhi bhi blank ho, to pehle dusri side stage karo (App-only stage, compare nahi
+ho sakta kyunki ye side wahan missing hai), phir ye side submit karo -> App ke paas dono sides
+-> EXACTLY ONE compare. Multi-drop (`overrideOtherPath`) pehle se paired hai, isliye skip;
+non-blank prop par purana single-submit behavior untouched (typing semantics same).
+Per-view mounts ki zaroorat nahi padi — pane drops App-level zone se sab views me kaam karte
+hain (spec se prove), isliye views/** me koi edit nahi (mount one-liner bhi nahi chahiye tha).
+
+## 5. Spec: `apps/desktop/e2e/specs/d2-pathdrop-251.spec.ts` (NEW, 8 tests, no geometry asserts)
+Har test: LEFT drop -> us side ka path set + `__AC_COMPARE_COUNT__` +1 + "Compare finished";
+phir RIGHT drop -> same. Zero console/page errors har test me.
+- text / folder / table / hex / sync / media: pathbar left+right drops, phir pane-half
+  (`panedrop/section-left|right`) drops. Folder/sync me folderish (`/`-suffixed) paths taaki
+  kind auto-switch na ho (file-vs-folder class rule).
+- blank session: left-first + right-first dono orders me do single drops -> exactly 1 recompute
+  (yehi D2 fix ka regression pin hai).
+- merge: pathbar left/right drops (base untouched) + `merge-pane-left|right` zone drops ->
+  triple staged + re-plan compare.
+
+## 6. Gates (worktree `/tmp/wt-D2`, fresh port 1856)
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (main node_modules symlink, gates ke baad remove kiya).
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash .../tools/gate-run.sh
+  /tmp/wt-D2/apps/desktop 1856 e2e/specs/d2-pathdrop-251.spec.ts e2e/specs/ui-standards.spec.ts
+  --workers=1` => all green: **12 passed** (d2-pathdrop-251: 8/8, ui-standards: 4/4),
+  GATE_PLAYWRIGHT_EXIT=0.
+- Related regression (dev server): pathdrop-193 (6) + folderdnd-159 (6) + pathbar-submit-124 (4)
+  + pathbar-history (3) + finderdrop-143 (4) = 23 passed, zero fail.
+- Existing testids byte-identical (koi testid add/remove/rename nahi; spec sirf existing
+  `pathbar/left|right`, `panedrop/section-*`, `merge-pane-*`, `statusbar/message` use karta hai).
+- NEVER commit/push: sirf worktree me changes, `wave-D2-pathdrop` branch unpushed.
+
+## 7. MATCH/OFF table (har view, dono sides)
+
+| View | PathBar L/R drop | Pane L/R drop | Recompute | Verdict |
+|---|---|---|---|---|
+| Text | path set | path set | +1 per drop | MATCH |
+| Folder | path set | path set | +1 per drop | MATCH |
+| Table | path set | path set | +1 per drop | MATCH |
+| Hex | path set | path set | +1 per drop | MATCH |
+| Sync | path set | path set | +1 per drop | MATCH |
+| Media | path set | path set | +1 per drop | MATCH |
+| Merge | path set (base untouched) | L/R zones -> triple | +1 per drop | MATCH |
+| Blank session (koi bhi kind) | 2x single drops -> 1 compare | App-level stage -> compare | exactly 1 | MATCH (D2 fix) |
+| Per-view extra mounts | zaroorat nahi (App zone covers all) | — | — | OFF (no edit) |
+| Tauri native shell drops | code unchanged (single-owner intact) | manual live-drop check pending | — | OFF (mock-only gate) |
+
+## 8. Files list (OWNS ke andar ONLY)
+- `apps/desktop/src/components/chrome/PathBar.tsx` — `handleFieldSubmit` me stale-other
+  stage-first convergence (drop handling ONLY, +25 lines, koi testid/API change nahi).
+- `apps/desktop/e2e/specs/d2-pathdrop-251.spec.ts` — NEW, 8 tests (upar section 5).
+- `REPORT.md` (yeh file, worktree root — append-only, purani entries intact).
+- Touch nahi kiya: `views/**` (mount bhi nahi chahiye tha), `session/**`, `ui/**` primitives,
+  `tokens.css`, `ipc/**`, `src-tauri/**`, koi aur spec, aur `chrome/PaneDropZone.tsx`,
+  `dropPaths.ts`, `useNativeFileDrop.ts` (inspection-only; fix ki zaroorat wahin nahi thi).
+
+D2-DONE
+---
+
+# D1 copycorrect REPORT (EDIT wave, worktree-first, Hinglish-roman)
+
+Base: main (3bb39f8). Worktree: /tmp/wt-D1 (branch wave-D1-copycorrect).
+NEVER commit/push — sab changes uncommitted worktree me hain.
+
+## User complaint (asal shikayat)
+1. "copy l2r or r2l few sections -> text compare fails in midst" — kayi
+   hunk-copy lagatar karne par diff toot jata tha.
+2. "click karte hi save kyon kar raha hai" — copy click par lagta tha save
+   ho gaya.
+
+## Reproduce (pehle prove, phir fix)
+Scratch spec me 176-row/10-hunk real fixture par alternate l2r/r2l x4 +
+Save right + Save left chalaya. Mila:
+- copy1..4 tak sab consistent (176->166 rows, hunks 10->6, save-note kabhi
+  nahi, copy-note "unsaved; press Save X") — copy path khud sahi tha.
+- **Save right ke baad view TOOT gaya: `159 / 173 rows · 144 same ...
+  (loaded)`** — pre-save `166 / 166 rows · 151 same` tha. Merge khoye,
+  tail kata, hasMore jhootha jaga. Yahi "fails in midst" hai — copy nahi,
+  **Save ka refetch** doshi tha.
+
+## Root cause
+`saveSide` ka Wave-178 refetch `textGetRows(session, 0, rowsRef.length)`
+(local-length window) se karta tha. Multi-side staged drops ke baad local
+length (166) < backend total (173, sirf is side ka flush hua) hota hai —
+window tail kaat deta hai, phir doosri side ke staged copies us kate
+prefix par re-apply hote hain: rows ghate (159), total backend wala (173),
+merge gayab (144 vs 151). Rows/total/status teeno toot-te hain. Complaint
+#2 ke liye code me koi autosave MILA HI NAHI (copy kabhi `text_save_side`
+nahi bulata; dirty dots + "unsaved; press Save X" pehle se honest the) —
+isliye #2 ka jawab proof + spec hai, code change nahi.
+
+## Fix (sirf OWNS: copyHunkAt + serialize/coalesce + Save path)
+`apps/desktop/src/components/views/TextView.tsx` ONLY (drop-mount lines
+untouched, testids byte-identical):
+1. **Save refetch gate (D1 pin ka fix)**: `sawRegroupRisk` flag — per-row
+   fallback replay ya flushed cell edits par hi refetch; clean
+   `text_apply_hunk` flush par row-refetch SKIP (staged rows == backend
+   truth by construction: dono taraf same take-wins/drop rule, identity
+   preserved). Sirf coarse overview refresh hota hai (null-safe).
+2. **Regroup-risk refetch ab full-truth**: `textGetRows` loop `page.total`
+   tak (tail kabhi nahi kat-ti), phir doosri side ke staged re-apply, total
+   = backendTotal − reappliedDrops (staged-truth display barkarar).
+3. **Serialize drain me liveEdits threading**: `runCopyHunk`/`runCopyLine`
+   ab `baseEdits` lete + updated map return karte hain; `copyHunkAt`/
+   `copyLineAt` drain me `liveEdits` carry hota hai — rapid l2r/r2l burst me
+   stale render closure se pruned override resurrect nahi hota (FIXT2 N3/N4
+   contract harden; pure gutter flow me no-op).
+Save buttons/dirty-dots pehle se honest the (`dirty-left/right`, aria
+"(unsaved changes)") — isliye controls me ZERO change (tag: ONLY if needed).
+
+## Gates (worktree, fresh ports, ABSOLUTE paths)
+- `./node_modules/.bin/tsc --noEmit` => TSC:0 (main node_modules symlink
+  kiya tha, gate ke baad hata diya)
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash
+  /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-D1/apps/desktop
+  1855 d1-copycorrect-250.spec.ts ui-standards.spec.ts --workers=1`
+  => **8/8 green** (D1 4/4 + ui-standards 4/4), GATE_PLAYWRIGHT_EXIT=0
+- Regression (same gate, port 1856): textfunc-178 + copy-persist-125 +
+  textgutter-139b + textinteract-109 => 15/16; 1 fail
+  (textinteract-109 caret-Esc `cell-edit` count) **clean main par bhi fail**
+  hota hai (port 1858, 4/5) — pre-existing, D1 OWNS ke bahar (cell editor
+  Esc path), is wave me untouched.
+- Strike 1: T3 me `expectConsistent` post-Save bhi save-note 0 mang raha
+  tha (spec bug — Save receipt hona sahi hai); `allowSaveNote` flag jodkar
+  same run me fix. Strike 2/3 nahi aaye.
+
+## MATCH/OFF
+| Cheez | Haal |
+|---|---|
+| 5x alternate l2r/r2l: rows==total, buttons==hunks, ordinal 0..N-1 gap-free | MATCH (T1, 10->5 hunks) |
+| Har copy par save-note 0 + copy-note unsaved + Save side | MATCH (T1 har step) |
+| Dono side dirty dots, disk byte-identical (no autosave, OS-level) | MATCH (T2) |
+| Save right/left: status byte-identical, staged per-side clear | MATCH (T3 — pre-fix 159/173 split ab 166/166 stable) |
+| Reload: unsaved staged drop, 176/176 + 10 hunks wapas, files identical | MATCH (T4, BC parity wave-172b) |
+| Save+reload ke baad disk me merged text (real disk round-trip) | OFF (mock IPC `text_save_side` no-op hai — pre-existing pin, textfunc-178 T2 jaisa; real-disk round-trip Rust unit test `save_side_persists_applied_hunk_to_disk` me pinned hai, is wave ke OWNS ke bahar) |
+| textinteract-109 caret-Esc 1 fail | OFF (clean main par bhi fail — pre-existing, cell-editor path untouched) |
+| `hunk-copy-left-N/right-N` + saare purane testids | MATCH (byte-identical; drop-mount lines untouched) |
+
+## Files list
+- apps/desktop/src/components/views/TextView.tsx (MOD: copyHunkAt + serialize/coalesce + Save path ONLY)
+- apps/desktop/e2e/specs/d1-copycorrect-250.spec.ts (NEW)
+- REPORT.md (yeh entry, append-only)
+
+D1-DONE
+
+---
+
+# D3 Shortcuts — dead shortcut audit + wiring REPORT (Hinglish-roman)
+
+Worktree: `/tmp/wt-D3` (branch `wave-D3-shortcuts`, base `main@3bb39f8`). NO commit, NO push.
+
+## 1. Masla (user complaint)
+
+UI me advertised saare shortcuts (menu labels, toolbar titles, tooltips) asal me kaam karein.
+"Shortcuts not working" — kuch advertised chords dead the ya sirf ek focus se chalte the.
+
+## 2. Inventory (UI text scan — poora shortcut suchi)
+
+Native menu (`src-tauri/src/menu.rs`): CmdOrCtrl+1..7 (View kinds), N (New Session),
+O (Open Session), Shift+O (Open Folder), S (Save Session), F (Find Session),
+D (Take Left), E (Take Right). Theme/Layout/Settings = honestly unsupported (koi accelerator nahi).
+
+Toolbar titles (`TOOLBAR_SHORTCUT_HINTS` se): open (Cmd+O), Next/Prev hunk
+(Cmd+Alt+Down/Up), Copy (Cmd+D), Copy-right (Cmd+E).
+
+Per-view toolbar labels: Ctrl+F (text/table/hex/merge find, folder name-filter,
+sync step-filter), Ctrl+G (text/hex goto, folder go-to-entry), Esc dismiss labels,
+folder Back/Forward (Alt+Left/Right), merge footer `j/k ... Cmd+B`, merge toolbar
+`(keys: j/k, n/p, arrows)`, merge take-both (Cmd+B).
+
+Chrome bridge: F3 (find next), Shift+F3 (find prev). View-local: text `n/p/l/r`,
+arrows, Enter, Esc; merge `j/k/n/p`, arrows.
+
+## 3. Keyboard verify — har chord ko asal key-press bheja (spec D3)
+
+Spec: `apps/desktop/e2e/specs/d3-shortcuts-252.spec.ts` (14 tests, koi geometry assert nahi).
+Har test me zero console/page errors assert hai.
+
+## 4. Mila hua dead (1 asli bug) + fix
+
+BUG: Merge `j`/`k` footer + toolbar me advertised tha, lekin sirf tab chalta tha jab
+merge section khud focused ho (`onKeyDown` section-level). Toolbar/body/ruler focus se
+`j`/`k` dead tha — bus me koi event nahi, koi nav nahi.
+FIX (`MergeView.tsx`, handler wiring ONLY, koi layout/testid change nahi): window-level
+`keydown` me `j`/`k` branch — input/textarea/contentEditable me type karne par ignore,
+`defaultPrevented` ka respect, phir SAME `autocompare:view-command` bus
+(`viewKind: "merge"`) jisse toolbar prev/next buttons bhi chalte hain. App GAP-09 `j`/`k`
+ko ignore karta hai, isliye double-step impossible. Bonus: Cmd+B branch me
+`defaultPrevented` guard (section + window double-take rokta hai; 30ms tick-dedupe
+ke saath belt-and-braces).
+`shortcuts.ts` (registry ONLY): values same (sab wired nikle), sirf D3 audit comment
+joda — per-view coverage + honest-disabled suchi, taaki agli wave ko dobara scan na karna pade.
+
+## 5. MATCH (wired — spec me green) vs OFF (honest-disabled, fake label nahi)
+
+MATCH: Cmd+O/N/S, Cmd+1/2/3/4/6/7 kind switch, Shift+Cmd+O, Cmd+D/E (text+merge take,
+bina selection honest note), Cmd+B (merge take-both, bahar "only in Merge" note),
+Ctrl+F (text/table/hex/merge/folder/sync), Ctrl+G (text/hex/folder), F3/Shift+F3
+(next/prev jahan prev button hai, baaki jagah focus-fallback), text n/p/l/r/arrows/
+Cmd+Alt-arrows/Enter/Esc, merge j/k/n/p/arrows, folder Alt+Left/Right/Up + Esc
+(query clear NAHI hota — contract), hex/table/merge/sync Esc, media Esc.
+OFF (honest, spec me no-crash assert): Table/Merge/Sync me Ctrl+G (koi goto nahi —
+browser Find Next suppress, koi nav nahi), Media me Ctrl+F/G + F3 (koi find/goto nahi —
+menu-find "Find is not available for this view" park karta hai). Toolbar Copy/Next/Prev
+bina wiring wale views me hidden + reason-title sahit disabled rehte hain
+(`needs view wiring in L3` kabhi fake hint ke saath visible nahi).
+
+## 6. Files (sirf OWNS, testids byte-identical)
+
+- `apps/desktop/src/components/views/MergeView.tsx` — window j/k wiring + Cmd+B guard.
+- `apps/desktop/src/components/chrome/shortcuts.ts` — registry values unchanged, D3 audit comments.
+- `apps/desktop/e2e/specs/d3-shortcuts-252.spec.ts` — NEW (14 tests).
+- Native menu (`src-tauri/src/menu.rs`): audit me MATCH, koi drift nahi, change nahi.
+- Touch nahi kiya: session/**, ui/** primitives, tokens.css, engines, ipc shape, baaki specs.
+
+## 7. GATES (1857, ABSOLUTE paths, fresh port)
+
+- `cd /tmp/wt-D3/apps/desktop && ./node_modules/.bin/tsc --noEmit` => **TSC:0**
+  (node_modules main se symlink karke, gate ke baad symlink hata diya).
+- `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright bash /Users/ektasaini/autocompare/tools/gate-run.sh /tmp/wt-D3/apps/desktop 1857 e2e/specs/d3-shortcuts-252.spec.ts e2e/specs/ui-standards.spec.ts --workers=1`
+  => **18 passed (13.9s), GATE_PLAYWRIGHT_EXIT=0** — d3 14/14 + ui-standards 4/4, webkit.
+  Note: pehli 1857 koshish D2 wave ke vite se takrayi (strike 1, kill nahi kiya);
+  probe 1861 par 11 pass + 3 spec-bug mile (neeche), fix karke 1861 par 18/18,
+  phir free hote hi pinned 1857 par 18/18 official.
+- Spec-fix trail (product me koi change nahi, sirf test expectations honest kiye):
+  (a) text nav: row-6 pehle hunk ki pehli row — pehla `n` wrap karke wahin rehta,
+  ab diffnav-note assert + doosra `n` move assert karta hai;
+  (b) merge j/k: listener-attach race — ab attach-await-press-poll pattern;
+  (c) folder Esc: stacked name+goto LIFO dismiss hota hai (DockedBar capture
+  `stopPropagation` by design, ui primitive untouched) — ab alag-alag + LIFO
+  teenon assert hote hain.
+
+D3-DONE
