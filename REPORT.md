@@ -727,3 +727,31 @@ Pehle har reload par reset ho jate the.
 - NEW `apps/desktop/e2e/specs/c3a-viewstate-248.spec.ts`
 
 C3a-DONE
+
+---
+
+## UPDATED ON : 2026-11-25
+
+### C1c stop-plumb (2026-11-25) — Toolbar Stop ab real `folder_cancel(session)` bulata hai
+
+1. **Masla**: C1b me Stop ka `folder_cancel` path `folderSession` prop par nirbhar tha, par koi host ye prop pass nahi karta tha — isliye Stop hamesha honest-note par girta tha (C1b ka documented OFF). Ab App `runComparePaths` ke `folder_compare` receipt se real session id rakhta hai aur ChromeShell se Toolbar tak pahunchata hai; Stop busy window me `folder_cancel(session)` fire karta hai.
+2. **Badlav (sirf plumbing, 21 lines)**: App me `folderSessionId` state + folder branch me receipt capture + `folderSession={sessionKind === "folder" ? folderSessionId : null}` (dusri kinds/text par null taaki honest-note path bana rahe); ChromeShell me optional `folderSession` prop jo Toolbar ko forward hota hai. Toolbar/ipc me koi badlav nahi (C1b ka path reuse). Testids byte-identical.
+3. **Spec (NAYA)**: `apps/desktop/e2e/specs/c1c-stopplumb-249.spec.ts` — busy+known session par `folder compare cancel requested (session mock-folder-1)`; bina session (text) par `cannot be cancelled` aur `cancel requested` nahi; idle par Stop disabled + title byte-identical + koi note nahi. Koi geometry assert nahi.
+4. **Tests (pehle → baad)**: gate port 1852, webkit, `--workers=1`: c1c-stopplumb-249 (3/3) + ui-standards (4/4) = 7/7 green. `tsc --noEmit` => TSC:0. Kabhi commit/push nahi kiya.
+
+| # | Defect | Status |
+|---|--------|--------|
+| C1c-1 | Busy + known folder session par Stop `folder_cancel(session)` bheje | MATCH |
+| C1c-2 | Bina session (text) par Stop honest no-op (`cannot be cancelled`) | MATCH |
+| C1c-3 | Idle Stop disabled rahe, purana title/note behavior intact | MATCH |
+| C1c-4 | Saare existing testids byte-identical | MATCH |
+| C1c-OFF | C1b OFF (koi host `folderSession` nahi deta tha) | CLOSED (ab App deta hai) |
+
+## Files
+
+- apps/desktop/src/App.tsx (folderSessionId state + receipt capture + folderSession pass ONLY)
+- apps/desktop/src/components/chrome/ChromeShell.tsx (folderSession prop + Toolbar forward ONLY)
+- apps/desktop/e2e/specs/c1c-stopplumb-249.spec.ts (NEW)
+- REPORT.md (ye file, worktree root)
+
+C1c-DONE
