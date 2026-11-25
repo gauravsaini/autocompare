@@ -2136,6 +2136,7 @@ export default function App(): React.JSX.Element {
       icon: Columns2,
       label: compareBlockedReason ? `Compare (${compareBlockedReason})` : "Compare",
       enabled: compareBlockedReason === null,
+      disabledReason: compareBlockedReason,
       onClick: handleCompare,
     },
     {
@@ -2159,6 +2160,7 @@ export default function App(): React.JSX.Element {
       icon: RefreshCw,
       label: syncEnabled ? "Sync" : "Sync (needs folder session)",
       enabled: syncEnabled,
+      disabledReason: syncEnabled ? null : "needs folder session",
       onClick: handleSync,
     },
     {
