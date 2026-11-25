@@ -23,7 +23,7 @@ import { sessionLoad, sessionSave, settingsGet, settingsSet } from "../../ipc/se
 import { useSession, pickOpenDialog, dedupSessionsById } from "./useSession";
 import { textCompareDemo, TEXT_DEMO_CANDIDATES } from "../../ipc/text";
 import { extractDroppedPath } from "../dnd/dropPaths";
-import { Button, Input, Select, ToolbarButton } from "../ui";
+import { Button, Input, Modal, Select, ToolbarButton } from "../ui";
 
 export interface SessionManagerProps {
   /** Controls dialog open/close visibility. Defaults to true if omitted. */
@@ -774,15 +774,19 @@ export function SessionManager({
     }
   };
 
+  const handleClose = onClose ?? (() => {});
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="session-manager-title"
-      data-testid="session/dialog"
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs ${className}`}
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      label="Session Manager"
+      ariaLabelledby="session-manager-title"
+      testid="session/dialog"
+      maxWidth="max-w-3xl"
+      hideDefaultHeader
+      className={`flex max-h-[90vh] flex-col overflow-hidden shadow-2xl ${className}`.trim()}
     >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--ac-border)] bg-[var(--ac-bg-raised)] text-[var(--ac-fg)] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--ac-border)] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -1348,7 +1352,6 @@ export function SessionManager({
             </form>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
