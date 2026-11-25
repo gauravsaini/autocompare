@@ -1507,3 +1507,47 @@ GATE (orchestrator, worktree, port 1891, webkit, --workers=1): tsc 0; run1+run2 
 OWNS: views/TextView.tsx only. NO testid/logic change (listener phase + guard only).
 
 ---
+# L3A hunk-nav wiring REPORT — folder/table/hex/sync bus forward (BC parity)
+
+## UPDATED ON: 2026-11-25
+
+### L3A implement (2026-11-25) — App forward + Table/Hex onBusCommand + naya spec, 11/11 x2 green
+
+1. **App.tsx (handleViewCommand next/prev branches ONLY)**: `folder/table/hex/sync` ab
+   `dispatchViewCommand(cmd, kind)` via view bus forward hota hai + status `Next diff (kind)` /
+   `Previous diff (kind)`. `merge`/`text` untouched. `media`/none/unknown ab bhi honestly
+   parked (`needs view wiring in L3`) — media summary view hai (score+metrics, koi cursor
+   nahi), wahan per-kind hunks truly unwirable hain. Engine/IPC untouched (bus-level only).
+2. **TableView.tsx**: optional `onBusCommand` prop add (FolderView Wave-228 twin) + `TableToolbar`
+   ko `onBusCommand ?? fallback-stepDiff` pass. Bus listener (Wave-180) pehle se live tha;
+   in-view Prev/Next buttons ab same bus path ride kar sakte hain. Koi visual/testid change nahi.
+3. **HexView.tsx**: optional `onBusCommand` prop add (same twin) + `HexToolbar` ko
+   `onBusCommand ?? fallback-void-stepDiff` pass. Bus listener (Wave-170) pehle se live tha.
+   Koi visual/testid change nahi.
+4. **FolderView.tsx / SyncView.tsx**: koi edit nahi — dono ke bus listeners pehle se live
+   verify hue (folder Wave-228 selection-step, sync Wave-180/228 plan-step + kind-scoped,
+   early-bus honest no-op). ViewRouter untouched (owns me nahi tha).
+5. **Naya spec ONLY `e2e/specs/hunknav-L3A.spec.ts` (5 tests)**: folder selection-step +
+   foreign-kind isolation, table diff-cursor walk, hex offset-8 land + prev honest park,
+   sync plan-step + isolation, media honest no-op. Top-bar parked title pin (no visual change).
+   Koi existing spec edit nahi, text/merge views untouched, koi testid change nahi.
+6. **Tests (before → after)**: tsc 0 → 0. Gate
+   `bash tools/gate-run.sh /private/tmp/wt-L3A/apps/desktop 1892
+   e2e/specs/hunknav-L3A.spec.ts e2e/specs/ui-standards.spec.ts
+   e2e/specs/chrome-budget.spec.ts --workers=1` → 11 passed x2 (run1 17.6s, run2 13.2s),
+   `GATE_PLAYWRIGHT_EXIT=0` dono bar. `PLAYWRIGHT_BROWSERS_PATH=/Users/ektasaini/ms-playwright`,
+   fresh PORT 1892, realpath DIR, node_modules main se symlink.
+7. **BLOCKER**: koi nahi. Engine me per-kind hunks ki kami nahi mili — charo kinds ke
+   follow-through existing IPC windows par chalte hain (folder loaded entries, table loaded
+   diff scope, hex `hex_get_page` windows, sync planned steps), isliye force karne ki zaroorat
+   nahi padi. FAIL 3x rule trigger nahi hua (pehle attempt me green).
+8. **Notes / honest parks**: top-bar Prev/Next buttons folder/table/hex/sync me ab bhi
+   disabled + `needs view wiring in L3` title dikhate hain (toolbar enable/labels is wave ke
+   owns me nahi the — `toolbar-dedupe`/`topbar-180` specs wahi pin karte hain, untouched).
+   App forward ab live hai (programmatic/menu/bus callers ke liye); button enablement agle
+   wave (L3B) ka kaam hai. NO commit/push/merge kiya.
+9. **Files changed**: `apps/desktop/src/App.tsx`, `apps/desktop/src/components/views/TableView.tsx`,
+   `apps/desktop/src/components/views/HexView.tsx`, `apps/desktop/e2e/specs/hunknav-L3A.spec.ts`
+   (NEW), `checks/hunknav-L3A/REPORT.md` (ye file).
+
+---
