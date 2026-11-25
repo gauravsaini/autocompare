@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FolderOpen, Search, X } from "lucide-react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
+import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2HexCompareProps {
@@ -42,6 +43,7 @@ export default function V2HexCompare({
   const [findHex, setFindHex] = useState("");
   const [findNote, setFindNote] = useState<string | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -187,7 +189,8 @@ export default function V2HexCompare({
           e.preventDefault();
           onPathsChange(leftDraft.trim(), rightDraft.trim());
         }}
-        className="grid shrink-0 grid-cols-2 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
+        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
+        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
       >
         {(["left", "right"] as const).map((side) => {
           const val = side === "left" ? leftDraft : rightDraft;
@@ -249,7 +252,7 @@ export default function V2HexCompare({
       ) : null}
 
       {/* Dual-Pane Hex + ASCII Table */}
-      <div className="v2-mono min-h-0 flex-1 overflow-auto text-[11.5px] leading-[21px]">
+      <div ref={containerRef} className="v2-mono min-h-0 flex-1 overflow-auto text-[11.5px] leading-[21px]">
         {loading ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
             Comparing binary streams…
@@ -260,18 +263,29 @@ export default function V2HexCompare({
           </div>
         ) : (
           <div className="min-w-[980px]">
-            <div className="sticky top-0 z-10 grid grid-cols-[78px_1fr_132px_5px_1fr_132px] border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2 py-1 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
+            <div
+              style={{ gridTemplateColumns: `78px minmax(0, ${splitPct}fr) 132px 6px minmax(0, ${100 - splitPct}fr) 132px` }}
+              className="sticky top-0 z-10 grid border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2 py-1 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]"
+            >
               <span>Offset</span>
               <span>Left Hex (00–0F)</span>
               <span>Left ASCII</span>
-              <span />
+              <span
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize panes (double-click to reset 50/50)"
+                onMouseDown={startDrag}
+                onDoubleClick={resetSplit}
+                className="cursor-col-resize bg-[var(--v2-splitter)]/40 hover:bg-[var(--v2-accent)]/60"
+              />
               <span className="pl-2">Right Hex (00–0F)</span>
               <span>Right ASCII</span>
             </div>
             {visibleRows.map((row) => (
               <div
                 key={row.rowOffset}
-                className="grid h-[21px] grid-cols-[78px_1fr_132px_5px_1fr_132px] items-center px-2 hover:bg-[var(--v2-btn-hover)]/40"
+                style={{ gridTemplateColumns: `78px minmax(0, ${splitPct}fr) 132px 6px minmax(0, ${100 - splitPct}fr) 132px` }}
+                className="grid h-[21px] items-center px-2 hover:bg-[var(--v2-btn-hover)]/40"
               >
                 <span className="select-none text-[var(--v2-fg-muted)]">
                   {row.rowOffset.toString(16).toUpperCase().padStart(8, "0")}
@@ -316,9 +330,22 @@ export default function V2HexCompare({
                   ))}
                 </div>
 
-                {/* Splitter */}
-                <span className="relative h-full">
-                  <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--v2-splitter)]" />
+                {/* Draggable Splitter */}
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  title="Drag to resize panes (double-click to reset 50/50)"
+                  onMouseDown={startDrag}
+                  onDoubleClick={resetSplit}
+                  className="group relative h-full cursor-col-resize"
+                >
+                  <span
+                    className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-colors ${
+                      dragging
+                        ? "w-[2px] bg-[var(--v2-accent)]"
+                        : "w-px bg-[var(--v2-splitter)] group-hover:w-[2px] group-hover:bg-[var(--v2-accent)]"
+                    }`}
+                  />
                 </span>
 
                 {/* Right Hex */}
