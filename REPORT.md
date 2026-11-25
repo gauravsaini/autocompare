@@ -1350,3 +1350,54 @@ MATCH: token equality + measured heights + flex pins + ellipsis + + adjacency + 
 OFF: none. Agent (agyx agentWTABS3) stalled 15min zero-output (1st strike); orchestrator verified + merged.
 
 ---
+# WA Folder Toolbar Unify — REPORT
+
+## GOAL
+FolderToolbar ko shared ui primitives par BC-parity laana tha: All/Diffs/Same
+(+Changes only) -> ui/SegmentedControl path, Name filter -> ui/Input, sm/md
+height tokens, koi logic change nahi, koi testid change nahi.
+
+Sach: toolbar pehle se unified nikla (Wave-239 UnifiedFilterSegment =
+SegmentedControl size sm; saare buttons size sm; name input FolderNamePanel
+mein ui/Input controlSize sm). Isliye WA me render/logic delta zero hai —
+kaam verify + pin + report hai. ui-standards spec UnifiedFilterSegment shape
+ko pin karta hai, isliye direct `<SegmentedControl` literal laana mana tha;
+wahi shape rakha.
+
+## Files
+- `apps/desktop/src/components/views/folder/controls/FolderToolbar.tsx`
+  (+5 comment lines ONLY — WA unify note; zero render/logic/testid delta)
+- `apps/desktop/e2e/specs/folder-toolbar-WA.spec.ts` (NEW — single-select,
+  input wiring, heights, chrome budget, light+dark)
+- `apps/desktop/src/components/views/folder/controls/index.ts` — touch nahi
+  (zaroorat nahi padi)
+- Text/sync/table/hex/merge dirs, App.tsx/ChromeShell/Toolbar/PathBar —
+  untouched. NO commit/push/merge. node_modules symlink as-is.
+
+## Gates
+- `tsc --noEmit`: 0 errors
+- Gate (fresh PORT 1882, realpath DIR `/private/tmp/wt-WA`, webkit,
+  `--workers=1`): `folder-toolbar-WA` + `ui-standards` + `chrome-budget`
+  - Run 1: 7 passed (11.1s) — GATE_PLAYWRIGHT_EXIT=0
+  - Run 2: 7 passed (10.3s) — GATE_PLAYWRIGHT_EXIT=0
+  - ALL GREEN 2x. Zero console/page errors, zero `role=alert`.
+- Evidence: `/tmp/folder-WA/folder-toolbar-light.png`,
+  `/tmp/folder-WA/folder-toolbar-dark.png`
+
+## MATCH-OFF (hai kya vs hona kya chahiye tha)
+| Cheez | Spec/Token | Measured | Status |
+|---|---|---|---|
+| Segment group | ek `role=group "Row filter"` me 4 options | visible, single container | MATCH |
+| Single-select | ek time par ek hi row option pressed | all->diffs->same cycle par sirf clicked `aria-pressed=true`, baaki `false` | MATCH |
+| Diffs filter | same rows chhupein | saare rows ka `data-status != same` | MATCH |
+| Changes only | toggle compose, count dikhe | pressed true + `folder-changes-count` visible; dobara click par gayab | MATCH |
+| Name Input wiring | toggle->fill->note->Esc->Ctrl+F focus | `folder-name-note` me "d00", Esc par panel+note gayab, Meta+F par visible+focused | MATCH |
+| Segment height | sm token 22px (`--ac-control-h-sm`), budget <=26 | chaaro buttons <=26px | MATCH |
+| Name input height | sm token 22px, budget <=26 | <=26px | MATCH |
+| Toolbar row | ek compact row <120px | <120px | MATCH |
+| Chrome budget | section-relative firstRowTop <=140 (panel closed), light+dark | light aur dark dono <=140 | MATCH |
+| Raw dupes | zero raw button/input, testids byte-identical | koi native control nahi; purani specs untouched aur green | MATCH |
+
+Blocker: koi nahi. FAIL 3x wala case aaya hi nahi.
+
+---
