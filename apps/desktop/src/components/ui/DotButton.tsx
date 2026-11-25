@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes } from "react";
 /**
  * Wave-158: shared 12px overview-dot primitive (merge conflict ruler).
  * Replaces the ad-hoc `h-3 w-3 Button` override: 12px lives OUTSIDE the
- * 22-26px control system on purpose (ruler affordance, not a control).
+ * 22-24px control system on purpose (ruler affordance, not a control).
  * Accent fill + border mark the active conflict; the inner pip keeps the
  * pre-migration look byte-identical. Testids + aria pass through untouched.
  */

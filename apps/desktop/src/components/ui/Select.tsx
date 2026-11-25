@@ -6,7 +6,7 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   readonly controlSize?: SelectSize;
 }
 
-/** Uniform desktop select with macOS density (22/24/26px), inset hairline border + blue focus ring matching Input. Testids pass through. */
+/** Uniform desktop select with macOS density (22px/24px), inset hairline border + blue focus ring matching Input. Testids pass through. */
 export default function Select({ controlSize, className = "", children, ...rest }: SelectProps): React.JSX.Element {
   const h =
     controlSize === "sm"
