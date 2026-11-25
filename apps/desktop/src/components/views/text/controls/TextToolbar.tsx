@@ -1,5 +1,5 @@
-import { ArrowDownToLine, ChevronDown, ChevronUp, Search, SlidersHorizontal, Type } from "lucide-react";
-import { Button, Checkbox, Select, ToolbarButton } from "../../../ui";
+import { ArrowDownToLine, Search, SlidersHorizontal, Type } from "lucide-react";
+import { Button, Checkbox, ToolbarButton, UnifiedCopyCluster, UnifiedDiffOnlyCluster, UnifiedNavCluster } from "../../../ui";
 
 /**
  * Wave-199c: single-row text controls toolbar (Beyond Compare style).
@@ -147,75 +147,42 @@ export default function TextToolbar(props: TextToolbarProps): React.JSX.Element 
         <span>Format</span>
       </ToolbarButton>
       <span aria-hidden="true" className="tv-controls-sep" />
-      <ToolbarButton
-        data-testid="textview/toolbar-prev-diff"
-        label="Previous difference"
-        title="Previous difference"
-        onClick={() => {
-          if (onBusCommand) onBusCommand("prev");
-          else onPrevDiff();
-        }}
-      >
-        <ChevronUp size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>Prev</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-next-diff"
-        label="Next difference"
-        title="Next difference"
-        onClick={() => {
-          if (onBusCommand) onBusCommand("next");
-          else onNextDiff();
-        }}
-      >
-        <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>Next</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-copy-line-left"
-        label="Copy line left"
-        title={copyLineDisabledReason ?? "Copy line to left (take right line)"}
+      {/* Wave-239: nav rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="textview/toolbar-prev-diff"
+        nextTestid="textview/toolbar-next-diff"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        onBusCommand={onBusCommand}
+      />
+      {/* Wave-239: copy addressing rides the shared UnifiedCopyCluster (same testids). */}
+      <UnifiedCopyCluster
+        leftTestid="textview/toolbar-copy-line-left"
+        rightTestid="textview/toolbar-copy-line-right"
+        leftTitle="Copy line to left (take right line)"
+        rightTitle="Copy line to right (take left line)"
         disabled={!canCopyLine}
-        onClick={() => onCopyLine?.("right")}
-      >
-        <span>Copy line left</span>
-      </ToolbarButton>
-      <ToolbarButton
-        data-testid="textview/toolbar-copy-line-right"
-        label="Copy line right"
-        title={copyLineDisabledReason ?? "Copy line to right (take left line)"}
-        disabled={!canCopyLine}
-        onClick={() => onCopyLine?.("left")}
-      >
-        <span>Copy line right</span>
-      </ToolbarButton>
+        disabledReason={copyLineDisabledReason}
+        onCopyLeft={() => onCopyLine?.("right")}
+        onCopyRight={() => onCopyLine?.("left")}
+      />
       {/* Wave-199c: counts moved to the bottom status bar (BC "N
           difference sections" truth). `textview/toolbar-hunks` +
           `textview/diffnav-note` render in `textview/status` with the
           same testids/text — the toolbar stays one compact row. */}
       <span aria-hidden="true" className="tv-controls-sep" />
+      {/* Wave-239: All/Diffs/Same + context rides the shared UnifiedDiffOnlyCluster (same testids). */}
       <Checkbox data-testid="textview/wrap-toggle" label="Word wrap" checked={wrap} onChange={(e) => onToggleWrap(e.target.checked)} />
       <Checkbox data-testid="textview/linenos-toggle" label="Line numbers" checked={showLineNos} onChange={(e) => onToggleLineNos(e.target.checked)} />
-      <Checkbox data-testid="textview/diffsonly-toggle" label="Differences only" checked={diffsOnly} onChange={(e) => onToggleDiffsOnly(e.target.checked)} />
-      <label className="inline-flex cursor-pointer items-center gap-2 text-[length:var(--ac-font-size-ui)] font-normal text-[var(--ac-fg)]">
-        Context
-        <Select
-          data-testid="textview/context-lines"
-          aria-label="Context lines around differences"
-          title={diffsOnly ? "Unchanged rows shown on each side of every difference" : "Enable Differences only to choose context lines"}
-          value={String(contextLines)}
-          disabled={!diffsOnly}
-          onChange={(e) => {
-            const n = Number.parseInt(e.target.value, 10);
-            if (n === 0 || n === 1 || n === 3 || n === 5) onContextLines(n);
-          }}
-        >
-          <option value="0">0</option>
-          <option value="1">1</option>
-          <option value="3">3</option>
-          <option value="5">5</option>
-        </Select>
-      </label>
+      <UnifiedDiffOnlyCluster
+        toggleTestid="textview/diffsonly-toggle"
+        checked={diffsOnly}
+        onToggle={onToggleDiffsOnly}
+        contextTestid="textview/context-lines"
+        contextValue={contextLines}
+        onContext={onContextLines}
+        contextDisabled={!diffsOnly}
+      />
       {/* Wave-89: save rides the toolbar overflow (right-aligned group,
           always mounted so legacy testids stay visible on load). */}
       <span aria-hidden="true" className="tv-controls-sep" />

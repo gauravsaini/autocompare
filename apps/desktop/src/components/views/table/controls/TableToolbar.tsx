@@ -27,8 +27,8 @@
  * wave-168 additions never compress away.
  */
 
-import { ChevronDown, ChevronUp, Search } from "lucide-react";
-import { Button, Checkbox, StatusText, ToolbarButton } from "../../../ui";
+import { Search } from "lucide-react";
+import { Button, Checkbox, StatusText, ToolbarButton, UnifiedNavCluster } from "../../../ui";
 
 export interface TableToolbarProps {
   readonly byKey: boolean;
@@ -240,34 +240,18 @@ export default function TableToolbar(props: TableToolbarProps): React.JSX.Elemen
       >
         <span>Find</span>
       </ToolbarButton>
-      <ToolbarButton
-        size="sm"
-        data-testid="tableview/toolbar-prev-diff"
-        label="Previous difference row"
-        title="Previous difference row"
-        icon={ChevronUp}
-        onClick={() => {
-          if (onBusCommand) onBusCommand("prev");
-          else onPrevDiff();
-        }}
-        disabled={diffCount === 0}
-      >
-        <span>Prev</span>
-      </ToolbarButton>
-      <ToolbarButton
-        size="sm"
-        data-testid="tableview/toolbar-next-diff"
-        label="Next difference row"
-        title="Next difference row"
-        icon={ChevronDown}
-        onClick={() => {
-          if (onBusCommand) onBusCommand("next");
-          else onNextDiff();
-        }}
-        disabled={diffCount === 0}
-      >
-        <span>Next</span>
-      </ToolbarButton>
+      {/* Wave-239: diff nav rides the shared UnifiedNavCluster (bus-first, same testids). */}
+      <UnifiedNavCluster
+        prevTestid="tableview/toolbar-prev-diff"
+        nextTestid="tableview/toolbar-next-diff"
+        prevLabel="Previous difference row"
+        nextLabel="Next difference row"
+        onPrev={onPrevDiff}
+        onNext={onNextDiff}
+        prevDisabled={diffCount === 0}
+        nextDisabled={diffCount === 0}
+        onBusCommand={onBusCommand}
+      />
       <StatusText data-testid="tableview/toolbar-diffs" variant="meta">
         {diffCount === 0
           ? "no differences"
