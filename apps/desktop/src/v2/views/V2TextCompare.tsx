@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
 import {
   textApplyEdit,
   textApplyHunk,
@@ -8,12 +7,22 @@ import {
   textGetRows,
   textSaveSide,
 } from "../../ipc/text";
-import type { InlineSpanDto, TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
-import V2Modal from "../components/V2Modal";
+import type { TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
+import V2TextFindBar from "../components/text/V2TextFindBar";
+import V2TextDiffRow, {
+  renderHighlightedLine,
+} from "../components/text/V2TextDiffRow";
+import type { EditingCell, HunkMeta, HunkRole, TextHunk } from "../components/text/V2TextDiffRow";
+import { V2TextFormatModal, V2TextRulesModal } from "../components/text/V2TextModals";
 import { useSplitPane } from "../hooks/useSplitPane";
+import { useVirtualRows } from "../hooks/useVirtualRows";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
+
+const ROW_HEIGHT = 21;
+const PAGE_LIMIT = 500;
+const MAX_VIRTUAL_ROWS = 20000;
 
 export interface V2TextCompareProps {
   readonly leftPath: string;
@@ -22,14 +31,6 @@ export interface V2TextCompareProps {
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onRegisterCommands: (cmds: V2ViewCommands) => void;
   readonly onStatusChange: (status: V2StatusInfo) => void;
-}
-
-type HunkRole = "single" | "start" | "middle" | "end";
-
-interface TextHunk {
-  readonly ordinal: number;
-  readonly start: number;
-  readonly end: number;
 }
 
 function collectHunks(rows: readonly TextRowDto[]): TextHunk[] {
@@ -73,75 +74,18 @@ function formatMtime(unix?: number): string {
   }
 }
 
-function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {dir === "left" ? (
-        <>
-          <path d="M1.5 2.5 5.5 6 1.5 9.5" />
-          <path d="M6.5 2.5 10.5 6 6.5 9.5" />
-        </>
-      ) : (
-        <>
-          <path d="M10.5 2.5 6.5 6 10.5 9.5" />
-          <path d="M5.5 2.5 1.5 6 5.5 9.5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function renderHighlightedLine(
-  text: string,
-  spans: readonly InlineSpanDto[],
-  side: TextSide,
-  inlineBgVar: string,
-): React.ReactNode {
-  if (!spans || spans.length === 0) return text;
-  const chars = Array.from(text);
-  const ranges = spans
-    .map((s) => ({
-      start: Math.max(0, Math.min(chars.length, side === "left" ? s.aStart : s.bStart)),
-      end: Math.max(0, Math.min(chars.length, side === "left" ? s.aEnd : s.bEnd)),
-    }))
-    .filter((r) => r.end > r.start)
-    .sort((a, b) => a.start - b.start);
-
-  if (ranges.length === 0) return text;
-
-  const nodes: React.ReactNode[] = [];
-  let cursor = 0;
-  ranges.forEach((r, idx) => {
-    if (r.start > cursor) {
-      nodes.push(<span key={`t-${idx}`}>{chars.slice(cursor, r.start).join("")}</span>);
-    }
-    const segStart = Math.max(cursor, r.start);
-    if (r.end > segStart) {
-      nodes.push(
-        <mark
-          key={`h-${idx}`}
-          style={{ backgroundColor: inlineBgVar, color: "inherit", borderRadius: 2 }}
-        >
-          {chars.slice(segStart, r.end).join("")}
-        </mark>,
-      );
-      cursor = r.end;
-    }
-  });
-  if (cursor < chars.length) {
-    nodes.push(<span key="tail">{chars.slice(cursor).join("")}</span>);
+async function fetchSessionRows(session: string, expectedTotal: number): Promise<TextRowDto[]> {
+  const cap = Math.min(Math.max(expectedTotal, PAGE_LIMIT), MAX_VIRTUAL_ROWS);
+  const all: TextRowDto[] = [];
+  let start = 0;
+  while (start < cap) {
+    const page = await textGetRows(session, start, PAGE_LIMIT);
+    if (page.rows.length === 0) break;
+    all.push(...page.rows);
+    if (all.length >= page.total || page.rows.length < PAGE_LIMIT) break;
+    start += page.rows.length;
   }
-  return nodes;
+  return all;
 }
 
 export default function V2TextCompare({
@@ -160,7 +104,7 @@ export default function V2TextCompare({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // BC view options
+  // Comparison options
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [contextEnabled, setContextEnabled] = useState(true);
   const [minorEnabled, setMinorEnabled] = useState(false);
@@ -177,9 +121,7 @@ export default function V2TextCompare({
 
   // Selection, editing, modals, find
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [editing, setEditing] = useState<{ index: number; side: TextSide; text: string } | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<EditingCell | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -225,8 +167,8 @@ export default function V2TextCompare({
           });
         }
         setSummary(dto);
-        const page = await textGetRows(dto.session, 0, 400);
-        setRows(page.rows);
+        const fetched = await fetchSessionRows(dto.session, dto.rows);
+        setRows(fetched);
         if (dto.encoding && dto.encoding !== encodingRef.current) setEncoding(dto.encoding);
         if (dto.eol && dto.eol !== eolRef.current) setEol(dto.eol);
       } catch (e) {
@@ -260,7 +202,7 @@ export default function V2TextCompare({
   const hunks = useMemo(() => collectHunks(rows), [rows]);
 
   const hunkMetaByIndex = useMemo(() => {
-    const map = new Map<number, { ordinal: number; role: HunkRole; hunk: TextHunk }>();
+    const map = new Map<number, HunkMeta>();
     for (const h of hunks) {
       const members = rows.filter(
         (r) => r.index >= h.start && r.index <= h.end && r.kind !== "equal",
@@ -296,7 +238,6 @@ export default function V2TextCompare({
   const visibleRows = useMemo(() => {
     if (filterMode === "all") return rows;
     if (filterMode === "same") return rows.filter((r) => r.kind === "equal");
-    // filterMode === "diffs"
     if (!contextEnabled) return rows.filter((r) => r.kind !== "equal");
     const keep = new Set<number>();
     rows.forEach((r, idx) => {
@@ -309,6 +250,18 @@ export default function V2TextCompare({
     return rows.filter((r) => keep.has(r.index));
   }, [rows, filterMode, contextEnabled]);
 
+  const { startIndex, endIndex, totalHeight, offsetTop, scrollToPosition } = useVirtualRows({
+    count: visibleRows.length,
+    rowHeight: ROW_HEIGHT,
+    overscan: 16,
+    scrollRef,
+  });
+
+  const windowedRows = useMemo(
+    () => visibleRows.slice(startIndex, endIndex),
+    [visibleRows, startIndex, endIndex],
+  );
+
   const findHits = useMemo(() => {
     const q = findQuery.trim().toLowerCase();
     if (!q) return [] as number[];
@@ -320,13 +273,14 @@ export default function V2TextCompare({
       .map((r) => r.index);
   }, [findQuery, visibleRows]);
 
-  const scrollToRow = useCallback((rowIndex: number): void => {
-    setSelectedIndex(rowIndex);
-    const el = scrollRef.current?.querySelector(`[data-row-index="${rowIndex}"]`);
-    if (el instanceof HTMLElement) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-  }, []);
+  const scrollToRow = useCallback(
+    (rowIndex: number): void => {
+      setSelectedIndex(rowIndex);
+      const pos = visibleRows.findIndex((r) => r.index === rowIndex);
+      if (pos >= 0) scrollToPosition(pos);
+    },
+    [visibleRows, scrollToPosition],
+  );
 
   const stepSection = useCallback(
     (delta: 1 | -1): void => {
@@ -339,7 +293,8 @@ export default function V2TextCompare({
         const next = hunks.find((h) => h.start > selectedIndex) ?? hunks[0];
         scrollToRow(next.start);
       } else {
-        const prev = [...hunks].reverse().find((h) => h.end < selectedIndex) ?? hunks[hunks.length - 1];
+        const prev =
+          [...hunks].reverse().find((h) => h.end < selectedIndex) ?? hunks[hunks.length - 1];
         scrollToRow(prev.start);
       }
     },
@@ -351,8 +306,8 @@ export default function V2TextCompare({
       if (!summary) return;
       try {
         await textApplyHunk(summary.session, hunk.start, hunk.end, dir);
-        const page = await textGetRows(summary.session, 0, Math.max(400, rows.length));
-        setRows(page.rows);
+        const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+        setRows(fetched);
         onDirtyChange(true);
         setNotice(`Copied section ${hunk.ordinal + 1} (${dir === "left" ? "L → R" : "R → L"})`);
       } catch (e) {
@@ -362,36 +317,58 @@ export default function V2TextCompare({
     [summary, rows.length, onDirtyChange],
   );
 
-  const handleCommitEdit = async (): Promise<void> => {
+  const handleCommitEdit = useCallback(async (): Promise<void> => {
     if (!editing || !summary) return;
     try {
       await textApplyEdit(summary.session, editing.index, editing.side, editing.text);
-      const page = await textGetRows(summary.session, 0, Math.max(400, rows.length));
-      setRows(page.rows);
+      const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+      setRows(fetched);
       onDirtyChange(true);
       setEditing(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  };
+  }, [editing, summary, rows.length, onDirtyChange]);
 
-  const handleSaveSide = async (side: TextSide): Promise<void> => {
-    if (!summary) return;
-    const targetPath = side === "left" ? leftDraft : rightDraft;
-    if (!targetPath) {
-      setNotice(`No file path set for ${side} side.`);
-      return;
-    }
-    try {
-      const saved = await textSaveSide(summary.session, side, targetPath);
-      onDirtyChange(false);
-      setNotice(`Saved ${side} (${saved.lines} lines, ${formatBytes(saved.bytes)})`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
+  const handleSaveSide = useCallback(
+    async (side: TextSide): Promise<void> => {
+      if (!summary) return;
+      const targetPath = side === "left" ? leftDraft : rightDraft;
+      if (!targetPath) {
+        setNotice(`No file path set for ${side} side.`);
+        return;
+      }
+      try {
+        const saved = await textSaveSide(summary.session, side, targetPath);
+        onDirtyChange(false);
+        setNotice(`Saved ${side} (${saved.lines} lines, ${formatBytes(saved.bytes)})`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [summary, leftDraft, rightDraft, onDirtyChange],
+  );
 
+  const handleStartEdit = useCallback((index: number, side: TextSide, text: string): void => {
+    setEditing({ index, side, text });
+  }, []);
 
+  const handleEditChange = useCallback((text: string): void => {
+    setEditing((prev) => (prev ? { ...prev, text } : null));
+  }, []);
+
+  const handleCancelEdit = useCallback((): void => setEditing(null), []);
+
+  const handleCopyHunkSync = useCallback(
+    (hunk: TextHunk, dir: TextSide): void => {
+      void handleCopyHunk(hunk, dir);
+    },
+    [handleCopyHunk],
+  );
+
+  const handleCommitEditSync = useCallback((): void => {
+    void handleCommitEdit();
+  }, [handleCommitEdit]);
 
   const selectedRow = useMemo(
     () => (selectedIndex === null ? null : (rows.find((r) => r.index === selectedIndex) ?? null)),
@@ -428,9 +405,7 @@ export default function V2TextCompare({
       hasSections: hunks.length > 0,
       prevSection: () => stepSection(-1),
       nextSection: () => stepSection(1),
-      swapSides: () => {
-        onPathsChange(rightDraft, leftDraft);
-      },
+      swapSides: () => onPathsChange(rightDraft, leftDraft),
       reload: () => void runCompare(leftDraft, rightDraft),
     });
   }, [
@@ -463,7 +438,10 @@ export default function V2TextCompare({
   }, [onStatusChange, hunks.length, notice, algorithm, encoding, eol, summary, rows.length]);
 
   return (
-    <div data-testid="v2/text-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
+    <div
+      data-testid="v2/text-view"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]"
+    >
       <V2DualPathBar
         leftValue={leftDraft}
         rightValue={rightDraft}
@@ -497,76 +475,30 @@ export default function V2TextCompare({
         }
       />
 
-      {/* Docked Cmd+F Find Bar */}
       {findOpen ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5">
-          <Search size={13} className="text-[var(--v2-fg-muted)]" />
-          <input
-            ref={findInputRef}
-            type="text"
-            value={findQuery}
-            onChange={(e) => {
-              setFindQuery(e.target.value);
-              setFindIdx(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && findHits.length > 0) {
-                const next = (findIdx + (e.shiftKey ? -1 : 1) + findHits.length) % findHits.length;
-                setFindIdx(next);
-                scrollToRow(findHits[next]);
-              }
-            }}
-            placeholder="Find in diff…"
-            className="v2-input v2-mono w-64"
-          />
-          <button
-            type="button"
-            disabled={findHits.length === 0}
-            onClick={() => {
-              const prev = (findIdx - 1 + findHits.length) % findHits.length;
-              setFindIdx(prev);
-              scrollToRow(findHits[prev]);
-            }}
-            className="v2-btn"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            disabled={findHits.length === 0}
-            onClick={() => {
-              const next = (findIdx + 1) % findHits.length;
-              setFindIdx(next);
-              scrollToRow(findHits[next]);
-            }}
-            className="v2-btn"
-          >
-            Next
-          </button>
-          <span className="text-[11px] text-[var(--v2-fg-muted)]">
-            {findQuery.trim()
-              ? findHits.length === 0
-                ? "No matches"
-                : `${findIdx + 1} of ${findHits.length}`
-              : "Press Enter to jump"}
-          </span>
-          <button
-            type="button"
-            aria-label="Close find"
-            onClick={() => setFindOpen(false)}
-            className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-hover)]"
-          >
-            <X size={13} />
-          </button>
-        </div>
+        <V2TextFindBar
+          inputRef={findInputRef}
+          query={findQuery}
+          hitCount={findHits.length}
+          activeHit={findIdx}
+          onQueryChange={(next) => {
+            setFindQuery(next);
+            setFindIdx(0);
+          }}
+          onStep={(delta) => {
+            if (findHits.length === 0) return;
+            const next = (findIdx + delta + findHits.length) % findHits.length;
+            setFindIdx(next);
+            scrollToRow(findHits[next]);
+          }}
+          onClose={() => setFindOpen(false)}
+        />
       ) : null}
 
-      {/* Pure-Token Inline Error Notice */}
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Main Workspace: Far-Left Overview Minimap + 7-Column BC Diff Grid */}
+      {/* Main Workspace: Far-Left Overview Minimap + Virtualized 7-Column Diff Grid */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Far-Left Overview Minimap (BC signature) */}
         <div
           aria-label="Difference overview map"
           className="relative w-[14px] shrink-0 cursor-pointer border-r border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
@@ -606,7 +538,6 @@ export default function V2TextCompare({
             })}
         </div>
 
-        {/* Scrollable Synchronized Diff Panes */}
         <div
           ref={(el) => {
             scrollRef.current = el;
@@ -630,202 +561,44 @@ export default function V2TextCompare({
               ) : null}
             </div>
           ) : (
-            <div className="v2-mono min-w-full text-[12px] leading-[21px]">
-              {visibleRows.map((row) => {
-                const meta = hunkMetaByIndex.get(row.index);
-                const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
-                const isSelected = selectedIndex === row.index;
-                const showArrow = meta && (meta.role === "single" || meta.role === "start");
-                const railClass =
-                  !meta || meta.role === "single"
-                    ? ""
-                    : meta.role === "start"
-                      ? "v2-rail-start"
-                      : meta.role === "middle"
-                        ? "v2-rail-middle"
-                        : "v2-rail-end";
-
-                const leftBg = isSelected
-                  ? "var(--v2-sel-bg)"
-                  : row.left === null
-                    ? undefined
-                    : row.kind === "leftOnly"
-                      ? "var(--v2-del-bg)"
-                      : row.kind === "changed"
-                        ? "var(--v2-chg-bg)"
-                        : undefined;
-                const leftFg = isSelected
-                  ? "var(--v2-sel-fg)"
-                  : row.kind === "leftOnly"
-                    ? "var(--v2-del-fg)"
-                    : row.kind === "changed"
-                      ? "var(--v2-chg-fg)"
-                      : "var(--v2-fg)";
-
-                const rightBg = isSelected
-                  ? "var(--v2-sel-bg)"
-                  : row.right === null
-                    ? undefined
-                    : row.kind === "rightOnly"
-                      ? "var(--v2-ins-bg)"
-                      : row.kind === "changed"
-                        ? "var(--v2-chg-bg)"
-                        : undefined;
-                const rightFg = isSelected
-                  ? "var(--v2-sel-fg)"
-                  : row.kind === "rightOnly"
-                    ? "var(--v2-ins-fg)"
-                    : row.kind === "changed"
-                      ? "var(--v2-chg-fg)"
-                      : "var(--v2-fg)";
-
-                return (
-                  <div
-                    key={row.index}
-                    data-testid={`v2/text-row-${row.index}`}
-                    data-row-index={row.index}
-                    onClick={() => setSelectedIndex(row.index)}
-                    style={{
-                      gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
-                    }}
-                    className="grid h-[21px] items-stretch"
-                  >
-                    {/* Left Action Gutter */}
-                    <span
-                      className={`relative flex items-center justify-center bg-[var(--v2-surface-subtle)] ${railClass}`}
-                    >
-                      {showArrow && meta ? (
-                        <button
-                          type="button"
-                          title="Copy section Left → Right"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCopyHunk(meta.hunk, "left");
-                          }}
-                          className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
-                        >
-                          <TakeArrow dir="left" />
-                        </button>
-                      ) : null}
-                    </span>
-
-                    {/* Left Line Number */}
-                    <span className="select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]">
-                      {nos.left ?? ""}
-                    </span>
-
-                    {/* Left Code Cell */}
-                    <div
-                      onDoubleClick={() => {
-                        if (row.left !== null) {
-                          setEditing({ index: row.index, side: "left", text: row.left });
-                        }
-                      }}
-                      style={{ backgroundColor: leftBg, color: leftFg }}
-                      className={`truncate whitespace-pre px-2 ${
-                        row.left === null && !isSelected ? "v2-hatch" : ""
-                      }`}
-                    >
-                      {editing?.index === row.index && editing.side === "left" ? (
-                        <input
-                          autoFocus
-                          value={editing.text}
-                          onChange={(e) => setEditing({ ...editing, text: e.target.value })}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleCommitEdit();
-                            if (e.key === "Escape") setEditing(null);
-                          }}
-                          onBlur={() => setEditing(null)}
-                          className="h-[19px] w-full bg-[var(--v2-surface)] px-1 text-[var(--v2-fg)] outline outline-1 outline-[var(--v2-accent)]"
-                        />
-                      ) : row.left !== null ? (
-                        renderHighlightedLine(row.left, row.inline, "left", "var(--v2-chg-inline)")
-                      ) : (
-                        ""
-                      )}
-                    </div>
-
-                    {/* Draggable Center Splitter (double-click resets to 50/50) */}
-                    <span
-                      role="separator"
-                      aria-orientation="vertical"
-                      title="Drag to resize panes (double-click to reset 50/50)"
-                      onMouseDown={startDrag}
-                      onDoubleClick={resetSplit}
-                      className="group relative cursor-col-resize bg-[var(--v2-surface-subtle)]"
-                    >
-                      <span
-                        className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-colors ${
-                          dragging
-                            ? "w-[2px] bg-[var(--v2-accent)]"
-                            : "w-px bg-[var(--v2-splitter)] group-hover:w-[2px] group-hover:bg-[var(--v2-accent)]"
-                        }`}
-                      />
-                    </span>
-
-                    {/* Right Action Gutter */}
-                    <span
-                      className={`relative flex items-center justify-center bg-[var(--v2-surface-subtle)] ${railClass}`}
-                    >
-                      {showArrow && meta ? (
-                        <button
-                          type="button"
-                          title="Copy section Right → Left"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCopyHunk(meta.hunk, "right");
-                          }}
-                          className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
-                        >
-                          <TakeArrow dir="right" />
-                        </button>
-                      ) : null}
-                    </span>
-
-                    {/* Right Line Number (symmetric border-r between number & code!) */}
-                    <span className="select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]">
-                      {nos.right ?? ""}
-                    </span>
-
-                    {/* Right Code Cell */}
-                    <div
-                      onDoubleClick={() => {
-                        if (row.right !== null) {
-                          setEditing({ index: row.index, side: "right", text: row.right });
-                        }
-                      }}
-                      style={{ backgroundColor: rightBg, color: rightFg }}
-                      className={`truncate whitespace-pre px-2 ${
-                        row.right === null && !isSelected ? "v2-hatch" : ""
-                      }`}
-                    >
-                      {editing?.index === row.index && editing.side === "right" ? (
-                        <input
-                          autoFocus
-                          value={editing.text}
-                          onChange={(e) => setEditing({ ...editing, text: e.target.value })}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleCommitEdit();
-                            if (e.key === "Escape") setEditing(null);
-                          }}
-                          onBlur={() => setEditing(null)}
-                          className="h-[19px] w-full bg-[var(--v2-surface)] px-1 text-[var(--v2-fg)] outline outline-1 outline-[var(--v2-accent)]"
-                        />
-                      ) : row.right !== null ? (
-                        renderHighlightedLine(row.right, row.inline, "right", "var(--v2-chg-inline)")
-                      ) : (
-                        ""
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div
+              className="v2-mono relative min-w-full text-[12px] leading-[21px]"
+              style={{ height: totalHeight }}
+            >
+              <div style={{ transform: `translateY(${offsetTop}px)` }}>
+                {windowedRows.map((row) => {
+                  const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
+                  const isEditingThis = editing?.index === row.index;
+                  return (
+                    <V2TextDiffRow
+                      key={row.index}
+                      row={row}
+                      meta={hunkMetaByIndex.get(row.index)}
+                      leftLineNo={nos.left}
+                      rightLineNo={nos.right}
+                      isSelected={selectedIndex === row.index}
+                      editingSide={isEditingThis ? editing.side : null}
+                      editingText={isEditingThis ? editing.text : ""}
+                      splitPct={splitPct}
+                      dragging={dragging}
+                      onSelect={setSelectedIndex}
+                      onCopyHunk={handleCopyHunkSync}
+                      onStartEdit={handleStartEdit}
+                      onEditChange={handleEditChange}
+                      onCommitEdit={handleCommitEditSync}
+                      onCancelEdit={handleCancelEdit}
+                      onStartDrag={startDrag}
+                      onResetSplit={resetSplit}
+                    />
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Bottom Stacked Line Detail Pane (Beyond Compare Signature) */}
+      {/* Bottom Stacked Line Detail Pane */}
       <div className="v2-mono shrink-0 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] text-[11.5px]">
         <div className="grid grid-cols-[26px_1fr] border-b border-[var(--v2-border-subtle)] leading-[21px]">
           <span className="flex items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
@@ -869,121 +642,35 @@ export default function V2TextCompare({
         </div>
       </div>
 
-      {/* Centered Rules Modal */}
-      <V2Modal
+      <V2TextRulesModal
         open={rulesOpen}
-        title="Comparison Rules"
-        subtitle="Applies directly to the Rust diff engine"
-        widthClass="max-w-md"
+        ignoreWs={ignoreWs}
+        ignoreCase={ignoreCase}
+        ignoreBlank={ignoreBlank}
+        algorithm={algorithm}
+        onIgnoreWsChange={setIgnoreWs}
+        onIgnoreCaseChange={setIgnoreCase}
+        onIgnoreBlankChange={setIgnoreBlank}
+        onAlgorithmChange={setAlgorithm}
         onClose={() => setRulesOpen(false)}
-        footer={
-          <>
-            <button type="button" onClick={() => setRulesOpen(false)} className="v2-btn">
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRulesOpen(false);
-                void runCompare(leftDraft, rightDraft);
-              }}
-              className="v2-btn v2-btn-primary"
-            >
-              Apply & Recompare
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-[12px]">
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={ignoreWs}
-              onChange={(e) => setIgnoreWs(e.target.checked)}
-              className="accent-[var(--v2-accent)]"
-            />
-            <span>Ignore whitespace changes</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={ignoreCase}
-              onChange={(e) => setIgnoreCase(e.target.checked)}
-              className="accent-[var(--v2-accent)]"
-            />
-            <span>Ignore character case</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={ignoreBlank}
-              onChange={(e) => setIgnoreBlank(e.target.checked)}
-              className="accent-[var(--v2-accent)]"
-            />
-            <span>Ignore blank lines</span>
-          </label>
-          <div className="pt-1">
-            <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-muted)]">
-              Diff Algorithm
-            </span>
-            <select
-              value={algorithm}
-              onChange={(e) => setAlgorithm(e.target.value as "myers" | "patience")}
-              className="v2-input w-full"
-            >
-              <option value="myers">Myers (standard)</option>
-              <option value="patience">Patience (better block alignment)</option>
-            </select>
-          </div>
-        </div>
-      </V2Modal>
+        onApply={() => {
+          setRulesOpen(false);
+          void runCompare(leftDraft, rightDraft);
+        }}
+      />
 
-      {/* Centered Format Modal */}
-      <V2Modal
+      <V2TextFormatModal
         open={formatOpen}
-        title="File Format & Encoding"
-        widthClass="max-w-sm"
+        encoding={encoding}
+        eol={eol}
+        onEncodingChange={setEncoding}
+        onEolChange={setEol}
         onClose={() => setFormatOpen(false)}
-        footer={
-          <button
-            type="button"
-            onClick={() => {
-              setFormatOpen(false);
-              void runCompare(leftDraft, rightDraft);
-            }}
-            className="v2-btn v2-btn-primary"
-          >
-            Apply
-          </button>
-        }
-      >
-        <div className="space-y-3 text-[12px]">
-          <div>
-            <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-muted)]">
-              Encoding
-            </span>
-            <select
-              value={encoding}
-              onChange={(e) => setEncoding(e.target.value)}
-              className="v2-input w-full"
-            >
-              <option value="UTF-8">Unicode (UTF-8)</option>
-              <option value="UTF-16">Unicode (UTF-16)</option>
-              <option value="ASCII">ASCII</option>
-            </select>
-          </div>
-          <div>
-            <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-muted)]">
-              Line Endings (EOL)
-            </span>
-            <select value={eol} onChange={(e) => setEol(e.target.value)} className="v2-input w-full">
-              <option value="UNIX">UNIX (LF)</option>
-              <option value="DOS">Windows (CRLF)</option>
-              <option value="MIX">Mixed</option>
-            </select>
-          </div>
-        </div>
-      </V2Modal>
+        onApply={() => {
+          setFormatOpen(false);
+          void runCompare(leftDraft, rightDraft);
+        }}
+      />
     </div>
   );
 }
