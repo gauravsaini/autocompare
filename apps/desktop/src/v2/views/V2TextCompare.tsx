@@ -10,6 +10,7 @@ import {
 } from "../../ipc/text";
 import type { InlineSpanDto, TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2Modal from "../components/V2Modal";
+import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2TextCompareProps {
@@ -181,6 +182,7 @@ export default function V2TextCompare({
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -475,7 +477,8 @@ export default function V2TextCompare({
       {/* Per-pane 50/50 Path + Metadata Header (Beyond Compare alignment) */}
       <form
         onSubmit={submitPaths}
-        className="grid shrink-0 grid-cols-2 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
+        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
+        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
       >
         {(["left", "right"] as const).map((side) => {
           const val = side === "left" ? leftDraft : rightDraft;
@@ -643,7 +646,13 @@ export default function V2TextCompare({
         </div>
 
         {/* Scrollable Synchronized Diff Panes */}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-[var(--v2-surface)]">
+        <div
+          ref={(el) => {
+            scrollRef.current = el;
+            (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+          }}
+          className="min-h-0 flex-1 overflow-auto bg-[var(--v2-surface)]"
+        >
           {loading ? (
             <div className="flex h-full items-center justify-center text-[12px] text-[var(--v2-fg-muted)]">
               Comparing files…
@@ -714,7 +723,10 @@ export default function V2TextCompare({
                     key={row.index}
                     data-row-index={row.index}
                     onClick={() => setSelectedIndex(row.index)}
-                    className="grid h-[21px] grid-cols-[22px_42px_minmax(0,1fr)_5px_22px_42px_minmax(0,1fr)] items-stretch"
+                    style={{
+                      gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
+                    }}
+                    className="grid h-[21px] items-stretch"
                   >
                     {/* Left Action Gutter */}
                     <span
@@ -771,9 +783,22 @@ export default function V2TextCompare({
                       )}
                     </div>
 
-                    {/* Thin Center Splitter */}
-                    <span className="relative bg-[var(--v2-surface-subtle)]">
-                      <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--v2-splitter)]" />
+                    {/* Draggable Center Splitter (double-click resets to 50/50) */}
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Drag to resize panes (double-click to reset 50/50)"
+                      onMouseDown={startDrag}
+                      onDoubleClick={resetSplit}
+                      className="group relative cursor-col-resize bg-[var(--v2-surface-subtle)]"
+                    >
+                      <span
+                        className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-colors ${
+                          dragging
+                            ? "w-[2px] bg-[var(--v2-accent)]"
+                            : "w-px bg-[var(--v2-splitter)] group-hover:w-[2px] group-hover:bg-[var(--v2-accent)]"
+                        }`}
+                      />
                     </span>
 
                     {/* Right Action Gutter */}

@@ -59,10 +59,17 @@ const SESSION_CARDS: readonly SessionCardDef[] = [
   },
   {
     kind: "merge",
-    title: "3-Way Merge",
-    subtitle: "Resolve conflicts with base",
+    title: "3-Way Text Merge",
+    subtitle: "Resolve line conflicts with base",
     icon: GitMerge,
     accent: "#dc2626",
+  },
+  {
+    kind: "folderMerge",
+    title: "3-Way Folder Merge",
+    subtitle: "Merge directory trees over base",
+    icon: Folder,
+    accent: "#ea580c",
   },
   {
     kind: "sync",
@@ -121,6 +128,7 @@ export default function V2Home({
         "table",
         "hex",
         "merge",
+        "folderMerge",
         "sync",
         "media",
       ];
@@ -241,7 +249,7 @@ export default function V2Home({
 
       {/* Right New Comparison Workspace */}
       <main className="flex flex-1 flex-col overflow-y-auto px-10 py-8">
-        <div className="mx-auto w-full max-w-3xl">
+        <div className="mx-auto w-full max-w-4xl">
           <div className="mb-6 flex items-end justify-between">
             <div>
               <h1 className="text-[22px] font-semibold tracking-tight text-[var(--v2-fg)]">
@@ -270,7 +278,7 @@ export default function V2Home({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {SESSION_CARDS.map((card) => {
               const Icon = card.icon;
               return (

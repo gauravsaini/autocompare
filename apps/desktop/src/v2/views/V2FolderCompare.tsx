@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, Folder, FolderOpen } from "lucide-react";
 import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
+import { useSplitPane } from "../hooks/useSplitPane";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2FolderCompareProps {
@@ -65,6 +66,7 @@ export default function V2FolderCompare({
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -148,7 +150,8 @@ export default function V2FolderCompare({
           e.preventDefault();
           onPathsChange(leftDraft.trim(), rightDraft.trim());
         }}
-        className="grid shrink-0 grid-cols-2 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
+        style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
+        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
       >
         {(["left", "right"] as const).map((side) => {
           const val = side === "left" ? leftDraft : rightDraft;
@@ -181,11 +184,21 @@ export default function V2FolderCompare({
       </form>
 
       {/* Dual-Pane Column Headers (True BC 2-Side Folder Tree!) */}
-      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_76px_96px_5px_minmax(0,1fr)_76px_96px] border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] text-[11px] font-semibold text-[var(--v2-fg-secondary)]">
+      <div
+        style={{ gridTemplateColumns: `minmax(0, ${splitPct}fr) 76px 96px 6px minmax(0, ${100 - splitPct}fr) 76px 96px` }}
+        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] text-[11px] font-semibold text-[var(--v2-fg-secondary)]"
+      >
         <div className="px-3 py-1">Name</div>
         <div className="px-2 py-1 text-right">Size</div>
         <div className="px-2 py-1 text-right">Modified</div>
-        <div className="bg-[var(--v2-splitter)]/40" />
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize panes (double-click to reset 50/50)"
+          onMouseDown={startDrag}
+          onDoubleClick={resetSplit}
+          className="cursor-col-resize bg-[var(--v2-splitter)]/40 hover:bg-[var(--v2-accent)]/60"
+        />
         <div className="px-3 py-1">Name</div>
         <div className="px-2 py-1 text-right">Size</div>
         <div className="px-2 py-1 text-right">Modified</div>
@@ -198,7 +211,7 @@ export default function V2FolderCompare({
       ) : null}
 
       {/* Synchronized Dual-Pane Tree Rows */}
-      <div className="min-h-0 flex-1 overflow-y-auto text-[12px]">
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto text-[12px]">
         {loading ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
             Comparing folders…
@@ -233,8 +246,9 @@ export default function V2FolderCompare({
                 style={{
                   backgroundColor: isSelected ? "var(--v2-sel-bg)" : undefined,
                   color,
+                  gridTemplateColumns: `minmax(0, ${splitPct}fr) 76px 96px 6px minmax(0, ${100 - splitPct}fr) 76px 96px`,
                 }}
-                className="grid h-[22px] cursor-default grid-cols-[minmax(0,1fr)_76px_96px_5px_minmax(0,1fr)_76px_96px] items-center hover:bg-[var(--v2-btn-hover)]/50"
+                className="grid h-[22px] cursor-default items-center hover:bg-[var(--v2-btn-hover)]/50"
               >
                 {/* Left Side */}
                 {hasLeft ? (
@@ -257,9 +271,22 @@ export default function V2FolderCompare({
                   <div className="v2-hatch col-span-3 h-full" />
                 )}
 
-                {/* Center Splitter */}
-                <span className="relative h-full bg-[var(--v2-surface-subtle)]">
-                  <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--v2-splitter)]" />
+                {/* Draggable Center Splitter */}
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  title="Drag to resize panes (double-click to reset 50/50)"
+                  onMouseDown={startDrag}
+                  onDoubleClick={resetSplit}
+                  className="group relative h-full cursor-col-resize bg-[var(--v2-surface-subtle)]"
+                >
+                  <span
+                    className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-colors ${
+                      dragging
+                        ? "w-[2px] bg-[var(--v2-accent)]"
+                        : "w-px bg-[var(--v2-splitter)] group-hover:w-[2px] group-hover:bg-[var(--v2-accent)]"
+                    }`}
+                  />
                 </span>
 
                 {/* Right Side */}
