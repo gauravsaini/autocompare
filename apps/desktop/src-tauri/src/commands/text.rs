@@ -1104,6 +1104,41 @@ pub fn text_apply_hunk(
     })
 }
 
+/// Restores a previously snapshotted row vector for `session` (used by
+/// frontend Undo/Redo so subsequent `text_save_side` writes the exact
+/// undone/redone state to disk). Recomputes line counts and overview map.
+#[tauri::command]
+pub fn text_restore_rows(session: String, rows: Vec<TextRowDto>) -> Result<u64, String> {
+    let cached = stored(&session)?;
+    let mut left_count: u64 = 0;
+    let mut right_count: u64 = 0;
+    for row in &rows {
+        if row.left.is_some() {
+            left_count = left_count.saturating_add(1);
+        }
+        if row.right.is_some() {
+            right_count = right_count.saturating_add(1);
+        }
+    }
+    let (overview, overview_truncated) = summarize_overview(&rows);
+    let total = rows.len() as u64;
+    let mut guard = lock_store()?;
+    guard.insert(
+        session,
+        StoredText {
+            left_count,
+            right_count,
+            rows,
+            overview,
+            overview_truncated,
+            opts: cached.opts,
+            ignore_blank: cached.ignore_blank,
+            algorithm: cached.algorithm,
+        },
+    );
+    Ok(total)
+}
+
 /// Returns one `(start, limit)` window of aligned rows. `start` past the
 /// end yields an empty page, never an error.
 #[tauri::command]

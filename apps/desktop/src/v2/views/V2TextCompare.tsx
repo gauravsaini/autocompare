@@ -5,6 +5,7 @@ import {
   textCompare,
   textCompareDemo,
   textGetRows,
+  textRestoreRows,
   textSaveSide,
 } from "../../ipc/text";
 import type { TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
@@ -119,8 +120,9 @@ export default function V2TextCompare({
   encodingRef.current = encoding;
   eolRef.current = eol;
 
-  // Selection, editing, modals, find
+  // Selection (supports Shift+Click multi-line range), editing, modals, find
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
@@ -277,8 +279,41 @@ export default function V2TextCompare({
       .map((r) => r.index);
   }, [findQuery, visibleRows]);
 
+  const handleSelectRow = useCallback(
+    (rowIndex: number, shiftKey: boolean): void => {
+      if (shiftKey && selectionAnchor !== null) {
+        setSelectedIndex(rowIndex);
+      } else {
+        setSelectionAnchor(rowIndex);
+        setSelectedIndex(rowIndex);
+      }
+    },
+    [selectionAnchor],
+  );
+
+  const selectionRange = useMemo(() => {
+    if (selectedIndex === null) return null;
+    const anchor = selectionAnchor ?? selectedIndex;
+    return {
+      start: Math.min(anchor, selectedIndex),
+      end: Math.max(anchor, selectedIndex),
+    };
+  }, [selectedIndex, selectionAnchor]);
+
+  const selectedRangeCount = selectionRange
+    ? selectionRange.end - selectionRange.start + 1
+    : 0;
+
+  const selectionHasDiff = useMemo(() => {
+    if (!selectionRange) return false;
+    return rows.some(
+      (r) => r.index >= selectionRange.start && r.index <= selectionRange.end && r.kind !== "equal",
+    );
+  }, [rows, selectionRange]);
+
   const scrollToRow = useCallback(
     (rowIndex: number): void => {
+      setSelectionAnchor(rowIndex);
       setSelectedIndex(rowIndex);
       const pos = visibleRows.findIndex((r) => r.index === rowIndex);
       if (pos >= 0) scrollToPosition(pos);
@@ -310,23 +345,37 @@ export default function V2TextCompare({
     redoStackRef.current = [];
   }, []);
 
-  const handleUndo = useCallback((): void => {
+  const handleUndo = useCallback(async (): Promise<void> => {
     const prev = undoStackRef.current.pop();
     if (!prev) return;
     redoStackRef.current = [...redoStackRef.current.slice(-29), { rows, label: prev.label }];
     setRows(prev.rows);
     onDirtyChange(undoStackRef.current.length > 0);
     setNotice(`Undid ${prev.label}`);
-  }, [rows, onDirtyChange]);
+    if (summary) {
+      try {
+        await textRestoreRows(summary.session, prev.rows);
+      } catch {
+        // Local snapshot already restored
+      }
+    }
+  }, [rows, summary, onDirtyChange]);
 
-  const handleRedo = useCallback((): void => {
+  const handleRedo = useCallback(async (): Promise<void> => {
     const next = redoStackRef.current.pop();
     if (!next) return;
     undoStackRef.current = [...undoStackRef.current.slice(-29), { rows, label: next.label }];
     setRows(next.rows);
     onDirtyChange(true);
     setNotice(`Redid ${next.label}`);
-  }, [rows, onDirtyChange]);
+    if (summary) {
+      try {
+        await textRestoreRows(summary.session, next.rows);
+      } catch {
+        // Local snapshot already restored
+      }
+    }
+  }, [rows, summary, onDirtyChange]);
 
   useEffect(() => {
     const onUndoKey = (e: KeyboardEvent): void => {
@@ -340,12 +389,12 @@ export default function V2TextCompare({
       if (key === "z" && !e.shiftKey) {
         if (undoStackRef.current.length > 0) {
           e.preventDefault();
-          handleUndo();
+          void handleUndo();
         }
       } else if ((key === "z" && e.shiftKey) || key === "y") {
         if (redoStackRef.current.length > 0) {
           e.preventDefault();
-          handleRedo();
+          void handleRedo();
         }
       }
     };
@@ -372,23 +421,38 @@ export default function V2TextCompare({
     [summary, rows, onDirtyChange, pushUndoSnapshot],
   );
 
-  const handleCopyLine = useCallback(
-    async (rowIndex: number, dir: TextSide): Promise<void> => {
+  const handleCopyRange = useCallback(
+    async (start: number, end: number, dir: TextSide): Promise<void> => {
       if (!summary) return;
-      const label = `copy line ${rowIndex + 1} (${dir === "left" ? "L → R" : "R → L"})`;
+      const count = end - start + 1;
+      const label =
+        count === 1
+          ? `copy line ${start + 1} (${dir === "left" ? "L → R" : "R → L"})`
+          : `copy lines ${start + 1}–${end + 1} (${dir === "left" ? "L → R" : "R → L"})`;
       const snapshot = rows;
       try {
-        await textApplyHunk(summary.session, rowIndex, rowIndex, dir);
+        await textApplyHunk(summary.session, start, end, dir);
         const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
         pushUndoSnapshot(snapshot, label);
         setRows(fetched);
         onDirtyChange(true);
-        setNotice(`Copied line ${rowIndex + 1} (${dir === "left" ? "L → R" : "R → L"})`);
+        setNotice(
+          count === 1
+            ? `Copied line ${start + 1} (${dir === "left" ? "L → R" : "R → L"})`
+            : `Copied ${count} lines (${start + 1}–${end + 1}, ${dir === "left" ? "L → R" : "R → L"})`,
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
     [summary, rows, onDirtyChange, pushUndoSnapshot],
+  );
+
+  const handleCopyLine = useCallback(
+    async (rowIndex: number, dir: TextSide): Promise<void> => {
+      await handleCopyRange(rowIndex, rowIndex, dir);
+    },
+    [handleCopyRange],
   );
 
   const handleCommitEdit = useCallback(async (): Promise<void> => {
@@ -479,12 +543,20 @@ export default function V2TextCompare({
         setFindOpen(true);
         setTimeout(() => findInputRef.current?.focus(), 20);
       },
-      canCopy: selectedHunk !== null,
+      canCopy: selectionHasDiff || selectedHunk !== null,
       copySelected: () => {
-        if (selectedHunk) void handleCopyHunk(selectedHunk, "left");
+        if (selectionRange && selectedRangeCount > 1 && selectionHasDiff) {
+          void handleCopyRange(selectionRange.start, selectionRange.end, "left");
+        } else if (selectedHunk) {
+          void handleCopyHunk(selectedHunk, "left");
+        }
       },
       copySelectedRight: () => {
-        if (selectedHunk) void handleCopyHunk(selectedHunk, "right");
+        if (selectionRange && selectedRangeCount > 1 && selectionHasDiff) {
+          void handleCopyRange(selectionRange.start, selectionRange.end, "right");
+        } else if (selectedHunk) {
+          void handleCopyHunk(selectedHunk, "right");
+        }
       },
       hasSections: hunks.length > 0,
       prevSection: () => stepSection(-1),
@@ -497,7 +569,11 @@ export default function V2TextCompare({
     filterMode,
     contextEnabled,
     minorEnabled,
+    selectionRange,
+    selectedRangeCount,
+    selectionHasDiff,
     selectedHunk,
+    handleCopyRange,
     handleCopyHunk,
     hunks.length,
     stepSection,
@@ -653,6 +729,10 @@ export default function V2TextCompare({
                 {windowedRows.map((row) => {
                   const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
                   const isEditingThis = editing?.index === row.index;
+                  const isInSelection =
+                    selectionRange !== null &&
+                    row.index >= selectionRange.start &&
+                    row.index <= selectionRange.end;
                   return (
                     <V2TextDiffRow
                       key={row.index}
@@ -660,12 +740,12 @@ export default function V2TextCompare({
                       meta={hunkMetaByIndex.get(row.index)}
                       leftLineNo={nos.left}
                       rightLineNo={nos.right}
-                      isSelected={selectedIndex === row.index}
+                      isSelected={isInSelection}
                       editingSide={isEditingThis ? editing.side : null}
                       editingText={isEditingThis ? editing.text : ""}
                       splitPct={splitPct}
                       dragging={dragging}
-                      onSelect={setSelectedIndex}
+                      onSelect={handleSelectRow}
                       onCopyHunk={handleCopyHunkSync}
                       onCopyLine={handleCopyLineSync}
                       onStartEdit={handleStartEdit}
@@ -683,7 +763,7 @@ export default function V2TextCompare({
         </div>
       </div>
 
-      {/* Bottom Stacked Line Detail Pane with Selective Single-Line Merge */}
+      {/* Bottom Stacked Line Detail Pane with Selective Single-Line & Range Merge */}
       <div className="v2-mono shrink-0 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] text-[11.5px]">
         <div className="grid grid-cols-[26px_1fr_auto] items-center border-b border-[var(--v2-border-subtle)] leading-[22px]">
           <span className="flex h-full items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
@@ -703,17 +783,25 @@ export default function V2TextCompare({
                     "var(--v2-chg-inline)",
                   )
                 : ""
-              : "Click any line to inspect character-level differences or merge selectively"}
+              : "Click a line (or Shift+Click a range) to inspect or merge selectively"}
           </div>
-          {selectedRow && selectedRow.kind !== "equal" ? (
+          {selectionRange && selectionHasDiff ? (
             <button
               type="button"
               data-testid="v2/detail-copy-line-left"
-              title="Copy only this selected line Left → Right"
-              onClick={() => void handleCopyLine(selectedRow.index, "left")}
+              title={
+                selectedRangeCount > 1
+                  ? `Copy selected ${selectedRangeCount} lines Left → Right`
+                  : "Copy only this selected line Left → Right"
+              }
+              onClick={() => void handleCopyRange(selectionRange.start, selectionRange.end, "left")}
               className="v2-btn mx-1.5 h-[18px] px-2 font-sans text-[10.5px]"
             >
-              {selectedRow.left === null ? "Delete R Line" : "Copy Line →"}
+              {selectedRangeCount > 1
+                ? `Copy ${selectedRangeCount} Lines →`
+                : selectedRow?.left === null
+                  ? "Delete R Line"
+                  : "Copy Line →"}
             </button>
           ) : null}
         </div>
@@ -735,15 +823,23 @@ export default function V2TextCompare({
                 )
               : ""}
           </div>
-          {selectedRow && selectedRow.kind !== "equal" ? (
+          {selectionRange && selectionHasDiff ? (
             <button
               type="button"
               data-testid="v2/detail-copy-line-right"
-              title="Copy only this selected line Right → Left"
-              onClick={() => void handleCopyLine(selectedRow.index, "right")}
+              title={
+                selectedRangeCount > 1
+                  ? `Copy selected ${selectedRangeCount} lines Right → Left`
+                  : "Copy only this selected line Right → Left"
+              }
+              onClick={() => void handleCopyRange(selectionRange.start, selectionRange.end, "right")}
               className="v2-btn mx-1.5 h-[18px] px-2 font-sans text-[10.5px]"
             >
-              {selectedRow.right === null ? "Delete L Line" : "← Copy Line"}
+              {selectedRangeCount > 1
+                ? `← Copy ${selectedRangeCount} Lines`
+                : selectedRow?.right === null
+                  ? "Delete L Line"
+                  : "← Copy Line"}
             </button>
           ) : null}
         </div>

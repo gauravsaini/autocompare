@@ -901,6 +901,36 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         rows: nextRows.length,
       } as unknown as T;
     }
+    case "text_restore_rows": {
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const rawRows = Array.isArray(args["rows"]) ? (args["rows"] as DumpedTextRow[]) : [];
+      const prev = mockTextSessions.get(sessId);
+      let leftLines = 0;
+      let rightLines = 0;
+      let opCount = 0;
+      let prevKind = "";
+      for (const r of rawRows) {
+        if (r.left !== null) leftLines += 1;
+        if (r.right !== null) rightLines += 1;
+        if (r.kind !== prevKind) {
+          opCount += 1;
+          prevKind = r.kind;
+        }
+      }
+      mockTextEdits.clear();
+      mockTextSessions.set(sessId, {
+        session: sessId,
+        rows: rawRows,
+        leftLines,
+        rightLines,
+        opCount,
+        leftPath: prev?.leftPath ?? "",
+        rightPath: prev?.rightPath ?? "",
+        leftMeta: prev?.leftMeta,
+        rightMeta: prev?.rightMeta,
+      });
+      return rawRows.length as unknown as T;
+    }
     case "folder_compare": {
       const masks = typeof args["masks"] === "string" ? (args["masks"] as string) : null;
       mockFolderMasks = masks;

@@ -339,6 +339,17 @@ export function textApplyHunk(
   return invoke<AppliedHunk>("text_apply_hunk", { session, start, end, dir });
 }
 
+/**
+ * Restore a snapshotted row list into the backend text session (Undo/Redo sync
+ * so subsequent `textSaveSide` persists the exact undone/redone content).
+ */
+export function textRestoreRows(
+  session: string,
+  rows: readonly TextRowDto[],
+): Promise<number> {
+  return invoke<number>("text_restore_rows", { session, rows });
+}
+
 // ---------------------------------------------------------------------------
 // Wave 5B: bundled demo pair (input files ONLY, never mock rows).
 //

@@ -124,7 +124,7 @@ export interface V2TextDiffRowProps {
   readonly editingText: string;
   readonly splitPct: number;
   readonly dragging: boolean;
-  readonly onSelect: (index: number) => void;
+  readonly onSelect: (index: number, shiftKey: boolean) => void;
   readonly onCopyHunk: (hunk: TextHunk, dir: TextSide) => void;
   readonly onCopyLine: (index: number, dir: TextSide) => void;
   readonly onStartEdit: (index: number, side: TextSide, text: string) => void;
@@ -204,11 +204,11 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
     <div
       data-testid={`v2/text-row-${row.index}`}
       data-row-index={row.index}
-      onClick={() => onSelect(row.index)}
+      onClick={(e) => onSelect(row.index, e.shiftKey)}
       style={{
         gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
       }}
-      className="group grid h-[21px] items-stretch"
+      className="group grid h-[21px] items-stretch select-none"
     >
       {/* Left Action Gutter */}
       <span
