@@ -127,3 +127,22 @@ test("text compare: Rules dialog covers Specs, Format, Importance, Alignment, an
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
   await expect(page.getByTestId("v2/statusbar")).toContainText("Applied session rules");
 });
+
+test("text compare: Minor unimportant toggle and F7 manual line alignment", async ({ page }) => {
+  await expect(page.getByTestId("v2/text-row-0")).toBeVisible({ timeout: 10000 });
+
+  // Toggle Minor unimportant differences button cleanly
+  await page.getByTestId("v2/toolbar-minor").click();
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+
+  // Select row 2 and press F7 to start Align With mode
+  await page.getByTestId("v2/text-row-2").locator("span").nth(1).click();
+  await page.keyboard.press("F7");
+  const alignBanner = page.getByTestId("v2/align-banner");
+  await expect(alignBanner).toBeVisible();
+
+  // Click a right-side cell on row 4 to pin manual alignment
+  await page.getByTestId("v2/text-row-4").locator("div").nth(1).click();
+  await expect(alignBanner).toContainText("1 manual alignment");
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+});

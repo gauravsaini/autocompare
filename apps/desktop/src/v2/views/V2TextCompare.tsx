@@ -32,6 +32,9 @@ import {
   splitLineAt,
 } from "../utils/textBuffer";
 import { matchesUnderSessionRules } from "../utils/textReplacements";
+import { resolveSyntaxLang } from "../utils/syntaxHighlight";
+import { addManualAnchor, applyManualAnchors } from "../utils/manualAlign";
+import type { ManualAnchor } from "../utils/manualAlign";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 const DEFAULT_RULES_STORAGE_KEY = "autocompare.v2.text.defaultRules";
@@ -192,6 +195,20 @@ export default function V2TextCompare({
   const rowsRef = useRef<readonly TextRowDto[]>(rows);
   rowsRef.current = rows;
 
+  // Manual Line Alignment (Align With... / F7) + Context Menu
+  const [manualAnchors, setManualAnchors] = useState<readonly ManualAnchor[]>([]);
+  const [alignSource, setAlignSource] = useState<{
+    readonly side: TextSide;
+    readonly sideLineIdx: number;
+    readonly rowIndex: number;
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    readonly x: number;
+    readonly y: number;
+    readonly rowIndex: number;
+    readonly side: TextSide;
+  } | null>(null);
+
   // Modals & Find
   const [rulesModalTab, setRulesModalTab] = useState<RulesDialogTab | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -270,6 +287,8 @@ export default function V2TextCompare({
         const fetched = await fetchSessionRows(dto.session, dto.rows);
         undoStackRef.current = [];
         redoStackRef.current = [];
+        setManualAnchors([]);
+        setAlignSource(null);
         setRows(fetched);
         if (dto.encoding) setDetectedEncoding(dto.encoding);
         if (dto.eol) setDetectedEol(dto.eol);
@@ -299,45 +318,151 @@ export default function V2TextCompare({
     void runCompare(leftPath, rightPath);
   }, [leftPath, rightPath, runCompare]);
 
-  // Global Cmd+F
+  const leftSyntaxLang = useMemo(
+    () => resolveSyntaxLang(rules.leftFormat, leftDraft),
+    [rules.leftFormat, leftDraft],
+  );
+  const rightSyntaxLang = useMemo(
+    () => resolveSyntaxLang(rules.sameFormat ? rules.leftFormat : rules.rightFormat, rightDraft),
+    [rules.sameFormat, rules.leftFormat, rules.rightFormat, rightDraft],
+  );
+
+  // Apply manual alignment anchors (F7 / Align With...) if any are active
+  const anchoredRows = useMemo(() => {
+    if (manualAnchors.length === 0) return rows;
+    const leftLines = extractSideLines(rows, "left");
+    const rightLines = extractSideLines(rows, "right");
+    return applyManualAnchors(leftLines, rightLines, manualAnchors) as readonly TextRowDto[];
+  }, [rows, manualAnchors]);
+
+  const manualAnchorRowIndices = useMemo(() => {
+    const set = new Set<number>();
+    if (manualAnchors.length === 0) return set;
+    let lIdx = 0;
+    let rIdx = 0;
+    for (const row of anchoredRows) {
+      const curL = row.left !== null ? lIdx++ : -1;
+      const curR = row.right !== null ? rIdx++ : -1;
+      if (manualAnchors.some((a) => a.leftLineIdx === curL && a.rightLineIdx === curR)) {
+        set.add(row.index);
+      }
+    }
+    return set;
+  }, [anchoredRows, manualAnchors]);
+
+  // Classify Unimportant differences (Blue tint when Minor OFF, folded to equal when Minor ON)
+  const { effectiveRows, unimportantIndices } = useMemo(() => {
+    const hasCustomUnimp = rules.unimportantRules.some((r) => r.enabled && r.pattern.length > 0);
+    const hasRep = rules.replacements.some((r) => r.enabled && r.left.length > 0);
+    const blueSet = new Set<number>();
+
+    const nextRows = anchoredRows.map((row) => {
+      if (row.kind !== "changed" || row.left === null || row.right === null) return row;
+
+      const matchedByRules =
+        (hasCustomUnimp || hasRep) &&
+        matchesUnderSessionRules(
+          row.left,
+          row.right,
+          rules.unimportantRules,
+          rules.replacements,
+          true,
+        );
+      const wsOrCaseOnly =
+        !hasCustomUnimp &&
+        !hasRep &&
+        row.left.trim().replace(/\s+/g, " ").toLowerCase() ===
+          row.right.trim().replace(/\s+/g, " ").toLowerCase();
+
+      if (matchedByRules || wsOrCaseOnly) {
+        if (rules.minorEnabled) {
+          return { ...row, kind: "equal" as const, inline: [] };
+        }
+        blueSet.add(row.index);
+      }
+      return row;
+    });
+    return { effectiveRows: nextRows, unimportantIndices: blueSet };
+  }, [anchoredRows, rules.unimportantRules, rules.replacements, rules.minorEnabled]);
+
+  const startAlignWith = useCallback(
+    (rowIndex: number, preferredSide: TextSide): void => {
+      const rowObj = effectiveRows.find((r) => r.index === rowIndex);
+      if (!rowObj) return;
+      const side: TextSide =
+        preferredSide === "left"
+          ? rowObj.left !== null
+            ? "left"
+            : "right"
+          : rowObj.right !== null
+            ? "right"
+            : "left";
+      const sideLineIdx = rowIndexToSideLineIndex(effectiveRows, rowIndex, side);
+      if (sideLineIdx < 0) return;
+      setActiveEdit(null);
+      setContextMenu(null);
+      setAlignSource({ side, sideLineIdx, rowIndex });
+    },
+    [effectiveRows],
+  );
+
+  const handlePickAlignTarget = useCallback(
+    (rowIndex: number, side: TextSide): void => {
+      if (!alignSource || alignSource.side === side) return;
+      const targetSideIdx = rowIndexToSideLineIndex(effectiveRows, rowIndex, side);
+      if (targetSideIdx < 0) return;
+      const nextAnchor: ManualAnchor =
+        alignSource.side === "left"
+          ? { leftLineIdx: alignSource.sideLineIdx, rightLineIdx: targetSideIdx }
+          : { leftLineIdx: targetSideIdx, rightLineIdx: alignSource.sideLineIdx };
+      setManualAnchors((prev) => addManualAnchor(prev, nextAnchor));
+      setAlignSource(null);
+      setNotice(
+        `Aligned Left line ${nextAnchor.leftLineIdx + 1} with Right line ${nextAnchor.rightLineIdx + 1}`,
+      );
+    },
+    [alignSource, effectiveRows],
+  );
+
+  const handleContextMenuCell = useCallback(
+    (e: React.MouseEvent, rowIndex: number, side: TextSide): void => {
+      e.preventDefault();
+      setSelectionAnchor(rowIndex);
+      setSelectedIndex(rowIndex);
+      setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, side });
+    },
+    [],
+  );
+
+  // Global Cmd+F, F7 (Align With...), and Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFindOpen(true);
         setTimeout(() => findInputRef.current?.focus(), 20);
-      } else if (e.key === "Escape" && findOpen) {
-        setFindOpen(false);
+      } else if (e.key === "F7") {
+        e.preventDefault();
+        const targetIdx = activeEditRef.current?.rowIndex ?? selectedIndex;
+        if (targetIdx !== null) {
+          startAlignWith(targetIdx, activeEditRef.current?.side ?? "left");
+        }
+      } else if (e.key === "Escape") {
+        if (contextMenu) setContextMenu(null);
+        else if (alignSource) setAlignSource(null);
+        else if (findOpen) setFindOpen(false);
       }
     };
+    const onWinClick = (): void => {
+      if (contextMenu) setContextMenu(null);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [findOpen]);
-
-  // Fold rows matching active Unimportant Grammar and/or Left -> Right replacement rules to `equal`
-  const effectiveRows = useMemo(() => {
-    const hasUnimp =
-      rules.minorEnabled && rules.unimportantRules.some((r) => r.enabled && r.pattern.length > 0);
-    const hasRep = rules.replacements.some((r) => r.enabled && r.left.length > 0);
-    if (!hasUnimp && !hasRep) return rows;
-    return rows.map((row) => {
-      if (
-        row.kind === "changed" &&
-        row.left !== null &&
-        row.right !== null &&
-        matchesUnderSessionRules(
-          row.left,
-          row.right,
-          rules.unimportantRules,
-          rules.replacements,
-          rules.minorEnabled,
-        )
-      ) {
-        return { ...row, kind: "equal" as const, inline: [] };
-      }
-      return row;
-    });
-  }, [rows, rules.unimportantRules, rules.replacements, rules.minorEnabled]);
+    window.addEventListener("click", onWinClick);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", onWinClick);
+    };
+  }, [findOpen, alignSource, contextMenu, selectedIndex, startAlignWith]);
 
   const hunks = useMemo(() => collectHunks(effectiveRows), [effectiveRows]);
 
@@ -1046,6 +1171,43 @@ export default function V2TextCompare({
         />
       ) : null}
 
+      {alignSource || manualAnchors.length > 0 ? (
+        <div
+          data-testid="v2/align-banner"
+          className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-minor-bg)] px-3 py-1 text-[11.5px] text-[var(--v2-minor-fg)]"
+        >
+          <span>
+            {alignSource
+              ? `Align With: click a line on the ${alignSource.side === "left" ? "right" : "left"} side to pin with ${alignSource.side} line ${alignSource.sideLineIdx + 1} (Esc to cancel)`
+              : `${manualAnchors.length} manual alignment${manualAnchors.length === 1 ? "" : "s"} active`}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {alignSource ? (
+              <button
+                type="button"
+                onClick={() => setAlignSource(null)}
+                className="v2-btn h-[20px] px-2 text-[11px]"
+              >
+                Cancel
+              </button>
+            ) : null}
+            {manualAnchors.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setManualAnchors([]);
+                  setAlignSource(null);
+                  setNotice("Cleared manual alignments");
+                }}
+                className="v2-btn h-[20px] px-2 text-[11px]"
+              >
+                Clear Alignments
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <V2ReloadPromptBanner
         changedPaths={changedPaths}
         onReload={() => {
@@ -1062,11 +1224,11 @@ export default function V2TextCompare({
           aria-label="Difference overview map"
           className="relative w-[14px] shrink-0 cursor-pointer border-r border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
           onClick={(e) => {
-            if (rows.length === 0) return;
+            if (effectiveRows.length === 0) return;
             const rect = e.currentTarget.getBoundingClientRect();
             const ratio = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-            const idx = Math.min(rows.length - 1, Math.floor(ratio * rows.length));
-            scrollToRow(rows[idx].index);
+            const idx = Math.min(effectiveRows.length - 1, Math.floor(ratio * effectiveRows.length));
+            scrollToRow(effectiveRows[idx].index);
           }}
         >
           {effectiveRows.length > 0 &&
@@ -1074,8 +1236,10 @@ export default function V2TextCompare({
               const firstRow = effectiveRows.find((r) => r.index === h.start);
               const topPct = (h.start / effectiveRows.length) * 100;
               const heightPct = Math.max(1.2, ((h.end - h.start + 1) / effectiveRows.length) * 100);
-              const color =
-                firstRow?.kind === "leftOnly"
+              const isMinorHunk = firstRow ? unimportantIndices.has(firstRow.index) : false;
+              const color = isMinorHunk
+                ? "var(--v2-ruler-minor)"
+                : firstRow?.kind === "leftOnly"
                   ? "var(--v2-ruler-del)"
                   : firstRow?.kind === "rightOnly"
                     ? "var(--v2-ruler-ins)"
@@ -1140,6 +1304,13 @@ export default function V2TextCompare({
                       leftLineNo={nos.left}
                       rightLineNo={nos.right}
                       isSelected={isInSelection}
+                      isUnimportant={unimportantIndices.has(row.index)}
+                      isManualAnchor={manualAnchorRowIndices.has(row.index)}
+                      leftSyntaxLang={leftSyntaxLang}
+                      rightSyntaxLang={rightSyntaxLang}
+                      alignPickTargetSide={
+                        alignSource ? (alignSource.side === "left" ? "right" : "left") : null
+                      }
                       activeSide={isActiveRow ? activeEdit.side : null}
                       activeText={isActiveRow ? activeEdit.text : ""}
                       activeCol={isActiveRow ? activeEdit.col : 0}
@@ -1158,6 +1329,8 @@ export default function V2TextCompare({
                       onBlurCommit={handleBlurCommit}
                       onCopyHunk={handleCopyHunkSync}
                       onCopyLine={handleCopyLineSync}
+                      onContextMenuCell={handleContextMenuCell}
+                      onPickAlignTarget={handlePickAlignTarget}
                       onStartDrag={startDrag}
                       onResetSplit={resetSplit}
                     />
@@ -1168,6 +1341,57 @@ export default function V2TextCompare({
           )}
         </div>
       </div>
+
+      {contextMenu ? (
+        <div
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          className="fixed z-50 min-w-[190px] rounded-[7px] border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] py-1 text-[12px] shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => startAlignWith(contextMenu.rowIndex, contextMenu.side)}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+          >
+            <span>Align With…</span>
+            <span className="text-[10.5px] text-[var(--v2-fg-muted)]">F7</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyLine(contextMenu.rowIndex, "left");
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+          >
+            <span>Copy Line Left → Right</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyLine(contextMenu.rowIndex, "right");
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+          >
+            <span>Copy Line Right → Left</span>
+          </button>
+          {manualAnchors.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setManualAnchors([]);
+                setAlignSource(null);
+                setContextMenu(null);
+                setNotice("Cleared manual alignments");
+              }}
+              className="mt-0.5 flex w-full items-center justify-between border-t border-[var(--v2-border-subtle)] px-3 py-1.5 text-left text-[var(--v2-del-fg)] hover:bg-[var(--v2-accent-soft)]"
+            >
+              <span>Clear Manual Alignments ({manualAnchors.length})</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Bottom Stacked Line Detail Pane with Selective Single-Line & Range Merge */}
       <div className="v2-mono shrink-0 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] text-[11.5px]">

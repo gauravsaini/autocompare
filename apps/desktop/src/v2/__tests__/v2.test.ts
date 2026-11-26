@@ -19,6 +19,8 @@ import {
   matchesWithReplacements,
   stripUnimportantText,
 } from "../utils/textReplacements.ts";
+import { resolveSyntaxLang, tokenizeLine } from "../utils/syntaxHighlight.ts";
+import { addManualAnchor, applyManualAnchors } from "../utils/manualAlign.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -211,5 +213,44 @@ describe("unimportant text / grammar rules", () => {
       ),
       true,
     );
+  });
+});
+
+describe("syntaxHighlight", () => {
+  it("resolves format overrides and file extensions accurately", () => {
+    assert.equal(resolveSyntaxLang("JSON", "file.txt"), "json");
+    assert.equal(resolveSyntaxLang("Detected (Everything Else)", "/src/main.rs"), "code");
+    assert.equal(resolveSyntaxLang("Detected (Everything Else)", "config.yaml"), "yaml");
+    assert.equal(resolveSyntaxLang("Detected (Everything Else)", "notes.txt"), "plain");
+  });
+
+  it("tokenizes code and JSON lines without losing characters", () => {
+    const line = "const count = 42; // answer";
+    const tokens = tokenizeLine(line, "code");
+    assert.equal(tokens.map((t) => line.slice(t.start, t.end)).join(""), line);
+    assert.equal(tokens.some((t) => t.type === "keyword" && line.slice(t.start, t.end) === "const"), true);
+    assert.equal(tokens.some((t) => t.type === "number" && line.slice(t.start, t.end) === "42"), true);
+    assert.equal(tokens.some((t) => t.type === "comment"), true);
+
+    const json = '  "port": 8080,';
+    const jTokens = tokenizeLine(json, "json");
+    assert.equal(jTokens.map((t) => json.slice(t.start, t.end)).join(""), json);
+    assert.equal(jTokens.some((t) => t.type === "key"), true);
+    assert.equal(jTokens.some((t) => t.type === "number"), true);
+  });
+});
+
+describe("manualAlign", () => {
+  it("prunes crossing anchors and pins anchored lines onto the same row", () => {
+    const a1 = addManualAnchor([], { leftLineIdx: 1, rightLineIdx: 3 });
+    const a2 = addManualAnchor(a1, { leftLineIdx: 2, rightLineIdx: 1 });
+    assert.deepEqual(a2, [{ leftLineIdx: 2, rightLineIdx: 1 }]);
+
+    const left = ["head", "foo", "target-A", "tail"];
+    const right = ["head", "target-B", "tail"];
+    const rows = applyManualAnchors(left, right, [{ leftLineIdx: 2, rightLineIdx: 1 }]);
+    const pinned = rows.find((r) => r.left === "target-A" && r.right === "target-B");
+    assert.ok(pinned, "anchored lines must be paired on the same row");
+    assert.equal(pinned?.kind, "changed");
   });
 });

@@ -52,15 +52,27 @@
   --v2-chg-bg: #fff5d6;
   --v2-chg-fg: #92400e;
   --v2-chg-inline: #fde08d;
+  --v2-minor-bg: #eaf3ff;
+  --v2-minor-fg: #1d4ed8;
+  --v2-minor-inline: #c6dfff;
   --v2-sel-bg: #dcebff;
   --v2-sel-fg: #0b3b75;
   --v2-hatch-bg: #f7f7f9;
   --v2-hatch-line: #dadAE0;
 
+  /* Syntax Highlighting */
+  --v2-syn-keyword: #7c3aed;
+  --v2-syn-string: #0f766e;
+  --v2-syn-comment: #6b7280;
+  --v2-syn-number: #c2410c;
+  --v2-syn-key: #1d4ed8;
+  --v2-syn-tag: #0369a1;
+
   /* Ruler */
   --v2-ruler-del: #ef4444;
   --v2-ruler-ins: #22c55e;
   --v2-ruler-chg: #f59e0b;
+  --v2-ruler-minor: #3b82f6;
 }
 
 :root[data-theme="dark"] {
@@ -101,14 +113,25 @@
   --v2-chg-bg: #3b2d10;
   --v2-chg-fg: #fde68a;
   --v2-chg-inline: #6b4f15;
+  --v2-minor-bg: #16263d;
+  --v2-minor-fg: #93c5fd;
+  --v2-minor-inline: #1f3c66;
   --v2-sel-bg: #1d4270;
   --v2-sel-fg: #ffffff;
   --v2-hatch-bg: #1a1a1e;
   --v2-hatch-line: #2e2e36;
 
+  --v2-syn-keyword: #c4b5fd;
+  --v2-syn-string: #5eead4;
+  --v2-syn-comment: #9ca3af;
+  --v2-syn-number: #fdba74;
+  --v2-syn-key: #93c5fd;
+  --v2-syn-tag: #7dd3fc;
+
   --v2-ruler-del: #f87171;
   --v2-ruler-ins: #4ade80;
   --v2-ruler-chg: #fbbf24;
+  --v2-ruler-minor: #60a5fa;
 }
 
 * {

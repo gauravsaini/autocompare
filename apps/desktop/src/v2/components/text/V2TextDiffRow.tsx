@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import type { InlineSpanDto, TextRowDto, TextSide } from "../../../ipc/text";
+import { tokenizeLine } from "../../utils/syntaxHighlight";
+import type { SyntaxLang, SyntaxTokenType } from "../../utils/syntaxHighlight";
 
 export type HunkRole = "single" | "start" | "middle" | "end";
 
@@ -20,6 +22,16 @@ export interface ActiveCaret {
   readonly side: TextSide;
   readonly col: number;
 }
+
+const SYNTAX_COLOR: Record<SyntaxTokenType, string | undefined> = {
+  plain: undefined,
+  keyword: "var(--v2-syn-keyword)",
+  string: "var(--v2-syn-string)",
+  comment: "var(--v2-syn-comment)",
+  number: "var(--v2-syn-number)",
+  key: "var(--v2-syn-key)",
+  tag: "var(--v2-syn-tag)",
+};
 
 function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
   return (
@@ -71,13 +83,35 @@ function SingleLineArrow({ dir }: { dir: TextSide }): React.JSX.Element {
   );
 }
 
+function renderSyntaxSlice(text: string, syntaxLang?: SyntaxLang, keyPrefix = "s"): React.ReactNode {
+  if (!syntaxLang || syntaxLang === "plain" || text.length === 0) return text;
+  const tokens = tokenizeLine(text, syntaxLang);
+  if (tokens.length === 0 || (tokens.length === 1 && tokens[0].type === "plain")) return text;
+  return tokens.map((tok, i) => {
+    const color = SYNTAX_COLOR[tok.type];
+    const slice = text.slice(tok.start, tok.end);
+    if (!color) return <React.Fragment key={`${keyPrefix}-${i}`}>{slice}</React.Fragment>;
+    return (
+      <span
+        key={`${keyPrefix}-${i}`}
+        style={{ color, fontStyle: tok.type === "comment" ? "italic" : undefined }}
+      >
+        {slice}
+      </span>
+    );
+  });
+}
+
 export function renderHighlightedLine(
   text: string,
   spans: readonly InlineSpanDto[],
   side: TextSide,
   inlineBgVar: string,
+  syntaxLang?: SyntaxLang,
 ): React.ReactNode {
-  if (!spans || spans.length === 0) return text;
+  if (!spans || spans.length === 0) {
+    return renderSyntaxSlice(text, syntaxLang, "eq");
+  }
   const chars = Array.from(text);
   const ranges = spans
     .map((s) => ({
@@ -87,13 +121,16 @@ export function renderHighlightedLine(
     .filter((r) => r.end > r.start)
     .sort((a, b) => a.start - b.start);
 
-  if (ranges.length === 0) return text;
+  if (ranges.length === 0) {
+    return renderSyntaxSlice(text, syntaxLang, "no");
+  }
 
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
   ranges.forEach((r, idx) => {
     if (r.start > cursor) {
-      nodes.push(<span key={`t-${idx}`}>{chars.slice(cursor, r.start).join("")}</span>);
+      const seg = chars.slice(cursor, r.start).join("");
+      nodes.push(<span key={`t-${idx}`}>{renderSyntaxSlice(seg, syntaxLang, `t${idx}`)}</span>);
     }
     const segStart = Math.max(cursor, r.start);
     if (r.end > segStart) {
@@ -109,7 +146,8 @@ export function renderHighlightedLine(
     }
   });
   if (cursor < chars.length) {
-    nodes.push(<span key="tail">{chars.slice(cursor).join("")}</span>);
+    const tail = chars.slice(cursor).join("");
+    nodes.push(<span key="tail">{renderSyntaxSlice(tail, syntaxLang, "tail")}</span>);
   }
   return nodes;
 }
@@ -145,8 +183,6 @@ function SeamlessLineInput({
   const targetColRef = useRef(targetCol);
   targetColRef.current = targetCol;
 
-  // Only programmatically place caret on mount or explicit programmatic jumps
-  // (Enter / Backspace / ArrowUp / ArrowDown / paste), NEVER on user double-click or drag-select.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -207,6 +243,11 @@ export interface V2TextDiffRowProps {
   readonly leftLineNo: number | null;
   readonly rightLineNo: number | null;
   readonly isSelected: boolean;
+  readonly isUnimportant?: boolean;
+  readonly isManualAnchor?: boolean;
+  readonly leftSyntaxLang?: SyntaxLang;
+  readonly rightSyntaxLang?: SyntaxLang;
+  readonly alignPickTargetSide?: TextSide | null;
   readonly activeSide: TextSide | null;
   readonly activeText: string;
   readonly activeCol: number;
@@ -231,14 +272,16 @@ export interface V2TextDiffRowProps {
   readonly onBlurCommit: () => void;
   readonly onCopyHunk: (hunk: TextHunk, dir: TextSide) => void;
   readonly onCopyLine: (index: number, dir: TextSide) => void;
+  readonly onContextMenuCell?: (e: React.MouseEvent, index: number, side: TextSide) => void;
+  readonly onPickAlignTarget?: (index: number, side: TextSide) => void;
   readonly onStartDrag: (e: React.MouseEvent) => void;
   readonly onResetSplit: () => void;
 }
 
 function estimateClickCol(e: React.MouseEvent<HTMLDivElement>, text: string): number {
   const rect = e.currentTarget.getBoundingClientRect();
-  const relX = Math.max(0, e.clientX - rect.left - 8); // 8px left padding
-  const charWidth = 7.22; // JetBrains Mono 12px average advance
+  const relX = Math.max(0, e.clientX - rect.left - 8);
+  const charWidth = 7.22;
   return Math.max(0, Math.min(text.length, Math.round(relX / charWidth)));
 }
 
@@ -248,6 +291,11 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   leftLineNo,
   rightLineNo,
   isSelected,
+  isUnimportant = false,
+  isManualAnchor = false,
+  leftSyntaxLang = "plain",
+  rightSyntaxLang = "plain",
+  alignPickTargetSide = null,
   activeSide,
   activeText,
   activeCol,
@@ -266,6 +314,8 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   onBlurCommit,
   onCopyHunk,
   onCopyLine,
+  onContextMenuCell,
+  onPickAlignTarget,
   onStartDrag,
   onResetSplit,
 }: V2TextDiffRowProps): React.JSX.Element {
@@ -280,48 +330,62 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
           ? "v2-rail-middle"
           : "v2-rail-end";
 
+  const inlineBg = isUnimportant ? "var(--v2-minor-inline)" : "var(--v2-chg-inline)";
+
   const leftBg =
     isSelected && activeSide !== "left"
       ? "var(--v2-sel-bg)"
       : row.left === null
         ? undefined
-        : row.kind === "leftOnly"
-          ? "var(--v2-del-bg)"
-          : row.kind === "changed"
-            ? "var(--v2-chg-bg)"
-            : undefined;
+        : isUnimportant
+          ? "var(--v2-minor-bg)"
+          : row.kind === "leftOnly"
+            ? "var(--v2-del-bg)"
+            : row.kind === "changed"
+              ? "var(--v2-chg-bg)"
+              : undefined;
   const leftFg =
     isSelected && activeSide !== "left"
       ? "var(--v2-sel-fg)"
-      : row.kind === "leftOnly"
-        ? "var(--v2-del-fg)"
-        : row.kind === "changed"
-          ? "var(--v2-chg-fg)"
-          : "var(--v2-fg)";
+      : isUnimportant
+        ? "var(--v2-minor-fg)"
+        : row.kind === "leftOnly"
+          ? "var(--v2-del-fg)"
+          : row.kind === "changed"
+            ? "var(--v2-chg-fg)"
+            : "var(--v2-fg)";
 
   const rightBg =
     isSelected && activeSide !== "right"
       ? "var(--v2-sel-bg)"
       : row.right === null
         ? undefined
-        : row.kind === "rightOnly"
-          ? "var(--v2-ins-bg)"
-          : row.kind === "changed"
-            ? "var(--v2-chg-bg)"
-            : undefined;
+        : isUnimportant
+          ? "var(--v2-minor-bg)"
+          : row.kind === "rightOnly"
+            ? "var(--v2-ins-bg)"
+            : row.kind === "changed"
+              ? "var(--v2-chg-bg)"
+              : undefined;
   const rightFg =
     isSelected && activeSide !== "right"
       ? "var(--v2-sel-fg)"
-      : row.kind === "rightOnly"
-        ? "var(--v2-ins-fg)"
-        : row.kind === "changed"
-          ? "var(--v2-chg-fg)"
-          : "var(--v2-fg)";
+      : isUnimportant
+        ? "var(--v2-minor-fg)"
+        : row.kind === "rightOnly"
+          ? "var(--v2-ins-fg)"
+          : row.kind === "changed"
+            ? "var(--v2-chg-fg)"
+            : "var(--v2-fg)";
+
+  const isLeftPickTarget = alignPickTargetSide === "left" && row.left !== null;
+  const isRightPickTarget = alignPickTargetSide === "right" && row.right !== null;
 
   return (
     <div
       data-testid={`v2/text-row-${row.index}`}
       data-row-index={row.index}
+      data-unimportant={isUnimportant ? "true" : undefined}
       style={{
         gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
       }}
@@ -348,7 +412,9 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
                 onCopyHunk(meta.hunk, "left");
               }
             }}
-            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
+            className={`relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] hover:bg-[var(--v2-btn-hover)] ${
+              isUnimportant ? "text-[var(--v2-minor-fg)]" : "text-[var(--v2-amber)]"
+            }`}
           >
             <TakeArrow dir="left" />
           </button>
@@ -370,17 +436,31 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
         ) : null}
       </span>
 
-      {/* Left Line Number (click / Shift+Click selects row or range) */}
+      {/* Left Line Number */}
       <span
         onClick={(e) => onSelect(row.index, e.shiftKey)}
-        className="cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
+        className="relative cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
       >
+        {isManualAnchor ? (
+          <span
+            title="Manually aligned line"
+            className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--v2-accent)]"
+          />
+        ) : null}
         {leftLineNo ?? ""}
       </span>
 
-      {/* Left Continuous Notepad Cell (single-click places caret immediately) */}
+      {/* Left Continuous Notepad Cell */}
       <div
+        onContextMenu={(e) => {
+          if (onContextMenuCell) onContextMenuCell(e, row.index, "left");
+        }}
         onClick={(e) => {
+          if (isLeftPickTarget && onPickAlignTarget) {
+            e.preventDefault();
+            onPickAlignTarget(row.index, "left");
+            return;
+          }
           onSelect(row.index, e.shiftKey);
           if (!e.shiftKey && row.left !== null && activeSide !== "left") {
             onFocusCell(row.index, "left", row.left, estimateClickCol(e, row.left));
@@ -388,7 +468,11 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
         }}
         style={{ backgroundColor: leftBg, color: leftFg }}
         className={`truncate whitespace-pre px-2 ${
-          row.left === null && !isSelected ? "v2-hatch cursor-default" : "cursor-text"
+          isLeftPickTarget
+            ? "cursor-crosshair hover:ring-1 hover:ring-inset hover:ring-[var(--v2-accent)]"
+            : row.left === null && !isSelected
+              ? "v2-hatch cursor-default"
+              : "cursor-text"
         }`}
       >
         {activeSide === "left" ? (
@@ -406,7 +490,13 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
             onBlurCommit={onBlurCommit}
           />
         ) : row.left !== null ? (
-          renderHighlightedLine(row.left, row.inline, "left", "var(--v2-chg-inline)")
+          renderHighlightedLine(
+            row.left,
+            row.inline,
+            "left",
+            inlineBg,
+            row.kind === "equal" ? leftSyntaxLang : "plain",
+          )
         ) : (
           ""
         )}
@@ -451,7 +541,9 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
                 onCopyHunk(meta.hunk, "right");
               }
             }}
-            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
+            className={`relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] hover:bg-[var(--v2-btn-hover)] ${
+              isUnimportant ? "text-[var(--v2-minor-fg)]" : "text-[var(--v2-amber)]"
+            }`}
           >
             <TakeArrow dir="right" />
           </button>
@@ -476,14 +568,28 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
       {/* Right Line Number */}
       <span
         onClick={(e) => onSelect(row.index, e.shiftKey)}
-        className="cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
+        className="relative cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
       >
+        {isManualAnchor ? (
+          <span
+            title="Manually aligned line"
+            className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--v2-accent)]"
+          />
+        ) : null}
         {rightLineNo ?? ""}
       </span>
 
       {/* Right Continuous Notepad Cell */}
       <div
+        onContextMenu={(e) => {
+          if (onContextMenuCell) onContextMenuCell(e, row.index, "right");
+        }}
         onClick={(e) => {
+          if (isRightPickTarget && onPickAlignTarget) {
+            e.preventDefault();
+            onPickAlignTarget(row.index, "right");
+            return;
+          }
           onSelect(row.index, e.shiftKey);
           if (!e.shiftKey && row.right !== null && activeSide !== "right") {
             onFocusCell(row.index, "right", row.right, estimateClickCol(e, row.right));
@@ -491,7 +597,11 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
         }}
         style={{ backgroundColor: rightBg, color: rightFg }}
         className={`truncate whitespace-pre px-2 ${
-          row.right === null && !isSelected ? "v2-hatch cursor-default" : "cursor-text"
+          isRightPickTarget
+            ? "cursor-crosshair hover:ring-1 hover:ring-inset hover:ring-[var(--v2-accent)]"
+            : row.right === null && !isSelected
+              ? "v2-hatch cursor-default"
+              : "cursor-text"
         }`}
       >
         {activeSide === "right" ? (
@@ -509,7 +619,13 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
             onBlurCommit={onBlurCommit}
           />
         ) : row.right !== null ? (
-          renderHighlightedLine(row.right, row.inline, "right", "var(--v2-chg-inline)")
+          renderHighlightedLine(
+            row.right,
+            row.inline,
+            "right",
+            inlineBg,
+            row.kind === "equal" ? rightSyntaxLang : "plain",
+          )
         ) : (
           ""
         )}
