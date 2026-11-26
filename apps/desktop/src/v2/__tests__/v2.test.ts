@@ -13,6 +13,7 @@ import {
   sideLineIndexToRowIndex,
   splitLineAt,
 } from "../utils/textBuffer.ts";
+import { matchesWithReplacements } from "../utils/textReplacements.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -126,5 +127,28 @@ describe("textBuffer notepad operations", () => {
     assert.deepEqual(res.lines, ["start one", "two", "three end"]);
     assert.equal(res.nextLine, 2);
     assert.equal(res.nextCol, 6);
+  });
+});
+
+describe("matchesWithReplacements", () => {
+  it("matches literal replacements respecting case sensitivity and enabled flag", () => {
+    const rules = [
+      { id: "1", left: "staging.example.com", right: "prod.example.com", regex: false, caseSensitive: false, enabled: true },
+      { id: "2", left: "disabled", right: "ignored", regex: false, caseSensitive: false, enabled: false },
+    ];
+    assert.equal(
+      matchesWithReplacements("https://STAGING.EXAMPLE.COM/api", "https://prod.example.com/api", rules),
+      true,
+    );
+    assert.equal(matchesWithReplacements("disabled", "ignored", rules), false);
+  });
+
+  it("supports regex capture groups and safely ignores invalid regex", () => {
+    const rules = [
+      { id: "r1", left: "v(\\d+)\\.0", right: "release-$1", regex: true, caseSensitive: true, enabled: true },
+      { id: "r2", left: "[invalid", right: "x", regex: true, caseSensitive: false, enabled: true },
+    ];
+    assert.equal(matchesWithReplacements("build v12.0 ok", "build release-12 ok", rules), true);
+    assert.equal(matchesWithReplacements("build V12.0 ok", "build release-12 ok", rules), false);
   });
 });

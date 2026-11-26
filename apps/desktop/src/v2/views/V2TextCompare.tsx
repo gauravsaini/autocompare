@@ -17,7 +17,8 @@ import V2TextDiffRow, {
   renderHighlightedLine,
 } from "../components/text/V2TextDiffRow";
 import type { HunkMeta, HunkRole, TextHunk } from "../components/text/V2TextDiffRow";
-import { V2TextFormatModal, V2TextRulesModal } from "../components/text/V2TextModals";
+import { V2TextRulesModal } from "../components/text/V2TextModals";
+import type { RulesDialogTab, TextSessionRules } from "../components/text/V2TextModals";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
 import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
@@ -30,7 +31,48 @@ import {
   sideLineIndexToRowIndex,
   splitLineAt,
 } from "../utils/textBuffer";
+import { matchesWithReplacements } from "../utils/textReplacements";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
+
+const DEFAULT_RULES_STORAGE_KEY = "autocompare.v2.text.defaultRules";
+
+const DEFAULT_TEXT_RULES: TextSessionRules = {
+  leftFormat: "Detected (Everything Else)",
+  rightFormat: "Detected (Everything Else)",
+  sameFormat: true,
+  leftEncoding: "None",
+  rightEncoding: "None",
+  sameEncoding: true,
+  eol: "UNIX",
+  ignoreWs: false,
+  ignoreCase: false,
+  ignoreBlank: false,
+  minorEnabled: false,
+  alignmentMode: "standard",
+  neverAlignDifferences: false,
+  skewTolerance: 2000,
+  useClosenessMatching: true,
+  replacements: [],
+};
+
+function loadDefaultRules(): TextSessionRules {
+  try {
+    const raw = window.localStorage.getItem(DEFAULT_RULES_STORAGE_KEY);
+    if (!raw) return DEFAULT_TEXT_RULES;
+    const parsed = JSON.parse(raw) as Partial<TextSessionRules>;
+    return { ...DEFAULT_TEXT_RULES, ...parsed };
+  } catch {
+    return DEFAULT_TEXT_RULES;
+  }
+}
+
+function saveDefaultRules(rules: TextSessionRules): void {
+  try {
+    window.localStorage.setItem(DEFAULT_RULES_STORAGE_KEY, JSON.stringify(rules));
+  } catch {
+    // Ignore storage quota / private-mode errors
+  }
+}
 
 const ROW_HEIGHT = 21;
 const PAGE_LIMIT = 500;
@@ -125,20 +167,20 @@ export default function V2TextCompare({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Comparison options
+  // Comparison options & BC-style session rules
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [contextEnabled, setContextEnabled] = useState(true);
-  const [minorEnabled, setMinorEnabled] = useState(false);
-  const [ignoreWs, setIgnoreWs] = useState(false);
-  const [ignoreCase, setIgnoreCase] = useState(false);
-  const [ignoreBlank, setIgnoreBlank] = useState(false);
-  const [algorithm, setAlgorithm] = useState<"myers" | "patience">("myers");
-  const [encoding, setEncoding] = useState("UTF-8");
-  const [eol, setEol] = useState("UNIX");
-  const encodingRef = useRef(encoding);
-  const eolRef = useRef(eol);
-  encodingRef.current = encoding;
-  eolRef.current = eol;
+  const [rules, setRules] = useState<TextSessionRules>(() => loadDefaultRules());
+  const [detectedEncoding, setDetectedEncoding] = useState("UTF-8");
+  const [detectedEol, setDetectedEol] = useState("UNIX");
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+
+  const effectiveAlgorithm: "myers" | "patience" =
+    rules.alignmentMode === "patience" ? "patience" : "myers";
+  const displayEncoding =
+    rules.leftEncoding !== "None" ? rules.leftEncoding : detectedEncoding;
+  const displayEol = rules.eol || detectedEol;
 
   // Selection (Shift+Click range) + continuous notepad editor state
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -150,8 +192,7 @@ export default function V2TextCompare({
   rowsRef.current = rows;
 
   // Modals & Find
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [formatOpen, setFormatOpen] = useState(false);
+  const [rulesModalTab, setRulesModalTab] = useState<RulesDialogTab | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [findIdx, setFindIdx] = useState(0);
@@ -203,14 +244,21 @@ export default function V2TextCompare({
           setLeftDraft(demo.left);
           setRightDraft(demo.right);
         } else {
+          const cur = rulesRef.current;
+          const encOverride =
+            cur.leftEncoding !== "None"
+              ? cur.leftEncoding === "Current Locale (UTF-8)"
+                ? "UTF-8"
+                : cur.leftEncoding
+              : undefined;
           dto = await textCompare(l, r, {
-            ignoreWhitespace: ignoreWs,
-            ignoreCase,
-            ignoreBlankLines: ignoreBlank,
-            minorUnimportant: minorEnabled,
-            algorithm,
-            encoding: encodingRef.current,
-            eol: eolRef.current,
+            ignoreWhitespace: cur.ignoreWs,
+            ignoreCase: cur.ignoreCase,
+            ignoreBlankLines: cur.ignoreBlank,
+            minorUnimportant: cur.minorEnabled,
+            algorithm: cur.alignmentMode === "patience" ? "patience" : "myers",
+            encoding: encOverride,
+            eol: cur.eol,
           });
         }
         setSummary(dto);
@@ -218,15 +266,23 @@ export default function V2TextCompare({
         undoStackRef.current = [];
         redoStackRef.current = [];
         setRows(fetched);
-        if (dto.encoding && dto.encoding !== encodingRef.current) setEncoding(dto.encoding);
-        if (dto.eol && dto.eol !== eolRef.current) setEol(dto.eol);
+        if (dto.encoding) setDetectedEncoding(dto.encoding);
+        if (dto.eol) setDetectedEol(dto.eol);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
     },
-    [ignoreWs, ignoreCase, ignoreBlank, minorEnabled, algorithm],
+    [
+      rules.ignoreWs,
+      rules.ignoreCase,
+      rules.ignoreBlank,
+      rules.minorEnabled,
+      rules.alignmentMode,
+      rules.leftEncoding,
+      rules.eol,
+    ],
   );
 
   useEffect(() => {
@@ -248,12 +304,29 @@ export default function V2TextCompare({
     return () => window.removeEventListener("keydown", onKey);
   }, [findOpen]);
 
-  const hunks = useMemo(() => collectHunks(rows), [rows]);
+  // Fold rows matching active Left -> Right replacement rules to `equal`
+  const effectiveRows = useMemo(() => {
+    const activeRules = rules.replacements.filter((r) => r.enabled && r.left.length > 0);
+    if (activeRules.length === 0) return rows;
+    return rows.map((row) => {
+      if (
+        row.kind === "changed" &&
+        row.left !== null &&
+        row.right !== null &&
+        matchesWithReplacements(row.left, row.right, activeRules)
+      ) {
+        return { ...row, kind: "equal" as const, inline: [] };
+      }
+      return row;
+    });
+  }, [rows, rules.replacements]);
+
+  const hunks = useMemo(() => collectHunks(effectiveRows), [effectiveRows]);
 
   const hunkMetaByIndex = useMemo(() => {
     const map = new Map<number, HunkMeta>();
     for (const h of hunks) {
-      const members = rows.filter(
+      const members = effectiveRows.filter(
         (r) => r.index >= h.start && r.index <= h.end && r.kind !== "equal",
       );
       members.forEach((m, i) => {
@@ -269,35 +342,35 @@ export default function V2TextCompare({
       });
     }
     return map;
-  }, [hunks, rows]);
+  }, [hunks, effectiveRows]);
 
   const lineNosByIndex = useMemo(() => {
     let l = 0;
     let r = 0;
     const map = new Map<number, { left: number | null; right: number | null }>();
-    for (const row of rows) {
+    for (const row of effectiveRows) {
       map.set(row.index, {
         left: row.left !== null ? ++l : null,
         right: row.right !== null ? ++r : null,
       });
     }
     return map;
-  }, [rows]);
+  }, [effectiveRows]);
 
   const visibleRows = useMemo(() => {
-    if (filterMode === "all") return rows;
-    if (filterMode === "same") return rows.filter((r) => r.kind === "equal");
-    if (!contextEnabled) return rows.filter((r) => r.kind !== "equal");
+    if (filterMode === "all") return effectiveRows;
+    if (filterMode === "same") return effectiveRows.filter((r) => r.kind === "equal");
+    if (!contextEnabled) return effectiveRows.filter((r) => r.kind !== "equal");
     const keep = new Set<number>();
-    rows.forEach((r, idx) => {
+    effectiveRows.forEach((r, idx) => {
       if (r.kind === "equal") return;
       for (let d = -3; d <= 3; d += 1) {
-        const nb = rows[idx + d];
+        const nb = effectiveRows[idx + d];
         if (nb) keep.add(nb.index);
       }
     });
-    return rows.filter((r) => keep.has(r.index));
-  }, [rows, filterMode, contextEnabled]);
+    return effectiveRows.filter((r) => keep.has(r.index));
+  }, [effectiveRows, filterMode, contextEnabled]);
 
   const { startIndex, endIndex, totalHeight, offsetTop, scrollToPosition } = useVirtualRows({
     count: visibleRows.length,
@@ -349,10 +422,10 @@ export default function V2TextCompare({
 
   const selectionHasDiff = useMemo(() => {
     if (!selectionRange) return false;
-    return rows.some(
+    return effectiveRows.some(
       (r) => r.index >= selectionRange.start && r.index <= selectionRange.end && r.kind !== "equal",
     );
-  }, [rows, selectionRange]);
+  }, [effectiveRows, selectionRange]);
 
   const scrollToRow = useCallback(
     (rowIndex: number): void => {
@@ -773,8 +846,11 @@ export default function V2TextCompare({
   );
 
   const selectedRow = useMemo(
-    () => (selectedIndex === null ? null : (rows.find((r) => r.index === selectedIndex) ?? null)),
-    [rows, selectedIndex],
+    () =>
+      selectedIndex === null
+        ? null
+        : (effectiveRows.find((r) => r.index === selectedIndex) ?? null),
+    [effectiveRows, selectedIndex],
   );
 
   const selectedHunk = useMemo(() => {
@@ -803,10 +879,10 @@ export default function V2TextCompare({
       setFilterMode,
       contextEnabled,
       toggleContext: () => setContextEnabled((v) => !v),
-      minorEnabled,
-      toggleMinor: () => setMinorEnabled((v) => !v),
-      openRules: () => setRulesOpen(true),
-      openFormat: () => setFormatOpen(true),
+      minorEnabled: rules.minorEnabled,
+      toggleMinor: () => setRules((prev) => ({ ...prev, minorEnabled: !prev.minorEnabled })),
+      openRules: () => setRulesModalTab("importance"),
+      openFormat: () => setRulesModalTab("format"),
       openFind: () => {
         setFindOpen(true);
         setTimeout(() => findInputRef.current?.focus(), 20);
@@ -836,7 +912,7 @@ export default function V2TextCompare({
     onRegisterCommands,
     filterMode,
     contextEnabled,
-    minorEnabled,
+    rules.minorEnabled,
     selectionRange,
     selectedRangeCount,
     selectionHasDiff,
@@ -852,13 +928,30 @@ export default function V2TextCompare({
   ]);
 
   // Publish clean 3-zone status bar
+  const activeReplacementCount = useMemo(
+    () => rules.replacements.filter((r) => r.enabled && r.left.length > 0).length,
+    [rules.replacements],
+  );
+
   useEffect(() => {
+    const alignLabel =
+      rules.alignmentMode === "patience"
+        ? "Patience"
+        : rules.alignmentMode === "unaligned"
+          ? "Unaligned"
+          : effectiveAlgorithm === "myers" && rules.alignmentMode === "myers"
+            ? "Myers O(ND)"
+            : "Standard";
+    const repLabel =
+      activeReplacementCount > 0
+        ? ` · ${activeReplacementCount} replacement${activeReplacementCount === 1 ? "" : "s"}`
+        : "";
     onStatusChange({
       left:
         hunks.length === 0
           ? "Files are identical"
           : `${hunks.length} difference ${hunks.length === 1 ? "section" : "sections"}`,
-      center: notice ?? `${algorithm === "patience" ? "Patience" : "Myers"} · ${encoding} · ${eol}`,
+      center: notice ?? `${alignLabel} · ${displayEncoding} · ${displayEol}${repLabel}`,
       right: `${caretCoordLabel ? `${caretCoordLabel}  ·  ` : ""}${
         summary ? `${summary.leftLines} / ${summary.rightLines} lines` : `${rows.length} rows`
       }`,
@@ -867,9 +960,11 @@ export default function V2TextCompare({
     onStatusChange,
     hunks.length,
     notice,
-    algorithm,
-    encoding,
-    eol,
+    rules.alignmentMode,
+    effectiveAlgorithm,
+    displayEncoding,
+    displayEol,
+    activeReplacementCount,
     caretCoordLabel,
     summary,
     rows.length,
@@ -898,8 +993,8 @@ export default function V2TextCompare({
             {summary?.leftMeta?.mtimeUnix ? <span>{formatMtime(summary.leftMeta.mtimeUnix)}</span> : null}
             {summary?.leftMeta?.bytes !== undefined ? <span>{formatBytes(summary.leftMeta.bytes)}</span> : null}
             {summary?.leftLines !== undefined ? <span>{summary.leftLines} lines</span> : null}
-            <span>{encoding}</span>
-            <span>{eol}</span>
+            <span>{displayEncoding}</span>
+            <span>{displayEol}</span>
           </>
         }
         rightMeta={
@@ -907,8 +1002,8 @@ export default function V2TextCompare({
             {summary?.rightMeta?.mtimeUnix ? <span>{formatMtime(summary.rightMeta.mtimeUnix)}</span> : null}
             {summary?.rightMeta?.bytes !== undefined ? <span>{formatBytes(summary.rightMeta.bytes)}</span> : null}
             {summary?.rightLines !== undefined ? <span>{summary.rightLines} lines</span> : null}
-            <span>{encoding}</span>
-            <span>{eol}</span>
+            <span>{rules.sameEncoding ? displayEncoding : rules.rightEncoding !== "None" ? rules.rightEncoding : detectedEncoding}</span>
+            <span>{displayEol}</span>
           </>
         }
       />
@@ -956,11 +1051,11 @@ export default function V2TextCompare({
             scrollToRow(rows[idx].index);
           }}
         >
-          {rows.length > 0 &&
+          {effectiveRows.length > 0 &&
             hunks.map((h) => {
-              const firstRow = rows.find((r) => r.index === h.start);
-              const topPct = (h.start / rows.length) * 100;
-              const heightPct = Math.max(1.2, ((h.end - h.start + 1) / rows.length) * 100);
+              const firstRow = effectiveRows.find((r) => r.index === h.start);
+              const topPct = (h.start / effectiveRows.length) * 100;
+              const heightPct = Math.max(1.2, ((h.end - h.start + 1) / effectiveRows.length) * 100);
               const color =
                 firstRow?.kind === "leftOnly"
                   ? "var(--v2-ruler-del)"
@@ -1139,32 +1234,22 @@ export default function V2TextCompare({
       </div>
 
       <V2TextRulesModal
-        open={rulesOpen}
-        ignoreWs={ignoreWs}
-        ignoreCase={ignoreCase}
-        ignoreBlank={ignoreBlank}
-        algorithm={algorithm}
-        onIgnoreWsChange={setIgnoreWs}
-        onIgnoreCaseChange={setIgnoreCase}
-        onIgnoreBlankChange={setIgnoreBlank}
-        onAlgorithmChange={setAlgorithm}
-        onClose={() => setRulesOpen(false)}
-        onApply={() => {
-          setRulesOpen(false);
-          void runCompare(leftDraft, rightDraft);
-        }}
-      />
-
-      <V2TextFormatModal
-        open={formatOpen}
-        encoding={encoding}
-        eol={eol}
-        onEncodingChange={setEncoding}
-        onEolChange={setEol}
-        onClose={() => setFormatOpen(false)}
-        onApply={() => {
-          setFormatOpen(false);
-          void runCompare(leftDraft, rightDraft);
+        open={rulesModalTab !== null}
+        initialTab={rulesModalTab ?? "importance"}
+        rules={rules}
+        onClose={() => setRulesModalTab(null)}
+        onApply={(next, scope) => {
+          rulesRef.current = next;
+          setRules(next);
+          if (scope === "defaults") {
+            saveDefaultRules(next);
+          }
+          setRulesModalTab(null);
+          setNotice(
+            scope === "defaults"
+              ? "Applied rules and updated session defaults"
+              : "Applied session rules to current view",
+          );
         }}
       />
     </div>
