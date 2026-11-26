@@ -117,6 +117,7 @@ export function renderHighlightedLine(
 interface SeamlessLineInputProps {
   readonly value: string;
   readonly targetCol: number;
+  readonly focusNonce: number;
   readonly onChange: (text: string, col: number) => void;
   readonly onCaretMove: (col: number) => void;
   readonly onSplitEnter: (col: number) => void;
@@ -130,6 +131,7 @@ interface SeamlessLineInputProps {
 function SeamlessLineInput({
   value,
   targetCol,
+  focusNonce,
   onChange,
   onCaretMove,
   onSplitEnter,
@@ -140,14 +142,18 @@ function SeamlessLineInput({
   onBlurCommit,
 }: SeamlessLineInputProps): React.JSX.Element {
   const ref = useRef<HTMLInputElement | null>(null);
+  const targetColRef = useRef(targetCol);
+  targetColRef.current = targetCol;
 
+  // Only programmatically place caret on mount or explicit programmatic jumps
+  // (Enter / Backspace / ArrowUp / ArrowDown / paste), NEVER on user double-click or drag-select.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.focus();
-    const clamped = Math.max(0, Math.min(el.value.length, targetCol));
+    const clamped = Math.max(0, Math.min(el.value.length, targetColRef.current));
     el.setSelectionRange(clamped, clamped);
-  }, [targetCol]);
+  }, [focusNonce]);
 
   return (
     <input
@@ -204,6 +210,7 @@ export interface V2TextDiffRowProps {
   readonly activeSide: TextSide | null;
   readonly activeText: string;
   readonly activeCol: number;
+  readonly focusNonce: number;
   readonly splitPct: number;
   readonly dragging: boolean;
   readonly onSelect: (index: number, shiftKey: boolean) => void;
@@ -244,6 +251,7 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   activeSide,
   activeText,
   activeCol,
+  focusNonce,
   splitPct,
   dragging,
   onSelect,
@@ -387,6 +395,7 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
           <SeamlessLineInput
             value={activeText}
             targetCol={activeCol}
+            focusNonce={focusNonce}
             onChange={onCellChange}
             onCaretMove={onCaretMove}
             onSplitEnter={(col) => onSplitEnter(row.index, "left", col)}
@@ -489,6 +498,7 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
           <SeamlessLineInput
             value={activeText}
             targetCol={activeCol}
+            focusNonce={focusNonce}
             onChange={onCellChange}
             onCaretMove={onCaretMove}
             onSplitEnter={(col) => onSplitEnter(row.index, "right", col)}

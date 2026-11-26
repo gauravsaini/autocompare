@@ -51,6 +51,7 @@ interface ActiveEditor {
   readonly text: string;
   readonly original: string;
   readonly col: number;
+  readonly focusNonce: number;
 }
 
 function collectHunks(rows: readonly TextRowDto[]): TextHunk[] {
@@ -465,13 +466,14 @@ export default function V2TextCompare({
             const text = (side === "left" ? rowObj?.left : rowObj?.right) ?? "";
             setSelectionAnchor(targetRow);
             setSelectedIndex(targetRow);
-            setActiveEdit({
+            setActiveEdit((prev) => ({
               rowIndex: targetRow,
               side,
               text,
               original: text,
               col: focusTarget.col,
-            });
+              focusNonce: (prev?.focusNonce ?? 0) + 1,
+            }));
           } else {
             setActiveEdit(null);
           }
@@ -517,7 +519,14 @@ export default function V2TextCompare({
       if (prev && (prev.rowIndex !== rowIndex || prev.side !== side) && prev.text !== prev.original) {
         void flushActiveEdit(prev);
       }
-      setActiveEdit({ rowIndex, side, text, original: text, col });
+      setActiveEdit((prev) => ({
+        rowIndex,
+        side,
+        text,
+        original: text,
+        col,
+        focusNonce: (prev?.focusNonce ?? 0) + 1,
+      }));
     },
     [flushActiveEdit],
   );
@@ -626,13 +635,14 @@ export default function V2TextCompare({
       const nextText = (side === "left" ? rowObj?.left : rowObj?.right) ?? "";
       setSelectionAnchor(nextRowIdx);
       setSelectedIndex(nextRowIdx);
-      setActiveEdit({
+      setActiveEdit((prev) => ({
         rowIndex: nextRowIdx,
         side,
         text: nextText,
         original: nextText,
         col: Math.min(col, nextText.length),
-      });
+        focusNonce: (prev?.focusNonce ?? 0) + 1,
+      }));
       const pos = visibleRows.findIndex((r) => r.index === nextRowIdx);
       if (pos >= 0 && (pos < startIndex + 2 || pos > endIndex - 4)) {
         scrollToPosition(pos);
@@ -1020,6 +1030,7 @@ export default function V2TextCompare({
                       activeSide={isActiveRow ? activeEdit.side : null}
                       activeText={isActiveRow ? activeEdit.text : ""}
                       activeCol={isActiveRow ? activeEdit.col : 0}
+                      focusNonce={isActiveRow ? activeEdit.focusNonce : 0}
                       splitPct={splitPct}
                       dragging={dragging}
                       onSelect={handleSelectRow}
