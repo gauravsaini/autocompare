@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AudioWaveform, Image as ImageIcon } from "lucide-react";
 import { audioCompare, pictureCompare } from "../../ipc/media";
 import type { AudioSummary, PictureSummary } from "../../ipc/media";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
+import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2MediaCompareProps {
@@ -38,6 +40,14 @@ export default function V2MediaCompare({
   const [aud, setAud] = useState<AudioSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const watchedPaths = useMemo(
+    () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
+    [leftDraft, rightDraft],
+  );
+  const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
+    paths: watchedPaths,
+    enabled: !loading && watchedPaths.length > 0,
+  });
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -168,6 +178,14 @@ export default function V2MediaCompare({
         </label>
       </div>
 
+      <V2ReloadPromptBanner
+        changedPaths={changedPaths}
+        onReload={() => {
+          void resetBaseline();
+          void runCompare(kind, leftDraft, rightDraft, tolerance);
+        }}
+        onDismiss={dismissReload}
+      />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Main Media Analysis Surface */}

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { computeVirtualWindow } from "../hooks/useVirtualRows.ts";
 import { inferDropKind } from "../utils/dropKind.ts";
 import { isMissingFixtureError } from "../utils/demoGuard.ts";
+import { detectChangedPaths } from "../utils/fileWatch.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -50,5 +51,31 @@ describe("isMissingFixtureError", () => {
     assert.equal(isMissingFixtureError(new Error("No such file or directory (os error 2)")), true);
     assert.equal(isMissingFixtureError("ENOENT: file not found"), true);
     assert.equal(isMissingFixtureError(new Error("Permission denied")), false);
+  });
+});
+
+describe("detectChangedPaths", () => {
+  it("detects mtime or byte-size modifications and ignores unchanged or null stats", () => {
+    const paths = ["/tmp/left.txt", "/tmp/right.txt"];
+    const base = [
+      { bytes: 100, mtimeUnix: 1700000000 },
+      { bytes: 200, mtimeUnix: 1700000000 },
+    ];
+    assert.deepEqual(detectChangedPaths(paths, base, base), []);
+    assert.deepEqual(
+      detectChangedPaths(paths, base, [
+        { bytes: 100, mtimeUnix: 1700000005 },
+        { bytes: 200, mtimeUnix: 1700000000 },
+      ]),
+      ["/tmp/left.txt"],
+    );
+    assert.deepEqual(
+      detectChangedPaths(paths, base, [
+        { bytes: 100, mtimeUnix: 1700000000 },
+        { bytes: 242, mtimeUnix: 1700000000 },
+      ]),
+      ["/tmp/right.txt"],
+    );
+    assert.deepEqual(detectChangedPaths(paths, base, [null, null]), []);
   });
 });

@@ -350,6 +350,13 @@ export function textRestoreRows(
   return invoke<number>("text_restore_rows", { session, rows });
 }
 
+/** Lightweight stat for external file-change detection (reload prompt). */
+export function statPaths(
+  paths: readonly string[],
+): Promise<readonly (TextFileMeta | null)[]> {
+  return invoke<readonly (TextFileMeta | null)[]>("stat_paths", { paths });
+}
+
 // ---------------------------------------------------------------------------
 // Wave 5B: bundled demo pair (input files ONLY, never mock rows).
 //

@@ -3,10 +3,12 @@ import { RotateCcw, Search, X } from "lucide-react";
 import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
+import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2HexCompareProps {
@@ -73,6 +75,14 @@ export default function V2HexCompare({
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+  const watchedPaths = useMemo(
+    () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
+    [leftDraft, rightDraft],
+  );
+  const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
+    paths: watchedPaths,
+    enabled: !loading && watchedPaths.length > 0,
+  });
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -365,6 +375,14 @@ export default function V2HexCompare({
         </div>
       ) : null}
 
+      <V2ReloadPromptBanner
+        changedPaths={changedPaths}
+        onReload={() => {
+          void resetBaseline();
+          void runCompare(leftDraft, rightDraft);
+        }}
+        onDismiss={dismissReload}
+      />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Virtualized Dual-Pane Hex + ASCII Table */}

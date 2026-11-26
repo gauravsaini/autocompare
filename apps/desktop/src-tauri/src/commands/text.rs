@@ -1139,6 +1139,23 @@ pub fn text_restore_rows(session: String, rows: Vec<TextRowDto>) -> Result<u64, 
     Ok(total)
 }
 
+/// Lightweight metadata stat for external file-change detection (used by the
+/// UI reload prompt). Returns `None` for missing/unreadable paths without
+/// failing the batch.
+#[tauri::command]
+pub fn stat_paths(paths: Vec<String>) -> Vec<Option<FileMetaDto>> {
+    paths
+        .iter()
+        .map(|p| {
+            if p.trim().is_empty() {
+                None
+            } else {
+                read_file_meta(p)
+            }
+        })
+        .collect()
+}
+
 /// Returns one `(start, limit)` window of aligned rows. `start` past the
 /// end yields an empty page, never an error.
 #[tauri::command]

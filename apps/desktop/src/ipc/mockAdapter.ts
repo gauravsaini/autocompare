@@ -931,6 +931,17 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       });
       return rawRows.length as unknown as T;
     }
+    case "stat_paths": {
+      const paths = Array.isArray(args["paths"]) ? (args["paths"] as string[]) : [];
+      const results = await Promise.all(
+        paths.map(async (p) => {
+          const res = await readMockFile(p);
+          if (!res) return null;
+          return { bytes: res.bytes, mtimeUnix: res.mtimeUnix };
+        }),
+      );
+      return results as unknown as T;
+    }
     case "folder_compare": {
       const masks = typeof args["masks"] === "string" ? (args["masks"] as string) : null;
       mockFolderMasks = masks;

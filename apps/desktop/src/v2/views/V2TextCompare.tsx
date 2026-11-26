@@ -10,6 +10,7 @@ import {
 } from "../../ipc/text";
 import type { TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2TextFindBar from "../components/text/V2TextFindBar";
 import V2TextDiffRow, {
@@ -19,6 +20,7 @@ import type { EditingCell, HunkMeta, HunkRole, TextHunk } from "../components/te
 import { V2TextFormatModal, V2TextRulesModal } from "../components/text/V2TextModals";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
+import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 const ROW_HEIGHT = 21;
@@ -135,6 +137,14 @@ export default function V2TextCompare({
   const undoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const redoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+  const watchedPaths = useMemo(
+    () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
+    [leftDraft, rightDraft],
+  );
+  const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
+    paths: watchedPaths,
+    enabled: !loading && watchedPaths.length > 0,
+  });
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -483,6 +493,7 @@ export default function V2TextCompare({
         const saved = await textSaveSide(summary.session, side, targetPath);
         onDirtyChange(false);
         setNotice(`Saved ${side} (${saved.lines} lines, ${formatBytes(saved.bytes)})`);
+        void resetBaseline();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -655,6 +666,14 @@ export default function V2TextCompare({
         />
       ) : null}
 
+      <V2ReloadPromptBanner
+        changedPaths={changedPaths}
+        onReload={() => {
+          void resetBaseline();
+          void runCompare(leftDraft, rightDraft);
+        }}
+        onDismiss={dismissReload}
+      />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Main Workspace: Far-Left Overview Minimap + Virtualized 7-Column Diff Grid */}
