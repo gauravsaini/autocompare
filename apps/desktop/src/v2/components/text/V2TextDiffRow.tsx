@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { InlineSpanDto, TextRowDto, TextSide } from "../../../ipc/text";
 
 export type HunkRole = "single" | "start" | "middle" | "end";
@@ -15,10 +15,10 @@ export interface HunkMeta {
   readonly hunk: TextHunk;
 }
 
-export interface EditingCell {
-  readonly index: number;
+export interface ActiveCaret {
+  readonly rowIndex: number;
   readonly side: TextSide;
-  readonly text: string;
+  readonly col: number;
 }
 
 function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
@@ -114,25 +114,125 @@ export function renderHighlightedLine(
   return nodes;
 }
 
+interface SeamlessLineInputProps {
+  readonly value: string;
+  readonly targetCol: number;
+  readonly onChange: (text: string, col: number) => void;
+  readonly onCaretMove: (col: number) => void;
+  readonly onSplitEnter: (col: number) => void;
+  readonly onBackspaceStart: () => void;
+  readonly onDeleteEnd: () => void;
+  readonly onArrowVertical: (delta: -1 | 1, col: number) => void;
+  readonly onMultiLinePaste: (selStart: number, selEnd: number, text: string) => void;
+  readonly onBlurCommit: () => void;
+}
+
+function SeamlessLineInput({
+  value,
+  targetCol,
+  onChange,
+  onCaretMove,
+  onSplitEnter,
+  onBackspaceStart,
+  onDeleteEnd,
+  onArrowVertical,
+  onMultiLinePaste,
+  onBlurCommit,
+}: SeamlessLineInputProps): React.JSX.Element {
+  const ref = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const clamped = Math.max(0, Math.min(el.value.length, targetCol));
+    el.setSelectionRange(clamped, clamped);
+  }, [targetCol]);
+
+  return (
+    <input
+      ref={ref}
+      type="text"
+      spellCheck={false}
+      autoComplete="off"
+      value={value}
+      onChange={(e) => onChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+      onSelect={(e) => onCaretMove(e.currentTarget.selectionStart ?? 0)}
+      onKeyDown={(e) => {
+        const el = e.currentTarget;
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? start;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onSplitEnter(start);
+        } else if (e.key === "Backspace" && start === 0 && end === 0) {
+          e.preventDefault();
+          onBackspaceStart();
+        } else if (e.key === "Delete" && start === el.value.length && end === el.value.length) {
+          e.preventDefault();
+          onDeleteEnd();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          onArrowVertical(-1, start);
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          onArrowVertical(1, start);
+        } else if (e.key === "Escape") {
+          el.blur();
+        }
+      }}
+      onPaste={(e) => {
+        const text = e.clipboardData?.getData("text/plain") ?? "";
+        if (text.includes("\n") || text.includes("\r")) {
+          e.preventDefault();
+          const el = e.currentTarget;
+          onMultiLinePaste(el.selectionStart ?? 0, el.selectionEnd ?? 0, text);
+        }
+      }}
+      onBlur={onBlurCommit}
+      className="v2-mono h-[21px] w-full border-0 bg-transparent p-0 text-[12px] leading-[21px] text-inherit outline-none"
+    />
+  );
+}
+
 export interface V2TextDiffRowProps {
   readonly row: TextRowDto;
   readonly meta?: HunkMeta;
   readonly leftLineNo: number | null;
   readonly rightLineNo: number | null;
   readonly isSelected: boolean;
-  readonly editingSide: TextSide | null;
-  readonly editingText: string;
+  readonly activeSide: TextSide | null;
+  readonly activeText: string;
+  readonly activeCol: number;
   readonly splitPct: number;
   readonly dragging: boolean;
   readonly onSelect: (index: number, shiftKey: boolean) => void;
+  readonly onFocusCell: (index: number, side: TextSide, text: string, col: number) => void;
+  readonly onCellChange: (text: string, col: number) => void;
+  readonly onCaretMove: (col: number) => void;
+  readonly onSplitEnter: (index: number, side: TextSide, col: number) => void;
+  readonly onBackspaceStart: (index: number, side: TextSide) => void;
+  readonly onDeleteEnd: (index: number, side: TextSide) => void;
+  readonly onArrowVertical: (index: number, side: TextSide, delta: -1 | 1, col: number) => void;
+  readonly onMultiLinePaste: (
+    index: number,
+    side: TextSide,
+    selStart: number,
+    selEnd: number,
+    pasted: string,
+  ) => void;
+  readonly onBlurCommit: () => void;
   readonly onCopyHunk: (hunk: TextHunk, dir: TextSide) => void;
   readonly onCopyLine: (index: number, dir: TextSide) => void;
-  readonly onStartEdit: (index: number, side: TextSide, text: string) => void;
-  readonly onEditChange: (text: string) => void;
-  readonly onCommitEdit: () => void;
-  readonly onCancelEdit: () => void;
   readonly onStartDrag: (e: React.MouseEvent) => void;
   readonly onResetSplit: () => void;
+}
+
+function estimateClickCol(e: React.MouseEvent<HTMLDivElement>, text: string): number {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const relX = Math.max(0, e.clientX - rect.left - 8); // 8px left padding
+  const charWidth = 7.22; // JetBrains Mono 12px average advance
+  return Math.max(0, Math.min(text.length, Math.round(relX / charWidth)));
 }
 
 const V2TextDiffRow = React.memo(function V2TextDiffRow({
@@ -141,17 +241,23 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   leftLineNo,
   rightLineNo,
   isSelected,
-  editingSide,
-  editingText,
+  activeSide,
+  activeText,
+  activeCol,
   splitPct,
   dragging,
   onSelect,
+  onFocusCell,
+  onCellChange,
+  onCaretMove,
+  onSplitEnter,
+  onBackspaceStart,
+  onDeleteEnd,
+  onArrowVertical,
+  onMultiLinePaste,
+  onBlurCommit,
   onCopyHunk,
   onCopyLine,
-  onStartEdit,
-  onEditChange,
-  onCommitEdit,
-  onCancelEdit,
   onStartDrag,
   onResetSplit,
 }: V2TextDiffRowProps): React.JSX.Element {
@@ -166,49 +272,52 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
           ? "v2-rail-middle"
           : "v2-rail-end";
 
-  const leftBg = isSelected
-    ? "var(--v2-sel-bg)"
-    : row.left === null
-      ? undefined
+  const leftBg =
+    isSelected && activeSide !== "left"
+      ? "var(--v2-sel-bg)"
+      : row.left === null
+        ? undefined
+        : row.kind === "leftOnly"
+          ? "var(--v2-del-bg)"
+          : row.kind === "changed"
+            ? "var(--v2-chg-bg)"
+            : undefined;
+  const leftFg =
+    isSelected && activeSide !== "left"
+      ? "var(--v2-sel-fg)"
       : row.kind === "leftOnly"
-        ? "var(--v2-del-bg)"
+        ? "var(--v2-del-fg)"
         : row.kind === "changed"
-          ? "var(--v2-chg-bg)"
-          : undefined;
-  const leftFg = isSelected
-    ? "var(--v2-sel-fg)"
-    : row.kind === "leftOnly"
-      ? "var(--v2-del-fg)"
-      : row.kind === "changed"
-        ? "var(--v2-chg-fg)"
-        : "var(--v2-fg)";
+          ? "var(--v2-chg-fg)"
+          : "var(--v2-fg)";
 
-  const rightBg = isSelected
-    ? "var(--v2-sel-bg)"
-    : row.right === null
-      ? undefined
+  const rightBg =
+    isSelected && activeSide !== "right"
+      ? "var(--v2-sel-bg)"
+      : row.right === null
+        ? undefined
+        : row.kind === "rightOnly"
+          ? "var(--v2-ins-bg)"
+          : row.kind === "changed"
+            ? "var(--v2-chg-bg)"
+            : undefined;
+  const rightFg =
+    isSelected && activeSide !== "right"
+      ? "var(--v2-sel-fg)"
       : row.kind === "rightOnly"
-        ? "var(--v2-ins-bg)"
+        ? "var(--v2-ins-fg)"
         : row.kind === "changed"
-          ? "var(--v2-chg-bg)"
-          : undefined;
-  const rightFg = isSelected
-    ? "var(--v2-sel-fg)"
-    : row.kind === "rightOnly"
-      ? "var(--v2-ins-fg)"
-      : row.kind === "changed"
-        ? "var(--v2-chg-fg)"
-        : "var(--v2-fg)";
+          ? "var(--v2-chg-fg)"
+          : "var(--v2-fg)";
 
   return (
     <div
       data-testid={`v2/text-row-${row.index}`}
       data-row-index={row.index}
-      onClick={(e) => onSelect(row.index, e.shiftKey)}
       style={{
         gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
       }}
-      className="group grid h-[21px] items-stretch select-none"
+      className="group grid h-[21px] items-stretch"
     >
       {/* Left Action Gutter */}
       <span
@@ -253,32 +362,39 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
         ) : null}
       </span>
 
-      {/* Left Line Number */}
-      <span className="select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]">
+      {/* Left Line Number (click / Shift+Click selects row or range) */}
+      <span
+        onClick={(e) => onSelect(row.index, e.shiftKey)}
+        className="cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
+      >
         {leftLineNo ?? ""}
       </span>
 
-      {/* Left Code Cell */}
+      {/* Left Continuous Notepad Cell (single-click places caret immediately) */}
       <div
-        onDoubleClick={() => {
-          if (row.left !== null) onStartEdit(row.index, "left", row.left);
+        onClick={(e) => {
+          onSelect(row.index, e.shiftKey);
+          if (!e.shiftKey && row.left !== null && activeSide !== "left") {
+            onFocusCell(row.index, "left", row.left, estimateClickCol(e, row.left));
+          }
         }}
         style={{ backgroundColor: leftBg, color: leftFg }}
         className={`truncate whitespace-pre px-2 ${
-          row.left === null && !isSelected ? "v2-hatch" : ""
+          row.left === null && !isSelected ? "v2-hatch cursor-default" : "cursor-text"
         }`}
       >
-        {editingSide === "left" ? (
-          <input
-            autoFocus
-            value={editingText}
-            onChange={(e) => onEditChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onCommitEdit();
-              if (e.key === "Escape") onCancelEdit();
-            }}
-            onBlur={onCancelEdit}
-            className="h-[19px] w-full bg-[var(--v2-surface)] px-1 text-[var(--v2-fg)] outline outline-1 outline-[var(--v2-accent)]"
+        {activeSide === "left" ? (
+          <SeamlessLineInput
+            value={activeText}
+            targetCol={activeCol}
+            onChange={onCellChange}
+            onCaretMove={onCaretMove}
+            onSplitEnter={(col) => onSplitEnter(row.index, "left", col)}
+            onBackspaceStart={() => onBackspaceStart(row.index, "left")}
+            onDeleteEnd={() => onDeleteEnd(row.index, "left")}
+            onArrowVertical={(delta, col) => onArrowVertical(row.index, "left", delta, col)}
+            onMultiLinePaste={(s, end, txt) => onMultiLinePaste(row.index, "left", s, end, txt)}
+            onBlurCommit={onBlurCommit}
           />
         ) : row.left !== null ? (
           renderHighlightedLine(row.left, row.inline, "left", "var(--v2-chg-inline)")
@@ -349,31 +465,38 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
       </span>
 
       {/* Right Line Number */}
-      <span className="select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]">
+      <span
+        onClick={(e) => onSelect(row.index, e.shiftKey)}
+        className="cursor-pointer select-none border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] pr-2 text-right text-[11px] text-[var(--v2-fg-muted)]"
+      >
         {rightLineNo ?? ""}
       </span>
 
-      {/* Right Code Cell */}
+      {/* Right Continuous Notepad Cell */}
       <div
-        onDoubleClick={() => {
-          if (row.right !== null) onStartEdit(row.index, "right", row.right);
+        onClick={(e) => {
+          onSelect(row.index, e.shiftKey);
+          if (!e.shiftKey && row.right !== null && activeSide !== "right") {
+            onFocusCell(row.index, "right", row.right, estimateClickCol(e, row.right));
+          }
         }}
         style={{ backgroundColor: rightBg, color: rightFg }}
         className={`truncate whitespace-pre px-2 ${
-          row.right === null && !isSelected ? "v2-hatch" : ""
+          row.right === null && !isSelected ? "v2-hatch cursor-default" : "cursor-text"
         }`}
       >
-        {editingSide === "right" ? (
-          <input
-            autoFocus
-            value={editingText}
-            onChange={(e) => onEditChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onCommitEdit();
-              if (e.key === "Escape") onCancelEdit();
-            }}
-            onBlur={onCancelEdit}
-            className="h-[19px] w-full bg-[var(--v2-surface)] px-1 text-[var(--v2-fg)] outline outline-1 outline-[var(--v2-accent)]"
+        {activeSide === "right" ? (
+          <SeamlessLineInput
+            value={activeText}
+            targetCol={activeCol}
+            onChange={onCellChange}
+            onCaretMove={onCaretMove}
+            onSplitEnter={(col) => onSplitEnter(row.index, "right", col)}
+            onBackspaceStart={() => onBackspaceStart(row.index, "right")}
+            onDeleteEnd={() => onDeleteEnd(row.index, "right")}
+            onArrowVertical={(delta, col) => onArrowVertical(row.index, "right", delta, col)}
+            onMultiLinePaste={(s, end, txt) => onMultiLinePaste(row.index, "right", s, end, txt)}
+            onBlurCommit={onBlurCommit}
           />
         ) : row.right !== null ? (
           renderHighlightedLine(row.right, row.inline, "right", "var(--v2-chg-inline)")

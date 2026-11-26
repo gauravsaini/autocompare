@@ -942,6 +942,35 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       );
       return results as unknown as T;
     }
+    case "text_update_side": {
+      const sessId = strArg(args, ["session"], activeMockTextSessionId);
+      const side = strArg(args, ["side"], "left");
+      const newLines = Array.isArray(args["lines"]) ? (args["lines"] as string[]) : [];
+      const prev =
+        mockTextSessions.get(sessId) ??
+        registerFixtureTextSession(dumped.textRows, "", "");
+      const prevLeft: string[] = [];
+      const prevRight: string[] = [];
+      for (const r of prev.rows) {
+        const patch = mockTextEdits.get(r.index);
+        const lv = patch?.left !== undefined ? patch.left : r.left;
+        const rv = patch?.right !== undefined ? patch.right : r.right;
+        if (lv !== null) prevLeft.push(lv);
+        if (rv !== null) prevRight.push(rv);
+      }
+      const leftLines = side === "left" ? newLines : prevLeft;
+      const rightLines = side === "right" ? newLines : prevRight;
+      const diffResult = buildMockDiffRows(leftLines, rightLines);
+      mockTextEdits.clear();
+      mockTextSessions.set(sessId, {
+        ...prev,
+        rows: diffResult.rows,
+        leftLines: leftLines.length,
+        rightLines: rightLines.length,
+        opCount: diffResult.opCount,
+      });
+      return diffResult.rows.length as unknown as T;
+    }
     case "folder_compare": {
       const masks = typeof args["masks"] === "string" ? (args["masks"] as string) : null;
       mockFolderMasks = masks;

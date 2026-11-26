@@ -1156,6 +1156,67 @@ pub fn stat_paths(paths: Vec<String>) -> Vec<Option<FileMetaDto>> {
         .collect()
 }
 
+/// Replaces all display lines on `side` (`"left"` / `"right"`) and re-runs
+/// the diff against the other side using the session's active comparison
+/// options. Enables true notepad-style editing (Enter to insert lines,
+/// Backspace to join lines, multi-line paste) with live re-diffing.
+#[tauri::command]
+pub fn text_update_side(
+    session: String,
+    side: String,
+    lines: Vec<String>,
+) -> Result<u64, String> {
+    let which = Side::parse(&side)?;
+    let cached = stored(&session)?;
+    let mut other_left: Vec<String> = Vec::new();
+    let mut other_right: Vec<String> = Vec::new();
+    for row in &cached.rows {
+        if let Some(l) = row.left.as_ref() {
+            other_left.push(l.clone());
+        }
+        if let Some(r) = row.right.as_ref() {
+            other_right.push(r.clone());
+        }
+    }
+    let (left_lines, right_lines) = match which {
+        Side::Left => (lines, other_right),
+        Side::Right => (other_left, lines),
+    };
+    let opts = cached.opts.clone();
+    let ignore_blank = cached.ignore_blank;
+    let algo = cached.algorithm;
+    let compared = if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
+        let script = diff_with_c2a(&left_lines, &right_lines, &opts, ignore_blank, algo);
+        autocompare_compare::TextComparison {
+            left_lines,
+            right_lines,
+            script,
+        }
+    } else {
+        compare_text_lines(&left_lines, &right_lines, &opts)
+    };
+    let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    fold_blank_rows_equal(&mut rows, ignore_blank);
+    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
+    let (overview, overview_truncated) = summarize_overview(&rows);
+    let total = rows.len() as u64;
+    let mut guard = lock_store()?;
+    guard.insert(
+        session,
+        StoredText {
+            left_count: compared.left_lines.len() as u64,
+            right_count: compared.right_lines.len() as u64,
+            rows,
+            overview,
+            overview_truncated,
+            opts,
+            ignore_blank,
+            algorithm: algo,
+        },
+    );
+    Ok(total)
+}
+
 /// Returns one `(start, limit)` window of aligned rows. `start` past the
 /// end yields an empty page, never an error.
 #[tauri::command]

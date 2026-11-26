@@ -357,6 +357,18 @@ export function statPaths(
   return invoke<readonly (TextFileMeta | null)[]>("stat_paths", { paths });
 }
 
+/**
+ * Replace all lines on one side and re-run the diff live (enables notepad-style
+ * Enter line insertion, Backspace line join, and multi-line paste).
+ */
+export function textUpdateSide(
+  session: string,
+  side: TextSide,
+  lines: readonly string[],
+): Promise<number> {
+  return invoke<number>("text_update_side", { session, side, lines });
+}
+
 // ---------------------------------------------------------------------------
 // Wave 5B: bundled demo pair (input files ONLY, never mock rows).
 //

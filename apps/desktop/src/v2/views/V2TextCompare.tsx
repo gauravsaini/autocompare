@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  textApplyEdit,
   textApplyHunk,
   textCompare,
   textCompareDemo,
   textGetRows,
   textRestoreRows,
   textSaveSide,
+  textUpdateSide,
 } from "../../ipc/text";
 import type { TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
 import V2ErrorBanner from "../components/V2ErrorBanner";
@@ -16,11 +16,20 @@ import V2TextFindBar from "../components/text/V2TextFindBar";
 import V2TextDiffRow, {
   renderHighlightedLine,
 } from "../components/text/V2TextDiffRow";
-import type { EditingCell, HunkMeta, HunkRole, TextHunk } from "../components/text/V2TextDiffRow";
+import type { HunkMeta, HunkRole, TextHunk } from "../components/text/V2TextDiffRow";
 import { V2TextFormatModal, V2TextRulesModal } from "../components/text/V2TextModals";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
 import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
+import {
+  extractSideLines,
+  insertPastedText,
+  joinWithNextLine,
+  joinWithPreviousLine,
+  rowIndexToSideLineIndex,
+  sideLineIndexToRowIndex,
+  splitLineAt,
+} from "../utils/textBuffer";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 const ROW_HEIGHT = 21;
@@ -34,6 +43,14 @@ export interface V2TextCompareProps {
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onRegisterCommands: (cmds: V2ViewCommands) => void;
   readonly onStatusChange: (status: V2StatusInfo) => void;
+}
+
+interface ActiveEditor {
+  readonly rowIndex: number;
+  readonly side: TextSide;
+  readonly text: string;
+  readonly original: string;
+  readonly col: number;
 }
 
 function collectHunks(rows: readonly TextRowDto[]): TextHunk[] {
@@ -122,10 +139,16 @@ export default function V2TextCompare({
   encodingRef.current = encoding;
   eolRef.current = eol;
 
-  // Selection (supports Shift+Click multi-line range), editing, modals, find
+  // Selection (Shift+Click range) + continuous notepad editor state
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<number | null>(null);
-  const [editing, setEditing] = useState<EditingCell | null>(null);
+  const [activeEdit, setActiveEdit] = useState<ActiveEditor | null>(null);
+  const activeEditRef = useRef<ActiveEditor | null>(null);
+  activeEditRef.current = activeEdit;
+  const rowsRef = useRef<readonly TextRowDto[]>(rows);
+  rowsRef.current = rows;
+
+  // Modals & Find
   const [rulesOpen, setRulesOpen] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -134,9 +157,11 @@ export default function V2TextCompare({
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const liveDiffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const redoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+
   const watchedPaths = useMemo(
     () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
     [leftDraft, rightDraft],
@@ -151,11 +176,18 @@ export default function V2TextCompare({
     setRightDraft(rightPath);
   }, [leftPath, rightPath]);
 
+  useEffect(() => {
+    return () => {
+      if (liveDiffTimerRef.current !== null) clearTimeout(liveDiffTimerRef.current);
+    };
+  }, []);
+
   const runCompare = useCallback(
     async (l: string, r: string): Promise<void> => {
       setLoading(true);
       setError(null);
       setNotice(null);
+      setActiveEdit(null);
       try {
         let dto: TextCompareDto;
         if (!l && !r) {
@@ -358,7 +390,8 @@ export default function V2TextCompare({
   const handleUndo = useCallback(async (): Promise<void> => {
     const prev = undoStackRef.current.pop();
     if (!prev) return;
-    redoStackRef.current = [...redoStackRef.current.slice(-29), { rows, label: prev.label }];
+    setActiveEdit(null);
+    redoStackRef.current = [...redoStackRef.current.slice(-29), { rows: rowsRef.current, label: prev.label }];
     setRows(prev.rows);
     onDirtyChange(undoStackRef.current.length > 0);
     setNotice(`Undid ${prev.label}`);
@@ -369,12 +402,13 @@ export default function V2TextCompare({
         // Local snapshot already restored
       }
     }
-  }, [rows, summary, onDirtyChange]);
+  }, [summary, onDirtyChange]);
 
   const handleRedo = useCallback(async (): Promise<void> => {
     const next = redoStackRef.current.pop();
     if (!next) return;
-    undoStackRef.current = [...undoStackRef.current.slice(-29), { rows, label: next.label }];
+    setActiveEdit(null);
+    undoStackRef.current = [...undoStackRef.current.slice(-29), { rows: rowsRef.current, label: next.label }];
     setRows(next.rows);
     onDirtyChange(true);
     setNotice(`Redid ${next.label}`);
@@ -385,16 +419,12 @@ export default function V2TextCompare({
         // Local snapshot already restored
       }
     }
-  }, [rows, summary, onDirtyChange]);
+  }, [summary, onDirtyChange]);
 
   useEffect(() => {
     const onUndoKey = (e: KeyboardEvent): void => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
-      const target = e.target;
-      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-        return;
-      }
       const key = e.key.toLowerCase();
       if (key === "z" && !e.shiftKey) {
         if (undoStackRef.current.length > 0) {
@@ -412,14 +442,243 @@ export default function V2TextCompare({
     return () => window.removeEventListener("keydown", onUndoKey);
   }, [handleUndo, handleRedo]);
 
+  // Apply updated full side buffer and live re-diff via Rust `text_update_side`
+  const applySideBuffer = useCallback(
+    async (
+      side: TextSide,
+      nextLines: readonly string[],
+      label: string,
+      focusTarget?: { sideLineIdx: number; col: number },
+    ): Promise<void> => {
+      if (!summary) return;
+      const snapshot = rowsRef.current;
+      try {
+        const total = await textUpdateSide(summary.session, side, nextLines);
+        const fetched = await fetchSessionRows(summary.session, Math.max(total, nextLines.length));
+        pushUndoSnapshot(snapshot, label);
+        setRows(fetched);
+        onDirtyChange(true);
+        if (focusTarget) {
+          const targetRow = sideLineIndexToRowIndex(fetched, focusTarget.sideLineIdx, side);
+          if (targetRow >= 0) {
+            const rowObj = fetched.find((r) => r.index === targetRow);
+            const text = (side === "left" ? rowObj?.left : rowObj?.right) ?? "";
+            setSelectionAnchor(targetRow);
+            setSelectedIndex(targetRow);
+            setActiveEdit({
+              rowIndex: targetRow,
+              side,
+              text,
+              original: text,
+              col: focusTarget.col,
+            });
+          } else {
+            setActiveEdit(null);
+          }
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [summary, onDirtyChange, pushUndoSnapshot],
+  );
+
+  // Flush current line edits to backend immediately
+  const flushActiveEdit = useCallback(
+    async (ed: ActiveEditor | null): Promise<readonly TextRowDto[]> => {
+      if (liveDiffTimerRef.current !== null) {
+        clearTimeout(liveDiffTimerRef.current);
+        liveDiffTimerRef.current = null;
+      }
+      if (!ed || !summary || ed.text === ed.original) return rowsRef.current;
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, ed.rowIndex, ed.side);
+      if (sideIdx < 0) return rowsRef.current;
+      const lines = extractSideLines(rowsRef.current, ed.side);
+      lines[sideIdx] = ed.text;
+      const snapshot = rowsRef.current;
+      try {
+        const total = await textUpdateSide(summary.session, ed.side, lines);
+        const fetched = await fetchSessionRows(summary.session, Math.max(total, lines.length));
+        pushUndoSnapshot(snapshot, `edit line ${sideIdx + 1} (${ed.side})`);
+        setRows(fetched);
+        onDirtyChange(true);
+        return fetched;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        return rowsRef.current;
+      }
+    },
+    [summary, onDirtyChange, pushUndoSnapshot],
+  );
+
+  const handleFocusCell = useCallback(
+    (rowIndex: number, side: TextSide, text: string, col: number): void => {
+      const prev = activeEditRef.current;
+      if (prev && (prev.rowIndex !== rowIndex || prev.side !== side) && prev.text !== prev.original) {
+        void flushActiveEdit(prev);
+      }
+      setActiveEdit({ rowIndex, side, text, original: text, col });
+    },
+    [flushActiveEdit],
+  );
+
+  const handleCellChange = useCallback(
+    (text: string, col: number): void => {
+      setActiveEdit((prev) => (prev ? { ...prev, text, col } : null));
+      onDirtyChange(true);
+      if (liveDiffTimerRef.current !== null) clearTimeout(liveDiffTimerRef.current);
+      liveDiffTimerRef.current = setTimeout(() => {
+        const cur = activeEditRef.current;
+        if (!cur || !summary || cur.text === cur.original) return;
+        const sideIdx = rowIndexToSideLineIndex(rowsRef.current, cur.rowIndex, cur.side);
+        if (sideIdx < 0) return;
+        const lines = extractSideLines(rowsRef.current, cur.side);
+        lines[sideIdx] = cur.text;
+        void applySideBuffer(cur.side, lines, `edit line ${sideIdx + 1} (${cur.side})`, {
+          sideLineIdx: sideIdx,
+          col: cur.col,
+        });
+      }, 240);
+    },
+    [summary, onDirtyChange, applySideBuffer],
+  );
+
+  const handleCaretMove = useCallback((col: number): void => {
+    setActiveEdit((prev) => (prev ? { ...prev, col } : null));
+  }, []);
+
+  const handleSplitEnter = useCallback(
+    (rowIndex: number, side: TextSide, col: number): void => {
+      if (liveDiffTimerRef.current !== null) {
+        clearTimeout(liveDiffTimerRef.current);
+        liveDiffTimerRef.current = null;
+      }
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, rowIndex, side);
+      if (sideIdx < 0) return;
+      const lines = extractSideLines(rowsRef.current, side);
+      if (activeEditRef.current?.rowIndex === rowIndex && activeEditRef.current.side === side) {
+        lines[sideIdx] = activeEditRef.current.text;
+      }
+      const res = splitLineAt(lines, sideIdx, col);
+      void applySideBuffer(side, res.lines, `insert line (${side})`, {
+        sideLineIdx: res.nextLine,
+        col: res.nextCol,
+      });
+    },
+    [applySideBuffer],
+  );
+
+  const handleBackspaceStart = useCallback(
+    (rowIndex: number, side: TextSide): void => {
+      if (liveDiffTimerRef.current !== null) {
+        clearTimeout(liveDiffTimerRef.current);
+        liveDiffTimerRef.current = null;
+      }
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, rowIndex, side);
+      if (sideIdx <= 0) return;
+      const lines = extractSideLines(rowsRef.current, side);
+      if (activeEditRef.current?.rowIndex === rowIndex && activeEditRef.current.side === side) {
+        lines[sideIdx] = activeEditRef.current.text;
+      }
+      const res = joinWithPreviousLine(lines, sideIdx);
+      void applySideBuffer(side, res.lines, `join lines (${side})`, {
+        sideLineIdx: res.nextLine,
+        col: res.nextCol,
+      });
+    },
+    [applySideBuffer],
+  );
+
+  const handleDeleteEnd = useCallback(
+    (rowIndex: number, side: TextSide): void => {
+      if (liveDiffTimerRef.current !== null) {
+        clearTimeout(liveDiffTimerRef.current);
+        liveDiffTimerRef.current = null;
+      }
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, rowIndex, side);
+      if (sideIdx < 0) return;
+      const lines = extractSideLines(rowsRef.current, side);
+      if (activeEditRef.current?.rowIndex === rowIndex && activeEditRef.current.side === side) {
+        lines[sideIdx] = activeEditRef.current.text;
+      }
+      if (sideIdx + 1 >= lines.length) return;
+      const res = joinWithNextLine(lines, sideIdx);
+      void applySideBuffer(side, res.lines, `join lines (${side})`, {
+        sideLineIdx: res.nextLine,
+        col: res.nextCol,
+      });
+    },
+    [applySideBuffer],
+  );
+
+  const handleArrowVertical = useCallback(
+    (rowIndex: number, side: TextSide, delta: -1 | 1, col: number): void => {
+      const cur = activeEditRef.current;
+      if (cur && cur.text !== cur.original) {
+        void flushActiveEdit(cur);
+      }
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, rowIndex, side);
+      if (sideIdx < 0) return;
+      const nextSideIdx = sideIdx + delta;
+      const nextRowIdx = sideLineIndexToRowIndex(rowsRef.current, nextSideIdx, side);
+      if (nextRowIdx < 0) return;
+      const rowObj = rowsRef.current.find((r) => r.index === nextRowIdx);
+      const nextText = (side === "left" ? rowObj?.left : rowObj?.right) ?? "";
+      setSelectionAnchor(nextRowIdx);
+      setSelectedIndex(nextRowIdx);
+      setActiveEdit({
+        rowIndex: nextRowIdx,
+        side,
+        text: nextText,
+        original: nextText,
+        col: Math.min(col, nextText.length),
+      });
+      const pos = visibleRows.findIndex((r) => r.index === nextRowIdx);
+      if (pos >= 0 && (pos < startIndex + 2 || pos > endIndex - 4)) {
+        scrollToPosition(pos);
+      }
+    },
+    [flushActiveEdit, visibleRows, startIndex, endIndex, scrollToPosition],
+  );
+
+  const handleMultiLinePaste = useCallback(
+    (rowIndex: number, side: TextSide, selStart: number, selEnd: number, pasted: string): void => {
+      if (liveDiffTimerRef.current !== null) {
+        clearTimeout(liveDiffTimerRef.current);
+        liveDiffTimerRef.current = null;
+      }
+      const sideIdx = rowIndexToSideLineIndex(rowsRef.current, rowIndex, side);
+      if (sideIdx < 0) return;
+      const lines = extractSideLines(rowsRef.current, side);
+      if (activeEditRef.current?.rowIndex === rowIndex && activeEditRef.current.side === side) {
+        lines[sideIdx] = activeEditRef.current.text;
+      }
+      const res = insertPastedText(lines, sideIdx, selStart, selEnd, pasted);
+      void applySideBuffer(side, res.lines, `paste (${side})`, {
+        sideLineIdx: res.nextLine,
+        col: res.nextCol,
+      });
+    },
+    [applySideBuffer],
+  );
+
+  const handleBlurCommit = useCallback((): void => {
+    const cur = activeEditRef.current;
+    setActiveEdit(null);
+    if (cur && cur.text !== cur.original) {
+      void flushActiveEdit(cur);
+    }
+  }, [flushActiveEdit]);
+
   const handleCopyHunk = useCallback(
     async (hunk: TextHunk, dir: TextSide): Promise<void> => {
       if (!summary) return;
+      setActiveEdit(null);
       const label = `copy section ${hunk.ordinal + 1} (${dir === "left" ? "L → R" : "R → L"})`;
-      const snapshot = rows;
+      const snapshot = rowsRef.current;
       try {
         await textApplyHunk(summary.session, hunk.start, hunk.end, dir);
-        const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+        const fetched = await fetchSessionRows(summary.session, Math.max(snapshot.length, summary.rows));
         pushUndoSnapshot(snapshot, label);
         setRows(fetched);
         onDirtyChange(true);
@@ -428,21 +687,22 @@ export default function V2TextCompare({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [summary, rows, onDirtyChange, pushUndoSnapshot],
+    [summary, onDirtyChange, pushUndoSnapshot],
   );
 
   const handleCopyRange = useCallback(
     async (start: number, end: number, dir: TextSide): Promise<void> => {
       if (!summary) return;
+      setActiveEdit(null);
       const count = end - start + 1;
       const label =
         count === 1
           ? `copy line ${start + 1} (${dir === "left" ? "L → R" : "R → L"})`
           : `copy lines ${start + 1}–${end + 1} (${dir === "left" ? "L → R" : "R → L"})`;
-      const snapshot = rows;
+      const snapshot = rowsRef.current;
       try {
         await textApplyHunk(summary.session, start, end, dir);
-        const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+        const fetched = await fetchSessionRows(summary.session, Math.max(snapshot.length, summary.rows));
         pushUndoSnapshot(snapshot, label);
         setRows(fetched);
         onDirtyChange(true);
@@ -455,7 +715,7 @@ export default function V2TextCompare({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [summary, rows, onDirtyChange, pushUndoSnapshot],
+    [summary, onDirtyChange, pushUndoSnapshot],
   );
 
   const handleCopyLine = useCallback(
@@ -465,25 +725,12 @@ export default function V2TextCompare({
     [handleCopyRange],
   );
 
-  const handleCommitEdit = useCallback(async (): Promise<void> => {
-    if (!editing || !summary) return;
-    const label = `edit line ${editing.index + 1} (${editing.side})`;
-    const snapshot = rows;
-    try {
-      await textApplyEdit(summary.session, editing.index, editing.side, editing.text);
-      const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
-      pushUndoSnapshot(snapshot, label);
-      setRows(fetched);
-      onDirtyChange(true);
-      setEditing(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [editing, summary, rows, onDirtyChange, pushUndoSnapshot]);
-
   const handleSaveSide = useCallback(
     async (side: TextSide): Promise<void> => {
       if (!summary) return;
+      if (activeEditRef.current) {
+        await flushActiveEdit(activeEditRef.current);
+      }
       const targetPath = side === "left" ? leftDraft : rightDraft;
       if (!targetPath) {
         setNotice(`No file path set for ${side} side.`);
@@ -498,18 +745,8 @@ export default function V2TextCompare({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [summary, leftDraft, rightDraft, onDirtyChange],
+    [summary, leftDraft, rightDraft, onDirtyChange, flushActiveEdit, resetBaseline],
   );
-
-  const handleStartEdit = useCallback((index: number, side: TextSide, text: string): void => {
-    setEditing({ index, side, text });
-  }, []);
-
-  const handleEditChange = useCallback((text: string): void => {
-    setEditing((prev) => (prev ? { ...prev, text } : null));
-  }, []);
-
-  const handleCancelEdit = useCallback((): void => setEditing(null), []);
 
   const handleCopyHunkSync = useCallback(
     (hunk: TextHunk, dir: TextSide): void => {
@@ -525,10 +762,6 @@ export default function V2TextCompare({
     [handleCopyLine],
   );
 
-  const handleCommitEditSync = useCallback((): void => {
-    void handleCommitEdit();
-  }, [handleCommitEdit]);
-
   const selectedRow = useMemo(
     () => (selectedIndex === null ? null : (rows.find((r) => r.index === selectedIndex) ?? null)),
     [rows, selectedIndex],
@@ -538,6 +771,20 @@ export default function V2TextCompare({
     if (selectedIndex === null) return null;
     return hunkMetaByIndex.get(selectedIndex)?.hunk ?? null;
   }, [selectedIndex, hunkMetaByIndex]);
+
+  const caretCoordLabel = useMemo(() => {
+    if (activeEdit) {
+      const nos = lineNosByIndex.get(activeEdit.rowIndex);
+      const ln = (activeEdit.side === "left" ? nos?.left : nos?.right) ?? activeEdit.rowIndex + 1;
+      return `${ln}: ${activeEdit.col + 1}`;
+    }
+    if (selectedIndex !== null) {
+      const nos = lineNosByIndex.get(selectedIndex);
+      const ln = nos?.left ?? nos?.right ?? selectedIndex + 1;
+      return `${ln}: 1`;
+    }
+    return "";
+  }, [activeEdit, selectedIndex, lineNosByIndex]);
 
   // Register unified top toolbar commands
   useEffect(() => {
@@ -602,11 +849,21 @@ export default function V2TextCompare({
           ? "Files are identical"
           : `${hunks.length} difference ${hunks.length === 1 ? "section" : "sections"}`,
       center: notice ?? `${algorithm === "patience" ? "Patience" : "Myers"} · ${encoding} · ${eol}`,
-      right: summary
-        ? `${summary.leftLines} / ${summary.rightLines} lines`
-        : `${rows.length} rows`,
+      right: `${caretCoordLabel ? `${caretCoordLabel}  ·  ` : ""}${
+        summary ? `${summary.leftLines} / ${summary.rightLines} lines` : `${rows.length} rows`
+      }`,
     });
-  }, [onStatusChange, hunks.length, notice, algorithm, encoding, eol, summary, rows.length]);
+  }, [
+    onStatusChange,
+    hunks.length,
+    notice,
+    algorithm,
+    encoding,
+    eol,
+    caretCoordLabel,
+    summary,
+    rows.length,
+  ]);
 
   return (
     <div
@@ -676,7 +933,7 @@ export default function V2TextCompare({
       />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Main Workspace: Far-Left Overview Minimap + Virtualized 7-Column Diff Grid */}
+      {/* Main Workspace: Far-Left Overview Minimap + Virtualized Continuous Notepad Diff Grid */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           aria-label="Difference overview map"
@@ -747,7 +1004,7 @@ export default function V2TextCompare({
               <div style={{ transform: `translateY(${offsetTop}px)` }}>
                 {windowedRows.map((row) => {
                   const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
-                  const isEditingThis = editing?.index === row.index;
+                  const isActiveRow = activeEdit?.rowIndex === row.index;
                   const isInSelection =
                     selectionRange !== null &&
                     row.index >= selectionRange.start &&
@@ -760,17 +1017,23 @@ export default function V2TextCompare({
                       leftLineNo={nos.left}
                       rightLineNo={nos.right}
                       isSelected={isInSelection}
-                      editingSide={isEditingThis ? editing.side : null}
-                      editingText={isEditingThis ? editing.text : ""}
+                      activeSide={isActiveRow ? activeEdit.side : null}
+                      activeText={isActiveRow ? activeEdit.text : ""}
+                      activeCol={isActiveRow ? activeEdit.col : 0}
                       splitPct={splitPct}
                       dragging={dragging}
                       onSelect={handleSelectRow}
+                      onFocusCell={handleFocusCell}
+                      onCellChange={handleCellChange}
+                      onCaretMove={handleCaretMove}
+                      onSplitEnter={handleSplitEnter}
+                      onBackspaceStart={handleBackspaceStart}
+                      onDeleteEnd={handleDeleteEnd}
+                      onArrowVertical={handleArrowVertical}
+                      onMultiLinePaste={handleMultiLinePaste}
+                      onBlurCommit={handleBlurCommit}
                       onCopyHunk={handleCopyHunkSync}
                       onCopyLine={handleCopyLineSync}
-                      onStartEdit={handleStartEdit}
-                      onEditChange={handleEditChange}
-                      onCommitEdit={handleCommitEditSync}
-                      onCancelEdit={handleCancelEdit}
                       onStartDrag={startDrag}
                       onResetSplit={resetSplit}
                     />
@@ -802,7 +1065,7 @@ export default function V2TextCompare({
                     "var(--v2-chg-inline)",
                   )
                 : ""
-              : "Click a line (or Shift+Click a range) to inspect or merge selectively"}
+              : "Click anywhere to type directly, or Shift+Click a range to merge selectively"}
           </div>
           {selectionRange && selectionHasDiff ? (
             <button
