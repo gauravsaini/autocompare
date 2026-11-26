@@ -376,7 +376,13 @@ function computeMockInlineSpans(
 function buildMockDiffRows(
   leftLines: readonly string[],
   rightLines: readonly string[],
-  opts?: { ignoreWhitespace?: boolean; ignoreCase?: boolean; eol?: string },
+  opts?: {
+    ignoreWhitespace?: boolean;
+    ignoreCase?: boolean;
+    eol?: string;
+    alignmentMode?: string;
+    neverAlignDifferences?: boolean;
+  },
 ): { rows: DumpedTextRow[]; opCount: number } {
   const normalize = (line: string): string => {
     let s = line;
@@ -387,6 +393,31 @@ function buildMockDiffRows(
   };
   const keysA = leftLines.map(normalize);
   const keysB = rightLines.map(normalize);
+
+  if (opts?.alignmentMode === "unaligned") {
+    const rows: DumpedTextRow[] = [];
+    const maxLen = Math.max(leftLines.length, rightLines.length);
+    for (let i = 0; i < maxLen; i += 1) {
+      const l = i < leftLines.length ? leftLines[i] : null;
+      const r = i < rightLines.length ? rightLines[i] : null;
+      if (l !== null && r !== null) {
+        const equal = keysA[i] === keysB[i];
+        rows.push({
+          index: rows.length,
+          kind: equal ? "equal" : "changed",
+          left: l,
+          right: r,
+          inline: equal ? [] : computeMockInlineSpans(l, r),
+        });
+      } else if (l !== null) {
+        rows.push({ index: rows.length, kind: "leftOnly", left: l, right: null, inline: [] });
+      } else if (r !== null) {
+        rows.push({ index: rows.length, kind: "rightOnly", left: null, right: r, inline: [] });
+      }
+    }
+    return { rows, opCount: rows.length };
+  }
+
   const opcodes = mockSequenceMatcher(keysA, keysB);
 
   const rows: DumpedTextRow[] = [];
@@ -410,17 +441,26 @@ function buildMockDiffRows(
         rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
       }
     } else if (tag === "replace") {
-      const paired = Math.min(len1, len2);
-      for (let k = 0; k < paired; k += 1) {
-        const l = leftLines[i1 + k];
-        const r = rightLines[j1 + k];
-        rows.push({ index: rows.length, kind: "changed", left: l, right: r, inline: computeMockInlineSpans(l, r) });
-      }
-      for (let k = paired; k < len1; k += 1) {
-        rows.push({ index: rows.length, kind: "leftOnly", left: leftLines[i1 + k], right: null, inline: [] });
-      }
-      for (let k = paired; k < len2; k += 1) {
-        rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
+      if (opts?.neverAlignDifferences) {
+        for (let k = 0; k < len1; k += 1) {
+          rows.push({ index: rows.length, kind: "leftOnly", left: leftLines[i1 + k], right: null, inline: [] });
+        }
+        for (let k = 0; k < len2; k += 1) {
+          rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
+        }
+      } else {
+        const paired = Math.min(len1, len2);
+        for (let k = 0; k < paired; k += 1) {
+          const l = leftLines[i1 + k];
+          const r = rightLines[j1 + k];
+          rows.push({ index: rows.length, kind: "changed", left: l, right: r, inline: computeMockInlineSpans(l, r) });
+        }
+        for (let k = paired; k < len1; k += 1) {
+          rows.push({ index: rows.length, kind: "leftOnly", left: leftLines[i1 + k], right: null, inline: [] });
+        }
+        for (let k = paired; k < len2; k += 1) {
+          rows.push({ index: rows.length, kind: "rightOnly", left: null, right: rightLines[j1 + k], inline: [] });
+        }
       }
     }
   }
@@ -644,10 +684,15 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         leftMeta = { bytes: leftRes.bytes, mtimeUnix: leftRes.mtimeUnix };
         rightMeta = { bytes: rightRes.bytes, mtimeUnix: rightRes.mtimeUnix };
 
+        const alignMode = strArg(args, ["alignmentMode", "alignment_mode"], "standard");
+        const neverAlign =
+          args["neverAlignDifferences"] === true || args["never_align_differences"] === true;
         const diffResult = buildMockDiffRows(lLines, rLines, {
           ignoreWhitespace: ws,
           ignoreCase: cs,
           eol,
+          alignmentMode: alignMode,
+          neverAlignDifferences: neverAlign,
         });
         rows = diffResult.rows;
         opCount = diffResult.opCount;

@@ -24,6 +24,9 @@ export type TextDirection = "up" | "down";
 /** Diff algorithm wire values for Wave-C2a (`DiffAlgorithm` in `crates/diff`). */
 export type TextAlgorithm = "myers" | "patience";
 
+/** Beyond Compare–style alignment modes supported by Rust `text_compare`. */
+export type TextAlignmentMode = "unaligned" | "standard" | "myers" | "patience";
+
 import { invoke } from "./client";
 
 /** Applied ignore flags echoed by the backend (`appliedOptions` on the wire). */
@@ -36,8 +39,15 @@ export interface AppliedTextOptions {
   readonly ignoreBlankLines?: boolean;
   /** Wave-C2a: diff algorithm echo (`"myers"` default | `"patience"`). */
   readonly algorithm?: TextAlgorithm | string;
+  /** Alignment mode echo (`unaligned` | `standard` | `myers` | `patience`). */
+  readonly alignmentMode?: TextAlignmentMode | string;
+  readonly neverAlignDifferences?: boolean;
+  readonly skewTolerance?: number;
+  readonly useClosenessMatching?: boolean;
   /** Wave-L1: encoding name passthrough. */
   readonly encoding?: string;
+  readonly leftEncoding?: string;
+  readonly rightEncoding?: string;
   /** Wave-L1: eol line ending format passthrough. */
   readonly eol?: string;
   /** Wave-L1: line indices suppressed / marked ignored (row flag, not deletion). */
@@ -92,24 +102,37 @@ export interface TextCompareDto {
   readonly suppressedLines?: readonly number[];
 }
 
-/** Ignore flags for [`textCompare`] (both default `false` = exact diff). */
+/** Ignore & alignment flags for [`textCompare`] (all default off = exact diff). */
 export interface TextIgnoreOptions {
   readonly ignoreWhitespace?: boolean;
   readonly ignoreCase?: boolean;
   readonly minorUnimportant?: boolean;
   readonly encoding?: string;
+  readonly leftEncoding?: string;
+  readonly rightEncoding?: string;
   readonly eol?: string;
   readonly suppressedLines?: readonly number[];
   /** Wave-C2a: Patience vs Myers diff engine. */
   readonly algorithm?: TextAlgorithm | string;
   /** Wave-C2a: fold whitespace-only lines (both spellings accepted). */
   readonly ignoreBlankLines?: boolean;
+  /** Beyond Compare–style alignment options. */
+  readonly alignmentMode?: TextAlignmentMode | string;
+  readonly neverAlignDifferences?: boolean;
+  readonly skewTolerance?: number;
+  readonly useClosenessMatching?: boolean;
   // snake_case spellings:
   readonly ignore_whitespace?: boolean;
   readonly ignore_case?: boolean;
   readonly minor_unimportant?: boolean;
   readonly suppressed_lines?: readonly number[];
   readonly ignore_blank_lines?: boolean;
+  readonly left_encoding?: string;
+  readonly right_encoding?: string;
+  readonly alignment_mode?: TextAlignmentMode | string;
+  readonly never_align_differences?: boolean;
+  readonly skew_tolerance?: number;
+  readonly use_closeness_matching?: boolean;
 }
 
 /** Rust mirror: `commands::text::InlineSpanDto` (half-open char offsets). */
@@ -201,22 +224,40 @@ export function textCompare(
   const cs = opts?.ignoreCase === true || opts?.ignore_case === true;
   const minor = opts?.minorUnimportant === true || opts?.minor_unimportant === true;
   const enc = opts?.encoding !== undefined && opts.encoding !== "" ? opts.encoding : undefined;
+  const leftEncRaw = opts?.leftEncoding ?? opts?.left_encoding;
+  const rightEncRaw = opts?.rightEncoding ?? opts?.right_encoding;
+  const leftEnc = leftEncRaw !== undefined && leftEncRaw !== "" ? leftEncRaw : undefined;
+  const rightEnc = rightEncRaw !== undefined && rightEncRaw !== "" ? rightEncRaw : undefined;
   const eol = opts?.eol !== undefined && opts.eol !== "" ? opts.eol : undefined;
   const supp = opts?.suppressedLines ?? opts?.suppressed_lines;
   // Wave-C2a engine-ready options: Patience algorithm + blank-line folding.
   const rawAlgo = typeof opts?.algorithm === "string" ? opts.algorithm.trim().toLowerCase() : "";
   const algo = rawAlgo === "patience" || rawAlgo === "myers" ? rawAlgo : undefined;
   const blank = opts?.ignoreBlankLines === true || opts?.ignore_blank_lines === true;
+  const rawAlign = (opts?.alignmentMode ?? opts?.alignment_mode ?? "").trim().toLowerCase();
+  const alignMode =
+    rawAlign === "unaligned" || rawAlign === "standard" || rawAlign === "myers" || rawAlign === "patience"
+      ? rawAlign
+      : undefined;
+  const neverAlign = opts?.neverAlignDifferences === true || opts?.never_align_differences === true;
+  const skew = opts?.skewTolerance ?? opts?.skew_tolerance;
+  const closeness = opts?.useClosenessMatching ?? opts?.use_closeness_matching;
 
   const hasOptions =
     ws ||
     cs ||
     minor ||
     enc !== undefined ||
+    leftEnc !== undefined ||
+    rightEnc !== undefined ||
     eol !== undefined ||
     (supp !== undefined && supp.length > 0) ||
     algo !== undefined ||
-    blank;
+    blank ||
+    alignMode !== undefined ||
+    neverAlign ||
+    skew !== undefined ||
+    closeness !== undefined;
 
   if (typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__TEXT_IGNORE_LAST__ = {
@@ -224,10 +265,16 @@ export function textCompare(
       ignoreCase: cs,
       minorUnimportant: minor,
       encoding: enc,
+      leftEncoding: leftEnc,
+      rightEncoding: rightEnc,
       eol,
       suppressedLines: supp,
       algorithm: algo,
       ignoreBlankLines: blank,
+      alignmentMode: alignMode,
+      neverAlignDifferences: neverAlign,
+      skewTolerance: skew,
+      useClosenessMatching: closeness,
     };
   }
   if (!hasOptions) return invoke<TextCompareDto>("text_compare", { left, right });
@@ -241,12 +288,24 @@ export function textCompare(
     minorUnimportant: minor,
     minor_unimportant: minor,
     encoding: enc,
+    leftEncoding: leftEnc,
+    left_encoding: leftEnc,
+    rightEncoding: rightEnc,
+    right_encoding: rightEnc,
     eol,
     suppressedLines: supp,
     suppressed_lines: supp,
     algorithm: algo,
     ignoreBlankLines: blank,
     ignore_blank_lines: blank,
+    alignmentMode: alignMode,
+    alignment_mode: alignMode,
+    neverAlignDifferences: neverAlign,
+    never_align_differences: neverAlign,
+    skewTolerance: skew,
+    skew_tolerance: skew,
+    useClosenessMatching: closeness,
+    use_closeness_matching: closeness,
   });
 }
 
