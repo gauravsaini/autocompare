@@ -13,7 +13,12 @@ import {
   sideLineIndexToRowIndex,
   splitLineAt,
 } from "../utils/textBuffer.ts";
-import { matchesWithReplacements } from "../utils/textReplacements.ts";
+import {
+  DEFAULT_UNIMPORTANT_PRESETS,
+  matchesUnderSessionRules,
+  matchesWithReplacements,
+  stripUnimportantText,
+} from "../utils/textReplacements.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -150,5 +155,61 @@ describe("matchesWithReplacements", () => {
     ];
     assert.equal(matchesWithReplacements("build v12.0 ok", "build release-12 ok", rules), true);
     assert.equal(matchesWithReplacements("build V12.0 ok", "build release-12 ok", rules), false);
+  });
+});
+
+describe("unimportant text / grammar rules", () => {
+  it("strips ISO timestamps and line comments cleanly", () => {
+    const tsRule = { id: "ts", ...DEFAULT_UNIMPORTANT_PRESETS[0] };
+    const commentRule = { id: "cm", ...DEFAULT_UNIMPORTANT_PRESETS[1] };
+    assert.equal(
+      stripUnimportantText("[2026-11-27T08:30:00Z] started // local", [tsRule, commentRule]),
+      "[] started ",
+    );
+  });
+
+  it("folds rows under minorEnabled + unimportant rules and combines with replacements", () => {
+    const tsRule = { id: "ts", ...DEFAULT_UNIMPORTANT_PRESETS[0] };
+    const repRule = {
+      id: "rep",
+      left: "staging",
+      right: "prod",
+      regex: false,
+      caseSensitive: false,
+      enabled: true,
+    };
+    // When minorEnabled is false, unimportant rules do not fold
+    assert.equal(
+      matchesUnderSessionRules(
+        "2026-01-01 10:00:00 OK",
+        "2026-11-27 12:34:56 OK",
+        [tsRule],
+        [],
+        false,
+      ),
+      false,
+    );
+    // When minorEnabled is true, timestamp-only difference folds to equal
+    assert.equal(
+      matchesUnderSessionRules(
+        "2026-01-01 10:00:00 OK",
+        "2026-11-27 12:34:56 OK",
+        [tsRule],
+        [],
+        true,
+      ),
+      true,
+    );
+    // Combined timestamp strip + staging->prod replacement
+    assert.equal(
+      matchesUnderSessionRules(
+        "2026-01-01 10:00:00 host=staging",
+        "2026-11-27 12:34:56 host=prod",
+        [tsRule],
+        [repRule],
+        true,
+      ),
+      true,
+    );
   });
 });

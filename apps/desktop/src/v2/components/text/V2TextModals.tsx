@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 import V2Modal from "../V2Modal";
-import type { TextReplacementRule } from "../../utils/textReplacements";
+import { DEFAULT_UNIMPORTANT_PRESETS } from "../../utils/textReplacements";
+import type { TextReplacementRule, UnimportantRule } from "../../utils/textReplacements";
 
-export type RulesDialogTab = "format" | "importance" | "alignment" | "replacements";
+export type RulesDialogTab = "specs" | "format" | "importance" | "alignment" | "replacements";
 export type AlignmentMode = "unaligned" | "standard" | "myers" | "patience";
 
 export interface TextSessionRules {
@@ -20,6 +21,7 @@ export interface TextSessionRules {
   readonly ignoreCase: boolean;
   readonly ignoreBlank: boolean;
   readonly minorEnabled: boolean;
+  readonly unimportantRules: readonly UnimportantRule[];
   // Alignment tab
   readonly alignmentMode: AlignmentMode;
   readonly neverAlignDifferences: boolean;
@@ -58,32 +60,78 @@ export interface V2TextRulesDialogProps {
   readonly open: boolean;
   readonly initialTab: RulesDialogTab;
   readonly rules: TextSessionRules;
+  readonly leftPath: string;
+  readonly rightPath: string;
   readonly onClose: () => void;
-  readonly onApply: (next: TextSessionRules, scope: "view" | "defaults") => void;
+  readonly onApply: (
+    next: TextSessionRules,
+    scope: "view" | "defaults",
+    paths?: { readonly left: string; readonly right: string },
+  ) => void;
 }
 
 export function V2TextRulesModal({
   open,
   initialTab,
   rules,
+  leftPath,
+  rightPath,
   onClose,
   onApply,
 }: V2TextRulesDialogProps): React.JSX.Element {
   const [tab, setTab] = useState<RulesDialogTab>(initialTab);
   const [draft, setDraft] = useState<TextSessionRules>(rules);
+  const [leftSpec, setLeftSpec] = useState(leftPath);
+  const [rightSpec, setRightSpec] = useState(rightPath);
   const [scope, setScope] = useState<"view" | "defaults">("view");
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [selectedUnimpId, setSelectedUnimpId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setTab(initialTab);
       setDraft(rules);
+      setLeftSpec(leftPath);
+      setRightSpec(rightPath);
       setSelectedRuleId(rules.replacements[0]?.id ?? null);
+      setSelectedUnimpId(rules.unimportantRules[0]?.id ?? null);
     }
-  }, [open, initialTab, rules]);
+  }, [open, initialTab, rules, leftPath, rightPath]);
 
   const patch = (partial: Partial<TextSessionRules>): void => {
     setDraft((prev) => ({ ...prev, ...partial }));
+  };
+
+  const addUnimportant = (preset?: Omit<UnimportantRule, "id">): void => {
+    const id = `unimp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const nextRule: UnimportantRule = preset
+      ? { id, ...preset }
+      : {
+          id,
+          name: "Custom Rule",
+          pattern: "",
+          regex: true,
+          caseSensitive: false,
+          enabled: true,
+        };
+    patch({
+      minorEnabled: true,
+      unimportantRules: [...draft.unimportantRules, nextRule],
+    });
+    setSelectedUnimpId(id);
+  };
+
+  const updateUnimportant = (id: string, partial: Partial<UnimportantRule>): void => {
+    patch({
+      unimportantRules: draft.unimportantRules.map((r) => (r.id === id ? { ...r, ...partial } : r)),
+    });
+  };
+
+  const removeSelectedUnimportant = (): void => {
+    if (!selectedUnimpId) return;
+    const next = draft.unimportantRules.filter((r) => r.id !== selectedUnimpId);
+    patch({ unimportantRules: next });
+    setSelectedUnimpId(next[0]?.id ?? null);
   };
 
   const addReplacement = (): void => {
@@ -117,7 +165,7 @@ export function V2TextRulesModal({
     <V2Modal
       open={open}
       title="Text Compare Session Settings"
-      subtitle="Configure format, importance, alignment, and replacement rules"
+      subtitle="Configure specs, format, importance, alignment, and replacement rules"
       widthClass="max-w-xl"
       onClose={onClose}
       footer={
@@ -137,7 +185,14 @@ export function V2TextRulesModal({
             <button
               type="button"
               data-testid="v2/rules-ok"
-              onClick={() => onApply(draft, scope)}
+              onClick={() => {
+                const pathsChanged = leftSpec !== leftPath || rightSpec !== rightPath;
+                onApply(
+                  draft,
+                  scope,
+                  pathsChanged ? { left: leftSpec, right: rightSpec } : undefined,
+                );
+              }}
               className="v2-btn v2-btn-primary"
             >
               OK
@@ -147,7 +202,7 @@ export function V2TextRulesModal({
       }
     >
       <div className="space-y-4 text-[12px]">
-        {/* Beyond Compare–style Segmented Tab Strip */}
+        {/* Beyond Compare–style 5-Tab Segmented Strip */}
         <div className="flex justify-center">
           <div
             role="tablist"
@@ -155,6 +210,7 @@ export function V2TextRulesModal({
           >
             {(
               [
+                ["specs", "Specs"],
                 ["format", "Format"],
                 ["importance", "Importance"],
                 ["alignment", "Alignment"],
@@ -183,7 +239,57 @@ export function V2TextRulesModal({
           </div>
         </div>
 
-        {/* 1. FORMAT TAB */}
+        {/* 1. SPECS TAB */}
+        {tab === "specs" ? (
+          <div className="space-y-3 py-1">
+            <div>
+              <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-secondary)]">
+                Left file:
+              </span>
+              <input
+                type="text"
+                data-testid="v2/rules-spec-left"
+                value={leftSpec}
+                onChange={(e) => setLeftSpec(e.target.value)}
+                placeholder="/path/to/left.txt"
+                className="v2-input v2-mono w-full"
+              />
+            </div>
+
+            <div>
+              <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-secondary)]">
+                Right file:
+              </span>
+              <input
+                type="text"
+                data-testid="v2/rules-spec-right"
+                value={rightSpec}
+                onChange={(e) => setRightSpec(e.target.value)}
+                placeholder="/path/to/right.txt"
+                className="v2-input v2-mono w-full"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setLeftSpec(rightSpec);
+                  setRightSpec(leftSpec);
+                }}
+                className="v2-btn h-[24px] px-2.5"
+              >
+                <ArrowLeftRight size={12} />
+                Swap Sides
+              </button>
+              <span className="text-[11px] text-[var(--v2-fg-muted)]">
+                Changes reload both files when you click OK.
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {/* 2. FORMAT TAB */}
         {tab === "format" ? (
           <div className="space-y-3">
             <div>
@@ -246,6 +352,7 @@ export function V2TextRulesModal({
                   Left encoding override:
                 </span>
                 <select
+                  data-testid="v2/rules-left-encoding"
                   value={draft.leftEncoding}
                   onChange={(e) =>
                     patch({
@@ -268,6 +375,7 @@ export function V2TextRulesModal({
                   Right encoding override:
                 </span>
                 <select
+                  data-testid="v2/rules-right-encoding"
                   disabled={draft.sameEncoding}
                   value={draft.sameEncoding ? draft.leftEncoding : draft.rightEncoding}
                   onChange={(e) => patch({ rightEncoding: e.target.value })}
@@ -314,49 +422,166 @@ export function V2TextRulesModal({
           </div>
         ) : null}
 
-        {/* 2. IMPORTANCE TAB */}
+        {/* 3. IMPORTANCE TAB (with Unimportant Grammar / Regex Rules) */}
         {tab === "importance" ? (
           <div className="space-y-3 py-1">
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.ignoreWs}
-                onChange={(e) => patch({ ignoreWs: e.target.checked })}
-                className="accent-[var(--v2-accent)]"
-              />
-              <span>Ignore whitespace changes</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.ignoreCase}
-                onChange={(e) => patch({ ignoreCase: e.target.checked })}
-                className="accent-[var(--v2-accent)]"
-              />
-              <span>Ignore character case</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.ignoreBlank}
-                onChange={(e) => patch({ ignoreBlank: e.target.checked })}
-                className="accent-[var(--v2-accent)]"
-              />
-              <span>Ignore blank lines</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.minorEnabled}
-                onChange={(e) => patch({ minorEnabled: e.target.checked })}
-                className="accent-[var(--v2-accent)]"
-              />
-              <span>Treat minor / unimportant differences as matching</span>
-            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.ignoreWs}
+                  onChange={(e) => patch({ ignoreWs: e.target.checked })}
+                  className="accent-[var(--v2-accent)]"
+                />
+                <span>Ignore whitespace changes</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.ignoreCase}
+                  onChange={(e) => patch({ ignoreCase: e.target.checked })}
+                  className="accent-[var(--v2-accent)]"
+                />
+                <span>Ignore character case</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.ignoreBlank}
+                  onChange={(e) => patch({ ignoreBlank: e.target.checked })}
+                  className="accent-[var(--v2-accent)]"
+                />
+                <span>Ignore blank lines</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={draft.minorEnabled}
+                  onChange={(e) => patch({ minorEnabled: e.target.checked })}
+                  className="accent-[var(--v2-accent)]"
+                />
+                <span>Ignore unimportant text</span>
+              </label>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-[var(--v2-fg-secondary)]">
+                  Unimportant text / grammar rules:
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {DEFAULT_UNIMPORTANT_PRESETS.map((preset, idx) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      data-testid={`v2/rules-add-preset-${idx}`}
+                      onClick={() => addUnimportant(preset)}
+                      className="v2-btn h-[20px] px-1.5 text-[10.5px]"
+                    >
+                      + {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[6px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">
+                <div className="grid grid-cols-[24px_110px_1fr_48px_48px] border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2 py-1 text-[11px] font-semibold text-[var(--v2-fg-secondary)]">
+                  <span />
+                  <span>Name</span>
+                  <span>Pattern</span>
+                  <span className="text-center">Regex</span>
+                  <span className="text-center">Case</span>
+                </div>
+                <div className="max-h-36 min-h-[84px] overflow-y-auto divide-y divide-[var(--v2-border-subtle)]">
+                  {draft.unimportantRules.length === 0 ? (
+                    <div className="flex h-[84px] items-center justify-center text-[11px] text-[var(--v2-fg-muted)]">
+                      Add a preset above (Timestamps, Comments, UUIDs) or click + Add.
+                    </div>
+                  ) : (
+                    draft.unimportantRules.map((rule) => {
+                      const selected = selectedUnimpId === rule.id;
+                      return (
+                        <div
+                          key={rule.id}
+                          onClick={() => setSelectedUnimpId(rule.id)}
+                          className={`grid grid-cols-[24px_110px_1fr_48px_48px] items-center gap-1.5 px-2 py-1 ${
+                            selected ? "bg-[var(--v2-accent-soft)]" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rule.enabled}
+                            onChange={(e) =>
+                              updateUnimportant(rule.id, { enabled: e.target.checked })
+                            }
+                            className="accent-[var(--v2-accent)]"
+                          />
+                          <input
+                            type="text"
+                            value={rule.name}
+                            onChange={(e) => updateUnimportant(rule.id, { name: e.target.value })}
+                            className="v2-input h-[22px] w-full text-[11px]"
+                          />
+                          <input
+                            type="text"
+                            value={rule.pattern}
+                            placeholder="Regex or literal…"
+                            onChange={(e) =>
+                              updateUnimportant(rule.id, { pattern: e.target.value })
+                            }
+                            className="v2-input v2-mono h-[22px] w-full text-[11px]"
+                          />
+                          <div className="flex justify-center">
+                            <input
+                              type="checkbox"
+                              checked={rule.regex}
+                              onChange={(e) =>
+                                updateUnimportant(rule.id, { regex: e.target.checked })
+                              }
+                              className="accent-[var(--v2-accent)]"
+                            />
+                          </div>
+                          <div className="flex justify-center">
+                            <input
+                              type="checkbox"
+                              checked={rule.caseSensitive}
+                              onChange={(e) =>
+                                updateUnimportant(rule.id, { caseSensitive: e.target.checked })
+                              }
+                              className="accent-[var(--v2-accent)]"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => addUnimportant()}
+                  className="v2-btn h-[22px] px-2 text-[11px]"
+                >
+                  <Plus size={11} />
+                  Add
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedUnimpId}
+                  onClick={removeSelectedUnimportant}
+                  className="v2-btn h-[22px] px-2 text-[11px]"
+                >
+                  <Trash2 size={11} />
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
 
-        {/* 3. ALIGNMENT TAB */}
+        {/* 4. ALIGNMENT TAB */}
         {tab === "alignment" ? (
           <div className="grid grid-cols-2 gap-6 py-1">
             <div className="space-y-2.5">
@@ -372,6 +597,7 @@ export function V2TextRulesModal({
                   <input
                     type="radio"
                     name="v2-alignment-mode"
+                    data-testid={`v2/rules-align-${mode}`}
                     checked={draft.alignmentMode === mode}
                     onChange={() => patch({ alignmentMode: mode })}
                     className="accent-[var(--v2-accent)]"
@@ -385,6 +611,7 @@ export function V2TextRulesModal({
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
+                  data-testid="v2/rules-never-align"
                   checked={draft.neverAlignDifferences}
                   onChange={(e) => patch({ neverAlignDifferences: e.target.checked })}
                   className="accent-[var(--v2-accent)]"
@@ -427,7 +654,7 @@ export function V2TextRulesModal({
           </div>
         ) : null}
 
-        {/* 4. REPLACEMENTS TAB */}
+        {/* 5. REPLACEMENTS TAB */}
         {tab === "replacements" ? (
           <div className="space-y-2.5">
             <div className="overflow-hidden rounded-[6px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">

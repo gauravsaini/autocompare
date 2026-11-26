@@ -91,3 +91,39 @@ test("text compare: Shift+Click multi-line range merge and Ctrl+Z undo", async (
   await page.keyboard.press("Control+z");
   await expect(page.getByTestId("v2/statusbar")).toContainText("Undid");
 });
+
+test("text compare: Rules dialog covers Specs, Format, Importance, Alignment, and Replacements", async ({ page }) => {
+  await expect(page.getByTestId("v2/text-row-0")).toBeVisible({ timeout: 10000 });
+
+  // Open Rules dialog from toolbar
+  await page.getByTestId("v2/toolbar-rules").click();
+  await expect(page.getByTestId("v2/rules-tab-importance")).toHaveAttribute("aria-selected", "true");
+
+  // Specs tab: both file path specs are editable
+  await page.getByTestId("v2/rules-tab-specs").click();
+  await expect(page.getByTestId("v2/rules-spec-left")).toBeVisible();
+  await expect(page.getByTestId("v2/rules-spec-right")).toBeVisible();
+
+  // Format tab: per-side encoding dropdowns visible
+  await page.getByTestId("v2/rules-tab-format").click();
+  await expect(page.getByTestId("v2/rules-left-encoding")).toBeVisible();
+  await expect(page.getByTestId("v2/rules-right-encoding")).toBeVisible();
+
+  // Importance tab: add ISO Timestamps unimportant grammar preset
+  await page.getByTestId("v2/rules-tab-importance").click();
+  await page.getByTestId("v2/rules-add-preset-0").click();
+
+  // Alignment tab: switch to Unaligned and toggle Never align differences
+  await page.getByTestId("v2/rules-tab-alignment").click();
+  await page.getByTestId("v2/rules-align-unaligned").check();
+  await page.getByTestId("v2/rules-never-align").check();
+
+  // Replacements tab: add a replacement rule
+  await page.getByTestId("v2/rules-tab-replacements").click();
+  await page.getByTestId("v2/rules-add-replacement").click();
+
+  // Apply and confirm zero errors
+  await page.getByTestId("v2/rules-ok").click();
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+  await expect(page.getByTestId("v2/statusbar")).toContainText("Applied session rules");
+});

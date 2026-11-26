@@ -31,7 +31,7 @@ import {
   sideLineIndexToRowIndex,
   splitLineAt,
 } from "../utils/textBuffer";
-import { matchesWithReplacements } from "../utils/textReplacements";
+import { matchesUnderSessionRules } from "../utils/textReplacements";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 const DEFAULT_RULES_STORAGE_KEY = "autocompare.v2.text.defaultRules";
@@ -48,6 +48,7 @@ const DEFAULT_TEXT_RULES: TextSessionRules = {
   ignoreCase: false,
   ignoreBlank: false,
   minorEnabled: false,
+  unimportantRules: [],
   alignmentMode: "standard",
   neverAlignDifferences: false,
   skewTolerance: 2000,
@@ -245,19 +246,23 @@ export default function V2TextCompare({
           setRightDraft(demo.right);
         } else {
           const cur = rulesRef.current;
-          const encOverride =
-            cur.leftEncoding !== "None"
-              ? cur.leftEncoding === "Current Locale (UTF-8)"
-                ? "UTF-8"
-                : cur.leftEncoding
-              : undefined;
+          const normEnc = (v: string): string | undefined =>
+            v !== "None" ? (v === "Current Locale (UTF-8)" ? "UTF-8" : v) : undefined;
+          const leftEnc = normEnc(cur.leftEncoding);
+          const rightEnc = cur.sameEncoding ? leftEnc : normEnc(cur.rightEncoding);
           dto = await textCompare(l, r, {
             ignoreWhitespace: cur.ignoreWs,
             ignoreCase: cur.ignoreCase,
             ignoreBlankLines: cur.ignoreBlank,
             minorUnimportant: cur.minorEnabled,
             algorithm: cur.alignmentMode === "patience" ? "patience" : "myers",
-            encoding: encOverride,
+            alignmentMode: cur.alignmentMode,
+            neverAlignDifferences: cur.neverAlignDifferences,
+            skewTolerance: cur.skewTolerance,
+            useClosenessMatching: cur.useClosenessMatching,
+            encoding: leftEnc,
+            leftEncoding: leftEnc,
+            rightEncoding: rightEnc,
             eol: cur.eol,
           });
         }
@@ -280,7 +285,12 @@ export default function V2TextCompare({
       rules.ignoreBlank,
       rules.minorEnabled,
       rules.alignmentMode,
+      rules.neverAlignDifferences,
+      rules.skewTolerance,
+      rules.useClosenessMatching,
       rules.leftEncoding,
+      rules.rightEncoding,
+      rules.sameEncoding,
       rules.eol,
     ],
   );
@@ -304,22 +314,30 @@ export default function V2TextCompare({
     return () => window.removeEventListener("keydown", onKey);
   }, [findOpen]);
 
-  // Fold rows matching active Left -> Right replacement rules to `equal`
+  // Fold rows matching active Unimportant Grammar and/or Left -> Right replacement rules to `equal`
   const effectiveRows = useMemo(() => {
-    const activeRules = rules.replacements.filter((r) => r.enabled && r.left.length > 0);
-    if (activeRules.length === 0) return rows;
+    const hasUnimp =
+      rules.minorEnabled && rules.unimportantRules.some((r) => r.enabled && r.pattern.length > 0);
+    const hasRep = rules.replacements.some((r) => r.enabled && r.left.length > 0);
+    if (!hasUnimp && !hasRep) return rows;
     return rows.map((row) => {
       if (
         row.kind === "changed" &&
         row.left !== null &&
         row.right !== null &&
-        matchesWithReplacements(row.left, row.right, activeRules)
+        matchesUnderSessionRules(
+          row.left,
+          row.right,
+          rules.unimportantRules,
+          rules.replacements,
+          rules.minorEnabled,
+        )
       ) {
         return { ...row, kind: "equal" as const, inline: [] };
       }
       return row;
     });
-  }, [rows, rules.replacements]);
+  }, [rows, rules.unimportantRules, rules.replacements, rules.minorEnabled]);
 
   const hunks = useMemo(() => collectHunks(effectiveRows), [effectiveRows]);
 
@@ -1237,12 +1255,17 @@ export default function V2TextCompare({
         open={rulesModalTab !== null}
         initialTab={rulesModalTab ?? "importance"}
         rules={rules}
+        leftPath={leftDraft}
+        rightPath={rightDraft}
         onClose={() => setRulesModalTab(null)}
-        onApply={(next, scope) => {
+        onApply={(next, scope, paths) => {
           rulesRef.current = next;
           setRules(next);
           if (scope === "defaults") {
             saveDefaultRules(next);
+          }
+          if (paths) {
+            onPathsChange(paths.left, paths.right);
           }
           setRulesModalTab(null);
           setNotice(
