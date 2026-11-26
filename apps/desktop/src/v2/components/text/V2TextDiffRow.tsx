@@ -49,6 +49,28 @@ function TakeArrow({ dir }: { dir: TextSide }): React.JSX.Element {
   );
 }
 
+function SingleLineArrow({ dir }: { dir: TextSide }): React.JSX.Element {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {dir === "left" ? (
+        <path d="M4 2.5 8 6 4 9.5" />
+      ) : (
+        <path d="M8 2.5 4 6 8 9.5" />
+      )}
+    </svg>
+  );
+}
+
 export function renderHighlightedLine(
   text: string,
   spans: readonly InlineSpanDto[],
@@ -104,6 +126,7 @@ export interface V2TextDiffRowProps {
   readonly dragging: boolean;
   readonly onSelect: (index: number) => void;
   readonly onCopyHunk: (hunk: TextHunk, dir: TextSide) => void;
+  readonly onCopyLine: (index: number, dir: TextSide) => void;
   readonly onStartEdit: (index: number, side: TextSide, text: string) => void;
   readonly onEditChange: (text: string) => void;
   readonly onCommitEdit: () => void;
@@ -124,6 +147,7 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   dragging,
   onSelect,
   onCopyHunk,
+  onCopyLine,
   onStartEdit,
   onEditChange,
   onCommitEdit,
@@ -131,7 +155,8 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
   onStartDrag,
   onResetSplit,
 }: V2TextDiffRowProps): React.JSX.Element {
-  const showArrow = meta && (meta.role === "single" || meta.role === "start");
+  const showBlockArrow = meta && (meta.role === "single" || meta.role === "start");
+  const showLineArrow = meta && (meta.role === "middle" || meta.role === "end");
   const railClass =
     !meta || meta.role === "single"
       ? ""
@@ -183,23 +208,47 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
       style={{
         gridTemplateColumns: `22px 42px minmax(0, ${splitPct}fr) 6px 22px 42px minmax(0, ${100 - splitPct}fr)`,
       }}
-      className="grid h-[21px] items-stretch"
+      className="group grid h-[21px] items-stretch"
     >
       {/* Left Action Gutter */}
       <span
         className={`relative flex items-center justify-center bg-[var(--v2-surface-subtle)] ${railClass}`}
       >
-        {showArrow && meta ? (
+        {showBlockArrow && meta ? (
           <button
             type="button"
-            title="Copy section Left → Right"
+            data-testid={`v2/copy-block-left-${row.index}`}
+            title={
+              meta.role === "single"
+                ? "Copy line Left → Right"
+                : "Copy block Left → Right (Option+Click for this line only)"
+            }
             onClick={(e) => {
               e.stopPropagation();
-              onCopyHunk(meta.hunk, "left");
+              if (e.altKey || meta.role === "single") {
+                onCopyLine(row.index, "left");
+              } else {
+                onCopyHunk(meta.hunk, "left");
+              }
             }}
-            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
+            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
           >
             <TakeArrow dir="left" />
+          </button>
+        ) : showLineArrow ? (
+          <button
+            type="button"
+            data-testid={`v2/copy-line-left-${row.index}`}
+            title="Copy only this line Left → Right"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyLine(row.index, "left");
+            }}
+            className={`relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-accent)] transition-opacity hover:bg-[var(--v2-btn-hover)] ${
+              isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <SingleLineArrow dir="left" />
           </button>
         ) : null}
       </span>
@@ -260,17 +309,41 @@ const V2TextDiffRow = React.memo(function V2TextDiffRow({
       <span
         className={`relative flex items-center justify-center bg-[var(--v2-surface-subtle)] ${railClass}`}
       >
-        {showArrow && meta ? (
+        {showBlockArrow && meta ? (
           <button
             type="button"
-            title="Copy section Right → Left"
+            data-testid={`v2/copy-block-right-${row.index}`}
+            title={
+              meta.role === "single"
+                ? "Copy line Right → Left"
+                : "Copy block Right → Left (Option+Click for this line only)"
+            }
             onClick={(e) => {
               e.stopPropagation();
-              onCopyHunk(meta.hunk, "right");
+              if (e.altKey || meta.role === "single") {
+                onCopyLine(row.index, "right");
+              } else {
+                onCopyHunk(meta.hunk, "right");
+              }
             }}
-            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
+            className="relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-amber)] hover:bg-[var(--v2-btn-hover)]"
           >
             <TakeArrow dir="right" />
+          </button>
+        ) : showLineArrow ? (
+          <button
+            type="button"
+            data-testid={`v2/copy-line-right-${row.index}`}
+            title="Copy only this line Right → Left"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyLine(row.index, "right");
+            }}
+            className={`relative z-10 inline-flex h-[15px] w-[15px] items-center justify-center rounded bg-[var(--v2-surface-subtle)] text-[var(--v2-accent)] transition-opacity hover:bg-[var(--v2-btn-hover)] ${
+              isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
+          >
+            <SingleLineArrow dir="right" />
           </button>
         ) : null}
       </span>

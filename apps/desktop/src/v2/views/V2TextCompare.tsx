@@ -372,6 +372,25 @@ export default function V2TextCompare({
     [summary, rows, onDirtyChange, pushUndoSnapshot],
   );
 
+  const handleCopyLine = useCallback(
+    async (rowIndex: number, dir: TextSide): Promise<void> => {
+      if (!summary) return;
+      const label = `copy line ${rowIndex + 1} (${dir === "left" ? "L → R" : "R → L"})`;
+      const snapshot = rows;
+      try {
+        await textApplyHunk(summary.session, rowIndex, rowIndex, dir);
+        const fetched = await fetchSessionRows(summary.session, Math.max(rows.length, summary.rows));
+        pushUndoSnapshot(snapshot, label);
+        setRows(fetched);
+        onDirtyChange(true);
+        setNotice(`Copied line ${rowIndex + 1} (${dir === "left" ? "L → R" : "R → L"})`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [summary, rows, onDirtyChange, pushUndoSnapshot],
+  );
+
   const handleCommitEdit = useCallback(async (): Promise<void> => {
     if (!editing || !summary) return;
     const label = `edit line ${editing.index + 1} (${editing.side})`;
@@ -422,6 +441,13 @@ export default function V2TextCompare({
       void handleCopyHunk(hunk, dir);
     },
     [handleCopyHunk],
+  );
+
+  const handleCopyLineSync = useCallback(
+    (rowIndex: number, dir: TextSide): void => {
+      void handleCopyLine(rowIndex, dir);
+    },
+    [handleCopyLine],
   );
 
   const handleCommitEditSync = useCallback((): void => {
@@ -641,6 +667,7 @@ export default function V2TextCompare({
                       dragging={dragging}
                       onSelect={setSelectedIndex}
                       onCopyHunk={handleCopyHunkSync}
+                      onCopyLine={handleCopyLineSync}
                       onStartEdit={handleStartEdit}
                       onEditChange={handleEditChange}
                       onCommitEdit={handleCommitEditSync}
@@ -656,10 +683,10 @@ export default function V2TextCompare({
         </div>
       </div>
 
-      {/* Bottom Stacked Line Detail Pane */}
+      {/* Bottom Stacked Line Detail Pane with Selective Single-Line Merge */}
       <div className="v2-mono shrink-0 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] text-[11.5px]">
-        <div className="grid grid-cols-[26px_1fr] border-b border-[var(--v2-border-subtle)] leading-[21px]">
-          <span className="flex items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
+        <div className="grid grid-cols-[26px_1fr_auto] items-center border-b border-[var(--v2-border-subtle)] leading-[22px]">
+          <span className="flex h-full items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
             L
           </span>
           <div
@@ -676,11 +703,22 @@ export default function V2TextCompare({
                     "var(--v2-chg-inline)",
                   )
                 : ""
-              : "Click any line to inspect character-level differences"}
+              : "Click any line to inspect character-level differences or merge selectively"}
           </div>
+          {selectedRow && selectedRow.kind !== "equal" ? (
+            <button
+              type="button"
+              data-testid="v2/detail-copy-line-left"
+              title="Copy only this selected line Left → Right"
+              onClick={() => void handleCopyLine(selectedRow.index, "left")}
+              className="v2-btn mx-1.5 h-[18px] px-2 font-sans text-[10.5px]"
+            >
+              {selectedRow.left === null ? "Delete R Line" : "Copy Line →"}
+            </button>
+          ) : null}
         </div>
-        <div className="grid grid-cols-[26px_1fr] leading-[21px]">
-          <span className="flex items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
+        <div className="grid grid-cols-[26px_1fr_auto] items-center leading-[22px]">
+          <span className="flex h-full items-center justify-center border-r border-[var(--v2-border-subtle)] text-[10px] font-semibold text-[var(--v2-fg-muted)]">
             R
           </span>
           <div
@@ -697,6 +735,17 @@ export default function V2TextCompare({
                 )
               : ""}
           </div>
+          {selectedRow && selectedRow.kind !== "equal" ? (
+            <button
+              type="button"
+              data-testid="v2/detail-copy-line-right"
+              title="Copy only this selected line Right → Left"
+              onClick={() => void handleCopyLine(selectedRow.index, "right")}
+              className="v2-btn mx-1.5 h-[18px] px-2 font-sans text-[10.5px]"
+            >
+              {selectedRow.right === null ? "Delete L Line" : "← Copy Line"}
+            </button>
+          ) : null}
         </div>
       </div>
 
