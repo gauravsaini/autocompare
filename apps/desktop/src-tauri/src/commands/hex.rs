@@ -26,8 +26,8 @@
 //! unaffected.
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
@@ -80,15 +80,38 @@ pub struct HexPage {
     pub truncated: bool,
 }
 
-/// Server-side session: paths plus sizes for paging.
-/// The summary itself is returned to the caller at compare time;
-/// file bytes are never cached here.
+/// Receipt returned after staging a single byte patch. Mirrors `ipc/hex.ts` `HexEditReceipt`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexEditReceipt {
+    pub session_id: String,
+    pub side: String,
+    pub offset: u64,
+    pub value: u8,
+    pub pending_edits: usize,
+}
+
+/// Receipt returned after flushing staged edits to disk. Mirrors `ipc/hex.ts` `HexSaveReceipt`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexSaveReceipt {
+    pub session_id: String,
+    pub side: String,
+    pub path: String,
+    pub bytes_written: u64,
+    pub edits_applied: usize,
+}
+
+/// Server-side session: paths, sizes, and sparse staged byte edits.
+/// File bytes are never cached here; only user-edited offsets live in memory until saved.
 #[derive(Debug, Clone)]
 struct HexSession {
     left: PathBuf,
     right: PathBuf,
     left_size: u64,
     right_size: u64,
+    left_edits: HashMap<u64, u8>,
+    right_edits: HashMap<u64, u8>,
 }
 
 static SESSIONS: LazyLock<Mutex<HashMap<String, HexSession>>> =
@@ -320,6 +343,19 @@ fn find_in_file(path: &Path, needle: &[u8], from: u64) -> Result<Option<u64>, St
 ///
 /// Returns sizes, the first-difference offset and the equality flag.
 /// Never returns file bytes; page them with [`hex_get_page`].
+fn overlay_edits(buf: &mut [u8], base_offset: u64, edits: &HashMap<u64, u8>) {
+    for (&off, &val) in edits {
+        if off >= base_offset {
+            let rel = off.saturating_sub(base_offset);
+            if let Ok(idx) = usize::try_from(rel) {
+                if let Some(slot) = buf.get_mut(idx) {
+                    *slot = val;
+                }
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
     let left_path = Path::new(left.as_str());
@@ -333,6 +369,8 @@ pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
             right: right_path.to_path_buf(),
             left_size,
             right_size,
+            left_edits: HashMap::new(),
+            right_edits: HashMap::new(),
         },
     )?;
     Ok(HexSummary {
@@ -344,7 +382,7 @@ pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
     })
 }
 
-/// Serves one bounded byte window over both session files.
+/// Serves one bounded byte window over both session files, overlaying any staged edits.
 ///
 /// `len` is clamped to [`MAX_PAGE_LEN`]. Offsets past EOF yield empty
 /// sides with `truncated == false`.
@@ -352,8 +390,10 @@ pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
 pub fn hex_get_page(session: String, offset: u64, len: u64) -> Result<HexPage, String> {
     let snapshot = get_session(session.as_str())?;
     let take = len.min(MAX_PAGE_LEN);
-    let left = read_window(snapshot.left.as_path(), offset, take)?;
-    let right = read_window(snapshot.right.as_path(), offset, take)?;
+    let mut left = read_window(snapshot.left.as_path(), offset, take)?;
+    let mut right = read_window(snapshot.right.as_path(), offset, take)?;
+    overlay_edits(left.as_mut_slice(), offset, &snapshot.left_edits);
+    overlay_edits(right.as_mut_slice(), offset, &snapshot.right_edits);
     let total = snapshot.left_size.max(snapshot.right_size);
     let got = (left.len() as u64).max(right.len() as u64);
     let truncated = offset.saturating_add(got) < total;
@@ -365,6 +405,113 @@ pub fn hex_get_page(session: String, offset: u64, len: u64) -> Result<HexPage, S
         right,
         total,
         truncated,
+    })
+}
+
+/// Stages a single byte patch in memory for `side` (`"left"` or `"right"`).
+#[tauri::command]
+pub fn hex_apply_edit(
+    session: String,
+    side: String,
+    offset: u64,
+    value: u8,
+) -> Result<HexEditReceipt, String> {
+    let is_left = match side.as_str() {
+        "left" => true,
+        "right" => false,
+        other => return Err(format!("invalid hex side: {other}")),
+    };
+    let mut guard = SESSIONS.lock().map_err(|_| store_msg())?;
+    let entry = guard
+        .get_mut(session.as_str())
+        .ok_or_else(|| unknown_session_msg(session.as_str()))?;
+    let (edits, size) = if is_left {
+        (&mut entry.left_edits, entry.left_size)
+    } else {
+        (&mut entry.right_edits, entry.right_size)
+    };
+    if offset >= size {
+        return Err(format!("offset {offset} is past end of file ({size} bytes)"));
+    }
+    edits.insert(offset, value);
+    let pending_edits = edits.len();
+    Ok(HexEditReceipt {
+        session_id: session,
+        side,
+        offset,
+        value,
+        pending_edits,
+    })
+}
+
+/// Persists all staged byte edits for `side` to `path` on disk and clears the staged map.
+#[tauri::command]
+pub fn hex_save_side(
+    session: String,
+    side: String,
+    path: String,
+) -> Result<HexSaveReceipt, String> {
+    let is_left = match side.as_str() {
+        "left" => true,
+        "right" => false,
+        other => return Err(format!("invalid hex side: {other}")),
+    };
+    let (source_path, edits_vec) = {
+        let guard = SESSIONS.lock().map_err(|_| store_msg())?;
+        let entry = guard
+            .get(session.as_str())
+            .ok_or_else(|| unknown_session_msg(session.as_str()))?;
+        let src = if is_left { &entry.left } else { &entry.right };
+        let map = if is_left { &entry.left_edits } else { &entry.right_edits };
+        let mut pairs: Vec<(u64, u8)> = map.iter().map(|(&k, &v)| (k, v)).collect();
+        pairs.sort_by_key(|(off, _)| *off);
+        (src.clone(), pairs)
+    };
+
+    let target = PathBuf::from(path.as_str());
+    if target != source_path {
+        std::fs::copy(source_path.as_path(), target.as_path())
+            .map_err(|err| format!("copying to {} failed: {err}", target.display()))?;
+    }
+
+    let edits_applied = edits_vec.len();
+    if !edits_vec.is_empty() {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(target.as_path())
+            .map_err(|err| format!("opening {} for write failed: {err}", target.display()))?;
+        for (off, byte) in &edits_vec {
+            file.seek(SeekFrom::Start(*off))
+                .map_err(|err| format!("seeking {} failed: {err}", target.display()))?;
+            file.write_all(&[*byte])
+                .map_err(|err| format!("writing {} failed: {err}", target.display()))?;
+        }
+        file.flush()
+            .map_err(|err| format!("flushing {} failed: {err}", target.display()))?;
+    }
+
+    let bytes_written = file_len(target.as_path())?;
+    if let Ok(mut guard) = SESSIONS.lock() {
+        if let Some(entry) = guard.get_mut(session.as_str()) {
+            if is_left {
+                entry.left = target;
+                entry.left_size = bytes_written;
+                entry.left_edits.clear();
+            } else {
+                entry.right = target;
+                entry.right_size = bytes_written;
+                entry.right_edits.clear();
+            }
+        }
+    }
+
+    Ok(HexSaveReceipt {
+        session_id: session,
+        side,
+        path,
+        bytes_written,
+        edits_applied,
     })
 }
 
@@ -643,5 +790,44 @@ mod tests {
         let back: Result<HexPage, _> = serde_json::from_str(json.as_str());
         assert!(back.is_ok());
         assert_eq!(back.ok(), Some(page));
+    }
+
+    #[test]
+    fn apply_edit_overlays_page_and_saves_to_disk() {
+        let left = temp_path("edit-l");
+        let right = temp_path("edit-r");
+        assert!(write_bytes(&left, &[0x10, 0x20, 0x30, 0x40]));
+        assert!(write_bytes(&right, &[0x10, 0x20, 0x30, 0x40]));
+        let cmp = hex_compare(left.display().to_string(), right.display().to_string());
+        assert!(cmp.is_ok());
+        let session_id = match cmp {
+            Ok(s) => s.session_id,
+            Err(_) => {
+                remove_quiet(&left);
+                remove_quiet(&right);
+                return;
+            }
+        };
+        let edit = hex_apply_edit(session_id.clone(), "right".to_string(), 1, 0xFF);
+        assert!(edit.is_ok());
+        let page = hex_get_page(session_id.clone(), 0, 16);
+        assert!(page.is_ok());
+        if let Ok(p) = page {
+            assert_eq!(p.right, vec![0x10, 0xFF, 0x30, 0x40]);
+        }
+        let saved = hex_save_side(
+            session_id,
+            "right".to_string(),
+            right.display().to_string(),
+        );
+        assert!(saved.is_ok());
+        if let Ok(receipt) = saved {
+            assert_eq!(receipt.edits_applied, 1);
+            assert_eq!(receipt.bytes_written, 4);
+        }
+        let disk = std::fs::read(&right);
+        remove_quiet(&left);
+        remove_quiet(&right);
+        assert_eq!(disk.ok(), Some(vec![0x10, 0xFF, 0x30, 0x40]));
     }
 }

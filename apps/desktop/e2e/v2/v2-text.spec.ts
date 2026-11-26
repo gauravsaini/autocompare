@@ -3,9 +3,10 @@
  *
  * Verifies:
  *  - Demo diff rows render immediately with zero error banner
- *  - Dual path bar inputs (v2/path-left, v2/path-right) are editable
- *  - Toolbar filters (All / Diffs / Same), Swap, and Find (Ctrl+F / Esc) work cleanly
- *  - Draggable Left/Right splitter updates pane split ratio smoothly
+ *  - Dual path bar inputs (v2/path-left, v2/path-right) and toolbar filters work cleanly
+ *  - Direct click-to-type notepad editing, double-click word selection (no collapse),
+ *    and Enter line split with live re-diff
+ *  - Shift+Click multi-line range selection + range merge + Ctrl+Z undo
  */
 import { expect, test } from "@playwright/test";
 
@@ -43,4 +44,50 @@ test("text compare: renders diff rows, path bar, and toolbar controls", async ({
   await expect(page.getByTestId("v2/path-left")).toHaveValue(beforeRight);
   await expect(page.getByTestId("v2/path-right")).toHaveValue(beforeLeft);
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+});
+
+test("text compare: notepad click-to-type, double-click word select, and Enter line split", async ({ page }) => {
+  const row0 = page.getByTestId("v2/text-row-0");
+  await expect(row0).toBeVisible({ timeout: 10000 });
+
+  // Single-click Left code cell mounts seamless borderless input immediately
+  const leftCell = row0.locator("div").first();
+  await leftCell.click();
+  const editor = row0.locator("input[type='text']").first();
+  await expect(editor).toBeVisible();
+
+  // Double-click word inside editor preserves non-empty text selection
+  await editor.dblclick();
+  const selLen = await editor.evaluate((el: HTMLInputElement) => (el.selectionEnd ?? 0) - (el.selectionStart ?? 0));
+  expect(selLen).toBeGreaterThan(0);
+
+  // Type and press Enter to split line live
+  await editor.press("End");
+  await editor.type(" edited");
+  await editor.press("Enter");
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+  await expect(page.getByTestId("v2/text-row-1")).toBeVisible();
+});
+
+test("text compare: Shift+Click multi-line range merge and Ctrl+Z undo", async ({ page }) => {
+  await expect(page.getByTestId("v2/text-row-0")).toBeVisible({ timeout: 10000 });
+
+  // Jump to first diff section via toolbar Next
+  await page.getByTestId("v2/toolbar-next").click();
+  const detailCopyLeft = page.getByTestId("v2/detail-copy-line-left");
+  await expect(detailCopyLeft).toBeVisible();
+
+  // Shift+Click two rows ahead via line-number gutter to form a multi-line range
+  const rows = page.locator("[data-testid^='v2/text-row-']");
+  const count = await rows.count();
+  expect(count).toBeGreaterThan(4);
+  await rows.nth(6).locator("span").nth(1).click();
+  await rows.nth(9).locator("span").nth(1).click({ modifiers: ["Shift"] });
+  await expect(detailCopyLeft).toContainText("Copy 4 Lines");
+
+  // Merge selected range and verify Undo via Ctrl+Z
+  await detailCopyLeft.click();
+  await expect(page.getByTestId("v2/statusbar")).toContainText("Copied 4 lines");
+  await page.keyboard.press("Control+z");
+  await expect(page.getByTestId("v2/statusbar")).toContainText("Undid");
 });

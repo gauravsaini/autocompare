@@ -1,11 +1,8 @@
 /**
  * Hex (binary) compare IPC surface.
  *
- * Wave 1b. Rust mirrors live in
+ * Wave 1b + v2 byte editing. Rust mirrors live in
  * `src-tauri/src/commands/hex.rs` (all `serde` `camelCase`).
- * Wrappers follow the `src/ipc/client.ts` pattern: arg keys must match
- * the Rust parameter names exactly (`session`, `offset`, `len`,
- * `needle_hex`, `from_offset`).
  */
 
 import { invoke } from "./client";
@@ -33,6 +30,24 @@ export interface HexPage {
   /** max(leftSize, rightSize); page over [0, total). */
   readonly total: number;
   readonly truncated: boolean;
+}
+
+/** Rust mirror: `commands::hex::HexEditReceipt`. */
+export interface HexEditReceipt {
+  readonly sessionId: string;
+  readonly side: "left" | "right";
+  readonly offset: number;
+  readonly value: number;
+  readonly pendingEdits: number;
+}
+
+/** Rust mirror: `commands::hex::HexSaveReceipt`. */
+export interface HexSaveReceipt {
+  readonly sessionId: string;
+  readonly side: "left" | "right";
+  readonly path: string;
+  readonly bytesWritten: number;
+  readonly editsApplied: number;
 }
 
 /** Opens a hex session for two files. Never returns file bytes. */
@@ -63,4 +78,23 @@ export function hexFind(
     needle_hex: needleHex,
     from_offset: fromOffset,
   });
+}
+
+/** Stages a single byte patch at `offset` on `side` (`"left"` / `"right"`). */
+export function hexApplyEdit(
+  session: string,
+  side: "left" | "right",
+  offset: number,
+  value: number,
+): Promise<HexEditReceipt> {
+  return invoke<HexEditReceipt>("hex_apply_edit", { session, side, offset, value });
+}
+
+/** Writes staged byte edits for `side` to `path` on disk. */
+export function hexSaveSide(
+  session: string,
+  side: "left" | "right",
+  path: string,
+): Promise<HexSaveReceipt> {
+  return invoke<HexSaveReceipt>("hex_save_side", { session, side, path });
 }

@@ -1269,6 +1269,31 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const res: number | null = null;
       return res as unknown as T;
     }
+    case "hex_apply_edit": {
+      const sessionId = strArg(args, ["session", "sessionId"], "mock-hex-1");
+      const side = strArg(args, ["side"], "left");
+      const offset = numArg(args, ["offset"], 0);
+      const value = numArg(args, ["value"], 0) & 0xff;
+      return {
+        sessionId,
+        side,
+        offset,
+        value,
+        pendingEdits: 1,
+      } as unknown as T;
+    }
+    case "hex_save_side": {
+      const sessionId = strArg(args, ["session", "sessionId"], "mock-hex-1");
+      const side = strArg(args, ["side"], "left");
+      const path = strArg(args, ["path"], "");
+      return {
+        sessionId,
+        side,
+        path,
+        bytesWritten: 64,
+        editsApplied: 1,
+      } as unknown as T;
+    }
     case "merge_text_plan": {
       const res: TextMergePlan = {
         conflicts: [

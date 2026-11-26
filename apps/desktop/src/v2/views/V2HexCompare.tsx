@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, Search, X } from "lucide-react";
-import { hexCompare, hexFind, hexGetPage } from "../../ipc/hex";
+import { hexApplyEdit, hexCompare, hexFind, hexGetPage, hexSaveSide } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
@@ -61,6 +61,7 @@ export default function V2HexCompare({
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [findOpen, setFindOpen] = useState(false);
   const [findHex, setFindHex] = useState("");
@@ -195,9 +196,43 @@ export default function V2HexCompare({
         next.set(key, parsed);
         return next;
       });
+      if (summary) {
+        void hexApplyEdit(summary.sessionId, editingByte.side, editingByte.absOffset, parsed).catch(
+          (e) => setError(e instanceof Error ? e.message : String(e)),
+        );
+      }
     }
     setEditingByte(null);
-  }, [editingByte]);
+  }, [editingByte, summary]);
+
+  const handleSaveSide = useCallback(
+    async (side: "left" | "right"): Promise<void> => {
+      if (!summary) return;
+      const targetPath = side === "left" ? leftDraft : rightDraft;
+      if (!targetPath.trim()) {
+        setNotice(`No file path set for ${side} side.`);
+        return;
+      }
+      try {
+        const rep = await hexSaveSide(summary.sessionId, side, targetPath.trim());
+        setByteEdits((prev) => {
+          const next = new Map(prev);
+          const prefix = `${side}:`;
+          for (const k of Array.from(next.keys())) {
+            if (k.startsWith(prefix)) next.delete(k);
+          }
+          return next;
+        });
+        setNotice(
+          `Saved ${side} (${rep.editsApplied} ${rep.editsApplied === 1 ? "edit" : "edits"}, ${rep.bytesWritten} B)`,
+        );
+        void resetBaseline();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [summary, leftDraft, rightDraft, resetBaseline],
+  );
 
   const rows = useMemo(() => {
     if (!page) return [];
@@ -290,9 +325,10 @@ export default function V2HexCompare({
           : `First diff at 0x${(summary.firstDiff ?? 0).toString(16).toUpperCase().padStart(8, "0")}`
         : "Ready",
       center:
-        editedCount > 0
+        notice ??
+        (editedCount > 0
           ? `${editedCount} modified ${editedCount === 1 ? "byte" : "bytes"} · Double-click any byte to edit (⌘Z undo)`
-          : `Window 0x${offset.toString(16).toUpperCase().padStart(8, "0")} · Double-click any byte to edit`,
+          : `Window 0x${offset.toString(16).toUpperCase().padStart(8, "0")} · Double-click any byte to edit`),
       right: summary ? `${summary.leftSize} B / ${summary.rightSize} B` : "",
     });
   }, [onStatusChange, summary, offset, byteEdits.size]);
@@ -329,6 +365,7 @@ export default function V2HexCompare({
         leftPlaceholder="Left binary path…"
         rightPlaceholder="Right binary path…"
         splitPct={splitPct}
+        onSaveSide={(side) => void handleSaveSide(side)}
       />
 
       {/* Docked Hex Find Bar */}
