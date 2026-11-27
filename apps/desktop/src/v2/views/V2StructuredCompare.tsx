@@ -71,6 +71,7 @@ export default function V2StructuredCompare({
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [ignoreArrayOrder, setIgnoreArrayOrder] = useState(false);
   const [ignoreCase, setIgnoreCase] = useState(false);
+  const [canonicalized, setCanonicalized] = useState(false);
   const [pathQuery, setPathQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +132,7 @@ export default function V2StructuredCompare({
   const handleCanonicalize = (): void => {
     if (parsedLeft.ok) setLeftText(canonicalizeJson(parsedLeft.value));
     if (parsedRight.ok) setRightText(canonicalizeJson(parsedRight.value));
+    if (parsedLeft.ok && parsedRight.ok) setCanonicalized(true);
   };
 
   useEffect(() => {
@@ -145,6 +147,13 @@ export default function V2StructuredCompare({
       reload: () => void loadFromPaths(leftDraft, rightDraft),
     });
   }, [onRegisterCommands, filterMode, onPathsChange, leftDraft, rightDraft, leftText, rightText, loadFromPaths]);
+
+  const structuredMode = useMemo(() => {
+    if (!parsedLeft.ok || !parsedRight.ok) return "error";
+    return `${parsedLeft.format}:${parsedRight.format}`;
+  }, [parsedLeft, parsedRight]);
+
+  const structuredStatus = parsedLeft.ok && parsedRight.ok ? "ok" : "error";
 
   useEffect(() => {
     const fmt =
@@ -161,6 +170,10 @@ export default function V2StructuredCompare({
   return (
     <div
       data-testid="v2/structured-view"
+      data-structured-mode={structuredMode}
+      data-structured-status={structuredStatus}
+      data-ignore-array-order={String(ignoreArrayOrder)}
+      data-canonicalized={String(canonicalized)}
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]"
     >
       <V2DualPathBar

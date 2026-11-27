@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 autocompare-compare = { path = "../compare" }
+autocompare-diff = { path = "../diff" }
 autocompare-sessions = { path = "../sessions" }
 autocompare-vfs = { path = "../vfs" }
 serde = { version = "1", features = ["derive"] }

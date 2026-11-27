@@ -10,6 +10,7 @@ use autocompare_compare::{
     FolderOptions, SyncDirection, SyncOptions, TableOptions, TextOptions, compare_folders,
     compare_table_files, compare_text_files, plan_sync,
 };
+use autocompare_diff::Op;
 use autocompare_vfs::registry::VfsRegistry;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -128,8 +129,11 @@ pub fn dispatch_rpc(method: &str, params: &Value) -> Result<Value, String> {
             };
             let cmp = compare_text_files(Path::new(left), Path::new(right), &opts)
                 .map_err(|e| e.to_string())?;
-            let equal = cmp.left_lines == cmp.right_lines && !opts.ignore_case && !opts.ignore_space_change
-                || cmp.script.is_empty();
+            let equal = cmp
+                .script
+                .ops
+                .iter()
+                .all(|op| matches!(op, Op::Equal { .. }));
             Ok(json!({
                 "left_lines": cmp.left_lines,
                 "right_lines": cmp.right_lines,
@@ -181,7 +185,7 @@ pub fn dispatch_rpc(method: &str, params: &Value) -> Result<Value, String> {
                 "header_r": cmp.header_r,
                 "rows_l": cmp.rows_l,
                 "rows_r": cmp.rows_r,
-                "equal": cmp.script.is_empty(),
+                "equal": cmp.script.ops.iter().all(|op| matches!(op, Op::Equal { .. })),
             }))
         }
         "plan_sync" => {

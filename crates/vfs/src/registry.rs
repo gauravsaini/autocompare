@@ -235,6 +235,17 @@ mod tests {
         assert_eq!(u4.scheme, "file");
     }
 
+    fn make_temp_dir(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "autocompare_vfs_reg_{}_{}",
+            label,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mkdir temp");
+        dir
+    }
+
     #[test]
     fn opens_local_zip_tar_and_bcss_through_registry() {
         let reg = VfsRegistry::with_builtins();
@@ -243,17 +254,17 @@ mod tests {
         assert!(reg.supports("tar"));
         assert!(reg.supports("bcss"));
 
-        let tmp = tempfile::tempdir().expect("tempdir");
-        std::fs::write(tmp.path().join("hello.txt"), b"world").expect("write hello");
+        let tmp = make_temp_dir("builtins");
+        std::fs::write(tmp.join("hello.txt"), b"world").expect("write hello");
 
         // 1. LocalFs via file://
-        let file_uri = format!("file://{}#hello.txt", tmp.path().display());
+        let file_uri = format!("file://{}#hello.txt", tmp.display());
         let (local_vfs, sub) = reg.open_with_subpath(&file_uri).expect("open file://");
         assert_eq!(sub.as_str(), "hello.txt");
         assert_eq!(local_vfs.read_all(&sub, 1024).expect("read"), b"world");
 
         // 2. ZipFs via zip://
-        let zip_path = tmp.path().join("bundle.zip");
+        let zip_path = tmp.join("bundle.zip");
         let entry_path = VfsPath::new("nested/a.txt").expect("vfs path");
         let zip_bytes = create_zip_archive(&[(&entry_path, b"from-zip")]).expect("zip");
         std::fs::write(&zip_path, zip_bytes).expect("write zip");
@@ -263,7 +274,7 @@ mod tests {
         assert_eq!(zip_vfs.read_all(&zsub, 1024).expect("read zip"), b"from-zip");
 
         // 3. TarGzFs via plain .tar.gz auto-detection
-        let tar_path = tmp.path().join("bundle.tar.gz");
+        let tar_path = tmp.join("bundle.tar.gz");
         let tar_bytes = create_tar_gz_archive(&[(&entry_path, b"from-tar")]).expect("tar");
         std::fs::write(&tar_path, tar_bytes).expect("write tar");
 
@@ -276,7 +287,7 @@ mod tests {
         );
 
         // 4. SnapshotFs via bcss://
-        let bcss_path = tmp.path().join("tree.bcss");
+        let bcss_path = tmp.join("tree.bcss");
         let mut doc = SnapshotDocument::new("demo");
         doc.add_entry(SnapshotEntry {
             path: "README.md".to_string(),
@@ -293,22 +304,27 @@ mod tests {
         let bcss_vfs = reg.open(&bcss_uri).expect("open bcss://");
         let readme = VfsPath::new("README.md").expect("readme path");
         assert_eq!(bcss_vfs.stat(&readme).expect("stat").len, 42);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn rejects_unknown_scheme_and_allows_custom_registration() {
         let mut reg = VfsRegistry::with_builtins();
-        let err = reg.open("s3://my-bucket/prefix").unwrap_err();
+        let err = match reg.open("s3://my-bucket/prefix") {
+            Err(e) => e,
+            Ok(_) => panic!("expected UnsupportedFormat for s3://"),
+        };
         assert!(matches!(err, VfsError::UnsupportedFormat(_)));
 
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().to_path_buf();
+        let root = make_temp_dir("custom");
+        let root_clone = root.clone();
         reg.register_scheme(
             "mem-alias",
-            Arc::new(move |_target: &str| Ok(Box::new(LocalFs::new(&root)?))),
+            Arc::new(move |_target: &str| Ok(Box::new(LocalFs::new(&root_clone)?))),
         );
         assert!(reg.supports("mem-alias"));
         let vfs = reg.open("mem-alias://anything").expect("open custom");
         assert!(!vfs.is_read_only());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

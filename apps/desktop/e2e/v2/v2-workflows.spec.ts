@@ -170,6 +170,8 @@ test("structured diff plugin (#9): compares JSON AST, toggles array order, and s
   await page.getByTestId("v2/home-card-structured").click();
   const view = page.getByTestId("v2/structured-view");
   await expect(view).toBeVisible({ timeout: 10000 });
+  await expect(view).toHaveAttribute("data-structured-mode", "json:json");
+  await expect(view).toHaveAttribute("data-structured-status", "ok");
 
   await expect(view).toContainText("$.database.host");
   await expect(view).toContainText("$.database.ssl");
@@ -177,8 +179,11 @@ test("structured diff plugin (#9): compares JSON AST, toggles array order, and s
   const ignoreArrayOrder = view.getByLabel("Ignore array order");
   await ignoreArrayOrder.check();
   await expect(ignoreArrayOrder).toBeChecked();
+  await expect(view).toHaveAttribute("data-ignore-array-order", "true");
 
   await view.getByRole("button", { name: "Sort Keys & Format" }).click();
-  await expect(page.getByTestId("v2/statusbar")).toContainText("JSON/YAML AST");
+  await expect(view).toHaveAttribute("data-canonicalized", "true");
+  await expect(page.getByTestId("v2/statusbar")).toContainText("JSON ↔ JSON");
+  await expect(page.getByTestId("v2/statusbar")).toContainText("Array-order insensitive");
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
 });
