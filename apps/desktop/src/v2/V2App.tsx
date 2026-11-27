@@ -1,12 +1,23 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleHelp, Command, Download, Home, Moon, Plus, Settings, Sun, X } from "lucide-react";
 import type { PaletteCommand } from "./components/V2CommandPalette";
+import V2MenuBar from "./components/V2MenuBar";
 import V2Toolbar from "./components/V2Toolbar";
 import { useTabs } from "./hooks/useTabs";
 import { useV2Shortcuts } from "./hooks/useV2Shortcuts";
 import V2Home from "./views/V2Home";
 import { registerBuiltinComparators } from "./plugins/builtins";
 import { getComparator, listComparators } from "./plugins/registry";
+import {
+  DEFAULT_FILE_FORMATS,
+  DEFAULT_VFS_PROFILES,
+  exportSettingsBundleJson,
+  loadFileFormats,
+  loadVfsProfiles,
+  parseSettingsBundleJson,
+  saveFileFormats,
+  saveVfsProfiles,
+} from "./utils/formatsAndProfiles";
 import type { V2StatusInfo, V2ViewCommands } from "./types";
 
 // Register all built-in + litmus comparator plugins into the Comparator Seam
@@ -16,6 +27,8 @@ const V2Modal = lazy(() => import("./components/V2Modal"));
 const V2NewSessionModal = lazy(() => import("./components/V2NewSessionModal"));
 const V2SessionManagerModal = lazy(() => import("./components/V2SessionManagerModal"));
 const V2SettingsModal = lazy(() => import("./components/V2SettingsModal"));
+const V2FileFormatsModal = lazy(() => import("./components/V2FileFormatsModal"));
+const V2ProfilesModal = lazy(() => import("./components/V2ProfilesModal"));
 const V2ReportExportModal = lazy(() => import("./components/V2ReportExportModal"));
 const V2CommandPalette = lazy(() => import("./components/V2CommandPalette"));
 const V2ShortcutHelpModal = lazy(() => import("./components/V2ShortcutHelpModal"));
@@ -102,10 +115,14 @@ export default function V2App(): React.JSX.Element {
   const [sessionManagerOpen, setSessionManagerOpen] = useState(false);
   const [sessionRefresh, setSessionRefresh] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fileFormatsOpen, setFileFormatsOpen] = useState(false);
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const resetCommands = useCallback(() => setCommands({}), []);
 
@@ -152,6 +169,32 @@ export default function V2App(): React.JSX.Element {
   const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
   const openNewSession = useCallback(() => setNewSessionOpen(true), []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const openFileFormats = useCallback(() => setFileFormatsOpen(true), []);
+  const openProfiles = useCallback(() => setProfilesOpen(true), []);
+  const toggleToolbar = useCallback(() => setShowToolbar((v) => !v), []);
+
+  const handleExportSettings = useCallback(() => {
+    const json = exportSettingsBundleJson(loadFileFormats(), loadVfsProfiles());
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "autocompare-settings.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Exported autocompare-settings.json", 2200);
+  }, [showToast]);
+
+  const handleImportSettings = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleRestoreDefaults = useCallback(() => {
+    if (!window.confirm("Restore factory default File Formats and VFS Profiles?")) return;
+    saveFileFormats(DEFAULT_FILE_FORMATS);
+    saveVfsProfiles(DEFAULT_VFS_PROFILES);
+    showToast("Restored factory default formats & profiles", 2200);
+  }, [showToast]);
 
   const requestCloseTab = useCallback(
     (id: string, e?: React.MouseEvent): void => {
@@ -194,6 +237,8 @@ export default function V2App(): React.JSX.Element {
       { id: "toggle-theme", category: "View", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`, run: toggleTheme },
       { id: "open-shortcuts", category: "Help", label: "Keyboard Shortcuts Cheat Sheet", shortcut: "⌘/", run: toggleShortcuts },
       { id: "open-settings", category: "App", label: "Open Preferences", shortcut: "⌘,", run: openSettings },
+      { id: "open-formats", category: "Tools", label: "Manage File Formats…", run: openFileFormats },
+      { id: "open-profiles", category: "Tools", label: "Manage VFS Profiles…", run: openProfiles },
     ];
     if (activeTab.kind !== "home") {
       list.push(
@@ -208,7 +253,7 @@ export default function V2App(): React.JSX.Element {
       }
     }
     return list;
-  }, [activeTab.kind, theme, openSession, setActiveId, toggleTheme, toggleShortcuts, openSettings, handleSaveWorkspaceSession, commands]);
+  }, [activeTab.kind, theme, openSession, setActiveId, toggleTheme, toggleShortcuts, openSettings, openFileFormats, openProfiles, handleSaveWorkspaceSession, commands]);
 
   return (
     <div
@@ -231,6 +276,59 @@ export default function V2App(): React.JSX.Element {
         if (files.length > 0) handleDroppedPaths(files, side);
       }}
     >
+      {/* 0. Plugin-Driven Application Menu Bar (BC Parity — Free & OSS) */}
+      <V2MenuBar
+        activeTab={activeTab}
+        commands={commands}
+        showToolbar={showToolbar}
+        layoutDensity={layoutDensity}
+        theme={theme}
+        onNewSessionModal={openNewSession}
+        onOpenSessionKind={openSession}
+        onOpenSessionManager={() => setSessionManagerOpen(true)}
+        onSaveSession={() => void handleSaveWorkspaceSession()}
+        onCloseActiveTab={() => {
+          if (activeTab.kind !== "home") requestCloseTab(activeTab.id);
+        }}
+        onOpenSettings={openSettings}
+        onOpenFileFormats={openFileFormats}
+        onOpenProfiles={openProfiles}
+        onOpenExportReport={() => setExportOpen(true)}
+        onOpenShortcuts={toggleShortcuts}
+        onOpenPalette={togglePalette}
+        onToggleToolbar={toggleToolbar}
+        onToggleLayout={toggleLayout}
+        onToggleTheme={toggleTheme}
+        onExportSettings={handleExportSettings}
+        onImportSettings={handleImportSettings}
+        onRestoreDefaults={handleRestoreDefaults}
+        onShowToast={(msg) => showToast(msg, 2400)}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          void file.text().then((text) => {
+            const parsed = parseSettingsBundleJson(text);
+            if (!parsed) {
+              showToast("Invalid settings bundle JSON", 2400);
+              return;
+            }
+            saveFileFormats(parsed.fileFormats);
+            saveVfsProfiles(parsed.vfsProfiles);
+            showToast(
+              `Imported ${parsed.fileFormats.length} formats & ${parsed.vfsProfiles.length} profiles`,
+              2400,
+            );
+          });
+          e.target.value = "";
+        }}
+      />
+
       {/* 1. Crisp macOS Tab Strip */}
       <header
         data-testid="v2/tabbar"
@@ -365,8 +463,8 @@ export default function V2App(): React.JSX.Element {
         </div>
       </header>
 
-      {/* 2. Context-Aware Unified Top Toolbar (Hidden on Home) */}
-      {activeTab.kind !== "home" ? (
+      {/* 2. Context-Aware Unified Top Toolbar (Hidden on Home or when toggled off via View -> Toolbar) */}
+      {activeTab.kind !== "home" && showToolbar ? (
         <V2Toolbar
           commands={commands}
           onGoHome={() => setActiveId("home")}
@@ -509,6 +607,20 @@ export default function V2App(): React.JSX.Element {
             theme={theme}
             onThemeChange={setTheme}
             onClose={() => setSettingsOpen(false)}
+          />
+        ) : null}
+        {fileFormatsOpen ? (
+          <V2FileFormatsModal
+            open={fileFormatsOpen}
+            onClose={() => setFileFormatsOpen(false)}
+            onSaved={(msg) => showToast(msg, 2200)}
+          />
+        ) : null}
+        {profilesOpen ? (
+          <V2ProfilesModal
+            open={profilesOpen}
+            onClose={() => setProfilesOpen(false)}
+            onSaved={(msg) => showToast(msg, 2200)}
           />
         ) : null}
         {exportOpen ? (
