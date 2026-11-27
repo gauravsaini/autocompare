@@ -163,3 +163,20 @@ test("hex compare inspector and media compare visual modes render cleanly", asyn
   await expect(page.getByTestId("v2/media-stage")).toContainText("Pixel Diff");
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
 });
+
+test("structured diff plugin (#9): compares JSON AST, toggles array order, and sorts keys", async ({ page }) => {
+  await page.getByTestId("v2/home-card-structured").click();
+  const view = page.getByTestId("v2/structured-view");
+  await expect(view).toBeVisible({ timeout: 10000 });
+
+  await expect(view).toContainText("$.database.host");
+  await expect(view).toContainText("$.database.ssl");
+
+  const ignoreArrayOrder = view.getByLabel("Ignore array order");
+  await ignoreArrayOrder.check();
+  await expect(ignoreArrayOrder).toBeChecked();
+
+  await view.getByRole("button", { name: "Sort Keys & Format" }).click();
+  await expect(page.getByTestId("v2/statusbar")).toContainText("JSON/YAML AST");
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+});

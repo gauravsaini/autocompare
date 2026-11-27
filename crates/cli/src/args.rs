@@ -326,6 +326,18 @@ pub enum Command {
         /// Path to the session document.
         path: String,
     },
+    /// Launch local HTTP JSON-RPC server + web UI on loopback (`127.0.0.1`).
+    Web {
+        /// Local TCP port to bind.
+        #[arg(long, default_value_t = 3080)]
+        port: u16,
+        /// Optional path to built frontend assets (`apps/desktop/dist`).
+        #[arg(long)]
+        dist: Option<String>,
+        /// Skip printing browser-open hint (headless / CI mode).
+        #[arg(long)]
+        no_open: bool,
+    },
 }
 
 #[cfg(test)]
