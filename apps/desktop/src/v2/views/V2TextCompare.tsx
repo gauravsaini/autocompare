@@ -225,6 +225,7 @@ export default function V2TextCompare({
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const liveDiffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingNoticeRef = useRef<string | null>(null);
   const undoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const redoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
@@ -251,9 +252,11 @@ export default function V2TextCompare({
 
   const runCompare = useCallback(
     async (l: string, r: string): Promise<void> => {
+      const postNotice = pendingNoticeRef.current;
+      pendingNoticeRef.current = null;
       setLoading(true);
       setError(null);
-      setNotice(null);
+      setNotice(postNotice);
       setActiveEdit(null);
       try {
         let dto: TextCompareDto;
@@ -1548,6 +1551,11 @@ export default function V2TextCompare({
         rightPath={rightDraft}
         onClose={() => setRulesModalTab(null)}
         onApply={(next, scope, paths) => {
+          const msg =
+            scope === "defaults"
+              ? "Applied rules and updated session defaults"
+              : "Applied session rules to current view";
+          pendingNoticeRef.current = msg;
           rulesRef.current = next;
           setRules(next);
           if (scope === "defaults") {
@@ -1557,11 +1565,7 @@ export default function V2TextCompare({
             onPathsChange(paths.left, paths.right);
           }
           setRulesModalTab(null);
-          setNotice(
-            scope === "defaults"
-              ? "Applied rules and updated session defaults"
-              : "Applied session rules to current view",
-          );
+          setNotice(msg);
         }}
       />
     </div>

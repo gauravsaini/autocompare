@@ -9,11 +9,18 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Star,
   Table2,
   Trash2,
 } from "lucide-react";
 import { deleteSession, sessionList, sessionLoad } from "../../ipc/session";
 import type { SessionEntry } from "../../ipc/session";
+import {
+  loadPinnedSessionIds,
+  savePinnedSessionIds,
+  sortSessionsWithPins,
+  togglePinnedId,
+} from "../utils/sessionPrefs";
 import type { SessionKind } from "../types";
 
 export interface V2HomeProps {
@@ -110,6 +117,8 @@ export default function V2Home({
   refreshSignal = 0,
 }: V2HomeProps): React.JSX.Element {
   const [sessions, setSessions] = useState<readonly SessionEntry[]>([]);
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedSessionIds());
+  const [pinnedOnly, setPinnedOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -127,13 +136,24 @@ export default function V2Home({
 
   useEffect(() => {
     void refreshSessions();
+    setPinnedIds(loadPinnedSessionIds());
   }, [refreshSignal]);
+
+  const handleTogglePin = (e: React.MouseEvent, id: string): void => {
+    e.stopPropagation();
+    setPinnedIds((prev) => {
+      const next = togglePinnedId(prev, id);
+      savePinnedSessionIds(next);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => (s.name ?? s.id).toLowerCase().includes(q));
-  }, [sessions, query]);
+    const base = pinnedOnly ? sessions.filter((s) => pinnedIds.includes(s.id)) : sessions;
+    const matched = q ? base.filter((s) => (s.name ?? s.id).toLowerCase().includes(q)) : base;
+    return sortSessionsWithPins(matched, pinnedIds);
+  }, [sessions, query, pinnedOnly, pinnedIds]);
 
   const handleOpenSaved = async (entry: SessionEntry): Promise<void> => {
     try {
@@ -185,7 +205,7 @@ export default function V2Home({
           </span>
         </div>
 
-        <div className="border-b border-[var(--v2-border-subtle)] px-3 py-2">
+        <div className="space-y-1.5 border-b border-[var(--v2-border-subtle)] px-3 py-2">
           <div className="relative">
             <Search
               size={12}
@@ -200,6 +220,23 @@ export default function V2Home({
               style={{ paddingLeft: 26 }}
             />
           </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPinnedOnly(false)}
+              className={`v2-btn h-[20px] flex-1 justify-center text-[10.5px] ${!pinnedOnly ? "v2-btn-primary" : ""}`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setPinnedOnly(true)}
+              className={`v2-btn h-[20px] flex-1 justify-center text-[10.5px] ${pinnedOnly ? "v2-btn-primary" : ""}`}
+            >
+              <Star size={10} />
+              Pinned ({pinnedIds.filter((id) => sessions.some((s) => s.id === id)).length})
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
@@ -210,10 +247,12 @@ export default function V2Home({
           ) : filtered.length === 0 ? (
             <div className="px-3 py-8 text-center">
               <p className="text-[12px] font-medium text-[var(--v2-fg-secondary)]">
-                No saved sessions
+                {pinnedOnly ? "No pinned sessions" : "No saved sessions"}
               </p>
               <p className="mt-1 text-[11px] text-[var(--v2-fg-muted)]">
-                Start a comparison on the right or save your active workspace.
+                {pinnedOnly
+                  ? "Click the star icon on any saved session to pin it here."
+                  : "Start a comparison on the right or save your active workspace."}
               </p>
             </div>
           ) : (
@@ -221,6 +260,7 @@ export default function V2Home({
               {filtered.map((entry) => {
                 const badge = inferSessionBadge(entry.name ?? entry.id);
                 const BadgeIcon = badge.icon;
+                const isPinned = pinnedIds.includes(entry.id);
                 return (
                   <li key={entry.id}>
                     <div
@@ -253,16 +293,30 @@ export default function V2Home({
                           {entry.locked ? " · Locked" : ""}
                         </div>
                       </div>
-                      {!entry.locked ? (
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <button
                           type="button"
-                          title="Delete session"
-                          onClick={(e) => void handleDeleteSaved(e, entry.id)}
-                          className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-del-fg)] group-hover:inline-flex"
+                          title={isPinned ? "Unpin session" : "Pin session"}
+                          onClick={(e) => handleTogglePin(e, entry.id)}
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--v2-btn-active)] ${
+                            isPinned
+                              ? "text-[var(--v2-amber)]"
+                              : "hidden text-[var(--v2-fg-muted)] group-hover:inline-flex"
+                          }`}
                         >
-                          <Trash2 size={12} />
+                          <Star size={11} fill={isPinned ? "currentColor" : "none"} />
                         </button>
-                      ) : null}
+                        {!entry.locked ? (
+                          <button
+                            type="button"
+                            title="Delete session"
+                            onClick={(e) => void handleDeleteSaved(e, entry.id)}
+                            className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-del-fg)] group-hover:inline-flex"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 );

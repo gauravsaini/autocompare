@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AudioWaveform, Image as ImageIcon } from "lucide-react";
+import { AudioWaveform, Image as ImageIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { audioCompare, pictureCompare } from "../../ipc/media";
 import type { AudioSummary, PictureSummary } from "../../ipc/media";
 import V2ErrorBanner from "../components/V2ErrorBanner";
@@ -18,11 +19,41 @@ export interface V2MediaCompareProps {
 }
 
 type MediaKind = "picture" | "audio";
+type PictureViewMode = "sideBySide" | "wipe" | "onion" | "diff";
 
 function inferMediaKind(path: string): MediaKind {
   const lower = path.toLowerCase();
   if (lower.endsWith(".wav") || lower.endsWith(".mp3")) return "audio";
   return "picture";
+}
+
+function makePreviewSvg(label: string, accent: string, altAccent: string, dims: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${accent}"/><stop offset="100%" stop-color="${altAccent}"/></linearGradient></defs>
+    <rect width="320" height="180" fill="url(#g)" rx="8"/>
+    <circle cx="96" cy="86" r="34" fill="rgba(255,255,255,0.22)"/>
+    <rect x="148" y="54" width="124" height="64" rx="8" fill="rgba(255,255,255,0.18)"/>
+    <text x="16" y="30" fill="#ffffff" font-family="system-ui,sans-serif" font-size="13" font-weight="600">${label}</text>
+    <text x="16" y="162" fill="rgba(255,255,255,0.85)" font-family="monospace" font-size="11">${dims}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function resolveImageUrl(path: string, fallbackSvg: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return fallbackSvg;
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+  const hasTauri =
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+  if (hasTauri) {
+    try {
+      return convertFileSrc(trimmed);
+    } catch {
+      return fallbackSvg;
+    }
+  }
+  return fallbackSvg;
 }
 
 export default function V2MediaCompare({
@@ -36,6 +67,12 @@ export default function V2MediaCompare({
   const [leftDraft, setLeftDraft] = useState(leftPath);
   const [rightDraft, setRightDraft] = useState(rightPath);
   const [tolerance, setTolerance] = useState(0);
+  const [viewMode, setViewMode] = useState<PictureViewMode>("wipe");
+  const [wipePct, setWipePct] = useState(50);
+  const [onionOpacity, setOnionOpacity] = useState(50);
+  const [zoomPct, setZoomPct] = useState(100);
+  const [leftImgErr, setLeftImgErr] = useState(false);
+  const [rightImgErr, setRightImgErr] = useState(false);
   const [pic, setPic] = useState<PictureSummary | null>(null);
   const [aud, setAud] = useState<AudioSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +89,8 @@ export default function V2MediaCompare({
   useEffect(() => {
     setLeftDraft(leftPath);
     setRightDraft(rightPath);
+    setLeftImgErr(false);
+    setRightImgErr(false);
   }, [leftPath, rightPath]);
 
   const runCompare = useCallback(
@@ -101,7 +140,7 @@ export default function V2MediaCompare({
     if (kind === "picture" && pic) {
       onStatusChange({
         left: pic.identical ? "Pictures are identical" : `${pic.differingBytes} differing bytes`,
-        center: `Similarity ${(pic.score * 100).toFixed(2)}% · ${pic.format.toUpperCase()}`,
+        center: `Similarity ${(pic.score * 100).toFixed(2)}% · ${pic.format.toUpperCase()} · Zoom ${zoomPct}%`,
         right: `${pic.widthL}×${pic.heightL} vs ${pic.widthR}×${pic.heightR}`,
       });
     } else if (kind === "audio" && aud) {
@@ -117,9 +156,20 @@ export default function V2MediaCompare({
     } else {
       onStatusChange({ left: "Ready", center: kind === "picture" ? "Picture Compare" : "Audio Compare", right: "" });
     }
-  }, [onStatusChange, kind, pic, aud]);
+  }, [onStatusChange, kind, pic, aud, zoomPct]);
 
   const scorePct = kind === "picture" && pic ? pic.score * 100 : kind === "audio" && aud ? aud.score * 100 : 0;
+
+  const leftFallback = useMemo(
+    () => makePreviewSvg("Left Picture", "#2563eb", "#1d4ed8", pic ? `${pic.widthL}×${pic.heightL} px` : "Preview"),
+    [pic],
+  );
+  const rightFallback = useMemo(
+    () => makePreviewSvg("Right Picture", "#059669", "#047857", pic ? `${pic.widthR}×${pic.heightR} px` : "Preview"),
+    [pic],
+  );
+  const leftSrc = leftImgErr ? leftFallback : resolveImageUrl(leftDraft, leftFallback);
+  const rightSrc = rightImgErr ? rightFallback : resolveImageUrl(rightDraft, rightFallback);
 
   return (
     <div data-testid="v2/media-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
@@ -135,47 +185,107 @@ export default function V2MediaCompare({
 
       {/* Media Mode + Tolerance Bar */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5">
-        <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
-          {(
-            [
-              ["picture", "Picture", ImageIcon],
-              ["audio", "Audio", AudioWaveform],
-            ] as const
-          ).map(([m, label, Icon]) => {
-            const active = kind === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setKind(m)}
-                className={`inline-flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[11.5px] font-medium transition ${
-                  active
-                    ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
-                    : "text-[var(--v2-fg-secondary)] hover:text-[var(--v2-fg)]"
-                }`}
-              >
-                <Icon size={12} />
-                {label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
+            {(
+              [
+                ["picture", "Picture", ImageIcon],
+                ["audio", "Audio", AudioWaveform],
+              ] as const
+            ).map(([m, label, Icon]) => {
+              const active = kind === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setKind(m)}
+                  className={`inline-flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[11.5px] font-medium transition ${
+                    active
+                      ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
+                      : "text-[var(--v2-fg-secondary)] hover:text-[var(--v2-fg)]"
+                  }`}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {kind === "picture" ? (
+            <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
+              {(
+                [
+                  ["sideBySide", "Side-by-Side"],
+                  ["wipe", "Slider Wipe"],
+                  ["onion", "Onion Skin"],
+                  ["diff", "Pixel Diff"],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  data-testid={`v2/media-mode-${mode}`}
+                  onClick={() => setViewMode(mode)}
+                  className={`h-[22px] rounded-[5px] px-2 text-[11px] font-medium transition ${
+                    viewMode === mode
+                      ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
+                      : "text-[var(--v2-fg-secondary)] hover:text-[var(--v2-fg)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        <label className="flex items-center gap-2 text-[12px] text-[var(--v2-fg-secondary)]">
-          <span>Tolerance</span>
-          <input
-            type="range"
-            min={0}
-            max={kind === "picture" ? 32 : 0.1}
-            step={kind === "picture" ? 1 : 0.005}
-            value={tolerance}
-            onChange={(e) => setTolerance(Number(e.target.value))}
-            className="w-28 accent-[var(--v2-accent)]"
-          />
-          <span className="v2-mono w-12 text-right text-[11px] text-[var(--v2-fg)]">
-            {kind === "picture" ? tolerance : tolerance.toFixed(3)}
-          </span>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          {kind === "picture" ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                title="Zoom Out"
+                onClick={() => setZoomPct((z) => Math.max(50, z - 25))}
+                className="v2-btn h-[22px] px-1.5"
+              >
+                <ZoomOut size={12} />
+              </button>
+              <button
+                type="button"
+                title="Reset Zoom"
+                onClick={() => setZoomPct(100)}
+                className="v2-btn v2-mono h-[22px] px-2 text-[11px]"
+              >
+                {zoomPct}%
+              </button>
+              <button
+                type="button"
+                title="Zoom In"
+                onClick={() => setZoomPct((z) => Math.min(400, z + 25))}
+                className="v2-btn h-[22px] px-1.5"
+              >
+                <ZoomIn size={12} />
+              </button>
+            </div>
+          ) : null}
+
+          <label className="flex items-center gap-2 text-[12px] text-[var(--v2-fg-secondary)]">
+            <span>Tolerance</span>
+            <input
+              type="range"
+              min={0}
+              max={kind === "picture" ? 32 : 0.1}
+              step={kind === "picture" ? 1 : 0.005}
+              value={tolerance}
+              onChange={(e) => setTolerance(Number(e.target.value))}
+              className="w-24 accent-[var(--v2-accent)]"
+            />
+            <span className="v2-mono w-10 text-right text-[11px] text-[var(--v2-fg)]">
+              {kind === "picture" ? tolerance : tolerance.toFixed(3)}
+            </span>
+          </label>
+        </div>
       </div>
 
       <V2ReloadPromptBanner
@@ -196,6 +306,101 @@ export default function V2MediaCompare({
           </div>
         ) : kind === "picture" && pic ? (
           <div className="mx-auto max-w-4xl space-y-4">
+            {/* Interactive Visual Comparison Stage */}
+            <div
+              data-testid="v2/media-stage"
+              className="overflow-hidden rounded-[9px] border border-[var(--v2-border)] bg-[var(--v2-surface)]"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-3.5 py-2 text-[11.5px]">
+                <span className="font-semibold text-[var(--v2-fg-secondary)]">
+                  Visual Compare — {viewMode === "sideBySide" ? "Side-by-Side" : viewMode === "wipe" ? "Slider Wipe" : viewMode === "onion" ? "Onion Skin" : "Pixel Diff"}
+                </span>
+                {viewMode === "wipe" ? (
+                  <label className="flex items-center gap-2 text-[11px] text-[var(--v2-fg-muted)]">
+                    <span>Wipe {wipePct}%</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={wipePct}
+                      onChange={(e) => setWipePct(Number(e.target.value))}
+                      className="w-32 accent-[var(--v2-accent)]"
+                    />
+                  </label>
+                ) : viewMode === "onion" ? (
+                  <label className="flex items-center gap-2 text-[11px] text-[var(--v2-fg-muted)]">
+                    <span>Right Opacity {onionOpacity}%</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={onionOpacity}
+                      onChange={(e) => setOnionOpacity(Number(e.target.value))}
+                      className="w-32 accent-[var(--v2-accent)]"
+                    />
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="flex max-h-[340px] items-center justify-center overflow-auto bg-[var(--v2-bg)] p-4">
+                {viewMode === "sideBySide" ? (
+                  <div className="grid w-full grid-cols-2 gap-3">
+                    <div className="flex flex-col items-center gap-1 overflow-hidden">
+                      <img
+                        src={leftSrc}
+                        alt="Left comparison"
+                        onError={() => setLeftImgErr(true)}
+                        style={{ transform: `scale(${zoomPct / 100})`, transformOrigin: "top center" }}
+                        className="max-h-[240px] rounded border border-[var(--v2-border)] object-contain"
+                      />
+                      <span className="text-[10.5px] text-[var(--v2-fg-muted)]">Left</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 overflow-hidden">
+                      <img
+                        src={rightSrc}
+                        alt="Right comparison"
+                        onError={() => setRightImgErr(true)}
+                        style={{ transform: `scale(${zoomPct / 100})`, transformOrigin: "top center" }}
+                        className="max-h-[240px] rounded border border-[var(--v2-border)] object-contain"
+                      />
+                      <span className="text-[10.5px] text-[var(--v2-fg-muted)]">Right</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="relative inline-block overflow-hidden rounded border border-[var(--v2-border)]"
+                    style={{ transform: `scale(${zoomPct / 100})`, transformOrigin: "center" }}
+                  >
+                    <img
+                      src={leftSrc}
+                      alt="Left base"
+                      onError={() => setLeftImgErr(true)}
+                      className="block max-h-[260px] max-w-full object-contain"
+                    />
+                    <img
+                      src={rightSrc}
+                      alt="Right overlay"
+                      onError={() => setRightImgErr(true)}
+                      style={
+                        viewMode === "wipe"
+                          ? { clipPath: `inset(0 0 0 ${wipePct}%)` }
+                          : viewMode === "onion"
+                            ? { opacity: onionOpacity / 100 }
+                            : { mixBlendMode: "difference" }
+                      }
+                      className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                    />
+                    {viewMode === "wipe" ? (
+                      <div
+                        style={{ left: `${wipePct}%` }}
+                        className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-[var(--v2-accent)] shadow"
+                      />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Similarity Header Card */}
             <div className="rounded-[9px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-4">
               <div className="flex items-center justify-between">

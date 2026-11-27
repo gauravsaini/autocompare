@@ -1,6 +1,6 @@
 import type { HexPage, HexSummary } from "./hex";
 import type { FolderMergeApplyReport, TextMergeApplyReport, TextMergePlan, TreeMergePlan, TreeMergeStep } from "./merge";
-import type { SessionDocument } from "./session";
+import type { AppSettings, SessionDocument } from "./session";
 
 /**
  * Fixture-mock IPC adapter for browser / Playwright / `VITE_MOCK_IPC=1` runs.
@@ -94,6 +94,30 @@ function strArg(args: Record<string, unknown>, names: readonly string[], fallbac
 
 const MOCK_SESSIONS_KEY = "autocompare:mockSessionStore:v1";
 const MOCK_SESSION_SEQ_KEY = "autocompare:mockSessionSeq:v1";
+
+let mockAppSettings: AppSettings = {
+  schema_version: 1,
+  theme: "dark",
+  keymap: "default",
+  grammar_preset_name: "default",
+  grammar_presets: [
+    {
+      name: "default",
+      extensions: [],
+      line_comment_prefix: null,
+      block_comment_start: null,
+      block_comment_end: null,
+      ignore_case: false,
+    },
+  ],
+  font_family: null,
+  font_size: 13,
+  tab_size: 4,
+  auto_save: false,
+  show_line_numbers: true,
+  locked: false,
+  extra: {},
+};
 
 function mockSessionStoreRead(): Record<string, SessionDocument> {
   try {
@@ -601,6 +625,38 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         mockSessionStoreWrite(store);
       }
       return true as unknown as T;
+    }
+    case "settings_get": {
+      return { ...mockAppSettings } as unknown as T;
+    }
+    case "settings_set": {
+      const patch = args["patch"];
+      if (patch && typeof patch === "object" && !Array.isArray(patch)) {
+        const p = patch as Record<string, unknown>;
+        mockAppSettings = {
+          ...mockAppSettings,
+          ...(typeof p["theme"] === "string" ? { theme: p["theme"] } : {}),
+          ...(typeof p["keymap"] === "string" ? { keymap: p["keymap"] } : {}),
+          ...(typeof p["grammar_preset_name"] === "string"
+            ? { grammar_preset_name: p["grammar_preset_name"] }
+            : {}),
+          ...(typeof p["font_family"] === "string" || p["font_family"] === null
+            ? { font_family: p["font_family"] as string | null }
+            : {}),
+          ...(typeof p["font_size"] === "number" || p["font_size"] === null
+            ? { font_size: p["font_size"] as number | null }
+            : {}),
+          ...(typeof p["tab_size"] === "number" || p["tab_size"] === null
+            ? { tab_size: p["tab_size"] as number | null }
+            : {}),
+          ...(typeof p["auto_save"] === "boolean" ? { auto_save: p["auto_save"] } : {}),
+          ...(typeof p["show_line_numbers"] === "boolean"
+            ? { show_line_numbers: p["show_line_numbers"] }
+            : {}),
+          ...(typeof p["locked"] === "boolean" ? { locked: p["locked"] } : {}),
+        };
+      }
+      return { ...mockAppSettings } as unknown as T;
     }
     case "report_export": {
       const outPath = strArg(args, ["out_path", "outPath"], "autocompare-report.html");

@@ -35,6 +35,7 @@ import {
   formatBytesAsAscii,
   formatBytesAsHex,
 } from "../utils/hexInspector.ts";
+import { sortSessionsWithPins, togglePinnedId } from "../utils/sessionPrefs.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -371,5 +372,15 @@ describe("hexInspector", () => {
     assert.equal(be.uint8, 0x3f);
     assert.equal(be.uint16, 0x3f80);
     assert.equal(be.float32, "1");
+  });
+});
+
+describe("sessionPrefs", () => {
+  it("toggles pinned session ids and floats pinned sessions to the top", () => {
+    const p1 = togglePinnedId([], "s2");
+    assert.deepEqual(p1, ["s2"]);
+    const sorted = sortSessionsWithPins([{ id: "s1" }, { id: "s2" }, { id: "s3" }], p1);
+    assert.deepEqual(sorted.map((s) => s.id), ["s2", "s1", "s3"]);
+    assert.deepEqual(togglePinnedId(p1, "s2"), []);
   });
 });

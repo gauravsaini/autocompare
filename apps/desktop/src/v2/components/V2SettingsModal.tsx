@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { settingsGet, settingsSet } from "../../ipc/session";
 import type { AppSettings } from "../../ipc/session";
+import { isRestoreLastSessionEnabled, setRestoreLastSessionEnabled } from "../utils/sessionPrefs";
 import V2Modal from "./V2Modal";
 
 export interface V2SettingsModalProps {
@@ -21,6 +22,7 @@ export default function V2SettingsModal({
   const [tabSize, setTabSize] = useState(4);
   const [showLineNos, setShowLineNos] = useState(true);
   const [autoSave, setAutoSave] = useState(false);
+  const [restoreOnStartup, setRestoreOnStartup] = useState(() => isRestoreLastSessionEnabled());
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -31,10 +33,10 @@ export default function V2SettingsModal({
       try {
         const s = await settingsGet();
         setSettings(s);
-        if (s.font_size) setFontSize(s.font_size);
-        if (s.tab_size) setTabSize(s.tab_size);
-        setShowLineNos(s.show_line_numbers);
-        setAutoSave(s.auto_save);
+        if (typeof s.font_size === "number") setFontSize(s.font_size);
+        if (typeof s.tab_size === "number") setTabSize(s.tab_size);
+        if (typeof s.show_line_numbers === "boolean") setShowLineNos(s.show_line_numbers);
+        if (typeof s.auto_save === "boolean") setAutoSave(s.auto_save);
       } catch {
         // Keep defaults
       }
@@ -45,6 +47,7 @@ export default function V2SettingsModal({
     setSaving(true);
     setNote(null);
     try {
+      setRestoreLastSessionEnabled(restoreOnStartup);
       await settingsSet({
         theme,
         font_size: fontSize,
@@ -148,6 +151,16 @@ export default function V2SettingsModal({
             className="accent-[var(--v2-accent)]"
           />
           <span>Auto-save edited panes</span>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={restoreOnStartup}
+            onChange={(e) => setRestoreOnStartup(e.target.checked)}
+            className="accent-[var(--v2-accent)]"
+          />
+          <span>Restore last comparison tab on startup</span>
         </label>
 
         {settings?.grammar_preset_name ? (

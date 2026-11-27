@@ -1,8 +1,13 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { sessionSave } from "../../ipc/session";
 import type { SessionKind, V2Tab } from "../types";
 import { inferDropKind } from "../utils/dropKind";
+import {
+  isRestoreLastSessionEnabled,
+  loadLastSessionSnapshot,
+  saveLastSessionSnapshot,
+} from "../utils/sessionPrefs";
 
 export { inferDropKind };
 
@@ -19,8 +24,32 @@ export interface UseTabsOptions {
 }
 
 export function useTabs({ onResetCommands }: UseTabsOptions) {
-  const [tabs, setTabs] = useState<V2Tab[]>([HOME_TAB]);
-  const [activeId, setActiveId] = useState<string>("home");
+  const [tabs, setTabs] = useState<V2Tab[]>(() => {
+    if (isRestoreLastSessionEnabled()) {
+      const snap = loadLastSessionSnapshot();
+      if (snap) {
+        return [
+          HOME_TAB,
+          {
+            id: `restored-${snap.kind}`,
+            kind: snap.kind,
+            title: snap.title,
+            leftPath: snap.leftPath,
+            rightPath: snap.rightPath,
+            dirty: false,
+          },
+        ];
+      }
+    }
+    return [HOME_TAB];
+  });
+  const [activeId, setActiveId] = useState<string>(() => {
+    if (isRestoreLastSessionEnabled()) {
+      const snap = loadLastSessionSnapshot();
+      if (snap) return `restored-${snap.kind}`;
+    }
+    return "home";
+  });
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -36,6 +65,17 @@ export function useTabs({ onResetCommands }: UseTabsOptions) {
   const activeTab = tabs.find((t) => t.id === activeId) ?? HOME_TAB;
   const activeTabRef = useRef<V2Tab>(activeTab);
   activeTabRef.current = activeTab;
+
+  useEffect(() => {
+    if (activeTab.kind !== "home") {
+      saveLastSessionSnapshot({
+        kind: activeTab.kind,
+        leftPath: activeTab.leftPath,
+        rightPath: activeTab.rightPath,
+        title: activeTab.title,
+      });
+    }
+  }, [activeTab.kind, activeTab.leftPath, activeTab.rightPath, activeTab.title]);
 
   const openSession = useCallback(
     (kind: SessionKind, left = "", right = "", customTitle?: string): void => {

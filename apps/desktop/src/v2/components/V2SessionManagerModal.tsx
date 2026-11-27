@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Lock, Search, Trash2, Unlock } from "lucide-react";
+import { Lock, Search, Star, Trash2, Unlock } from "lucide-react";
 import { deleteSession, sessionList, sessionLoad, sessionSave } from "../../ipc/session";
 import type { SessionEntry } from "../../ipc/session";
+import {
+  loadPinnedSessionIds,
+  savePinnedSessionIds,
+  sortSessionsWithPins,
+  togglePinnedId,
+} from "../utils/sessionPrefs";
 import V2Modal from "./V2Modal";
 import type { SessionKind } from "../types";
 
@@ -30,6 +36,7 @@ export default function V2SessionManagerModal({
   onSessionsChanged,
 }: V2SessionManagerModalProps): React.JSX.Element {
   const [sessions, setSessions] = useState<readonly SessionEntry[]>([]);
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedSessionIds());
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -41,6 +48,7 @@ export default function V2SessionManagerModal({
     try {
       const list = await sessionList();
       setSessions(Array.isArray(list) ? list : []);
+      setPinnedIds(loadPinnedSessionIds());
     } catch {
       setSessions([]);
     } finally {
@@ -52,11 +60,20 @@ export default function V2SessionManagerModal({
     if (open) void loadList();
   }, [open, loadList]);
 
+  const handleTogglePin = (id: string): void => {
+    setPinnedIds((prev) => {
+      const next = togglePinnedId(prev, id);
+      savePinnedSessionIds(next);
+      return next;
+    });
+    onSessionsChanged?.();
+  };
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => (s.name ?? s.id).toLowerCase().includes(q));
-  }, [sessions, query]);
+    const matched = q ? sessions.filter((s) => (s.name ?? s.id).toLowerCase().includes(q)) : sessions;
+    return sortSessionsWithPins(matched, pinnedIds);
+  }, [sessions, query, pinnedIds]);
 
   const handleOpen = async (entry: SessionEntry): Promise<void> => {
     try {
@@ -200,6 +217,15 @@ export default function V2SessionManagerModal({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        title={pinnedIds.includes(entry.id) ? "Unpin session" : "Pin session"}
+                        onClick={() => handleTogglePin(entry.id)}
+                        className={`v2-btn h-[22px] px-1.5 ${pinnedIds.includes(entry.id) ? "text-[var(--v2-amber)]" : ""}`}
+                      >
+                        <Star size={11} fill={pinnedIds.includes(entry.id) ? "currentColor" : "none"} />
+                      </button>
                       <button
                         type="button"
                         disabled={isBusy}
