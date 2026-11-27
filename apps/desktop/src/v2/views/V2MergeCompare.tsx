@@ -3,7 +3,15 @@ import { Check, ChevronDown, ChevronUp, Edit3, FolderOpen, RotateCcw } from "luc
 import { mergeTextApply, mergeTextPlan } from "../../ipc/merge";
 import type { TextChoice, TextMergePlan, TextResolution } from "../../ipc/merge";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2EventLogBar from "../components/V2EventLogBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
+import {
+  appendEvent,
+  createEventLog,
+  redoEvent,
+  undoEvent,
+  type UiEventLogState,
+} from "../utils/sessionEventLog";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2MergeCompareProps {
@@ -53,6 +61,7 @@ export default function V2MergeCompare({
 
   const [plan, setPlan] = useState<TextMergePlan | null>(null);
   const [choices, setChoices] = useState<Record<number, TextChoice>>({});
+  const [eventLog, setEventLog] = useState<UiEventLogState<{ prev: Record<number, TextChoice>; next: Record<number, TextChoice> }>>(() => createEventLog());
   const [editingConflictId, setEditingConflictId] = useState<number | null>(null);
   const [outputText, setOutputText] = useState("");
   const [manualOutputEdited, setManualOutputEdited] = useState(false);
@@ -133,20 +142,59 @@ export default function V2MergeCompare({
 
   const setChoice = useCallback((id: number, choice: TextChoice): void => {
     setManualOutputEdited(false);
-    setChoices((prev) => ({ ...prev, [id]: choice }));
+    setChoices((prev) => {
+      const next = { ...prev, [id]: choice };
+      const labelChoice = typeof choice === "string" ? choice : "custom";
+      setEventLog((log) =>
+        appendEvent(log, "merge_resolve", `Conflict #${id + 1} → ${labelChoice}`, { prev, next }),
+      );
+      return next;
+    });
   }, []);
 
   const applyAll = useCallback(
     (choice: "left" | "right" | "base" | "bothLeftFirst"): void => {
       if (!plan) return;
-      const next: Record<number, TextChoice> = {};
-      for (const c of plan.conflicts) next[c.id] = choice;
       setManualOutputEdited(false);
-      setChoices(next);
+      setChoices((prev) => {
+        const next: Record<number, TextChoice> = {};
+        for (const c of plan.conflicts) next[c.id] = choice;
+        setEventLog((log) =>
+          appendEvent(log, "merge_bulk_resolve", `Take all ${choice} (${plan.conflicts.length})`, {
+            prev,
+            next,
+          }),
+        );
+        return next;
+      });
       setReportNote(`Applied "${choice}" to all ${plan.conflicts.length} conflict(s)`);
     },
     [plan],
   );
+
+  const handleUndo = useCallback((): void => {
+    setEventLog((log) => {
+      const { next, undone } = undoEvent(log);
+      if (undone) {
+        setManualOutputEdited(false);
+        setChoices(undone.payload.prev);
+        setReportNote(`Undid: ${undone.label}`);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleRedo = useCallback((): void => {
+    setEventLog((log) => {
+      const { next, redone } = redoEvent(log);
+      if (redone) {
+        setManualOutputEdited(false);
+        setChoices(redone.payload.next);
+        setReportNote(`Redid: ${redone.label}`);
+      }
+      return next;
+    });
+  }, []);
 
   // Sync horizontal scroll across Left | Base | Right panes within each conflict card
   const handleSyncHorizontalScroll = useCallback((conflictId: number, sourceKey: string, scrollLeft: number): void => {
@@ -566,6 +614,13 @@ export default function V2MergeCompare({
           </div>
         )}
       </div>
+
+      <V2EventLogBar
+        log={eventLog}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onCopied={setReportNote}
+      />
 
       {/* Bottom Editable Output Pane (BC 4th Pane) */}
       <div className="flex h-[210px] shrink-0 flex-col border-t border-[var(--v2-border)] bg-[var(--v2-surface)]">

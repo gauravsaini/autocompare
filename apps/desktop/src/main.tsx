@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { bootstrapHttpRpcFromOrigin } from "./ipc/client";
 import V2App from "./v2/V2App";
 import "./v2/v2.css";
 import "./theme/tokens.css";
@@ -13,7 +14,8 @@ const useV1 =
 
 const LazyV1App = React.lazy(() => import("./App"));
 
-if (root !== null) {
+function mountApp(): void {
+  if (root === null) return;
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       {useV1 ? (
@@ -26,3 +28,11 @@ if (root !== null) {
     </React.StrictMode>,
   );
 }
+
+// Auto-discover `/rpc-config.json` when served by `autocompare web --dist ...`,
+// bounded so local Tauri / mock startup never stalls.
+const bootstrapTimeout = new Promise<null>((resolve) => {
+  setTimeout(() => resolve(null), 350);
+});
+
+void Promise.race([bootstrapHttpRpcFromOrigin(), bootstrapTimeout]).finally(mountApp);

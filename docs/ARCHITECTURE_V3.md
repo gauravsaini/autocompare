@@ -1,6 +1,6 @@
 # AutoCompare Architecture v3 — Plugin-First Diff Harness (ADR)
 
-**Status**: Accepted (Phase 1 & Phase 2 implemented on branch `v2`)
+**Status**: Implemented (All 6 phases complete on branch `v2`)
 **Date**: 2026-11-27
 **Inspiration**: Seam + Plugin + Multi-Profile + Projection architecture of [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness), adapted to AutoCompare's `#![forbid(unsafe_code)]` Rust engine.
 

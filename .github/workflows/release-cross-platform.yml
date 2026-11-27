@@ -64,8 +64,10 @@ jobs:
           npm test
           npm run build
 
-      - name: Run Rust workspace tests
-        run: cargo test --workspace
+      - name: Run Rust workspace tests (including V3 server, VFS, and event log)
+        run: |
+          cargo test --workspace
+          cargo test -p autocompare-server -p autocompare-vfs -p autocompare-sessions
 
       - name: Build Tauri bundle
         uses: tauri-apps/tauri-action@v0

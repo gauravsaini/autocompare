@@ -4,7 +4,15 @@ import { syncApply, syncPlan } from "../../ipc/sync";
 import type { SyncApplyReport, SyncDirection, SyncPlan, SyncStep } from "../../ipc/sync";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
+import V2EventLogBar from "../components/V2EventLogBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
+import {
+  appendEvent,
+  createEventLog,
+  redoEvent,
+  undoEvent,
+  type UiEventLogState,
+} from "../utils/sessionEventLog";
 import type { V2StatusInfo, V2ViewCommands } from "../types";
 
 export interface V2SyncCompareProps {
@@ -43,6 +51,7 @@ export default function V2SyncCompare({
   const [excludedPaths, setExcludedPaths] = useState<Set<string>>(() => new Set());
   const [report, setReport] = useState<SyncApplyReport | null>(null);
   const [syncLog, setSyncLog] = useState<string[]>([]);
+  const [eventLog, setEventLog] = useState<UiEventLogState<{ prevExcluded: string[]; nextExcluded: string[]; prevDirection: SyncDirection; nextDirection: SyncDirection }>>(() => createEventLog());
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,8 +109,39 @@ export default function V2SyncCompare({
   const toggleExclude = (relPath: string): void => {
     setExcludedPaths((prev) => {
       const next = new Set(prev);
-      if (next.has(relPath)) next.delete(relPath);
-      else next.add(relPath);
+      const excluding = !next.has(relPath);
+      if (excluding) next.add(relPath);
+      else next.delete(relPath);
+      setEventLog((log) =>
+        appendEvent(log, "sync_filter", `${excluding ? "Exclude" : "Include"} ${relPath}`, {
+          prevExcluded: Array.from(prev),
+          nextExcluded: Array.from(next),
+          prevDirection: direction,
+          nextDirection: direction,
+        }),
+      );
+      return next;
+    });
+  };
+
+  const handleUndo = (): void => {
+    setEventLog((log) => {
+      const { next, undone } = undoEvent(log);
+      if (undone) {
+        setExcludedPaths(new Set(undone.payload.prevExcluded));
+        setDirection(undone.payload.prevDirection);
+      }
+      return next;
+    });
+  };
+
+  const handleRedo = (): void => {
+    setEventLog((log) => {
+      const { next, redone } = redoEvent(log);
+      if (redone) {
+        setExcludedPaths(new Set(redone.payload.nextExcluded));
+        setDirection(redone.payload.nextDirection);
+      }
       return next;
     });
   };
@@ -154,6 +194,21 @@ export default function V2SyncCompare({
         ? `${ts}  [DRY RUN] ${direction}: ${rep.plannedCopies} copies, ${rep.plannedDeletes} deletes planned`
         : `${ts}  [SYNCED] ${direction}: ${rep.copied} copied, ${rep.deleted} deleted${rep.failed.length > 0 ? `, ${rep.failed.length} failed` : ""}`;
       setSyncLog((prev) => [...prev.slice(-7), line]);
+      setEventLog((log) =>
+        appendEvent(
+          log,
+          dryRun ? "sync_dry_run" : "sync_apply",
+          dryRun
+            ? `Dry run (${rep.plannedCopies} copies, ${rep.plannedDeletes} deletes)`
+            : `Synced ${rep.copied} copied, ${rep.deleted} deleted`,
+          {
+            prevExcluded: Array.from(excludedPaths),
+            nextExcluded: Array.from(excludedPaths),
+            prevDirection: direction,
+            nextDirection: direction,
+          },
+        ),
+      );
       if (!dryRun) {
         await runPlan(leftDraft, rightDraft);
       }
@@ -334,6 +389,13 @@ export default function V2SyncCompare({
           </div>
         )}
       </div>
+
+      <V2EventLogBar
+        log={eventLog}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onCopied={(msg) => setSyncLog((prev) => [...prev.slice(-7), msg])}
+      />
 
       {/* Compact Sync Activity & Undo-Preview Log */}
       <div className="flex h-[56px] shrink-0 items-center justify-between gap-2 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1">
