@@ -11,6 +11,7 @@ import {
 import { registerComparator } from "./registry";
 import type { ComparatorViewProps } from "./registry";
 import { structuredDiffPlugin } from "./structuredDiffPlugin";
+import { tomlXmlPlugin } from "./tomlXmlPlugin";
 
 const V2TextCompare = lazy(() => import("../views/V2TextCompare"));
 const V2FolderCompare = lazy(() => import("../views/V2FolderCompare"));
@@ -181,4 +182,6 @@ export function registerBuiltinComparators(): void {
 
   // Phase 2 Litmus-Test Plugin (#9)
   registerComparator(structuredDiffPlugin);
+  // Phase 6 External SDK Sample Plugin (#10)
+  registerComparator(tomlXmlPlugin);
 }

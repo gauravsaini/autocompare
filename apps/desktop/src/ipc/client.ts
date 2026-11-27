@@ -19,6 +19,38 @@ interface RpcEnvelope<T> {
   error?: string;
 }
 
+let originRpcBootstrapPromise: Promise<HttpRpcConfig | null> | null = null;
+
+/**
+ * Discovers `/rpc-config.json` when served by `autocompare web --dist ...`.
+ * Caches the lookup so mock/Tauri environments incur at most one fast check.
+ */
+export function bootstrapHttpRpcFromOrigin(): Promise<HttpRpcConfig | null> {
+  if (originRpcBootstrapPromise) return originRpcBootstrapPromise;
+  if (typeof window === "undefined" || typeof fetch !== "function") {
+    originRpcBootstrapPromise = Promise.resolve(null);
+    return originRpcBootstrapPromise;
+  }
+  const w = window as unknown as { __AUTOCOMPARE_RPC__?: HttpRpcConfig };
+  if (w.__AUTOCOMPARE_RPC__ && typeof w.__AUTOCOMPARE_RPC__.url === "string") {
+    originRpcBootstrapPromise = Promise.resolve(w.__AUTOCOMPARE_RPC__);
+    return originRpcBootstrapPromise;
+  }
+  originRpcBootstrapPromise = fetch("/rpc-config.json", { cache: "no-store" })
+    .then(async (resp) => {
+      if (!resp.ok) return null;
+      const cfg = (await resp.json()) as Partial<HttpRpcConfig>;
+      if (typeof cfg.url === "string" && cfg.url.length > 0) {
+        const resolved: HttpRpcConfig = { url: cfg.url, token: cfg.token };
+        w.__AUTOCOMPARE_RPC__ = resolved;
+        return resolved;
+      }
+      return null;
+    })
+    .catch(() => null);
+  return originRpcBootstrapPromise;
+}
+
 function getHttpRpcConfig(): HttpRpcConfig | null {
   if (typeof window !== "undefined") {
     const w = window as unknown as { __AUTOCOMPARE_RPC__?: HttpRpcConfig };
