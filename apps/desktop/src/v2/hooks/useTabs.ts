@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { sessionSave } from "../../ipc/session";
 import type { SessionKind, V2Tab } from "../types";
+import { getComparator, inferComparatorForPaths } from "../plugins/registry";
 import { inferDropKind } from "../utils/dropKind";
 import {
   isRestoreLastSessionEnabled,
@@ -85,9 +86,8 @@ export function useTabs({ onResetCommands }: UseTabsOptions) {
       }
       const id = `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const kindLabel =
-        kind === "folderMerge"
-          ? "Folder Merge"
-          : `${kind[0].toUpperCase()}${kind.slice(1)} Compare`;
+        getComparator(kind)?.title ??
+        `${kind[0].toUpperCase()}${kind.slice(1)} Compare`;
       const baseTitle =
         customTitle ??
         (left && right
@@ -185,7 +185,7 @@ export function useTabs({ onResetCommands }: UseTabsOptions) {
 
       const cur = activeTabRef.current;
       if (clean.length >= 2) {
-        const kind = cur.kind === "home" ? inferDropKind(clean) : cur.kind;
+        const kind = cur.kind === "home" ? inferComparatorForPaths(clean) : cur.kind;
         if (cur.kind === "home") {
           openSession(kind, clean[0], clean[1]);
         } else {
@@ -197,7 +197,7 @@ export function useTabs({ onResetCommands }: UseTabsOptions) {
 
       const dropped = clean[0];
       if (cur.kind === "home") {
-        const kind = inferDropKind([dropped]);
+        const kind = inferComparatorForPaths([dropped]);
         openSession(kind, side === "left" ? dropped : "", side === "right" ? dropped : "");
       } else {
         const nextL = side === "left" ? dropped : cur.leftPath;

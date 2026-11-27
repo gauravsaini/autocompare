@@ -5,17 +5,12 @@ import V2Toolbar from "./components/V2Toolbar";
 import { useTabs } from "./hooks/useTabs";
 import { useV2Shortcuts } from "./hooks/useV2Shortcuts";
 import V2Home from "./views/V2Home";
+import { registerBuiltinComparators } from "./plugins/builtins";
+import { getComparator, listComparators } from "./plugins/registry";
 import type { V2StatusInfo, V2ViewCommands } from "./types";
 
-// Code-split all 8 comparison views & secondary modals so Home boots instantly
-const V2TextCompare = lazy(() => import("./views/V2TextCompare"));
-const V2FolderCompare = lazy(() => import("./views/V2FolderCompare"));
-const V2TableCompare = lazy(() => import("./views/V2TableCompare"));
-const V2HexCompare = lazy(() => import("./views/V2HexCompare"));
-const V2MergeCompare = lazy(() => import("./views/V2MergeCompare"));
-const V2FolderMerge = lazy(() => import("./views/V2FolderMerge"));
-const V2SyncCompare = lazy(() => import("./views/V2SyncCompare"));
-const V2MediaCompare = lazy(() => import("./views/V2MediaCompare"));
+// Register all built-in + litmus comparator plugins into the Comparator Seam
+registerBuiltinComparators();
 
 const V2Modal = lazy(() => import("./components/V2Modal"));
 const V2NewSessionModal = lazy(() => import("./components/V2NewSessionModal"));
@@ -188,14 +183,13 @@ export default function V2App(): React.JSX.Element {
 
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
     const list: PaletteCommand[] = [
-      { id: "new-text", category: "Compare", label: "New Text Compare", shortcut: "⌘1", run: () => openSession("text") },
-      { id: "new-folder", category: "Compare", label: "New Folder Compare", shortcut: "⌘2", run: () => openSession("folder") },
-      { id: "new-hex", category: "Compare", label: "New Hex Compare", shortcut: "⌘3", run: () => openSession("hex") },
-      { id: "new-table", category: "Compare", label: "New Table Compare", shortcut: "⌘4", run: () => openSession("table") },
-      { id: "new-media", category: "Compare", label: "New Media Compare", shortcut: "⌘5", run: () => openSession("media") },
-      { id: "new-sync", category: "Compare", label: "New Folder Sync", shortcut: "⌘6", run: () => openSession("sync") },
-      { id: "new-merge", category: "Compare", label: "New 3-Way Text Merge", shortcut: "⌘7", run: () => openSession("merge") },
-      { id: "new-fmerge", category: "Compare", label: "New 3-Way Folder Merge", run: () => openSession("folderMerge") },
+      ...listComparators().map((plugin) => ({
+        id: `new-${plugin.id}`,
+        category: "Compare",
+        label: plugin.paletteLabel ?? `New ${plugin.title}`,
+        shortcut: plugin.shortcut,
+        run: () => openSession(plugin.id),
+      })),
       { id: "go-home", category: "Navigate", label: "Go to Home", run: () => setActiveId("home") },
       { id: "toggle-theme", category: "View", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`, run: toggleTheme },
       { id: "open-shortcuts", category: "Help", label: "Keyboard Shortcuts Cheat Sheet", shortcut: "⌘/", run: toggleShortcuts },
@@ -390,82 +384,29 @@ export default function V2App(): React.JSX.Element {
                 onOpenSessionManager={() => setSessionManagerOpen(true)}
                 refreshSignal={sessionRefresh}
               />
-            ) : activeTab.kind === "text" ? (
-              <V2TextCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onDirtyChange={updateActiveDirty}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "folder" ? (
-              <V2FolderCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onOpenTextPair={(l, r, title) => openSession("text", l, r, title)}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "table" ? (
-              <V2TableCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "hex" ? (
-              <V2HexCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "merge" ? (
-              <V2MergeCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "folderMerge" ? (
-              <V2FolderMerge
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onOpenTextMerge={(l, r, title) => openSession("merge", l, r, title)}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : activeTab.kind === "sync" ? (
-              <V2SyncCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            ) : (
-              <V2MediaCompare
-                key={activeTab.id}
-                leftPath={activeTab.leftPath}
-                rightPath={activeTab.rightPath}
-                onPathsChange={updateActivePaths}
-                onRegisterCommands={setCommands}
-                onStatusChange={setStatus}
-              />
-            )}
+            ) : (() => {
+              const plugin = getComparator(activeTab.kind);
+              if (!plugin) {
+                return (
+                  <div className="flex h-full items-center justify-center text-[12px] text-[var(--v2-fg-muted)]">
+                    Unknown comparator plugin: {activeTab.kind}
+                  </div>
+                );
+              }
+              const ActiveView = plugin.component;
+              return (
+                <ActiveView
+                  key={activeTab.id}
+                  leftPath={activeTab.leftPath}
+                  rightPath={activeTab.rightPath}
+                  onPathsChange={updateActivePaths}
+                  onDirtyChange={updateActiveDirty}
+                  onOpenSession={openSession}
+                  onRegisterCommands={setCommands}
+                  onStatusChange={setStatus}
+                />
+              );
+            })()}
           </Suspense>
         </V2ViewErrorBoundary>
       </div>

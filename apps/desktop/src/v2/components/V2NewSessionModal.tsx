@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import V2Modal from "./V2Modal";
+import { listComparators } from "../plugins/registry";
 import type { SessionKind } from "../types";
 
 export interface V2NewSessionModalProps {
@@ -13,6 +14,7 @@ export default function V2NewSessionModal({
   onClose,
   onCreate,
 }: V2NewSessionModalProps): React.JSX.Element {
+  const comparators = listComparators();
   const [draftKind, setDraftKind] = useState<SessionKind>("text");
   const [draftLeft, setDraftLeft] = useState("");
   const [draftRight, setDraftRight] = useState("");
@@ -54,14 +56,11 @@ export default function V2NewSessionModal({
             onChange={(e) => setDraftKind(e.target.value as SessionKind)}
             className="v2-input w-full"
           >
-            <option value="text">Text Compare</option>
-            <option value="folder">Folder Compare</option>
-            <option value="table">Table Compare</option>
-            <option value="hex">Hex Compare</option>
-            <option value="merge">3-Way Text Merge</option>
-            <option value="folderMerge">3-Way Folder Merge</option>
-            <option value="sync">Folder Sync</option>
-            <option value="media">Media Compare (Picture & Audio)</option>
+            {comparators.map((plugin) => (
+              <option key={plugin.id} value={plugin.id}>
+                {plugin.title}
+              </option>
+            ))}
           </select>
         </div>
         <div>

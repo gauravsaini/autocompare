@@ -37,6 +37,19 @@ import {
 } from "../utils/hexInspector.ts";
 import { normalizeFileWatchMode, sortSessionsWithPins, togglePinnedId } from "../utils/sessionPrefs.ts";
 import { normalizeKeymapPreset, resolveKeymapAction } from "../utils/keymap.ts";
+import {
+  getComparator,
+  inferComparatorForPaths,
+  listComparators,
+  registerComparator,
+  resetComparatorRegistryForTests,
+  resolveComparatorId,
+} from "../plugins/registry.ts";
+import {
+  canonicalizeJson,
+  diffStructuredValues,
+  parseStructuredDocument,
+} from "../utils/structuredDiff.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -407,5 +420,65 @@ describe("keymap presets", () => {
     assert.equal(resolveKeymapAction(mk("s", { ctrlKey: true }), "emacs"), "openFind");
     assert.equal(resolveKeymapAction(mk("F7"), "bc"), "nextSection");
     assert.equal(resolveKeymapAction(mk("F7", { shiftKey: true }), "bc"), "prevSection");
+  });
+});
+
+describe("ComparatorPluginRegistry", () => {
+  it("registers plugins, matches extensions by priority, and resolves ids case-insensitively", () => {
+    resetComparatorRegistryForTests();
+    const Dummy = () => null;
+    registerComparator({
+      id: "table",
+      title: "Table Compare",
+      subtitle: "CSV",
+      accent: "#059669",
+      icon: Dummy,
+      extensions: [".csv"],
+      component: Dummy,
+    });
+    registerComparator({
+      id: "structured",
+      title: "JSON / YAML Diff",
+      subtitle: "AST",
+      accent: "#0d9488",
+      icon: Dummy,
+      extensions: [".json", ".yaml"],
+      priority: 10,
+      component: Dummy,
+    });
+    assert.equal(listComparators().length, 2);
+    assert.equal(getComparator("structured")?.title, "JSON / YAML Diff");
+    assert.equal(inferComparatorForPaths(["/tmp/config.yaml"]), "structured");
+    assert.equal(inferComparatorForPaths(["/tmp/data.csv"]), "table");
+    assert.equal(inferComparatorForPaths(["/tmp/my_folder/"]), "folder");
+    assert.equal(resolveComparatorId("STRUCTURED"), "structured");
+    assert.equal(resolveComparatorId("unknown"), "text");
+  });
+});
+
+describe("structuredDiff (JSON & YAML AST)", () => {
+  it("diffs JSON ignoring object key order and detects added/changed/typeChanged paths", () => {
+    const l = parseStructuredDocument('{"b": 2, "a": 1, "nested": {"x": "hi"}}');
+    const r = parseStructuredDocument('{"a": 1, "b": "2", "nested": {"x": "hi", "y": true}}');
+    assert.equal(l.ok, true);
+    assert.equal(r.ok, true);
+    if (!l.ok || !r.ok) return;
+    const nodes = diffStructuredValues(l.value, r.value);
+    assert.equal(nodes.find((n) => n.path === "$.a")?.kind, "equal");
+    assert.equal(nodes.find((n) => n.path === "$.b")?.kind, "typeChanged");
+    assert.equal(nodes.find((n) => n.path === "$.nested.y")?.kind, "added");
+    assert.ok(canonicalizeJson(l.value).indexOf('"a"') < canonicalizeJson(l.value).indexOf('"b"'));
+  });
+
+  it("parses YAML config documents and supports ignoreArrayOrder", () => {
+    const l = parseStructuredDocument("service: api\ntags:\n  - alpha\n  - beta\n");
+    const r = parseStructuredDocument("service: api\ntags:\n  - beta\n  - alpha\n");
+    assert.equal(l.ok, true);
+    assert.equal(r.ok, true);
+    if (!l.ok || !r.ok) return;
+    const strict = diffStructuredValues(l.value, r.value, { ignoreArrayOrder: false });
+    assert.equal(strict.some((n) => n.kind === "changed"), true);
+    const unordered = diffStructuredValues(l.value, r.value, { ignoreArrayOrder: true });
+    assert.equal(unordered.every((n) => n.kind === "equal"), true);
   });
 });

@@ -1,20 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Binary,
-  FileText,
-  Folder,
-  GitMerge,
-  Image,
-  Lock,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Star,
-  Table2,
-  Trash2,
-} from "lucide-react";
+import { FileText, Lock, Search, Sparkles, Star, Trash2 } from "lucide-react";
 import { deleteSession, sessionList, sessionLoad } from "../../ipc/session";
 import type { SessionEntry } from "../../ipc/session";
+import { listComparators, resolveComparatorId } from "../plugins/registry";
 import {
   loadPinnedSessionIds,
   savePinnedSessionIds,
@@ -34,88 +22,20 @@ function inferSessionBadge(name: string): {
   accent: string;
 } {
   const n = name.toLowerCase();
-  if (n.includes("folder merge")) return { icon: Folder, accent: "#ea580c" };
-  if (n.includes("folder")) return { icon: Folder, accent: "#d97706" };
-  if (n.includes("table") || n.includes("csv")) return { icon: Table2, accent: "#059669" };
-  if (n.includes("hex") || n.includes("bin")) return { icon: Binary, accent: "#7c3aed" };
-  if (n.includes("merge")) return { icon: GitMerge, accent: "#dc2626" };
-  if (n.includes("sync")) return { icon: RefreshCw, accent: "#0891b2" };
-  if (n.includes("media") || n.includes("image") || n.includes("audio")) return { icon: Image, accent: "#db2777" };
+  for (const plugin of listComparators()) {
+    if (plugin.keywords?.some((kw) => n.includes(kw))) {
+      return { icon: plugin.icon, accent: plugin.accent };
+    }
+  }
   return { icon: FileText, accent: "#2563eb" };
 }
-
-interface SessionCardDef {
-  readonly kind: SessionKind;
-  readonly title: string;
-  readonly subtitle: string;
-  readonly icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
-  readonly accent: string;
-}
-
-const SESSION_CARDS: readonly SessionCardDef[] = [
-  {
-    kind: "text",
-    title: "Text Compare",
-    subtitle: "Side-by-side line and word diff",
-    icon: FileText,
-    accent: "#2563eb",
-  },
-  {
-    kind: "folder",
-    title: "Folder Compare",
-    subtitle: "Directories & archives",
-    icon: Folder,
-    accent: "#d97706",
-  },
-  {
-    kind: "table",
-    title: "Table Compare",
-    subtitle: "CSV and structured data grids",
-    icon: Table2,
-    accent: "#059669",
-  },
-  {
-    kind: "hex",
-    title: "Hex Compare",
-    subtitle: "Binary bytes and ASCII offsets",
-    icon: Binary,
-    accent: "#7c3aed",
-  },
-  {
-    kind: "merge",
-    title: "3-Way Text Merge",
-    subtitle: "Resolve line conflicts with base",
-    icon: GitMerge,
-    accent: "#dc2626",
-  },
-  {
-    kind: "folderMerge",
-    title: "3-Way Folder Merge",
-    subtitle: "Merge directory trees over base",
-    icon: Folder,
-    accent: "#ea580c",
-  },
-  {
-    kind: "sync",
-    title: "Folder Sync",
-    subtitle: "Mirror and update directory trees",
-    icon: RefreshCw,
-    accent: "#0891b2",
-  },
-  {
-    kind: "media",
-    title: "Media Compare",
-    subtitle: "Images, heatmaps, and audio",
-    icon: Image,
-    accent: "#db2777",
-  },
-];
 
 export default function V2Home({
   onNewSession,
   onOpenSessionManager,
   refreshSignal = 0,
 }: V2HomeProps): React.JSX.Element {
+  const comparators = listComparators();
   const [sessions, setSessions] = useState<readonly SessionEntry[]>([]);
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedSessionIds());
   const [pinnedOnly, setPinnedOnly] = useState(false);
@@ -159,18 +79,7 @@ export default function V2Home({
     try {
       const doc = await sessionLoad(entry.id);
       const first = doc.tabs[0];
-      const rawKind = (first?.session_type ?? "text").toLowerCase();
-      const kindMap: Record<string, SessionKind> = {
-        text: "text",
-        folder: "folder",
-        table: "table",
-        hex: "hex",
-        merge: "merge",
-        foldermerge: "folderMerge",
-        sync: "sync",
-        media: "media",
-      };
-      const kind: SessionKind = kindMap[rawKind] ?? "text";
+      const kind = resolveComparatorId(first?.session_type);
       onNewSession(
         kind,
         first?.left_path ?? "",
@@ -336,7 +245,7 @@ export default function V2Home({
         </div>
       </aside>
 
-      {/* Right New Comparison Workspace */}
+      {/* Right New Comparison Workspace (Registry-Driven Plugin Grid) */}
       <main className="flex flex-1 flex-col overflow-y-auto px-10 py-8">
         <div className="mx-auto w-full max-w-4xl">
           <div className="mb-6 flex items-end justify-between">
@@ -345,7 +254,7 @@ export default function V2Home({
                 AutoCompare
               </h1>
               <p className="mt-1 text-[13px] text-[var(--v2-fg-muted)]">
-                Choose a comparison type or open a saved session to begin.
+                Choose a comparison plugin or open a saved session to begin.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -367,29 +276,29 @@ export default function V2Home({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {SESSION_CARDS.map((card) => {
-              const Icon = card.icon;
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            {comparators.map((plugin) => {
+              const Icon = plugin.icon;
               return (
                 <button
-                  key={card.kind}
+                  key={plugin.id}
                   type="button"
-                  data-testid={`v2/home-card-${card.kind}`}
-                  onClick={() => onNewSession(card.kind)}
+                  data-testid={`v2/home-card-${plugin.id}`}
+                  onClick={() => onNewSession(plugin.id)}
                   className="group flex items-start gap-3 rounded-[9px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-3.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[var(--v2-accent)] hover:shadow-[0_2px_8px_rgba(10,132,255,0.12)]"
                 >
                   <div
                     className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px]"
-                    style={{ backgroundColor: `${card.accent}18`, color: card.accent }}
+                    style={{ backgroundColor: `${plugin.accent}18`, color: plugin.accent }}
                   >
                     <Icon size={17} strokeWidth={1.8} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-semibold text-[var(--v2-fg)] group-hover:text-[var(--v2-accent)]">
-                      {card.title}
+                      {plugin.title}
                     </div>
                     <div className="mt-0.5 text-[11px] leading-snug text-[var(--v2-fg-muted)]">
-                      {card.subtitle}
+                      {plugin.subtitle}
                     </div>
                   </div>
                 </button>

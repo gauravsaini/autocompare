@@ -1,4 +1,4 @@
-export type SessionKind =
+export type BuiltinSessionKind =
   | "home"
   | "text"
   | "folder"
@@ -8,6 +8,13 @@ export type SessionKind =
   | "folderMerge"
   | "sync"
   | "media";
+
+/**
+ * Open session kind union: preserves autocomplete for built-in kinds while
+ * allowing comparator plugins (e.g. "structured") to register without editing
+ * core shell types.
+ */
+export type SessionKind = BuiltinSessionKind | (string & {});
 
 export type FilterMode = "all" | "diffs" | "same";
 
