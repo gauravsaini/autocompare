@@ -22,6 +22,13 @@ import {
 } from "../utils/textReplacements.ts";
 import { resolveSyntaxLang, tokenizeLine } from "../utils/syntaxHighlight.ts";
 import { addManualAnchor, applyManualAnchors } from "../utils/manualAlign.ts";
+import {
+  buildCsvDiffReport,
+  buildHtmlDiffReport,
+  buildMarkdownDiffReport,
+  buildReport,
+  buildUnifiedPatch,
+} from "../utils/reportBuilder.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -270,5 +277,73 @@ describe("replaceInLines", () => {
     const single = replaceInLines(lines, "foo", "qux", { matchCase: false, onlyLineIndex: 1 });
     assert.equal(single.count, 1);
     assert.deepEqual(single.lines, ["Foo bar foo", "qux baz"]);
+  });
+});
+
+describe("reportBuilder", () => {
+  const textInput = {
+    kind: "text" as const,
+    title: "main.ts diff",
+    leftPath: "/src/main.ts",
+    rightPath: "/src/main_new.ts",
+    generatedAt: "2026-11-27T00:00:00Z",
+    rows: [
+      { index: 0, kind: "equal" as const, left: "const a = 1;", right: "const a = 1;", inline: [] },
+      { index: 1, kind: "equal" as const, left: "const b = 2;", right: "const b = 2;", inline: [] },
+      { index: 2, kind: "equal" as const, left: "const c = 3;", right: "const c = 3;", inline: [] },
+      { index: 3, kind: "equal" as const, left: "const d = 4;", right: "const d = 4;", inline: [] },
+      { index: 4, kind: "equal" as const, left: "const e = 5;", right: "const e = 5;", inline: [] },
+      { index: 5, kind: "equal" as const, left: "const f = 6;", right: "const f = 6;", inline: [] },
+      { index: 6, kind: "changed" as const, left: "return oldVal;", right: "return newVal;", inline: [] },
+    ],
+  };
+
+  it("builds syntax-highlighted HTML with collapsible unchanged sections", () => {
+    const html = buildHtmlDiffReport(textInput, { syntaxHighlight: true, collapseUnchanged: true });
+    assert.ok(html.includes("<!DOCTYPE html>"));
+    assert.ok(html.includes('class="tok-kw"'), "must syntax-highlight TypeScript keywords");
+    assert.ok(html.includes('<details class="unchanged-group">'), "must collapse long equal runs");
+    assert.ok(html.includes("Show 2 unchanged lines"));
+  });
+
+  it("builds standard unified patch hunks", () => {
+    const patch = buildUnifiedPatch(textInput, 2);
+    assert.ok(patch.startsWith("--- a//src/main.ts\n+++ b//src/main_new.ts\n"));
+    assert.ok(patch.includes("@@ -5,3 +5,3 @@"));
+    assert.ok(patch.includes("-return oldVal;\n+return newVal;"));
+  });
+
+  it("builds Markdown and RFC-4180 CSV diff reports for tables", () => {
+    const tableInput = {
+      kind: "table" as const,
+      title: "prices.csv",
+      leftPath: "left.csv",
+      rightPath: "right.csv",
+      page: {
+        sessionId: "s1",
+        startRow: 0,
+        limit: 10,
+        startCol: 0,
+        colLimit: 10,
+        headerL: ["Item", "Price"],
+        headerR: ["Item", "Price"],
+        rowsL: [["Apple, Red", "1.50"], ["Pear", "2.00"]],
+        rowsR: [["Apple, Red", "1.75"], ["Pear", "2.00"]],
+        totalRowsL: 2,
+        totalRowsR: 2,
+        totalCols: 2,
+        truncated: false,
+      },
+    };
+    const md = buildMarkdownDiffReport(tableInput, { diffsOnly: true });
+    assert.ok(md.includes("| 1 | changed |"));
+    assert.ok(!md.includes("| 2 | equal |"));
+
+    const csv = buildCsvDiffReport(tableInput, { diffsOnly: true });
+    assert.ok(csv.includes('1,changed,"Apple, Red",1.50,"Apple, Red",1.75'));
+    assert.ok(!csv.includes("Pear"));
+
+    const json = buildReport("json", tableInput);
+    assert.ok(json.includes('"schemaVersion": 2'));
   });
 });

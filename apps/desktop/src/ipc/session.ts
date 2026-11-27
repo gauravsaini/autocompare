@@ -81,7 +81,7 @@ export interface SessionEntry {
 }
 
 /** Report formats accepted by `reportExport`. */
-export type ReportFormat = "html" | "json" | "md";
+export type ReportFormat = "html" | "patch" | "md" | "csv" | "json";
 
 /** Lists saved sessions (directory order, never an error). */
 export function sessionList(): Promise<SessionEntry[]> {
@@ -124,17 +124,20 @@ export function settingsSet(patch: Record<string, unknown>): Promise<AppSettings
 }
 
 /**
- * Renders a session descriptor to `format` and writes it to `outPath`
- * (confined to the temp directory); resolves the written path.
+ * Renders a session descriptor (or pre-rendered diff report body) to `format`
+ * and writes it to `outPath` (confined to the temp directory); resolves the
+ * written path.
  */
 export function reportExport(
   session: SessionDocument,
   format: ReportFormat,
   outPath: string,
+  renderedBody?: string,
 ): Promise<string> {
   return invoke<string>("report_export", {
     session,
     format,
     out_path: outPath,
+    rendered_body: renderedBody ?? null,
   });
 }

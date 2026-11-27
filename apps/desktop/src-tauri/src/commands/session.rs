@@ -253,6 +253,8 @@ enum ReportFormat {
     Html,
     Json,
     Md,
+    Patch,
+    Csv,
 }
 
 impl ReportFormat {
@@ -261,8 +263,10 @@ impl ReportFormat {
             "html" | "htm" => Ok(Self::Html),
             "json" => Ok(Self::Json),
             "md" | "markdown" => Ok(Self::Md),
+            "patch" | "diff" => Ok(Self::Patch),
+            "csv" => Ok(Self::Csv),
             _ => Err(format!(
-                "unknown report format '{raw}'; expected html, json, or md"
+                "unknown report format '{raw}'; expected html, json, md, patch, or csv"
             )),
         }
     }
@@ -635,21 +639,29 @@ fn apply_setting(
     Ok(())
 }
 
-/// Renders a session descriptor to `html`, `json`, or `md` and writes it
-/// to `out_path` (confined to the temp directory). Returns the written
-/// path. The file is verified non-empty after the write.
+/// Renders a session descriptor to `html`, `json`, `md`, `patch`, or `csv`
+/// (or writes a pre-rendered diff report body when `rendered_body` is supplied)
+/// and writes it to `out_path` (confined to the temp directory). Returns the
+/// written path. The file is verified non-empty after the write.
 #[tauri::command]
 pub fn report_export(
     session: SessionDocument,
     format: String,
     out_path: String,
+    rendered_body: Option<String>,
 ) -> Result<String, String> {
     validate_descriptor(&session)?;
-    let rendered = match ReportFormat::parse(&format)? {
-        ReportFormat::Html => render_html_report(&session),
-        ReportFormat::Json => serde_json::to_string_pretty(&session)
-            .map_err(|source| format!("encoding report failed: {source}"))?,
-        ReportFormat::Md => render_markdown_report(&session),
+    let parsed_format = ReportFormat::parse(&format)?;
+    let rendered = match rendered_body {
+        Some(body) if !body.trim().is_empty() => body,
+        _ => match parsed_format {
+            ReportFormat::Html => render_html_report(&session),
+            ReportFormat::Json => serde_json::to_string_pretty(&session)
+                .map_err(|source| format!("encoding report failed: {source}"))?,
+            ReportFormat::Md => render_markdown_report(&session),
+            ReportFormat::Patch => render_markdown_report(&session),
+            ReportFormat::Csv => render_csv_report(&session),
+        },
     };
     if rendered.is_empty() {
         return Err("rendered report is empty".to_string());
@@ -727,6 +739,19 @@ fn render_html_report(session: &SessionDocument) -> String {
         out.push_str("</li>\n");
     }
     out.push_str("</ul>\n</body>\n</html>\n");
+    out
+}
+
+/// CSV fallback report body for a session descriptor.
+fn render_csv_report(session: &SessionDocument) -> String {
+    let mut out = String::from("Title,Type,Left,Right\n");
+    for tab in &session.tabs {
+        let left = tab.left_path.as_deref().unwrap_or("").replace('"', "\"\"");
+        let right = tab.right_path.as_deref().unwrap_or("").replace('"', "\"\"");
+        let title = tab.title.replace('"', "\"\"");
+        let kind = tab.session_type.replace('"', "\"\"");
+        out.push_str(&format!("\"{title}\",\"{kind}\",\"{left}\",\"{right}\"\n"));
+    }
     out
 }
 
@@ -916,12 +941,13 @@ mod tests {
     #[test]
     fn report_export_writes_non_empty_tmp_files() {
         let doc = sample_doc();
-        for format in ["html", "json", "md"] {
+        for format in ["html", "json", "md", "patch", "csv"] {
             let out = unique_path(&format!("report-1d.{format}"));
             let written = report_export(
                 doc.clone(),
                 format.to_string(),
                 out.to_string_lossy().to_string(),
+                None,
             )
             .expect("export");
             let content = std::fs::read_to_string(&written).expect("read");
@@ -937,8 +963,28 @@ mod tests {
                 let parsed: SessionDocument = serde_json::from_str(&content).expect("parse");
                 assert_eq!(parsed.tabs.len(), 2);
             }
+            if format == "csv" {
+                assert!(content.starts_with("Title,Type,Left,Right\n"));
+            }
             let _ = std::fs::remove_file(&written);
         }
+    }
+
+    #[test]
+    fn report_export_accepts_custom_rendered_body() {
+        let doc = sample_doc();
+        let out = unique_path("report-custom.patch");
+        let patch = "--- a/left.txt\n+++ b/right.txt\n@@ -1,1 +1,1 @@\n-old\n+new\n".to_string();
+        let written = report_export(
+            doc,
+            "patch".to_string(),
+            out.to_string_lossy().to_string(),
+            Some(patch.clone()),
+        )
+        .expect("export custom patch");
+        let content = std::fs::read_to_string(&written).expect("read");
+        assert_eq!(content, patch);
+        let _ = std::fs::remove_file(&written);
     }
 
     #[test]
@@ -949,11 +995,17 @@ mod tests {
             doc.clone(),
             "pdf".to_string(),
             out.to_string_lossy().to_string(),
+            None,
         )
         .expect_err("unknown format must fail");
         assert!(err.contains("unknown report format"), "unexpected: {err}");
-        let err = report_export(doc, "html".to_string(), "/etc/wave1d-evil.html".to_string())
-            .expect_err("escaping tmp must fail");
+        let err = report_export(
+            doc,
+            "html".to_string(),
+            "/etc/wave1d-evil.html".to_string(),
+            None,
+        )
+        .expect_err("escaping tmp must fail");
         assert!(err.contains("temp directory"), "unexpected: {err}");
     }
 }

@@ -602,6 +602,10 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       }
       return true as unknown as T;
     }
+    case "report_export": {
+      const outPath = strArg(args, ["out_path", "outPath"], "autocompare-report.html");
+      return (outPath.startsWith("/") ? outPath : `/tmp/${outPath}`) as unknown as T;
+    }
     case "text_compare": {
       const leftPath = strArg(args, ["left"], "");
       const rightPath = strArg(args, ["right"], "");
