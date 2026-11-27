@@ -338,12 +338,31 @@ export default function V2MergeCompare({
               <ChevronDown size={12} />
             </button>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button type="button" onClick={() => applyAll("left")} className="v2-btn h-[21px] text-[11px]">
               Take All Left
             </button>
+            <button type="button" onClick={() => applyAll("base")} className="v2-btn h-[21px] text-[11px]">
+              Take All Base
+            </button>
             <button type="button" onClick={() => applyAll("right")} className="v2-btn h-[21px] text-[11px]">
               Take All Right
+            </button>
+            <button type="button" onClick={() => applyAll("bothLeftFirst")} className="v2-btn h-[21px] text-[11px]">
+              Take All Both
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(outputText).then(
+                  () => setReportNote("Copied merged output with conflict markers"),
+                  () => setReportNote("Could not access clipboard"),
+                );
+              }}
+              title="Copy merged output (including Git conflict markers for unresolved conflicts)"
+              className="v2-btn h-[21px] text-[11px]"
+            >
+              Copy Markers
             </button>
             <button
               type="button"

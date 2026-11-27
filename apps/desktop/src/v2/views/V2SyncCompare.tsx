@@ -42,6 +42,7 @@ export default function V2SyncCompare({
   const [plan, setPlan] = useState<SyncPlan | null>(null);
   const [excludedPaths, setExcludedPaths] = useState<Set<string>>(() => new Set());
   const [report, setReport] = useState<SyncApplyReport | null>(null);
+  const [syncLog, setSyncLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +130,10 @@ export default function V2SyncCompare({
 
   const handleApply = async (dryRun: boolean): Promise<void> => {
     if (!plan || activeSteps.length === 0) return;
+    if (!dryRun) {
+      const summaryMsg = `Apply ${activeSteps.length} sync step(s)? (${breakdown.copyRight + breakdown.copyLeft} copies, ${breakdown.deletes} deletes)`;
+      if (!window.confirm(summaryMsg)) return;
+    }
     setRunning(true);
     setError(null);
     const lEff = leftDraft || "tools/parity-harness/fixtures/folder/left";
@@ -144,6 +149,14 @@ export default function V2SyncCompare({
     try {
       const rep = await syncApply(lEff, rEff, filteredPlan, dryRun);
       setReport(rep);
+      const ts = new Date().toLocaleTimeString();
+      const line = rep.dryRun
+        ? `${ts}  [DRY RUN] ${direction}: ${rep.plannedCopies} copies, ${rep.plannedDeletes} deletes planned`
+        : `${ts}  [SYNCED] ${direction}: ${rep.copied} copied, ${rep.deleted} deleted${rep.failed.length > 0 ? `, ${rep.failed.length} failed` : ""}`;
+      setSyncLog((prev) => [...prev.slice(-7), line]);
+      if (!dryRun) {
+        await runPlan(leftDraft, rightDraft);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -320,6 +333,21 @@ export default function V2SyncCompare({
             })}
           </div>
         )}
+      </div>
+
+      {/* Compact Sync Activity & Undo-Preview Log */}
+      <div className="flex h-[56px] shrink-0 items-center justify-between gap-2 border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1">
+        <div className="v2-mono h-full min-w-0 flex-1 overflow-y-auto text-[11px] leading-[16px] text-[var(--v2-fg-muted)]">
+          {syncLog.length === 0 ? "Ready — run Dry Run to preview or Sync Now to apply" : syncLog.map((l, idx) => <div key={idx}>{l}</div>)}
+        </div>
+        <button
+          type="button"
+          onClick={() => setDirection((d) => (d === "LeftToRight" ? "RightToLeft" : "LeftToRight"))}
+          title="Reverse sync direction to preview inverse changes"
+          className="v2-btn h-[22px] shrink-0 px-2 text-[11px]"
+        >
+          Reverse Direction
+        </button>
       </div>
     </div>
   );

@@ -84,6 +84,7 @@ export default function V2MediaCompare({
   const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
     paths: watchedPaths,
     enabled: !loading && watchedPaths.length > 0,
+    onAutoReload: () => void runCompare(kind, leftDraft, rightDraft, tolerance),
   });
 
   useEffect(() => {

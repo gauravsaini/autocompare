@@ -30,7 +30,7 @@ interface ViewErrorBoundaryState {
 }
 
 class V2ViewErrorBoundary extends React.Component<
-  { readonly resetKey: string; readonly children: React.ReactNode },
+  { readonly resetKey: string; readonly viewName: string; readonly onGoHome?: () => void; readonly children: React.ReactNode },
   ViewErrorBoundaryState
 > {
   state: ViewErrorBoundaryState = { error: null };
@@ -53,18 +53,32 @@ class V2ViewErrorBoundary extends React.Component<
           className="flex h-full flex-col items-center justify-center gap-2 bg-[var(--v2-surface)] p-6 text-center"
         >
           <p className="text-[13px] font-semibold text-[var(--v2-del-fg)]">
-            View failed to render
+            {this.props.viewName} view crashed
           </p>
           <p className="v2-mono max-w-lg text-[11.5px] text-[var(--v2-fg-muted)]">
             {this.state.error}
           </p>
-          <button
-            type="button"
-            onClick={() => this.setState({ error: null })}
-            className="v2-btn mt-1"
-          >
-            Retry
-          </button>
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => this.setState({ error: null })}
+              className="v2-btn v2-btn-primary"
+            >
+              Reload View
+            </button>
+            {this.props.onGoHome ? (
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ error: null });
+                  this.props.onGoHome?.();
+                }}
+                className="v2-btn"
+              >
+                Return Home
+              </button>
+            ) : null}
+          </div>
         </div>
       );
     }
@@ -368,7 +382,7 @@ export default function V2App(): React.JSX.Element {
 
       {/* 3. Main Content Surface (Lazy-loaded Native v2 Views) */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <V2ViewErrorBoundary resetKey={activeTab.id}>
+        <V2ViewErrorBoundary resetKey={activeTab.id} viewName={activeTab.title} onGoHome={() => setActiveId("home")}>
           <Suspense fallback={<ViewLoadingFallback />}>
             {activeTab.kind === "home" ? (
               <V2Home

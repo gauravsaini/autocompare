@@ -120,6 +120,14 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ExitCodeMode::Diff, global = true)]
     pub exit_code_mode: ExitCodeMode,
 
+    /// Explicit git-diff compatible exit code flag (0=equal, 1=diff, 2=error).
+    #[arg(long, global = true)]
+    pub exit_code: bool,
+
+    /// Write CI-friendly JUnit XML report to the given path.
+    #[arg(long, global = true)]
+    pub junit: Option<String>,
+
     /// Force Beyond Compare return codes (0=success, 11=binary diff, 13=rules diff, 14=conflicts).
     #[arg(long, global = true)]
     pub bc_exit_code: bool,
@@ -184,7 +192,8 @@ impl Cli {
 /// Comparison and merge subcommands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
-    /// Compare two text files line by line, side by side.
+    /// Compare two text files line by line, side by side (alias: `diff`).
+    #[command(alias = "diff")]
     Text {
         /// Left file path.
         left: String,

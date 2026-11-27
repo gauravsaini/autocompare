@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { SessionKind, V2Tab, V2ViewCommands } from "../types";
+import { loadKeymapPreset, resolveKeymapAction } from "../utils/keymap";
+import type { KeymapPreset } from "../utils/keymap";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -38,6 +40,15 @@ export function useV2Shortcuts({
   onToggleLayout,
 }: UseV2ShortcutsOptions) {
   const [dropOverlay, setDropOverlay] = useState<"left" | "right" | "both" | null>(null);
+  const [keymap, setKeymap] = useState<KeymapPreset>(() => loadKeymapPreset());
+
+  useEffect(() => {
+    const onKeymapChange = (e: Event): void => {
+      setKeymap((e as CustomEvent<KeymapPreset>).detail ?? loadKeymapPreset());
+    };
+    window.addEventListener("autocompare:keymap-changed", onKeymapChange);
+    return () => window.removeEventListener("autocompare:keymap-changed", onKeymapChange);
+  }, []);
 
   // Global keyboard shortcuts (aligned 1:1 with src-tauri/src/menu.rs + BC ergonomics)
   useEffect(() => {
@@ -117,16 +128,28 @@ export function useV2Shortcuts({
           return;
         }
       }
-      if (!mod && !isEditableTarget(e.target)) {
-        if (e.key === "?") {
+      if (!isEditableTarget(e.target)) {
+        if (!mod && e.key === "?") {
           e.preventDefault();
           onToggleShortcuts();
-        } else if (key === "n" && commandsRef.current.hasSections) {
+          return;
+        }
+        const mapped = resolveKeymapAction(e, keymap);
+        if (mapped === "nextSection" && commandsRef.current.hasSections) {
           e.preventDefault();
           commandsRef.current.nextSection?.();
-        } else if (key === "p" && commandsRef.current.hasSections) {
+        } else if (mapped === "prevSection" && commandsRef.current.hasSections) {
           e.preventDefault();
           commandsRef.current.prevSection?.();
+        } else if (mapped === "openFind" && commandsRef.current.openFind) {
+          e.preventDefault();
+          commandsRef.current.openFind();
+        } else if (mapped === "copyLeft" && commandsRef.current.canCopy) {
+          e.preventDefault();
+          commandsRef.current.copySelected?.();
+        } else if (mapped === "copyRight" && commandsRef.current.canCopy) {
+          e.preventDefault();
+          commandsRef.current.copySelectedRight?.();
         }
       }
     };
@@ -142,6 +165,7 @@ export function useV2Shortcuts({
     onToggleShortcuts,
     onOpenNewSession,
     onOpenSettings,
+    keymap,
   ]);
 
   // Native Tauri window-level file drag-and-drop listener

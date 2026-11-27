@@ -3,6 +3,9 @@ import type { SessionKind } from "../types";
 const PINNED_KEY = "autocompare:v2:pinnedSessions";
 const RESTORE_ENABLED_KEY = "autocompare:v2:restoreLastSession";
 const LAST_SESSION_KEY = "autocompare:v2:lastSession";
+const FILE_WATCH_MODE_KEY = "autocompare:v2:fileWatchMode";
+
+export type FileWatchMode = "prompt" | "auto" | "off";
 
 export interface LastSessionSnapshot {
   readonly kind: Exclude<SessionKind, "home">;
@@ -94,5 +97,29 @@ export function loadLastSessionSnapshot(): LastSessionSnapshot | null {
     };
   } catch {
     return null;
+  }
+}
+
+export function normalizeFileWatchMode(raw: unknown): FileWatchMode {
+  if (raw === "auto" || raw === "off" || raw === "prompt") return raw;
+  return "prompt";
+}
+
+export function loadFileWatchMode(): FileWatchMode {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return "prompt";
+    return normalizeFileWatchMode(window.localStorage.getItem(FILE_WATCH_MODE_KEY));
+  } catch {
+    return "prompt";
+  }
+}
+
+export function saveFileWatchMode(mode: FileWatchMode): void {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(FILE_WATCH_MODE_KEY, mode);
+    window.dispatchEvent(new CustomEvent("autocompare:filewatch-changed", { detail: mode }));
+  } catch {
+    // Ignore storage errors
   }
 }

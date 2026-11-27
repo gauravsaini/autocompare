@@ -70,6 +70,7 @@ export default function V2TableCompare({
   const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
     paths: watchedPaths,
     enabled: !loading && watchedPaths.length > 0,
+    onAutoReload: () => void runCompare(leftDraft, rightDraft),
   });
 
   useEffect(() => {

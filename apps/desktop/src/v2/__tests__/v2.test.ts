@@ -35,7 +35,8 @@ import {
   formatBytesAsAscii,
   formatBytesAsHex,
 } from "../utils/hexInspector.ts";
-import { sortSessionsWithPins, togglePinnedId } from "../utils/sessionPrefs.ts";
+import { normalizeFileWatchMode, sortSessionsWithPins, togglePinnedId } from "../utils/sessionPrefs.ts";
+import { normalizeKeymapPreset, resolveKeymapAction } from "../utils/keymap.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -382,5 +383,29 @@ describe("sessionPrefs", () => {
     const sorted = sortSessionsWithPins([{ id: "s1" }, { id: "s2" }, { id: "s3" }], p1);
     assert.deepEqual(sorted.map((s) => s.id), ["s2", "s1", "s3"]);
     assert.deepEqual(togglePinnedId(p1, "s2"), []);
+    assert.equal(normalizeFileWatchMode("auto"), "auto");
+    assert.equal(normalizeFileWatchMode("unknown"), "prompt");
+  });
+});
+
+describe("keymap presets", () => {
+  const mk = (key: string, mods?: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({
+    key,
+    ctrlKey: mods?.ctrlKey ?? false,
+    metaKey: mods?.metaKey ?? false,
+    altKey: mods?.altKey ?? false,
+    shiftKey: mods?.shiftKey ?? false,
+  });
+
+  it("resolves Vim, Emacs, Beyond Compare, and Default navigation shortcuts", () => {
+    assert.equal(normalizeKeymapPreset("vim"), "vim");
+    assert.equal(normalizeKeymapPreset("weird"), "default");
+    assert.equal(resolveKeymapAction(mk("j"), "vim"), "nextSection");
+    assert.equal(resolveKeymapAction(mk("k"), "vim"), "prevSection");
+    assert.equal(resolveKeymapAction(mk("/"), "vim"), "openFind");
+    assert.equal(resolveKeymapAction(mk("n", { ctrlKey: true }), "emacs"), "nextSection");
+    assert.equal(resolveKeymapAction(mk("s", { ctrlKey: true }), "emacs"), "openFind");
+    assert.equal(resolveKeymapAction(mk("F7"), "bc"), "nextSection");
+    assert.equal(resolveKeymapAction(mk("F7", { shiftKey: true }), "bc"), "prevSection");
   });
 });

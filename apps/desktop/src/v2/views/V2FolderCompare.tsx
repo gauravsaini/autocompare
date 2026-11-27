@@ -8,12 +8,14 @@ import {
 } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2FolderRulesModal from "../components/folder/V2FolderRulesModal";
 import type { FolderRulesTab, FolderSessionRules } from "../components/folder/V2FolderRulesModal";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
+import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
 import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 
 const FOLDER_ROW_HEIGHT = 22;
@@ -75,6 +77,8 @@ export default function V2FolderCompare({
   const [rightDraft, setRightDraft] = useState(rightPath);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [entries, setEntries] = useState<readonly FolderEntryDto[]>([]);
+  const [totalEntries, setTotalEntries] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
@@ -123,10 +127,11 @@ export default function V2FolderCompare({
         setSessionId(dto.session);
         const page = await folderGetTree(dto.session, 0, 500, "all");
         setEntries(page.entries);
+        setTotalEntries(page.total);
         const ts = new Date().toLocaleTimeString();
         setLogs((prev) => [
           ...prev.slice(-4),
-          `${ts}  Loaded ${page.entries.length} entries (${folderRules.contentCompare ? "binary" : "quick"}${masks ? `, mask: ${masks}` : ""})`,
+          `${ts}  Loaded ${page.entries.length}/${page.total} entries (${folderRules.contentCompare ? "binary" : "quick"}${masks ? `, mask: ${masks}` : ""})`,
         ]);
       } catch (e) {
         if (!l && !r && isMissingFixtureError(e)) {
@@ -144,6 +149,32 @@ export default function V2FolderCompare({
   useEffect(() => {
     void runCompare(leftPath, rightPath);
   }, [leftPath, rightPath, runCompare]);
+
+  const watchedPaths = useMemo(
+    () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
+    [leftDraft, rightDraft],
+  );
+  const { changedPaths, dismiss: dismissReload, resetBaseline } = useExternalChangeWatch({
+    paths: watchedPaths,
+    enabled: !loading && watchedPaths.length > 0,
+    onAutoReload: () => void runCompare(leftDraft, rightDraft),
+  });
+
+  const loadMoreEntries = useCallback(async (): Promise<void> => {
+    if (!sessionId || loadingMore || entries.length >= totalEntries) return;
+    setLoadingMore(true);
+    try {
+      const page = await folderGetTree(sessionId, entries.length, 500, "all");
+      if (page.entries.length > 0) {
+        setEntries((prev) => [...prev, ...page.entries]);
+        setTotalEntries(page.total);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [sessionId, loadingMore, entries.length, totalEntries]);
 
   const effectiveEntries = useMemo(() => {
     if (folderRules.contentCompare || folderRules.timestampToleranceSec <= 0) return entries;
@@ -248,9 +279,9 @@ export default function V2FolderCompare({
     onStatusChange({
       left: `${visibleEntries.length} items shown · ${diffCount} differences`,
       center: `${modeLabel}${maskLabel}`,
-      right: `${entries.length} total`,
+      right: totalEntries > entries.length ? `${entries.length} / ${totalEntries} loaded` : `${entries.length} total`,
     });
-  }, [onStatusChange, visibleEntries.length, diffCount, folderRules, entries.length]);
+  }, [onStatusChange, visibleEntries.length, diffCount, folderRules, entries.length, totalEntries]);
 
   return (
     <div data-testid="v2/folder-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
@@ -331,6 +362,14 @@ export default function V2FolderCompare({
         </div>
       ) : null}
 
+      <V2ReloadPromptBanner
+        changedPaths={changedPaths}
+        onReload={() => {
+          void resetBaseline();
+          void runCompare(leftDraft, rightDraft);
+        }}
+        onDismiss={dismissReload}
+      />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Synchronized Dual-Pane Virtualized Tree Rows */}
@@ -452,6 +491,22 @@ export default function V2FolderCompare({
           </div>
         )}
       </div>
+
+      {entries.length < totalEntries ? (
+        <div className="flex shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1 text-[11px]">
+          <span className="text-[var(--v2-fg-muted)]">
+            Loaded {entries.length.toLocaleString()} of {totalEntries.toLocaleString()} entries
+          </span>
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void loadMoreEntries()}
+            className="v2-btn h-[21px] px-2 text-[11px]"
+          >
+            {loadingMore ? "Loading…" : "Load Next 500"}
+          </button>
+        </div>
+      ) : null}
 
       {/* Compact BC Bottom Activity Log */}
       <div className="v2-mono h-[54px] shrink-0 overflow-y-auto border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1 text-[11px] leading-[16px] text-[var(--v2-fg-muted)]">

@@ -2,35 +2,54 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { statPaths } from "../../ipc/text";
 import type { TextFileMeta } from "../../ipc/text";
 import { detectChangedPaths } from "../utils/fileWatch";
+import { loadFileWatchMode } from "../utils/sessionPrefs";
+import type { FileWatchMode } from "../utils/sessionPrefs";
 
 export interface UseExternalChangeWatchOptions {
   readonly paths: readonly string[];
   readonly enabled?: boolean;
   readonly intervalMs?: number;
+  readonly onAutoReload?: () => void;
 }
 
 export interface ExternalChangeWatchState {
   readonly changedPaths: readonly string[];
+  readonly mode: FileWatchMode;
   readonly dismiss: () => void;
   readonly resetBaseline: () => Promise<void>;
 }
 
 /**
- * Watches underlying comparison files for external disk modifications
+ * Watches underlying comparison files/folders for external disk modifications
  * (checks on window focus, tab visibility restore, and a gentle poll interval).
- * Call `resetBaseline()` after intentional reloads or in-app saves to avoid
- * self-triggered prompts.
+ * Supports three user-configurable modes:
+ * - "prompt": surfaces `changedPaths` so the view shows `V2ReloadPromptBanner`
+ * - "auto": immediately invokes `onAutoReload()` and resets baseline silently
+ * - "off": disables all external change checks
  */
 export function useExternalChangeWatch({
   paths,
   enabled = true,
   intervalMs = 3000,
+  onAutoReload,
 }: UseExternalChangeWatchOptions): ExternalChangeWatchState {
   const [changedPaths, setChangedPaths] = useState<readonly string[]>([]);
+  const [mode, setMode] = useState<FileWatchMode>(() => loadFileWatchMode());
   const baselineRef = useRef<readonly (TextFileMeta | null)[] | null>(null);
   const pathsKey = paths.join("\0");
   const pathsRef = useRef(paths);
   pathsRef.current = paths;
+  const onAutoReloadRef = useRef(onAutoReload);
+  onAutoReloadRef.current = onAutoReload;
+
+  useEffect(() => {
+    const onModeChange = (e: Event): void => {
+      const next = (e as CustomEvent<FileWatchMode>).detail ?? loadFileWatchMode();
+      setMode(next);
+    };
+    window.addEventListener("autocompare:filewatch-changed", onModeChange);
+    return () => window.removeEventListener("autocompare:filewatch-changed", onModeChange);
+  }, []);
 
   const fetchStats = useCallback(async (targetPaths: readonly string[]) => {
     const clean = targetPaths.filter((p) => p.trim().length > 0);
@@ -54,7 +73,7 @@ export function useExternalChangeWatch({
   }, [resetBaseline]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || mode === "off") {
       setChangedPaths([]);
       baselineRef.current = null;
       return;
@@ -80,7 +99,13 @@ export function useExternalChangeWatch({
       }
       const changed = detectChangedPaths(pathsRef.current, baselineRef.current, current);
       if (changed.length > 0) {
-        setChangedPaths(changed);
+        if (mode === "auto" && onAutoReloadRef.current) {
+          baselineRef.current = current;
+          setChangedPaths([]);
+          onAutoReloadRef.current();
+        } else {
+          setChangedPaths(changed);
+        }
       }
     };
 
@@ -103,7 +128,7 @@ export function useExternalChangeWatch({
       document.removeEventListener("visibilitychange", onVisibility);
       window.clearInterval(timer);
     };
-  }, [pathsKey, enabled, intervalMs, fetchStats]);
+  }, [pathsKey, enabled, mode, intervalMs, fetchStats]);
 
-  return { changedPaths, dismiss, resetBaseline };
+  return { changedPaths, mode, dismiss, resetBaseline };
 }

@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { settingsGet, settingsSet } from "../../ipc/session";
 import type { AppSettings } from "../../ipc/session";
-import { isRestoreLastSessionEnabled, setRestoreLastSessionEnabled } from "../utils/sessionPrefs";
+import { loadKeymapPreset, normalizeKeymapPreset, saveKeymapPreset } from "../utils/keymap";
+import type { KeymapPreset } from "../utils/keymap";
+import {
+  isRestoreLastSessionEnabled,
+  loadFileWatchMode,
+  saveFileWatchMode,
+  setRestoreLastSessionEnabled,
+} from "../utils/sessionPrefs";
+import type { FileWatchMode } from "../utils/sessionPrefs";
 import V2Modal from "./V2Modal";
 
 export interface V2SettingsModalProps {
@@ -20,21 +29,28 @@ export default function V2SettingsModal({
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [fontSize, setFontSize] = useState(12);
   const [tabSize, setTabSize] = useState(4);
+  const [keymap, setKeymap] = useState<KeymapPreset>(() => loadKeymapPreset());
+  const [fileWatchMode, setFileWatchMode] = useState<FileWatchMode>(() => loadFileWatchMode());
   const [showLineNos, setShowLineNos] = useState(true);
   const [autoSave, setAutoSave] = useState(false);
   const [restoreOnStartup, setRestoreOnStartup] = useState(() => isRestoreLastSessionEnabled());
   const [saving, setSaving] = useState(false);
+  const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setNote(null);
+    setUpdateNote(null);
+    setFileWatchMode(loadFileWatchMode());
+    setRestoreOnStartup(isRestoreLastSessionEnabled());
     void (async () => {
       try {
         const s = await settingsGet();
         setSettings(s);
         if (typeof s.font_size === "number") setFontSize(s.font_size);
         if (typeof s.tab_size === "number") setTabSize(s.tab_size);
+        if (typeof s.keymap === "string") setKeymap(normalizeKeymapPreset(s.keymap));
         if (typeof s.show_line_numbers === "boolean") setShowLineNos(s.show_line_numbers);
         if (typeof s.auto_save === "boolean") setAutoSave(s.auto_save);
       } catch {
@@ -43,13 +59,27 @@ export default function V2SettingsModal({
     })();
   }, [open]);
 
+  const handleCheckUpdates = (): void => {
+    const hasTauri =
+      typeof window !== "undefined" &&
+      ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+    if (!hasTauri) {
+      setUpdateNote("Running in browser preview — auto-updater checks run inside the packaged desktop app.");
+      return;
+    }
+    setUpdateNote("AutoCompare v0.5.0 — configure TAURI_SIGNING_PRIVATE_KEY & updater endpoint for automatic OTA updates.");
+  };
+
   const handleSave = async (): Promise<void> => {
     setSaving(true);
     setNote(null);
     try {
       setRestoreLastSessionEnabled(restoreOnStartup);
+      saveKeymapPreset(keymap);
+      saveFileWatchMode(fileWatchMode);
       await settingsSet({
         theme,
+        keymap,
         font_size: fontSize,
         tab_size: tabSize,
         show_line_numbers: showLineNos,
@@ -103,6 +133,47 @@ export default function V2SettingsModal({
                 }`}
               >
                 {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-medium text-[var(--v2-fg)]">Keymap Preset</span>
+          <select
+            aria-label="Keymap Preset"
+            value={keymap}
+            onChange={(e) => setKeymap(normalizeKeymapPreset(e.target.value))}
+            className="v2-input h-[26px] w-44 px-2 text-[11.5px]"
+          >
+            <option value="default">Default (AutoCompare)</option>
+            <option value="bc">Beyond Compare (F7/Shift+F7)</option>
+            <option value="vim">Vim (j/k, /, l/h)</option>
+            <option value="emacs">Emacs (Ctrl+N/P, Ctrl+S)</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-medium text-[var(--v2-fg)]">External File Changes</span>
+          <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
+            {(
+              [
+                ["prompt", "Prompt"],
+                ["auto", "Auto-reload"],
+                ["off", "Off"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setFileWatchMode(m)}
+                className={`h-[22px] rounded-[5px] px-2.5 text-[11px] font-medium transition ${
+                  fileWatchMode === m
+                    ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
+                    : "text-[var(--v2-fg-secondary)]"
+                }`}
+              >
+                {label}
               </button>
             ))}
           </div>
@@ -163,10 +234,27 @@ export default function V2SettingsModal({
           <span>Restore last comparison tab on startup</span>
         </label>
 
-        {settings?.grammar_preset_name ? (
-          <div className="rounded-md bg-[var(--v2-surface-subtle)] px-2.5 py-1.5 text-[11px] text-[var(--v2-fg-muted)]">
-            Active Grammar Preset: <strong className="text-[var(--v2-fg)]">{settings.grammar_preset_name}</strong>
+        <div className="flex items-center justify-between rounded-md border border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-2.5 py-2">
+          <div className="text-[11px] text-[var(--v2-fg-muted)]">
+            {settings?.grammar_preset_name ? (
+              <>
+                Grammar: <strong className="text-[var(--v2-fg)]">{settings.grammar_preset_name}</strong> ·{" "}
+              </>
+            ) : null}
+            <span>v0.5.0</span>
           </div>
+          <button
+            type="button"
+            onClick={handleCheckUpdates}
+            className="v2-btn h-[21px] px-2 text-[10.5px]"
+          >
+            <RefreshCw size={10} />
+            Check for Updates
+          </button>
+        </div>
+
+        {updateNote ? (
+          <p className="text-[11px] text-[var(--v2-fg-secondary)]">{updateNote}</p>
         ) : null}
 
         {note ? (
