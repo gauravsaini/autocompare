@@ -41,13 +41,13 @@ fn main() -> ExitCode {
 /// - L0: autocompare-evidence, autocompare-diff
 /// - L1: autocompare-vfs, autocompare-sessions, autocompare-reports
 /// - L2: autocompare-compare
-/// - L3: autocompare-cli, autocompare-gui, autocompare-desktop
+/// - L3: autocompare-cli, autocompare-desktop
 fn crate_layer(name: &str) -> Option<u8> {
     match name {
         "autocompare-evidence" | "autocompare-diff" => Some(0),
         "autocompare-vfs" | "autocompare-sessions" | "autocompare-reports" => Some(1),
         "autocompare-compare" => Some(2),
-        "autocompare-cli" | "autocompare-gui" | "autocompare-desktop" => Some(3),
+        "autocompare-cli" | "autocompare-desktop" => Some(3),
         _ => None,
     }
 }
@@ -99,11 +99,10 @@ fn cmd_layers() -> ExitCode {
 
         let deps = extract_dependencies(&content);
         for dep in deps {
-            // Check UI library restriction: only autocompare-gui may depend on egui/eframe/rfd
-            if (dep == "egui" || dep == "eframe" || dep == "rfd") && this_crate != "autocompare-gui"
-            {
+            // Check UI library restriction: legacy egui/eframe/rfd crates are retired (Tauri desktop only)
+            if dep == "egui" || dep == "eframe" || dep == "rfd" {
                 violations.push(format!(
-                    "UI dependency '{dep}' forbidden in non-GUI crate '{this_crate}' (layer {this_layer})"
+                    "legacy UI dependency '{dep}' forbidden in crate '{this_crate}' (layer {this_layer})"
                 ));
             }
 
@@ -367,7 +366,8 @@ mod tests {
         assert_eq!(crate_layer("autocompare-vfs"), Some(1));
         assert_eq!(crate_layer("autocompare-compare"), Some(2));
         assert_eq!(crate_layer("autocompare-cli"), Some(3));
-        assert_eq!(crate_layer("autocompare-gui"), Some(3));
+        assert_eq!(crate_layer("autocompare-desktop"), Some(3));
+        assert_eq!(crate_layer("autocompare-gui"), None);
         assert_eq!(crate_layer("unknown-crate"), None);
     }
 

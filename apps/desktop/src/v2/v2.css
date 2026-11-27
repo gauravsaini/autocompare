@@ -1,0 +1,276 @@
+@import "tailwindcss" source("../");
+
+/*
+ * AutoCompare v2 — Clean-Slate Native macOS / Beyond Compare Design System.
+ * Zero legacy wave hacks. Strict light/dark parity via :root and [data-theme="dark"].
+ */
+
+:root {
+  --v2-font-ui: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --v2-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Surfaces */
+  --v2-bg: #f3f3f5;
+  --v2-surface: #ffffff;
+  --v2-surface-subtle: #fafafa;
+  --v2-chrome: #ececef;
+  --v2-chrome-elevated: #ffffff;
+  --v2-sidebar: #f6f6f8;
+
+  /* Borders */
+  --v2-border: #d5d5da;
+  --v2-border-subtle: #e6e6eb;
+  --v2-splitter: #dcdce2;
+
+  /* Text */
+  --v2-fg: #1d1d1f;
+  --v2-fg-secondary: #48484c;
+  --v2-fg-muted: #76767c;
+
+  /* Accent */
+  --v2-accent: #0a84ff;
+  --v2-accent-soft: rgba(10, 132, 255, 0.12);
+  --v2-accent-fg: #ffffff;
+  --v2-amber: #d97706;
+  --v2-amber-bright: #f59e0b;
+
+  /* Controls */
+  --v2-btn-bg: #ffffff;
+  --v2-btn-hover: #f0f0f4;
+  --v2-btn-active: #e4e4ea;
+  --v2-btn-border: rgba(0, 0, 0, 0.14);
+  --v2-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0.5px 1px rgba(0, 0, 0, 0.08);
+  --v2-seg-track: #e2e2e7;
+
+  /* Diff Semantics (BC-calibrated soft light washes) */
+  --v2-del-bg: #fdecec;
+  --v2-del-fg: #b91c1c;
+  --v2-del-inline: #f9c6c6;
+  --v2-ins-bg: #e7f7ec;
+  --v2-ins-fg: #15803d;
+  --v2-ins-inline: #b7ebc7;
+  --v2-chg-bg: #fff5d6;
+  --v2-chg-fg: #92400e;
+  --v2-chg-inline: #fde08d;
+  --v2-minor-bg: #eaf3ff;
+  --v2-minor-fg: #1d4ed8;
+  --v2-minor-inline: #c6dfff;
+  --v2-sel-bg: #dcebff;
+  --v2-sel-fg: #0b3b75;
+  --v2-hatch-bg: #f7f7f9;
+  --v2-hatch-line: #dadAE0;
+
+  /* Syntax Highlighting */
+  --v2-syn-keyword: #7c3aed;
+  --v2-syn-string: #0f766e;
+  --v2-syn-comment: #6b7280;
+  --v2-syn-number: #c2410c;
+  --v2-syn-key: #1d4ed8;
+  --v2-syn-tag: #0369a1;
+
+  /* Ruler */
+  --v2-ruler-del: #ef4444;
+  --v2-ruler-ins: #22c55e;
+  --v2-ruler-chg: #f59e0b;
+  --v2-ruler-minor: #3b82f6;
+}
+
+:root[data-theme="dark"] {
+  --v2-bg: #18181b;
+  --v2-surface: #1e1e22;
+  --v2-surface-subtle: #232328;
+  --v2-chrome: #252529;
+  --v2-chrome-elevated: #2e2e34;
+  --v2-sidebar: #1b1b1f;
+
+  --v2-border: #3a3a42;
+  --v2-border-subtle: #2d2d34;
+  --v2-splitter: #34343c;
+
+  --v2-fg: #f4f4f6;
+  --v2-fg-secondary: #c7c7ce;
+  --v2-fg-muted: #8e8e96;
+
+  --v2-accent: #0a84ff;
+  --v2-accent-soft: rgba(10, 132, 255, 0.2);
+  --v2-accent-fg: #ffffff;
+  --v2-amber: #fbbf24;
+  --v2-amber-bright: #f59e0b;
+
+  --v2-btn-bg: #2c2c32;
+  --v2-btn-hover: #35353d;
+  --v2-btn-active: #3f3f48;
+  --v2-btn-border: rgba(255, 255, 255, 0.14);
+  --v2-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0.5px 1px rgba(0, 0, 0, 0.4);
+  --v2-seg-track: #2a2a30;
+
+  --v2-del-bg: #3b181b;
+  --v2-del-fg: #fca5a5;
+  --v2-del-inline: #6e242b;
+  --v2-ins-bg: #163322;
+  --v2-ins-fg: #86efac;
+  --v2-ins-inline: #1f5c39;
+  --v2-chg-bg: #3b2d10;
+  --v2-chg-fg: #fde68a;
+  --v2-chg-inline: #6b4f15;
+  --v2-minor-bg: #16263d;
+  --v2-minor-fg: #93c5fd;
+  --v2-minor-inline: #1f3c66;
+  --v2-sel-bg: #1d4270;
+  --v2-sel-fg: #ffffff;
+  --v2-hatch-bg: #1a1a1e;
+  --v2-hatch-line: #2e2e36;
+
+  --v2-syn-keyword: #c4b5fd;
+  --v2-syn-string: #5eead4;
+  --v2-syn-comment: #9ca3af;
+  --v2-syn-number: #fdba74;
+  --v2-syn-key: #93c5fd;
+  --v2-syn-tag: #7dd3fc;
+
+  --v2-ruler-del: #f87171;
+  --v2-ruler-ins: #4ade80;
+  --v2-ruler-chg: #fbbf24;
+  --v2-ruler-minor: #60a5fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--v2-font-ui);
+  background: var(--v2-bg);
+  color: var(--v2-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.v2-mono {
+  font-family: var(--v2-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Seamless Beyond Compare diagonal orphan hatching */
+.v2-hatch {
+  background-color: var(--v2-hatch-bg);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    var(--v2-hatch-line) 4px 5px
+  );
+}
+
+/* Crisp macOS button tactile bevel */
+.v2-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--v2-btn-border);
+  background: var(--v2-btn-bg);
+  color: var(--v2-fg);
+  box-shadow: var(--v2-btn-shadow);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+
+.v2-btn:hover:not(:disabled) {
+  background: var(--v2-btn-hover);
+}
+
+.v2-btn:active:not(:disabled) {
+  background: var(--v2-btn-active);
+}
+
+.v2-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v2-btn-primary {
+  background: var(--v2-accent);
+  color: var(--v2-accent-fg);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+.v2-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  background: var(--v2-accent);
+}
+
+.v2-input {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid var(--v2-border);
+  background: var(--v2-surface);
+  color: var(--v2-fg);
+  font-size: 12px;
+  outline: none;
+}
+
+.v2-input:focus {
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 2px var(--v2-accent-soft);
+}
+
+/* Per-pane BC bracket rails (start stem begins cleanly BELOW the arrow) */
+.v2-rail-start::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 7px);
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--v2-fg-muted);
+  pointer-events: none;
+}
+
+.v2-rail-middle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--v2-fg-muted);
+  pointer-events: none;
+}
+
+.v2-rail-end::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--v2-fg-muted);
+  pointer-events: none;
+}
+
+.v2-rail-end::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 1px;
+  background: var(--v2-fg-muted);
+  pointer-events: none;
+}

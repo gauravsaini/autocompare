@@ -9,6 +9,7 @@
 mod binary;
 mod folder;
 mod folder_merge;
+pub mod format_converter;
 pub mod jobs;
 mod media;
 mod picture;
@@ -20,6 +21,10 @@ mod vfs_compare;
 pub use autocompare_diff::hex::HexAlignment;
 pub use folder::{FolderCompare, compare_folders_cancellable};
 pub use folder_merge::FolderMerge;
+pub use format_converter::{
+    FormatConvertError, FormatConverterRegistry, FormatRule, FormatTransform,
+    MAX_CONVERTER_OUTPUT_BYTES,
+};
 pub use jobs::{JobHandle, JobProgress, JobRunner};
 pub use media::{AudioTolerance, compare_audio_files_with_tolerance};
 pub use sync::{

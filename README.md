@@ -1,343 +1,130 @@
-
-
 <p align="center">
-  <img src="logo.png" alt="autocompare logo" width="32">
+  <img src="logo.png" alt="AutoCompare logo" width="48">
 </p>
 
-# autocompare
+<h1 align="center">AutoCompare</h1>
 
-Compare text, folders and bytes, and merge three ways — from the terminal.
+<p align="center">
+  A fast, native <strong>Beyond Compare alternative</strong> built in safe Rust + Tauri v2.<br/>
+  Side-by-side text, folder, table, hex, 3-way merge, folder sync, and media comparison — on desktop and CLI.
+</p>
 
-A clean-room rebuild of the classic file-comparison tool: side-by-side
-text comparison with word-level inline highlights, recursive folder
-comparison, byte-level (hex) comparison and three-way merge with
-git-style conflict markers. Pure, safe Rust: no `unsafe`, no panics on
-hostile input, and honest limits instead of silent ones.
+---
 
-Built from a user-facing study of the original — never from its insides.
-Study notes stay local and are not published to GitHub; no code,
-assets or wording were taken from it.
+## Highlights
 
-## Build
+- **Native Desktop App (Tauri v2 + React 19 + Tailwind v4)** — Lightweight macOS/cross-platform UI powered directly by the Rust comparison engine, with 60fps virtualized scrolling, light/dark themes, tabbed sessions, and command palette (`Cmd+K`).
+- **Pure, Safe Rust Engine** — `#![forbid(unsafe_code)]`, clippy-enforced panic-free production code (`unwrap`/`expect`/indexing panics denied), paged IPC windows so huge files never stall the UI, and symlink-safe directory walks.
+- **Scriptable Headless CLI** — Every comparison mode is also available from the terminal with standard `diff(1)` exit codes (`0` equal, `1` differences/conflicts, `2` error) and HTML/Text/XML/Patch report export.
+
+## Desktop Comparison Modes
+
+| Mode | Key Capabilities |
+| :--- | :--- |
+| **Text Compare** | Continuous notepad-style inline editing (`Enter` split, `Backspace`/`Delete` join, multi-line paste, live re-diff), per-line & `Shift+Click` range merge, backend-synced `Cmd+Z` Undo/Redo, `Cmd+F` / `Cmd+H` Find & Replace, syntax highlighting (`Source Code`, `JSON`, `YAML`, `XML/HTML`, `Markdown`, `CSV`), blue unimportant-diff highlighting (`Minor` toggle), manual line alignment (`F7` / `Align With…`), external file-change reload prompt, and a 5-tab Beyond Compare–style Rules dialog (`Specs`, `Format` with per-side encoding overrides, `Importance` with regex grammar presets, `Alignment` with Unaligned/Standard/Myers/Patience/`Never align differences`, and `Replacements`). |
+| **Folder Compare** | Synchronized dual-pane virtualized directory tree, Quick (size + timestamp tolerance) vs Binary byte-for-byte comparison, semicolon-separated `Name Filters` (`*.rs; -target/*; -node_modules/*`), and double-click to open file pairs in Text Compare. |
+| **Table Compare** | Virtualized CSV/TSV grid with key-column alignment, custom delimiters (`,`, `\t`, `;`, `|`), case/whitespace ignore, and numeric tolerance (`±0.01`), configured via the tabbed Table Rules dialog (`Columns`, `Format`, `Importance`). |
+| **Hex Compare** | Paged binary viewer + ASCII pane with virtualized scrolling, hex byte search, inline byte-level editing, and disk persistence (`hex_apply_edit` + `hex_save_side`). |
+| **3-Way Text Merge** | Synchronized 3-pane conflict cards (`Left \| Base \| Right`), keyboard resolution (`Alt+1/2/3/4`, `Alt+N/P`), per-conflict inline custom editor, bulk `Take All Left/Right`, and editable 4th output pane. |
+| **3-Way Folder Merge** | Tree-level 3-way merge plan with per-row conflict overrides and double-click into 3-Way Text Merge. |
+| **Folder Sync** | Preview-first one-way and mirror sync plans (`dry_run`) with apply execution and failure reporting. |
+| **Media Compare** | Side-by-side PNG pixel comparison with difference heatmaps and WAV/MP3 audio window comparison. |
+
+## Quick Start (Development)
+
+### Prerequisites
+- **Rust** (stable toolchain) + `cargo-tauri` (`cargo install tauri-cli`)
+- **Node.js** `20+` (verified on Node `26.x`)
+
+### Run the Desktop App (Dev)
+```sh
+cd apps/desktop
+npm install
+npm run dev
+```
+
+### Run Tests & Build
+```sh
+# Frontend unit tests (zero-dep Node test runner) & production bundle
+cd apps/desktop
+npm test
+npm run build
+
+# Rust workspace tests (400+ engine & IPC tests)
+cargo test --workspace
+
+# Playwright E2E specs (v2 living suite)
+cd apps/desktop
+npm run test:e2e
+```
+
+## Build macOS `.dmg` Installer
+
+Create a clean, compressed `AutoCompare-<version>-macos-<arch>.dmg` with `/Applications` drag-to-install symlink, ad-hoc (or Developer ID) signing, and SHA-256 checksum:
 
 ```sh
-cargo build --release        # binary at target/release/autocompare
-cargo test --workspace       # 400+ tests
+# Native architecture (Apple Silicon on M-series Macs)
+scripts/build-macos-dmg.sh
+
+# Or via npm script inside apps/desktop
+cd apps/desktop && npm run package:dmg
+
+# Optional flags:
+scripts/build-macos-dmg.sh --arch universal --open
+scripts/build-macos-dmg.sh --arch aarch64 --skip-tests
 ```
 
-## Install (macOS, GUI early feedback)
+Output lands in `dist/AutoCompare-<version>-macos-<arch>.dmg` alongside `dist/AutoCompare-<version>-macos-<arch>.dmg.sha256`.
+To sign with an Apple Developer ID certificate, export `APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"` before running the script.
+
+## CLI Usage
+
+Build the standalone CLI binary (`target/release/autocompare`):
 
 ```sh
-scripts/install-macos.sh
-# tarball: dist/autocompare-gui-<version>-macos-<arch>.tar.gz (binary + VERSION)
-tar -xzf dist/autocompare-gui-*.tar.gz -C /tmp/ac && /tmp/ac/autocompare-gui
-scripts/install-macos.sh --install   # PREFIX me copy (default $HOME/.local/bin)
+cargo build --release -p autocompare-cli
 ```
 
-## Usage
-
-### Text compare, side by side
+Common commands:
 
 ```sh
-autocompare text old.txt new.txt
-```
+# Side-by-side or unified text diff
+autocompare text old.txt new.txt [--unified] [--ignore-case] [--ignore-space-change]
 
-For `old.txt` / `new.txt` containing:
+# Recursive folder comparison
+autocompare folder left/ right/ [--content] [--include "*.rs"] [--exclude "target/*"]
 
-```text
-the quick brown fox        the quick red fox
-jumps over                 jumps over
-the lazy dog               the lazy dog
-                           and keeps going
-```
+# Byte-level hex comparison
+autocompare hex bin_a.bin bin_b.bin
 
-the tool prints (colors on a terminal: changed yellow with the changed
-words accented, inserted green, deleted red):
+# CSV / delimited table comparison
+autocompare table old.csv new.csv [--delimiter ";"]
 
-```text
-   1 the quick brown fox     |    1 the quick red fox
-   2 jumps over              |    2 jumps over
-   3 the lazy dog            |    3 the lazy dog
-                             |    4 and keeps going
-```
-
-Options: `--unified` (patch view), `--ignore-case`,
-`--ignore-space-change`, `--width N` (default 80).
-
-```text
-@@ -1,3 +1,4 @@
--the quick brown fox
-+the quick red fox
- jumps over
- the lazy dog
-+and keeps going
-```
-
-### Folder compare
-
-```sh
-autocompare folder left/ right/
-```
-
-Walks both trees recursively and prints every node with a status
-glyph, sizes and dates:
-
-```text
-<          0          0  2026-11-18 10:40 2026-11-18 10:40  shared/
-<         18         18  2026-11-18 10:40 2026-11-18 10:40  shared/notes.md
-L         17          -  2026-11-18 10:40                -  left-only.txt
-L          0          -  2026-11-18 10:40                -  nested/deep/hidden.txt
-R          -         18                 - 2026-11-18 10:40  right-only.txt
-9 entries: 0 same, 0 different, 0 newer left, 4 newer right, 4 left-only, 1 right-only
-```
-
-Glyphs: `=` same, `!` different (size or content), `>` newer left,
-`<` newer right, `L` left-only, `R` right-only.
-
-Options: `--content` (byte-compare files instead of size + time),
-`--ignore-case` (name matching), `--include`/`--exclude` globs,
-`--depth N` (default 32, capped walks are flagged in the output).
-
-### Hex compare
-
-```sh
-autocompare hex bin_a bin_b
-```
-
-```text
-left:  13 bytes
-right: 13 bytes
-first difference at offset 0x0000000c
-0x0000000c   41                      A        |  42                      B
-```
-
-Options: `--max-hunks N` (default 50; more differences are flagged).
-
-### Three-way merge
-
-```sh
-autocompare merge base.txt mine.txt theirs.txt
-```
-
-Non-overlapping edits apply cleanly; overlapping edits become one
-conflict block:
-
-```text
-alpha
-<<<<<<< left
-BRAVO-left
-=======
-BRAVO-right
->>>>>>> right
-charlie
-delta
-```
-
-Options: `--output FILE` writes the result instead of standard output.
-
-### Table compare
-
-```sh
-autocompare table old.csv new.csv
-```
-
-Compares delimited (CSV-style) files cell by cell. Changed cells show
-as `[old => new]`; rows are aligned by position, inserted rows `R`,
-removed rows `L`, equal rows `=` (dim). Quoted fields are parsed
-RFC-4180-lite, so delimiters and line breaks inside quotes are data.
-
-```text
-!  hdr | name | [size => extent] | kind
-=    1 | alpha | 10 | core
-!    2 | bravo | [20 => 25] | core
-=    3 | charlie,x | 30 | extra
-R    4 | echo | 50 | core
-=    5 | delta | 40 | core
-```
-
-Options: `--delimiter <char>` (default `,`), `--no-header`.
-
-### Folder sync
-
-```sh
-autocompare sync left/ right/            # dry run: prints the plan
-autocompare sync left/ right/ --apply    # executes it
-```
-
-Plans a one-directional (`--direction l2r|r2l`) or `--newer` sync.
-One-directional sync never overwrites a newer destination (skipped
-with a reason); entries whose content differs never lose to either
-side; `--prune` deletes one-sided entries on the losing side.
-Symlinks are never followed, copied or written through.
-
-```text
-→ left-only.txt
-→ nested/deep-file.txt
-~ mismatch.txt (content differs; no side wins)
-~ newer.txt (destination is newer)
-2 step(s) planned, 5 skipped
-dry run: nothing changed (pass --apply to run)
-```
-
-`--apply` copies files (creating parent directories as needed) and
-performs prune deletes; every step's failure is recorded and the run
-continues. Exit codes: dry run with steps → 1; apply without failures
-→ 0; any failed step → 1.
-
-### Folder merge
-
-```sh
-autocompare folder-merge base/ left/ right/                 # dry run
+# 3-way text merge & 3-way folder merge
+autocompare merge base.txt left.txt right.txt --output merged.txt
 autocompare folder-merge base/ left/ right/ --apply --output merged/
-```
 
-Three-way merge of two trees over their common base. Identical sides
-take the left copy; one-sided edits take the edited side; files
-changed on both sides merge as text (clean merges become `M`,
-overlapping edits become `C` with git-style markers in the output);
-both-changed binaries keep the left copy and are flagged as
-conflicts. Deletions against an unchanged other side omit the file.
+# Folder sync (dry-run by default; pass --apply to execute)
+autocompare sync left/ right/ --direction l2r [--apply]
 
-```text
-L a.txt
-R b.txt
-C f.txt
-M e.txt
-~ c.txt (deleted on the left; right unchanged from base)
-! f.txt (conflict)
-13 step(s) planned, 1 omitted, 2 conflict(s)
-```
-
-`--apply` requires `--output DIR`, which must be missing or empty;
-nothing is merged in place. Symlinks are never followed, read or
-copied. Files above 32 MiB are treated as binary.
-
-### Picture compare
-
-```sh
-autocompare picture left.png right.png [--heatmap diff.png]
-```
-
-Compares two PNG images pixel by pixel over their overlap:
-
-```text
-left:  8x8
-right: 8x8
-overlap: 8x8 (64 pixels)
-differing pixels: 14 (21.88%)
-difference bounds: (2,2)..(6,6)
-```
-
-`--heatmap FILE` writes a PNG with identical pixels dimmed to 30%
-grayscale and differing pixels in red. Hostile inputs (forged
-dimension headers) are refused, not crashed.
-
-### Audio compare
-
-```sh
+# Picture (PNG) and Audio (WAV/MP3) comparison
+autocompare picture left.png right.png --heatmap diff.png
 autocompare audio a.wav b.wav
-```
 
-Compares WAV and MP3 files sample by sample over the shorter stream's
-duration:
-
-```text
-left:  1.000s, 8000 Hz, 1 channel(s)
-right: 1.000s, 8000 Hz, 1 channel(s)
-first difference at 0.500s
-differing 10ms windows: 1/100 (1.00%)
-```
-
-WAV decoding is a hand-written RIFF parser (no dependency: PCM
-8/16/24/32-bit and IEEE float, 1–64 channels); MP3 decoding uses the
-pure-Rust symphonia engine. Files that do not decode are refused with
-a plain error; differing sample rates or channel counts are reported
-honestly as not comparable instead of guessed.
-
-### GUI client
-
-```sh
-cargo run -p autocompare-gui
-```
-
-A Tauri desktop app (Rust engine + native webview) with seven views over the same
-engine libraries the CLI uses — Text, Folder, Hex, Merge, Table,
-Sync, Picture, FolderMerge and Audio, matching the nine session
-types of the original: side-by-side rows with accent highlights,
-folder listings with status colors, hex/plan/stat summaries, the
-three-way merge output with conflict highlighting, `[old => new]`
-table cells, and the difference heatmap rendered in-app. Merge and
-FolderMerge take base/left/right paths; Sync and FolderMerge show
-the dry-run plan (applying stays a CLI operation). Errors appear as
-panels; the window never crashes on bad input (all engine errors
-are values).
-
-On Linux, the windowing system development packages are needed first
-(the CI workflow installs exactly this set):
-
-```sh
-sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 \
-  libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
-```
-
-### Reports, VCS flags and headless screenshot
-
-```sh
+# Export HTML, Text, XML, or Patch reports from any subcommand
 autocompare text left.txt right.txt --report html:report.html
-autocompare text base.txt left.txt --ro
-cargo run -p autocompare-gui -- --screenshot gui-smoke.png
 ```
 
-Every subcommand accepts `--report <fmt:path>` (`html`, `text`,
-`xml`, `patch`) alongside the normal exit code. The `-ro`,
-`-automerge`, `-mergeoutput <path>` and `-vcs1..-vcs4` flags mirror
-the original's VCS invocation shape: `-ro` forces read-only mode,
-`-automerge` writes the merged output only when conflict-free. The
-GUI stays a thin client but supports a clean-room check contract:
-`--screenshot <path>` renders the Text fixture session offscreen,
-writes a valid PNG and exits 0 without opening a window.
+### Exit Codes
+`0` no differences · `1` differences found (or merge conflicts) · `2` error.
 
-## Exit codes
+## Architecture
 
-`0` no differences · `1` differences found (or merge conflicts) ·
-`2` error — the diff(1) convention, scriptable.
-
-## Design
-
-- **Clean room**: rebuilt from user-visible behavior of the original,
-  never from its code or assets.
-- **Layers**: pure algorithms (`diff`) → filesystem comparison
-  (`compare`) → thin CLI renderer (`cli`).
-- **Never crash**: `unsafe` forbidden; `unwrap`/`expect`/`panic!` and
-  indexing panics denied by clippy in non-test code; hostile paths,
-  huge files, deep trees and invalid UTF-8 all return errors or
-  degrade honestly.
-- **Honest limits**: the line diff falls back to a coarse view past an
-  edit budget (`exact=false`, noted in the output); folder walks cap
-  depth; hex caps hunks. Limits are stated, never hidden.
-- **Safe walks**: symlinks are never followed, so symlink cycles
-  cannot hang a folder compare.
-
-## Tests
-
-406 workspace tests: replay validity for every diff case, brute-force
-minimality on random pairs, budget fallback, symlink-safe folder
-fixtures, streamed binary compare, RFC-4180-lite parser edge cases,
-sync plan and apply semantics, three-way tree merge rules, PNG and
-audio decode totality sweeps (every prefix truncation of a valid WAV,
-random buffers, hostile headers), plus headless GUI view-model tests and 150+ Playwright e2e specs. Five exhaustive sweeps (~430k pairs, each checked for replay,
-canonical form and minimal edit count) run separately in release
-mode:
-
-```sh
-cargo test -p autocompare-diff --release -- --ignored
-```
-
-## Roadmap
-
-- More audio codecs (FLAC, OGG)
-- Sync / folder-merge apply actions in the GUI (plan views exist; `--apply` stays CLI)
-- In-place editing (the original's panes are editors)
+- **`crates/diff`** — Pure diff & merge algorithms (Myers, Patience, inline word/char spans, 3-way merge).
+- **`crates/compare`** — Filesystem, text, table, binary/hex, folder sync, 3-way folder merge, PNG picture, and WAV/MP3 audio engines.
+- **`crates/cli`** — Thin, scriptable terminal renderer and report generator.
+- **`apps/desktop/src-tauri`** — Tauri v2 IPC command layer with paged row/tree/hex/table session caches.
+- **`apps/desktop/src/v2`** — Clean-slate React 19 + Tailwind v4 desktop interface.
 
 ## License
 

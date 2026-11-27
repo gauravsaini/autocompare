@@ -17,6 +17,7 @@ path = "src/lib.rs"
 autocompare-diff = { path = "../diff" }
 autocompare-compare = { path = "../compare" }
 autocompare-reports = { path = "../reports" }
+autocompare-server = { path = "../server" }
 autocompare-sessions = { path = "../sessions" }
 clap = { version = "4", features = ["derive"] }
 

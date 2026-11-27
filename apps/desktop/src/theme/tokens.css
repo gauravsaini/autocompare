@@ -1,4 +1,4 @@
-@import "tailwindcss";
+/* Tailwind is imported once in src/v2/v2.css with source("../") */
 
 /*
  * Wave-144 typexquis: bundled offline-first fonts (repo woff2, no npm

@@ -479,9 +479,42 @@ fn test_session_tab_3way_merge_round_trip() {
 
 #[test]
 fn test_edge_fixture_merge_3way_round_trip() {
-    let content = include_str!(
-        "../../../checks/agyx-sess-h2/round-1/comparison/edge-merge-3way-session.json"
-    );
+    let content = r#"{
+  "schema_version": 1,
+  "name": "Enterprise 3-Way Merge Session",
+  "active_tab_index": 0,
+  "locked": true,
+  "tabs": [
+    {
+      "id": "tab-merge-text-1",
+      "title": "Merge Feature Branch",
+      "session_type": "merge",
+      "base_path": "/repo/ancestor_common.rs",
+      "left_path": "/repo/branch_feature.rs",
+      "right_path": "/repo/main.rs",
+      "output_path": "/repo/merged_result.rs",
+      "read_only": false,
+      "locked": true,
+      "options": {
+        "merge.auto_merge": "true",
+        "merge.conflict_strategy": "manual",
+        "merge.alignment": "patience"
+      }
+    },
+    {
+      "id": "tab-merge-folder-2",
+      "title": "Merge Release Tree",
+      "session_type": "folder_merge",
+      "base_path": "/build/release_base",
+      "left_path": "/build/release_left",
+      "right_path": "/build/release_right",
+      "output_path": "/build/release_output",
+      "read_only": false,
+      "locked": false,
+      "options": {}
+    }
+  ]
+}"#;
     let doc = SessionDocument::from_json(content).expect("parse edge merge fixture");
 
     assert_eq!(doc.schema_version, 1);

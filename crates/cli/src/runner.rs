@@ -335,6 +335,23 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             save_tab(cli.save_session.as_deref(), "session", path, path, is_ro)?;
             Ok(outcome.to_mode(mode))
         }
+        Command::Web {
+            port,
+            dist,
+            no_open: _,
+        } => {
+            let cfg = autocompare_server::ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: *port,
+                dist_dir: dist.as_deref().map(PathBuf::from),
+                token: autocompare_server::generate_token(),
+            };
+            autocompare_server::serve_blocking(cfg).map_err(|source| CliError::Io {
+                path: format!("127.0.0.1:{port}"),
+                source,
+            })?;
+            Ok(Outcome::for_diff(false, mode))
+        }
     }
 }
 
@@ -444,6 +461,8 @@ mod tests {
             session: None,
             save_session: None,
             exit_code_mode: ExitCodeMode::Diff,
+            exit_code: false,
+            junit: None,
             bc_exit_code: false,
             report_title: None,
             solo: false,

@@ -128,7 +128,29 @@ pub struct TableHit {
     pub value: String,
 }
 
-/// Server-side session: parsed tables plus the effective key columns.
+/// Receipt returned after mutating a single cached table cell.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableEditReceipt {
+    pub session_id: String,
+    pub side: String,
+    pub row: u64,
+    pub col: u64,
+    pub value: String,
+}
+
+/// Receipt returned after serializing one table side back to disk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableSaveReceipt {
+    pub session_id: String,
+    pub side: String,
+    pub path: String,
+    pub rows_written: u64,
+    pub bytes_written: u64,
+}
+
+/// Server-side session: parsed tables plus the effective delimiter.
 /// Parsed rows never cross IPC except through bounded pages/hits; the
 /// summary itself is returned to the caller at compare time.
 #[derive(Debug, Clone)]
@@ -137,6 +159,7 @@ struct TableSession {
     header_r: Vec<String>,
     rows_l: Vec<Vec<String>>,
     rows_r: Vec<Vec<String>>,
+    delim: char,
 }
 
 static SESSIONS: LazyLock<Mutex<HashMap<String, TableSession>>> =
@@ -661,6 +684,7 @@ pub fn table_compare(
             header_r,
             rows_l,
             rows_r,
+            delim,
         },
     )?;
     Ok(summary)
@@ -769,6 +793,108 @@ pub fn table_find(session: String, query: String) -> Result<Vec<TableHit>, Strin
         }
     }
     Ok(hits)
+}
+
+fn format_csv_cell(cell: &str, delim: char) -> String {
+    if cell.contains(delim) || cell.contains('"') || cell.contains('\n') || cell.contains('\r') {
+        format!("\"{}\"", cell.replace('"', "\"\""))
+    } else {
+        cell.to_owned()
+    }
+}
+
+fn serialize_csv(header: &[String], rows: &[Vec<String>], delim: char) -> String {
+    let sep = delim.to_string();
+    let mut out_lines: Vec<String> = Vec::with_capacity(rows.len().saturating_add(1));
+    if !header.is_empty() {
+        let h: Vec<String> = header.iter().map(|c| format_csv_cell(c, delim)).collect();
+        out_lines.push(h.join(&sep));
+    }
+    for row in rows {
+        let r: Vec<String> = row.iter().map(|c| format_csv_cell(c, delim)).collect();
+        out_lines.push(r.join(&sep));
+    }
+    if out_lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", out_lines.join("\n"))
+    }
+}
+
+/// Mutates a single cell in the cached table session (`side`: `"left"` | `"right"`).
+#[tauri::command]
+pub fn table_apply_edit(
+    session: String,
+    side: String,
+    row: u64,
+    col: u64,
+    value: String,
+) -> Result<TableEditReceipt, String> {
+    let is_left = match side.as_str() {
+        "left" => true,
+        "right" => false,
+        other => return Err(format!("invalid table side: {other}")),
+    };
+    let r_idx = usize::try_from(row).map_err(|_| format!("row out of range: {row}"))?;
+    let c_idx = usize::try_from(col).map_err(|_| format!("col out of range: {col}"))?;
+    let mut guard = SESSIONS.lock().map_err(|_| store_msg())?;
+    let entry = guard
+        .get_mut(session.as_str())
+        .ok_or_else(|| unknown_session_msg(session.as_str()))?;
+    let target_rows = if is_left {
+        &mut entry.rows_l
+    } else {
+        &mut entry.rows_r
+    };
+    let target_row = target_rows
+        .get_mut(r_idx)
+        .ok_or_else(|| format!("row {row} out of range"))?;
+    while target_row.len() <= c_idx {
+        target_row.push(String::new());
+    }
+    if let Some(slot) = target_row.get_mut(c_idx) {
+        *slot = value.clone();
+    }
+    Ok(TableEditReceipt {
+        session_id: session,
+        side,
+        row,
+        col,
+        value,
+    })
+}
+
+/// Serializes one side of the cached table session to `path` as RFC-4180 CSV.
+#[tauri::command]
+pub fn table_save_side(
+    session: String,
+    side: String,
+    path: String,
+) -> Result<TableSaveReceipt, String> {
+    if path.trim().is_empty() {
+        return Err("path must not be empty".to_string());
+    }
+    let is_left = match side.as_str() {
+        "left" => true,
+        "right" => false,
+        other => return Err(format!("invalid table side: {other}")),
+    };
+    let snapshot = get_session(session.as_str())?;
+    let (header, rows) = if is_left {
+        (&snapshot.header_l, &snapshot.rows_l)
+    } else {
+        (&snapshot.header_r, &snapshot.rows_r)
+    };
+    let content = serialize_csv(header.as_slice(), rows.as_slice(), snapshot.delim);
+    std::fs::write(Path::new(path.as_str()), content.as_bytes())
+        .map_err(|err| format!("writing {path} failed: {err}"))?;
+    Ok(TableSaveReceipt {
+        session_id: session,
+        side,
+        path,
+        rows_written: rows.len() as u64,
+        bytes_written: content.len() as u64,
+    })
 }
 
 #[cfg(test)]
@@ -1480,5 +1606,24 @@ mod tests {
         };
         assert!(summary.equal);
         assert_eq!((summary.left_cols, summary.right_cols), (2, 2));
+    }
+
+    #[test]
+    fn apply_edit_and_save_side_round_trips_csv() {
+        let csv = "id,name\n1,amy\n";
+        let res = open_session(csv, csv, false, Vec::new());
+        assert!(res.is_ok());
+        let session_id = match res {
+            Ok(s) => s.session_id,
+            Err(_) => return,
+        };
+        let edit = table_apply_edit(session_id.clone(), "right".to_string(), 0, 1, "amy, jr".to_string());
+        assert!(edit.is_ok());
+        let out = temp_path("saved-csv");
+        let saved = table_save_side(session_id, "right".to_string(), out.display().to_string());
+        assert!(saved.is_ok());
+        let content = std::fs::read_to_string(&out).unwrap_or_default();
+        remove_quiet(&out);
+        assert!(content.contains("\"amy, jr\""));
     }
 }

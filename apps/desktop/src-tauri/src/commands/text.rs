@@ -120,9 +120,9 @@ pub struct InlineSpanDto {
     pub b_end: u64,
 }
 
-/// Applied ignore flags echoed back so the UI can tell support from
+/// Applied ignore & alignment flags echoed back so the UI can tell support from
 /// honest fallback. `camelCase` on the wire (`appliedOptions`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppliedTextOptions {
     pub ignore_whitespace: bool,
@@ -134,7 +134,19 @@ pub struct AppliedTextOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub algorithm: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignment_mode: Option<String>,
+    #[serde(default)]
+    pub never_align_differences: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skew_tolerance: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_closeness_matching: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_encoding: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eol: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -283,9 +295,13 @@ struct StoredText {
     overview_truncated: bool,
     opts: TextOptions,
     /// C2a engine-ready options (no `TextOptions` home upstream):
-    /// blank-line folding + diff algorithm for re-compare paths.
+    /// blank-line folding + diff algorithm + BC alignment flags for re-compare paths.
     ignore_blank: bool,
     algorithm: DiffAlgorithm,
+    alignment_mode: String,
+    never_align_differences: bool,
+    skew_tolerance: u64,
+    use_closeness_matching: bool,
 }
 
 fn text_store() -> &'static Mutex<HashMap<String, StoredText>> {
@@ -351,6 +367,18 @@ pub fn build_rows(
     right_lines: &[String],
     script: &DiffScript,
 ) -> Vec<TextRowDto> {
+    build_rows_with_options(left_lines, right_lines, script, false)
+}
+
+/// Builds aligned rows from `script`, optionally keeping Delete+Insert runs
+/// un-zipped as separate `LeftOnly` + `RightOnly` blocks when
+/// `never_align_differences` is true (Beyond Compare parity).
+pub fn build_rows_with_options(
+    left_lines: &[String],
+    right_lines: &[String],
+    script: &DiffScript,
+    never_align_differences: bool,
+) -> Vec<TextRowDto> {
     let mut rows: Vec<TextRowDto> = Vec::new();
     let mut li: usize = 0;
     let mut ri: usize = 0;
@@ -375,11 +403,14 @@ pub fn build_rows(
                 }
             }
             autocompare_diff::Op::Delete { len } => {
-                // Zip with a following Insert run into Changed pairs.
+                // Zip with a following Insert run into Changed pairs unless
+                // `never_align_differences` requests separate orphan runs.
                 let mut insert_len: usize = 0;
-                if let Some(autocompare_diff::Op::Insert { len: n }) = ops.peek() {
-                    insert_len = *n;
-                    ops.next();
+                if !never_align_differences {
+                    if let Some(autocompare_diff::Op::Insert { len: n }) = ops.peek() {
+                        insert_len = *n;
+                        ops.next();
+                    }
                 }
                 let paired = (*len).min(insert_len);
                 for _ in 0..paired {
@@ -727,8 +758,136 @@ fn fold_blank_rows_equal(rows: &mut [TextRowDto], ignore_blank: bool) {
     }
 }
 
+/// Decodes raw bytes for one side using a named encoding override.
+fn decode_side_bytes(bytes: &[u8], encoding: Option<&str>) -> String {
+    let norm = encoding.unwrap_or("").trim().to_ascii_lowercase();
+    match norm.as_str() {
+        "" | "none" | "utf-8" | "utf8" | "current locale (utf-8)" | "ascii" => {
+            String::from_utf8_lossy(bytes).into_owned()
+        }
+        "utf-16le" | "utf16le" => {
+            let mut units = Vec::with_capacity(bytes.len() / 2);
+            for pair in bytes.chunks_exact(2) {
+                if let (Some(&lo), Some(&hi)) = (pair.first(), pair.get(1)) {
+                    units.push(u16::from_le_bytes([lo, hi]));
+                }
+            }
+            let s = String::from_utf16_lossy(&units);
+            s.strip_prefix('\u{FEFF}').unwrap_or(&s).to_owned()
+        }
+        "utf-16be" | "utf16be" => {
+            let mut units = Vec::with_capacity(bytes.len() / 2);
+            for pair in bytes.chunks_exact(2) {
+                if let (Some(&hi), Some(&lo)) = (pair.first(), pair.get(1)) {
+                    units.push(u16::from_be_bytes([hi, lo]));
+                }
+            }
+            let s = String::from_utf16_lossy(&units);
+            s.strip_prefix('\u{FEFF}').unwrap_or(&s).to_owned()
+        }
+        "iso-8859-1" | "latin-1" | "latin1" => bytes.iter().map(|b| *b as char).collect(),
+        "windows-1252" | "cp1252" | "1252" | "ansi" => {
+            const CP1252: [char; 32] = [
+                '€', '\u{FFFD}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{FFFD}',
+                'Ž', '\u{FFFD}', '\u{FFFD}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›',
+                'œ', '\u{FFFD}', 'ž', 'Ÿ',
+            ];
+            let mut out = String::with_capacity(bytes.len());
+            for &b in bytes {
+                if (0x80..0xA0).contains(&b) {
+                    out.push(
+                        CP1252
+                            .get(usize::from(b.wrapping_sub(0x80)))
+                            .copied()
+                            .unwrap_or('\u{FFFD}'),
+                    );
+                } else {
+                    out.push(b as char);
+                }
+            }
+            out
+        }
+        _ => String::from_utf8_lossy(bytes).into_owned(),
+    }
+}
+
+/// Loads one file with an explicit per-side encoding and EOL policy.
+fn load_side_lines(path: &str, encoding: Option<&str>, eol: Option<&str>) -> Result<Vec<String>, String> {
+    let raw = std::fs::read(std::path::Path::new(path))
+        .map_err(|e| format!("reading {path} failed: {e}"))?;
+    let decoded = decode_side_bytes(&raw, encoding);
+    let text = if eol.is_some() {
+        decoded.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        decoded
+    };
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut lines: Vec<String> = text
+        .split('\n')
+        .map(|l| l.strip_suffix('\r').unwrap_or(l).to_owned())
+        .collect();
+    if text.ends_with('\n') {
+        lines.pop();
+    }
+    Ok(lines)
+}
+
+/// Positional 1:1 pairing for Beyond Compare's `Unaligned` alignment mode.
+fn build_unaligned_rows(
+    left_lines: &[String],
+    right_lines: &[String],
+    opts: &TextOptions,
+    ignore_blank: bool,
+) -> Vec<TextRowDto> {
+    let max_len = left_lines.len().max(right_lines.len());
+    let mut rows = Vec::with_capacity(max_len);
+    for i in 0..max_len {
+        let l = left_lines.get(i).cloned();
+        let r = right_lines.get(i).cloned();
+        match (l, r) {
+            (Some(lv), Some(rv)) => {
+                let key_eq = text_compare_key(&lv, opts, ignore_blank)
+                    == text_compare_key(&rv, opts, ignore_blank);
+                let (kind, inline) = if key_eq {
+                    (RowKind::Equal, Vec::new())
+                } else {
+                    (RowKind::Changed, spans_for_lines(&lv, &rv))
+                };
+                rows.push(TextRowDto {
+                    index: i as u64,
+                    kind,
+                    left: Some(lv),
+                    right: Some(rv),
+                    inline,
+                    suppressed: false,
+                });
+            }
+            (Some(lv), None) => rows.push(TextRowDto {
+                index: i as u64,
+                kind: RowKind::LeftOnly,
+                left: Some(lv),
+                right: None,
+                inline: Vec::new(),
+                suppressed: false,
+            }),
+            (None, Some(rv)) => rows.push(TextRowDto {
+                index: i as u64,
+                kind: RowKind::RightOnly,
+                left: None,
+                right: Some(rv),
+                inline: Vec::new(),
+                suppressed: false,
+            }),
+            (None, None) => {}
+        }
+    }
+    rows
+}
+
 #[tauri::command]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn text_compare(
     left: String,
     right: String,
@@ -745,6 +904,18 @@ pub fn text_compare(
     algorithm: Option<String>,
     ignoreBlankLines: Option<bool>,
     ignore_blank_lines: Option<bool>,
+    alignmentMode: Option<String>,
+    alignment_mode: Option<String>,
+    neverAlignDifferences: Option<bool>,
+    never_align_differences: Option<bool>,
+    skewTolerance: Option<u64>,
+    skew_tolerance: Option<u64>,
+    useClosenessMatching: Option<bool>,
+    use_closeness_matching: Option<bool>,
+    leftEncoding: Option<String>,
+    left_encoding: Option<String>,
+    rightEncoding: Option<String>,
+    right_encoding: Option<String>,
 ) -> Result<TextCompareDto, String> {
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
@@ -752,16 +923,36 @@ pub fn text_compare(
     if right.is_empty() {
         return Err("right path must not be empty".to_string());
     }
-    let ignore_ws = ignoreWhitespace
-        .or(ignore_whitespace)
-        .unwrap_or(false);
+    let ignore_ws = ignoreWhitespace.or(ignore_whitespace).unwrap_or(false);
     let ignore_cs = ignoreCase.or(ignore_case).unwrap_or(false);
     let minor = minorUnimportant.or(minor_unimportant).unwrap_or(false);
     let suppressed = suppressedLines.or(suppressed_lines).unwrap_or_default();
     let enc = encoding;
+    let left_enc = leftEncoding.or(left_encoding);
+    let right_enc = rightEncoding.or(right_encoding);
     let line_ending = eol;
     let ignore_blank = ignoreBlankLines.or(ignore_blank_lines).unwrap_or(false);
-    let (algo, algo_echo) = parse_text_algorithm(algorithm);
+    let align_raw = alignmentMode.or(alignment_mode);
+    let align_norm = align_raw
+        .as_deref()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let align_mode_str = match align_norm.as_str() {
+        "unaligned" => "unaligned".to_string(),
+        "patience" => "patience".to_string(),
+        "myers" => "myers".to_string(),
+        "standard" => "standard".to_string(),
+        _ => "standard".to_string(),
+    };
+    let effective_algo_input = if align_norm == "patience" {
+        Some("patience".to_string())
+    } else {
+        algorithm
+    };
+    let (algo, algo_echo) = parse_text_algorithm(effective_algo_input);
+    let never_align = neverAlignDifferences.or(never_align_differences).unwrap_or(false);
+    let skew_tol = skewTolerance.or(skew_tolerance).unwrap_or(2000);
+    let use_closeness = useClosenessMatching.or(use_closeness_matching).unwrap_or(true);
 
     let opts = TextOptions {
         ignore_case: ignore_cs,
@@ -771,31 +962,41 @@ pub fn text_compare(
         encoding: enc.clone(),
         eol: line_ending.clone(),
     };
-    let mut compared = compare_text_files(
-        std::path::Path::new(&left),
-        std::path::Path::new(&right),
-        &opts,
-    )
-    .map_err(|e| e.to_string())?;
-    // C2a engine-ready path: Patience and/or blank-line folding re-key
-    // over the decoded display lines and re-diff with the chosen
-    // algorithm. Display lines are untouched; only the script changes.
-    // Myers without blank folding keeps the legacy `compare_text_files`
-    // script byte-identical.
-    if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
-        compared.script = diff_with_c2a(
+
+    let has_per_side_enc = left_enc.is_some() || right_enc.is_some();
+    let mut compared = if has_per_side_enc {
+        let l_lines = load_side_lines(&left, left_enc.as_deref().or(enc.as_deref()), line_ending.as_deref())?;
+        let r_lines = load_side_lines(&right, right_enc.as_deref().or(enc.as_deref()), line_ending.as_deref())?;
+        compare_text_lines(&l_lines, &r_lines, &opts)
+    } else {
+        compare_text_files(
+            std::path::Path::new(&left),
+            std::path::Path::new(&right),
+            &opts,
+        )
+        .map_err(|e| e.to_string())?
+    };
+
+    let use_unaligned = align_mode_str == "unaligned" || skew_tol == 0;
+    let mut rows = if use_unaligned {
+        build_unaligned_rows(&compared.left_lines, &compared.right_lines, &opts, ignore_blank)
+    } else {
+        if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
+            compared.script = diff_with_c2a(
+                &compared.left_lines,
+                &compared.right_lines,
+                &opts,
+                ignore_blank,
+                algo,
+            );
+        }
+        build_rows_with_options(
             &compared.left_lines,
             &compared.right_lines,
-            &opts,
-            ignore_blank,
-            algo,
-        );
-    }
-    let mut rows = build_rows(
-        &compared.left_lines,
-        &compared.right_lines,
-        &compared.script,
-    );
+            &compared.script,
+            never_align,
+        )
+    };
     fold_blank_rows_equal(&mut rows, ignore_blank);
     mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
@@ -815,7 +1016,13 @@ pub fn text_compare(
             minor_unimportant: minor,
             ignore_blank_lines: ignore_blank,
             algorithm: algo_echo,
+            alignment_mode: align_raw.map(|_| align_mode_str.clone()),
+            never_align_differences: never_align,
+            skew_tolerance: skewTolerance.or(skew_tolerance),
+            use_closeness_matching: useClosenessMatching.or(use_closeness_matching),
             encoding: enc,
+            left_encoding: left_enc,
+            right_encoding: right_enc,
             eol: line_ending,
             suppressed_lines: suppressed,
         },
@@ -834,6 +1041,10 @@ pub fn text_compare(
             opts,
             ignore_blank,
             algorithm: algo,
+            alignment_mode: align_mode_str,
+            never_align_differences: never_align,
+            skew_tolerance: skew_tol,
+            use_closeness_matching: use_closeness,
         },
     );
     Ok(dto)
@@ -941,7 +1152,16 @@ pub fn text_apply_edit(
     } else {
         compare_text_lines(&left_lines, &right_lines, &opts)
     };
-    let mut rows = build_rows(&compared.left_lines, &compared.right_lines, &compared.script);
+    let mut rows = if cached.alignment_mode == "unaligned" || cached.skew_tolerance == 0 {
+        build_unaligned_rows(&compared.left_lines, &compared.right_lines, &opts, ignore_blank)
+    } else {
+        build_rows_with_options(
+            &compared.left_lines,
+            &compared.right_lines,
+            &compared.script,
+            cached.never_align_differences,
+        )
+    };
     fold_blank_rows_equal(&mut rows, ignore_blank);
     mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
     let (overview, overview_truncated) = summarize_overview(&rows);
@@ -959,6 +1179,10 @@ pub fn text_apply_edit(
             opts,
             ignore_blank,
             algorithm: algo,
+            alignment_mode: cached.alignment_mode,
+            never_align_differences: cached.never_align_differences,
+            skew_tolerance: cached.skew_tolerance,
+            use_closeness_matching: cached.use_closeness_matching,
         },
     );
     Ok(AppliedEdit {
@@ -1091,6 +1315,10 @@ pub fn text_apply_hunk(
             opts,
             ignore_blank,
             algorithm: algo,
+            alignment_mode: cached.alignment_mode,
+            never_align_differences: cached.never_align_differences,
+            skew_tolerance: cached.skew_tolerance,
+            use_closeness_matching: cached.use_closeness_matching,
         },
     );
     Ok(AppliedHunk {
@@ -1102,6 +1330,136 @@ pub fn text_apply_hunk(
         total,
         rows: rows.len() as u64,
     })
+}
+
+/// Restores a previously snapshotted row vector for `session` (used by
+/// frontend Undo/Redo so subsequent `text_save_side` writes the exact
+/// undone/redone state to disk). Recomputes line counts and overview map.
+#[tauri::command]
+pub fn text_restore_rows(session: String, rows: Vec<TextRowDto>) -> Result<u64, String> {
+    let cached = stored(&session)?;
+    let mut left_count: u64 = 0;
+    let mut right_count: u64 = 0;
+    for row in &rows {
+        if row.left.is_some() {
+            left_count = left_count.saturating_add(1);
+        }
+        if row.right.is_some() {
+            right_count = right_count.saturating_add(1);
+        }
+    }
+    let (overview, overview_truncated) = summarize_overview(&rows);
+    let total = rows.len() as u64;
+    let mut guard = lock_store()?;
+    guard.insert(
+        session,
+        StoredText {
+            left_count,
+            right_count,
+            rows,
+            overview,
+            overview_truncated,
+            opts: cached.opts,
+            ignore_blank: cached.ignore_blank,
+            algorithm: cached.algorithm,
+            alignment_mode: cached.alignment_mode,
+            never_align_differences: cached.never_align_differences,
+            skew_tolerance: cached.skew_tolerance,
+            use_closeness_matching: cached.use_closeness_matching,
+        },
+    );
+    Ok(total)
+}
+
+/// Lightweight metadata stat for external file-change detection (used by the
+/// UI reload prompt). Returns `None` for missing/unreadable paths without
+/// failing the batch.
+#[tauri::command]
+pub fn stat_paths(paths: Vec<String>) -> Vec<Option<FileMetaDto>> {
+    paths
+        .iter()
+        .map(|p| {
+            if p.trim().is_empty() {
+                None
+            } else {
+                read_file_meta(p)
+            }
+        })
+        .collect()
+}
+
+/// Replaces all display lines on `side` (`"left"` / `"right"`) and re-runs
+/// the diff against the other side using the session's active comparison
+/// options. Enables true notepad-style editing (Enter to insert lines,
+/// Backspace to join lines, multi-line paste) with live re-diffing.
+#[tauri::command]
+pub fn text_update_side(
+    session: String,
+    side: String,
+    lines: Vec<String>,
+) -> Result<u64, String> {
+    let which = Side::parse(&side)?;
+    let cached = stored(&session)?;
+    let mut other_left: Vec<String> = Vec::new();
+    let mut other_right: Vec<String> = Vec::new();
+    for row in &cached.rows {
+        if let Some(l) = row.left.as_ref() {
+            other_left.push(l.clone());
+        }
+        if let Some(r) = row.right.as_ref() {
+            other_right.push(r.clone());
+        }
+    }
+    let (left_lines, right_lines) = match which {
+        Side::Left => (lines, other_right),
+        Side::Right => (other_left, lines),
+    };
+    let opts = cached.opts.clone();
+    let ignore_blank = cached.ignore_blank;
+    let algo = cached.algorithm;
+    let compared = if matches!(algo, DiffAlgorithm::Patience) || ignore_blank {
+        let script = diff_with_c2a(&left_lines, &right_lines, &opts, ignore_blank, algo);
+        autocompare_compare::TextComparison {
+            left_lines,
+            right_lines,
+            script,
+        }
+    } else {
+        compare_text_lines(&left_lines, &right_lines, &opts)
+    };
+    let mut rows = if cached.alignment_mode == "unaligned" || cached.skew_tolerance == 0 {
+        build_unaligned_rows(&compared.left_lines, &compared.right_lines, &opts, ignore_blank)
+    } else {
+        build_rows_with_options(
+            &compared.left_lines,
+            &compared.right_lines,
+            &compared.script,
+            cached.never_align_differences,
+        )
+    };
+    fold_blank_rows_equal(&mut rows, ignore_blank);
+    mark_suppressed_rows(&mut rows, &opts.suppressed_lines);
+    let (overview, overview_truncated) = summarize_overview(&rows);
+    let total = rows.len() as u64;
+    let mut guard = lock_store()?;
+    guard.insert(
+        session,
+        StoredText {
+            left_count: compared.left_lines.len() as u64,
+            right_count: compared.right_lines.len() as u64,
+            rows,
+            overview,
+            overview_truncated,
+            opts,
+            ignore_blank,
+            algorithm: algo,
+            alignment_mode: cached.alignment_mode,
+            never_align_differences: cached.never_align_differences,
+            skew_tolerance: cached.skew_tolerance,
+            use_closeness_matching: cached.use_closeness_matching,
+        },
+    );
+    Ok(total)
 }
 
 /// Returns one `(start, limit)` window of aligned rows. `start` past the
@@ -1494,7 +1852,7 @@ mod tests {
     ) -> Result<TextCompareDto, String> {
         text_compare(
             left, right, ws, cs, ws_snake, cs_snake, None, None, None, None, None, None, None, None,
-            None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
     }
 
@@ -1559,16 +1917,7 @@ mod tests {
             op_count: 4,
             exact: true,
             truncated: false,
-            applied_options: AppliedTextOptions {
-                ignore_whitespace: false,
-                ignore_case: false,
-                minor_unimportant: false,
-                ignore_blank_lines: false,
-                algorithm: None,
-                encoding: None,
-                eol: None,
-                suppressed_lines: Vec::new(),
-            },
+            applied_options: AppliedTextOptions::default(),
             left_meta: Some(FileMetaDto {
                 bytes: 42,
                 mtime_unix: Some(1700000000),
@@ -1595,16 +1944,7 @@ mod tests {
             op_count: 0,
             exact: false,
             truncated: false,
-            applied_options: AppliedTextOptions {
-                ignore_whitespace: false,
-                ignore_case: false,
-                minor_unimportant: false,
-                ignore_blank_lines: false,
-                algorithm: None,
-                encoding: None,
-                eol: None,
-                suppressed_lines: Vec::new(),
-            },
+            applied_options: AppliedTextOptions::default(),
             left_meta: None,
             right_meta: None,
         });
@@ -1896,6 +2236,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare must succeed");
 
@@ -1928,6 +2269,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare with snake_case must succeed");
 
@@ -1978,6 +2320,7 @@ mod tests {
             None,
             None,
             None,
+            None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare must succeed");
 
@@ -2040,6 +2383,7 @@ mod tests {
             ls.clone(),
             rs.clone(),
             None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("exact compare must succeed");
         assert!(!exact.applied_options.ignore_blank_lines);
@@ -2051,6 +2395,7 @@ mod tests {
             Some("patience".to_string()),
             None,
             Some(true),
+            None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("folded compare must succeed");
         assert!(folded.applied_options.ignore_blank_lines);
@@ -2061,5 +2406,56 @@ mod tests {
         assert_eq!(page.rows.get(1).map(|r| r.kind), Some(RowKind::Equal));
         let _ = std::fs::remove_file(&left);
         let _ = std::fs::remove_file(&right);
+    }
+
+    #[test]
+    fn unaligned_mode_pairs_lines_positionally() {
+        let left = lines(&["a", "b", "c"]);
+        let right = lines(&["x", "a", "b"]);
+        let rows = build_unaligned_rows(&left, &right, &TextOptions::default(), false);
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows.first().map(|r| r.kind), Some(RowKind::Changed));
+        assert_eq!(rows.get(1).map(|r| r.kind), Some(RowKind::Changed));
+        assert_eq!(rows.get(2).map(|r| r.kind), Some(RowKind::Changed));
+    }
+
+    #[test]
+    fn never_align_differences_splits_delete_insert_into_orphans() {
+        let left = lines(&["a", "old", "c"]);
+        let right = lines(&["a", "new", "c"]);
+        let rows = build_rows_with_options(&left, &right, &script_for(&left, &right), true);
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows.get(1).map(|r| r.kind), Some(RowKind::LeftOnly));
+        assert_eq!(rows.get(2).map(|r| r.kind), Some(RowKind::RightOnly));
+    }
+
+    #[test]
+    fn per_side_encoding_decodes_left_and_right_independently() {
+        let dir = std::env::temp_dir();
+        let left = dir.join("v2-per-side-enc-left.txt");
+        let right = dir.join("v2-per-side-enc-right.txt");
+        // "café" in Windows-1252 (0xE9) vs UTF-8 (0xC3 0xA9)
+        let _ = std::fs::write(&left, &[b'c', b'a', b'f', 0xE9, b'\n']);
+        let _ = std::fs::write(&right, "café\n".as_bytes());
+        let res = text_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None,
+            Some("Windows-1252".to_string()),
+            None,
+            Some("UTF-8".to_string()),
+            None,
+        );
+        let _ = std::fs::remove_file(&left);
+        let _ = std::fs::remove_file(&right);
+        assert!(res.is_ok());
+        if let Ok(dto) = res {
+            let page = text_get_rows(dto.session, 0, 10);
+            assert!(page.is_ok());
+            if let Ok(p) = page {
+                assert_eq!(p.rows.first().map(|r| r.kind), Some(RowKind::Equal));
+            }
+        }
     }
 }

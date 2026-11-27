@@ -3,13 +3,13 @@ import { defineConfig, devices } from "@playwright/test";
 const port = Number(process.env.PORT || 1420);
 
 /**
- * Wave 0 e2e scaffold: WebKit-only (macOS target), deviceScaleFactor 2 for
- * retina screenshots, 1280x800 to match the Tauri window geometry in
- * `src-tauri/tauri.conf.json`. Runs against `pnpm exec vite` with the
- * fixture-mock IPC adapter (`VITE_MOCK_IPC=1`) so no Tauri binary is needed.
+ * AutoCompare v2 Playwright E2E configuration:
+ * WebKit (macOS native rendering), 1280x800 @ 2x retina, running against
+ * `pnpm exec vite` with the lazy fixture-mock IPC adapter (`VITE_MOCK_IPC=1`)
+ * and `VITE_UI_VERSION=v2` by default.
  */
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./e2e/v2",
   fullyParallel: true,
   use: {
     baseURL: `http://localhost:${port}`,
@@ -20,6 +20,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.PORT,
     env: {
       VITE_MOCK_IPC: "1",
+      VITE_UI_VERSION: process.env.VITE_UI_VERSION || "v2",
     },
   },
   projects: [

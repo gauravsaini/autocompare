@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod event_log;
 pub mod options;
 pub mod session;
 pub mod settings;
@@ -34,6 +35,7 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SessionError
     }
     Ok(())
 }
+pub use event_log::{SessionEvent, SessionEventKind, SessionEventLog, SessionReplayState};
 pub use options::{
     AudioCompareOptions, FolderCompareOptions, HexCompareOptions, MergeCompareOptions,
     PictureCompareOptions, SyncCompareOptions, TableCompareOptions, TextCompareOptions,

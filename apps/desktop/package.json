@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test": "node --test src/v2/__tests__/*.test.ts",
+    "test:e2e": "playwright test",
+    "package:dmg": "bash ../../scripts/build-macos-dmg.sh"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.11.0",

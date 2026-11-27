@@ -15,6 +15,7 @@ pub mod archive_zip;
 pub mod error;
 pub mod local;
 pub mod path;
+pub mod registry;
 pub mod snapshot;
 pub mod trait_def;
 
@@ -25,6 +26,7 @@ pub use archive_zip::{ArchiveFs, ZipFs, create_zip_archive, create_zip_from_vfs}
 pub use error::VfsError;
 pub use local::LocalFs;
 pub use path::{VfsPath, VfsPathAncestors};
+pub use registry::{VfsFactory, VfsRegistry, VfsUri, detect_scheme_from_path};
 pub use snapshot::{
     BCSS_SCHEMA_VERSION, DetailedSnapshotDiff, SnapshotDiffSummary, SnapshotDocument,
     SnapshotEntry, SnapshotFs, create_deep_snapshot, create_shallow_snapshot, create_snapshot,

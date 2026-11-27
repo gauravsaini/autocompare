@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -165,10 +166,22 @@ pub struct FolderCancelDto {
     pub cancelled: bool,
 }
 
+/// Receipt returned by [`folder_copy_entry`] and [`folder_delete_entry`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderActionReceipt {
+    pub session: String,
+    pub rel_path: String,
+    pub action: String,
+    pub bytes_affected: u64,
+}
+
 /// Cached full folder comparison. Lives in Rust memory only; the UI pages
 /// through it via [`folder_get_tree`].
 #[derive(Debug, Clone)]
 struct StoredFolder {
+    left_root: PathBuf,
+    right_root: PathBuf,
     comparison: FolderComparison,
 }
 
@@ -318,7 +331,14 @@ pub fn folder_compare(
     };
     {
         let mut guard = lock_snapshots()?;
-        guard.insert(session, StoredFolder { comparison });
+        guard.insert(
+            session,
+            StoredFolder {
+                left_root: PathBuf::from(&left),
+                right_root: PathBuf::from(&right),
+                comparison,
+            },
+        );
     }
     Ok(dto)
 }
@@ -386,6 +406,114 @@ pub fn folder_cancel(session: String) -> Result<FolderCancelDto, String> {
         }
     }
     Ok(FolderCancelDto { session, cancelled })
+}
+
+/// Safely joins a relative path onto `root`, rejecting absolute paths or `..` traversal.
+fn resolve_inside_root(root: &Path, rel_path: &str) -> Result<PathBuf, String> {
+    let trimmed = rel_path.trim();
+    if trimmed.is_empty() {
+        return Err("relative path must not be empty".to_string());
+    }
+    let rel = Path::new(trimmed);
+    let mut out = root.to_path_buf();
+    for comp in rel.components() {
+        match comp {
+            Component::Normal(part) => out.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(format!("unsafe relative path rejected: {rel_path}"));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Copies a file or directory recursively without ever following symlinks.
+fn copy_recursive_no_symlinks(src: &Path, dst: &Path) -> Result<u64, String> {
+    let meta = std::fs::symlink_metadata(src)
+        .map_err(|e| format!("reading metadata for {} failed: {e}", src.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing to follow symlink: {}", src.display()));
+    }
+    if meta.is_dir() {
+        std::fs::create_dir_all(dst)
+            .map_err(|e| format!("creating directory {} failed: {e}", dst.display()))?;
+        let mut total: u64 = 0;
+        let entries = std::fs::read_dir(src)
+            .map_err(|e| format!("reading directory {} failed: {e}", src.display()))?;
+        for item in entries {
+            let entry = item.map_err(|e| format!("reading dir entry failed: {e}"))?;
+            let child_src = entry.path();
+            let child_dst = dst.join(entry.file_name());
+            total = total.saturating_add(copy_recursive_no_symlinks(&child_src, &child_dst)?);
+        }
+        return Ok(total);
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("creating parent directory {} failed: {e}", parent.display()))?;
+    }
+    std::fs::copy(src, dst)
+        .map_err(|e| format!("copying {} to {} failed: {e}", src.display(), dst.display()))
+}
+
+/// Copies a single file or directory entry between left and right roots (`"leftToRight"` | `"rightToLeft"`).
+#[tauri::command]
+pub fn folder_copy_entry(
+    session: String,
+    rel_path: String,
+    dir: String,
+) -> Result<FolderActionReceipt, String> {
+    let cached = snapshot(&session)?;
+    let (src_root, dst_root) = match dir.as_str() {
+        "leftToRight" => (&cached.left_root, &cached.right_root),
+        "rightToLeft" => (&cached.right_root, &cached.left_root),
+        other => return Err(format!("invalid copy direction '{other}'")),
+    };
+    let src = resolve_inside_root(src_root, &rel_path)?;
+    let dst = resolve_inside_root(dst_root, &rel_path)?;
+    let bytes_affected = copy_recursive_no_symlinks(&src, &dst)?;
+    Ok(FolderActionReceipt {
+        session,
+        rel_path,
+        action: dir,
+        bytes_affected,
+    })
+}
+
+/// Deletes a single file or directory entry on `side` (`"left"` | `"right"`).
+#[tauri::command]
+pub fn folder_delete_entry(
+    session: String,
+    rel_path: String,
+    side: String,
+) -> Result<FolderActionReceipt, String> {
+    let cached = snapshot(&session)?;
+    let root = match side.as_str() {
+        "left" => &cached.left_root,
+        "right" => &cached.right_root,
+        other => return Err(format!("invalid folder side '{other}'")),
+    };
+    let target = resolve_inside_root(root, &rel_path)?;
+    let meta = std::fs::symlink_metadata(&target)
+        .map_err(|e| format!("reading metadata for {} failed: {e}", target.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing to delete symlink: {}", target.display()));
+    }
+    let bytes_affected = meta.len();
+    if meta.is_dir() {
+        std::fs::remove_dir_all(&target)
+            .map_err(|e| format!("deleting directory {} failed: {e}", target.display()))?;
+    } else {
+        std::fs::remove_file(&target)
+            .map_err(|e| format!("deleting file {} failed: {e}", target.display()))?;
+    }
+    Ok(FolderActionReceipt {
+        session,
+        rel_path,
+        action: format!("delete:{side}"),
+        bytes_affected,
+    })
 }
 
 #[cfg(test)]
@@ -664,5 +792,23 @@ mod tests {
         assert_eq!(page.entries[0].status, FolderStatusDto::Same);
         folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base).unwrap_or(());
+    }
+
+    #[test]
+    fn copy_and_delete_entry_work_and_block_traversal() {
+        let (base, left, right) = mask_fixture_roots("copy-del");
+        let extra = PathBuf::from(&left).join("only_left.txt");
+        let _ = std::fs::write(&extra, "hello world");
+        let dto = folder_compare(left.clone(), right.clone(), None, None, None, None, None)
+            .expect("compare must succeed");
+        assert!(folder_copy_entry(dto.session.clone(), "../escape.txt".to_string(), "leftToRight".to_string()).is_err());
+        let copied = folder_copy_entry(dto.session.clone(), "only_left.txt".to_string(), "leftToRight".to_string());
+        assert!(copied.is_ok());
+        assert!(PathBuf::from(&right).join("only_left.txt").exists());
+        let deleted = folder_delete_entry(dto.session.clone(), "only_left.txt".to_string(), "right".to_string());
+        assert!(deleted.is_ok());
+        assert!(!PathBuf::from(&right).join("only_left.txt").exists());
+        let _ = folder_cancel(dto.session);
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

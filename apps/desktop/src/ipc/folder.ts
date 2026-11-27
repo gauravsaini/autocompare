@@ -128,3 +128,37 @@ export function folderGetTree(
 export function folderCancel(session: string): Promise<FolderCancelDto> {
   return invoke<FolderCancelDto>("folder_cancel", { session });
 }
+
+/** Rust mirror: `commands::folder::FolderActionReceipt`. */
+export interface FolderActionReceipt {
+  readonly session: string;
+  readonly relPath: string;
+  readonly action: string;
+  readonly bytesAffected: number;
+}
+
+/** Copies a single file or folder entry between sides (`"leftToRight"` | `"rightToLeft"`). */
+export function folderCopyEntry(
+  session: string,
+  relPath: string,
+  dir: "leftToRight" | "rightToLeft",
+): Promise<FolderActionReceipt> {
+  return invoke<FolderActionReceipt>("folder_copy_entry", {
+    session,
+    rel_path: relPath,
+    dir,
+  });
+}
+
+/** Deletes a single file or folder entry on `"left"` or `"right"`. */
+export function folderDeleteEntry(
+  session: string,
+  relPath: string,
+  side: "left" | "right",
+): Promise<FolderActionReceipt> {
+  return invoke<FolderActionReceipt>("folder_delete_entry", {
+    session,
+    rel_path: relPath,
+    side,
+  });
+}
