@@ -62,6 +62,24 @@ jobs:
           chmod +x scripts/build-macos-dmg.sh
           scripts/build-macos-dmg.sh --arch "${ARCH_TARGET}"
 
+      - name: Notarize & Staple macOS DMG (optional when Apple secrets configured)
+        if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          DMG_FILE=$(ls dist/AutoCompare-*-macos-*.dmg | head -n 1)
+          xcrun notarytool submit "${DMG_FILE}" \
+            --apple-id "${APPLE_ID}" \
+            --password "${APPLE_APP_SPECIFIC_PASSWORD}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --wait
+          xcrun stapler staple "${DMG_FILE}"
+          spctl -a -t open --context context:primary-signature -v "${DMG_FILE}"
+          (cd dist && shasum -a 256 "$(basename "${DMG_FILE}")" > "$(basename "${DMG_FILE}").sha256")
+
       - name: Upload DMG & SHA-256 artifacts
         uses: actions/upload-artifact@v4
         with:

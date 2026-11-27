@@ -16,6 +16,7 @@ export interface UseV2ShortcutsOptions {
   readonly onSaveSession: () => Promise<void>;
   readonly onDroppedPaths: (paths: readonly string[], side: "left" | "right") => void;
   readonly onTogglePalette: () => void;
+  readonly onToggleShortcuts: () => void;
   readonly onOpenNewSession: () => void;
   readonly onOpenSettings: () => void;
   readonly onToggleTheme: () => void;
@@ -30,6 +31,7 @@ export function useV2Shortcuts({
   onSaveSession,
   onDroppedPaths,
   onTogglePalette,
+  onToggleShortcuts,
   onOpenNewSession,
   onOpenSettings,
   onToggleTheme,
@@ -45,6 +47,11 @@ export function useV2Shortcuts({
       if (mod && key === "k") {
         e.preventDefault();
         onTogglePalette();
+        return;
+      }
+      if (mod && e.key === "/") {
+        e.preventDefault();
+        onToggleShortcuts();
         return;
       }
       if (mod && key === "s") {
@@ -111,7 +118,10 @@ export function useV2Shortcuts({
         }
       }
       if (!mod && !isEditableTarget(e.target)) {
-        if (key === "n" && commandsRef.current.hasSections) {
+        if (e.key === "?") {
+          e.preventDefault();
+          onToggleShortcuts();
+        } else if (key === "n" && commandsRef.current.hasSections) {
           e.preventDefault();
           commandsRef.current.nextSection?.();
         } else if (key === "p" && commandsRef.current.hasSections) {
@@ -129,6 +139,7 @@ export function useV2Shortcuts({
     onSaveSession,
     openSession,
     onTogglePalette,
+    onToggleShortcuts,
     onOpenNewSession,
     onOpenSettings,
   ]);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowLeftRight, Play, Trash2 } from "lucide-react";
 import { syncApply, syncPlan } from "../../ipc/sync";
 import type { SyncApplyReport, SyncDirection, SyncPlan, SyncStep } from "../../ipc/sync";
@@ -40,6 +40,7 @@ export default function V2SyncCompare({
   const [direction, setDirection] = useState<SyncDirection>("LeftToRight");
   const [prune, setPrune] = useState(false);
   const [plan, setPlan] = useState<SyncPlan | null>(null);
+  const [excludedPaths, setExcludedPaths] = useState<Set<string>>(() => new Set());
   const [report, setReport] = useState<SyncApplyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -55,6 +56,7 @@ export default function V2SyncCompare({
       setLoading(true);
       setError(null);
       setReport(null);
+      setExcludedPaths(new Set());
       const lEff = l || "tools/parity-harness/fixtures/folder/left";
       const rEff = r || "tools/parity-harness/fixtures/folder/right";
       try {
@@ -77,6 +79,32 @@ export default function V2SyncCompare({
     void runPlan(leftPath, rightPath);
   }, [leftPath, rightPath, runPlan]);
 
+  const activeSteps = useMemo(
+    () => (plan ? plan.steps.filter((s) => !excludedPaths.has(s.rel_path)) : []),
+    [plan, excludedPaths],
+  );
+
+  const breakdown = useMemo(() => {
+    let copyRight = 0;
+    let copyLeft = 0;
+    let deletes = 0;
+    for (const s of activeSteps) {
+      if (s.action === "CopyToRight") copyRight += 1;
+      else if (s.action === "CopyToLeft") copyLeft += 1;
+      else deletes += 1;
+    }
+    return { copyRight, copyLeft, deletes, excluded: excludedPaths.size };
+  }, [activeSteps, excludedPaths.size]);
+
+  const toggleExclude = (relPath: string): void => {
+    setExcludedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(relPath)) next.delete(relPath);
+      else next.add(relPath);
+      return next;
+    });
+  };
+
   useEffect(() => {
     onRegisterCommands({
       swapSides: () => onPathsChange(rightDraft, leftDraft),
@@ -85,10 +113,10 @@ export default function V2SyncCompare({
   }, [onRegisterCommands, onPathsChange, leftDraft, rightDraft, runPlan]);
 
   useEffect(() => {
-    const steps = plan?.steps.length ?? 0;
-    const skipped = plan?.skipped.length ?? 0;
+    const steps = activeSteps.length;
+    const skipped = (plan?.skipped.length ?? 0) + excludedPaths.size;
     onStatusChange({
-      left: steps === 0 ? "Folders are in sync" : `${steps} planned ${steps === 1 ? "action" : "actions"}`,
+      left: steps === 0 ? "Folders are in sync" : `${steps} active ${steps === 1 ? "action" : "actions"}`,
       center:
         report !== null
           ? report.dryRun
@@ -97,16 +125,24 @@ export default function V2SyncCompare({
           : `${direction}${prune ? " · Mirror/Prune" : ""}`,
       right: `${skipped} skipped`,
     });
-  }, [onStatusChange, plan, report, direction, prune]);
+  }, [onStatusChange, activeSteps.length, plan, excludedPaths.size, report, direction, prune]);
 
   const handleApply = async (dryRun: boolean): Promise<void> => {
-    if (!plan) return;
+    if (!plan || activeSteps.length === 0) return;
     setRunning(true);
     setError(null);
     const lEff = leftDraft || "tools/parity-harness/fixtures/folder/left";
     const rEff = rightDraft || "tools/parity-harness/fixtures/folder/right";
+    const filteredPlan: SyncPlan = {
+      ...plan,
+      steps: activeSteps,
+      skipped: [
+        ...plan.skipped,
+        ...Array.from(excludedPaths).map((p) => [p, "Excluded by user"] as const),
+      ],
+    };
     try {
-      const rep = await syncApply(lEff, rEff, plan, dryRun);
+      const rep = await syncApply(lEff, rEff, filteredPlan, dryRun);
       setReport(rep);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -173,7 +209,7 @@ export default function V2SyncCompare({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={running || !plan || plan.steps.length === 0}
+            disabled={running || activeSteps.length === 0}
             onClick={() => void handleApply(true)}
             className="v2-btn"
           >
@@ -181,19 +217,57 @@ export default function V2SyncCompare({
           </button>
           <button
             type="button"
-            disabled={running || !plan || plan.steps.length === 0}
+            disabled={running || activeSteps.length === 0}
             onClick={() => void handleApply(false)}
             className="v2-btn v2-btn-primary"
           >
             <Play size={12} />
-            Sync Now
+            Sync Now ({activeSteps.length})
           </button>
         </div>
       </div>
 
+      {/* Plan & Dry-Run Breakdown Strip */}
+      {plan && plan.steps.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-[var(--v2-ins-bg)] px-2 py-0.5 font-medium text-[var(--v2-ins-fg)]">
+              → Right: {breakdown.copyRight}
+            </span>
+            <span className="rounded-full bg-[var(--v2-accent-soft)] px-2 py-0.5 font-medium text-[var(--v2-accent)]">
+              ← Left: {breakdown.copyLeft}
+            </span>
+            <span className="rounded-full bg-[var(--v2-del-bg)] px-2 py-0.5 font-medium text-[var(--v2-del-fg)]">
+              Deletes: {breakdown.deletes}
+            </span>
+            {breakdown.excluded > 0 ? (
+              <span className="rounded-full bg-[var(--v2-seg-track)] px-2 py-0.5 font-medium text-[var(--v2-fg-muted)]">
+                Excluded: {breakdown.excluded}
+              </span>
+            ) : null}
+            {report ? (
+              <span className="font-medium text-[var(--v2-fg)]">
+                {report.dryRun
+                  ? `Dry-Run Preview: ${report.plannedCopies} copies, ${report.plannedDeletes} deletes`
+                  : `Completed: ${report.copied} copied, ${report.deleted} deleted`}
+              </span>
+            ) : null}
+          </div>
+          {breakdown.excluded > 0 ? (
+            <button
+              type="button"
+              onClick={() => setExcludedPaths(new Set())}
+              className="v2-btn h-[20px] px-2 text-[10.5px]"
+            >
+              Include All
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Planned Sync Steps Table */}
+      {/* Planned Sync Steps Table with Per-Row Exclude Checkbox */}
       <div className="min-h-0 flex-1 overflow-y-auto text-[12px]">
         {loading ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
@@ -206,18 +280,29 @@ export default function V2SyncCompare({
           </div>
         ) : (
           <div>
-            <div className="sticky top-0 grid grid-cols-[130px_1fr_80px] border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1 text-[11px] font-semibold text-[var(--v2-fg-secondary)]">
+            <div className="sticky top-0 grid grid-cols-[34px_130px_1fr_80px] border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1 text-[11px] font-semibold text-[var(--v2-fg-secondary)]">
+              <span>Run</span>
               <span>Action</span>
               <span>Relative Path</span>
               <span className="text-right">Kind</span>
             </div>
             {plan.steps.map((step, i) => {
               const badge = actionBadge(step.action);
+              const excluded = excludedPaths.has(step.rel_path);
               return (
                 <div
                   key={`${step.rel_path}-${i}`}
-                  className="grid h-[26px] grid-cols-[130px_1fr_80px] items-center border-b border-[var(--v2-border-subtle)]/60 px-3 hover:bg-[var(--v2-btn-hover)]/40"
+                  className={`grid h-[26px] grid-cols-[34px_130px_1fr_80px] items-center border-b border-[var(--v2-border-subtle)]/60 px-3 hover:bg-[var(--v2-btn-hover)]/40 ${
+                    excluded ? "opacity-45 line-through" : ""
+                  }`}
                 >
+                  <input
+                    type="checkbox"
+                    aria-label={`Include ${step.rel_path}`}
+                    checked={!excluded}
+                    onChange={() => toggleExclude(step.rel_path)}
+                    className="accent-[var(--v2-accent)]"
+                  />
                   <div>
                     <span
                       style={{ backgroundColor: badge.bg, color: badge.color }}

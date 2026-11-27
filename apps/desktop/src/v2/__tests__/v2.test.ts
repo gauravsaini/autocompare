@@ -29,6 +29,12 @@ import {
   buildReport,
   buildUnifiedPatch,
 } from "../utils/reportBuilder.ts";
+import {
+  asciiToHexQuery,
+  decodeHexInspector,
+  formatBytesAsAscii,
+  formatBytesAsHex,
+} from "../utils/hexInspector.ts";
 
 describe("computeVirtualWindow", () => {
   it("computes bounded start/end/offset for 10,000 rows", () => {
@@ -345,5 +351,25 @@ describe("reportBuilder", () => {
 
     const json = buildReport("json", tableInput);
     assert.ok(json.includes('"schemaVersion": 2'));
+  });
+});
+
+describe("hexInspector", () => {
+  it("converts ASCII/UTF-8 text to hex query and formats byte arrays", () => {
+    assert.equal(asciiToHexQuery("Hi!"), "48 69 21");
+    assert.equal(formatBytesAsHex([0x00, 0x41, 0xff]), "00 41 FF");
+    assert.equal(formatBytesAsAscii([0x00, 0x41, 0x7e, 0xff]), ".A~.");
+  });
+
+  it("decodes little-endian and big-endian integers and float32", () => {
+    const le = decodeHexInspector([0x00, 0x00, 0x80, 0x3f], true);
+    assert.equal(le.uint8, 0);
+    assert.equal(le.float32, "1");
+    assert.equal(le.uint32, 0x3f800000);
+
+    const be = decodeHexInspector([0x3f, 0x80, 0x00, 0x00], false);
+    assert.equal(be.uint8, 0x3f);
+    assert.equal(be.uint16, 0x3f80);
+    assert.equal(be.float32, "1");
   });
 });

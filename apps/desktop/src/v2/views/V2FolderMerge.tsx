@@ -152,6 +152,17 @@ export default function V2FolderMerge({
     });
   };
 
+  const resolveAllConflicts = (choice: "TakeLeft" | "TakeRight"): void => {
+    if (!plan) return;
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (const step of plan.steps) {
+        if (step.action === "Conflict") next[step.rel_path] = choice;
+      }
+      return next;
+    });
+  };
+
   const handleApply = async (): Promise<void> => {
     if (!plan) return;
     if (!outPath.trim()) {
@@ -264,8 +275,8 @@ export default function V2FolderMerge({
         ))}
       </form>
 
-      {/* Output Target Bar */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5">
+      {/* Output Target & Bulk Conflict Resolution Bar */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="shrink-0 text-[11px] font-semibold text-[var(--v2-fg-secondary)]">
             Merge Output Folder
@@ -286,15 +297,47 @@ export default function V2FolderMerge({
             <FolderOpen size={12} />
           </button>
         </div>
-        <button
-          type="button"
-          disabled={applying || !plan || effectiveSteps.length === 0}
-          onClick={() => void handleApply()}
-          className="v2-btn v2-btn-primary"
-        >
-          <Play size={12} />
-          {applying ? "Merging…" : "Apply Tree Merge"}
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {unresolvedConflicts > 0 ? (
+            <>
+              <span className="rounded-full bg-[var(--v2-del-bg)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--v2-del-fg)]">
+                {unresolvedConflicts} {unresolvedConflicts === 1 ? "conflict" : "conflicts"}
+              </span>
+              <button
+                type="button"
+                onClick={() => resolveAllConflicts("TakeLeft")}
+                className="v2-btn h-[22px] text-[11px]"
+              >
+                Conflicts → Left
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveAllConflicts("TakeRight")}
+                className="v2-btn h-[22px] text-[11px]"
+              >
+                Conflicts → Right
+              </button>
+            </>
+          ) : null}
+          {Object.keys(overrides).length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setOverrides({})}
+              className="v2-btn h-[22px] text-[11px]"
+            >
+              Reset
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={applying || !plan || effectiveSteps.length === 0}
+            onClick={() => void handleApply()}
+            className="v2-btn v2-btn-primary"
+          >
+            <Play size={12} />
+            {applying ? "Merging…" : "Apply Tree Merge"}
+          </button>
+        </div>
       </div>
 
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />

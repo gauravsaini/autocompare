@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RotateCcw, Search, X } from "lucide-react";
+import { Copy, RotateCcw, Search, X } from "lucide-react";
 import { hexApplyEdit, hexCompare, hexFind, hexGetPage, hexSaveSide } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
+import {
+  asciiToHexQuery,
+  decodeHexInspector,
+  formatBytesAsAscii,
+  formatBytesAsHex,
+} from "../utils/hexInspector";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
 import { useExternalChangeWatch } from "../hooks/useExternalChangeWatch";
@@ -64,8 +70,11 @@ export default function V2HexCompare({
   const [notice, setNotice] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [findOpen, setFindOpen] = useState(false);
+  const [findMode, setFindMode] = useState<"hex" | "ascii">("hex");
   const [findHex, setFindHex] = useState("");
   const [findNote, setFindNote] = useState<string | null>(null);
+  const [selectedByte, setSelectedByte] = useState<{ readonly side: "left" | "right"; readonly absOffset: number } | null>(null);
+  const [littleEndian, setLittleEndian] = useState(true);
 
   // Byte-level inline edits & Undo/Redo stack
   const [byteEdits, setByteEdits] = useState<Map<string, number>>(() => new Map());
@@ -335,12 +344,15 @@ export default function V2HexCompare({
 
   const handleFindHex = async (): Promise<void> => {
     if (!summary || !findHex.trim()) return;
+    const query = findMode === "ascii" ? asciiToHexQuery(findHex) : findHex.trim();
+    if (!query) return;
     try {
-      const hit = await hexFind(summary.sessionId, findHex.trim(), offset);
+      const hit = await hexFind(summary.sessionId, query, offset);
       if (hit === null) {
-        setFindNote("Hex pattern not found");
+        setFindNote(findMode === "ascii" ? "Text pattern not found" : "Hex pattern not found");
       } else {
         setFindNote(`Found at 0x${hit.toString(16).toUpperCase().padStart(8, "0")}`);
+        setSelectedByte({ side: "left", absOffset: hit });
         const targetRowOff = Math.floor(hit / BYTES_PER_ROW) * BYTES_PER_ROW;
         const pos = visibleRows.findIndex((r) => r.rowOffset === targetRowOff);
         if (pos >= 0) scrollToPosition(pos);
@@ -348,6 +360,42 @@ export default function V2HexCompare({
       }
     } catch (e) {
       setFindNote(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const inspectorState = useMemo(() => {
+    if (!selectedByte || !page) return null;
+    const rel = selectedByte.absOffset - page.offset;
+    const src = selectedByte.side === "left" ? page.left : page.right;
+    if (rel < 0 || rel >= src.length) return null;
+    const slice: number[] = [];
+    for (let i = 0; i < 4 && rel + i < src.length; i += 1) {
+      const absOff = selectedByte.absOffset + i;
+      slice.push(byteEdits.get(byteKey(selectedByte.side, absOff)) ?? src[rel + i]);
+    }
+    const rowStart = Math.floor(rel / BYTES_PER_ROW) * BYTES_PER_ROW;
+    const rowBytes: number[] = [];
+    for (let i = 0; i < BYTES_PER_ROW && rowStart + i < src.length; i += 1) {
+      const absOff = page.offset + rowStart + i;
+      rowBytes.push(byteEdits.get(byteKey(selectedByte.side, absOff)) ?? src[rowStart + i]);
+    }
+    return {
+      decoded: decodeHexInspector(slice, littleEndian),
+      rowBytes,
+    };
+  }, [selectedByte, page, byteEdits, littleEndian]);
+
+  const copySelectedRow = async (mode: "hex" | "ascii"): Promise<void> => {
+    if (!inspectorState) return;
+    const text =
+      mode === "hex"
+        ? formatBytesAsHex(inspectorState.rowBytes)
+        : formatBytesAsAscii(inspectorState.rowBytes);
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice(`Copied ${mode.toUpperCase()} row (${inspectorState.rowBytes.length} bytes)`);
+    } catch {
+      setNotice("Clipboard unavailable");
     }
   };
 
@@ -368,10 +416,26 @@ export default function V2HexCompare({
         onSaveSide={(side) => void handleSaveSide(side)}
       />
 
-      {/* Docked Hex Find Bar */}
+      {/* Docked Hex / ASCII Find Bar */}
       {findOpen ? (
         <div className="flex shrink-0 items-center gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5">
           <Search size={13} className="text-[var(--v2-fg-muted)]" />
+          <div className="inline-flex rounded-[5px] bg-[var(--v2-seg-track)] p-0.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setFindMode("hex")}
+              className={`rounded-[4px] px-2 py-0.5 font-medium ${findMode === "hex" ? "bg-[var(--v2-surface)] text-[var(--v2-fg)]" : "text-[var(--v2-fg-secondary)]"}`}
+            >
+              Hex
+            </button>
+            <button
+              type="button"
+              onClick={() => setFindMode("ascii")}
+              className={`rounded-[4px] px-2 py-0.5 font-medium ${findMode === "ascii" ? "bg-[var(--v2-surface)] text-[var(--v2-fg)]" : "text-[var(--v2-fg-secondary)]"}`}
+            >
+              ASCII
+            </button>
+          </div>
           <input
             ref={findInputRef}
             type="text"
@@ -380,11 +444,11 @@ export default function V2HexCompare({
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleFindHex();
             }}
-            placeholder="Hex bytes (e.g. 61 6C 70 68 61)…"
+            placeholder={findMode === "ascii" ? "UTF-8 / ASCII text (e.g. alpha)…" : "Hex bytes (e.g. 61 6C 70 68 61)…"}
             className="v2-input v2-mono w-64"
           />
           <button type="button" onClick={() => void handleFindHex()} className="v2-btn">
-            Find Hex
+            Find
           </button>
           {findNote ? <span className="text-[11px] text-[var(--v2-fg-muted)]">{findNote}</span> : null}
           {byteEdits.size > 0 ? (
@@ -505,7 +569,10 @@ export default function V2HexCompare({
                         ) : (
                           <span
                             key={idx}
-                            title={b !== null ? `0x${absOff.toString(16).toUpperCase()} — double-click to edit` : undefined}
+                            title={b !== null ? `0x${absOff.toString(16).toUpperCase()} — click to inspect, double-click to edit` : undefined}
+                            onClick={() => {
+                              if (b !== null) setSelectedByte({ side: "left", absOffset: absOff });
+                            }}
                             onDoubleClick={() => {
                               if (b !== null) {
                                 setEditingByte({ side: "left", absOffset: absOff, draft: hex2(b) });
@@ -518,7 +585,7 @@ export default function V2HexCompare({
                             }
                             className={`inline-block w-[18px] cursor-pointer rounded-[2px] text-center ${
                               b === null ? "v2-hatch cursor-default text-transparent" : ""
-                            } ${modified ? "ring-1 ring-[var(--v2-accent)]" : ""} ${
+                            } ${modified || (selectedByte?.side === "left" && selectedByte.absOffset === absOff) ? "ring-1 ring-[var(--v2-accent)]" : ""} ${
                               idx === 7 ? "mr-1.5" : ""
                             }`}
                           >
@@ -592,7 +659,10 @@ export default function V2HexCompare({
                         ) : (
                           <span
                             key={idx}
-                            title={b !== null ? `0x${absOff.toString(16).toUpperCase()} — double-click to edit` : undefined}
+                            title={b !== null ? `0x${absOff.toString(16).toUpperCase()} — click to inspect, double-click to edit` : undefined}
+                            onClick={() => {
+                              if (b !== null) setSelectedByte({ side: "right", absOffset: absOff });
+                            }}
                             onDoubleClick={() => {
                               if (b !== null) {
                                 setEditingByte({ side: "right", absOffset: absOff, draft: hex2(b) });
@@ -605,7 +675,7 @@ export default function V2HexCompare({
                             }
                             className={`inline-block w-[18px] cursor-pointer rounded-[2px] text-center ${
                               b === null ? "v2-hatch cursor-default text-transparent" : ""
-                            } ${modified ? "ring-1 ring-[var(--v2-accent)]" : ""} ${
+                            } ${modified || (selectedByte?.side === "right" && selectedByte.absOffset === absOff) ? "ring-1 ring-[var(--v2-accent)]" : ""} ${
                               idx === 7 ? "mr-1.5" : ""
                             }`}
                           >
@@ -637,6 +707,53 @@ export default function V2HexCompare({
           </div>
         )}
       </div>
+
+      {/* Data Inspector Bar for Selected Byte */}
+      {selectedByte && inspectorState ? (
+        <div
+          data-testid="v2/hex-inspector"
+          className="v2-mono flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1.5 text-[11px]"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-semibold text-[var(--v2-accent)]">
+              {selectedByte.side.toUpperCase()} 0x{selectedByte.absOffset.toString(16).toUpperCase().padStart(8, "0")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setLittleEndian((v) => !v)}
+              className="v2-btn h-[19px] px-1.5 text-[10px]"
+              title="Toggle Little-Endian / Big-Endian"
+            >
+              {littleEndian ? "LE" : "BE"}
+            </button>
+            <span>U8: <b>{inspectorState.decoded.uint8 ?? "—"}</b></span>
+            <span>I8: <b>{inspectorState.decoded.int8 ?? "—"}</b></span>
+            <span>U16: <b>{inspectorState.decoded.uint16 ?? "—"}</b></span>
+            <span>I16: <b>{inspectorState.decoded.int16 ?? "—"}</b></span>
+            <span>I32: <b>{inspectorState.decoded.int32 ?? "—"}</b></span>
+            <span>F32: <b>{inspectorState.decoded.float32 ?? "—"}</b></span>
+            <span className="text-[var(--v2-fg-muted)]">Bin: {inspectorState.decoded.binary}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void copySelectedRow("hex")}
+              className="v2-btn h-[20px] px-2 text-[10.5px]"
+            >
+              <Copy size={10} />
+              Copy Hex
+            </button>
+            <button
+              type="button"
+              onClick={() => void copySelectedRow("ascii")}
+              className="v2-btn h-[20px] px-2 text-[10.5px]"
+            >
+              <Copy size={10} />
+              Copy ASCII
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Pagination Footer when files exceed 16KB */}
       {page && page.total > PAGE_BYTES ? (

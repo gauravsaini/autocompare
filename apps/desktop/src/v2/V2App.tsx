@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Command, Download, Home, Moon, Plus, Settings, Sun, X } from "lucide-react";
+import { CircleHelp, Command, Download, Home, Moon, Plus, Settings, Sun, X } from "lucide-react";
 import type { PaletteCommand } from "./components/V2CommandPalette";
 import V2Toolbar from "./components/V2Toolbar";
 import { useTabs } from "./hooks/useTabs";
@@ -23,6 +23,7 @@ const V2SessionManagerModal = lazy(() => import("./components/V2SessionManagerMo
 const V2SettingsModal = lazy(() => import("./components/V2SettingsModal"));
 const V2ReportExportModal = lazy(() => import("./components/V2ReportExportModal"));
 const V2CommandPalette = lazy(() => import("./components/V2CommandPalette"));
+const V2ShortcutHelpModal = lazy(() => import("./components/V2ShortcutHelpModal"));
 
 interface ViewErrorBoundaryState {
   readonly error: string | null;
@@ -94,6 +95,7 @@ export default function V2App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
 
   const resetCommands = useCallback(() => setCommands({}), []);
@@ -138,6 +140,7 @@ export default function V2App(): React.JSX.Element {
   }, [showToast]);
 
   const togglePalette = useCallback(() => setPaletteOpen((v) => !v), []);
+  const toggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
   const openNewSession = useCallback(() => setNewSessionOpen(true), []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
 
@@ -162,6 +165,7 @@ export default function V2App(): React.JSX.Element {
     onSaveSession: handleSaveWorkspaceSession,
     onDroppedPaths: handleDroppedPaths,
     onTogglePalette: togglePalette,
+    onToggleShortcuts: toggleShortcuts,
     onOpenNewSession: openNewSession,
     onOpenSettings: openSettings,
     onToggleTheme: toggleTheme,
@@ -180,6 +184,7 @@ export default function V2App(): React.JSX.Element {
       { id: "new-fmerge", category: "Compare", label: "New 3-Way Folder Merge", run: () => openSession("folderMerge") },
       { id: "go-home", category: "Navigate", label: "Go to Home", run: () => setActiveId("home") },
       { id: "toggle-theme", category: "View", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`, run: toggleTheme },
+      { id: "open-shortcuts", category: "Help", label: "Keyboard Shortcuts Cheat Sheet", shortcut: "⌘/", run: toggleShortcuts },
       { id: "open-settings", category: "App", label: "Open Preferences", shortcut: "⌘,", run: openSettings },
     ];
     if (activeTab.kind !== "home") {
@@ -195,7 +200,7 @@ export default function V2App(): React.JSX.Element {
       }
     }
     return list;
-  }, [activeTab.kind, theme, openSession, setActiveId, toggleTheme, openSettings, handleSaveWorkspaceSession, commands]);
+  }, [activeTab.kind, theme, openSession, setActiveId, toggleTheme, toggleShortcuts, openSettings, handleSaveWorkspaceSession, commands]);
 
   return (
     <div
@@ -318,6 +323,16 @@ export default function V2App(): React.JSX.Element {
           >
             <Command size={11} />
             <span>K</span>
+          </button>
+          <button
+            type="button"
+            data-testid="v2/open-shortcuts"
+            title="Keyboard Shortcuts (? or Cmd+/)"
+            aria-label="Keyboard Shortcuts"
+            onClick={toggleShortcuts}
+            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+          >
+            <CircleHelp size={14} />
           </button>
           <button
             type="button"
@@ -553,6 +568,12 @@ export default function V2App(): React.JSX.Element {
             open={paletteOpen}
             commands={paletteCommands}
             onClose={() => setPaletteOpen(false)}
+          />
+        ) : null}
+        {shortcutsOpen ? (
+          <V2ShortcutHelpModal
+            open={shortcutsOpen}
+            onClose={() => setShortcutsOpen(false)}
           />
         ) : null}
       </Suspense>
