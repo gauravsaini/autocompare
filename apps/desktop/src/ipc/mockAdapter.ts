@@ -1058,6 +1058,40 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         cancelled: true,
       } as unknown as T;
     }
+    case "folder_copy_entry": {
+      return {
+        session: strArg(args, ["session"], "mock-folder-1"),
+        relPath: strArg(args, ["rel_path", "relPath"], ""),
+        action: strArg(args, ["dir"], "leftToRight"),
+        bytesAffected: 128,
+      } as unknown as T;
+    }
+    case "folder_delete_entry": {
+      return {
+        session: strArg(args, ["session"], "mock-folder-1"),
+        relPath: strArg(args, ["rel_path", "relPath"], ""),
+        action: `delete:${strArg(args, ["side"], "left")}`,
+        bytesAffected: 128,
+      } as unknown as T;
+    }
+    case "table_apply_edit": {
+      return {
+        sessionId: strArg(args, ["session", "sessionId"], "mock-table-1"),
+        side: strArg(args, ["side"], "left"),
+        row: numArg(args, ["row"], 0),
+        col: numArg(args, ["col"], 0),
+        value: strArg(args, ["value"], ""),
+      } as unknown as T;
+    }
+    case "table_save_side": {
+      return {
+        sessionId: strArg(args, ["session", "sessionId"], "mock-table-1"),
+        side: strArg(args, ["side"], "left"),
+        path: strArg(args, ["path"], ""),
+        rowsWritten: dumped.tableCells.totalRowsL,
+        bytesWritten: 256,
+      } as unknown as T;
+    }
     case "table_compare": {
       const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
       const cells = ("_mockCells" in a && a["_mockCells"])

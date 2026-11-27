@@ -187,3 +187,51 @@ export function tableGetPage(
 export function tableFind(session: string, query: string): Promise<TableHit[]> {
   return invoke<TableHit[]>("table_find", { session, query });
 }
+
+/** Rust mirror: `commands::table::TableEditReceipt`. */
+export interface TableEditReceipt {
+  readonly sessionId: string;
+  readonly side: "left" | "right";
+  readonly row: number;
+  readonly col: number;
+  readonly value: string;
+}
+
+/** Rust mirror: `commands::table::TableSaveReceipt`. */
+export interface TableSaveReceipt {
+  readonly sessionId: string;
+  readonly side: "left" | "right";
+  readonly path: string;
+  readonly rowsWritten: number;
+  readonly bytesWritten: number;
+}
+
+/** Mutates one cached cell on `"left"` or `"right"`. */
+export function tableApplyEdit(
+  session: string,
+  side: "left" | "right",
+  row: number,
+  col: number,
+  value: string,
+): Promise<TableEditReceipt> {
+  return invoke<TableEditReceipt>("table_apply_edit", {
+    session,
+    side,
+    row,
+    col,
+    value,
+  });
+}
+
+/** Serializes one table side back to disk as RFC-4180 CSV. */
+export function tableSaveSide(
+  session: string,
+  side: "left" | "right",
+  path: string,
+): Promise<TableSaveReceipt> {
+  return invoke<TableSaveReceipt>("table_save_side", {
+    session,
+    side,
+    path,
+  });
+}

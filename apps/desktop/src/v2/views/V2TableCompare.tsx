@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyRound, Search, X } from "lucide-react";
-import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
+import { tableApplyEdit, tableCompare, tableFind, tableGetPage, tableSaveSide } from "../../ipc/table";
 import type { TableHit, TablePage, TableSummary } from "../../ipc/table";
 import V2TableRulesModal from "../components/table/V2TableRulesModal";
 import type { TableRulesTab } from "../components/table/V2TableRulesModal";
@@ -47,8 +47,15 @@ export default function V2TableCompare({
   const [numericTolerance, setNumericTolerance] = useState("");
   const [rulesTab, setRulesTab] = useState<TableRulesTab | null>(null);
 
-  // Selection & Find
+  // Selection, Inline Cell Editor & Find
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
+  const [editingCell, setEditingCell] = useState<{
+    readonly side: "left" | "right";
+    readonly row: number;
+    readonly col: number;
+    readonly value: string;
+  } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [findHits, setFindHits] = useState<readonly TableHit[]>([]);
@@ -222,10 +229,60 @@ export default function V2TableCompare({
   useEffect(() => {
     onStatusChange({
       left: `${summary?.diffRows ?? diffRowIndices.size} difference row(s)`,
-      center: byKey ? `Key-aligned (col ${keyColumns.map((k) => k + 1).join(",")})` : "Positional alignment",
+      center:
+        notice ??
+        (byKey ? `Key-aligned (col ${keyColumns.map((k) => k + 1).join(",")})` : "Positional alignment"),
       right: `${summary?.leftRows ?? rowCount} / ${summary?.rightRows ?? rowCount} rows · ${colCount} cols`,
     });
-  }, [onStatusChange, summary, diffRowIndices.size, byKey, keyColumns, rowCount, colCount]);
+  }, [onStatusChange, summary, diffRowIndices.size, notice, byKey, keyColumns, rowCount, colCount]);
+
+  const commitCellEdit = useCallback(async (): Promise<void> => {
+    if (!editingCell || !summary || !page) {
+      setEditingCell(null);
+      return;
+    }
+    const { side, row, col, value } = editingCell;
+    setEditingCell(null);
+    try {
+      await tableApplyEdit(summary.sessionId, side, row, col, value);
+      setPage((prev) => {
+        if (!prev) return prev;
+        const updateRows = (src: readonly (readonly string[])[]): string[][] =>
+          src.map((r, rIdx) => {
+            if (rIdx !== row) return [...r];
+            const nextRow = [...r];
+            while (nextRow.length <= col) nextRow.push("");
+            nextRow[col] = value;
+            return nextRow;
+          });
+        return side === "left"
+          ? { ...prev, rowsL: updateRows(prev.rowsL) }
+          : { ...prev, rowsR: updateRows(prev.rowsR) };
+      });
+      setNotice(`Edited ${side} row ${row + 1}, col ${col + 1}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [editingCell, summary, page]);
+
+  const handleSaveSide = useCallback(
+    async (side: "left" | "right"): Promise<void> => {
+      if (!summary) return;
+      const targetPath = side === "left" ? leftDraft : rightDraft;
+      if (!targetPath.trim()) {
+        setNotice(`Enter a ${side} CSV file path before saving.`);
+        return;
+      }
+      try {
+        const res = await tableSaveSide(summary.sessionId, side, targetPath.trim());
+        setNotice(`Saved ${side} CSV (${res.rowsWritten} rows, ${res.bytesWritten} B)`);
+        void resetBaseline();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [summary, leftDraft, rightDraft, resetBaseline],
+  );
 
   const handleSearch = async (): Promise<void> => {
     if (!summary || !findQuery.trim()) {
@@ -260,6 +317,7 @@ export default function V2TableCompare({
         leftPlaceholder="Left CSV / table path…"
         rightPlaceholder="Right CSV / table path…"
         splitPct={splitPct}
+        onSaveSide={(side) => void handleSaveSide(side)}
       />
 
       {/* Docked Find Bar */}
@@ -403,17 +461,41 @@ export default function V2TableCompare({
                         const lv = rl[c] ?? "";
                         const rv = rr?.[c] ?? "";
                         const cellDiff = !rr || lv !== rv;
+                        const isEditing =
+                          editingCell?.side === "left" && editingCell.row === rIdx && editingCell.col === c;
                         return (
                           <div
                             key={`lc-${c}`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCell({ side: "left", row: rIdx, col: c, value: lv });
+                            }}
                             style={
                               !isSelected && cellDiff
                                 ? { backgroundColor: "var(--v2-del-bg)", color: "var(--v2-del-fg)" }
                                 : undefined
                             }
-                            className="truncate border-r border-[var(--v2-border-subtle)]/60 px-2"
+                            className="cursor-text truncate border-r border-[var(--v2-border-subtle)]/60 px-2"
                           >
-                            {lv}
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingCell.value}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  setEditingCell((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void commitCellEdit();
+                                  else if (e.key === "Escape") setEditingCell(null);
+                                }}
+                                onBlur={() => void commitCellEdit()}
+                                className="v2-mono h-[20px] w-full border-0 bg-transparent p-0 text-[12px] text-inherit outline-none"
+                              />
+                            ) : (
+                              lv
+                            )}
                           </div>
                         );
                       })
@@ -450,17 +532,41 @@ export default function V2TableCompare({
                         const lv = rl?.[c] ?? "";
                         const rv = rr[c] ?? "";
                         const cellDiff = !rl || lv !== rv;
+                        const isEditing =
+                          editingCell?.side === "right" && editingCell.row === rIdx && editingCell.col === c;
                         return (
                           <div
                             key={`rc-${c}`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCell({ side: "right", row: rIdx, col: c, value: rv });
+                            }}
                             style={
                               !isSelected && cellDiff
                                 ? { backgroundColor: "var(--v2-ins-bg)", color: "var(--v2-ins-fg)" }
                                 : undefined
                             }
-                            className="truncate border-r border-[var(--v2-border-subtle)]/60 px-2"
+                            className="cursor-text truncate border-r border-[var(--v2-border-subtle)]/60 px-2"
                           >
-                            {rv}
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingCell.value}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  setEditingCell((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") void commitCellEdit();
+                                  else if (e.key === "Escape") setEditingCell(null);
+                                }}
+                                onBlur={() => void commitCellEdit()}
+                                className="v2-mono h-[20px] w-full border-0 bg-transparent p-0 text-[12px] text-inherit outline-none"
+                              />
+                            ) : (
+                              rv
+                            )}
                           </div>
                         );
                       })
