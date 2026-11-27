@@ -135,3 +135,35 @@ export function insertPastedText(
     nextCol: parts[parts.length - 1].length,
   };
 }
+
+export interface ReplaceLinesResult {
+  readonly lines: string[];
+  readonly count: number;
+}
+
+/**
+ * Replaces occurrences of `query` with `replacement` across `lines` (or only
+ * on `onlyLineIndex` when provided). Case-sensitive when `matchCase` is true.
+ */
+export function replaceInLines(
+  lines: readonly string[],
+  query: string,
+  replacement: string,
+  opts: { readonly matchCase: boolean; readonly onlyLineIndex?: number },
+): ReplaceLinesResult {
+  if (!query) return { lines: [...lines], count: 0 };
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(escaped, opts.matchCase ? "g" : "gi");
+  let count = 0;
+  const next = lines.map((line, idx) => {
+    if (opts.onlyLineIndex !== undefined && idx !== opts.onlyLineIndex) return line;
+    let lineHits = 0;
+    const updated = line.replace(re, () => {
+      lineHits += 1;
+      return replacement;
+    });
+    count += lineHits;
+    return updated;
+  });
+  return { lines: next, count };
+}

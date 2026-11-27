@@ -4,6 +4,8 @@ import { folderCompare, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
+import V2FolderRulesModal from "../components/folder/V2FolderRulesModal";
+import type { FolderRulesTab, FolderSessionRules } from "../components/folder/V2FolderRulesModal";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { useSplitPane } from "../hooks/useSplitPane";
 import { useVirtualRows } from "../hooks/useVirtualRows";
@@ -72,6 +74,12 @@ export default function V2FolderCompare({
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [folderRules, setFolderRules] = useState<FolderSessionRules>({
+    contentCompare: false,
+    timestampToleranceSec: 2,
+    masks: "",
+  });
+  const [rulesTab, setRulesTab] = useState<FolderRulesTab | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
 
@@ -80,40 +88,69 @@ export default function V2FolderCompare({
     setRightDraft(rightPath);
   }, [leftPath, rightPath]);
 
-  const runCompare = useCallback(async (l: string, r: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    const lEff = l || "tools/parity-harness/fixtures/folder/left";
-    const rEff = r || "tools/parity-harness/fixtures/folder/right";
-    try {
-      const dto = await folderCompare(lEff, rEff);
-      const page = await folderGetTree(dto.session, 0, 500, "all");
-      setEntries(page.entries);
-      const ts = new Date().toLocaleTimeString();
-      setLogs((prev) => [
-        ...prev.slice(-4),
-        `${ts}  Loaded ${page.entries.length} entries (${lEff} <-> ${rEff})`,
-      ]);
-    } catch (e) {
-      if (!l && !r && isMissingFixtureError(e)) {
-        setEntries([]);
-      } else {
-        setError(e instanceof Error ? e.message : String(e));
+  const runCompare = useCallback(
+    async (l: string, r: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      const lEff = l || "tools/parity-harness/fixtures/folder/left";
+      const rEff = r || "tools/parity-harness/fixtures/folder/right";
+      try {
+        const masks = folderRules.masks.trim() || null;
+        const dto = await folderCompare(
+          lEff,
+          rEff,
+          masks,
+          folderRules.contentCompare,
+          !folderRules.contentCompare,
+        );
+        const page = await folderGetTree(dto.session, 0, 500, "all");
+        setEntries(page.entries);
+        const ts = new Date().toLocaleTimeString();
+        setLogs((prev) => [
+          ...prev.slice(-4),
+          `${ts}  Loaded ${page.entries.length} entries (${folderRules.contentCompare ? "binary" : "quick"}${masks ? `, mask: ${masks}` : ""})`,
+        ]);
+      } catch (e) {
+        if (!l && !r && isMissingFixtureError(e)) {
+          setEntries([]);
+        } else {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [folderRules.masks, folderRules.contentCompare],
+  );
 
   useEffect(() => {
     void runCompare(leftPath, rightPath);
   }, [leftPath, rightPath, runCompare]);
 
+  const effectiveEntries = useMemo(() => {
+    if (folderRules.contentCompare || folderRules.timestampToleranceSec <= 0) return entries;
+    const tolMs = folderRules.timestampToleranceSec * 1000;
+    return entries.map((e) => {
+      if (
+        (e.status === "newerLeft" || e.status === "newerRight") &&
+        e.left !== null &&
+        e.right !== null &&
+        e.left.size === e.right.size &&
+        e.left.modifiedMs !== null &&
+        e.right.modifiedMs !== null &&
+        Math.abs(e.left.modifiedMs - e.right.modifiedMs) <= tolMs
+      ) {
+        return { ...e, status: "same" as const };
+      }
+      return e;
+    });
+  }, [entries, folderRules.contentCompare, folderRules.timestampToleranceSec]);
+
   const visibleEntries = useMemo(() => {
-    if (filterMode === "all") return entries;
-    if (filterMode === "same") return entries.filter((e) => e.status === "same");
-    return entries.filter((e) => e.status !== "same");
-  }, [entries, filterMode]);
+    if (filterMode === "all") return effectiveEntries;
+    if (filterMode === "same") return effectiveEntries.filter((e) => e.status === "same");
+    return effectiveEntries.filter((e) => e.status !== "same");
+  }, [effectiveEntries, filterMode]);
 
   const { startIndex, endIndex, totalHeight, offsetTop } = useVirtualRows({
     count: visibleEntries.length,
@@ -128,26 +165,30 @@ export default function V2FolderCompare({
   );
 
   const diffCount = useMemo(
-    () => entries.filter((e) => e.status !== "same").length,
-    [entries],
+    () => effectiveEntries.filter((e) => e.status !== "same").length,
+    [effectiveEntries],
   );
 
   useEffect(() => {
     onRegisterCommands({
       filterMode,
       setFilterMode,
+      openRules: () => setRulesTab("comparison"),
+      openFormat: () => setRulesTab("filters"),
       swapSides: () => onPathsChange(rightDraft, leftDraft),
       reload: () => void runCompare(leftDraft, rightDraft),
     });
   }, [onRegisterCommands, filterMode, onPathsChange, leftDraft, rightDraft, runCompare]);
 
   useEffect(() => {
+    const modeLabel = folderRules.contentCompare ? "Binary compare" : `Quick (±${folderRules.timestampToleranceSec}s)`;
+    const maskLabel = folderRules.masks.trim() ? ` · Filter: ${folderRules.masks.trim()}` : "";
     onStatusChange({
       left: `${visibleEntries.length} items shown · ${diffCount} differences`,
-      center: filterMode === "all" ? "All items" : filterMode === "diffs" ? "Differences only" : "Same only",
+      center: `${modeLabel}${maskLabel}`,
       right: `${entries.length} total`,
     });
-  }, [onStatusChange, visibleEntries.length, diffCount, filterMode, entries.length]);
+  }, [onStatusChange, visibleEntries.length, diffCount, folderRules, entries.length]);
 
   return (
     <div data-testid="v2/folder-view" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]">
@@ -305,6 +346,17 @@ export default function V2FolderCompare({
       <div className="v2-mono h-[54px] shrink-0 overflow-y-auto border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-3 py-1 text-[11px] leading-[16px] text-[var(--v2-fg-muted)]">
         {logs.length === 0 ? "Ready" : logs.map((line, i) => <div key={i}>{line}</div>)}
       </div>
+
+      <V2FolderRulesModal
+        open={rulesTab !== null}
+        initialTab={rulesTab ?? "comparison"}
+        rules={folderRules}
+        onClose={() => setRulesTab(null)}
+        onApply={(next) => {
+          setFolderRules(next);
+          setRulesTab(null);
+        }}
+      />
     </div>
   );
 }

@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KeyRound, Search, X } from "lucide-react";
 import { tableCompare, tableFind, tableGetPage } from "../../ipc/table";
 import type { TableHit, TablePage, TableSummary } from "../../ipc/table";
-import V2Modal from "../components/V2Modal";
+import V2TableRulesModal from "../components/table/V2TableRulesModal";
+import type { TableRulesTab } from "../components/table/V2TableRulesModal";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
@@ -44,7 +45,7 @@ export default function V2TableCompare({
   const [ignoreSpace, setIgnoreSpace] = useState(false);
   const [delimiter, setDelimiter] = useState(",");
   const [numericTolerance, setNumericTolerance] = useState("");
-  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesTab, setRulesTab] = useState<TableRulesTab | null>(null);
 
   // Selection & Find
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
@@ -204,7 +205,8 @@ export default function V2TableCompare({
     onRegisterCommands({
       filterMode,
       setFilterMode,
-      openRules: () => setRulesOpen(true),
+      openRules: () => setRulesTab("columns"),
+      openFormat: () => setRulesTab("format"),
       openFind: () => {
         setFindOpen(true);
         setTimeout(() => findInputRef.current?.focus(), 20);
@@ -475,60 +477,30 @@ export default function V2TableCompare({
         )}
       </div>
 
-      {/* Centered Table Rules Modal */}
-      <V2Modal
-        open={rulesOpen}
-        title="Table Comparison Rules"
-        widthClass="max-w-sm"
-        onClose={() => setRulesOpen(false)}
-        footer={
-          <>
-            <button type="button" onClick={() => setRulesOpen(false)} className="v2-btn">
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRulesOpen(false);
-                void runCompare(leftDraft, rightDraft);
-              }}
-              className="v2-btn v2-btn-primary"
-            >
-              Apply
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-[12px]">
-          <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={byKey} onChange={(e) => setByKey(e.target.checked)} className="accent-[var(--v2-accent)]" />
-            <span>Align rows by key column(s)</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={ignoreCase} onChange={(e) => setIgnoreCase(e.target.checked)} className="accent-[var(--v2-accent)]" />
-            <span>Ignore case in cells</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={ignoreSpace} onChange={(e) => setIgnoreSpace(e.target.checked)} className="accent-[var(--v2-accent)]" />
-            <span>Trim whitespace in cells</span>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="mb-1 block text-[11px] text-[var(--v2-fg-muted)]">Delimiter</span>
-              <input value={delimiter} onChange={(e) => setDelimiter(e.target.value)} maxLength={1} className="v2-input v2-mono w-full" />
-            </div>
-            <div>
-              <span className="mb-1 block text-[11px] text-[var(--v2-fg-muted)]">Numeric tolerance</span>
-              <input
-                value={numericTolerance}
-                onChange={(e) => setNumericTolerance(e.target.value)}
-                placeholder="e.g. 0.01"
-                className="v2-input v2-mono w-full"
-              />
-            </div>
-          </div>
-        </div>
-      </V2Modal>
+      {/* Tabbed BC-Style Table Rules Modal */}
+      <V2TableRulesModal
+        open={rulesTab !== null}
+        initialTab={rulesTab ?? "columns"}
+        columnNames={Array.from({ length: colCount }, (_, c) => page?.headerL[c] ?? `Col ${c + 1}`)}
+        rules={{
+          byKey,
+          keyColumns,
+          delimiter,
+          ignoreCase,
+          ignoreSpace,
+          numericTolerance,
+        }}
+        onClose={() => setRulesTab(null)}
+        onApply={(next) => {
+          setByKey(next.byKey);
+          setKeyColumns([...next.keyColumns]);
+          setDelimiter(next.delimiter || ",");
+          setIgnoreCase(next.ignoreCase);
+          setIgnoreSpace(next.ignoreSpace);
+          setNumericTolerance(next.numericTolerance);
+          setRulesTab(null);
+        }}
+      />
     </div>
   );
 }

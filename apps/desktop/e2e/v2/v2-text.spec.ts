@@ -146,3 +146,19 @@ test("text compare: Minor unimportant toggle and F7 manual line alignment", asyn
   await expect(alignBanner).toContainText("1 manual alignment");
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
 });
+
+test("text compare: Ctrl+H opens Find & Replace and replaces text cleanly", async ({ page }) => {
+  await expect(page.getByTestId("v2/text-row-0")).toBeVisible({ timeout: 10000 });
+
+  await page.keyboard.press("Control+h");
+  const findInput = page.locator("input[placeholder*='Find']");
+  const replaceInput = page.getByTestId("v2/replace-input");
+  await expect(findInput).toBeVisible();
+  await expect(replaceInput).toBeVisible();
+
+  await findInput.fill("common");
+  await replaceInput.fill("shared");
+  await page.getByTestId("v2/replace-all").click();
+  await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
+  await expect(page.getByTestId("v2/statusbar")).toContainText("Replaced");
+});

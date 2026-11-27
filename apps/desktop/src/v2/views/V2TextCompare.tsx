@@ -13,6 +13,7 @@ import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2TextFindBar from "../components/text/V2TextFindBar";
+import type { ReplaceTargetSide } from "../components/text/V2TextFindBar";
 import V2TextDiffRow, {
   renderHighlightedLine,
 } from "../components/text/V2TextDiffRow";
@@ -27,6 +28,7 @@ import {
   insertPastedText,
   joinWithNextLine,
   joinWithPreviousLine,
+  replaceInLines,
   rowIndexToSideLineIndex,
   sideLineIndexToRowIndex,
   splitLineAt,
@@ -209,14 +211,19 @@ export default function V2TextCompare({
     readonly side: TextSide;
   } | null>(null);
 
-  // Modals & Find
+  // Modals & Find / Replace (Cmd+F / Cmd+H)
   const [rulesModalTab, setRulesModalTab] = useState<RulesDialogTab | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
+  const [replaceQuery, setReplaceQuery] = useState("");
+  const [findMatchCase, setFindMatchCase] = useState(false);
+  const [replaceTargetSide, setReplaceTargetSide] = useState<ReplaceTargetSide>("left");
   const [findIdx, setFindIdx] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const liveDiffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
   const redoStackRef = useRef<Array<{ rows: readonly TextRowDto[]; label: string }>>([]);
@@ -441,6 +448,11 @@ export default function V2TextCompare({
         e.preventDefault();
         setFindOpen(true);
         setTimeout(() => findInputRef.current?.focus(), 20);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        setFindOpen(true);
+        setReplaceOpen(true);
+        setTimeout(() => findInputRef.current?.focus(), 20);
       } else if (e.key === "F7") {
         e.preventDefault();
         const targetIdx = activeEditRef.current?.rowIndex ?? selectedIndex;
@@ -528,15 +540,17 @@ export default function V2TextCompare({
   );
 
   const findHits = useMemo(() => {
-    const q = findQuery.trim().toLowerCase();
-    if (!q) return [] as number[];
+    const raw = findQuery;
+    if (!raw.trim()) return [] as number[];
+    const q = findMatchCase ? raw : raw.toLowerCase();
     return visibleRows
-      .filter(
-        (r) =>
-          (r.left ?? "").toLowerCase().includes(q) || (r.right ?? "").toLowerCase().includes(q),
-      )
+      .filter((r) => {
+        const l = findMatchCase ? (r.left ?? "") : (r.left ?? "").toLowerCase();
+        const ri = findMatchCase ? (r.right ?? "") : (r.right ?? "").toLowerCase();
+        return l.includes(q) || ri.includes(q);
+      })
       .map((r) => r.index);
-  }, [findQuery, visibleRows]);
+  }, [findQuery, findMatchCase, visibleRows]);
 
   const handleSelectRow = useCallback(
     (rowIndex: number, shiftKey: boolean): void => {
@@ -951,6 +965,43 @@ export default function V2TextCompare({
     [handleCopyRange],
   );
 
+  const handleReplace = useCallback(
+    async (replaceAll: boolean): Promise<void> => {
+      if (!summary || !findQuery) return;
+      const sides: readonly TextSide[] =
+        replaceTargetSide === "both" ? ["left", "right"] : [replaceTargetSide];
+      let totalReplaced = 0;
+      const activeRowIndex = !replaceAll && findHits.length > 0 ? findHits[findIdx % findHits.length] : undefined;
+
+      for (const side of sides) {
+        const sideLines = extractSideLines(rowsRef.current, side);
+        const onlyLineIndex =
+          activeRowIndex !== undefined
+            ? rowIndexToSideLineIndex(rowsRef.current, activeRowIndex, side)
+            : undefined;
+        if (onlyLineIndex !== undefined && onlyLineIndex < 0) continue;
+        const res = replaceInLines(sideLines, findQuery, replaceQuery, {
+          matchCase: findMatchCase,
+          onlyLineIndex,
+        });
+        if (res.count > 0) {
+          totalReplaced += res.count;
+          await applySideBuffer(
+            side,
+            res.lines,
+            `replace ${res.count} occurrence${res.count === 1 ? "" : "s"} (${side})`,
+          );
+        }
+      }
+      setNotice(
+        totalReplaced > 0
+          ? `Replaced ${totalReplaced} occurrence${totalReplaced === 1 ? "" : "s"}`
+          : `No matches to replace on ${replaceTargetSide} side`,
+      );
+    },
+    [summary, findQuery, replaceQuery, findMatchCase, replaceTargetSide, findHits, findIdx, applySideBuffer],
+  );
+
   const handleSaveSide = useCallback(
     async (side: TextSide): Promise<void> => {
       if (!summary) return;
@@ -1154,20 +1205,34 @@ export default function V2TextCompare({
       {findOpen ? (
         <V2TextFindBar
           inputRef={findInputRef}
+          replaceInputRef={replaceInputRef}
           query={findQuery}
+          replaceQuery={replaceQuery}
+          replaceOpen={replaceOpen}
+          matchCase={findMatchCase}
+          targetSide={replaceTargetSide}
           hitCount={findHits.length}
           activeHit={findIdx}
           onQueryChange={(next) => {
             setFindQuery(next);
             setFindIdx(0);
           }}
+          onReplaceQueryChange={setReplaceQuery}
+          onToggleReplaceOpen={() => setReplaceOpen((v) => !v)}
+          onToggleMatchCase={() => setFindMatchCase((v) => !v)}
+          onTargetSideChange={setReplaceTargetSide}
           onStep={(delta) => {
             if (findHits.length === 0) return;
             const next = (findIdx + delta + findHits.length) % findHits.length;
             setFindIdx(next);
             scrollToRow(findHits[next]);
           }}
-          onClose={() => setFindOpen(false)}
+          onReplaceOne={() => void handleReplace(false)}
+          onReplaceAll={() => void handleReplace(true)}
+          onClose={() => {
+            setFindOpen(false);
+            setReplaceOpen(false);
+          }}
         />
       ) : null}
 

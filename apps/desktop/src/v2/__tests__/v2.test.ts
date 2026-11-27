@@ -9,6 +9,7 @@ import {
   insertPastedText,
   joinWithNextLine,
   joinWithPreviousLine,
+  replaceInLines,
   rowIndexToSideLineIndex,
   sideLineIndexToRowIndex,
   splitLineAt,
@@ -252,5 +253,22 @@ describe("manualAlign", () => {
     const pinned = rows.find((r) => r.left === "target-A" && r.right === "target-B");
     assert.ok(pinned, "anchored lines must be paired on the same row");
     assert.equal(pinned?.kind, "changed");
+  });
+});
+
+describe("replaceInLines", () => {
+  it("replaces all or single-line occurrences respecting matchCase", () => {
+    const lines = ["Foo bar foo", "FOO baz"];
+    const ci = replaceInLines(lines, "foo", "qux", { matchCase: false });
+    assert.equal(ci.count, 3);
+    assert.deepEqual(ci.lines, ["qux bar qux", "qux baz"]);
+
+    const cs = replaceInLines(lines, "foo", "qux", { matchCase: true });
+    assert.equal(cs.count, 1);
+    assert.deepEqual(cs.lines, ["Foo bar qux", "FOO baz"]);
+
+    const single = replaceInLines(lines, "foo", "qux", { matchCase: false, onlyLineIndex: 1 });
+    assert.equal(single.count, 1);
+    assert.deepEqual(single.lines, ["Foo bar foo", "qux baz"]);
   });
 });
