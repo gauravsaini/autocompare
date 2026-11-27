@@ -5,6 +5,7 @@ import type { SyncApplyReport, SyncDirection, SyncPlan, SyncStep } from "../../i
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2EventLogBar from "../components/V2EventLogBar";
+import V2ConfirmModal from "../components/V2ConfirmModal";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import {
   appendEvent,
@@ -54,6 +55,7 @@ export default function V2SyncCompare({
   const [eventLog, setEventLog] = useState<UiEventLogState<{ prevExcluded: string[]; nextExcluded: string[]; prevDirection: SyncDirection; nextDirection: SyncDirection }>>(() => createEventLog());
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -168,11 +170,11 @@ export default function V2SyncCompare({
     });
   }, [onStatusChange, activeSteps.length, plan, excludedPaths.size, report, direction, prune]);
 
-  const handleApply = async (dryRun: boolean): Promise<void> => {
+  const handleApply = async (dryRun: boolean, skipConfirm = false): Promise<void> => {
     if (!plan || activeSteps.length === 0) return;
-    if (!dryRun) {
-      const summaryMsg = `Apply ${activeSteps.length} sync step(s)? (${breakdown.copyRight + breakdown.copyLeft} copies, ${breakdown.deletes} deletes)`;
-      if (!window.confirm(summaryMsg)) return;
+    if (!dryRun && !skipConfirm) {
+      setConfirmApplyOpen(true);
+      return;
     }
     setRunning(true);
     setError(null);
@@ -411,6 +413,20 @@ export default function V2SyncCompare({
           Reverse Direction
         </button>
       </div>
+
+      <V2ConfirmModal
+        open={confirmApplyOpen}
+        title="Apply Folder Sync"
+        subtitle={`${direction}${prune ? " · Mirror/Prune" : ""}`}
+        message={`Apply ${activeSteps.length} sync step(s)? (${breakdown.copyRight + breakdown.copyLeft} copies, ${breakdown.deletes} deletes)`}
+        confirmLabel="Sync Now"
+        destructive={breakdown.deletes > 0}
+        onConfirm={() => {
+          setConfirmApplyOpen(false);
+          void handleApply(false, true);
+        }}
+        onCancel={() => setConfirmApplyOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight } from "lucide-react";
+import {
+  MENU_SCHEMA,
+  isMenuItemChecked,
+  isMenuItemEnabled,
+  isViewAllowed,
+  type MenuEvalContext,
+} from "../menus/menuSchema";
 import { listComparators } from "../plugins/registry";
 import type { SessionKind, V2Tab, V2ViewCommands } from "../types";
 
@@ -9,27 +16,9 @@ export interface V2MenuBarProps {
   readonly showToolbar: boolean;
   readonly layoutDensity: "standard" | "compact";
   readonly theme: "light" | "dark";
-  readonly onNewSessionModal: () => void;
+  readonly onCommand: (command: string) => void;
   readonly onOpenSessionKind: (kind: SessionKind, left?: string, right?: string) => void;
-  readonly onOpenSessionManager: () => void;
-  readonly onSaveSession: () => void;
-  readonly onCloseActiveTab: () => void;
-  readonly onOpenSettings: () => void;
-  readonly onOpenFileFormats: () => void;
-  readonly onOpenProfiles: () => void;
-  readonly onOpenExportReport: () => void;
-  readonly onOpenShortcuts: () => void;
-  readonly onOpenPalette: () => void;
-  readonly onToggleToolbar: () => void;
-  readonly onToggleLayout: () => void;
-  readonly onToggleTheme: () => void;
-  readonly onExportSettings: () => void;
-  readonly onImportSettings: () => void;
-  readonly onRestoreDefaults: () => void;
-  readonly onShowToast: (msg: string) => void;
 }
-
-type MenuKey = "app" | "session" | "search" | "view" | "tools" | "help";
 
 interface MenuItemRowProps {
   readonly label: string;
@@ -76,30 +65,21 @@ export default function V2MenuBar({
   showToolbar,
   layoutDensity,
   theme,
-  onNewSessionModal,
+  onCommand,
   onOpenSessionKind,
-  onOpenSessionManager,
-  onSaveSession,
-  onCloseActiveTab,
-  onOpenSettings,
-  onOpenFileFormats,
-  onOpenProfiles,
-  onOpenExportReport,
-  onOpenShortcuts,
-  onOpenPalette,
-  onToggleToolbar,
-  onToggleLayout,
-  onToggleTheme,
-  onExportSettings,
-  onImportSettings,
-  onRestoreDefaults,
-  onShowToast,
 }: V2MenuBarProps): React.JSX.Element {
-  const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
-  const [openSub, setOpenSub] = useState<"new-session" | "compare-using" | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [openSub, setOpenSub] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const comparators = listComparators();
-  const inComparison = activeTab.kind !== "home";
+
+  const evalCtx: MenuEvalContext = {
+    activeViewId: activeTab.kind,
+    commands,
+    showToolbar,
+    layoutDensity,
+    theme,
+  };
 
   useEffect(() => {
     if (!openMenu) return;
@@ -129,15 +109,6 @@ export default function V2MenuBar({
     fn();
   };
 
-  const menus: readonly { key: MenuKey; label: string; bold?: boolean }[] = [
-    { key: "app", label: "AutoCompare", bold: true },
-    { key: "session", label: "Session" },
-    { key: "search", label: "Search" },
-    { key: "view", label: "View" },
-    { key: "tools", label: "Tools" },
-    { key: "help", label: "Help" },
-  ];
-
   return (
     <nav
       ref={navRef}
@@ -146,158 +117,99 @@ export default function V2MenuBar({
       className="relative z-30 flex h-[26px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] px-2 text-[12px] select-none"
     >
       <div className="flex items-center gap-0.5">
-        {menus.map((m) => {
-          const active = openMenu === m.key;
+        {MENU_SCHEMA.menus.map((menu) => {
+          const active = openMenu === menu.id;
           return (
-            <div key={m.key} className="relative">
+            <div key={menu.id} className="relative">
               <button
                 type="button"
-                data-testid={`v2/menu-${m.key}`}
+                data-testid={`v2/menu-${menu.id}`}
                 onClick={() => {
-                  setOpenMenu(active ? null : m.key);
+                  setOpenMenu(active ? null : menu.id);
                   setOpenSub(null);
                 }}
                 onMouseEnter={() => {
-                  if (openMenu && openMenu !== m.key) {
-                    setOpenMenu(m.key);
+                  if (openMenu && openMenu !== menu.id) {
+                    setOpenMenu(menu.id);
                     setOpenSub(null);
                   }
                 }}
                 className={`rounded-[5px] px-2 py-0.5 transition ${
-                  m.bold ? "font-semibold" : "font-normal"
+                  menu.bold ? "font-semibold" : "font-normal"
                 } ${
                   active
                     ? "bg-[var(--v2-accent)] text-white"
                     : "text-[var(--v2-fg)] hover:bg-[var(--v2-btn-hover)]"
                 }`}
               >
-                {m.label}
+                {menu.label}
               </button>
 
               {active ? (
-                <div className="absolute left-0 top-full mt-0.5 min-w-[230px] rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-1 shadow-lg">
-                  {m.key === "app" ? (
-                    <>
-                      <MenuItemRow
-                        label="About AutoCompare (Free & OSS)"
-                        onClick={() =>
-                          run(() =>
-                            onShowToast(
-                              `AutoCompare v0.5.0 · Free & Open Source · ${comparators.length} plugins loaded`,
-                            ),
-                          )
-                        }
-                      />
-                      <MenuSep />
-                      <MenuItemRow label="Settings…" shortcut="⌘," onClick={() => run(onOpenSettings)} />
-                      <MenuItemRow label="File Formats…" onClick={() => run(onOpenFileFormats)} />
-                      <MenuItemRow label="Profiles…" onClick={() => run(onOpenProfiles)} />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Install Command Line Tools…"
-                        onClick={() =>
-                          run(() => {
-                            const cmd = "cargo install --path crates/cli";
-                            void navigator.clipboard?.writeText(cmd).catch(() => undefined);
-                            onShowToast(`Copied CLI install command: ${cmd}`);
-                          })
-                        }
-                      />
-                    </>
-                  ) : null}
-
-                  {m.key === "session" ? (
-                    <>
-                      {/* Dynamic Plugin-Driven New Session Submenu */}
+                <div className="absolute left-0 top-full mt-0.5 min-w-[235px] rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-1 shadow-lg">
+                  {menu.items.map((item, idx) => {
+                    if (item.kind === "separator") {
+                      return item.nativeOnly ? null : <MenuSep key={`sep-${idx}`} />;
+                    }
+                    if (item.kind === "action") {
+                      if (item.nativeOnly) return null;
+                      const enabled = isMenuItemEnabled(item, evalCtx);
+                      const checked = isMenuItemChecked(item.checkedBy, evalCtx);
+                      return (
+                        <MenuItemRow
+                          key={item.id}
+                          label={item.label}
+                          shortcut={item.shortcutDisplay}
+                          checked={checked}
+                          disabled={!enabled}
+                          onClick={() => run(() => onCommand(item.command))}
+                        />
+                      );
+                    }
+                    // Dynamic plugin-driven submenu slot
+                    const allowed = isViewAllowed(item.requiresView, activeTab.kind);
+                    return (
                       <div
+                        key={item.id}
                         className="relative"
-                        onMouseEnter={() => setOpenSub("new-session")}
+                        onMouseEnter={() => setOpenSub(item.id)}
                       >
                         <button
                           type="button"
-                          onClick={() => run(onNewSessionModal)}
-                          className="flex w-full items-center justify-between rounded-[5px] px-2.5 py-1 text-left text-[12px] text-[var(--v2-fg)] hover:bg-[var(--v2-accent)] hover:text-white"
-                        >
-                          <span className="pl-5">New Session</span>
-                          <ChevronRight size={12} />
-                        </button>
-                        {openSub === "new-session" ? (
-                          <div className="absolute left-full top-0 ml-1 min-w-[215px] rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-1 shadow-lg">
-                            {comparators.map((plugin) => (
-                              <MenuItemRow
-                                key={plugin.id}
-                                label={plugin.title}
-                                shortcut={plugin.shortcut}
-                                onClick={() => run(() => onOpenSessionKind(plugin.id))}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <MenuItemRow label="New Tab (Grid)…" shortcut="⌘T" onClick={() => run(onNewSessionModal)} />
-                      <MenuItemRow label="Open Session…" shortcut="⌃⌘O" onClick={() => run(onOpenSessionManager)} />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Close Tab"
-                        shortcut="⌘W"
-                        disabled={!inComparison}
-                        onClick={() => run(onCloseActiveTab)}
-                      />
-                      <MenuItemRow
-                        label="Save Session"
-                        shortcut="⌘S"
-                        disabled={!inComparison}
-                        onClick={() => run(onSaveSession)}
-                      />
-                      <MenuItemRow
-                        label="Session Settings…"
-                        disabled={!commands.openRules}
-                        onClick={() => run(() => commands.openRules?.())}
-                      />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Swap Sides"
-                        disabled={!commands.swapSides}
-                        onClick={() => run(() => commands.swapSides?.())}
-                      />
-                      <MenuItemRow
-                        label="Reload Files"
-                        shortcut="⌘R"
-                        disabled={!commands.reload}
-                        onClick={() => run(() => commands.reload?.())}
-                      />
-                      <MenuItemRow
-                        label="Compare Report…"
-                        shortcut="⌘P"
-                        disabled={!inComparison}
-                        onClick={() => run(onOpenExportReport)}
-                      />
-                      <MenuSep />
-
-                      {/* Dynamic Plugin-Driven Compare Files Using Submenu */}
-                      <div
-                        className="relative"
-                        onMouseEnter={() => setOpenSub("compare-using")}
-                      >
-                        <button
-                          type="button"
-                          disabled={!inComparison}
+                          disabled={!allowed}
+                          onClick={() => {
+                            if (item.slot === "new-session-plugins") {
+                              run(() => onCommand("session_new"));
+                            }
+                          }}
                           className="flex w-full items-center justify-between rounded-[5px] px-2.5 py-1 text-left text-[12px] text-[var(--v2-fg)] hover:bg-[var(--v2-accent)] hover:text-white disabled:pointer-events-none disabled:opacity-40"
                         >
-                          <span className="pl-5">Compare Files Using</span>
+                          <span className="pl-5">{item.label}</span>
                           <ChevronRight size={12} />
                         </button>
-                        {openSub === "compare-using" && inComparison ? (
+                        {openSub === item.id && allowed ? (
                           <div className="absolute left-full top-0 ml-1 min-w-[215px] rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-1 shadow-lg">
                             {comparators.map((plugin) => (
                               <MenuItemRow
                                 key={plugin.id}
                                 label={plugin.title}
-                                checked={activeTab.kind === plugin.id}
+                                shortcut={
+                                  item.slot === "new-session-plugins" ? plugin.shortcut : undefined
+                                }
+                                checked={
+                                  item.slot === "compare-using-plugins"
+                                    ? activeTab.kind === plugin.id
+                                    : undefined
+                                }
                                 onClick={() =>
                                   run(() =>
-                                    onOpenSessionKind(plugin.id, activeTab.leftPath, activeTab.rightPath),
+                                    item.slot === "compare-using-plugins"
+                                      ? onOpenSessionKind(
+                                          plugin.id,
+                                          activeTab.leftPath,
+                                          activeTab.rightPath,
+                                        )
+                                      : onOpenSessionKind(plugin.id),
                                   )
                                 }
                               />
@@ -305,125 +217,8 @@ export default function V2MenuBar({
                           </div>
                         ) : null}
                       </div>
-                    </>
-                  ) : null}
-
-                  {m.key === "search" ? (
-                    <>
-                      <MenuItemRow
-                        label="Next Difference"
-                        shortcut="⌥↓"
-                        disabled={!commands.hasSections}
-                        onClick={() => run(() => commands.nextSection?.())}
-                      />
-                      <MenuItemRow
-                        label="Previous Difference"
-                        shortcut="⌥↑"
-                        disabled={!commands.hasSections}
-                        onClick={() => run(() => commands.prevSection?.())}
-                      />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Find…"
-                        shortcut="⌘F"
-                        disabled={!commands.openFind}
-                        onClick={() => run(() => commands.openFind?.())}
-                      />
-                      <MenuItemRow label="Command Palette…" shortcut="⌘K" onClick={() => run(onOpenPalette)} />
-                    </>
-                  ) : null}
-
-                  {m.key === "view" ? (
-                    <>
-                      <MenuItemRow
-                        label="Show All"
-                        checked={commands.filterMode === "all"}
-                        disabled={!commands.setFilterMode}
-                        onClick={() => run(() => commands.setFilterMode?.("all"))}
-                      />
-                      <MenuItemRow
-                        label="Show Differences"
-                        checked={commands.filterMode === "diffs"}
-                        disabled={!commands.setFilterMode}
-                        onClick={() => run(() => commands.setFilterMode?.("diffs"))}
-                      />
-                      <MenuItemRow
-                        label="Show Same"
-                        checked={commands.filterMode === "same"}
-                        disabled={!commands.setFilterMode}
-                        onClick={() => run(() => commands.setFilterMode?.("same"))}
-                      />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Ignore Unimportant / Minor"
-                        checked={commands.minorEnabled === true}
-                        disabled={!commands.toggleMinor}
-                        onClick={() => run(() => commands.toggleMinor?.())}
-                      />
-                      <MenuItemRow
-                        label="Context Lines"
-                        checked={commands.contextEnabled === true}
-                        disabled={!commands.toggleContext}
-                        onClick={() => run(() => commands.toggleContext?.())}
-                      />
-                      <MenuSep />
-                      <MenuItemRow label="Toolbar" checked={showToolbar} onClick={() => run(onToggleToolbar)} />
-                      <MenuItemRow
-                        label="Compact Layout"
-                        checked={layoutDensity === "compact"}
-                        onClick={() => run(onToggleLayout)}
-                      />
-                      <MenuItemRow label="Dark Mode" checked={theme === "dark"} onClick={() => run(onToggleTheme)} />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="Toggle Full Screen"
-                        onClick={() =>
-                          run(() => {
-                            if (document.fullscreenElement) {
-                              void document.exitFullscreen().catch(() => undefined);
-                            } else {
-                              void document.documentElement.requestFullscreen?.().catch(() => undefined);
-                            }
-                          })
-                        }
-                      />
-                    </>
-                  ) : null}
-
-                  {m.key === "tools" ? (
-                    <>
-                      <MenuItemRow label="Export Settings…" onClick={() => run(onExportSettings)} />
-                      <MenuItemRow label="Import Settings…" onClick={() => run(onImportSettings)} />
-                      <MenuItemRow label="Restore Factory Defaults…" onClick={() => run(onRestoreDefaults)} />
-                      <MenuSep />
-                      <MenuItemRow label="File Formats…" onClick={() => run(onOpenFileFormats)} />
-                      <MenuItemRow label="Profiles…" onClick={() => run(onOpenProfiles)} />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="View Patch / Export Report…"
-                        disabled={!inComparison}
-                        onClick={() => run(onOpenExportReport)}
-                      />
-                    </>
-                  ) : null}
-
-                  {m.key === "help" ? (
-                    <>
-                      <MenuItemRow label="Keyboard Shortcuts" shortcut="⌘/" onClick={() => run(onOpenShortcuts)} />
-                      <MenuItemRow label="Command Palette" shortcut="⌘K" onClick={() => run(onOpenPalette)} />
-                      <MenuSep />
-                      <MenuItemRow
-                        label="About AutoCompare (Free & Open Source)"
-                        onClick={() =>
-                          run(() =>
-                            onShowToast(
-                              `AutoCompare v0.5.0 · 100% Free & Open Source · ${comparators.length} comparators`,
-                            ),
-                          )
-                        }
-                      />
-                    </>
-                  ) : null}
+                    );
+                  })}
                 </div>
               ) : null}
             </div>

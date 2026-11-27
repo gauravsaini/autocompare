@@ -31,11 +31,13 @@ test("folder compare: selection bar copy and right-click context menu delete log
 
   await expect(page.getByTestId("v2/folder-view")).toContainText("L → R");
 
-  page.once("dialog", (dialog) => dialog.accept());
   await firstRow.click({ button: "right" });
   const deleteMenuBtn = page.getByRole("button", { name: "Delete Left" });
   await expect(deleteMenuBtn).toBeVisible();
   await deleteMenuBtn.click();
+
+  await expect(page.getByTestId("v2/confirm-accept")).toBeVisible();
+  await page.getByTestId("v2/confirm-accept").click();
 
   await expect(page.getByTestId("v2/folder-view")).toContainText("Deleted");
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);

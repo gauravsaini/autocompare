@@ -8,6 +8,7 @@ import {
 } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
 import V2ErrorBanner from "../components/V2ErrorBanner";
+import V2ConfirmModal from "../components/V2ConfirmModal";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2FolderRulesModal from "../components/folder/V2FolderRulesModal";
@@ -87,6 +88,10 @@ export default function V2FolderCompare({
     readonly x: number;
     readonly y: number;
     readonly entry: FolderEntryDto;
+  } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    readonly entry: FolderEntryDto;
+    readonly side: "left" | "right";
   } | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [folderRules, setFolderRules] = useState<FolderSessionRules>({
@@ -243,24 +248,30 @@ export default function V2FolderCompare({
   );
 
   const handleDeleteEntry = useCallback(
-    async (entry: FolderEntryDto, side: "left" | "right"): Promise<void> => {
+    (entry: FolderEntryDto, side: "left" | "right"): void => {
       if (!sessionId) return;
       setContextMenu(null);
-      if (!window.confirm(`Delete "${entry.relPath}" on the ${side} side?`)) return;
-      try {
-        await folderDeleteEntry(sessionId, entry.relPath, side);
-        const ts = new Date().toLocaleTimeString();
-        setLogs((prev) => [
-          ...prev.slice(-6),
-          `${ts}  Deleted ${entry.relPath} (${side})`,
-        ]);
-        await runCompare(leftDraft, rightDraft);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+      setPendingDelete({ entry, side });
     },
-    [sessionId, runCompare, leftDraft, rightDraft],
+    [sessionId],
   );
+
+  const confirmDeleteEntry = useCallback(async (): Promise<void> => {
+    if (!sessionId || !pendingDelete) return;
+    const { entry, side } = pendingDelete;
+    setPendingDelete(null);
+    try {
+      await folderDeleteEntry(sessionId, entry.relPath, side);
+      const ts = new Date().toLocaleTimeString();
+      setLogs((prev) => [
+        ...prev.slice(-6),
+        `${ts}  Deleted ${entry.relPath} (${side})`,
+      ]);
+      await runCompare(leftDraft, rightDraft);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [sessionId, pendingDelete, runCompare, leftDraft, rightDraft]);
 
   useEffect(() => {
     onRegisterCommands({
@@ -585,6 +596,21 @@ export default function V2FolderCompare({
           setFolderRules(next);
           setRulesTab(null);
         }}
+      />
+
+      <V2ConfirmModal
+        open={pendingDelete !== null}
+        title="Delete Item"
+        subtitle={pendingDelete ? `${pendingDelete.side} side` : undefined}
+        message={
+          pendingDelete
+            ? `Delete "${pendingDelete.entry.relPath}" on the ${pendingDelete.side} side?`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => void confirmDeleteEntry()}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

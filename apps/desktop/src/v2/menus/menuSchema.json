@@ -1,0 +1,369 @@
+{
+  "version": 1,
+  "menus": [
+    {
+      "id": "app",
+      "label": "AutoCompare",
+      "bold": true,
+      "items": [
+        {
+          "kind": "action",
+          "id": "app.about",
+          "command": "app_about",
+          "label": "About AutoCompare (Free & OSS)",
+          "nativeRole": "about"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "tools.settings",
+          "command": "settings_open",
+          "label": "Settings…",
+          "accelerator": "CmdOrCtrl+,",
+          "shortcutDisplay": "⌘,"
+        },
+        {
+          "kind": "action",
+          "id": "tools.file-formats",
+          "command": "file_formats_open",
+          "label": "File Formats…"
+        },
+        {
+          "kind": "action",
+          "id": "tools.profiles",
+          "command": "profiles_open",
+          "label": "Profiles…"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "app.install-cli",
+          "command": "cli_install_hint",
+          "label": "Install Command Line Tools…"
+        },
+        { "kind": "separator", "nativeOnly": true },
+        {
+          "kind": "action",
+          "id": "app.quit",
+          "command": "app_quit",
+          "label": "Quit AutoCompare",
+          "nativeRole": "quit",
+          "nativeOnly": true
+        }
+      ]
+    },
+    {
+      "id": "session",
+      "label": "Session",
+      "items": [
+        {
+          "kind": "dynamic-submenu",
+          "id": "session.new-submenu",
+          "label": "New Session",
+          "slot": "new-session-plugins"
+        },
+        {
+          "kind": "action",
+          "id": "session.new",
+          "command": "session_new",
+          "label": "New Tab (Grid)…",
+          "accelerator": "CmdOrCtrl+T",
+          "shortcutDisplay": "⌘T"
+        },
+        {
+          "kind": "action",
+          "id": "file.open-session",
+          "command": "session_load",
+          "label": "Open Session…",
+          "accelerator": "CmdOrCtrl+O",
+          "shortcutDisplay": "⌘O"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "session.close-tab",
+          "command": "tab_close",
+          "label": "Close Tab",
+          "accelerator": "CmdOrCtrl+W",
+          "shortcutDisplay": "⌘W",
+          "requiresView": "comparison"
+        },
+        {
+          "kind": "action",
+          "id": "file.save-session",
+          "command": "session_save",
+          "label": "Save Session",
+          "accelerator": "CmdOrCtrl+S",
+          "shortcutDisplay": "⌘S",
+          "requiresView": "comparison"
+        },
+        {
+          "kind": "action",
+          "id": "session.rules",
+          "command": "session_rules",
+          "label": "Session Settings…",
+          "requiresView": "comparison",
+          "requiresCapability": "openRules"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "session.take-left",
+          "command": "text_copy_left",
+          "label": "Copy Selection to Left",
+          "accelerator": "CmdOrCtrl+D",
+          "shortcutDisplay": "⌘D",
+          "requiresView": "comparison",
+          "requiresCapability": "canCopy"
+        },
+        {
+          "kind": "action",
+          "id": "session.take-right",
+          "command": "text_copy_right",
+          "label": "Copy Selection to Right",
+          "accelerator": "CmdOrCtrl+E",
+          "shortcutDisplay": "⌘E",
+          "requiresView": "comparison",
+          "requiresCapability": "canCopy"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "session.swap",
+          "command": "sides_swap",
+          "label": "Swap Sides",
+          "requiresView": "comparison",
+          "requiresCapability": "swapSides"
+        },
+        {
+          "kind": "action",
+          "id": "session.reload",
+          "command": "session_reload",
+          "label": "Reload Files",
+          "accelerator": "CmdOrCtrl+R",
+          "shortcutDisplay": "⌘R",
+          "requiresView": "comparison",
+          "requiresCapability": "reload"
+        },
+        {
+          "kind": "action",
+          "id": "session.report",
+          "command": "report_export_open",
+          "label": "Compare Report…",
+          "accelerator": "CmdOrCtrl+P",
+          "shortcutDisplay": "⌘P",
+          "requiresView": "comparison"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "dynamic-submenu",
+          "id": "session.compare-using",
+          "label": "Compare Files Using",
+          "slot": "compare-using-plugins",
+          "requiresView": "comparison"
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "label": "Search",
+      "items": [
+        {
+          "kind": "action",
+          "id": "search.next-diff",
+          "command": "diff_next",
+          "label": "Next Difference",
+          "accelerator": "Alt+Down",
+          "shortcutDisplay": "⌥↓",
+          "requiresView": "comparison",
+          "requiresCapability": "hasSections"
+        },
+        {
+          "kind": "action",
+          "id": "search.prev-diff",
+          "command": "diff_prev",
+          "label": "Previous Difference",
+          "accelerator": "Alt+Up",
+          "shortcutDisplay": "⌥↑",
+          "requiresView": "comparison",
+          "requiresCapability": "hasSections"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "session.find",
+          "command": "session_find",
+          "label": "Find…",
+          "accelerator": "CmdOrCtrl+F",
+          "shortcutDisplay": "⌘F",
+          "requiresView": "comparison",
+          "requiresCapability": "openFind"
+        },
+        {
+          "kind": "action",
+          "id": "search.palette",
+          "command": "palette_toggle",
+          "label": "Command Palette…",
+          "accelerator": "CmdOrCtrl+K",
+          "shortcutDisplay": "⌘K"
+        }
+      ]
+    },
+    {
+      "id": "view",
+      "label": "View",
+      "items": [
+        {
+          "kind": "action",
+          "id": "view.filter-all",
+          "command": "filter_all",
+          "label": "Show All",
+          "requiresView": "comparison",
+          "requiresCapability": "setFilterMode",
+          "checkedBy": "filterMode:all"
+        },
+        {
+          "kind": "action",
+          "id": "view.filter-diffs",
+          "command": "filter_diffs",
+          "label": "Show Differences",
+          "requiresView": "comparison",
+          "requiresCapability": "setFilterMode",
+          "checkedBy": "filterMode:diffs"
+        },
+        {
+          "kind": "action",
+          "id": "view.filter-same",
+          "command": "filter_same",
+          "label": "Show Same",
+          "requiresView": "comparison",
+          "requiresCapability": "setFilterMode",
+          "checkedBy": "filterMode:same"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "view.toggle-minor",
+          "command": "minor_toggle",
+          "label": "Ignore Unimportant / Minor",
+          "requiresView": "comparison",
+          "requiresCapability": "toggleMinor",
+          "checkedBy": "minorEnabled"
+        },
+        {
+          "kind": "action",
+          "id": "view.toggle-context",
+          "command": "context_toggle",
+          "label": "Context Lines",
+          "requiresView": "comparison",
+          "requiresCapability": "toggleContext",
+          "checkedBy": "contextEnabled"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "view.toggle-toolbar",
+          "command": "toolbar_toggle",
+          "label": "Toolbar",
+          "checkedBy": "showToolbar"
+        },
+        {
+          "kind": "action",
+          "id": "view.toggle-layout",
+          "command": "layout_toggle",
+          "label": "Compact Layout",
+          "checkedBy": "compactLayout"
+        },
+        {
+          "kind": "action",
+          "id": "view.toggle-theme",
+          "command": "theme_toggle",
+          "label": "Dark Mode",
+          "checkedBy": "darkMode"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "view.fullscreen",
+          "command": "fullscreen_toggle",
+          "label": "Toggle Full Screen",
+          "nativeRole": "fullscreen"
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "label": "Tools",
+      "items": [
+        {
+          "kind": "action",
+          "id": "tools.export-settings",
+          "command": "settings_export",
+          "label": "Export Settings…"
+        },
+        {
+          "kind": "action",
+          "id": "tools.import-settings",
+          "command": "settings_import",
+          "label": "Import Settings…"
+        },
+        {
+          "kind": "action",
+          "id": "tools.restore-defaults",
+          "command": "settings_restore_defaults",
+          "label": "Restore Factory Defaults…"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "tools.file-formats-alias",
+          "command": "file_formats_open",
+          "label": "File Formats…"
+        },
+        {
+          "kind": "action",
+          "id": "tools.profiles-alias",
+          "command": "profiles_open",
+          "label": "Profiles…"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "tools.view-patch",
+          "command": "report_export_open",
+          "label": "View Patch / Export Report…",
+          "requiresView": "comparison"
+        }
+      ]
+    },
+    {
+      "id": "help",
+      "label": "Help",
+      "items": [
+        {
+          "kind": "action",
+          "id": "help.shortcuts",
+          "command": "shortcuts_open",
+          "label": "Keyboard Shortcuts",
+          "accelerator": "CmdOrCtrl+/",
+          "shortcutDisplay": "⌘/"
+        },
+        {
+          "kind": "action",
+          "id": "help.palette",
+          "command": "palette_toggle",
+          "label": "Command Palette",
+          "accelerator": "CmdOrCtrl+K",
+          "shortcutDisplay": "⌘K"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
+          "id": "help.about",
+          "command": "app_about",
+          "label": "About AutoCompare (Free & Open Source)"
+        }
+      ]
+    }
+  ]
+}

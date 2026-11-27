@@ -24,6 +24,7 @@ import type { V2StatusInfo, V2ViewCommands } from "./types";
 registerBuiltinComparators();
 
 const V2Modal = lazy(() => import("./components/V2Modal"));
+const V2ConfirmModal = lazy(() => import("./components/V2ConfirmModal"));
 const V2NewSessionModal = lazy(() => import("./components/V2NewSessionModal"));
 const V2SessionManagerModal = lazy(() => import("./components/V2SessionManagerModal"));
 const V2SettingsModal = lazy(() => import("./components/V2SettingsModal"));
@@ -121,6 +122,7 @@ export default function V2App(): React.JSX.Element {
   const [exportOpen, setExportOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [restoreDefaultsConfirmOpen, setRestoreDefaultsConfirmOpen] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -190,7 +192,11 @@ export default function V2App(): React.JSX.Element {
   }, []);
 
   const handleRestoreDefaults = useCallback(() => {
-    if (!window.confirm("Restore factory default File Formats and VFS Profiles?")) return;
+    setRestoreDefaultsConfirmOpen(true);
+  }, []);
+
+  const confirmRestoreDefaults = useCallback(() => {
+    setRestoreDefaultsConfirmOpen(false);
     saveFileFormats(DEFAULT_FILE_FORMATS);
     saveVfsProfiles(DEFAULT_VFS_PROFILES);
     showToast("Restored factory default formats & profiles", 2200);
@@ -208,6 +214,183 @@ export default function V2App(): React.JSX.Element {
     },
     [tabs, closeTab],
   );
+
+  const dispatchMenuCommand = useCallback(
+    (command: string): void => {
+      const cmds = commandsRef.current;
+      const cur = activeTabRef.current;
+      switch (command) {
+        case "app_about":
+          showToast(
+            `AutoCompare v0.5.0 · 100% Free & Open Source · ${listComparators().length} plugins`,
+            2600,
+          );
+          break;
+        case "settings_open":
+          openSettings();
+          break;
+        case "file_formats_open":
+          openFileFormats();
+          break;
+        case "profiles_open":
+          openProfiles();
+          break;
+        case "cli_install_hint": {
+          const cmd = "cargo install --path crates/cli";
+          void navigator.clipboard?.writeText(cmd).catch(() => undefined);
+          showToast(`Copied CLI install command: ${cmd}`, 2600);
+          break;
+        }
+        case "session_new":
+          openNewSession();
+          break;
+        case "session_load":
+          setSessionManagerOpen(true);
+          break;
+        case "tab_close":
+          if (cur.kind !== "home") requestCloseTab(cur.id);
+          break;
+        case "session_save":
+          if (cur.kind !== "home") void handleSaveWorkspaceSession();
+          break;
+        case "session_rules":
+          cmds.openRules?.();
+          break;
+        case "text_copy_left":
+          cmds.copySelected?.();
+          break;
+        case "text_copy_right":
+          (cmds.copySelectedRight ?? cmds.copySelected)?.();
+          break;
+        case "sides_swap":
+          cmds.swapSides?.();
+          break;
+        case "session_reload":
+          cmds.reload?.();
+          break;
+        case "report_export_open":
+          if (cur.kind !== "home") setExportOpen(true);
+          break;
+        case "diff_next":
+          cmds.nextSection?.();
+          break;
+        case "diff_prev":
+          cmds.prevSection?.();
+          break;
+        case "session_find":
+          cmds.openFind?.();
+          break;
+        case "palette_toggle":
+          togglePalette();
+          break;
+        case "filter_all":
+          cmds.setFilterMode?.("all");
+          break;
+        case "filter_diffs":
+          cmds.setFilterMode?.("diffs");
+          break;
+        case "filter_same":
+          cmds.setFilterMode?.("same");
+          break;
+        case "minor_toggle":
+          cmds.toggleMinor?.();
+          break;
+        case "context_toggle":
+          cmds.toggleContext?.();
+          break;
+        case "toolbar_toggle":
+          toggleToolbar();
+          break;
+        case "layout_toggle":
+          toggleLayout();
+          break;
+        case "theme_toggle":
+          toggleTheme();
+          break;
+        case "fullscreen_toggle":
+          if (document.fullscreenElement) {
+            void document.exitFullscreen().catch(() => undefined);
+          } else {
+            void document.documentElement.requestFullscreen?.().catch(() => undefined);
+          }
+          break;
+        case "settings_export":
+          handleExportSettings();
+          break;
+        case "settings_import":
+          handleImportSettings();
+          break;
+        case "settings_restore_defaults":
+          handleRestoreDefaults();
+          break;
+        case "shortcuts_open":
+          toggleShortcuts();
+          break;
+        case "text_compare":
+          openSession("text");
+          break;
+        case "folder_compare":
+          openSession("folder");
+          break;
+        case "hex_compare":
+          openSession("hex");
+          break;
+        case "table_compare":
+          openSession("table");
+          break;
+        case "picture_compare":
+          openSession("media");
+          break;
+        case "sync_plan":
+          openSession("sync");
+          break;
+        case "merge_compare":
+          openSession("merge");
+          break;
+      }
+    },
+    [
+      activeTabRef,
+      handleExportSettings,
+      handleImportSettings,
+      handleRestoreDefaults,
+      handleSaveWorkspaceSession,
+      openFileFormats,
+      openNewSession,
+      openProfiles,
+      openSession,
+      openSettings,
+      requestCloseTab,
+      showToast,
+      toggleLayout,
+      togglePalette,
+      toggleShortcuts,
+      toggleTheme,
+      toggleToolbar,
+    ],
+  );
+
+  // Subscribe to native Tauri OS menu events so native menu.rs and V2MenuBar share one dispatcher
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void import("@tauri-apps/api/event")
+      .then((mod) =>
+        mod.listen<{ id?: string; command?: string }>("menu-event", (ev) => {
+          const cmd = ev.payload?.command;
+          if (cmd) dispatchMenuCommand(cmd);
+        }),
+      )
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [dispatchMenuCommand]);
 
   const { dropOverlay, setDropOverlay } = useV2Shortcuts({
     activeTabRef,
@@ -276,33 +459,15 @@ export default function V2App(): React.JSX.Element {
         if (files.length > 0) handleDroppedPaths(files, side);
       }}
     >
-      {/* 0. Plugin-Driven Application Menu Bar (BC Parity — Free & OSS) */}
+      {/* 0. Schema-Driven Application Menu Bar (in sync with native src-tauri/src/menu.rs) */}
       <V2MenuBar
         activeTab={activeTab}
         commands={commands}
         showToolbar={showToolbar}
         layoutDensity={layoutDensity}
         theme={theme}
-        onNewSessionModal={openNewSession}
+        onCommand={dispatchMenuCommand}
         onOpenSessionKind={openSession}
-        onOpenSessionManager={() => setSessionManagerOpen(true)}
-        onSaveSession={() => void handleSaveWorkspaceSession()}
-        onCloseActiveTab={() => {
-          if (activeTab.kind !== "home") requestCloseTab(activeTab.id);
-        }}
-        onOpenSettings={openSettings}
-        onOpenFileFormats={openFileFormats}
-        onOpenProfiles={openProfiles}
-        onOpenExportReport={() => setExportOpen(true)}
-        onOpenShortcuts={toggleShortcuts}
-        onOpenPalette={togglePalette}
-        onToggleToolbar={toggleToolbar}
-        onToggleLayout={toggleLayout}
-        onToggleTheme={toggleTheme}
-        onExportSettings={handleExportSettings}
-        onImportSettings={handleImportSettings}
-        onRestoreDefaults={handleRestoreDefaults}
-        onShowToast={(msg) => showToast(msg, 2400)}
       />
       <input
         ref={importInputRef}
@@ -641,6 +806,18 @@ export default function V2App(): React.JSX.Element {
           <V2ShortcutHelpModal
             open={shortcutsOpen}
             onClose={() => setShortcutsOpen(false)}
+          />
+        ) : null}
+        {restoreDefaultsConfirmOpen ? (
+          <V2ConfirmModal
+            open={restoreDefaultsConfirmOpen}
+            title="Restore Factory Defaults"
+            subtitle="Reset File Formats and VFS Profiles"
+            message="Restore factory default File Formats and VFS Profiles? Any custom format rules or profiles will be overwritten."
+            confirmLabel="Restore Defaults"
+            destructive
+            onConfirm={confirmRestoreDefaults}
+            onCancel={() => setRestoreDefaultsConfirmOpen(false)}
           />
         ) : null}
       </Suspense>
