@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, FolderOpen } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Edit3, FolderOpen, RotateCcw } from "lucide-react";
 import { mergeTextApply, mergeTextPlan } from "../../ipc/merge";
 import type { TextChoice, TextMergePlan, TextResolution } from "../../ipc/merge";
 import V2ErrorBanner from "../components/V2ErrorBanner";
@@ -35,6 +35,10 @@ function renderChoiceLines(
   return choice.custom.join("\n");
 }
 
+function isCustomChoice(choice: TextChoice | undefined): choice is { readonly custom: readonly string[] } {
+  return typeof choice === "object" && choice !== null && "custom" in choice;
+}
+
 export default function V2MergeCompare({
   leftPath,
   rightPath,
@@ -49,6 +53,7 @@ export default function V2MergeCompare({
 
   const [plan, setPlan] = useState<TextMergePlan | null>(null);
   const [choices, setChoices] = useState<Record<number, TextChoice>>({});
+  const [editingConflictId, setEditingConflictId] = useState<number | null>(null);
   const [outputText, setOutputText] = useState("");
   const [manualOutputEdited, setManualOutputEdited] = useState(false);
   const [selectedConflict, setSelectedConflict] = useState(0);
@@ -56,6 +61,10 @@ export default function V2MergeCompare({
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reportNote, setReportNote] = useState<string | null>(null);
+
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const paneScrollRefs = useRef<Record<string, HTMLPreElement | null>>({});
+  const syncingScrollRef = useRef(false);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -73,6 +82,7 @@ export default function V2MergeCompare({
       const p = await mergeTextPlan(bEff, lEff, rEff);
       setPlan(p);
       setChoices({});
+      setEditingConflictId(null);
       setManualOutputEdited(false);
       setSelectedConflict(0);
     } catch (e) {
@@ -108,30 +118,99 @@ export default function V2MergeCompare({
     [plan, choices],
   );
 
+  const jumpToConflict = useCallback(
+    (nextIdx: number): void => {
+      if (!plan || plan.conflicts.length === 0) return;
+      const clamped = (nextIdx + plan.conflicts.length) % plan.conflicts.length;
+      setSelectedConflict(clamped);
+      const id = plan.conflicts[clamped]?.id;
+      if (id !== undefined) {
+        cardRefs.current[id]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    },
+    [plan],
+  );
+
+  const setChoice = useCallback((id: number, choice: TextChoice): void => {
+    setManualOutputEdited(false);
+    setChoices((prev) => ({ ...prev, [id]: choice }));
+  }, []);
+
+  const applyAll = useCallback(
+    (choice: "left" | "right" | "base" | "bothLeftFirst"): void => {
+      if (!plan) return;
+      const next: Record<number, TextChoice> = {};
+      for (const c of plan.conflicts) next[c.id] = choice;
+      setManualOutputEdited(false);
+      setChoices(next);
+      setReportNote(`Applied "${choice}" to all ${plan.conflicts.length} conflict(s)`);
+    },
+    [plan],
+  );
+
+  // Sync horizontal scroll across Left | Base | Right panes within each conflict card
+  const handleSyncHorizontalScroll = useCallback((conflictId: number, sourceKey: string, scrollLeft: number): void => {
+    if (syncingScrollRef.current) return;
+    syncingScrollRef.current = true;
+    for (const side of ["left", "base", "right"] as const) {
+      const k = `${conflictId}:${side}`;
+      if (k === sourceKey) continue;
+      const el = paneScrollRefs.current[k];
+      if (el) el.scrollLeft = scrollLeft;
+    }
+    syncingScrollRef.current = false;
+  }, []);
+
+  // Keyboard shortcuts for rapid conflict resolution (Alt+1/2/3/4, Alt+N/P)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.altKey || !plan || plan.conflicts.length === 0) return;
+      const active = plan.conflicts[selectedConflict];
+      if (!active) return;
+      const key = e.key.toLowerCase();
+      if (key === "1") {
+        e.preventDefault();
+        setChoice(active.id, "left");
+      } else if (key === "2") {
+        e.preventDefault();
+        setChoice(active.id, "base");
+      } else if (key === "3") {
+        e.preventDefault();
+        setChoice(active.id, "right");
+      } else if (key === "4") {
+        e.preventDefault();
+        setChoice(active.id, "bothLeftFirst");
+      } else if (key === "n") {
+        e.preventDefault();
+        jumpToConflict(selectedConflict + 1);
+      } else if (key === "p") {
+        e.preventDefault();
+        jumpToConflict(selectedConflict - 1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [plan, selectedConflict, setChoice, jumpToConflict]);
+
   useEffect(() => {
     const count = plan?.conflicts.length ?? 0;
     onRegisterCommands({
       hasSections: count > 0,
-      prevSection: () => setSelectedConflict((i) => (count > 0 ? (i - 1 + count) % count : 0)),
-      nextSection: () => setSelectedConflict((i) => (count > 0 ? (i + 1) % count : 0)),
+      prevSection: () => jumpToConflict(selectedConflict - 1),
+      nextSection: () => jumpToConflict(selectedConflict + 1),
       swapSides: () => onPathsChange(rightDraft, leftDraft),
       reload: () => void runPlan(baseDraft, leftDraft, rightDraft),
     });
-  }, [onRegisterCommands, plan, onPathsChange, baseDraft, leftDraft, rightDraft, runPlan]);
+  }, [onRegisterCommands, plan, selectedConflict, jumpToConflict, onPathsChange, baseDraft, leftDraft, rightDraft, runPlan]);
 
   useEffect(() => {
     const total = plan?.conflictCount ?? 0;
     onStatusChange({
       left: `${total} conflict ${total === 1 ? "section" : "sections"} · ${resolvedCount} resolved`,
-      center: reportNote ?? (manualOutputEdited ? "Output manually edited" : "Live 3-way merge"),
+      center: reportNote ?? (manualOutputEdited ? "Output manually edited" : "Alt+1/2/3/4 resolve · Alt+N/P jump"),
       right: `${plan?.cleanBlockCount ?? 0} clean blocks`,
     });
   }, [onStatusChange, plan, resolvedCount, reportNote, manualOutputEdited]);
-
-  const setChoice = (id: number, choice: TextChoice): void => {
-    setManualOutputEdited(false);
-    setChoices((prev) => ({ ...prev, [id]: choice }));
-  };
 
   const handleApply = async (): Promise<void> => {
     if (!plan) return;
@@ -159,9 +238,14 @@ export default function V2MergeCompare({
     }
   };
 
-  const handleBrowse = async (which: "base" | "left" | "right"): Promise<void> => {
+  const handleBrowse = async (which: "base" | "left" | "right" | "out"): Promise<void> => {
     try {
       const mod = await import("@tauri-apps/plugin-dialog");
+      if (which === "out") {
+        const saved = await mod.save({ title: "Save Merged Output" });
+        if (typeof saved === "string" && saved) setOutPath(saved);
+        return;
+      }
       const picked = await mod.open({ multiple: false, directory: false });
       if (typeof picked === "string" && picked) {
         if (which === "base") setBaseDraft(picked);
@@ -214,7 +298,12 @@ export default function V2MergeCompare({
                 placeholder={`${label} path…`}
                 className="v2-input v2-mono min-w-0 flex-1 text-[11.5px]"
               />
-              <button type="button" onClick={() => void handleBrowse(key)} className="v2-btn px-1.5" title={`Browse ${label}`}>
+              <button
+                type="button"
+                onClick={() => void handleBrowse(key)}
+                className="v2-btn px-1.5"
+                title={`Browse ${label}`}
+              >
                 <FolderOpen size={12} />
               </button>
             </div>
@@ -222,9 +311,60 @@ export default function V2MergeCompare({
         ))}
       </form>
 
+      {/* Conflict Navigation & Bulk Resolution Bar */}
+      {plan && plan.conflicts.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-1 text-[11.5px]">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-[var(--v2-fg)]">
+              Conflict {selectedConflict + 1} / {plan.conflicts.length}
+            </span>
+            <span className="text-[var(--v2-fg-muted)]">
+              ({resolvedCount} resolved)
+            </span>
+            <button
+              type="button"
+              onClick={() => jumpToConflict(selectedConflict - 1)}
+              title="Previous Conflict (Alt+P)"
+              className="v2-btn h-[21px] px-1.5"
+            >
+              <ChevronUp size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => jumpToConflict(selectedConflict + 1)}
+              title="Next Conflict (Alt+N)"
+              className="v2-btn h-[21px] px-1.5"
+            >
+              <ChevronDown size={12} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => applyAll("left")} className="v2-btn h-[21px] text-[11px]">
+              Take All Left
+            </button>
+            <button type="button" onClick={() => applyAll("right")} className="v2-btn h-[21px] text-[11px]">
+              Take All Right
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChoices({});
+                setEditingConflictId(null);
+                setManualOutputEdited(false);
+              }}
+              title="Reset all conflict choices"
+              className="v2-btn h-[21px] px-2 text-[11px]"
+            >
+              <RotateCcw size={11} />
+              Reset
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 
-      {/* Top Bank: 3-Way Conflict Cards */}
+      {/* Top Bank: 3-Way Synchronized Conflict Cards with Inline Custom Editor */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--v2-bg)] p-3">
         {loading ? (
           <div className="flex h-full items-center justify-center text-[12px] text-[var(--v2-fg-muted)]">
@@ -240,35 +380,58 @@ export default function V2MergeCompare({
             {plan.conflicts.map((conflict, idx) => {
               const active = choices[conflict.id];
               const isSelected = idx === selectedConflict;
+              const isEditingCustom = editingConflictId === conflict.id;
+              const customLinesText = isCustomChoice(active)
+                ? active.custom.join("\n")
+                : renderChoiceLines(conflict, active);
+
               return (
                 <div
                   key={conflict.id}
+                  ref={(el) => {
+                    cardRefs.current[conflict.id] = el;
+                  }}
                   onClick={() => setSelectedConflict(idx)}
                   className={`overflow-hidden rounded-[8px] border bg-[var(--v2-surface)] shadow-xs ${
-                    isSelected ? "border-[var(--v2-accent)] ring-1 ring-[var(--v2-accent-soft)]" : "border-[var(--v2-border)]"
+                    isSelected
+                      ? "border-[var(--v2-accent)] ring-1 ring-[var(--v2-accent-soft)]"
+                      : "border-[var(--v2-border)]"
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-3 py-1.5">
-                    <span className="text-[12px] font-semibold text-[var(--v2-fg)]">
-                      Conflict #{idx + 1}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-semibold text-[var(--v2-fg)]">
+                        Conflict #{idx + 1}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          active
+                            ? "bg-[var(--v2-ins-bg)] text-[var(--v2-ins-fg)]"
+                            : "bg-[var(--v2-chg-bg)] text-[var(--v2-chg-fg)]"
+                        }`}
+                      >
+                        {active ? (isCustomChoice(active) ? "Custom" : "Resolved") : "Unresolved"}
+                      </span>
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {(
                         [
-                          ["left", "Take Left"],
-                          ["base", "Take Base"],
-                          ["right", "Take Right"],
-                          ["bothLeftFirst", "Both (L→R)"],
-                          ["bothRightFirst", "Both (R→L)"],
+                          ["left", "Take Left", "Alt+1"],
+                          ["base", "Take Base", "Alt+2"],
+                          ["right", "Take Right", "Alt+3"],
+                          ["bothLeftFirst", "Both (L→R)", "Alt+4"],
+                          ["bothRightFirst", "Both (R→L)", ""],
                         ] as const
-                      ).map(([val, label]) => {
+                      ).map(([val, label, hint]) => {
                         const picked = active === val;
                         return (
                           <button
                             key={val}
                             type="button"
+                            title={hint ? `${label} (${hint})` : label}
                             onClick={(e) => {
                               e.stopPropagation();
+                              setEditingConflictId(null);
                               setChoice(conflict.id, val);
                             }}
                             className={`v2-btn h-[22px] text-[11px] ${picked ? "v2-btn-primary" : ""}`}
@@ -278,25 +441,106 @@ export default function V2MergeCompare({
                           </button>
                         );
                       })}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isEditingCustom && !isCustomChoice(active)) {
+                            setChoice(conflict.id, {
+                              custom: renderChoiceLines(conflict, active).split("\n"),
+                            });
+                          }
+                          setEditingConflictId(isEditingCustom ? null : conflict.id);
+                        }}
+                        className={`v2-btn h-[22px] text-[11px] ${
+                          isEditingCustom || isCustomChoice(active) ? "v2-btn-primary" : ""
+                        }`}
+                      >
+                        <Edit3 size={11} />
+                        Edit Inline
+                      </button>
                     </div>
                   </div>
+
+                  {/* Synchronized 3-Pane Conflict Body */}
                   <div className="v2-mono grid grid-cols-3 text-[11.5px] leading-[19px]">
                     <pre
+                      ref={(el) => {
+                        paneScrollRefs.current[`${conflict.id}:left`] = el;
+                      }}
+                      onScroll={(e) =>
+                        handleSyncHorizontalScroll(
+                          conflict.id,
+                          `${conflict.id}:left`,
+                          e.currentTarget.scrollLeft,
+                        )
+                      }
                       className="m-0 overflow-x-auto border-r border-[var(--v2-border-subtle)] p-2.5"
                       style={{ backgroundColor: "var(--v2-del-bg)", color: "var(--v2-del-fg)" }}
                     >
                       {conflict.left.join("\n") || "(empty)"}
                     </pre>
-                    <pre className="m-0 overflow-x-auto border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface)] p-2.5 text-[var(--v2-fg-secondary)]">
+                    <pre
+                      ref={(el) => {
+                        paneScrollRefs.current[`${conflict.id}:base`] = el;
+                      }}
+                      onScroll={(e) =>
+                        handleSyncHorizontalScroll(
+                          conflict.id,
+                          `${conflict.id}:base`,
+                          e.currentTarget.scrollLeft,
+                        )
+                      }
+                      className="m-0 overflow-x-auto border-r border-[var(--v2-border-subtle)] bg-[var(--v2-surface)] p-2.5 text-[var(--v2-fg-secondary)]"
+                    >
                       {conflict.base.join("\n") || "(empty)"}
                     </pre>
                     <pre
+                      ref={(el) => {
+                        paneScrollRefs.current[`${conflict.id}:right`] = el;
+                      }}
+                      onScroll={(e) =>
+                        handleSyncHorizontalScroll(
+                          conflict.id,
+                          `${conflict.id}:right`,
+                          e.currentTarget.scrollLeft,
+                        )
+                      }
                       className="m-0 overflow-x-auto p-2.5"
                       style={{ backgroundColor: "var(--v2-ins-bg)", color: "var(--v2-ins-fg)" }}
                     >
                       {conflict.right.join("\n") || "(empty)"}
                     </pre>
                   </div>
+
+                  {/* Per-Conflict Inline Custom Resolution Editor */}
+                  {isEditingCustom ? (
+                    <div className="border-t border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] p-2.5">
+                      <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--v2-fg-secondary)]">
+                        <span className="font-medium">Custom resolution for Conflict #{idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingConflictId(null);
+                          }}
+                          className="v2-btn h-[20px] px-2 text-[10.5px]"
+                        >
+                          Done
+                        </button>
+                      </div>
+                      <textarea
+                        value={customLinesText}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          setChoice(conflict.id, { custom: e.target.value.split("\n") })
+                        }
+                        rows={Math.max(3, Math.min(10, customLinesText.split("\n").length + 1))}
+                        spellCheck={false}
+                        className="v2-input v2-mono h-auto w-full resize-y py-1.5 text-[11.5px] leading-[18px]"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -310,7 +554,7 @@ export default function V2MergeCompare({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--v2-fg-secondary)]">
             Merged Output (Editable)
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <input
               type="text"
               value={outPath}
@@ -318,6 +562,14 @@ export default function V2MergeCompare({
               placeholder="Output file path…"
               className="v2-input v2-mono w-64 text-[11.5px]"
             />
+            <button
+              type="button"
+              onClick={() => void handleBrowse("out")}
+              title="Choose output file"
+              className="v2-btn px-1.5"
+            >
+              <FolderOpen size={12} />
+            </button>
             <button
               type="button"
               disabled={applying}
