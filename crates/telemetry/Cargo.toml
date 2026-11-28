@@ -1,0 +1,16 @@
+[package]
+name = "autocompare-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ODD telemetry/v1 primitives: trace context, sampling, redaction, emitters, sinks"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+sha2 = "0.10"
+getrandom = "0.3"

@@ -9,6 +9,7 @@ members = [
     "crates/sessions",
     "crates/reports",
     "crates/server",
+    "crates/telemetry",
     "apps/desktop/src-tauri",
     "xtask",
 ]
