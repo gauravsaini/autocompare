@@ -132,6 +132,18 @@ pub enum TraceAction {
         #[arg(long)]
         dir: Option<PathBuf>,
     },
+    /// Summarize agent feed-in loop usage (ODD loop dogfood dashboard).
+    Agents {
+        /// Telemetry root override (`<support-dir>/telemetry` by default).
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit stable snake_case machine JSON instead of human text.
+        #[arg(long)]
+        json: bool,
+        /// Write a self-contained offline HTML dashboard to this path.
+        #[arg(long)]
+        html: Option<PathBuf>,
+    },
 }
 
 /// One parsed JSONL line with its provenance.
@@ -1329,5 +1341,6 @@ pub fn run(action: &TraceAction, _color: bool) -> Result<Outcome, CliError> {
         TraceAction::Diagnose { trace_id, json, dir } => {
             crate::diagnose::run_diagnose(trace_id, *json, dir)
         }
+        TraceAction::Agents { dir, json, html } => crate::agents::run_agents(dir, *json, html),
     }
 }

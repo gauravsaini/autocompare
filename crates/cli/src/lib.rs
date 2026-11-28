@@ -5,6 +5,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod agents;
 pub mod args;
 pub mod bcomp;
 pub mod diagnose;
