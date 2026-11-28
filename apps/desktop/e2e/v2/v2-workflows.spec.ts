@@ -137,7 +137,7 @@ test("folder sync: per-row exclude updates active count and Dry Run previews pla
     await view.getByRole("button", { name: "Include All" }).click();
   }
   await view.getByRole("button", { name: "Dry Run" }).click();
-  await expect(view).toContainText("Dry-Run Preview:");
+  await expect(view).toContainText(/Dry-Run Preview:\s*\d+ copies,\s*\d+ deletes/);
   await expect(page.getByTestId("v2/error-banner")).toHaveCount(0);
 });
 

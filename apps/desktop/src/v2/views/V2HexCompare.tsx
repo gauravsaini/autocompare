@@ -343,7 +343,7 @@ export default function V2HexCompare({
           : `Window 0x${offset.toString(16).toUpperCase().padStart(8, "0")} · Double-click any byte to edit`),
       right: summary ? `${summary.leftSize} B / ${summary.rightSize} B` : "",
     });
-  }, [onStatusChange, summary, offset, byteEdits.size]);
+  }, [onStatusChange, summary, offset, byteEdits.size, notice]);
 
   const handleFindHex = async (): Promise<void> => {
     if (!summary || !findHex.trim()) return;

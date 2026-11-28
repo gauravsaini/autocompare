@@ -8,6 +8,7 @@ import {
   sortSessionsWithPins,
   togglePinnedId,
 } from "../utils/sessionPrefs";
+import { resolveComparatorId } from "../plugins/registry";
 import V2Modal from "./V2Modal";
 import type { SessionKind } from "../types";
 
@@ -17,17 +18,6 @@ export interface V2SessionManagerModalProps {
   readonly onOpenSession: (kind: SessionKind, left?: string, right?: string, title?: string) => void;
   readonly onSessionsChanged?: () => void;
 }
-
-const KIND_MAP: Record<string, SessionKind> = {
-  text: "text",
-  folder: "folder",
-  table: "table",
-  hex: "hex",
-  merge: "merge",
-  foldermerge: "folderMerge",
-  sync: "sync",
-  media: "media",
-};
 
 export default function V2SessionManagerModal({
   open,
@@ -79,7 +69,7 @@ export default function V2SessionManagerModal({
     try {
       const doc = await sessionLoad(entry.id);
       const first = doc.tabs[0];
-      const kind = KIND_MAP[(first?.session_type ?? "text").toLowerCase()] ?? "text";
+      const kind = resolveComparatorId(first?.session_type);
       onOpenSession(
         kind,
         first?.left_path ?? "",

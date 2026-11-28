@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Globe, Minus, Plus } from "lucide-react";
 import V2Modal from "./V2Modal";
 import {
@@ -31,6 +31,14 @@ export default function V2ProfilesModal({
   const [profiles, setProfiles] = useState<VfsProfileEntry[]>(() => loadVfsProfiles());
   const [selectedId, setSelectedId] = useState<string>(() => profiles[0]?.id ?? "default");
   const [tab, setTab] = useState<ProfileTab>("global");
+
+  useEffect(() => {
+    if (!open) return;
+    const loaded = loadVfsProfiles();
+    setProfiles(loaded);
+    setSelectedId(loaded[0]?.id ?? "default");
+    setTab("global");
+  }, [open]);
 
   const selected = profiles.find((p) => p.id === selectedId) ?? profiles[0];
 
@@ -148,7 +156,7 @@ export default function V2ProfilesModal({
                   onClick={() => setTab(id)}
                   className={`rounded-lg px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
                     tab === id
-                      ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                      ? "bg-[var(--v2-accent-fill)] text-[var(--v2-accent-fg)] shadow-sm"
                       : "text-[var(--v2-fg-muted)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
                   }`}
                 >

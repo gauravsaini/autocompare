@@ -195,6 +195,7 @@ function SeamlessLineInput({
     <input
       ref={ref}
       type="text"
+      aria-label="Diff line editor"
       spellCheck={false}
       autoComplete="off"
       value={value}
@@ -219,6 +220,15 @@ function SeamlessLineInput({
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
           onArrowVertical(1, start);
+        } else if (e.key === "Home" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          el.setSelectionRange(0, e.shiftKey ? end : 0);
+          onCaretMove(0);
+        } else if (e.key === "End" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          const len = el.value.length;
+          el.setSelectionRange(e.shiftKey ? start : len, len);
+          onCaretMove(len);
         } else if (e.key === "Escape") {
           el.blur();
         }

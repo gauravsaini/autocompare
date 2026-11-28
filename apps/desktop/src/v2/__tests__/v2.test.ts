@@ -446,12 +446,33 @@ describe("ComparatorPluginRegistry", () => {
       priority: 10,
       component: Dummy,
     });
-    assert.equal(listComparators().length, 2);
+    registerComparator({
+      id: "folderMerge",
+      title: "3-Way Folder Merge",
+      subtitle: "Merge trees",
+      accent: "#ea580c",
+      icon: Dummy,
+      component: Dummy,
+    });
+    registerComparator({
+      id: "toml-xml",
+      title: "TOML / XML Diff",
+      subtitle: "Key paths",
+      accent: "#0d9488",
+      icon: Dummy,
+      extensions: [".toml", ".xml"],
+      priority: 15,
+      component: Dummy,
+    });
+    assert.equal(listComparators().length, 4);
     assert.equal(getComparator("structured")?.title, "JSON / YAML Diff");
     assert.equal(inferComparatorForPaths(["/tmp/config.yaml"]), "structured");
+    assert.equal(inferComparatorForPaths(["/tmp/cargo.toml"]), "toml-xml");
     assert.equal(inferComparatorForPaths(["/tmp/data.csv"]), "table");
     assert.equal(inferComparatorForPaths(["/tmp/my_folder/"]), "folder");
     assert.equal(resolveComparatorId("STRUCTURED"), "structured");
+    assert.equal(resolveComparatorId("toml-xml"), "toml-xml");
+    assert.equal(resolveComparatorId("foldermerge"), "folderMerge");
     assert.equal(resolveComparatorId("unknown"), "text");
   });
 });

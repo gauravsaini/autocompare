@@ -75,9 +75,6 @@ export default function V2NewSessionModal({
     else setDraftRight(picked);
   };
 
-  // Span the last two cards across 2 columns on desktop when a 2-column-per-row or 4-col grid has a 2-item final row
-  const spanLastTwo = filtered.length >= 6 && filtered.length % 2 === 0 && filtered.length % 3 === 1;
-
   return (
     <V2Modal
       open={open}
@@ -183,7 +180,7 @@ export default function V2NewSessionModal({
                   selected
                     ? "border-[var(--v2-accent)] bg-[var(--v2-accent-soft)]/70 ring-1 ring-[var(--v2-accent)]"
                     : "border-[var(--v2-border)] bg-[var(--v2-surface)] hover:border-[var(--v2-accent)]/50 hover:shadow-sm"
-                } ${spanLastTwo ? "" : ""}`}
+                }`}
               >
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
@@ -210,7 +207,7 @@ export default function V2NewSessionModal({
                         </span>
                       ) : null}
                       {selected ? (
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--v2-accent)] text-white">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--v2-accent-fill)] text-white">
                           <Check size={10} strokeWidth={3} />
                         </span>
                       ) : null}

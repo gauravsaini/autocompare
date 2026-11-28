@@ -1287,21 +1287,28 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       return { steps, skipped: [], truncated: false } as unknown as T;
     }
     case "sync_apply": {
-      const steps = dumped.folderNodes
+      const passedPlan = args["plan"] as { steps?: ReadonlyArray<{ action?: string }> } | undefined;
+      const fallbackSteps = dumped.folderNodes
         .filter((node) => node.status !== "same")
         .map((node) => ({
           rel_path: node.relPath,
           is_dir: node.isDir,
           action: node.left === null ? "CopyToLeft" : "CopyToRight",
         }));
-      const copies = steps.length;
+      const steps = Array.isArray(passedPlan?.steps) ? passedPlan.steps : fallbackSteps;
+      let copies = 0;
+      let deletes = 0;
+      for (const step of steps) {
+        if (step.action === "DeleteRight" || step.action === "DeleteLeft") deletes += 1;
+        else copies += 1;
+      }
       const dry = args["dry_run"] === true || args["dryRun"] === true;
       return {
-        dry_run: dry,
+        dryRun: dry,
         copied: dry ? 0 : copies,
-        deleted: 0,
-        planned_copies: dry ? copies : 0,
-        planned_deletes: 0,
+        deleted: dry ? 0 : deletes,
+        plannedCopies: dry ? copies : 0,
+        plannedDeletes: dry ? deletes : 0,
         failed: [],
       } as unknown as T;
     }

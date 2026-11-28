@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, FileCode, Minus, Plus } from "lucide-react";
 import V2Modal from "./V2Modal";
 import {
@@ -24,6 +24,14 @@ export default function V2FileFormatsModal({
   const [formats, setFormats] = useState<FileFormatEntry[]>(() => loadFileFormats());
   const [selectedId, setSelectedId] = useState<string>(() => formats[0]?.id ?? "json");
   const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const loaded = loadFileFormats();
+    setFormats(loaded);
+    setSelectedId(loaded[0]?.id ?? "json");
+    setNote(null);
+  }, [open]);
 
   const selected = formats.find((f) => f.id === selectedId) ?? formats[0];
   const selectedIdx = formats.findIndex((f) => f.id === selected?.id);
@@ -142,6 +150,7 @@ export default function V2FileFormatsModal({
                 >
                   <input
                     type="checkbox"
+                    aria-label={`Enable ${fmt.name}`}
                     checked={fmt.enabled}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) =>

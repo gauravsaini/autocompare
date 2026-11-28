@@ -702,14 +702,17 @@ export default function V2TextCompare({
             const text = (side === "left" ? rowObj?.left : rowObj?.right) ?? "";
             setSelectionAnchor(targetRow);
             setSelectedIndex(targetRow);
-            setActiveEdit((prev) => ({
-              rowIndex: targetRow,
-              side,
-              text,
-              original: text,
-              col: focusTarget.col,
-              focusNonce: (prev?.focusNonce ?? 0) + 1,
-            }));
+            setActiveEdit((prev) => {
+              const keepNewer = prev && prev.side === side && prev.text !== nextLines[focusTarget.sideLineIdx];
+              return {
+                rowIndex: targetRow,
+                side,
+                text: keepNewer ? prev.text : text,
+                original: text,
+                col: keepNewer ? prev.col : focusTarget.col,
+                focusNonce: (prev?.focusNonce ?? 0) + 1,
+              };
+            });
           } else {
             setActiveEdit(null);
           }
@@ -1358,7 +1361,11 @@ export default function V2TextCompare({
             </div>
           ) : paneOrientation === "over-under" ? (
             <div className="v2-mono flex h-full flex-col divide-y divide-[var(--v2-border)] text-[12px] leading-[21px]">
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div
+                tabIndex={0}
+                aria-label="Top left pane diff rows"
+                className="min-h-0 flex-1 overflow-auto outline-none"
+              >
                 <div className="sticky top-0 z-10 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-0.5 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
                   Top Pane (Left): {leftDraft || "Left"}
                 </div>
@@ -1378,7 +1385,11 @@ export default function V2TextCompare({
                   );
                 })}
               </div>
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div
+                tabIndex={0}
+                aria-label="Bottom right pane diff rows"
+                className="min-h-0 flex-1 overflow-auto outline-none"
+              >
                 <div className="sticky top-0 z-10 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-0.5 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
                   Bottom Pane (Right): {rightDraft || "Right"}
                 </div>
@@ -1467,7 +1478,7 @@ export default function V2TextCompare({
           <button
             type="button"
             onClick={() => startAlignWith(contextMenu.rowIndex, contextMenu.side)}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent-fill)] hover:text-white"
           >
             <span>Align With…</span>
             <span className="v2-mono text-[10.5px] opacity-65">F7</span>
@@ -1478,7 +1489,7 @@ export default function V2TextCompare({
               void handleCopyLine(contextMenu.rowIndex, "left");
               setContextMenu(null);
             }}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent-fill)] hover:text-white"
           >
             <span>Copy Line Left → Right</span>
           </button>
@@ -1488,7 +1499,7 @@ export default function V2TextCompare({
               void handleCopyLine(contextMenu.rowIndex, "right");
               setContextMenu(null);
             }}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent-fill)] hover:text-white"
           >
             <span>Copy Line Right → Left</span>
           </button>
