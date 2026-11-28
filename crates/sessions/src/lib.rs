@@ -35,7 +35,7 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SessionError
     }
     Ok(())
 }
-pub use event_log::{SessionEvent, SessionEventKind, SessionEventLog, SessionReplayState};
+pub use event_log::{SessionEvent, SessionEventKind, SessionEventLog, SessionReplayState, normalize_trace_id};
 pub use options::{
     AudioCompareOptions, FolderCompareOptions, HexCompareOptions, MergeCompareOptions,
     PictureCompareOptions, SyncCompareOptions, TableCompareOptions, TextCompareOptions,

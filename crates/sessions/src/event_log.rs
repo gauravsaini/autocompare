@@ -77,8 +77,30 @@ pub struct SessionEvent {
     pub timestamp_epoch_ms: u64,
     /// Identifier of the session owning this event.
     pub session_id: String,
+    /// ODD Phase 7 trace linkage: telemetry/v1 `trace_id` (32 lowercase
+    /// hex chars) joining this domain event to its execution trace.
+    ///
+    /// `None` when telemetry is off. `skip_serializing_if` keeps the JSON
+    /// shape byte-identical to pre-trace logs whenever no trace is linked;
+    /// `default` keeps old `.jsonl` lines (without the key) loadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
     /// Event payload.
     pub kind: SessionEventKind,
+}
+
+/// Returns the canonical form of a candidate `trace_id`: `Some` when `id`
+/// is exactly 32 lowercase-or-uppercase hex chars, `None` otherwise.
+///
+/// Malformed input normalizes to `None` so callers store no linkage rather
+/// than a corrupt join key.
+#[must_use]
+pub fn normalize_trace_id(id: &str) -> Option<String> {
+    if id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Some(id.to_string())
+    } else {
+        None
+    }
 }
 
 /// Deterministic projection produced by replaying active events in a [`SessionEventLog`].
@@ -129,7 +151,25 @@ impl SessionEventLog {
     ///
     /// If the user previously undid one or more events, the undone redo tail is
     /// truncated before appending (standard linear undo/redo semantics).
+    ///
+    /// Records no trace linkage (telemetry-off shape). Use
+    /// [`append_with_trace`](Self::append_with_trace) to join the event to an
+    /// execution trace.
     pub fn append(&mut self, kind: SessionEventKind) -> &SessionEvent {
+        self.append_with_trace(kind, None)
+    }
+
+    /// Appends a new event at the current cursor, linked to `trace_id` when
+    /// `Some` holds a valid 32-hex-char telemetry/v1 trace id.
+    ///
+    /// Malformed ids normalize to no linkage ([`normalize_trace_id`]), so
+    /// the stored JSON shape stays byte-identical to [`append`](Self::append)
+    /// output whenever telemetry is off or the id is unusable.
+    pub fn append_with_trace(
+        &mut self,
+        kind: SessionEventKind,
+        trace_id: Option<&str>,
+    ) -> &SessionEvent {
         if self.cursor < self.events.len() {
             self.events.truncate(self.cursor);
         }
@@ -141,11 +181,13 @@ impl SessionEventLog {
             .duration_since(UNIX_EPOCH)
             .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
             .unwrap_or(0);
+        let linked = trace_id.and_then(normalize_trace_id);
 
         self.events.push(SessionEvent {
             seq: next_seq,
             timestamp_epoch_ms: now_ms,
             session_id: self.session_id.clone(),
+            trace_id: linked,
             kind,
         });
         self.cursor = self.events.len();
@@ -303,6 +345,7 @@ fn unreachable_fallback(events: &[SessionEvent]) -> &SessionEvent {
         seq: 0,
         timestamp_epoch_ms: 0,
         session_id: String::new(),
+        trace_id: None,
         kind: SessionEventKind::CustomAction {
             action: "noop".to_string(),
             payload: Value::Null,
@@ -385,5 +428,69 @@ mod tests {
         let parsed = SessionEventLog::from_jsonl("sess-jsonl", &jsonl).expect("from_jsonl");
         let state = parsed.replay();
         assert_eq!(state.sync_applied, vec!["copy_to_right:src/main.rs"]);
+    }
+
+    #[test]
+    fn trace_absent_when_telemetry_off_keeps_byte_identical_shape() {
+        let mut log = SessionEventLog::new("sess-trace-off");
+        log.append(SessionEventKind::PathsChanged {
+            left: "/a/left.txt".to_string(),
+            right: "/b/right.txt".to_string(),
+            base: None,
+        });
+
+        let jsonl = log.to_jsonl().expect("to_jsonl");
+        // No linkage key anywhere: byte-identical JSON shape to pre-trace logs.
+        assert!(!jsonl.contains("trace_id"));
+        let value: Value = serde_json::from_str(jsonl.trim()).expect("line json");
+        assert!(value.get("trace_id").is_none());
+
+        // Old lines (no trace_id key) still load with None linkage.
+        let parsed = SessionEventLog::from_jsonl("sess-trace-off", &jsonl).expect("from_jsonl");
+        assert_eq!(parsed.active_events().len(), 1);
+        assert_eq!(parsed.active_events()[0].trace_id, None);
+    }
+
+    #[test]
+    fn trace_id_round_trips_and_leaves_replay_untouched() {
+        let trace = "0123456789abcdef0123456789abcdef";
+        let mut log = SessionEventLog::new("sess-traced");
+        log.append_with_trace(
+            SessionEventKind::OptionChanged {
+                key: "ignore_whitespace".to_string(),
+                previous: json!(false),
+                next: json!(true),
+            },
+            Some(trace),
+        );
+
+        let jsonl = log.to_jsonl().expect("to_jsonl");
+        assert!(jsonl.contains(trace));
+
+        let parsed = SessionEventLog::from_jsonl("sess-traced", &jsonl).expect("from_jsonl");
+        assert_eq!(parsed.active_events().len(), 1);
+        assert_eq!(
+            parsed.active_events()[0].trace_id.as_deref(),
+            Some(trace)
+        );
+        // Linkage never affects the deterministic replay projection.
+        let state = parsed.replay();
+        assert_eq!(state.applied_count, 1);
+        assert_eq!(state.options.get("ignore_whitespace"), Some(&json!(true)));
+
+        // Malformed ids normalize to no linkage (absent key, not null).
+        assert_eq!(normalize_trace_id("zz"), None);
+        assert_eq!(normalize_trace_id(""), None);
+        let mut bad = SessionEventLog::new("sess-bad-trace");
+        bad.append_with_trace(
+            SessionEventKind::PathsChanged {
+                left: "l".to_string(),
+                right: "r".to_string(),
+                base: None,
+            },
+            Some("not-a-trace-id"),
+        );
+        let bad_jsonl = bad.to_jsonl().expect("to_jsonl");
+        assert!(!bad_jsonl.contains("trace_id"));
     }
 }

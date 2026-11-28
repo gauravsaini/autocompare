@@ -11,6 +11,7 @@ use autocompare_compare::{
     compare_table_files, compare_text_files, plan_sync,
 };
 use autocompare_diff::Op;
+use autocompare_telemetry::{Sampling, TraceContext, redact};
 use autocompare_vfs::registry::VfsRegistry;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -52,6 +53,141 @@ fn req_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, String> {
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| format!("missing string parameter '{key}'"))
+}
+
+/// ODD Phase 7: maps an RPC method name to its telemetry op.
+///
+/// The four engine ops join the registry in `telemetry/schema/v1/ops.json`;
+/// everything else is namespaced under `server.` so op names stay
+/// free-form but collision-free.
+#[must_use]
+pub fn op_for_method(method: &str) -> String {
+    match method {
+        "compare_text" => "text.compare".to_string(),
+        "compare_table" => "table.compare".to_string(),
+        "compare_folders" => "folder.compare".to_string(),
+        "plan_sync" => "sync.plan".to_string(),
+        "ping" | "health" => "server.health".to_string(),
+        _ => format!("server.{}", method.replace('_', ".")),
+    }
+}
+
+/// Process-unique salt for path hashing: stable in-process so one run
+/// correlates, never persisted anywhere. Mirrors the compare crate's salt
+/// convention so tokens stay opaque across crates.
+fn odd_server_salt() -> String {
+    format!("odd-server-v1-{}", std::process::id())
+}
+
+/// Opaque token for a path-like RPC parameter. The raw value never leaves
+/// the process.
+fn odd_path_token(value: &str) -> String {
+    redact::hash_path(value, &odd_server_salt())
+}
+
+/// ODD Phase 7: derives a child trace context for one RPC request.
+///
+/// Prefers the W3C `traceparent` header, falls back to the Tauri-style
+/// `__trace` envelope inside `params` (the HTTP client sends both).
+/// Returns `None` when telemetry is disabled or no valid context was
+/// supplied — in which case handling and serialized shapes are unchanged.
+#[must_use]
+pub fn resolve_trace_context(traceparent: Option<&str>, params: &Value) -> Option<TraceContext> {
+    if !Sampling::enabled() {
+        return None;
+    }
+    if let Some(header) = traceparent {
+        if let Some(parent) = TraceContext::from_traceparent(header.trim()) {
+            return Some(parent.child());
+        }
+    }
+    if let Some(parent) = TraceContext::from_envelope(params) {
+        return Some(parent.child());
+    }
+    None
+}
+
+/// ODD Phase 7: builds a redaction-safe attribute map for one RPC request.
+///
+/// Contains the method/op names, sorted parameter keys, opaque tokens for
+/// path-like parameters, and byte counts for inline content — never raw
+/// paths, tokens, or file contents.
+#[must_use]
+pub fn redacted_summary(method: &str, params: &Value) -> Value {
+    let mut keys: Vec<String> = Vec::new();
+    if let Some(obj) = params.as_object() {
+        for key in obj.keys() {
+            keys.push(key.clone());
+        }
+    }
+    keys.sort();
+
+    let mut paths = serde_json::Map::new();
+    for key in ["left", "right", "path", "uri", "base"] {
+        if let Some(raw) = params.get(key).and_then(Value::as_str) {
+            paths.insert(key.to_string(), Value::from(odd_path_token(raw)));
+        }
+    }
+    let content_bytes = params
+        .get("content")
+        .and_then(Value::as_str)
+        .map(|c| Value::from(c.len() as u64));
+
+    let mut summary = serde_json::Map::new();
+    summary.insert("method".to_string(), Value::from(method));
+    summary.insert("op".to_string(), Value::from(op_for_method(method)));
+    let key_values: Vec<Value> = keys.iter().map(|k| Value::from(k.as_str())).collect();
+    summary.insert("param_keys".to_string(), Value::from(key_values));
+    summary.insert("paths".to_string(), Value::Object(paths));
+    if let Some(bytes) = content_bytes {
+        summary.insert("content_bytes".to_string(), bytes);
+    }
+    Value::Object(summary)
+}
+
+/// ODD Phase 7: enters the per-request server span for `method`.
+///
+/// All span fields come from [`redacted_summary`]: op/method names plus
+/// opaque trace ids and path tokens only.
+pub fn enter_request_span(ctx: &TraceContext, method: &str, params: &Value) -> tracing::span::EnteredSpan {
+    let envelope = ctx.to_envelope();
+    let trace_id = envelope
+        .get("trace_id")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let span_id = envelope
+        .get("span_id")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let summary = redacted_summary(method, params);
+    tracing::info_span!(
+        "server.rpc",
+        op = %op_for_method(method),
+        method = %method,
+        trace_id = ?trace_id,
+        span_id = ?span_id,
+        summary = ?summary,
+        component = "rs.server/rpc"
+    )
+    .entered()
+}
+
+/// ODD Phase 7: injects the `__trace` echo into an object result so the
+/// HTTP client can correlate the response to its outgoing span (the same
+/// contract as the Tauri `trace_echo` DTO field).
+///
+/// Non-object results and `None` contexts pass through untouched, keeping
+/// serialized shapes byte-identical whenever telemetry is off.
+#[must_use]
+pub fn with_trace_echo(result: Value, ctx: Option<&TraceContext>) -> Value {
+    let Some(ctx) = ctx else {
+        return result;
+    };
+    let mut result = result;
+    if let Some(obj) = result.as_object_mut() {
+        obj.insert("__trace".to_string(), ctx.to_envelope());
+    }
+    result
 }
 
 /// Dispatches an RPC command to the AutoCompare core crates.
@@ -222,6 +358,82 @@ pub fn dispatch_rpc(method: &str, params: &Value) -> Result<Value, String> {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn traceparent_propagates_to_child_with_same_trace() {
+        use autocompare_telemetry::TraceContext;
+
+        // Header path: child shares the trace, mints a fresh span.
+        let parent = TraceContext::fresh(true);
+        let header = parent.to_traceparent();
+        let params = json!({});
+        let child = resolve_trace_context(Some(&header), &params).expect("child");
+        assert_eq!(child.trace_id, parent.trace_id);
+        assert_ne!(child.span_id, parent.span_id);
+
+        // Envelope fallback path (Tauri-style __trace in params).
+        let via_envelope = resolve_trace_context(
+            None,
+            &json!({ "__trace": parent.to_envelope() }),
+        )
+        .expect("envelope child");
+        assert_eq!(via_envelope.trace_id, parent.trace_id);
+
+        // Header wins over envelope when both are present.
+        let other = TraceContext::fresh(true);
+        let both = resolve_trace_context(
+            Some(&header),
+            &json!({ "__trace": other.to_envelope() }),
+        )
+        .expect("both");
+        assert_eq!(both.trace_id, parent.trace_id);
+
+        // Absent or malformed input yields no span (shapes unchanged).
+        assert!(resolve_trace_context(None, &json!({})).is_none());
+        assert!(resolve_trace_context(Some("bogus"), &json!({})).is_none());
+        assert!(
+            resolve_trace_context(None, &json!({ "__trace": { "trace_id": "zz" } })).is_none()
+        );
+    }
+
+    #[test]
+    fn redacted_summary_never_carries_raw_values() {
+        let params = json!({
+            "left": "/secret/home/left.txt",
+            "right": "/secret/home/right.txt",
+            "content": "super-secret-bytes",
+            "ignore_case": true,
+        });
+        let summary = redacted_summary("compare_text", &params);
+        let flat = summary.to_string();
+        assert!(!flat.contains("/secret/home"));
+        assert!(!flat.contains("super-secret-bytes"));
+        assert_eq!(
+            summary.get("op").and_then(Value::as_str),
+            Some("text.compare")
+        );
+        // Opaque tokens + shapes survive redaction.
+        let paths = summary.get("paths").expect("paths");
+        assert!(paths.get("left").and_then(Value::as_str).is_some_and(|t| t.starts_with("p_")));
+        assert_eq!(
+            summary.get("content_bytes").and_then(Value::as_u64),
+            Some(18)
+        );
+
+        // Registry joins for the engine ops, namespaced fallback otherwise.
+        assert_eq!(op_for_method("compare_folders"), "folder.compare");
+        assert_eq!(op_for_method("plan_sync"), "sync.plan");
+        assert_eq!(op_for_method("vfs_list_dir"), "server.vfs.list.dir");
+
+        // Trace echo only touches object results with a live context.
+        use autocompare_telemetry::TraceContext;
+        let ctx = TraceContext::fresh(true);
+        let echoed = with_trace_echo(json!({"ok": true}), Some(&ctx));
+        assert!(echoed.get("__trace").is_some());
+        assert!(with_trace_echo(json!({"ok": true}), None).get("__trace").is_none());
+        let scalar = with_trace_echo(json!(42), Some(&ctx));
+        assert_eq!(scalar, json!(42));
+    }
 
     #[test]
     fn dispatches_compare_text_table_folder_and_plan_sync() {
