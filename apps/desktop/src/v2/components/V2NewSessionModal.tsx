@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Check, FolderOpen, Search, X } from "lucide-react";
 import V2Modal from "./V2Modal";
 import { listComparators } from "../plugins/registry";
@@ -40,6 +40,20 @@ export default function V2NewSessionModal({
       return hay.includes(q);
     });
   }, [comparators, query]);
+
+  useEffect(() => {
+    if (filtered.length > 0 && !filtered.some((p) => p.id === draftKind)) {
+      setDraftKind(filtered[0].id);
+    }
+  }, [filtered, draftKind]);
+
+  const stepSelection = (delta: number): void => {
+    if (filtered.length === 0) return;
+    const curIdx = filtered.findIndex((p) => p.id === draftKind);
+    const base = curIdx >= 0 ? curIdx : 0;
+    const nextIdx = (base + delta + filtered.length) % filtered.length;
+    setDraftKind(filtered[nextIdx].id);
+  };
 
   const handleOpen = (kind: SessionKind): void => {
     onCreate(kind, draftLeft.trim(), draftRight.trim());
@@ -116,9 +130,22 @@ export default function V2NewSessionModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && filtered.length > 0) {
+              if (e.key === "ArrowRight") {
                 e.preventDefault();
-                handleOpen(filtered[0].id);
+                stepSelection(1);
+              } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                stepSelection(-1);
+              } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                stepSelection(2);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                stepSelection(-2);
+              } else if (e.key === "Enter" && filtered.length > 0) {
+                e.preventDefault();
+                const target = filtered.some((p) => p.id === draftKind) ? draftKind : filtered[0].id;
+                handleOpen(target);
               }
             }}
             placeholder="Filter comparators (e.g. text, folder, json, toml, merge, hex)…"

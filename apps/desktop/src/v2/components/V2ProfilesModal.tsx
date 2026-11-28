@@ -93,7 +93,7 @@ export default function V2ProfilesModal({
     >
       <div data-testid="v2/profiles-modal" className="grid h-[340px] grid-cols-[190px_1fr] gap-3 text-[12px]">
         {/* Left Sidebar: Profile List */}
-        <div className="flex min-h-0 flex-col rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)]/70">
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
             {profiles.map((prof) => {
               const active = prof.id === selected?.id;
@@ -132,8 +132,8 @@ export default function V2ProfilesModal({
 
         {/* Right Tabbed Editor */}
         {selected ? (
-          <div className="flex min-h-0 flex-col rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)]">
-            <div className="flex items-center gap-1 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-2 py-1.5">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)]">
+            <div className="flex items-center gap-1 border-b border-[var(--v2-border)] bg-[var(--v2-bg)]/70 px-2.5 py-2">
               {(
                 [
                   ["global", "Global"],
@@ -146,10 +146,10 @@ export default function V2ProfilesModal({
                   key={id}
                   type="button"
                   onClick={() => setTab(id)}
-                  className={`rounded-[5px] px-2.5 py-1 text-[11.5px] font-medium ${
+                  className={`rounded-lg px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
                     tab === id
-                      ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
-                      : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
+                      ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                      : "text-[var(--v2-fg-muted)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
                   }`}
                 >
                   {label}

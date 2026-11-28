@@ -154,23 +154,22 @@ export default function V2SessionManagerModal({
         </button>
       }
     >
-      <div className="space-y-3 text-[12px]">
-        <div className="relative">
+      <div className="space-y-3.5 text-[12px]">
+        <div className="relative flex items-center">
           <Search
-            size={12}
-            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[var(--v2-fg-muted)]"
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--v2-fg-muted)]"
           />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search saved sessions…"
-            className="v2-input w-full"
-            style={{ paddingLeft: 26 }}
+            className="h-9 w-full rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] pl-9 pr-3 text-[12.5px] text-[var(--v2-fg)] outline-none transition-colors placeholder:text-[var(--v2-fg-muted)] focus:border-[var(--v2-accent)] focus:bg-[var(--v2-surface)] focus:ring-2 focus:ring-[var(--v2-accent-ring)]"
           />
         </div>
 
-        <div className="max-h-72 overflow-y-auto rounded-[6px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">
+        <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)]/60">
           {loading ? (
             <p className="px-3 py-6 text-center text-[var(--v2-fg-muted)]">Loading sessions…</p>
           ) : filtered.length === 0 ? (

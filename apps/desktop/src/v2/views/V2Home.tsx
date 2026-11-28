@@ -76,6 +76,8 @@ export default function V2Home({
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [sessionQuery, setSessionQuery] = useState("");
   const [spotlightQuery, setSpotlightQuery] = useState("");
+  const [spotlightIdx, setSpotlightIdx] = useState(0);
+  const [spotlightNavActive, setSpotlightNavActive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Persisted dockable + resizable left sidebar
@@ -173,6 +175,13 @@ export default function V2Home({
       return hay.includes(q);
     });
   }, [comparators, spotlightQuery, parsedPaths]);
+
+  const totalSpotlightItems = spotlightSessions.length + filteredPlugins.length;
+
+  useEffect(() => {
+    setSpotlightIdx(0);
+    setSpotlightNavActive(spotlightQuery.trim().length > 0);
+  }, [spotlightQuery]);
 
   const pinnedCount = useMemo(
     () => pinnedIds.filter((id) => sessions.some((s) => s.id === id)).length,
@@ -464,20 +473,35 @@ export default function V2Home({
                 value={spotlightQuery}
                 onChange={(e) => setSpotlightQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "ArrowDown" && !parsedPaths && totalSpotlightItems > 0) {
+                    e.preventDefault();
+                    setSpotlightNavActive(true);
+                    setSpotlightIdx((prev) => (prev + 1) % totalSpotlightItems);
+                  } else if (e.key === "ArrowUp" && !parsedPaths && totalSpotlightItems > 0) {
+                    e.preventDefault();
+                    setSpotlightNavActive(true);
+                    setSpotlightIdx((prev) => (prev - 1 + totalSpotlightItems) % totalSpotlightItems);
+                  } else if (e.key === "Enter") {
                     if (parsedPaths) {
                       e.preventDefault();
                       launchParsedPaths();
-                    } else if (filteredPlugins.length > 0) {
+                    } else if (totalSpotlightItems > 0) {
                       e.preventDefault();
-                      onNewSession(filteredPlugins[0].id);
-                    } else if (spotlightSessions.length > 0) {
-                      e.preventDefault();
-                      void handleOpenSaved(spotlightSessions[0]);
+                      const safeIdx = Math.min(spotlightIdx, totalSpotlightItems - 1);
+                      if (safeIdx < spotlightSessions.length) {
+                        void handleOpenSaved(spotlightSessions[safeIdx]);
+                      } else {
+                        const plugin = filteredPlugins[safeIdx - spotlightSessions.length];
+                        if (plugin) onNewSession(plugin.id);
+                      }
                     }
-                  } else if (e.key === "Escape" && spotlightQuery) {
-                    e.preventDefault();
-                    setSpotlightQuery("");
+                  } else if (e.key === "Escape") {
+                    if (spotlightQuery) {
+                      e.preventDefault();
+                      setSpotlightQuery("");
+                    } else if (spotlightNavActive) {
+                      setSpotlightNavActive(false);
+                    }
                   }
                 }}
                 placeholder="Search plugins, saved sessions, or paste paths (e.g. /a.json /b.json)…"
@@ -536,16 +560,26 @@ export default function V2Home({
                   Matching Saved Sessions
                 </div>
                 <div className="space-y-0.5">
-                  {spotlightSessions.map((entry) => {
+                  {spotlightSessions.map((entry, sIdx) => {
                     const badge = inferSessionBadge(entry.name ?? entry.id);
                     const BadgeIcon = badge.icon;
+                    const isActive = spotlightNavActive && !parsedPaths && spotlightIdx === sIdx;
                     return (
                       <button
                         key={entry.id}
                         type="button"
                         data-testid={`v2/spotlight-session-${entry.id}`}
+                        data-spotlight-active={isActive ? "true" : undefined}
+                        onMouseEnter={() => {
+                          setSpotlightNavActive(true);
+                          setSpotlightIdx(sIdx);
+                        }}
                         onClick={() => void handleOpenSaved(entry)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-surface-subtle)]"
+                        className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12px] transition-colors ${
+                          isActive
+                            ? "bg-[var(--v2-accent-soft)] text-[var(--v2-accent)] ring-1 ring-[var(--v2-accent)]/50"
+                            : "text-[var(--v2-fg)] hover:bg-[var(--v2-surface-subtle)]"
+                        }`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <span
@@ -629,13 +663,23 @@ export default function V2Home({
                 {filteredPlugins.map((plugin, idx) => {
                   const Icon = plugin.icon;
                   const isWide = spanLastTwo && idx >= filteredPlugins.length - 2;
+                  const flatIdx = spotlightSessions.length + idx;
+                  const isActive = spotlightNavActive && !parsedPaths && spotlightIdx === flatIdx;
                   return (
                     <button
                       key={plugin.id}
                       type="button"
                       data-testid={`v2/home-card-${plugin.id}`}
+                      data-spotlight-active={isActive ? "true" : undefined}
+                      onMouseEnter={() => {
+                        if (spotlightNavActive) setSpotlightIdx(flatIdx);
+                      }}
                       onClick={() => onNewSession(plugin.id)}
-                      className={`group grid h-full rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)] p-3 text-left transition-all hover:border-[var(--v2-accent)]/60 hover:shadow-md ${
+                      className={`group grid h-full rounded-xl border bg-[var(--v2-surface)] p-3 text-left transition-all hover:border-[var(--v2-accent)]/60 hover:shadow-md ${
+                        isActive
+                          ? "border-[var(--v2-accent)] ring-2 ring-[var(--v2-accent-ring)] shadow-md"
+                          : "border-[var(--v2-border)]"
+                      } ${
                         isWide
                           ? "grid-cols-[auto_1fr_auto] items-center gap-3 lg:col-span-2"
                           : "grid-cols-[auto_1fr] items-start gap-2.5"

@@ -120,16 +120,16 @@ export default function V2SettingsModal({
       <div className="space-y-3.5 text-[12px]">
         <div className="flex items-center justify-between">
           <span className="font-medium text-[var(--v2-fg)]">Appearance</span>
-          <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
+          <div className="inline-flex rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] p-0.5">
             {(["light", "dark"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => onThemeChange(t)}
-                className={`h-[22px] rounded-[5px] px-3 text-[11.5px] font-medium capitalize transition ${
+                className={`h-7 rounded-lg px-3 text-[11.5px] font-medium capitalize transition-colors ${
                   theme === t
-                    ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
-                    : "text-[var(--v2-fg-secondary)]"
+                    ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                    : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                 }`}
               >
                 {t}
@@ -155,7 +155,7 @@ export default function V2SettingsModal({
 
         <div className="flex items-center justify-between gap-3">
           <span className="font-medium text-[var(--v2-fg)]">External File Changes</span>
-          <div className="inline-flex rounded-[6px] bg-[var(--v2-seg-track)] p-0.5">
+          <div className="inline-flex rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] p-0.5">
             {(
               [
                 ["prompt", "Prompt"],
@@ -167,10 +167,10 @@ export default function V2SettingsModal({
                 key={m}
                 type="button"
                 onClick={() => setFileWatchMode(m)}
-                className={`h-[22px] rounded-[5px] px-2.5 text-[11px] font-medium transition ${
+                className={`h-7 rounded-lg px-2.5 text-[11px] font-medium transition-colors ${
                   fileWatchMode === m
-                    ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"
-                    : "text-[var(--v2-fg-secondary)]"
+                    ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                    : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                 }`}
               >
                 {label}
@@ -234,7 +234,7 @@ export default function V2SettingsModal({
           <span>Restore last comparison tab on startup</span>
         </label>
 
-        <div className="flex items-center justify-between rounded-md border border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-2.5 py-2">
+        <div className="flex items-center justify-between rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] px-3 py-2.5">
           <div className="text-[11px] text-[var(--v2-fg-muted)]">
             {settings?.grammar_preset_name ? (
               <>

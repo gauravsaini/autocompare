@@ -99,11 +99,11 @@ export default function V2ShortcutHelpModal({
         </button>
       }
     >
-      <div data-testid="v2/shortcuts-modal" className="space-y-3 text-[12px]">
-        <div className="relative">
+      <div data-testid="v2/shortcuts-modal" className="space-y-3.5 text-[12px]">
+        <div className="relative flex items-center">
           <Search
-            size={13}
-            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[var(--v2-fg-muted)]"
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--v2-fg-muted)]"
           />
           <input
             autoFocus
@@ -111,13 +111,13 @@ export default function V2ShortcutHelpModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter shortcuts (e.g. merge, find, align, hex)…"
-            className="v2-input w-full pl-8"
+            className="h-9 w-full rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] pl-9 pr-3 text-[12.5px] text-[var(--v2-fg)] outline-none transition-colors placeholder:text-[var(--v2-fg-muted)] focus:border-[var(--v2-accent)] focus:bg-[var(--v2-surface)] focus:ring-2 focus:ring-[var(--v2-accent-ring)]"
           />
         </div>
 
         <div className="max-h-[380px] space-y-3 overflow-y-auto pr-1">
           {filteredGroups.length === 0 ? (
-            <div className="py-8 text-center text-[var(--v2-fg-muted)]">
+            <div className="rounded-xl border border-dashed border-[var(--v2-border-strong)] py-8 text-center text-[var(--v2-fg-muted)]">
               No shortcuts match &ldquo;{query}&rdquo;.
             </div>
           ) : (
@@ -126,7 +126,7 @@ export default function V2ShortcutHelpModal({
                 <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--v2-fg-muted)]">
                   {group.category}
                 </h3>
-                <div className="divide-y divide-[var(--v2-border-subtle)] rounded-[7px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">
+                <div className="divide-y divide-[var(--v2-border-subtle)] rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)]/60">
                   {group.items.map((item) => (
                     <div
                       key={`${group.category}-${item.action}`}

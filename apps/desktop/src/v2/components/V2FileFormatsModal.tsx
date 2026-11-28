@@ -121,7 +121,7 @@ export default function V2FileFormatsModal({
     >
       <div data-testid="v2/file-formats-modal" className="grid h-[340px] grid-cols-[240px_1fr] gap-3 text-[12px]">
         {/* Left List: Name | Mask */}
-        <div className="flex min-h-0 flex-col rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)]/70">
           <div className="grid grid-cols-[20px_1fr_76px] border-b border-[var(--v2-border)] px-2 py-1 text-[10.5px] font-semibold text-[var(--v2-fg-muted)]">
             <span />
             <span>Name</span>
@@ -180,7 +180,7 @@ export default function V2FileFormatsModal({
 
         {/* Right Pane: Conversion Details */}
         {selected ? (
-          <div className="flex flex-col gap-3 rounded-[8px] border border-[var(--v2-border)] bg-[var(--v2-surface)] p-3">
+          <div className="flex flex-col gap-3 rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)] p-3.5">
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium text-[var(--v2-fg-muted)]">
