@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bookmark,
+  CornerDownLeft,
   FileText,
   FolderOpen,
   Lock,
@@ -17,13 +18,24 @@ import {
 import appLogo from "../../assets/logo.png";
 import { deleteSession, sessionList, sessionLoad } from "../../ipc/session";
 import type { SessionEntry } from "../../ipc/session";
-import { listComparators, resolveComparatorId } from "../plugins/registry";
+import {
+  getComparator,
+  inferComparatorForPaths,
+  listComparators,
+  resolveComparatorId,
+} from "../plugins/registry";
+import {
+  clampSidebarWidth,
+  loadHomeSidebarPrefs,
+  saveHomeSidebarPrefs,
+} from "../utils/homePrefs";
 import {
   loadPinnedSessionIds,
   savePinnedSessionIds,
   sortSessionsWithPins,
   togglePinnedId,
 } from "../utils/sessionPrefs";
+import { matchSavedSessions, parseSpotlightPaths } from "../utils/spotlightSearch";
 import type { SessionKind } from "../types";
 
 export interface V2HomeProps {
@@ -64,9 +76,14 @@ export default function V2Home({
   const [spotlightQuery, setSpotlightQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Dockable + resizable left sidebar (inspired by Concept__Spotlight_Launcher.html)
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(272);
+  // Persisted dockable + resizable left sidebar
+  const initialPrefs = useMemo(() => loadHomeSidebarPrefs(), []);
+  const [sidebarOpen, setSidebarOpen] = useState(initialPrefs.open);
+  const [sidebarWidth, setSidebarWidth] = useState(initialPrefs.width);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+  const sidebarOpenRef = useRef(sidebarOpen);
+  sidebarOpenRef.current = sidebarOpen;
   const resizingRef = useRef(false);
 
   const refreshSessions = async (): Promise<void> => {
@@ -86,16 +103,23 @@ export default function V2Home({
     setPinnedIds(loadPinnedSessionIds());
   }, [refreshSignal]);
 
+  // Persist dock open/collapsed state immediately
+  useEffect(() => {
+    saveHomeSidebarPrefs({ open: sidebarOpen, width: sidebarWidthRef.current });
+  }, [sidebarOpen]);
+
   useEffect(() => {
     const onMove = (e: PointerEvent): void => {
       if (!resizingRef.current) return;
-      const nextWidth = Math.min(420, Math.max(220, e.clientX));
+      const nextWidth = clampSidebarWidth(e.clientX);
+      sidebarWidthRef.current = nextWidth;
       setSidebarWidth(nextWidth);
     };
     const onUp = (): void => {
       if (!resizingRef.current) return;
       resizingRef.current = false;
       document.body.style.userSelect = "";
+      saveHomeSidebarPrefs({ open: sidebarOpenRef.current, width: sidebarWidthRef.current });
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -121,9 +145,19 @@ export default function V2Home({
     return sortSessionsWithPins(matched, pinnedIds);
   }, [sessions, sessionQuery, pinnedOnly, pinnedIds]);
 
+  const parsedPaths = useMemo(
+    () => parseSpotlightPaths(spotlightQuery, inferComparatorForPaths),
+    [spotlightQuery],
+  );
+
+  const spotlightSessions = useMemo(
+    () => (parsedPaths ? [] : matchSavedSessions(sessions, spotlightQuery, 4)),
+    [sessions, spotlightQuery, parsedPaths],
+  );
+
   const filteredPlugins = useMemo(() => {
     const q = spotlightQuery.trim().toLowerCase();
-    if (!q) return comparators;
+    if (!q || parsedPaths) return comparators;
     return comparators.filter((p) => {
       const hay = [
         p.id,
@@ -136,7 +170,7 @@ export default function V2Home({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [comparators, spotlightQuery]);
+  }, [comparators, spotlightQuery, parsedPaths]);
 
   const pinnedCount = useMemo(
     () => pinnedIds.filter((id) => sessions.some((s) => s.id === id)).length,
@@ -168,6 +202,14 @@ export default function V2Home({
     }
     setSessions((prev) => prev.filter((s) => s.id !== id));
   };
+
+  const launchParsedPaths = (): void => {
+    if (!parsedPaths) return;
+    onNewSession(parsedPaths.inferredKind, parsedPaths.left, parsedPaths.right);
+    setSpotlightQuery("");
+  };
+
+  const inferredPlugin = parsedPaths ? getComparator(parsedPaths.inferredKind) : undefined;
 
   // When a 4-column desktop grid ends with a 2-card final row (e.g. 10 plugins), span both across 2 cols
   const spanLastTwo = filteredPlugins.length >= 6 && filteredPlugins.length % 4 === 2;
@@ -402,12 +444,12 @@ export default function V2Home({
                 AutoCompare
               </h1>
               <p className="text-[13.5px] text-[var(--v2-fg-muted)]">
-                Choose a comparison plugin or search to launch
+                Choose a comparison plugin, search saved sessions, or paste paths to launch
               </p>
             </div>
           </div>
 
-          {/* Mac Spotlight-style Search Bar + Quick Launch Pills */}
+          {/* Mac Spotlight-style Search Bar + Smart Results + Quick Launch Pills */}
           <div className="flex w-full max-w-2xl flex-col gap-3">
             <div
               style={{ boxShadow: "var(--v2-shadow-spotlight)" }}
@@ -420,15 +462,23 @@ export default function V2Home({
                 value={spotlightQuery}
                 onChange={(e) => setSpotlightQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && filteredPlugins.length > 0) {
-                    e.preventDefault();
-                    onNewSession(filteredPlugins[0].id);
+                  if (e.key === "Enter") {
+                    if (parsedPaths) {
+                      e.preventDefault();
+                      launchParsedPaths();
+                    } else if (filteredPlugins.length > 0) {
+                      e.preventDefault();
+                      onNewSession(filteredPlugins[0].id);
+                    } else if (spotlightSessions.length > 0) {
+                      e.preventDefault();
+                      void handleOpenSaved(spotlightSessions[0]);
+                    }
                   } else if (e.key === "Escape" && spotlightQuery) {
                     e.preventDefault();
                     setSpotlightQuery("");
                   }
                 }}
-                placeholder="Search plugins, file types, or drop paths to compare…"
+                placeholder="Search plugins, saved sessions, or paste paths (e.g. /a.json /b.json)…"
                 className="h-13 w-full bg-transparent px-3.5 text-[14.5px] text-[var(--v2-fg)] outline-none placeholder:text-[var(--v2-fg-muted)]"
               />
               <div className="flex shrink-0 items-center gap-1.5 pr-3.5">
@@ -453,7 +503,68 @@ export default function V2Home({
               </div>
             </div>
 
-            {/* Quick Launch Circular Actions */}
+            {/* Direct Path-Pair Launch Banner when paths are pasted into Spotlight */}
+            {parsedPaths ? (
+              <button
+                type="button"
+                data-testid="v2/spotlight-paths-action"
+                onClick={launchParsedPaths}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--v2-accent)]/50 bg-[var(--v2-accent-soft)] px-3.5 py-2.5 text-left transition-colors hover:border-[var(--v2-accent)]"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--v2-accent)]">
+                    <span>Open in {inferredPlugin?.title ?? parsedPaths.inferredKind}</span>
+                  </div>
+                  <div className="v2-mono mt-0.5 truncate text-[11px] text-[var(--v2-fg-secondary)]">
+                    {parsedPaths.left}
+                    {parsedPaths.right ? `  ↔  ${parsedPaths.right}` : "  (select right side in view)"}
+                  </div>
+                </div>
+                <span className="v2-mono inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--v2-accent)] px-2 py-1 text-[10.5px] font-medium text-[var(--v2-accent-fg)]">
+                  <span>Launch</span>
+                  <CornerDownLeft size={11} />
+                </span>
+              </button>
+            ) : null}
+
+            {/* Matching Saved Sessions directly inside Spotlight */}
+            {spotlightSessions.length > 0 ? (
+              <div className="rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)] p-2 shadow-sm">
+                <div className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--v2-fg-muted)]">
+                  Matching Saved Sessions
+                </div>
+                <div className="space-y-0.5">
+                  {spotlightSessions.map((entry) => {
+                    const badge = inferSessionBadge(entry.name ?? entry.id);
+                    const BadgeIcon = badge.icon;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        data-testid={`v2/spotlight-session-${entry.id}`}
+                        onClick={() => void handleOpenSaved(entry)}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-surface-subtle)]"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                            style={{ backgroundColor: `${badge.accent}18`, color: badge.accent }}
+                          >
+                            <BadgeIcon size={13} strokeWidth={1.8} />
+                          </span>
+                          <span className="truncate font-medium">{entry.name ?? entry.id}</span>
+                        </div>
+                        <span className="v2-mono shrink-0 text-[10.5px] text-[var(--v2-fg-muted)]">
+                          {entry.tabs} {entry.tabs === 1 ? "tab" : "tabs"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Quick Launch Action Pills */}
             <div className="flex flex-wrap items-center justify-center gap-2.5">
               <button
                 type="button"

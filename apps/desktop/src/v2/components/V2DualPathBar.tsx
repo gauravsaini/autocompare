@@ -63,7 +63,7 @@ export default function V2DualPathBar({
         onSubmit(leftValue.trim(), rightValue.trim());
       }}
       style={{ gridTemplateColumns: `${splitPct}fr ${100 - splitPct}fr` }}
-      className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
+      className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-surface)]"
     >
       {(["left", "right"] as const).map((side) => {
         const val = side === "left" ? leftValue : rightValue;
@@ -73,40 +73,46 @@ export default function V2DualPathBar({
         return (
           <div
             key={side}
-            className={`flex flex-col gap-1 px-2.5 py-1.5 ${
+            className={`flex flex-col gap-1.5 px-3 py-2 ${
               side === "left" ? "border-r border-[var(--v2-border)]" : ""
             }`}
           >
             <div className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="v2-mono inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--v2-surface-subtle)] text-[10.5px] font-semibold uppercase text-[var(--v2-fg-muted)]"
+              >
+                {side === "left" ? "L" : "R"}
+              </span>
               <input
                 type="text"
                 data-testid={`v2/path-${side}`}
                 value={val}
                 onChange={(e) => setVal(e.target.value)}
                 placeholder={placeholder}
-                className="v2-input v2-mono min-w-0 flex-1 text-[11.5px]"
+                className="v2-mono h-7 min-w-0 flex-1 rounded-xl border border-[var(--v2-border)] bg-[var(--v2-bg)] px-2.5 text-[11.5px] text-[var(--v2-fg)] outline-none transition-colors placeholder:text-[var(--v2-fg-muted)] focus:border-[var(--v2-accent)] focus:bg-[var(--v2-surface)] focus:ring-2 focus:ring-[var(--v2-accent-ring)]"
               />
               <button
                 type="button"
                 title={`Browse ${side} ${directory ? "folder" : "file"}`}
                 onClick={() => void handleBrowse(side)}
-                className="v2-btn px-2"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
               >
-                <FolderOpen size={13} />
+                <FolderOpen size={13.5} />
               </button>
               {onSaveSide ? (
                 <button
                   type="button"
                   title={`Save ${side} file`}
                   onClick={() => onSaveSide(side)}
-                  className="v2-btn px-2"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
                 >
-                  <Save size={13} />
+                  <Save size={13.5} />
                 </button>
               ) : null}
             </div>
             {meta ? (
-              <div className="flex items-center gap-3 text-[11px] text-[var(--v2-fg-muted)]">
+              <div className="v2-mono flex items-center gap-3 pl-7 text-[10.5px] text-[var(--v2-fg-muted)]">
                 {meta}
               </div>
             ) : null}

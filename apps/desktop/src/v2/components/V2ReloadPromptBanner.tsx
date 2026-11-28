@@ -24,10 +24,10 @@ export default function V2ReloadPromptBanner({
     <div
       role="status"
       data-testid="v2/reload-banner"
-      className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chg-bg)] px-3 py-1.5 text-[12px] text-[var(--v2-chg-fg)]"
+      className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--v2-border)] bg-[var(--v2-chg-bg)] px-3.5 py-2 text-[12px] text-[var(--v2-chg-fg)]"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <RefreshCw size={13} className="shrink-0" />
+        <RefreshCw size={13.5} className="shrink-0" />
         <span className="truncate font-medium">
           {summary} Reload comparison to see the latest changes?
         </span>
@@ -37,7 +37,7 @@ export default function V2ReloadPromptBanner({
           type="button"
           data-testid="v2/reload-banner-confirm"
           onClick={onReload}
-          className="v2-btn v2-btn-primary h-[21px] px-2.5 text-[11px]"
+          className="v2-btn v2-btn-primary h-6 rounded-lg px-2.5 text-[11px]"
         >
           Reload
         </button>
@@ -45,7 +45,7 @@ export default function V2ReloadPromptBanner({
           type="button"
           data-testid="v2/reload-banner-dismiss"
           onClick={onDismiss}
-          className="v2-btn h-[21px] px-2 text-[11px]"
+          className="v2-btn h-6 rounded-lg px-2 text-[11px]"
         >
           Ignore
         </button>
@@ -53,9 +53,9 @@ export default function V2ReloadPromptBanner({
           type="button"
           aria-label="Dismiss reload prompt"
           onClick={onDismiss}
-          className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-[var(--v2-btn-hover)]"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-lg hover:bg-[var(--v2-btn-hover)]"
         >
-          <X size={12} />
+          <X size={12.5} />
         </button>
       </div>
     </div>

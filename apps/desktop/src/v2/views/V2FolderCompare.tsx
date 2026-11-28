@@ -308,14 +308,14 @@ export default function V2FolderCompare({
         splitPct={splitPct}
       />
 
-      {/* Dual-Pane Column Headers (True BC 2-Side Folder Tree!) */}
+      {/* Dual-Pane Column Headers (Modern Spotlight Surface) */}
       <div
         style={{ gridTemplateColumns: `minmax(0, ${splitPct}fr) 76px 96px 6px minmax(0, ${100 - splitPct}fr) 76px 96px` }}
-        className="grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] text-[11px] font-semibold text-[var(--v2-fg-secondary)]"
+        className="v2-mono grid shrink-0 border-b border-[var(--v2-border)] bg-[var(--v2-bg)] text-[10.5px] font-semibold uppercase tracking-wider text-[var(--v2-fg-muted)]"
       >
-        <div className="px-3 py-1">Name</div>
-        <div className="px-2 py-1 text-right">Size</div>
-        <div className="px-2 py-1 text-right">Modified</div>
+        <div className="px-3 py-1.5">Name</div>
+        <div className="px-2 py-1.5 text-right">Size</div>
+        <div className="px-2 py-1.5 text-right">Modified</div>
         <div
           role="separator"
           aria-orientation="vertical"
@@ -324,9 +324,9 @@ export default function V2FolderCompare({
           onDoubleClick={resetSplit}
           className="cursor-col-resize bg-[var(--v2-splitter)]/40 hover:bg-[var(--v2-accent)]/60"
         />
-        <div className="px-3 py-1">Name</div>
-        <div className="px-2 py-1 text-right">Size</div>
-        <div className="px-2 py-1 text-right">Modified</div>
+        <div className="px-3 py-1.5">Name</div>
+        <div className="px-2 py-1.5 text-right">Size</div>
+        <div className="px-2 py-1.5 text-right">Modified</div>
       </div>
 
       {selectedEntry ? (

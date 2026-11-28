@@ -23,14 +23,14 @@ export default function V2ErrorBanner({
         color: "var(--v2-del-fg)",
         borderColor: "var(--v2-border)",
       }}
-      className="flex shrink-0 items-center justify-between border-b px-3 py-1.5 text-[12px]"
+      className="flex shrink-0 items-center justify-between border-b px-3.5 py-2 text-[12px]"
     >
-      <span className="truncate">{message}</span>
+      <span className="truncate font-medium">{message}</span>
       {onDismiss ? (
         <button
           type="button"
           onClick={onDismiss}
-          className="ml-3 shrink-0 text-[11px] font-medium underline opacity-85 hover:opacity-100"
+          className="ml-3 shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-medium underline opacity-85 hover:opacity-100"
         >
           Dismiss
         </button>

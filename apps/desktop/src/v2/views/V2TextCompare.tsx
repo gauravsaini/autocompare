@@ -1459,17 +1459,17 @@ export default function V2TextCompare({
 
       {contextMenu ? (
         <div
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          className="fixed z-50 min-w-[190px] rounded-[7px] border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] py-1 text-[12px] shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y, boxShadow: "var(--v2-shadow-md)" }}
+          className="fixed z-50 min-w-[205px] rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)] p-1.5 text-[12px]"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
             onClick={() => startAlignWith(contextMenu.rowIndex, contextMenu.side)}
-            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
           >
             <span>Align With…</span>
-            <span className="text-[10.5px] text-[var(--v2-fg-muted)]">F7</span>
+            <span className="v2-mono text-[10.5px] opacity-65">F7</span>
           </button>
           <button
             type="button"
@@ -1477,7 +1477,7 @@ export default function V2TextCompare({
               void handleCopyLine(contextMenu.rowIndex, "left");
               setContextMenu(null);
             }}
-            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
           >
             <span>Copy Line Left → Right</span>
           </button>
@@ -1487,7 +1487,7 @@ export default function V2TextCompare({
               void handleCopyLine(contextMenu.rowIndex, "right");
               setContextMenu(null);
             }}
-            className="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-[var(--v2-accent-soft)]"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--v2-accent)] hover:text-white"
           >
             <span>Copy Line Right → Left</span>
           </button>
@@ -1500,7 +1500,7 @@ export default function V2TextCompare({
                 setContextMenu(null);
                 setNotice("Cleared manual alignments");
               }}
-              className="mt-0.5 flex w-full items-center justify-between border-t border-[var(--v2-border-subtle)] px-3 py-1.5 text-left text-[var(--v2-del-fg)] hover:bg-[var(--v2-accent-soft)]"
+              className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[var(--v2-border-subtle)] px-2.5 py-1.5 text-left text-[var(--v2-del-fg)] transition-colors hover:bg-[var(--v2-del-bg)]"
             >
               <span>Clear Manual Alignments ({manualAnchors.length})</span>
             </button>

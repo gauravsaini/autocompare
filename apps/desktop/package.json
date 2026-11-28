@@ -12,6 +12,9 @@
     "test:e2e": "playwright test",
     "package:dmg": "bash ../../scripts/build-macos-dmg.sh"
   },
+  "browserslist": [
+    "defaults"
+  ],
   "dependencies": {
     "@tanstack/react-virtual": "^3.11.0",
     "@tauri-apps/api": "^2.1.1",

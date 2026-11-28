@@ -574,7 +574,7 @@ export default function V2HexCompare({
               style={{
                 gridTemplateColumns: `78px minmax(0, ${splitPct}fr) 132px 6px minmax(0, ${100 - splitPct}fr) 132px`,
               }}
-              className="sticky top-0 z-10 grid border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2 py-1 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]"
+              className="sticky top-0 z-10 grid border-b border-[var(--v2-border)] bg-[var(--v2-bg)] px-2 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--v2-fg-muted)]"
             >
               <span>Offset</span>
               <span>Left Hex (00–0F)</span>

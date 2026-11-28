@@ -6,7 +6,15 @@ import tailwindcss from "@tailwindcss/vite";
 // `src-tauri/tauri.conf.json`. `strictPort` makes a clash fail loudly
 // instead of silently picking another port the shell is not serving.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        // Prevent browserslist from walking above the repository root in sandboxed environments
+        browserslistConfigFile: false,
+      },
+    }),
+    tailwindcss(),
+  ],
   clearScreen: false,
   server: {
     port: 1420,
