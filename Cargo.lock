@@ -150,8 +150,11 @@ dependencies = [
  "autocompare-reports",
  "autocompare-server",
  "autocompare-sessions",
+ "autocompare-telemetry",
  "clap",
+ "serde_json",
  "tempfile",
+ "zip",
 ]
 
 [[package]]
@@ -218,6 +221,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -242,6 +242,25 @@ impl SessionEventLog {
         &self.events
     }
 
+    /// ODD Phase 7-remainder: joins the undo history to an execution trace.
+    ///
+    /// Returns every recorded event (active **and** undone redo tail) whose
+    /// `trace_id` equals `trace_id`, so agents can replay what an undone
+    /// operation did from its trace alone. Malformed ids match nothing;
+    /// telemetry-off logs (all `trace_id: None`) never match. Query-only:
+    /// cursor, replay, and serialized shapes are untouched, so behavior is
+    /// identical when telemetry is disabled.
+    #[must_use]
+    pub fn events_for_trace(&self, trace_id: &str) -> Vec<&SessionEvent> {
+        let Some(want) = normalize_trace_id(trace_id) else {
+            return Vec::new();
+        };
+        self.events
+            .iter()
+            .filter(|event| event.trace_id.as_deref() == Some(want.as_str()))
+            .collect()
+    }
+
     /// Deterministically replays all active events into a [`SessionReplayState`].
     #[must_use]
     pub fn replay(&self) -> SessionReplayState {
@@ -492,5 +511,63 @@ mod tests {
         );
         let bad_jsonl = bad.to_jsonl().expect("to_jsonl");
         assert!(!bad_jsonl.contains("trace_id"));
+    }
+
+    #[test]
+    fn events_for_trace_joins_undo_history_to_execution_trace() {
+        let first = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let second = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let mut log = SessionEventLog::new("sess-join");
+
+        log.append_with_trace(
+            SessionEventKind::PathsChanged {
+                left: "l".to_string(),
+                right: "r".to_string(),
+                base: None,
+            },
+            Some(first),
+        );
+        log.append(SessionEventKind::OptionChanged {
+            key: "k".to_string(),
+            previous: json!(false),
+            next: json!(true),
+        });
+        log.append_with_trace(
+            SessionEventKind::MergeConflictResolved {
+                conflict_index: 0,
+                previous: None,
+                choice: "left".to_string(),
+            },
+            Some(second),
+        );
+
+        // Exact join: only linked events come back, in seq order.
+        let joined = log.events_for_trace(first);
+        assert_eq!(joined.len(), 1);
+        assert_eq!(joined[0].seq, 1);
+
+        // Undo does not hide history from the join (redo tail included).
+        log.undo();
+        log.undo();
+        assert_eq!(log.active_events().len(), 1);
+        assert_eq!(log.events_for_trace(second).len(), 1);
+        assert_eq!(log.events_for_trace(second)[0].seq, 3);
+
+        // Telemetry-off logs and malformed ids never match.
+        assert!(log.events_for_trace("not-a-trace-id").is_empty());
+        assert!(log.events_for_trace("").is_empty());
+        let mut plain = SessionEventLog::new("sess-plain");
+        plain.append(SessionEventKind::OptionChanged {
+            key: "k".to_string(),
+            previous: json!(1),
+            next: json!(2),
+        });
+        assert!(plain.events_for_trace(first).is_empty());
+
+        // Join is query-only: cursor, replay, and JSONL shapes untouched.
+        assert_eq!(log.active_events().len(), 1);
+        assert_eq!(log.replay().applied_count, 1);
+        let jsonl = log.to_jsonl().expect("to_jsonl");
+        assert_eq!(jsonl.lines().count(), 1);
     }
 }
