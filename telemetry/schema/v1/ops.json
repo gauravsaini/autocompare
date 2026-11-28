@@ -1,33 +1,211 @@
 {
   "$id": "https://autocompare.local/telemetry/schema/v1/ops.json",
   "title": "ODD op registry (telemetry/v1)",
-  "description": "Every span op must be listed here. Grounded in src-tauri commands/* and src/v2/views/*.",
+  "description": "Every span op must be listed here. Matches opForCommand() in apps/desktop/src/ipc/client.ts 1:1; text_* collapses to text.compare.",
   "ops": {
-    "text.compare": { "layer": "rs", "component": "rs.cmd/text", "via": "text_compare", "view": "text" },
-    "text.copy_hunk": { "layer": "ui", "component": "ts.ui/TextView", "via": "gutter copy l2r/r2l", "view": "text" },
-    "text.find": { "layer": "ui", "component": "ts.ui/TextView", "via": "in-view find", "view": "text" },
-    "text.goto": { "layer": "ui", "component": "ts.ui/TextView", "via": "goto row", "view": "text" },
-    "folder.compare": { "layer": "rs", "component": "rs.cmd/folder", "via": "folder_compare", "view": "folder" },
-    "folder.tree": { "layer": "rs", "component": "rs.cmd/folder", "via": "folder_get_tree", "view": "folder" },
-    "folder.copy_entry": { "layer": "rs", "component": "rs.cmd/folder", "via": "folder_copy_entry", "view": "folder" },
-    "folder.delete_entry": { "layer": "rs", "component": "rs.cmd/folder", "via": "folder_delete_entry", "view": "folder" },
-    "table.compare": { "layer": "rs", "component": "rs.cmd/table", "via": "table_compare", "view": "table" },
-    "table.edit": { "layer": "rs", "component": "rs.cmd/table", "via": "table_apply_edit", "view": "table" },
-    "hex.compare": { "layer": "rs", "component": "rs.cmd/hex", "via": "hex_compare", "view": "hex" },
-    "hex.edit": { "layer": "rs", "component": "rs.cmd/hex", "via": "hex_apply_edit", "view": "hex" },
-    "merge.text_plan": { "layer": "rs", "component": "rs.cmd/merge", "via": "merge_text_plan", "view": "merge" },
-    "merge.text_apply": { "layer": "rs", "component": "rs.cmd/merge", "via": "merge_text_apply", "view": "merge" },
-    "merge.folder_plan": { "layer": "rs", "component": "rs.cmd/merge", "via": "merge_folder_plan", "view": "merge" },
-    "merge.folder_apply": { "layer": "rs", "component": "rs.cmd/merge", "via": "merge_folder_apply", "view": "merge" },
-    "sync.plan": { "layer": "rs", "component": "rs.cmd/sync", "via": "sync_plan", "view": "sync" },
-    "sync.apply": { "layer": "rs", "component": "rs.cmd/sync", "via": "sync_apply", "view": "sync" },
-    "media.picture_compare": { "layer": "rs", "component": "rs.cmd/media", "via": "picture_compare", "view": "media" },
-    "media.audio_compare": { "layer": "rs", "component": "rs.cmd/media", "via": "audio_compare", "view": "media" },
-    "structured.compare": { "layer": "ui", "component": "ts.plugin/structured", "via": "structuredDiffPlugin", "view": "structured" },
-    "session.open": { "layer": "rs", "component": "rs.cmd/session", "via": "session_load", "view": "home" },
-    "session.save": { "layer": "rs", "component": "rs.cmd/session", "via": "session_save", "view": "home" },
-    "report.export": { "layer": "rs", "component": "rs.cmd/session", "via": "report_export", "view": "*" },
-    "ui.tab_switch": { "layer": "ui", "component": "ts.ui/V2App", "via": "tab state", "view": "*" },
-    "ui.reload_prompt": { "layer": "ui", "component": "ts.ui/fileWatch", "via": "file-watch reload", "view": "*" }
+    "text.compare": {
+      "layer": "rs",
+      "component": "rs.cmd/text",
+      "via": "text_* (11 cmds)",
+      "view": "text"
+    },
+    "folder.compare": {
+      "layer": "rs",
+      "component": "rs.cmd/folder",
+      "via": "folder_compare",
+      "view": "folder"
+    },
+    "folder.get_tree": {
+      "layer": "rs",
+      "component": "rs.cmd/folder",
+      "via": "folder_get_tree",
+      "view": "folder"
+    },
+    "folder.cancel": {
+      "layer": "rs",
+      "component": "rs.cmd/folder",
+      "via": "folder_cancel",
+      "view": "folder"
+    },
+    "folder.copy_entry": {
+      "layer": "rs",
+      "component": "rs.cmd/folder",
+      "via": "folder_copy_entry",
+      "view": "folder"
+    },
+    "folder.delete_entry": {
+      "layer": "rs",
+      "component": "rs.cmd/folder",
+      "via": "folder_delete_entry",
+      "view": "folder"
+    },
+    "table.compare": {
+      "layer": "rs",
+      "component": "rs.cmd/table",
+      "via": "table_compare",
+      "view": "table"
+    },
+    "table.get_page": {
+      "layer": "rs",
+      "component": "rs.cmd/table",
+      "via": "table_get_page",
+      "view": "table"
+    },
+    "table.find": {
+      "layer": "rs",
+      "component": "rs.cmd/table",
+      "via": "table_find",
+      "view": "table"
+    },
+    "table.apply_edit": {
+      "layer": "rs",
+      "component": "rs.cmd/table",
+      "via": "table_apply_edit",
+      "view": "table"
+    },
+    "table.save_side": {
+      "layer": "rs",
+      "component": "rs.cmd/table",
+      "via": "table_save_side",
+      "view": "table"
+    },
+    "hex.compare": {
+      "layer": "rs",
+      "component": "rs.cmd/hex",
+      "via": "hex_compare",
+      "view": "hex"
+    },
+    "hex.get_page": {
+      "layer": "rs",
+      "component": "rs.cmd/hex",
+      "via": "hex_get_page",
+      "view": "hex"
+    },
+    "hex.find": {
+      "layer": "rs",
+      "component": "rs.cmd/hex",
+      "via": "hex_find",
+      "view": "hex"
+    },
+    "hex.apply_edit": {
+      "layer": "rs",
+      "component": "rs.cmd/hex",
+      "via": "hex_apply_edit",
+      "view": "hex"
+    },
+    "hex.save_side": {
+      "layer": "rs",
+      "component": "rs.cmd/hex",
+      "via": "hex_save_side",
+      "view": "hex"
+    },
+    "merge.text_plan": {
+      "layer": "rs",
+      "component": "rs.cmd/merge",
+      "via": "merge_text_plan",
+      "view": "merge"
+    },
+    "merge.text_apply": {
+      "layer": "rs",
+      "component": "rs.cmd/merge",
+      "via": "merge_text_apply",
+      "view": "merge"
+    },
+    "merge.folder_plan": {
+      "layer": "rs",
+      "component": "rs.cmd/merge",
+      "via": "merge_folder_plan",
+      "view": "merge"
+    },
+    "merge.folder_apply": {
+      "layer": "rs",
+      "component": "rs.cmd/merge",
+      "via": "merge_folder_apply",
+      "view": "merge"
+    },
+    "sync.plan": {
+      "layer": "rs",
+      "component": "rs.cmd/sync",
+      "via": "sync_plan",
+      "view": "sync"
+    },
+    "sync.apply": {
+      "layer": "rs",
+      "component": "rs.cmd/sync",
+      "via": "sync_apply",
+      "view": "sync"
+    },
+    "media.picture_compare": {
+      "layer": "rs",
+      "component": "rs.cmd/media",
+      "via": "picture_compare",
+      "view": "media"
+    },
+    "media.audio_compare": {
+      "layer": "rs",
+      "component": "rs.cmd/media",
+      "via": "audio_compare",
+      "view": "media"
+    },
+    "session.list": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "session_list",
+      "view": "home"
+    },
+    "session.load": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "session_load",
+      "view": "home"
+    },
+    "session.save": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "session_save",
+      "view": "home"
+    },
+    "session.delete": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "session_delete",
+      "view": "home"
+    },
+    "settings.get": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "settings_get",
+      "view": "home"
+    },
+    "settings.set": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "settings_set",
+      "view": "home"
+    },
+    "report.export": {
+      "layer": "rs",
+      "component": "rs.cmd/session",
+      "via": "report_export",
+      "view": "*"
+    },
+    "structured.compare": {
+      "layer": "ui",
+      "component": "ts.plugin/structured",
+      "via": "structuredDiffPlugin",
+      "view": "structured"
+    },
+    "ui.tab_switch": {
+      "layer": "ui",
+      "component": "ts.ui/V2App",
+      "via": "tab state",
+      "view": "*"
+    },
+    "ui.reload_prompt": {
+      "layer": "ui",
+      "component": "ts.ui/fileWatch",
+      "via": "file-watch reload",
+      "view": "*"
+    }
   }
 }

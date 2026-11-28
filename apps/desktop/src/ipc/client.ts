@@ -259,7 +259,12 @@ function opForCommand(cmd: string): string {
 // at module init; it only reads the in-memory sink buffer and never alters
 // IPC behavior, so it is inert when telemetry is disabled (buffer stays empty).
 try {
-  if (typeof window !== "undefined") {
+  // Dev/mock only: the introspection hook must never ship in production
+  // shells (buffer stays empty there anyway, but internals stay hidden).
+  const exposeHook =
+    typeof window !== "undefined" &&
+    (import.meta.env.DEV || import.meta.env.VITE_MOCK_IPC === "1");
+  if (exposeHook) {
     const w = window as unknown as Record<string, unknown>;
     if (w["__AUTOCOMPARE_TRACE__"] === undefined) {
       w["__AUTOCOMPARE_TRACE__"] = {
