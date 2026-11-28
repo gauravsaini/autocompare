@@ -626,6 +626,9 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       }
       return true as unknown as T;
     }
+    case "sync_menu_states": {
+      return true as unknown as T;
+    }
     case "settings_get": {
       return { ...mockAppSettings } as unknown as T;
     }

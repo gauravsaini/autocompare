@@ -87,6 +87,7 @@ const MAX_VIRTUAL_ROWS = 20000;
 export interface V2TextCompareProps {
   readonly leftPath: string;
   readonly rightPath: string;
+  readonly paneOrientation?: "side-by-side" | "over-under";
   readonly onPathsChange: (left: string, right: string) => void;
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onRegisterCommands: (cmds: V2ViewCommands) => void;
@@ -160,6 +161,7 @@ async function fetchSessionRows(session: string, expectedTotal: number): Promise
 export default function V2TextCompare({
   leftPath,
   rightPath,
+  paneOrientation = "side-by-side",
   onPathsChange,
   onDirtyChange,
   onRegisterCommands,
@@ -1171,6 +1173,7 @@ export default function V2TextCompare({
   return (
     <div
       data-testid="v2/text-view"
+      data-pane-orientation={paneOrientation}
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]"
     >
       <V2DualPathBar
@@ -1351,6 +1354,49 @@ export default function V2TextCompare({
                   Show All Rows
                 </button>
               ) : null}
+            </div>
+          ) : paneOrientation === "over-under" ? (
+            <div className="v2-mono flex h-full flex-col divide-y divide-[var(--v2-border)] text-[12px] leading-[21px]">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <div className="sticky top-0 z-10 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-0.5 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
+                  Top Pane (Left): {leftDraft || "Left"}
+                </div>
+                {visibleRows.map((row) => {
+                  const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
+                  const bg = row.kind === "leftOnly" ? "var(--v2-del-bg)" : row.kind === "changed" ? "var(--v2-chg-bg)" : undefined;
+                  return (
+                    <div
+                      key={`ou-l-${row.index}`}
+                      onClick={(e) => handleSelectRow(row.index, e.shiftKey)}
+                      style={{ backgroundColor: bg }}
+                      className="grid grid-cols-[44px_1fr] px-2 hover:bg-[var(--v2-btn-hover)]/40"
+                    >
+                      <span className="select-none pr-2 text-right text-[var(--v2-fg-muted)]">{nos.left ?? ""}</span>
+                      <span className="whitespace-pre">{row.left ?? ""}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                <div className="sticky top-0 z-10 border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 py-0.5 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
+                  Bottom Pane (Right): {rightDraft || "Right"}
+                </div>
+                {visibleRows.map((row) => {
+                  const nos = lineNosByIndex.get(row.index) ?? { left: null, right: null };
+                  const bg = row.kind === "rightOnly" ? "var(--v2-ins-bg)" : row.kind === "changed" ? "var(--v2-chg-bg)" : undefined;
+                  return (
+                    <div
+                      key={`ou-r-${row.index}`}
+                      onClick={(e) => handleSelectRow(row.index, e.shiftKey)}
+                      style={{ backgroundColor: bg }}
+                      className="grid grid-cols-[44px_1fr] px-2 hover:bg-[var(--v2-btn-hover)]/40"
+                    >
+                      <span className="select-none pr-2 text-right text-[var(--v2-fg-muted)]">{nos.right ?? ""}</span>
+                      <span className="whitespace-pre">{row.right ?? ""}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div

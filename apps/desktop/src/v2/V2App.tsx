@@ -6,6 +6,8 @@ import V2Toolbar from "./components/V2Toolbar";
 import { useTabs } from "./hooks/useTabs";
 import { useV2Shortcuts } from "./hooks/useV2Shortcuts";
 import V2Home from "./views/V2Home";
+import { invoke } from "../ipc/client";
+import { computeNativeMenuEnabledMap, type PaneOrientation } from "./menus/menuSchema";
 import { registerBuiltinComparators } from "./plugins/builtins";
 import { getComparator, listComparators } from "./plugins/registry";
 import {
@@ -110,6 +112,7 @@ export default function V2App(): React.JSX.Element {
       : "light",
   );
   const [layoutDensity, setLayoutDensity] = useState<"standard" | "compact">("standard");
+  const [paneOrientation, setPaneOrientation] = useState<PaneOrientation>("side-by-side");
   const [commands, setCommands] = useState<V2ViewCommands>({});
   const [status, setStatus] = useState<V2StatusInfo>({ left: "", center: "", right: "" });
   const [newSessionOpen, setNewSessionOpen] = useState(false);
@@ -298,6 +301,14 @@ export default function V2App(): React.JSX.Element {
         case "context_toggle":
           cmds.toggleContext?.();
           break;
+        case "pane_side_by_side":
+          setPaneOrientation("side-by-side");
+          showToast("Layout: Side-by-Side", 1800);
+          break;
+        case "pane_over_under":
+          setPaneOrientation("over-under");
+          showToast("Layout: Over-Under", 1800);
+          break;
         case "toolbar_toggle":
           toggleToolbar();
           break;
@@ -392,6 +403,15 @@ export default function V2App(): React.JSX.Element {
     };
   }, [dispatchMenuCommand]);
 
+  // Push active ViewId + capability enabled states to native Tauri menu.rs
+  useEffect(() => {
+    const enabledMap = computeNativeMenuEnabledMap({
+      activeViewId: activeTab.kind,
+      commands,
+    });
+    void invoke("sync_menu_states", { enabledMap }).catch(() => undefined);
+  }, [activeTab.kind, commands]);
+
   const { dropOverlay, setDropOverlay } = useV2Shortcuts({
     activeTabRef,
     commandsRef,
@@ -465,6 +485,7 @@ export default function V2App(): React.JSX.Element {
         commands={commands}
         showToolbar={showToolbar}
         layoutDensity={layoutDensity}
+        paneOrientation={paneOrientation}
         theme={theme}
         onCommand={dispatchMenuCommand}
         onOpenSessionKind={openSession}
@@ -662,6 +683,7 @@ export default function V2App(): React.JSX.Element {
                   key={activeTab.id}
                   leftPath={activeTab.leftPath}
                   rightPath={activeTab.rightPath}
+                  paneOrientation={paneOrientation}
                   onPathsChange={updateActivePaths}
                   onDirtyChange={updateActiveDirty}
                   onOpenSession={openSession}

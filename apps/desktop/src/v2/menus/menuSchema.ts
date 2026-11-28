@@ -13,10 +13,14 @@ export type MenuCapabilityKey =
   | "swapSides"
   | "reload";
 
+export type PaneOrientation = "side-by-side" | "over-under";
+
 export type MenuCheckedKey =
   | "filterMode:all"
   | "filterMode:diffs"
   | "filterMode:same"
+  | "paneOrientation:side-by-side"
+  | "paneOrientation:over-under"
   | "minorEnabled"
   | "contextEnabled"
   | "showToolbar"
@@ -69,6 +73,7 @@ export interface MenuEvalContext {
   readonly commands: V2ViewCommands;
   readonly showToolbar: boolean;
   readonly layoutDensity: "standard" | "compact";
+  readonly paneOrientation?: PaneOrientation;
   readonly theme: "light" | "dark";
 }
 
@@ -134,6 +139,10 @@ export function isMenuItemChecked(
       return ctx.commands.filterMode === "diffs";
     case "filterMode:same":
       return ctx.commands.filterMode === "same";
+    case "paneOrientation:side-by-side":
+      return (ctx.paneOrientation ?? "side-by-side") === "side-by-side";
+    case "paneOrientation:over-under":
+      return ctx.paneOrientation === "over-under";
     case "minorEnabled":
       return ctx.commands.minorEnabled === true;
     case "contextEnabled":

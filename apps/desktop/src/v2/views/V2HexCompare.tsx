@@ -20,6 +20,7 @@ import type { FilterMode, V2StatusInfo, V2ViewCommands } from "../types";
 export interface V2HexCompareProps {
   readonly leftPath: string;
   readonly rightPath: string;
+  readonly paneOrientation?: "side-by-side" | "over-under";
   readonly onPathsChange: (left: string, right: string) => void;
   readonly onRegisterCommands: (cmds: V2ViewCommands) => void;
   readonly onStatusChange: (status: V2StatusInfo) => void;
@@ -56,6 +57,7 @@ function byteKey(side: "left" | "right", absOffset: number): string {
 export default function V2HexCompare({
   leftPath,
   rightPath,
+  paneOrientation = "side-by-side",
   onPathsChange,
   onRegisterCommands,
   onStatusChange,
@@ -403,6 +405,7 @@ export default function V2HexCompare({
   return (
     <div
       data-testid="v2/hex-view"
+      data-pane-orientation={paneOrientation}
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--v2-surface)]"
     >
       <V2DualPathBar
@@ -502,6 +505,68 @@ export default function V2HexCompare({
         ) : visibleRows.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
             No hex bytes to display.
+          </div>
+        ) : paneOrientation === "over-under" ? (
+          <div className="flex h-full flex-col divide-y divide-[var(--v2-border)]">
+            {(["left", "right"] as const).map((side) => (
+              <div key={side} className="min-h-0 flex-1 overflow-auto">
+                <div className="sticky top-0 z-10 grid grid-cols-[78px_1fr_140px] border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2 py-1 text-[10.5px] font-semibold text-[var(--v2-fg-secondary)]">
+                  <span>Offset</span>
+                  <span>{side === "left" ? "Top Pane — Left Hex (00–0F)" : "Bottom Pane — Right Hex (00–0F)"}</span>
+                  <span>{side === "left" ? "Left ASCII" : "Right ASCII"}</span>
+                </div>
+                {visibleRows.map((row) => {
+                  const bytes = side === "left" ? row.left : row.right;
+                  const other = side === "left" ? row.right : row.left;
+                  return (
+                    <div
+                      key={`${side}-${row.rowOffset}`}
+                      className="grid h-[21px] grid-cols-[78px_1fr_140px] items-center px-2 hover:bg-[var(--v2-btn-hover)]/40"
+                    >
+                      <span className="select-none text-[var(--v2-fg-muted)]">
+                        {row.rowOffset.toString(16).toUpperCase().padStart(8, "0")}
+                      </span>
+                      <div className="flex flex-wrap gap-1 pr-2">
+                        {bytes.map((b, idx) => {
+                          const absOff = row.rowOffset + idx;
+                          const diff = b !== other[idx];
+                          return (
+                            <span
+                              key={idx}
+                              onClick={() => {
+                                if (b !== null) setSelectedByte({ side, absOffset: absOff });
+                              }}
+                              style={
+                                b !== null && diff
+                                  ? { backgroundColor: "var(--v2-chg-bg)", color: "var(--v2-chg-fg)" }
+                                  : undefined
+                              }
+                              className={`inline-block w-[18px] cursor-pointer rounded-[2px] text-center ${b === null ? "v2-hatch text-transparent" : ""} ${idx === 7 ? "mr-1.5" : ""}`}
+                            >
+                              {b === null ? ".." : hex2(b)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div className="truncate tracking-tight text-[var(--v2-fg-secondary)]">
+                        {bytes.map((b, idx) => (
+                          <span
+                            key={idx}
+                            style={
+                              b !== null && b !== other[idx]
+                                ? { backgroundColor: "var(--v2-chg-bg)", color: "var(--v2-chg-fg)" }
+                                : undefined
+                            }
+                          >
+                            {b === null ? " " : asciiChar(b)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="min-w-[980px]">

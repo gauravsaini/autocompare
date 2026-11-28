@@ -262,6 +262,23 @@
         { "kind": "separator" },
         {
           "kind": "action",
+          "id": "view.layout-side-by-side",
+          "command": "pane_side_by_side",
+          "label": "Side-by-Side Layout",
+          "requiresView": ["text", "hex"],
+          "checkedBy": "paneOrientation:side-by-side"
+        },
+        {
+          "kind": "action",
+          "id": "view.layout-over-under",
+          "command": "pane_over_under",
+          "label": "Over-Under Layout",
+          "requiresView": ["text", "hex"],
+          "checkedBy": "paneOrientation:over-under"
+        },
+        { "kind": "separator" },
+        {
+          "kind": "action",
           "id": "view.toggle-toolbar",
           "command": "toolbar_toggle",
           "label": "Toolbar",

@@ -130,7 +130,7 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 /// Synchronizes native menu item enabled/disabled states from the frontend's
 /// `computeNativeMenuEnabledMap(...)` so OS accelerators stay in sync with
 /// active ViewId and view capabilities.
-pub fn sync_menu_states<R: Runtime>(app: &AppHandle<R>, enabled_map: &HashMap<String, bool>) {
+pub fn apply_menu_states<R: Runtime>(app: &AppHandle<R>, enabled_map: &HashMap<String, bool>) {
     let Some(menu) = app.menu() else {
         return;
     };
@@ -143,12 +143,19 @@ pub fn sync_menu_states<R: Runtime>(app: &AppHandle<R>, enabled_map: &HashMap<St
     }
 }
 
+/// Tauri IPC command invoked by `V2App.tsx` whenever active ViewId or view
+/// capabilities change so native OS menus never drift from `V2MenuBar`.
+#[tauri::command]
+pub fn sync_menu_states(app: tauri::AppHandle, enabled_map: HashMap<String, bool>) {
+    apply_menu_states(&app, &enabled_map);
+}
+
 /// Dynamically updates the enabled state of native Take Left / Take Right menu items.
 pub fn set_take_menu_enabled<R: Runtime>(app: &AppHandle<R>, enabled: bool) {
     let mut map = HashMap::new();
     map.insert("session.take-left".to_string(), enabled);
     map.insert("session.take-right".to_string(), enabled);
-    sync_menu_states(app, &map);
+    apply_menu_states(app, &map);
 }
 
 /// Builds the native application menu directly from `menuSchema.json`.

@@ -15,6 +15,7 @@ export interface V2MenuBarProps {
   readonly commands: V2ViewCommands;
   readonly showToolbar: boolean;
   readonly layoutDensity: "standard" | "compact";
+  readonly paneOrientation: "side-by-side" | "over-under";
   readonly theme: "light" | "dark";
   readonly onCommand: (command: string) => void;
   readonly onOpenSessionKind: (kind: SessionKind, left?: string, right?: string) => void;
@@ -64,6 +65,7 @@ export default function V2MenuBar({
   commands,
   showToolbar,
   layoutDensity,
+  paneOrientation,
   theme,
   onCommand,
   onOpenSessionKind,
@@ -78,6 +80,7 @@ export default function V2MenuBar({
     commands,
     showToolbar,
     layoutDensity,
+    paneOrientation,
     theme,
   };
 

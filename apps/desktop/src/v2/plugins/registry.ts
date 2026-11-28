@@ -4,6 +4,7 @@ import type { SessionKind, V2StatusInfo, V2ViewCommands } from "../types";
 export interface ComparatorViewProps {
   readonly leftPath: string;
   readonly rightPath: string;
+  readonly paneOrientation?: "side-by-side" | "over-under";
   readonly onPathsChange: (left: string, right: string) => void;
   readonly onDirtyChange?: (dirty: boolean) => void;
   readonly onOpenSession?: (kind: SessionKind, left?: string, right?: string, title?: string) => void;

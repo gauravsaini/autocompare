@@ -25,6 +25,7 @@ const V2MediaCompare = lazy(() => import("../views/V2MediaCompare"));
 const TextAdapter: React.FC<ComparatorViewProps> = ({
   leftPath,
   rightPath,
+  paneOrientation,
   onPathsChange,
   onDirtyChange,
   onRegisterCommands,
@@ -33,6 +34,7 @@ const TextAdapter: React.FC<ComparatorViewProps> = ({
   <V2TextCompare
     leftPath={leftPath}
     rightPath={rightPath}
+    paneOrientation={paneOrientation}
     onPathsChange={onPathsChange}
     onDirtyChange={onDirtyChange ?? (() => undefined)}
     onRegisterCommands={onRegisterCommands}

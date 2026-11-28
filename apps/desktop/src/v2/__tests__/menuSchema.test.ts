@@ -50,10 +50,23 @@ describe("Unified Menu Schema (V2MenuBar + native menu.rs single source)", () =>
     assert.equal(textMap["session.take-left"], true);
     assert.equal(textMap["session.rules"], false);
     assert.equal(textMap["view.filter-diffs"], true);
+    assert.equal(textMap["view.layout-over-under"], true);
+    assert.equal(homeMap["view.layout-over-under"], false);
 
     assert.equal(
       isMenuItemEnabled({ requiresView: ["text", "hex"] }, { activeViewId: "folder", commands: {} }),
       false,
+    );
+    assert.equal(
+      isMenuItemChecked("paneOrientation:over-under", {
+        activeViewId: "hex",
+        commands: {},
+        showToolbar: true,
+        layoutDensity: "standard",
+        paneOrientation: "over-under",
+        theme: "dark",
+      }),
+      true,
     );
     assert.equal(
       isMenuItemChecked("filterMode:diffs", {

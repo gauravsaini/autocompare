@@ -65,6 +65,7 @@ pub const COMMANDS: &[&str] = &[
     "settings_get",
     "settings_set",
     "report_export",
+    "sync_menu_states",
 ];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -128,6 +129,7 @@ pub fn run() {
             commands::session::settings_get,
             commands::session::settings_set,
             commands::session::report_export,
+            menu::sync_menu_states,
         ]);
 
     match builder.build(tauri::generate_context!()) {
