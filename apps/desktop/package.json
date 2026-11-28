@@ -13,8 +13,8 @@
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build -o storybook-static",
     "test:storybook": "vitest run --project=storybook",
-    "test:visual": "playwright test -c playwright.storybook.config.ts",
-    "test:visual:update": "playwright test -c playwright.storybook.config.ts --update-snapshots",
+    "test:visual": "pnpm storybook:build && playwright test -c playwright.storybook.config.ts",
+    "test:visual:update": "pnpm storybook:build && playwright test -c playwright.storybook.config.ts --update-snapshots",
     "package:dmg": "bash ../../scripts/build-macos-dmg.sh"
   },
   "browserslist": [
