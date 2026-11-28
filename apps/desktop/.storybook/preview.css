@@ -1,0 +1,13 @@
+/* Storybook-only layout ergonomics (kept separate from app src/v2/v2.css) */
+html,
+body,
+#storybook-root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Allow Docs pages to scroll while keeping full-viewport story captures crisp */
+.sbdocs-wrapper,
+body.sb-main-padded {
+  overflow: auto;
+}
