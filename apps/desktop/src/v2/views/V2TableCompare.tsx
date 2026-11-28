@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KeyRound, Search, X } from "lucide-react";
 import { tableApplyEdit, tableCompare, tableFind, tableGetPage, tableSaveSide } from "../../ipc/table";
 import type { TableHit, TablePage, TableSummary } from "../../ipc/table";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitFileWatchTransition } from "../utils/fileWatch";
+import { emitBufferEditTransition, emitManualAlignTransition } from "../utils/textBuffer";
 import V2TableRulesModal from "../components/table/V2TableRulesModal";
 import type { TableRulesTab } from "../components/table/V2TableRulesModal";
 import V2ErrorBanner from "../components/V2ErrorBanner";
@@ -63,6 +67,9 @@ export default function V2TableCompare({
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+  // ODD Phase 4 Leaf A: ambient trace of the last compare, so reload prompts,
+  // buffer edits, and manual-align overrides link to the same trace.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
   const watchedPaths = useMemo(
     () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
     [leftDraft, rightDraft],
@@ -73,6 +80,20 @@ export default function V2TableCompare({
     onAutoReload: () => void runCompare(leftDraft, rightDraft),
   });
 
+  // ODD Phase 4 Leaf A: file-watch reload prompts emit explicit
+  // state-transition events linked to the ambient (last compare) trace.
+  const promptEmittedRef = useRef<string>("");
+  useEffect(() => {
+    if (changedPaths.length === 0) {
+      promptEmittedRef.current = "";
+      return;
+    }
+    const key = changedPaths.join("\0");
+    if (promptEmittedRef.current === key) return;
+    promptEmittedRef.current = key;
+    emitFileWatchTransition("table", "prompt_shown", { paths: changedPaths.length }, lastTraceRef.current);
+  }, [changedPaths]);
+
   useEffect(() => {
     setLeftDraft(leftPath);
     setRightDraft(rightPath);
@@ -80,6 +101,15 @@ export default function V2TableCompare({
 
   const runCompare = useCallback(
     async (l: string, r: string): Promise<void> => {
+      // ODD Phase 4 Leaf A: one root span per compare trigger (op table.compare),
+      // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op: "table.compare", component: "ts.ui/TableView", view_id: "table" })
+        : null;
+      if (obs !== null) {
+        setActiveTrace(obs.context());
+        lastTraceRef.current = obs.context();
+      }
       setLoading(true);
       setError(null);
       const lEff = l || "tools/parity-harness/fixtures/tab_left.csv";
@@ -95,7 +125,23 @@ export default function V2TableCompare({
         setSummary(dto);
         const pg = await tableGetPage(dto.sessionId, 0, 200, 0, 32);
         setPage(pg);
+        if (obs !== null) {
+          obs.set({
+            rows: Math.max(pg.totalRowsL, pg.totalRowsR),
+            cols: pg.totalCols,
+            hunks: dto.diffRows,
+            equal: dto.equal,
+            session: dto.sessionId,
+          });
+        }
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "table_compare_failed",
+            component: "ts.ui/TableView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (!l && !r && isMissingFixtureError(e)) {
           setSummary(null);
           setPage(null);
@@ -103,6 +149,10 @@ export default function V2TableCompare({
           setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },
@@ -244,6 +294,8 @@ export default function V2TableCompare({
     }
     const { side, row, col, value } = editingCell;
     setEditingCell(null);
+    // ODD Phase 4 Leaf A: buffer-edit state-transition event linked to ambient trace.
+    emitBufferEditTransition("table.compare", "table", "cell_edit", { side, row, col }, lastTraceRef.current);
     try {
       await tableApplyEdit(summary.sessionId, side, row, col, value);
       setPage((prev) => {
@@ -301,6 +353,8 @@ export default function V2TableCompare({
   };
 
   const toggleKeyCol = (colIdx: number): void => {
+    // ODD Phase 4 Leaf A: manual-align override event linked to ambient trace.
+    emitManualAlignTransition("table.compare", "table", "key_column_toggle", { col: colIdx }, lastTraceRef.current);
     setByKey(true);
     setKeyColumns((prev) =>
       prev.includes(colIdx) ? (prev.length > 1 ? prev.filter((c) => c !== colIdx) : prev) : [...prev, colIdx].sort((a, b) => a - b),
@@ -368,10 +422,14 @@ export default function V2TableCompare({
       <V2ReloadPromptBanner
         changedPaths={changedPaths}
         onReload={() => {
+          emitFileWatchTransition("table", "reload_accepted", { paths: changedPaths.length }, lastTraceRef.current);
           void resetBaseline();
           void runCompare(leftDraft, rightDraft);
         }}
-        onDismiss={dismissReload}
+        onDismiss={() => {
+          emitFileWatchTransition("table", "reload_dismissed", { paths: changedPaths.length }, lastTraceRef.current);
+          dismissReload();
+        }}
       />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 

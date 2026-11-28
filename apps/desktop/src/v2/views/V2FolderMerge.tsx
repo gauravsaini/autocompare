@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, GitMerge, Play } from "lucide-react";
 import { mergeFolderApply, mergeFolderPlan } from "../../ipc/merge";
 import type { FolderMergeApplyReport, TreeMergeAction, TreeMergePlan, TreeMergeStep } from "../../ipc/merge";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitManualAlignTransition } from "../utils/textBuffer";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import { isMissingFixtureError } from "../utils/demoGuard";
 import { browsePath } from "../utils/dialog";
@@ -54,6 +57,9 @@ export default function V2FolderMerge({
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ODD Phase 4 Leaf A: ambient trace of the last plan, so per-row overrides
+  // link to the same trace after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -61,6 +67,15 @@ export default function V2FolderMerge({
   }, [leftPath, rightPath]);
 
   const runPlan = useCallback(async (b: string, l: string, r: string): Promise<void> => {
+    // ODD Phase 4 Leaf A: one root span per plan trigger (op merge.folder_plan),
+    // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+    const obs: Span | null = isTelemetryEnabled()
+      ? startRootSpan({ op: "merge.folder_plan", component: "ts.ui/FolderMergeView", view_id: "merge" })
+      : null;
+    if (obs !== null) {
+      setActiveTrace(obs.context());
+      lastTraceRef.current = obs.context();
+    }
     setLoading(true);
     setError(null);
     setReport(null);
@@ -76,16 +91,39 @@ export default function V2FolderMerge({
           conflicts: Array.isArray(p.conflicts) ? p.conflicts : [],
           skipped: Array.isArray(p.skipped) ? p.skipped : [],
         });
+        if (obs !== null) {
+          const conflicts = p.steps.filter((s) => s.action === "Conflict").length;
+          obs.set({
+            rows: p.steps.length,
+            hunks: conflicts,
+            equal: conflicts === 0,
+            skipped: Array.isArray(p.skipped) ? p.skipped.length : 0,
+          });
+        }
       } else {
         setPlan({ steps: [], conflicts: [], skipped: [] });
+        if (obs !== null) {
+          obs.set({ rows: 0, hunks: 0, equal: true, skipped: 0 });
+        }
       }
     } catch (e) {
+      if (obs !== null) {
+        obs.error({
+          kind: "folder_merge_plan_failed",
+          component: "ts.ui/FolderMergeView",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
       if (!b && !l && !r && isMissingFixtureError(e)) {
         setPlan(null);
       } else {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
+      if (obs !== null) {
+        clearActiveTrace();
+        endSpan(obs);
+      }
       setLoading(false);
     }
   }, []);
@@ -142,6 +180,14 @@ export default function V2FolderMerge({
   }, [onStatusChange, effectiveSteps.length, unresolvedConflicts, plan, overrides, report]);
 
   const setRowOverride = (relPath: string, choice: StepOverride): void => {
+    // ODD Phase 4 Leaf A: per-row merge override linked to ambient trace.
+    emitManualAlignTransition(
+      "merge.folder_plan",
+      "merge",
+      "row_override",
+      { rel_path: relPath, choice },
+      lastTraceRef.current,
+    );
     setOverrides((prev) => {
       if (prev[relPath] === choice) {
         const next = { ...prev };
@@ -154,6 +200,14 @@ export default function V2FolderMerge({
 
   const resolveAllConflicts = (choice: "TakeLeft" | "TakeRight"): void => {
     if (!plan) return;
+    // ODD Phase 4 Leaf A: bulk conflict-resolution override linked to ambient trace.
+    emitManualAlignTransition(
+      "merge.folder_plan",
+      "merge",
+      "bulk_resolve",
+      { choice, conflicts: plan.steps.filter((s) => s.action === "Conflict").length },
+      lastTraceRef.current,
+    );
     setOverrides((prev) => {
       const next = { ...prev };
       for (const step of plan.steps) {

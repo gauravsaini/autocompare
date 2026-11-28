@@ -1,3 +1,5 @@
+import { endSpan, isTelemetryEnabled, startRootSpan } from "../../observability/tracer.ts";
+
 export interface BufferEditResult {
   readonly lines: string[];
   readonly nextLine: number;
@@ -166,4 +168,66 @@ export function replaceInLines(
     return updated;
   });
   return { lines: next, count };
+}
+
+/**
+ * ODD Phase 4 Leaf A — explicit buffer-edit state-transition event.
+ *
+ * Emits a short correlated span parent-linked to the ambient trace (the
+ * view's last compare root span) so in-place edits are traceable. The
+ * caller supplies the view's root `op` (from `telemetry/schema/v1/ops.json`)
+ * so no new ops are introduced. No-op when telemetry is off or `parent`
+ * is absent; never throws; pure buffer helpers above are untouched.
+ */
+export function emitBufferEditTransition(
+  op: string,
+  viewId: string,
+  transition: string,
+  detail?: Record<string, unknown>,
+  parent?: unknown,
+): void {
+  try {
+    if (!isTelemetryEnabled()) return;
+    if (parent === null || parent === undefined) return;
+    const span = startRootSpan({
+      op,
+      component: "ts.ui/bufferEdit",
+      view_id: viewId,
+      parent,
+      attributes: { event: transition, ...(detail ?? {}) },
+    });
+    endSpan(span);
+  } catch {
+    // Instrumentation never breaks the UI.
+  }
+}
+
+/**
+ * ODD Phase 4 Leaf A — explicit manual-align/override state-transition event.
+ *
+ * Same correlated-span mechanism as buffer edits, with a distinct
+ * component so alignment overrides (key columns, conflict resolutions,
+ * sync excludes, structured options) are distinguishable in traces.
+ */
+export function emitManualAlignTransition(
+  op: string,
+  viewId: string,
+  transition: string,
+  detail?: Record<string, unknown>,
+  parent?: unknown,
+): void {
+  try {
+    if (!isTelemetryEnabled()) return;
+    if (parent === null || parent === undefined) return;
+    const span = startRootSpan({
+      op,
+      component: "ts.ui/manualAlign",
+      view_id: viewId,
+      parent,
+      attributes: { event: transition, ...(detail ?? {}) },
+    });
+    endSpan(span);
+  } catch {
+    // Instrumentation never breaks the UI.
+  }
 }

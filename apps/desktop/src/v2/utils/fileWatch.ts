@@ -1,6 +1,39 @@
+import { endSpan, isTelemetryEnabled, startRootSpan } from "../../observability/tracer.ts";
+
 export interface FileFingerprint {
   readonly bytes?: number;
   readonly mtimeUnix?: number;
+}
+
+/**
+ * ODD Phase 4 Leaf A — explicit file-watch state-transition event.
+ *
+ * Emits a short correlated span (`ui.reload_prompt`, `ts.ui/fileWatch`)
+ * parent-linked to the ambient trace (the view's last compare root span)
+ * so reload prompts / auto-reloads / dismissals are traceable without
+ * altering behavior. No-op when telemetry is off or `parent` is absent;
+ * never throws.
+ */
+export function emitFileWatchTransition(
+  viewId: string,
+  transition: "prompt_shown" | "reload_accepted" | "reload_dismissed" | "auto_reloaded" | "baseline_reset",
+  detail?: Record<string, unknown>,
+  parent?: unknown,
+): void {
+  try {
+    if (!isTelemetryEnabled()) return;
+    if (parent === null || parent === undefined) return;
+    const span = startRootSpan({
+      op: "ui.reload_prompt",
+      component: "ts.ui/fileWatch",
+      view_id: viewId,
+      parent,
+      attributes: { event: transition, ...(detail ?? {}) },
+    });
+    endSpan(span);
+  } catch {
+    // Instrumentation never breaks the UI.
+  }
 }
 
 /**

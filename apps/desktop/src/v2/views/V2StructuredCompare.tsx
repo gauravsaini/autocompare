@@ -1,6 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Braces, Search, Sparkles } from "lucide-react";
 import { textCompare, textGetRows } from "../../ipc/text";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitBufferEditTransition, emitManualAlignTransition } from "../utils/textBuffer";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import {
@@ -74,6 +77,9 @@ export default function V2StructuredCompare({
   const [canonicalized, setCanonicalized] = useState(false);
   const [pathQuery, setPathQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // ODD Phase 4 Leaf A: ambient trace of the last load, so buffer edits and
+  // option overrides link to the same trace after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -82,6 +88,15 @@ export default function V2StructuredCompare({
 
   const loadFromPaths = useCallback(async (l: string, r: string): Promise<void> => {
     if (!l.trim() || !r.trim()) return;
+    // ODD Phase 4 Leaf A: one root span per load trigger (op structured.compare),
+    // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+    const obs: Span | null = isTelemetryEnabled()
+      ? startRootSpan({ op: "structured.compare", component: "ts.ui/StructuredView", view_id: "structured" })
+      : null;
+    if (obs !== null) {
+      setActiveTrace(obs.context());
+      lastTraceRef.current = obs.context();
+    }
     setError(null);
     try {
       const sum = await textCompare(l.trim(), r.trim());
@@ -90,8 +105,29 @@ export default function V2StructuredCompare({
       const rLines = page.rows.filter((row) => row.right !== null).map((row) => row.right as string);
       if (lLines.length > 0) setLeftText(lLines.join("\n"));
       if (rLines.length > 0) setRightText(rLines.join("\n"));
+      if (obs !== null) {
+        const hunks = page.rows.filter((row) => row.kind !== "equal").length;
+        obs.set({
+          rows: page.rows.length,
+          hunks,
+          equal: page.rows.length > 0 && hunks === 0,
+          session: sum.session,
+        });
+      }
     } catch (e) {
+      if (obs !== null) {
+        obs.error({
+          kind: "structured_compare_failed",
+          component: "ts.ui/StructuredView",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (obs !== null) {
+        clearActiveTrace();
+        endSpan(obs);
+      }
     }
   }, []);
 
@@ -130,6 +166,8 @@ export default function V2StructuredCompare({
   }, [nodes, filterMode, pathQuery]);
 
   const handleCanonicalize = (): void => {
+    // ODD Phase 4 Leaf A: manual canonicalize override linked to ambient trace.
+    emitManualAlignTransition("structured.compare", "structured", "canonicalize", undefined, lastTraceRef.current);
     if (parsedLeft.ok) setLeftText(canonicalizeJson(parsedLeft.value));
     if (parsedRight.ok) setRightText(canonicalizeJson(parsedRight.value));
     if (parsedLeft.ok && parsedRight.ok) setCanonicalized(true);
@@ -197,7 +235,10 @@ export default function V2StructuredCompare({
             <input
               type="checkbox"
               checked={ignoreArrayOrder}
-              onChange={(e) => setIgnoreArrayOrder(e.target.checked)}
+              onChange={(e) => {
+                emitManualAlignTransition("structured.compare", "structured", "ignore_array_order", { value: e.target.checked }, lastTraceRef.current);
+                setIgnoreArrayOrder(e.target.checked);
+              }}
               className="accent-[var(--v2-accent)]"
             />
             <span>Ignore array order</span>
@@ -206,7 +247,10 @@ export default function V2StructuredCompare({
             <input
               type="checkbox"
               checked={ignoreCase}
-              onChange={(e) => setIgnoreCase(e.target.checked)}
+              onChange={(e) => {
+                emitManualAlignTransition("structured.compare", "structured", "ignore_case", { value: e.target.checked }, lastTraceRef.current);
+                setIgnoreCase(e.target.checked);
+              }}
               className="accent-[var(--v2-accent)]"
             />
             <span>Ignore string case</span>
@@ -305,7 +349,10 @@ export default function V2StructuredCompare({
           </span>
           <textarea
             value={leftText}
-            onChange={(e) => setLeftText(e.target.value)}
+            onChange={(e) => {
+              emitBufferEditTransition("structured.compare", "structured", "source_edit", { side: "left" }, lastTraceRef.current);
+              setLeftText(e.target.value);
+            }}
             spellCheck={false}
             className="v2-mono min-h-0 flex-1 resize-none border-0 bg-[var(--v2-surface)] p-2.5 text-[11.5px] leading-[17px] text-[var(--v2-fg)] outline-none"
           />
@@ -316,7 +363,10 @@ export default function V2StructuredCompare({
           </span>
           <textarea
             value={rightText}
-            onChange={(e) => setRightText(e.target.value)}
+            onChange={(e) => {
+              emitBufferEditTransition("structured.compare", "structured", "source_edit", { side: "right" }, lastTraceRef.current);
+              setRightText(e.target.value);
+            }}
             spellCheck={false}
             className="v2-mono min-h-0 flex-1 resize-none border-0 bg-[var(--v2-surface)] p-2.5 text-[11.5px] leading-[17px] text-[var(--v2-fg)] outline-none"
           />

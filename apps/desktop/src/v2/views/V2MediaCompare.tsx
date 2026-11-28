@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioWaveform, Image as ImageIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { audioCompare, pictureCompare } from "../../ipc/media";
 import type { AudioSummary, PictureSummary } from "../../ipc/media";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitFileWatchTransition } from "../utils/fileWatch";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
@@ -77,6 +80,9 @@ export default function V2MediaCompare({
   const [aud, setAud] = useState<AudioSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // ODD Phase 4 Leaf A: ambient trace of the last compare, so reload prompts
+  // link to the same trace after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
   const watchedPaths = useMemo(
     () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
     [leftDraft, rightDraft],
@@ -94,8 +100,33 @@ export default function V2MediaCompare({
     setRightImgErr(false);
   }, [leftPath, rightPath]);
 
+  // ODD Phase 4 Leaf A: file-watch reload prompts emit explicit
+  // state-transition events linked to the ambient (last compare) trace.
+  const promptEmittedRef = useRef<string>("");
+  useEffect(() => {
+    if (changedPaths.length === 0) {
+      promptEmittedRef.current = "";
+      return;
+    }
+    const key = changedPaths.join("\0");
+    if (promptEmittedRef.current === key) return;
+    promptEmittedRef.current = key;
+    emitFileWatchTransition("media", "prompt_shown", { paths: changedPaths.length }, lastTraceRef.current);
+  }, [changedPaths]);
+
   const runCompare = useCallback(
     async (mKind: MediaKind, l: string, r: string, tol: number): Promise<void> => {
+      // ODD Phase 4 Leaf A: one root span per compare trigger
+      // (op media.picture_compare / media.audio_compare), following the exact
+      // V2TextCompare pattern. Telemetry-off runs identically.
+      const op = mKind === "picture" ? "media.picture_compare" : "media.audio_compare";
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op, component: "ts.ui/MediaView", view_id: "media" })
+        : null;
+      if (obs !== null) {
+        setActiveTrace(obs.context());
+        lastTraceRef.current = obs.context();
+      }
       setLoading(true);
       setError(null);
       try {
@@ -105,14 +136,39 @@ export default function V2MediaCompare({
           const res = await pictureCompare(lEff, rEff, tol > 0 ? tol : undefined);
           setPic(res);
           setAud(null);
+          if (obs !== null) {
+            obs.set({
+              rows: res.samples.length,
+              hunks: res.differingBytes,
+              equal: res.identical,
+              score: res.score,
+              session: res.receipt,
+            });
+          }
         } else {
           const lEff = l || "tools/parity-harness/fixtures/aud_left.wav";
           const rEff = r || "tools/parity-harness/fixtures/aud_right.wav";
           const res = await audioCompare(lEff, rEff, tol > 0 ? tol : undefined);
           setAud(res);
           setPic(null);
+          if (obs !== null) {
+            obs.set({
+              rows: res.diffWindows.length,
+              hunks: res.windowsDiffering,
+              equal: res.identical,
+              score: res.score,
+              session: res.receipt,
+            });
+          }
         }
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "media_compare_failed",
+            component: "ts.ui/MediaView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (!l && !r && isMissingFixtureError(e)) {
           setPic(null);
           setAud(null);
@@ -120,6 +176,10 @@ export default function V2MediaCompare({
           setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },
@@ -292,10 +352,14 @@ export default function V2MediaCompare({
       <V2ReloadPromptBanner
         changedPaths={changedPaths}
         onReload={() => {
+          emitFileWatchTransition("media", "reload_accepted", { paths: changedPaths.length }, lastTraceRef.current);
           void resetBaseline();
           void runCompare(kind, leftDraft, rightDraft, tolerance);
         }}
-        onDismiss={dismissReload}
+        onDismiss={() => {
+          emitFileWatchTransition("media", "reload_dismissed", { paths: changedPaths.length }, lastTraceRef.current);
+          dismissReload();
+        }}
       />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 

@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronUp, Edit3, FolderOpen, RotateCcw } from "lucide-react";
 import { mergeTextApply, mergeTextPlan } from "../../ipc/merge";
 import type { TextChoice, TextMergePlan, TextResolution } from "../../ipc/merge";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitBufferEditTransition, emitManualAlignTransition } from "../utils/textBuffer";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2EventLogBar from "../components/V2EventLogBar";
 import { isMissingFixtureError } from "../utils/demoGuard";
@@ -74,6 +77,9 @@ export default function V2MergeCompare({
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const paneScrollRefs = useRef<Record<string, HTMLPreElement | null>>({});
   const syncingScrollRef = useRef(false);
+  // ODD Phase 4 Leaf A: ambient trace of the last plan, so conflict
+  // resolutions and output edits link to the same trace.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -81,6 +87,15 @@ export default function V2MergeCompare({
   }, [leftPath, rightPath]);
 
   const runPlan = useCallback(async (b: string, l: string, r: string): Promise<void> => {
+    // ODD Phase 4 Leaf A: one root span per plan trigger (op merge.text_plan),
+    // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+    const obs: Span | null = isTelemetryEnabled()
+      ? startRootSpan({ op: "merge.text_plan", component: "ts.ui/MergeView", view_id: "merge" })
+      : null;
+    if (obs !== null) {
+      setActiveTrace(obs.context());
+      lastTraceRef.current = obs.context();
+    }
     setLoading(true);
     setError(null);
     setReportNote(null);
@@ -94,13 +109,32 @@ export default function V2MergeCompare({
       setEditingConflictId(null);
       setManualOutputEdited(false);
       setSelectedConflict(0);
+      if (obs !== null) {
+        obs.set({
+          rows: p.conflicts.length,
+          hunks: p.conflictCount,
+          equal: !p.hasConflicts,
+          clean_blocks: p.cleanBlockCount,
+        });
+      }
     } catch (e) {
+      if (obs !== null) {
+        obs.error({
+          kind: "merge_plan_failed",
+          component: "ts.ui/MergeView",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
       if (!b && !l && !r && isMissingFixtureError(e)) {
         setPlan(null);
       } else {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
+      if (obs !== null) {
+        clearActiveTrace();
+        endSpan(obs);
+      }
       setLoading(false);
     }
   }, []);
@@ -141,6 +175,14 @@ export default function V2MergeCompare({
   );
 
   const setChoice = useCallback((id: number, choice: TextChoice): void => {
+    // ODD Phase 4 Leaf A: manual conflict-resolution override linked to ambient trace.
+    emitManualAlignTransition(
+      "merge.text_plan",
+      "merge",
+      "conflict_resolve",
+      { conflict: id, choice: typeof choice === "string" ? choice : "custom" },
+      lastTraceRef.current,
+    );
     setManualOutputEdited(false);
     setChoices((prev) => {
       const next = { ...prev, [id]: choice };
@@ -155,6 +197,13 @@ export default function V2MergeCompare({
   const applyAll = useCallback(
     (choice: "left" | "right" | "base" | "bothLeftFirst"): void => {
       if (!plan) return;
+      emitManualAlignTransition(
+        "merge.text_plan",
+        "merge",
+        "bulk_resolve",
+        { choice, conflicts: plan.conflicts.length },
+        lastTraceRef.current,
+      );
       setManualOutputEdited(false);
       setChoices((prev) => {
         const next: Record<number, TextChoice> = {};
@@ -658,6 +707,8 @@ export default function V2MergeCompare({
           value={outputText}
           onChange={(e) => {
             setManualOutputEdited(true);
+            // ODD Phase 4 Leaf A: merged-output buffer edit linked to ambient trace.
+            emitBufferEditTransition("merge.text_plan", "merge", "output_edit", undefined, lastTraceRef.current);
             setOutputText(e.target.value);
           }}
           spellCheck={false}

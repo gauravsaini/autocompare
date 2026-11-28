@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowLeftRight, Play, Trash2 } from "lucide-react";
 import { syncApply, syncPlan } from "../../ipc/sync";
 import type { SyncApplyReport, SyncDirection, SyncPlan, SyncStep } from "../../ipc/sync";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitManualAlignTransition } from "../utils/textBuffer";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
 import V2EventLogBar from "../components/V2EventLogBar";
@@ -57,6 +60,9 @@ export default function V2SyncCompare({
   const [running, setRunning] = useState(false);
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ODD Phase 4 Leaf A: ambient trace of the last plan, so direction/exclude
+  // overrides link to the same trace after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -65,6 +71,15 @@ export default function V2SyncCompare({
 
   const runPlan = useCallback(
     async (l: string, r: string): Promise<void> => {
+      // ODD Phase 4 Leaf A: one root span per plan trigger (op sync.plan),
+      // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op: "sync.plan", component: "ts.ui/SyncView", view_id: "sync" })
+        : null;
+      if (obs !== null) {
+        setActiveTrace(obs.context());
+        lastTraceRef.current = obs.context();
+      }
       setLoading(true);
       setError(null);
       setReport(null);
@@ -74,13 +89,32 @@ export default function V2SyncCompare({
       try {
         const p = await syncPlan(lEff, rEff, { direction, prune });
         setPlan(p);
+        if (obs !== null) {
+          obs.set({
+            rows: p.steps.length,
+            hunks: p.steps.length,
+            equal: p.steps.length === 0,
+            skipped: p.skipped.length,
+          });
+        }
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "sync_plan_failed",
+            component: "ts.ui/SyncView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (!l && !r && isMissingFixtureError(e)) {
           setPlan(null);
         } else {
           setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },
@@ -114,6 +148,14 @@ export default function V2SyncCompare({
       const excluding = !next.has(relPath);
       if (excluding) next.add(relPath);
       else next.delete(relPath);
+      // ODD Phase 4 Leaf A: sync exclude/include override linked to ambient trace.
+      emitManualAlignTransition(
+        "sync.plan",
+        "sync",
+        excluding ? "step_excluded" : "step_included",
+        { rel_path: relPath },
+        lastTraceRef.current,
+      );
       setEventLog((log) =>
         appendEvent(log, "sync_filter", `${excluding ? "Exclude" : "Include"} ${relPath}`, {
           prevExcluded: Array.from(prev),
@@ -250,7 +292,10 @@ export default function V2SyncCompare({
                 <button
                   key={dir}
                   type="button"
-                  onClick={() => setDirection(dir)}
+                  onClick={() => {
+                    emitManualAlignTransition("sync.plan", "sync", "direction_change", { direction: dir }, lastTraceRef.current);
+                    setDirection(dir);
+                  }}
                   className={`inline-flex h-[22px] items-center gap-1 rounded-[5px] px-2.5 text-[11.5px] font-medium transition ${
                     active
                       ? "bg-[var(--v2-surface)] text-[var(--v2-fg)] shadow-xs"

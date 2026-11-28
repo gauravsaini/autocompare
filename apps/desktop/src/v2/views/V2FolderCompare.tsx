@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, FileText, Folder, Trash2 } from "lucide-react";
-import {
-  folderCompare,
-  folderCopyEntry,
-  folderDeleteEntry,
-  folderGetTree,
-} from "../../ipc/folder";
+import { folderCompare, folderCopyEntry, folderDeleteEntry, folderGetTree } from "../../ipc/folder";
 import type { FolderEntryDto } from "../../ipc/folder";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitFileWatchTransition } from "../utils/fileWatch";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ConfirmModal from "../components/V2ConfirmModal";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
@@ -102,6 +100,9 @@ export default function V2FolderCompare({
   const [rulesTab, setRulesTab] = useState<FolderRulesTab | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+  // ODD Phase 4 Leaf A: ambient trace of the last compare, so file-watch
+  // reload prompts link to the same trace even after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -116,6 +117,16 @@ export default function V2FolderCompare({
 
   const runCompare = useCallback(
     async (l: string, r: string): Promise<void> => {
+      // ODD Phase 4 Leaf A: one root span per compare trigger (op folder.compare),
+      // following the exact V2TextCompare pattern. Telemetry-off stays null and
+      // the body below runs identically (ambient slot untouched).
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op: "folder.compare", component: "ts.ui/FolderView", view_id: "folder" })
+        : null;
+      if (obs !== null) {
+        setActiveTrace(obs.context());
+        lastTraceRef.current = obs.context();
+      }
       setLoading(true);
       setError(null);
       const lEff = l || "tools/parity-harness/fixtures/folder/left";
@@ -133,18 +144,39 @@ export default function V2FolderCompare({
         const page = await folderGetTree(dto.session, 0, 500, "all");
         setEntries(page.entries);
         setTotalEntries(page.total);
+        if (obs !== null) {
+          const diffCount = page.entries.filter((e) => e.status !== "same").length;
+          obs.set({
+            rows: page.entries.length,
+            total: page.total,
+            hunks: diffCount,
+            equal: page.entries.length > 0 && diffCount === 0,
+            session: dto.session,
+          });
+        }
         const ts = new Date().toLocaleTimeString();
         setLogs((prev) => [
           ...prev.slice(-4),
           `${ts}  Loaded ${page.entries.length}/${page.total} entries (${folderRules.contentCompare ? "binary" : "quick"}${masks ? `, mask: ${masks}` : ""})`,
         ]);
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "folder_compare_failed",
+            component: "ts.ui/FolderView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (!l && !r && isMissingFixtureError(e)) {
           setEntries([]);
         } else {
           setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },
@@ -164,6 +196,20 @@ export default function V2FolderCompare({
     enabled: !loading && watchedPaths.length > 0,
     onAutoReload: () => void runCompare(leftDraft, rightDraft),
   });
+
+  // ODD Phase 4 Leaf A: file-watch reload prompts emit explicit
+  // state-transition events linked to the ambient (last compare) trace.
+  const promptEmittedRef = useRef<string>("");
+  useEffect(() => {
+    if (changedPaths.length === 0) {
+      promptEmittedRef.current = "";
+      return;
+    }
+    const key = changedPaths.join("\0");
+    if (promptEmittedRef.current === key) return;
+    promptEmittedRef.current = key;
+    emitFileWatchTransition("folder", "prompt_shown", { paths: changedPaths.length }, lastTraceRef.current);
+  }, [changedPaths]);
 
   const loadMoreEntries = useCallback(async (): Promise<void> => {
     if (!sessionId || loadingMore || entries.length >= totalEntries) return;
@@ -376,10 +422,14 @@ export default function V2FolderCompare({
       <V2ReloadPromptBanner
         changedPaths={changedPaths}
         onReload={() => {
+          emitFileWatchTransition("folder", "reload_accepted", { paths: changedPaths.length }, lastTraceRef.current);
           void resetBaseline();
           void runCompare(leftDraft, rightDraft);
         }}
-        onDismiss={dismissReload}
+        onDismiss={() => {
+          emitFileWatchTransition("folder", "reload_dismissed", { paths: changedPaths.length }, lastTraceRef.current);
+          dismissReload();
+        }}
       />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 

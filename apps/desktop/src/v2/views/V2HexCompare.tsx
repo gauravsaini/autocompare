@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Copy, RotateCcw, Search, X } from "lucide-react";
 import { hexApplyEdit, hexCompare, hexFind, hexGetPage, hexSaveSide } from "../../ipc/hex";
 import type { HexPage, HexSummary } from "../../ipc/hex";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import { endSpan, isTelemetryEnabled, startRootSpan, type Span } from "../../observability/tracer";
+import { emitFileWatchTransition } from "../utils/fileWatch";
+import { emitBufferEditTransition } from "../utils/textBuffer";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
@@ -87,6 +91,9 @@ export default function V2HexCompare({
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { containerRef, splitPct, dragging, startDrag, resetSplit } = useSplitPane(50);
+  // ODD Phase 4 Leaf A: ambient trace of the last compare, so reload prompts
+  // and byte edits link to the same trace after the root span ends.
+  const lastTraceRef = useRef<{ trace_id: string; span_id: string; sampled: boolean } | null>(null);
   const watchedPaths = useMemo(
     () => [leftDraft.trim(), rightDraft.trim()].filter((p) => p.length > 0),
     [leftDraft, rightDraft],
@@ -96,6 +103,20 @@ export default function V2HexCompare({
     enabled: !loading && watchedPaths.length > 0,
     onAutoReload: () => void runCompare(leftDraft, rightDraft),
   });
+
+  // ODD Phase 4 Leaf A: file-watch reload prompts emit explicit
+  // state-transition events linked to the ambient (last compare) trace.
+  const promptEmittedRef = useRef<string>("");
+  useEffect(() => {
+    if (changedPaths.length === 0) {
+      promptEmittedRef.current = "";
+      return;
+    }
+    const key = changedPaths.join("\0");
+    if (promptEmittedRef.current === key) return;
+    promptEmittedRef.current = key;
+    emitFileWatchTransition("hex", "prompt_shown", { paths: changedPaths.length }, lastTraceRef.current);
+  }, [changedPaths]);
 
   useEffect(() => {
     setLeftDraft(leftPath);
@@ -110,6 +131,15 @@ export default function V2HexCompare({
 
   const runCompare = useCallback(
     async (l: string, r: string): Promise<void> => {
+      // ODD Phase 4 Leaf A: one root span per compare trigger (op hex.compare),
+      // following the exact V2TextCompare pattern. Telemetry-off runs identically.
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op: "hex.compare", component: "ts.ui/HexView", view_id: "hex" })
+        : null;
+      if (obs !== null) {
+        setActiveTrace(obs.context());
+        lastTraceRef.current = obs.context();
+      }
       setLoading(true);
       setError(null);
       setByteEdits(new Map());
@@ -122,7 +152,24 @@ export default function V2HexCompare({
         const dto = await hexCompare(lEff, rEff);
         setSummary(dto);
         await loadPage(dto.sessionId, 0);
+        if (obs !== null) {
+          obs.set({
+            rows: Math.ceil(Math.max(dto.leftSize, dto.rightSize) / BYTES_PER_ROW),
+            hunks: dto.firstDiff === null || dto.firstDiff === undefined ? 0 : 1,
+            equal: dto.equal,
+            left_size: dto.leftSize,
+            right_size: dto.rightSize,
+            session: dto.sessionId,
+          });
+        }
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "hex_compare_failed",
+            component: "ts.ui/HexView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         if (!l && !r && isMissingFixtureError(e)) {
           setSummary(null);
           setPage(null);
@@ -130,6 +177,10 @@ export default function V2HexCompare({
           setError(e instanceof Error ? e.message : String(e));
         }
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },
@@ -199,6 +250,14 @@ export default function V2HexCompare({
     const raw = editingByte.draft.trim();
     if (/^[0-9a-fA-F]{1,2}$/.test(raw)) {
       const parsed = parseInt(raw, 16);
+      // ODD Phase 4 Leaf A: byte-edit state-transition event linked to ambient trace.
+      emitBufferEditTransition(
+        "hex.compare",
+        "hex",
+        "byte_edit",
+        { side: editingByte.side, offset: editingByte.absOffset },
+        lastTraceRef.current,
+      );
       const key = byteKey(editingByte.side, editingByte.absOffset);
       setByteEdits((prev) => {
         const prevVal = prev.get(key);
@@ -483,10 +542,14 @@ export default function V2HexCompare({
       <V2ReloadPromptBanner
         changedPaths={changedPaths}
         onReload={() => {
+          emitFileWatchTransition("hex", "reload_accepted", { paths: changedPaths.length }, lastTraceRef.current);
           void resetBaseline();
           void runCompare(leftDraft, rightDraft);
         }}
-        onDismiss={dismissReload}
+        onDismiss={() => {
+          emitFileWatchTransition("hex", "reload_dismissed", { paths: changedPaths.length }, lastTraceRef.current);
+          dismissReload();
+        }}
       />
       <V2ErrorBanner message={error} onDismiss={() => setError(null)} />
 

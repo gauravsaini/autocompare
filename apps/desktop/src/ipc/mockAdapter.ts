@@ -96,11 +96,12 @@ function strArg(args: Record<string, unknown>, names: readonly string[], fallbac
 // ODD Phase 3: trace echo (mock branch ONLY).
 //
 // When the caller injects a `__trace` envelope (see `client.ts`), every
-// text-domain OBJECT response echoes it back verbatim plus `__mock: true`,
-// so e2e correlation tests prove propagation without Rust. Non-object
-// responses (numbers, arrays, null) pass through untouched — echo fields
-// must never change a response shape. When no `__trace` arrives (telemetry
-// disabled or uninstrumented caller), responses are byte-identical to before.
+// text/folder/table/hex/merge/sync/media-domain OBJECT response echoes it
+// back verbatim plus `__mock: true`, so e2e correlation tests prove
+// propagation without Rust. Non-object responses (numbers, arrays, null)
+// pass through untouched — echo fields must never change a response shape.
+// When no `__trace` arrives (telemetry disabled or uninstrumented caller),
+// responses are byte-identical to before.
 // ---------------------------------------------------------------------------
 
 function withTraceEcho<T>(incomingTrace: unknown, value: T): T {
@@ -1114,13 +1115,13 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const nodes = dumped.folderNodes.filter((node) =>
         mockMasksAllow(parsed, node.relPath, node.isDir),
       );
-      return {
+      return withTraceEcho(incomingTrace, {
         session: "mock-folder-1",
         leftRoot: strArg(args, ["left"], ""),
         rightRoot: strArg(args, ["right"], ""),
         total: nodes.length,
         truncated: false,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "folder_get_tree": {
       const filter = strArg(args, ["filter"], "all");
@@ -1135,53 +1136,53 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const total = entries.length;
       const start = Math.min(numArg(args, ["start"], 0), total);
       const limit = Math.min(numArg(args, ["limit"], 50), 500);
-      return {
+      return withTraceEcho(incomingTrace, {
         session: "mock-folder-1",
         start,
         total,
         filter,
         entries: entries.slice(start, start + limit),
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "folder_cancel": {
-      return {
+      return withTraceEcho(incomingTrace, {
         session: strArg(args, ["session"], "mock-folder-1"),
         cancelled: true,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "folder_copy_entry": {
-      return {
+      return withTraceEcho(incomingTrace, {
         session: strArg(args, ["session"], "mock-folder-1"),
         relPath: strArg(args, ["rel_path", "relPath"], ""),
         action: strArg(args, ["dir"], "leftToRight"),
         bytesAffected: 128,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "folder_delete_entry": {
-      return {
+      return withTraceEcho(incomingTrace, {
         session: strArg(args, ["session"], "mock-folder-1"),
         relPath: strArg(args, ["rel_path", "relPath"], ""),
         action: `delete:${strArg(args, ["side"], "left")}`,
         bytesAffected: 128,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "table_apply_edit": {
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId: strArg(args, ["session", "sessionId"], "mock-table-1"),
         side: strArg(args, ["side"], "left"),
         row: numArg(args, ["row"], 0),
         col: numArg(args, ["col"], 0),
         value: strArg(args, ["value"], ""),
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "table_save_side": {
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId: strArg(args, ["session", "sessionId"], "mock-table-1"),
         side: strArg(args, ["side"], "left"),
         path: strArg(args, ["path"], ""),
         rowsWritten: dumped.tableCells.totalRowsL,
         bytesWritten: 256,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "table_compare": {
       const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
@@ -1216,7 +1217,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       }
       const diffRows =
         mismatches + Math.abs(cells.rowsL.length - cells.rowsR.length);
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId: "mock-table-1",
         leftRows: cells.totalRowsL,
         rightRows: cells.totalRowsR,
@@ -1226,7 +1227,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         byKey: false,
         diffRows,
         keyColumns: [],
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "table_get_page": {
       const cells = dumped.tableCells;
@@ -1240,7 +1241,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const rowsR = cells.rowsR.slice(startRow, startRow + limit).map(sliceCols);
       const rowsRemain =
         startRow + limit < cells.totalRowsL || startRow + limit < cells.totalRowsR;
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId: "mock-table-1",
         startRow,
         limit,
@@ -1254,7 +1255,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         totalRowsR: cells.totalRowsR,
         totalCols: cells.totalCols,
         truncated: rowsRemain || startCol + colLimit < cells.totalCols,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "table_find": {
       // Wave-66G: numeric-aware find — substring win, else exact f64 equality (mirrors the exact-equality half of cells_equal_with_tolerance with no tolerance: find carries none).
@@ -1312,7 +1313,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
             ? (node.right === null ? "DeleteLeft" : "CopyToLeft")
             : (node.left === null ? "CopyToLeft" : "CopyToRight"),
         }));
-      return { steps, skipped: [], truncated: false } as unknown as T;
+      return withTraceEcho(incomingTrace, { steps, skipped: [], truncated: false }) as unknown as T;
     }
     case "sync_apply": {
       const steps = dumped.folderNodes
@@ -1324,19 +1325,19 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         }));
       const copies = steps.length;
       const dry = args["dry_run"] === true || args["dryRun"] === true;
-      return {
+      return withTraceEcho(incomingTrace, {
         dry_run: dry,
         copied: dry ? 0 : copies,
         deleted: 0,
         planned_copies: dry ? copies : 0,
         planned_deletes: 0,
         failed: [],
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "picture_compare": {
       // Mock-only fixed summary (proves MediaView wiring end to end;
       // real metrics come from the Rust engine).
-      return {
+      return withTraceEcho(incomingTrace, {
         receipt: "mock-picture-1",
         identical: false,
         format: "png",
@@ -1354,11 +1355,11 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
           { offset: 202, left: 200, right: 201 },
         ],
         truncated: false,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "audio_compare": {
       const tol = typeof args["tolerance"] === "number" ? args["tolerance"] : 0;
-      return {
+      return withTraceEcho(incomingTrace, {
         receipt: "mock-audio-1",
         identical: false,
         configMismatch: false,
@@ -1379,7 +1380,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
           { window: 78, atSeconds: 0.78 },
         ],
         truncated: false,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "hex_compare": {
       const res: HexSummary = {
@@ -1389,7 +1390,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         equal: false,
         firstDiff: 8,
       };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     case "hex_get_page": {
       const sessionId = strArg(args, ["session", "sessionId"], "mock-hex-1");
@@ -1409,7 +1410,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         total: 64,
         truncated: false,
       };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     case "hex_find": {
       const fromOffset = numArg(args, ["from_offset", "fromOffset"], 0);
@@ -1444,25 +1445,25 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const side = strArg(args, ["side"], "left");
       const offset = numArg(args, ["offset"], 0);
       const value = numArg(args, ["value"], 0) & 0xff;
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId,
         side,
         offset,
         value,
         pendingEdits: 1,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "hex_save_side": {
       const sessionId = strArg(args, ["session", "sessionId"], "mock-hex-1");
       const side = strArg(args, ["side"], "left");
       const path = strArg(args, ["path"], "");
-      return {
+      return withTraceEcho(incomingTrace, {
         sessionId,
         side,
         path,
         bytesWritten: 64,
         editsApplied: 1,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "merge_text_plan": {
       const res: TextMergePlan = {
@@ -1478,7 +1479,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         cleanBlockCount: 2,
         hasConflicts: true,
       };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     case "merge_text_apply": {
       const res: TextMergeApplyReport = {
@@ -1489,7 +1490,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         unresolvedCount: 0,
         hasConflictMarkers: false,
       };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     case "merge_folder_plan": {
       const steps: TreeMergeStep[] = dumped.folderNodes
@@ -1509,7 +1510,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         }));
       const conflicts = steps.filter((s) => s.action === "Conflict").map((s) => s.rel_path);
       const res: TreeMergePlan = { steps, conflicts, skipped: [] };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     case "merge_folder_apply": {
       const outPath = strArg(args, ["out_path", "outPath"], "/tmp/merged-folder");
@@ -1526,7 +1527,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         conflictPaths: conflicts,
         failed: [],
       };
-      return res as unknown as T;
+      return withTraceEcho(incomingTrace, res) as unknown as T;
     }
     default:
       return Promise.resolve([] as unknown as T);
