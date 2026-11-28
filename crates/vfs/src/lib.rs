@@ -14,6 +14,7 @@ pub mod archive_tar;
 pub mod archive_zip;
 pub mod error;
 pub mod local;
+pub(crate) mod odd;
 pub mod path;
 pub mod registry;
 pub mod snapshot;

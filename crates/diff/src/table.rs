@@ -136,6 +136,27 @@ pub struct WorkbookDiff {
 
 /// Compares two workbooks by matching sheets on name.
 pub fn diff_workbooks(a: &Workbook, b: &Workbook) -> WorkbookDiff {
+    // ODD Phase 6: orchestration span (sheet counts + verdict, never names/contents).
+    let odd_span = tracing::info_span!(
+        "diff.workbooks",
+        component = "rs.diff/table",
+        a_sheets = a.sheets.len() as u64,
+        b_sheets = b.sheets.len() as u64,
+        sheets_compared = tracing::field::Empty,
+        identical = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_workbooks_inner(a, b);
+    odd_span.record("sheets_compared", out.sheet_diffs.len() as u64);
+    odd_span.record("identical", out.identical);
+    out
+}
+
+fn diff_workbooks_inner(a: &Workbook, b: &Workbook) -> WorkbookDiff {
     let mut sheet_diffs = Vec::new();
     let mut identical = true;
 
@@ -205,8 +226,25 @@ pub fn parse_delimited(text: &str, delimiter: char, first_row_is_header: bool) -
 
 /// Row-level diff over whole cell rows: the Myers engine over `Vec<String>` rows.
 pub fn diff_rows(a: &[Vec<String>], b: &[Vec<String>]) -> DiffScript {
+    // ODD Phase 6: orchestration span (row counts + op count, never cell contents).
+    let odd_span = tracing::info_span!(
+        "diff.table_rows",
+        component = "rs.diff/table",
+        a_rows = a.len() as u64,
+        b_rows = b.len() as u64,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let (ops, exact) = engine::diff_slices(a, b, Some(EDIT_BUDGET));
-    DiffScript { ops, exact }
+    let out = DiffScript { ops, exact };
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("exact", out.exact);
+    out
 }
 
 /// Indices of columns whose cells differ between two rows, compared
@@ -321,6 +359,28 @@ pub fn detect_key_columns(table: &Table) -> Vec<usize> {
 /// Exact text equality on every cell. For numeric tolerance, case
 /// folding or space trimming see [`diff_table_by_key_with_options`].
 pub fn diff_table_by_key(a: &Table, b: &Table, key_columns: &[usize]) -> TableKeyDiff {
+    // ODD Phase 6: orchestration span (row counts + key arity + verdict counts).
+    let odd_span = tracing::info_span!(
+        "diff.table_by_key",
+        component = "rs.diff/table",
+        a_rows = a.rows.len() as u64,
+        b_rows = b.rows.len() as u64,
+        key_columns = key_columns.len() as u64,
+        matching_rows = tracing::field::Empty,
+        modified_rows = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_table_by_key_inner(a, b, key_columns);
+    odd_span.record("matching_rows", out.matching_rows as u64);
+    odd_span.record("modified_rows", out.modified_rows as u64);
+    out
+}
+
+fn diff_table_by_key_inner(a: &Table, b: &Table, key_columns: &[usize]) -> TableKeyDiff {
     if key_columns.is_empty() {
         // Fall back to sequential row diff
         let script = diff_rows(&a.rows, &b.rows);
@@ -540,8 +600,35 @@ pub fn diff_table_by_key_with_options(
     b: &Table,
     opts: &TableCompareOptions,
 ) -> TableKeyDiff {
+    // ODD Phase 6: orchestration span (row counts + option flags, never contents).
+    let odd_span = tracing::info_span!(
+        "diff.table_by_key",
+        component = "rs.diff/table",
+        a_rows = a.rows.len() as u64,
+        b_rows = b.rows.len() as u64,
+        ignore_case = opts.ignore_case,
+        trim_space = opts.trim_space,
+        matching_rows = tracing::field::Empty,
+        modified_rows = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_table_by_key_with_options_inner(a, b, opts);
+    odd_span.record("matching_rows", out.matching_rows as u64);
+    odd_span.record("modified_rows", out.modified_rows as u64);
+    out
+}
+
+fn diff_table_by_key_with_options_inner(
+    a: &Table,
+    b: &Table,
+    opts: &TableCompareOptions,
+) -> TableKeyDiff {
     if opts.numeric_tolerance.is_none() && !opts.ignore_case && !opts.trim_space {
-        return diff_table_by_key(a, b, &opts.key_columns);
+        return diff_table_by_key_inner(a, b, &opts.key_columns);
     }
     if opts.key_columns.is_empty() {
         return diff_tables_positional(a, b, opts);

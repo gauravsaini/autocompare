@@ -250,6 +250,18 @@ impl LocalFs {
 
 impl Vfs for LocalFs {
     fn list_dir(&self, path: &VfsPath) -> Result<Vec<VfsEntry>, VfsError> {
+        // ODD Phase 6: I/O summary span (entry count only, never names).
+        let odd_span = tracing::info_span!(
+            "vfs.list_dir",
+            component = "rs.vfs/local",
+            path = %crate::odd::path_token(path.as_str()),
+            entries = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         let physical = self.resolve(path)?;
         self.check_traversal_escape(&physical, path)?;
 
@@ -305,10 +317,24 @@ impl Vfs for LocalFs {
         }
 
         entries.sort_by(|a, b| a.name.cmp(&b.name));
+        odd_span.record("entries", entries.len() as u64);
         Ok(entries)
     }
 
     fn stat(&self, path: &VfsPath) -> Result<VfsMeta, VfsError> {
+        // ODD Phase 6: I/O summary span (shape only, never names).
+        let odd_span = tracing::info_span!(
+            "vfs.stat",
+            component = "rs.vfs/local",
+            path = %crate::odd::path_token(path.as_str()),
+            is_dir = tracing::field::Empty,
+            len = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         let physical = self.resolve(path)?;
         if !path.is_root()
             && let Some(parent) = physical.parent()
@@ -332,7 +358,7 @@ impl Vfs for LocalFs {
             (sym_meta.is_dir(), sym_meta.is_file())
         };
 
-        Ok(VfsMeta {
+        let meta = VfsMeta {
             is_dir,
             is_file,
             is_symlink,
@@ -340,7 +366,10 @@ impl Vfs for LocalFs {
             modified: sym_meta.modified().ok(),
             readonly: sym_meta.permissions().readonly(),
             crc32: None,
-        })
+        };
+        odd_span.record("is_dir", meta.is_dir);
+        odd_span.record("len", meta.len);
+        Ok(meta)
     }
 
     fn read_stream(
@@ -348,6 +377,19 @@ impl Vfs for LocalFs {
         path: &VfsPath,
         max_bytes: u64,
     ) -> Result<Box<dyn Read + Send>, VfsError> {
+        // ODD Phase 6: I/O summary span (byte counts only, never contents).
+        let odd_span = tracing::info_span!(
+            "vfs.read",
+            component = "rs.vfs/local",
+            path = %crate::odd::path_token(path.as_str()),
+            max_bytes = max_bytes,
+            bytes = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         let physical = self.resolve(path)?;
         self.check_traversal_escape(&physical, path)?;
 
@@ -375,6 +417,7 @@ impl Vfs for LocalFs {
             _ => VfsError::Io(err),
         })?;
 
+        odd_span.record("bytes", meta.len());
         Ok(Box::new(BoundedReader {
             inner: file,
             bytes_read: 0,
@@ -384,6 +427,19 @@ impl Vfs for LocalFs {
     }
 
     fn write_atomic(&self, path: &VfsPath, bytes: &[u8]) -> Result<(), VfsError> {
+        // ODD Phase 6: I/O summary span (byte count only, never contents).
+        let odd_span = tracing::info_span!(
+            "vfs.write",
+            component = "rs.vfs/local",
+            path = %crate::odd::path_token(path.as_str()),
+            bytes = bytes.len() as u64,
+            ok = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         if self.readonly {
             return Err(VfsError::ReadOnly);
         }
@@ -429,6 +485,7 @@ impl Vfs for LocalFs {
             return Err(VfsError::Io(err));
         }
 
+        odd_span.record("ok", true);
         Ok(())
     }
 

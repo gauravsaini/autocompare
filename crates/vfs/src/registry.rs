@@ -191,6 +191,28 @@ impl VfsRegistry {
         &self,
         uri_or_path: &str,
     ) -> Result<(Box<dyn Vfs>, VfsPath), VfsError> {
+        // ODD Phase 6: I/O summary span (scheme token only, never raw URI).
+        let scheme = crate::registry::detect_scheme_from_path(uri_or_path);
+        let odd_span = tracing::info_span!(
+            "vfs.registry_open",
+            component = "rs.vfs/registry",
+            scheme = crate::odd::scheme_token(scheme),
+            ok = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = self.open_with_subpath_inner(uri_or_path)?;
+        odd_span.record("ok", true);
+        Ok(out)
+    }
+
+    fn open_with_subpath_inner(
+        &self,
+        uri_or_path: &str,
+    ) -> Result<(Box<dyn Vfs>, VfsPath), VfsError> {
         let parsed = VfsUri::parse(uri_or_path)?;
         let factory = self.factories.get(&parsed.scheme).ok_or_else(|| {
             VfsError::UnsupportedFormat(format!(

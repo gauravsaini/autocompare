@@ -54,20 +54,85 @@ impl Default for TextDiffOptions {
 
 /// Computes a diff script between two line sequences using the chosen algorithm.
 pub fn diff(a: &[&str], b: &[&str], algorithm: DiffAlgorithm) -> DiffScript {
-    match algorithm {
-        DiffAlgorithm::Myers => diff_myers(a, b),
-        DiffAlgorithm::Patience => diff_patience(a, b),
-    }
+    // ODD Phase 6: orchestration span (counts + algorithm, never contents).
+    let algo_name = match algorithm {
+        DiffAlgorithm::Myers => "myers",
+        DiffAlgorithm::Patience => "patience",
+    };
+    let odd_span = tracing::info_span!(
+        "diff.text",
+        component = "rs.diff/text",
+        algorithm = algo_name,
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = match algorithm {
+        DiffAlgorithm::Myers => diff_myers_inner(a, b),
+        DiffAlgorithm::Patience => diff_patience_inner(a, b),
+    };
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("exact", out.exact);
+    out
 }
 
 /// Compares two line sequences using Myers' linear-space algorithm.
 pub fn diff_myers(a: &[&str], b: &[&str]) -> DiffScript {
+    // ODD Phase 6: orchestration span (counts only).
+    let odd_span = tracing::info_span!(
+        "diff.text",
+        component = "rs.diff/text",
+        algorithm = "myers",
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_myers_inner(a, b);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("exact", out.exact);
+    out
+}
+
+fn diff_myers_inner(a: &[&str], b: &[&str]) -> DiffScript {
     let (ops, exact) = engine::diff_slices(a, b, Some(crate::EDIT_BUDGET));
     DiffScript { ops, exact }
 }
 
 /// Compares two line sequences taking full text diff ignore options into account.
 pub fn diff_with_options(a: &[&str], b: &[&str], options: &TextDiffOptions) -> DiffScript {
+    // ODD Phase 6: orchestration span (counts + option flags, never contents).
+    let algo_name = match options.algorithm {
+        DiffAlgorithm::Myers => "myers",
+        DiffAlgorithm::Patience => "patience",
+    };
+    let odd_span = tracing::info_span!(
+        "diff.text",
+        component = "rs.diff/text",
+        algorithm = algo_name,
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ignore_case = options.ignore_case,
+        ignore_blank_lines = options.ignore_blank_lines,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let grammar_opts = GrammarOptions {
         ignore_case: options.ignore_case,
         whitespace: options.whitespace,
@@ -84,7 +149,10 @@ pub fn diff_with_options(a: &[&str], b: &[&str], options: &TextDiffOptions) -> D
     let slice_a: Vec<&str> = norm_a.iter().map(|s| s.as_str()).collect();
     let slice_b: Vec<&str> = norm_b.iter().map(|s| s.as_str()).collect();
 
-    diff(&slice_a, &slice_b, options.algorithm)
+    let out = diff(&slice_a, &slice_b, options.algorithm);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("exact", out.exact);
+    out
 }
 
 /// Compares two line sequences using the Patience diff algorithm.
@@ -94,6 +162,28 @@ pub fn diff_with_options(a: &[&str], b: &[&str], options: &TextDiffOptions) -> D
 /// 3. Recursively diff the regions between anchors.
 /// 4. When a region contains no unique matches, fallback to Myers diff.
 pub fn diff_patience(a: &[&str], b: &[&str]) -> DiffScript {
+    // ODD Phase 6: orchestration span (counts only).
+    let odd_span = tracing::info_span!(
+        "diff.text",
+        component = "rs.diff/text",
+        algorithm = "patience",
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_patience_inner(a, b);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("exact", out.exact);
+    out
+}
+
+fn diff_patience_inner(a: &[&str], b: &[&str]) -> DiffScript {
     let mut builder = PatienceBuilder::new();
     let exact = diff_patience_slice(a, 0, a.len(), b, 0, b.len(), &mut builder, 0);
     DiffScript {

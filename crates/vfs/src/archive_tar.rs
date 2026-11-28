@@ -40,12 +40,28 @@ impl TarGzFs {
     /// Returns [`VfsError::NotFound`] if missing, or [`VfsError::CorruptedArchive`]
     /// if archive parsing fails.
     pub fn open_file(path: impl AsRef<Path>) -> Result<Self, VfsError> {
+        // ODD Phase 6: I/O summary span (byte + entry counts, never names).
+        let odd_span = tracing::info_span!(
+            "vfs.archive_open",
+            component = "rs.vfs/tar",
+            kind = "tar",
+            bytes = tracing::field::Empty,
+            entries = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         let bytes = fs::read(path.as_ref()).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => VfsError::NotFound(VfsPath::root()),
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(VfsPath::root()),
             _ => VfsError::Io(err),
         })?;
-        Self::from_bytes(&bytes)
+        odd_span.record("bytes", bytes.len() as u64);
+        let out = Self::from_bytes_inner(&bytes)?;
+        odd_span.record("entries", out.entries_count() as u64);
+        Ok(out)
     }
 
     /// Creates a [`TarGzFs`] from an in-memory byte slice.
@@ -56,6 +72,25 @@ impl TarGzFs {
     ///
     /// Returns [`VfsError::CorruptedArchive`] if decompression or tar reading fails.
     pub fn from_bytes(raw_bytes: &[u8]) -> Result<Self, VfsError> {
+        // ODD Phase 6: I/O summary span (byte + entry counts only).
+        let odd_span = tracing::info_span!(
+            "vfs.archive_open",
+            component = "rs.vfs/tar",
+            kind = "tar",
+            bytes = raw_bytes.len() as u64,
+            entries = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = Self::from_bytes_inner(raw_bytes)?;
+        odd_span.record("entries", out.entries_count() as u64);
+        Ok(out)
+    }
+
+    fn from_bytes_inner(raw_bytes: &[u8]) -> Result<Self, VfsError> {
         let is_gzip = raw_bytes.first() == Some(&0x1F) && raw_bytes.get(1) == Some(&0x8B);
 
         let decompressed = if is_gzip {

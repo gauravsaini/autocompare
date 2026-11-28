@@ -781,6 +781,27 @@ fn diff_extra_tags(
 
 /// Compares two sets of media tags and reports matches, differences, and unique fields.
 pub fn diff_media_tags(left: &MediaTags, right: &MediaTags) -> MediaTagsDiff {
+    // ODD Phase 6: orchestration span (field counts only, never tag values).
+    let odd_span = tracing::info_span!(
+        "diff.media_tags",
+        component = "rs.diff/media_tags",
+        matching = tracing::field::Empty,
+        differing = tracing::field::Empty,
+        identical = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_media_tags_inner(left, right);
+    odd_span.record("matching", out.matching.len() as u64);
+    odd_span.record("differing", out.differing.len() as u64);
+    odd_span.record("identical", out.identical);
+    out
+}
+
+fn diff_media_tags_inner(left: &MediaTags, right: &MediaTags) -> MediaTagsDiff {
     let mut matching = Vec::new();
     let mut differing = Vec::new();
     let mut left_only = Vec::new();

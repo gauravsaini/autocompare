@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod error;
 pub mod folder;
 pub mod hex;
 pub mod media;

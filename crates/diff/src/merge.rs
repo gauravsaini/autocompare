@@ -552,6 +552,26 @@ pub struct MergeSession {
 impl MergeSession {
     /// Constructs a new 3-way merge session from base, left, and right lines.
     pub fn new(base: &[&str], left: &[&str], right: &[&str]) -> Self {
+        // ODD Phase 6: orchestration span (line counts + conflict count).
+        let odd_span = tracing::info_span!(
+            "diff.merge_session",
+            component = "rs.diff/merge",
+            base_lines = base.len() as u64,
+            left_lines = left.len() as u64,
+            right_lines = right.len() as u64,
+            conflicts = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = Self::new_inner(base, left, right);
+        odd_span.record("conflicts", out.conflict_count() as u64);
+        out
+    }
+
+    fn new_inner(base: &[&str], left: &[&str], right: &[&str]) -> Self {
         let raw_blocks = merge3_blocks(base, left, right);
         let mut blocks = Vec::with_capacity(raw_blocks.len());
         let mut conflict_id = 0usize;
@@ -580,6 +600,36 @@ impl MergeSession {
     /// Constructs a 3-way merge session with explicit diff algorithm
     /// (Myers minimal vs Patience readable). Headless; never panics.
     pub fn new_with_algorithm(
+        base: &[&str],
+        left: &[&str],
+        right: &[&str],
+        algorithm: DiffAlgorithm,
+    ) -> Self {
+        // ODD Phase 6: orchestration span (counts + algorithm, never contents).
+        let algo_name = match algorithm {
+            DiffAlgorithm::Myers => "myers",
+            DiffAlgorithm::Patience => "patience",
+        };
+        let odd_span = tracing::info_span!(
+            "diff.merge_session",
+            component = "rs.diff/merge",
+            algorithm = algo_name,
+            base_lines = base.len() as u64,
+            left_lines = left.len() as u64,
+            right_lines = right.len() as u64,
+            conflicts = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = Self::new_with_algorithm_inner(base, left, right, algorithm);
+        odd_span.record("conflicts", out.conflict_count() as u64);
+        out
+    }
+
+    fn new_with_algorithm_inner(
         base: &[&str],
         left: &[&str],
         right: &[&str],

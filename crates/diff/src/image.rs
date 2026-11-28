@@ -394,11 +394,58 @@ impl PictureDiff {
 
 /// Compares two images pixel by pixel over their overlap with default options (exact RGBA match).
 pub fn diff_pictures(a: &RgbaImage, b: &RgbaImage) -> PictureDiff {
-    diff_pictures_with_options(a, b, &PictureOptions::default())
+    // ODD Phase 6: orchestration span (dimensions only, never pixels).
+    let odd_span = tracing::info_span!(
+        "diff.pictures",
+        component = "rs.diff/image",
+        a_width = a.width as u64,
+        a_height = a.height as u64,
+        b_width = b.width as u64,
+        b_height = b.height as u64,
+        differing = tracing::field::Empty,
+        identical = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_pictures_with_options(a, b, &PictureOptions::default());
+    odd_span.record("differing", out.differing);
+    odd_span.record("identical", out.identical);
+    out
 }
 
 /// Compares two images pixel by pixel over their overlap with custom tolerance, range, and blend options.
 pub fn diff_pictures_with_options(
+    a: &RgbaImage,
+    b: &RgbaImage,
+    opts: &PictureOptions,
+) -> PictureDiff {
+    // ODD Phase 6: orchestration span (dimensions + tolerance, never pixels).
+    let odd_span = tracing::info_span!(
+        "diff.pictures",
+        component = "rs.diff/image",
+        a_width = a.width as u64,
+        a_height = a.height as u64,
+        b_width = b.width as u64,
+        b_height = b.height as u64,
+        tolerance = opts.tolerance as u64,
+        differing = tracing::field::Empty,
+        identical = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_pictures_with_options_inner(a, b, opts);
+    odd_span.record("differing", out.differing);
+    odd_span.record("identical", out.identical);
+    out
+}
+
+fn diff_pictures_with_options_inner(
     a: &RgbaImage,
     b: &RgbaImage,
     opts: &PictureOptions,

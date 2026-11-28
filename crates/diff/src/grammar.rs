@@ -1466,6 +1466,32 @@ pub fn diff_lines_with_grammar(
     b: &[&str],
     options: &GrammarOptions,
 ) -> GrammarDiffScript {
+    // ODD Phase 6: orchestration span (line counts + option flags, never contents).
+    let odd_span = tracing::info_span!(
+        "diff.grammar",
+        component = "rs.diff/grammar",
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ignore_blank_lines = options.ignore_blank_lines,
+        identical = tracing::field::Empty,
+        important = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_lines_with_grammar_inner(a, b, options);
+    odd_span.record("identical", out.identical_count as u64);
+    odd_span.record("important", out.important_count as u64);
+    out
+}
+
+fn diff_lines_with_grammar_inner(
+    a: &[&str],
+    b: &[&str],
+    options: &GrammarOptions,
+) -> GrammarDiffScript {
     let norm_a = normalize_lines(a, options);
     let norm_b = normalize_lines(b, options);
 

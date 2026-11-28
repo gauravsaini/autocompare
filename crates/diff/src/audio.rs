@@ -291,11 +291,53 @@ pub struct AudioDiff {
 
 /// Compares two decoded streams with exact equality (0.0 tolerance).
 pub fn diff_audio(a: &PcmAudio, b: &PcmAudio) -> AudioDiff {
-    diff_audio_with_tolerance(a, b, 0.0)
+    // ODD Phase 6: orchestration span (sample counts + config, never samples).
+    let odd_span = tracing::info_span!(
+        "diff.audio",
+        component = "rs.diff/audio",
+        a_samples = a.samples.len() as u64,
+        b_samples = b.samples.len() as u64,
+        identical = tracing::field::Empty,
+        config_mismatch = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_audio_with_tolerance_inner(a, b, 0.0);
+    odd_span.record("identical", out.identical);
+    odd_span.record("config_mismatch", out.config_mismatch);
+    out
 }
 
 /// Compares two decoded streams with an amplitude tolerance.
 pub fn diff_audio_with_tolerance(
+    a: &PcmAudio,
+    b: &PcmAudio,
+    amplitude_tolerance: f32,
+) -> AudioDiff {
+    // ODD Phase 6: orchestration span (sample counts only, never samples).
+    let odd_span = tracing::info_span!(
+        "diff.audio",
+        component = "rs.diff/audio",
+        a_samples = a.samples.len() as u64,
+        b_samples = b.samples.len() as u64,
+        identical = tracing::field::Empty,
+        config_mismatch = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_audio_with_tolerance_inner(a, b, amplitude_tolerance);
+    odd_span.record("identical", out.identical);
+    odd_span.record("config_mismatch", out.config_mismatch);
+    out
+}
+
+fn diff_audio_with_tolerance_inner(
     a: &PcmAudio,
     b: &PcmAudio,
     amplitude_tolerance: f32,

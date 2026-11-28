@@ -14,6 +14,7 @@ mod image;
 pub mod media_tags;
 pub mod merge;
 mod merge3;
+pub(crate) mod odd;
 mod table;
 pub mod text_diff;
 mod word_diff;
@@ -71,7 +72,23 @@ pub const EDIT_BUDGET: usize = 50_000;
 /// delete+insert when the edit distance exceeds [`EDIT_BUDGET`].
 /// Never panics.
 pub fn diff_lines(a: &[&str], b: &[&str]) -> DiffScript {
+    // ODD Phase 6: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "diff.lines",
+        component = "rs.diff/lines",
+        a_lines = a.len() as u64,
+        b_lines = b.len() as u64,
+        ops = tracing::field::Empty,
+        exact = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let (ops, exact) = engine::diff_slices(a, b, Some(EDIT_BUDGET));
+    odd_span.record("ops", ops.len() as u64);
+    odd_span.record("exact", exact);
     DiffScript { ops, exact }
 }
 
@@ -96,7 +113,22 @@ pub struct InlineSpan {
 /// aid: highlighting is computed on the raw lines, whatever the
 /// comparison options were.
 pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
-    word_diff::word_char_diff(a, b)
+    // ODD Phase 6: orchestration span. Only shapes recorded, never text.
+    let odd_span = tracing::info_span!(
+        "diff.inline",
+        component = "rs.diff/inline",
+        a_chars = a.chars().count() as u64,
+        b_chars = b.chars().count() as u64,
+        spans = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = word_diff::word_char_diff(a, b);
+    odd_span.record("spans", out.len() as u64);
+    out
 }
 
 /// Three-way merge of `base`, `left` and `right` line sequences.
@@ -105,7 +137,25 @@ pub fn inline_diff(a: &str, b: &str) -> Vec<InlineSpan> {
 /// edits become conflict hunks delimited by `<<<<<<<` / `>>>>>>>`
 /// markers. Never panics; the result is always complete lines.
 pub fn merge3(base: &[&str], left: &[&str], right: &[&str]) -> Vec<String> {
-    merge3::merge3(base, left, right)
+    // ODD Phase 6: orchestration span (counts only).
+    let odd_span = tracing::info_span!(
+        "diff.merge3",
+        component = "rs.diff/merge3",
+        base_lines = base.len() as u64,
+        left_lines = left.len() as u64,
+        right_lines = right.len() as u64,
+        out_lines = tracing::field::Empty,
+        has_conflict = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = merge3::merge3(base, left, right);
+    odd_span.record("out_lines", out.len() as u64);
+    odd_span.record("has_conflict", crate::odd::has_conflict_markers(&out));
+    out
 }
 
 /// Three-way merge with explicit diff algorithm (Myers/Patience).
@@ -116,5 +166,28 @@ pub fn merge3_with_algorithm(
     right: &[&str],
     algorithm: crate::text_diff::DiffAlgorithm,
 ) -> Vec<String> {
-    merge3::merge3_with_algorithm(base, left, right, algorithm)
+    // ODD Phase 6: orchestration span (counts + algorithm, never contents).
+    let algo_name = match algorithm {
+        crate::text_diff::DiffAlgorithm::Myers => "myers",
+        crate::text_diff::DiffAlgorithm::Patience => "patience",
+    };
+    let odd_span = tracing::info_span!(
+        "diff.merge3",
+        component = "rs.diff/merge3",
+        algorithm = algo_name,
+        base_lines = base.len() as u64,
+        left_lines = left.len() as u64,
+        right_lines = right.len() as u64,
+        out_lines = tracing::field::Empty,
+        has_conflict = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = merge3::merge3_with_algorithm(base, left, right, algorithm);
+    odd_span.record("out_lines", out.len() as u64);
+    odd_span.record("has_conflict", crate::odd::has_conflict_markers(&out));
+    out
 }

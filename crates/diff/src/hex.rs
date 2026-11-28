@@ -93,15 +93,59 @@ pub struct HexRow {
 
 /// Compares two byte slices with the requested alignment strategy.
 pub fn diff_hex(left: &[u8], right: &[u8], alignment: HexAlignment) -> HexDiff {
-    match alignment {
-        HexAlignment::None => diff_hex_none(left, right),
-        HexAlignment::Fast => diff_hex_fast(left, right),
-        HexAlignment::Complete => diff_hex_complete(left, right),
-    }
+    // ODD Phase 6: orchestration span (byte counts + alignment, never contents).
+    let algo_name = match alignment {
+        HexAlignment::None => "none",
+        HexAlignment::Fast => "fast",
+        HexAlignment::Complete => "complete",
+    };
+    let odd_span = tracing::info_span!(
+        "diff.hex",
+        component = "rs.diff/hex",
+        alignment = algo_name,
+        left_bytes = left.len() as u64,
+        right_bytes = right.len() as u64,
+        ops = tracing::field::Empty,
+        differing_bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = match alignment {
+        HexAlignment::None => diff_hex_none_inner(left, right),
+        HexAlignment::Fast => diff_hex_fast_inner(left, right),
+        HexAlignment::Complete => diff_hex_complete_inner(left, right),
+    };
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("differing_bytes", out.differing_bytes as u64);
+    out
 }
 
 /// Direct byte-by-byte comparison with no alignment/shift detection.
 pub fn diff_hex_none(left: &[u8], right: &[u8]) -> HexDiff {
+    // ODD Phase 6: orchestration span (byte counts only).
+    let odd_span = tracing::info_span!(
+        "diff.hex_none",
+        component = "rs.diff/hex",
+        left_bytes = left.len() as u64,
+        right_bytes = right.len() as u64,
+        ops = tracing::field::Empty,
+        differing_bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_hex_none_inner(left, right);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("differing_bytes", out.differing_bytes as u64);
+    out
+}
+
+fn diff_hex_none_inner(left: &[u8], right: &[u8]) -> HexDiff {
     let left_len = left.len();
     let right_len = right.len();
     let common = left_len.min(right_len);
@@ -188,6 +232,27 @@ pub fn diff_hex_none(left: &[u8], right: &[u8]) -> HexDiff {
 
 /// Windowed heuristic lookahead alignment for fast resynchronization.
 pub fn diff_hex_fast(left: &[u8], right: &[u8]) -> HexDiff {
+    // ODD Phase 6: orchestration span (byte counts only).
+    let odd_span = tracing::info_span!(
+        "diff.hex_fast",
+        component = "rs.diff/hex",
+        left_bytes = left.len() as u64,
+        right_bytes = right.len() as u64,
+        ops = tracing::field::Empty,
+        differing_bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_hex_fast_inner(left, right);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("differing_bytes", out.differing_bytes as u64);
+    out
+}
+
+fn diff_hex_fast_inner(left: &[u8], right: &[u8]) -> HexDiff {
     let left_len = left.len();
     let right_len = right.len();
 
@@ -387,6 +452,27 @@ fn emit_mismatch_ops(
 
 /// Optimal minimal edit sequence alignment via Myers diff engine.
 pub fn diff_hex_complete(left: &[u8], right: &[u8]) -> HexDiff {
+    // ODD Phase 6: orchestration span (byte counts only).
+    let odd_span = tracing::info_span!(
+        "diff.hex_complete",
+        component = "rs.diff/hex",
+        left_bytes = left.len() as u64,
+        right_bytes = right.len() as u64,
+        ops = tracing::field::Empty,
+        differing_bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = diff_hex_complete_inner(left, right);
+    odd_span.record("ops", out.ops.len() as u64);
+    odd_span.record("differing_bytes", out.differing_bytes as u64);
+    out
+}
+
+fn diff_hex_complete_inner(left: &[u8], right: &[u8]) -> HexDiff {
     let left_len = left.len();
     let right_len = right.len();
 

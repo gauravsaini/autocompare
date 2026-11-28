@@ -38,6 +38,25 @@ pub struct ZipFs {
 ///
 /// Returns [`VfsError::CorruptedArchive`] if zip construction fails.
 pub fn create_zip_archive(entries: &[(&VfsPath, &[u8])]) -> Result<Vec<u8>, VfsError> {
+    // ODD Phase 6: I/O summary span (entry + byte counts, never names/contents).
+    let odd_span = tracing::info_span!(
+        "vfs.archive_create",
+        component = "rs.vfs/zip",
+        kind = "zip",
+        entries = entries.len() as u64,
+        bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = create_zip_archive_inner(entries)?;
+    odd_span.record("bytes", out.len() as u64);
+    Ok(out)
+}
+
+fn create_zip_archive_inner(entries: &[(&VfsPath, &[u8])]) -> Result<Vec<u8>, VfsError> {
     let mut buffer = Vec::new();
     let mut writer = ZipWriter::new(Cursor::new(&mut buffer));
     let options = SimpleFileOptions::default();
@@ -123,12 +142,28 @@ impl ZipFs {
     /// Returns [`VfsError::NotFound`] if missing, or [`VfsError::CorruptedArchive`]
     /// if archive parsing fails.
     pub fn open_file(path: impl AsRef<Path>) -> Result<Self, VfsError> {
+        // ODD Phase 6: I/O summary span (byte + entry counts, never names).
+        let odd_span = tracing::info_span!(
+            "vfs.archive_open",
+            component = "rs.vfs/zip",
+            kind = "zip",
+            bytes = tracing::field::Empty,
+            entries = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
         let bytes = fs::read(path.as_ref()).map_err(|err| match err.kind() {
             io::ErrorKind::NotFound => VfsError::NotFound(VfsPath::root()),
             io::ErrorKind::PermissionDenied => VfsError::PermissionDenied(VfsPath::root()),
             _ => VfsError::Io(err),
         })?;
-        Self::from_bytes(bytes)
+        odd_span.record("bytes", bytes.len() as u64);
+        let out = Self::from_bytes_inner(bytes)?;
+        odd_span.record("entries", out.entries_count() as u64);
+        Ok(out)
     }
 
     /// Creates a [`ZipFs`] from an in-memory byte buffer.
@@ -137,6 +172,25 @@ impl ZipFs {
     ///
     /// Returns [`VfsError::CorruptedArchive`] if the buffer is not a valid zip archive.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, VfsError> {
+        // ODD Phase 6: I/O summary span (byte + entry counts only).
+        let odd_span = tracing::info_span!(
+            "vfs.archive_open",
+            component = "rs.vfs/zip",
+            kind = "zip",
+            bytes = bytes.len() as u64,
+            entries = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = Self::from_bytes_inner(bytes)?;
+        odd_span.record("entries", out.entries_count() as u64);
+        Ok(out)
+    }
+
+    fn from_bytes_inner(bytes: Vec<u8>) -> Result<Self, VfsError> {
         let cursor = Cursor::new(&bytes);
         let mut archive = ZipArchive::new(cursor).map_err(VfsError::from)?;
         let comment = std::str::from_utf8(archive.comment())
@@ -339,6 +393,25 @@ impl ZipFs {
     ///
     /// Returns VFS errors on read or write failures.
     pub fn extract_to(&self, dest: &dyn Vfs, dest_root: &VfsPath) -> Result<usize, VfsError> {
+        // ODD Phase 6: I/O summary span (entry counts only).
+        let odd_span = tracing::info_span!(
+            "vfs.archive_extract",
+            component = "rs.vfs/zip",
+            kind = "zip",
+            entries = self.entries.len() as u64,
+            extracted = tracing::field::Empty,
+        );
+        let _odd_guard = if crate::odd::enabled() {
+            Some(odd_span.enter())
+        } else {
+            None
+        };
+        let out = self.extract_to_inner(dest, dest_root)?;
+        odd_span.record("extracted", out as u64);
+        Ok(out)
+    }
+
+    fn extract_to_inner(&self, dest: &dyn Vfs, dest_root: &VfsPath) -> Result<usize, VfsError> {
         let mut extracted = 0_usize;
         for (path, item) in &self.entries {
             if item.meta.is_file {

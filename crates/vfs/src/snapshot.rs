@@ -348,7 +348,21 @@ pub struct SnapshotEntry {
 ///
 /// Returns [`VfsError::CorruptedArchive`] if JSON serialization fails.
 pub fn serialize_bcss_json(doc: &SnapshotDocument) -> Result<Vec<u8>, VfsError> {
-    serde_json::to_vec_pretty(doc).map_err(VfsError::from)
+    // ODD Phase 6: I/O summary span (entry + byte counts, never names).
+    let odd_span = tracing::info_span!(
+        "vfs.snapshot_serialize",
+        component = "rs.vfs/snapshot",
+        entries = doc.entries.len() as u64,
+        bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = serde_json::to_vec_pretty(doc).map_err(VfsError::from)?;
+    odd_span.record("bytes", out.len() as u64);
+    Ok(out)
 }
 
 /// Serializes a snapshot document to Gzip-compressed JSON bytes.
@@ -372,6 +386,24 @@ pub fn serialize_bcss_compressed(doc: &SnapshotDocument) -> Result<Vec<u8>, VfsE
 /// Returns [`VfsError::SchemaVersionMismatch`] if the schema version differs from [`BCSS_SCHEMA_VERSION`],
 /// or [`VfsError::CorruptedArchive`] on malformed data.
 pub fn deserialize_bcss(raw_bytes: &[u8]) -> Result<SnapshotDocument, VfsError> {
+    // ODD Phase 6: I/O summary span (byte + entry counts, never names).
+    let odd_span = tracing::info_span!(
+        "vfs.snapshot_deserialize",
+        component = "rs.vfs/snapshot",
+        bytes = raw_bytes.len() as u64,
+        entries = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = deserialize_bcss_inner(raw_bytes)?;
+    odd_span.record("entries", out.entries.len() as u64);
+    Ok(out)
+}
+
+fn deserialize_bcss_inner(raw_bytes: &[u8]) -> Result<SnapshotDocument, VfsError> {
     let is_gzip = raw_bytes.first() == Some(&0x1F) && raw_bytes.get(1) == Some(&0x8B);
 
     let json_bytes = if is_gzip {
@@ -454,6 +486,31 @@ pub fn create_deep_snapshot(
 ///
 /// Propagates VFS traversal and read errors.
 pub fn create_snapshot_with_options(
+    vfs: &dyn Vfs,
+    root: &VfsPath,
+    root_name: &str,
+    description: Option<String>,
+    options: &WalkOptions,
+) -> Result<SnapshotDocument, VfsError> {
+    // ODD Phase 6: I/O summary span (entry counts only, never names).
+    let odd_span = tracing::info_span!(
+        "vfs.snapshot_create",
+        component = "rs.vfs/snapshot",
+        entries = tracing::field::Empty,
+        bytes = tracing::field::Empty,
+    );
+    let _odd_guard = if crate::odd::enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
+    let out = create_snapshot_with_options_inner(vfs, root, root_name, description, options)?;
+    odd_span.record("entries", out.entries.len() as u64);
+    odd_span.record("bytes", out.total_size());
+    Ok(out)
+}
+
+fn create_snapshot_with_options_inner(
     vfs: &dyn Vfs,
     root: &VfsPath,
     root_name: &str,

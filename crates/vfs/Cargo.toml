@@ -10,9 +10,14 @@ workspace = true
 
 [dependencies]
 autocompare-evidence = { path = "../evidence" }
+autocompare-telemetry = { path = "../telemetry" }
+tracing = "0.1"
 tar = "0.4"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 flate2 = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crc32fast = "1.4"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
