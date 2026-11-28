@@ -58,15 +58,17 @@ fn redact_never_leaks_content() {
 #[test]
 fn emit_shapes_match_schema_fields() {
     let ctx = TraceContext::fresh(true);
-    let open = emit::span_open(&ctx, None, "text.compare", "rs.cmd/text", Some("s1"), Some("text"), "2026-11-28T00:00:00Z");
-    assert_eq!(open.get("schema_version").and_then(serde_json::Value::as_u64), Some(1));
-    assert_eq!(open.get("kind").and_then(serde_json::Value::as_str), Some("span"));
-    assert_eq!(open.get("op").and_then(serde_json::Value::as_str), Some("text.compare"));
-    assert_eq!(open.get("redaction").and_then(serde_json::Value::as_str), Some("v1-default"));
-
-    let close = emit::span_close(&ctx, "text.compare", true, 42, serde_json::Map::new());
-    assert_eq!(close.get("status").and_then(serde_json::Value::as_str), Some("ok"));
-    assert_eq!(close.get("duration_ns").and_then(serde_json::Value::as_u64), Some(42));
+    let mut span = emit::Span::begin(&ctx, None, "text.compare", "rs.cmd/text", Some("s1"), Some("text"), "2026-11-28T00:00:00Z");
+    span.set_attr("hunks", serde_json::json!(6));
+    let rec = span.finish(true);
+    assert_eq!(rec.get("schema_version").and_then(serde_json::Value::as_u64), Some(1));
+    assert_eq!(rec.get("kind").and_then(serde_json::Value::as_str), Some("span"));
+    assert_eq!(rec.get("op").and_then(serde_json::Value::as_str), Some("text.compare"));
+    assert_eq!(rec.get("redaction").and_then(serde_json::Value::as_str), Some("v1-default"));
+    assert_eq!(rec.get("status").and_then(serde_json::Value::as_str), Some("ok"));
+    assert!(rec.get("started_at").is_some());
+    assert!(rec.get("duration_ns").and_then(serde_json::Value::as_u64).is_some());
+    assert_eq!(rec.get("attributes").and_then(|a| a.get("hunks")).and_then(serde_json::Value::as_u64), Some(6));
 
     let err = emit::error_event(&ctx, "ipc.serde_error", "rs.compare/text", "bad field", "2026-11-28T00:00:00Z");
     assert_eq!(err.get("kind").and_then(serde_json::Value::as_str), Some("event"));
