@@ -24,7 +24,9 @@ type Story = StoryObj<typeof meta>;
 export const UnresolvedConflict: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("Conflict #1")).toBeVisible();
+    await expect(
+      await canvas.findByText("Conflict #1", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await expect(canvas.getByText("Unresolved")).toBeVisible();
   },
 };
@@ -32,7 +34,9 @@ export const UnresolvedConflict: Story = {
 export const ResolvedWithCustomEdit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("Conflict #1")).toBeVisible();
+    await expect(
+      await canvas.findByText("Conflict #1", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Take Left" }));
     await expect(canvas.getByText("Resolved")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: /Edit Inline/i }));

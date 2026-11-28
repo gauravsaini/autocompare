@@ -1,8 +1,8 @@
 import type { SessionDocument } from "../../ipc/session";
 
 const MOCK_SESSIONS_KEY = "autocompare:mockSessionStore:v1";
-const PINNED_SESSIONS_KEY = "autocompare:v2:pinnedSessions:v1";
-const SIDEBAR_PREFS_KEY = "autocompare:v2:homeSidebar:v1";
+const PINNED_SESSIONS_KEY = "autocompare:v2:pinnedSessions";
+const SIDEBAR_PREFS_KEY = "autocompare.v2.home.sidebar.v1";
 
 export const SAMPLE_SAVED_SESSIONS: Record<string, SessionDocument> = {
   "sess-api-diff": {

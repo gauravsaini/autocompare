@@ -22,6 +22,7 @@ export default defineConfig({
     "import.meta.env.VITE_MOCK_IPC": JSON.stringify("1"),
   },
   test: {
+    fileParallelism: false,
     projects: [
       {
         extends: true,

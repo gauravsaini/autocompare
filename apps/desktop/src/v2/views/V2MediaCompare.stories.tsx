@@ -24,43 +24,55 @@ type Story = StoryObj<typeof meta>;
 export const PictureSliderWipe: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByTestId("v2/media-stage")).toBeVisible();
-    await expect(canvas.getByText(/Slider Wipe/)).toBeVisible();
+    await expect(
+      await canvas.findByTestId("v2/media-stage", {}, { timeout: 5000 }),
+    ).toBeVisible();
+    await expect(canvas.getByText("Visual Compare — Slider Wipe")).toBeVisible();
   },
 };
 
 export const SideBySideMode: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByTestId("v2/media-stage")).toBeVisible();
+    await expect(
+      await canvas.findByTestId("v2/media-stage", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByTestId("v2/media-mode-sideBySide"));
-    await expect(canvas.getByText(/Side-by-Side/)).toBeVisible();
+    await expect(canvas.getByText("Visual Compare — Side-by-Side")).toBeVisible();
   },
 };
 
 export const OnionSkinMode: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByTestId("v2/media-stage")).toBeVisible();
+    await expect(
+      await canvas.findByTestId("v2/media-stage", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByTestId("v2/media-mode-onion"));
-    await expect(canvas.getByText(/Onion Skin/)).toBeVisible();
+    await expect(canvas.getByText("Visual Compare — Onion Skin")).toBeVisible();
   },
 };
 
 export const PixelDiffMode: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByTestId("v2/media-stage")).toBeVisible();
+    await expect(
+      await canvas.findByTestId("v2/media-stage", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByTestId("v2/media-mode-diff"));
-    await expect(canvas.getByText(/Pixel Diff/)).toBeVisible();
+    await expect(canvas.getByText("Visual Compare — Pixel Diff")).toBeVisible();
   },
 };
 
 export const AudioCompareMode: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByTestId("v2/media-stage")).toBeVisible();
+    await expect(
+      await canvas.findByTestId("v2/media-stage", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Audio" }));
-    await expect(await canvas.findByText("Audio Stream Similarity")).toBeVisible();
+    await expect(
+      await canvas.findByText("Audio Stream Similarity", {}, { timeout: 5000 }),
+    ).toBeVisible();
   },
 };

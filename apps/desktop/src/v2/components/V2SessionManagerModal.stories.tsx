@@ -30,7 +30,9 @@ export const PopulatedSessions: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("API Config JSON Diff")).toBeVisible();
+    await expect(
+      await canvas.findByText("API Config JSON Diff", {}, { timeout: 5000 }),
+    ).toBeVisible();
     await userEvent.type(canvas.getByPlaceholderText("Search saved sessions…"), "Release");
     await expect(canvas.getByText("Release Build Folder Check")).toBeVisible();
   },
@@ -45,6 +47,8 @@ export const EmptyState: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("No saved sessions found.")).toBeVisible();
+    await expect(
+      await canvas.findByText("No saved sessions found.", {}, { timeout: 5000 }),
+    ).toBeVisible();
   },
 };

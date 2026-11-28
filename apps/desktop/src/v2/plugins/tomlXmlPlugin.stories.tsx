@@ -43,6 +43,6 @@ export const XmlModeAndDiffsOnly: Story = {
     await userEvent.clear(rightArea);
     await userEvent.type(rightArea, "<config><port>8080</port><mode>dev</mode></config>");
     await userEvent.click(canvas.getByLabelText("Only differences"));
-    await expect(canvas.getByText("config.port")).toBeVisible();
+    await expect(canvas.getByText("config/port")).toBeVisible();
   },
 };

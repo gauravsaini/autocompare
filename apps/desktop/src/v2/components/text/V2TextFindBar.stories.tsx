@@ -1,15 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { createRef } from "react";
+import { useRef } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
-import V2TextFindBar from "./V2TextFindBar";
+import V2TextFindBar, { type V2TextFindBarProps } from "./V2TextFindBar";
+
+function FindBarHarness(
+  props: Omit<V2TextFindBarProps, "inputRef" | "replaceInputRef">,
+) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  return <V2TextFindBar {...props} inputRef={inputRef} replaceInputRef={replaceInputRef} />;
+}
 
 const meta = {
   title: "V2/Text/V2TextFindBar",
-  component: V2TextFindBar,
+  component: FindBarHarness,
   tags: ["autodocs"],
   args: {
-    inputRef: createRef<HTMLInputElement | null>(),
-    replaceInputRef: createRef<HTMLInputElement | null>(),
     query: "latency",
     replaceQuery: "duration",
     replaceOpen: false,
