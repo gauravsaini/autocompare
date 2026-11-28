@@ -99,7 +99,7 @@ export default function V2EventLogBar<TPayload>({
                 <div
                   key={`${ev.seq}-${idx}`}
                   className={`flex items-center justify-between gap-2 ${
-                    isUndone ? "opacity-40 line-through" : "text-[var(--v2-fg)]"
+                    isUndone ? "text-[var(--v2-fg-muted)] line-through" : "text-[var(--v2-fg)]"
                   }`}
                 >
                   <span>

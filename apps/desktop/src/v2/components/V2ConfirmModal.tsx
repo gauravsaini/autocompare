@@ -61,7 +61,7 @@ export default function V2ConfirmModal({
             onClick={onConfirm}
             className={
               destructive
-                ? "v2-btn border-[var(--v2-del-fg)] bg-[var(--v2-del-fg)] text-white hover:opacity-90"
+                ? "v2-btn border-[#b91c1c] bg-[#b91c1c] text-white hover:bg-[#991b1b]"
                 : "v2-btn v2-btn-primary"
             }
           >

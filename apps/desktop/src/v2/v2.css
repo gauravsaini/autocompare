@@ -33,6 +33,7 @@
 
   /* Accent (Deep Cobalt Blue) */
   --v2-accent: #1d4ed8;
+  --v2-accent-fill: #1d4ed8;
   --v2-accent-hover: #1e40af;
   --v2-accent-soft: #eff6ff;
   --v2-accent-ring: rgba(29, 78, 216, 0.22);
@@ -103,8 +104,9 @@
   --v2-fg-secondary: #cbd5e1;
   --v2-fg-muted: #94a3b8;
 
-  --v2-accent: #3b82f6;
-  --v2-accent-hover: #2563eb;
+  --v2-accent: #60a5fa;
+  --v2-accent-fill: #2563eb;
+  --v2-accent-hover: #1d4ed8;
   --v2-accent-soft: rgba(59, 130, 246, 0.16);
   --v2-accent-ring: rgba(59, 130, 246, 0.32);
   --v2-accent-fg: #ffffff;
@@ -224,7 +226,7 @@ body,
 }
 
 .v2-btn-primary {
-  background: var(--v2-accent);
+  background: var(--v2-accent-fill);
   color: var(--v2-accent-fg);
   border-color: transparent;
 }

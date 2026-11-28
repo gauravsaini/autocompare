@@ -27,13 +27,13 @@ export interface V2SyncCompareProps {
 function actionBadge(action: SyncStep["action"]): { label: string; color: string; bg: string } {
   switch (action) {
     case "CopyToRight":
-      return { label: "Copy → Right", color: "#15803d", bg: "var(--v2-ins-bg)" };
+      return { label: "Copy → Right", color: "var(--v2-ins-fg)", bg: "var(--v2-ins-bg)" };
     case "CopyToLeft":
-      return { label: "Copy ← Left", color: "#2563eb", bg: "var(--v2-accent-soft)" };
+      return { label: "Copy ← Left", color: "var(--v2-accent)", bg: "var(--v2-accent-soft)" };
     case "DeleteRight":
-      return { label: "Delete Right", color: "#b91c1c", bg: "var(--v2-del-bg)" };
+      return { label: "Delete Right", color: "var(--v2-del-fg)", bg: "var(--v2-del-bg)" };
     case "DeleteLeft":
-      return { label: "Delete Left", color: "#b91c1c", bg: "var(--v2-del-bg)" };
+      return { label: "Delete Left", color: "var(--v2-del-fg)", bg: "var(--v2-del-bg)" };
   }
 }
 
@@ -362,9 +362,7 @@ export default function V2SyncCompare({
               return (
                 <div
                   key={`${step.rel_path}-${i}`}
-                  className={`grid h-[26px] grid-cols-[34px_130px_1fr_80px] items-center border-b border-[var(--v2-border-subtle)]/60 px-3 hover:bg-[var(--v2-btn-hover)]/40 ${
-                    excluded ? "opacity-45 line-through" : ""
-                  }`}
+                  className="grid h-[26px] grid-cols-[34px_130px_1fr_80px] items-center border-b border-[var(--v2-border-subtle)]/60 px-3 hover:bg-[var(--v2-btn-hover)]/40"
                 >
                   <input
                     type="checkbox"
@@ -375,13 +373,25 @@ export default function V2SyncCompare({
                   />
                   <div>
                     <span
-                      style={{ backgroundColor: badge.bg, color: badge.color }}
-                      className="inline-flex rounded px-1.5 py-0.5 text-[10.5px] font-semibold"
+                      style={
+                        excluded
+                          ? { backgroundColor: "var(--v2-seg-track)", color: "var(--v2-fg-muted)" }
+                          : { backgroundColor: badge.bg, color: badge.color }
+                      }
+                      className={`inline-flex rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${
+                        excluded ? "line-through" : ""
+                      }`}
                     >
                       {badge.label}
                     </span>
                   </div>
-                  <span className="v2-mono truncate text-[var(--v2-fg)]">{step.rel_path}</span>
+                  <span
+                    className={`v2-mono truncate ${
+                      excluded ? "text-[var(--v2-fg-muted)] line-through" : "text-[var(--v2-fg)]"
+                    }`}
+                  >
+                    {step.rel_path}
+                  </span>
                   <span className="text-right text-[11px] text-[var(--v2-fg-muted)]">
                     {step.is_dir ? "Folder" : "File"}
                   </span>

@@ -195,6 +195,7 @@ export default function V2TableRulesModal({
                 Custom delimiter character:
               </span>
               <input
+                aria-label="Custom delimiter character"
                 value={draft.delimiter === "\t" ? "\\t" : draft.delimiter}
                 onChange={(e) => {
                   const raw = e.target.value;

@@ -41,7 +41,7 @@ function MenuItemRow({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex w-full items-center justify-between gap-4 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-accent)] hover:text-white disabled:pointer-events-none disabled:opacity-40"
+      className="flex w-full items-center justify-between gap-4 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-accent-fill)] hover:text-white disabled:pointer-events-none disabled:opacity-40"
     >
       <span className="flex items-center gap-1.5">
         <span className="inline-flex w-3.5 items-center justify-center">
@@ -141,7 +141,7 @@ export default function V2MenuBar({
                   menu.bold ? "font-semibold" : "font-medium"
                 } ${
                   active
-                    ? "bg-[var(--v2-accent)] text-white"
+                    ? "bg-[var(--v2-accent-fill)] text-white"
                     : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
                 }`}
               >
@@ -188,7 +188,7 @@ export default function V2MenuBar({
                               run(() => onCommand("session_new"));
                             }
                           }}
-                          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-accent)] hover:text-white disabled:pointer-events-none disabled:opacity-40"
+                          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-accent-fill)] hover:text-white disabled:pointer-events-none disabled:opacity-40"
                         >
                           <span className="pl-5">{item.label}</span>
                           <ChevronRight size={12} />

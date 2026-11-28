@@ -280,7 +280,7 @@ export default function V2Home({
                   onClick={() => setPinnedOnly(false)}
                   className={`h-7 rounded-lg text-[11.5px] font-medium transition-colors ${
                     !pinnedOnly
-                      ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                      ? "bg-[var(--v2-accent-fill)] text-[var(--v2-accent-fg)] shadow-sm"
                       : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                   }`}
                 >
@@ -291,7 +291,7 @@ export default function V2Home({
                   onClick={() => setPinnedOnly(true)}
                   className={`flex h-7 items-center justify-center gap-1 rounded-lg text-[11.5px] font-medium transition-colors ${
                     pinnedOnly
-                      ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                      ? "bg-[var(--v2-accent-fill)] text-[var(--v2-accent-fg)] shadow-sm"
                       : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                   }`}
                 >
@@ -541,7 +541,7 @@ export default function V2Home({
                     {parsedPaths.right ? `  ↔  ${parsedPaths.right}` : "  (select right side in view)"}
                   </div>
                 </div>
-                <span className="v2-mono inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--v2-accent)] px-2 py-1 text-[10.5px] font-medium text-[var(--v2-accent-fg)]">
+                <span className="v2-mono inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--v2-accent-fill)] px-2 py-1 text-[10.5px] font-medium text-[var(--v2-accent-fg)]">
                   <span>Launch</span>
                   <CornerDownLeft size={11} />
                 </span>
@@ -605,7 +605,7 @@ export default function V2Home({
                     aria-label="Try Demo Text Diff"
                     title="Try Demo Text Diff"
                     onClick={() => onNewSession("text", "", "", "Demo Text Compare")}
-                    className="flex h-9 items-center gap-1.5 rounded-full bg-[var(--v2-accent)] px-3.5 text-[12px] font-medium text-[var(--v2-accent-fg)] shadow-sm transition-colors hover:bg-[var(--v2-accent-hover)]"
+                    className="flex h-9 items-center gap-1.5 rounded-full bg-[var(--v2-accent-fill)] px-3.5 text-[12px] font-medium text-[var(--v2-accent-fg)] shadow-sm transition-colors hover:bg-[var(--v2-accent-hover)]"
                   >
                     <Sparkles size={14} />
                     <span>Try Demo Text Diff</span>

@@ -133,6 +133,7 @@ export default function V2TextFindBar({
             className="v2-input v2-mono w-64"
           />
           <select
+            aria-label="Replace target side"
             value={targetSide}
             onChange={(e) => onTargetSideChange(e.target.value as ReplaceTargetSide)}
             className="v2-input text-[11.5px]"

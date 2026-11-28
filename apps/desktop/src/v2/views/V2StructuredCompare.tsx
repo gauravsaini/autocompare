@@ -304,6 +304,7 @@ export default function V2StructuredCompare({
             Left Source (Editable JSON / YAML)
           </span>
           <textarea
+            aria-label="Left JSON or YAML source"
             value={leftText}
             onChange={(e) => setLeftText(e.target.value)}
             spellCheck={false}
@@ -315,6 +316,7 @@ export default function V2StructuredCompare({
             Right Source (Editable JSON / YAML)
           </span>
           <textarea
+            aria-label="Right JSON or YAML source"
             value={rightText}
             onChange={(e) => setRightText(e.target.value)}
             spellCheck={false}

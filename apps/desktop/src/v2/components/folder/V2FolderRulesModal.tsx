@@ -148,6 +148,7 @@ export default function V2FolderRulesModal({
               <div className="flex items-center gap-2">
                 <input
                   type="number"
+                  aria-label="Timestamp tolerance in seconds"
                   min={0}
                   max={3600}
                   value={draft.timestampToleranceSec}
@@ -173,6 +174,7 @@ export default function V2FolderRulesModal({
               </span>
               <input
                 type="text"
+                aria-label="Include or exclude file masks"
                 data-testid="v2/folder-masks-input"
                 value={draft.masks}
                 onChange={(e) => patch({ masks: e.target.value })}

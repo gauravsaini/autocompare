@@ -600,6 +600,7 @@ export default function V2MergeCompare({
                         </button>
                       </div>
                       <textarea
+                        aria-label={`Custom resolution for Conflict #${idx + 1}`}
                         value={customLinesText}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) =>
@@ -658,6 +659,7 @@ export default function V2MergeCompare({
           </div>
         </div>
         <textarea
+          aria-label="Merged output preview"
           value={outputText}
           onChange={(e) => {
             setManualOutputEdited(true);

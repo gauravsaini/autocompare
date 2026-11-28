@@ -128,7 +128,7 @@ export default function V2SettingsModal({
                 onClick={() => onThemeChange(t)}
                 className={`h-7 rounded-lg px-3 text-[11.5px] font-medium capitalize transition-colors ${
                   theme === t
-                    ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                    ? "bg-[var(--v2-accent-fill)] text-[var(--v2-accent-fg)] shadow-sm"
                     : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                 }`}
               >
@@ -169,7 +169,7 @@ export default function V2SettingsModal({
                 onClick={() => setFileWatchMode(m)}
                 className={`h-7 rounded-lg px-2.5 text-[11px] font-medium transition-colors ${
                   fileWatchMode === m
-                    ? "bg-[var(--v2-accent)] text-[var(--v2-accent-fg)] shadow-sm"
+                    ? "bg-[var(--v2-accent-fill)] text-[var(--v2-accent-fg)] shadow-sm"
                     : "text-[var(--v2-fg-muted)] hover:text-[var(--v2-fg)]"
                 }`}
               >
@@ -184,6 +184,7 @@ export default function V2SettingsModal({
             <span className="mb-1 block text-[11px] text-[var(--v2-fg-muted)]">Code Font Size (px)</span>
             <input
               type="number"
+              aria-label="Code Font Size (px)"
               min={10}
               max={18}
               value={fontSize}
@@ -195,6 +196,7 @@ export default function V2SettingsModal({
             <span className="mb-1 block text-[11px] text-[var(--v2-fg-muted)]">Tab Width</span>
             <input
               type="number"
+              aria-label="Tab Width"
               min={2}
               max={8}
               value={tabSize}

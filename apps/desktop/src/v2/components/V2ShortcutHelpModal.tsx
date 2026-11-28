@@ -115,7 +115,11 @@ export default function V2ShortcutHelpModal({
           />
         </div>
 
-        <div className="max-h-[380px] space-y-3 overflow-y-auto pr-1">
+        <div
+          tabIndex={0}
+          aria-label="Keyboard shortcuts list"
+          className="max-h-[380px] space-y-3 overflow-y-auto pr-1 outline-none"
+        >
           {filteredGroups.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[var(--v2-border-strong)] py-8 text-center text-[var(--v2-fg-muted)]">
               No shortcuts match &ldquo;{query}&rdquo;.

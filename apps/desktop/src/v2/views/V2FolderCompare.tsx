@@ -55,9 +55,9 @@ function statusColor(status: FolderEntryDto["status"]): string {
     case "different":
       return "var(--v2-del-fg)";
     case "leftOnly":
-      return "#7c3aed";
+      return "var(--v2-syn-keyword)";
     case "rightOnly":
-      return "#059669";
+      return "var(--v2-ins-fg)";
     case "newerLeft":
     case "newerRight":
       return "var(--v2-accent)";
@@ -389,7 +389,9 @@ export default function V2FolderCompare({
           scrollRef.current = el;
           (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
         }}
-        className="min-h-0 flex-1 overflow-y-auto text-[12px]"
+        tabIndex={0}
+        aria-label="Folder comparison entries"
+        className="min-h-0 flex-1 overflow-y-auto text-[12px] outline-none"
       >
         {loading ? (
           <div className="flex h-full items-center justify-center text-[var(--v2-fg-muted)]">
@@ -446,10 +448,10 @@ export default function V2FolderCompare({
                       <Icon size={13} className="shrink-0 opacity-80" />
                       <span className="truncate">{name}</span>
                     </div>
-                    <div className="v2-mono px-2 text-right text-[11px] opacity-80">
+                    <div className="v2-mono px-2 text-right text-[11px]">
                       {entry.isDir ? "" : formatSize(entry.left?.size)}
                     </div>
-                    <div className="v2-mono px-2 text-right text-[11px] opacity-75">
+                    <div className="v2-mono px-2 text-right text-[11px]">
                       {formatDate(entry.left?.modifiedMs)}
                     </div>
                   </>
@@ -485,10 +487,10 @@ export default function V2FolderCompare({
                       <Icon size={13} className="shrink-0 opacity-80" />
                       <span className="truncate">{name}</span>
                     </div>
-                    <div className="v2-mono px-2 text-right text-[11px] opacity-80">
+                    <div className="v2-mono px-2 text-right text-[11px]">
                       {entry.isDir ? "" : formatSize(entry.right?.size)}
                     </div>
-                    <div className="v2-mono px-2 text-right text-[11px] opacity-75">
+                    <div className="v2-mono px-2 text-right text-[11px]">
                       {formatDate(entry.right?.modifiedMs)}
                     </div>
                   </>

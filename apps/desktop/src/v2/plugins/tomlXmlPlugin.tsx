@@ -67,7 +67,7 @@ const V2TomlXmlCompare: React.FC<ComparatorViewProps> = ({
     <div data-testid="v2/toml-xml-view" className="flex h-full flex-col bg-[var(--v2-bg)] text-[12px]">
       <div className="flex items-center gap-2 border-b border-[var(--v2-border)] px-3 py-1.5">
         <span className="font-semibold text-[var(--v2-fg)]">TOML / XML Config Diff</span>
-        <span className="rounded bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-300">
+        <span className="rounded bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-medium text-teal-800 dark:text-teal-300">
           SDK · read_only
         </span>
         <select

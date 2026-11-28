@@ -290,6 +290,7 @@ export default function V2ReportExportModal({
           </span>
           <input
             type="text"
+            aria-label="Output Filename"
             value={outPath}
             onChange={(e) => setOutPath(e.target.value)}
             className="v2-input v2-mono w-full"
@@ -303,6 +304,8 @@ export default function V2ReportExportModal({
             </span>
             <pre
               data-testid="v2/report-preview"
+              tabIndex={0}
+              aria-label="Report preview"
               className="v2-mono max-h-40 overflow-auto rounded-[6px] border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] p-2 text-[10.5px] leading-[15px] text-[var(--v2-fg-secondary)]"
             >
               {previewText.slice(0, 4000)}

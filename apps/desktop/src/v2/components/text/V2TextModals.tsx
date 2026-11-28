@@ -171,6 +171,7 @@ export function V2TextRulesModal({
       footer={
         <div className="flex w-full items-center justify-between gap-2">
           <select
+            aria-label="Settings application scope"
             value={scope}
             onChange={(e) => setScope(e.target.value as "view" | "defaults")}
             className="v2-input text-[11.5px]"
@@ -297,6 +298,7 @@ export function V2TextRulesModal({
                 Left file format:
               </span>
               <select
+                aria-label="Left file format"
                 value={draft.leftFormat}
                 onChange={(e) =>
                   patch({
@@ -319,6 +321,7 @@ export function V2TextRulesModal({
                 Right file format:
               </span>
               <select
+                aria-label="Right file format"
                 disabled={draft.sameFormat}
                 value={draft.sameFormat ? draft.leftFormat : draft.rightFormat}
                 onChange={(e) => patch({ rightFormat: e.target.value })}
@@ -352,6 +355,7 @@ export function V2TextRulesModal({
                   Left encoding override:
                 </span>
                 <select
+                  aria-label="Left encoding override"
                   data-testid="v2/rules-left-encoding"
                   value={draft.leftEncoding}
                   onChange={(e) =>
@@ -375,6 +379,7 @@ export function V2TextRulesModal({
                   Right encoding override:
                 </span>
                 <select
+                  aria-label="Right encoding override"
                   data-testid="v2/rules-right-encoding"
                   disabled={draft.sameEncoding}
                   value={draft.sameEncoding ? draft.leftEncoding : draft.rightEncoding}
@@ -410,6 +415,7 @@ export function V2TextRulesModal({
                 Line Endings (EOL):
               </span>
               <select
+                aria-label="Line Endings (EOL)"
                 value={draft.eol}
                 onChange={(e) => patch({ eol: e.target.value })}
                 className="v2-input w-full"
@@ -510,6 +516,7 @@ export function V2TextRulesModal({
                         >
                           <input
                             type="checkbox"
+                            aria-label={`Enable unimportant rule ${rule.name || rule.id}`}
                             checked={rule.enabled}
                             onChange={(e) =>
                               updateUnimportant(rule.id, { enabled: e.target.checked })
@@ -518,12 +525,14 @@ export function V2TextRulesModal({
                           />
                           <input
                             type="text"
+                            aria-label={`Rule name for ${rule.name || rule.id}`}
                             value={rule.name}
                             onChange={(e) => updateUnimportant(rule.id, { name: e.target.value })}
                             className="v2-input h-[22px] w-full text-[11px]"
                           />
                           <input
                             type="text"
+                            aria-label={`Rule pattern for ${rule.name || rule.id}`}
                             value={rule.pattern}
                             placeholder="Regex or literal…"
                             onChange={(e) =>
@@ -534,6 +543,7 @@ export function V2TextRulesModal({
                           <div className="flex justify-center">
                             <input
                               type="checkbox"
+                              aria-label={`Use regex for ${rule.name || rule.id}`}
                               checked={rule.regex}
                               onChange={(e) =>
                                 updateUnimportant(rule.id, { regex: e.target.checked })
@@ -544,6 +554,7 @@ export function V2TextRulesModal({
                           <div className="flex justify-center">
                             <input
                               type="checkbox"
+                              aria-label={`Case sensitive for ${rule.name || rule.id}`}
                               checked={rule.caseSensitive}
                               onChange={(e) =>
                                 updateUnimportant(rule.id, { caseSensitive: e.target.checked })
@@ -626,6 +637,7 @@ export function V2TextRulesModal({
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label="Skew tolerance in lines"
                     min={0}
                     max={50000}
                     step={100}
@@ -683,6 +695,7 @@ export function V2TextRulesModal({
                       >
                         <input
                           type="checkbox"
+                          aria-label={`Enable replacement rule ${rule.left || rule.id}`}
                           checked={rule.enabled}
                           onChange={(e) =>
                             updateReplacement(rule.id, { enabled: e.target.checked })
@@ -691,6 +704,7 @@ export function V2TextRulesModal({
                         />
                         <input
                           type="text"
+                          aria-label={`Replacement match pattern ${rule.id}`}
                           value={rule.left}
                           placeholder="Left text or regex…"
                           onChange={(e) => updateReplacement(rule.id, { left: e.target.value })}
@@ -698,6 +712,7 @@ export function V2TextRulesModal({
                         />
                         <input
                           type="text"
+                          aria-label={`Replacement output text ${rule.id}`}
                           value={rule.right}
                           placeholder="Right replacement…"
                           onChange={(e) => updateReplacement(rule.id, { right: e.target.value })}
@@ -706,6 +721,7 @@ export function V2TextRulesModal({
                         <div className="flex justify-center">
                           <input
                             type="checkbox"
+                            aria-label={`Use regex for replacement ${rule.id}`}
                             checked={rule.regex}
                             onChange={(e) =>
                               updateReplacement(rule.id, { regex: e.target.checked })
@@ -716,6 +732,7 @@ export function V2TextRulesModal({
                         <div className="flex justify-center">
                           <input
                             type="checkbox"
+                            aria-label={`Case sensitive for replacement ${rule.id}`}
                             checked={rule.caseSensitive}
                             onChange={(e) =>
                               updateReplacement(rule.id, { caseSensitive: e.target.checked })

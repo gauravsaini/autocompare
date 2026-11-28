@@ -115,7 +115,7 @@ export default function V2CommandPalette({
                   onClick={() => execute(cmd)}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[12.5px] transition-colors ${
                     selected
-                      ? "bg-[var(--v2-accent)] text-white"
+                      ? "bg-[var(--v2-accent-fill)] text-white"
                       : "text-[var(--v2-fg)] hover:bg-[var(--v2-surface-subtle)]"
                   }`}
                 >
@@ -123,7 +123,7 @@ export default function V2CommandPalette({
                     <span
                       className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
                         selected
-                          ? "bg-white/20 text-white"
+                          ? "bg-[var(--v2-accent-hover)] text-white"
                           : "bg-[var(--v2-surface-subtle)] text-[var(--v2-fg-muted)]"
                       }`}
                     >
@@ -135,7 +135,7 @@ export default function V2CommandPalette({
                     <kbd
                       className={`v2-mono rounded-md px-1.5 py-0.5 text-[10px] ${
                         selected
-                          ? "bg-white/20 text-white"
+                          ? "bg-[var(--v2-accent-hover)] text-white"
                           : "border border-[var(--v2-border)] bg-[var(--v2-bg)] text-[var(--v2-fg-muted)]"
                       }`}
                     >
