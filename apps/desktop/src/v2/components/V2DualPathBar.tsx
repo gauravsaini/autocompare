@@ -119,6 +119,9 @@ export default function V2DualPathBar({
           </div>
         );
       })}
+      <button type="submit" className="sr-only" tabIndex={-1}>
+        Compare paths
+      </button>
     </form>
   );
 }

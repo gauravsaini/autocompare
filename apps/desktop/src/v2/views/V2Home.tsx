@@ -326,36 +326,31 @@ export default function V2Home({
                       const isPinned = pinnedIds.includes(entry.id);
                       return (
                         <li key={entry.id}>
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => void handleOpenSaved(entry)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                void handleOpenSaved(entry);
-                              }
-                            }}
-                            className="group flex cursor-pointer items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-surface-subtle)]"
-                          >
-                            <span
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-                              style={{ backgroundColor: `${badge.accent}18`, color: badge.accent }}
+                          <div className="group flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-[12px] text-[var(--v2-fg)] transition-colors hover:bg-[var(--v2-surface-subtle)]">
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenSaved(entry)}
+                              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left outline-none"
                             >
-                              <BadgeIcon size={14} strokeWidth={1.8} />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1 truncate font-medium">
-                                {entry.locked ? (
-                                  <Lock size={10} className="shrink-0 text-[var(--v2-amber)]" />
-                                ) : null}
-                                <span className="truncate">{entry.name ?? entry.id}</span>
+                              <span
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                                style={{ backgroundColor: `${badge.accent}18`, color: badge.accent }}
+                              >
+                                <BadgeIcon size={14} strokeWidth={1.8} />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1 truncate font-medium">
+                                  {entry.locked ? (
+                                    <Lock size={10} className="shrink-0 text-[var(--v2-amber)]" />
+                                  ) : null}
+                                  <span className="truncate">{entry.name ?? entry.id}</span>
+                                </div>
+                                <div className="v2-mono text-[10px] text-[var(--v2-fg-muted)]">
+                                  {entry.tabs} {entry.tabs === 1 ? "tab" : "tabs"}
+                                  {entry.locked ? " · Locked" : ""}
+                                </div>
                               </div>
-                              <div className="v2-mono text-[10px] text-[var(--v2-fg-muted)]">
-                                {entry.tabs} {entry.tabs === 1 ? "tab" : "tabs"}
-                                {entry.locked ? " · Locked" : ""}
-                              </div>
-                            </div>
+                            </button>
                             <div className="flex shrink-0 items-center gap-0.5">
                               <button
                                 type="button"
@@ -631,7 +626,6 @@ export default function V2Home({
               {onOpenNewSessionModal ? (
                 <button
                   type="button"
-                  aria-label="Open Files..."
                   title="Open New Session with Custom Paths…"
                   onClick={onOpenNewSessionModal}
                   className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] px-3.5 text-[12px] font-medium text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"

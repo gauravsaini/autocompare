@@ -535,51 +535,51 @@ export default function V2App(): React.JSX.Element {
         className="flex h-[40px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3"
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTab.id;
-            return (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={isActive}
-                tabIndex={0}
-                onClick={() => {
-                  setActiveId(tab.id);
-                  if (tab.kind === "home") setCommands({});
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setActiveId(tab.id);
-                  }
-                }}
-                className={`group flex h-[28px] max-w-[230px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-all select-none ${
-                  isActive
-                    ? "border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] text-[var(--v2-fg)] shadow-sm"
-                    : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
-                }`}
-              >
-                {tab.kind === "home" ? <Home size={12.5} strokeWidth={2} /> : null}
-                <span className="truncate">{tab.title}</span>
-                {tab.dirty ? (
-                  <span
-                    title="Unsaved changes"
-                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--v2-amber-bright)]"
-                  />
-                ) : null}
-                {tab.kind !== "home" ? (
+          <div role="tablist" aria-label="Open comparison tabs" className="flex items-center gap-1.5">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTab.id;
+              return (
+                <div
+                  key={tab.id}
+                  className={`group flex h-[28px] max-w-[230px] shrink-0 items-center gap-1 rounded-lg px-2.5 text-[12px] font-medium transition-all select-none ${
+                    isActive
+                      ? "border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] text-[var(--v2-fg)] shadow-sm"
+                      : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
+                  }`}
+                >
                   <button
                     type="button"
-                    aria-label={`Close ${tab.title}`}
-                    onClick={(e) => requestCloseTab(tab.id, e)}
-                    className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md text-[var(--v2-fg-muted)] opacity-60 hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-fg)] hover:opacity-100"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => {
+                      setActiveId(tab.id);
+                      if (tab.kind === "home") setCommands({});
+                    }}
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left outline-none"
                   >
-                    <X size={11} />
+                    {tab.kind === "home" ? <Home size={12.5} strokeWidth={2} /> : null}
+                    <span className="truncate">{tab.title}</span>
+                    {tab.dirty ? (
+                      <span
+                        title="Unsaved changes"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--v2-amber-bright)]"
+                      />
+                    ) : null}
                   </button>
-                ) : null}
-              </div>
-            );
-          })}
+                  {tab.kind !== "home" ? (
+                    <button
+                      type="button"
+                      aria-label={`Close ${tab.title}`}
+                      onClick={(e) => requestCloseTab(tab.id, e)}
+                      className="ml-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-[var(--v2-fg-muted)] opacity-60 hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-fg)] hover:opacity-100"
+                    >
+                      <X size={11} />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
 
           <button
             type="button"

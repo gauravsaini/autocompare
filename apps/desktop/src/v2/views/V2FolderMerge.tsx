@@ -273,6 +273,9 @@ export default function V2FolderMerge({
             </div>
           </div>
         ))}
+        <button type="submit" className="sr-only" tabIndex={-1}>
+          Compute folder merge plan
+        </button>
       </form>
 
       {/* Output Target & Bulk Conflict Resolution Bar */}

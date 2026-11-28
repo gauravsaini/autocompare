@@ -357,6 +357,9 @@ export default function V2MergeCompare({
             </div>
           </div>
         ))}
+        <button type="submit" className="sr-only" tabIndex={-1}>
+          Compute merge plan
+        </button>
       </form>
 
       {/* Conflict Navigation & Bulk Resolution Bar */}

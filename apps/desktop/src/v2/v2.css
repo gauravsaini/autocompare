@@ -1,4 +1,5 @@
 @import "tailwindcss" source("../");
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /*
  * AutoCompare v2 — Modern Spotlight Launcher Design System.
@@ -27,8 +28,8 @@
 
   /* Text */
   --v2-fg: #111827;
-  --v2-fg-secondary: #525c6a;
-  --v2-fg-muted: #6b7280;
+  --v2-fg-secondary: #374151;
+  --v2-fg-muted: #525c6a;
 
   /* Accent (Deep Cobalt Blue) */
   --v2-accent: #1d4ed8;
@@ -73,7 +74,7 @@
   /* Syntax Highlighting */
   --v2-syn-keyword: #7c3aed;
   --v2-syn-string: #0f766e;
-  --v2-syn-comment: #6b7280;
+  --v2-syn-comment: #525c6a;
   --v2-syn-number: #c2410c;
   --v2-syn-key: #1d4ed8;
   --v2-syn-tag: #0369a1;

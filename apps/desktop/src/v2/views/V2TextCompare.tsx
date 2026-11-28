@@ -1293,6 +1293,7 @@ export default function V2TextCompare({
       {/* Main Workspace: Far-Left Overview Minimap + Virtualized Continuous Notepad Diff Grid */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
+          role="region"
           aria-label="Difference overview map"
           className="relative w-[14px] shrink-0 cursor-pointer border-r border-[var(--v2-border)] bg-[var(--v2-surface-subtle)]"
           onClick={(e) => {
