@@ -109,21 +109,21 @@ export default function V2NewSessionModal({
                 aria-pressed={selected}
                 onClick={() => setDraftKind(plugin.id)}
                 onDoubleClick={() => handleOpen(plugin.id)}
-                className={`group relative flex flex-col items-start gap-1.5 rounded-[9px] border p-2.5 text-left transition ${
+                className={`group relative flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all ${
                   selected
-                    ? "border-[var(--v2-accent)] bg-[var(--v2-accent-soft)]/50 ring-1 ring-[var(--v2-accent)]"
-                    : "border-[var(--v2-border)] bg-[var(--v2-surface)] hover:border-[var(--v2-fg-muted)]/60 hover:bg-[var(--v2-surface-subtle)]"
+                    ? "border-[var(--v2-accent)] bg-[var(--v2-accent-soft)]/70 ring-1 ring-[var(--v2-accent)]"
+                    : "border-[var(--v2-border)] bg-[var(--v2-surface)] hover:border-[var(--v2-accent)]/50 hover:shadow-sm"
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
                   <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px]"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
                     style={{
                       backgroundColor: `${plugin.accent}1a`,
                       color: plugin.accent,
                     }}
                   >
-                    <Icon size={15} strokeWidth={2} />
+                    <Icon size={16} strokeWidth={1.9} />
                   </span>
                   <div className="flex items-center gap-1">
                     {plugin.shortcut ? (

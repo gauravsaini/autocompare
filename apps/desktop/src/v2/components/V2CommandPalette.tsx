@@ -61,15 +61,16 @@ export default function V2CommandPalette({
       data-testid="v2/command-palette"
       aria-modal="true"
       aria-label="Command palette"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-[14vh] backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 pt-[14vh] backdrop-blur-[3px]"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-[10px] border border-[var(--v2-border)] bg-[var(--v2-surface)] shadow-2xl"
+        style={{ boxShadow: "var(--v2-shadow-spotlight)" }}
+        className="w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--v2-border-strong)] bg-[var(--v2-surface)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-[var(--v2-border-subtle)] px-3.5 py-2.5">
-          <Search size={14} className="text-[var(--v2-fg-muted)]" />
+        <div className="flex items-center gap-3 border-b border-[var(--v2-border-subtle)] px-4 py-3">
+          <Search size={17} className="shrink-0 text-[var(--v2-fg-muted)]" />
           <input
             ref={inputRef}
             type="text"
@@ -91,16 +92,16 @@ export default function V2CommandPalette({
               }
             }}
             placeholder="Type a command or comparison mode…"
-            className="w-full bg-transparent text-[13px] text-[var(--v2-fg)] outline-none placeholder:text-[var(--v2-fg-muted)]"
+            className="w-full bg-transparent text-[14px] text-[var(--v2-fg)] outline-none placeholder:text-[var(--v2-fg-muted)]"
           />
-          <kbd className="rounded border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--v2-fg-muted)]">
+          <kbd className="v2-mono rounded-lg border border-[var(--v2-border)] bg-[var(--v2-bg)] px-2 py-0.5 text-[10.5px] text-[var(--v2-fg-muted)]">
             Esc
           </kbd>
         </div>
 
-        <div className="max-h-[300px] overflow-y-auto p-1.5">
+        <div className="max-h-[320px] overflow-y-auto p-2">
           {filtered.length === 0 ? (
-            <div className="px-3 py-6 text-center text-[12px] text-[var(--v2-fg-muted)]">
+            <div className="px-3 py-8 text-center text-[12px] text-[var(--v2-fg-muted)]">
               No matching commands
             </div>
           ) : (
@@ -112,24 +113,30 @@ export default function V2CommandPalette({
                   type="button"
                   onMouseEnter={() => setIdx(i)}
                   onClick={() => execute(cmd)}
-                  className={`flex w-full items-center justify-between rounded-[6px] px-3 py-1.5 text-left text-[12px] ${
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[12.5px] transition-colors ${
                     selected
                       ? "bg-[var(--v2-accent)] text-white"
-                      : "text-[var(--v2-fg)] hover:bg-[var(--v2-btn-hover)]"
+                      : "text-[var(--v2-fg)] hover:bg-[var(--v2-surface-subtle)]"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10.5px] ${selected ? "text-white/80" : "text-[var(--v2-fg-muted)]"}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                        selected
+                          ? "bg-white/20 text-white"
+                          : "bg-[var(--v2-surface-subtle)] text-[var(--v2-fg-muted)]"
+                      }`}
+                    >
                       {cmd.category}
                     </span>
                     <span className="font-medium">{cmd.label}</span>
                   </div>
                   {cmd.shortcut ? (
                     <kbd
-                      className={`v2-mono rounded px-1.5 py-0.5 text-[10px] ${
+                      className={`v2-mono rounded-md px-1.5 py-0.5 text-[10px] ${
                         selected
                           ? "bg-white/20 text-white"
-                          : "border border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] text-[var(--v2-fg-muted)]"
+                          : "border border-[var(--v2-border)] bg-[var(--v2-bg)] text-[var(--v2-fg-muted)]"
                       }`}
                     >
                       {cmd.shortcut}

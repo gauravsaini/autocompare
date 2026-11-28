@@ -44,34 +44,35 @@ export default function V2Modal({
       data-testid="v2/modal"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[3px]"
       onClick={onClose}
     >
       <div
-        className={`w-full ${widthClass} overflow-hidden rounded-[10px] border border-[var(--v2-border)] bg-[var(--v2-surface)] shadow-2xl`}
+        style={{ boxShadow: "var(--v2-shadow-spotlight)" }}
+        className={`w-full ${widthClass} overflow-hidden rounded-2xl border border-[var(--v2-border)] bg-[var(--v2-surface)]`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-4 py-2.5">
+        <div className="flex items-center justify-between border-b border-[var(--v2-border-subtle)] bg-[var(--v2-bg)]/60 px-5 py-3.5">
           <div>
-            <h2 className="text-[13px] font-semibold text-[var(--v2-fg)]">{title}</h2>
+            <h2 className="v2-display text-[14px] font-semibold text-[var(--v2-fg)]">{title}</h2>
             {subtitle ? (
-              <p className="text-[11px] text-[var(--v2-fg-muted)]">{subtitle}</p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--v2-fg-muted)]">{subtitle}</p>
             ) : null}
           </div>
           <button
             type="button"
             aria-label="Close modal"
             onClick={onClose}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-[5px] text-[var(--v2-fg-muted)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--v2-fg-muted)] transition-colors hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
           >
-            <X size={14} strokeWidth={1.75} />
+            <X size={15} strokeWidth={1.8} />
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-4 py-3.5">{children}</div>
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
 
         {footer ? (
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--v2-border-subtle)] bg-[var(--v2-surface-subtle)] px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--v2-border-subtle)] bg-[var(--v2-bg)]/60 px-5 py-3">
             {footer}
           </div>
         ) : null}

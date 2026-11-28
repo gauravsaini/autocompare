@@ -515,12 +515,12 @@ export default function V2App(): React.JSX.Element {
         }}
       />
 
-      {/* 1. Crisp macOS Tab Strip */}
+      {/* 1. Modern Tab Strip & Utility Bar */}
       <header
         data-testid="v2/tabbar"
-        className="flex h-[36px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-2"
+        className="flex h-[40px] shrink-0 items-center justify-between border-b border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTab.id;
             return (
@@ -539,13 +539,13 @@ export default function V2App(): React.JSX.Element {
                     setActiveId(tab.id);
                   }
                 }}
-                className={`group flex h-[26px] max-w-[220px] shrink-0 cursor-pointer items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-medium transition select-none ${
+                className={`group flex h-[28px] max-w-[230px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-all select-none ${
                   isActive
-                    ? "border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] text-[var(--v2-fg)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                    : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)]"
+                    ? "border border-[var(--v2-border)] bg-[var(--v2-chrome-elevated)] text-[var(--v2-fg)] shadow-sm"
+                    : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
                 }`}
               >
-                {tab.kind === "home" ? <Home size={12} strokeWidth={2} /> : null}
+                {tab.kind === "home" ? <Home size={12.5} strokeWidth={2} /> : null}
                 <span className="truncate">{tab.title}</span>
                 {tab.dirty ? (
                   <span
@@ -558,7 +558,7 @@ export default function V2App(): React.JSX.Element {
                     type="button"
                     aria-label={`Close ${tab.title}`}
                     onClick={(e) => requestCloseTab(tab.id, e)}
-                    className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded text-[var(--v2-fg-muted)] opacity-60 hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-fg)] hover:opacity-100"
+                    className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md text-[var(--v2-fg-muted)] opacity-60 hover:bg-[var(--v2-btn-active)] hover:text-[var(--v2-fg)] hover:opacity-100"
                   >
                     <X size={11} />
                   </button>
@@ -572,7 +572,7 @@ export default function V2App(): React.JSX.Element {
             title="New comparison session"
             aria-label="New tab"
             onClick={openNewSession}
-            className="inline-flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--v2-fg-secondary)] transition-colors hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
           >
             <Plus size={14} strokeWidth={2} />
           </button>
@@ -580,7 +580,10 @@ export default function V2App(): React.JSX.Element {
 
         <div className="ml-2 flex shrink-0 items-center gap-1.5">
           {saveToast ? (
-            <span data-testid="v2/toast" className="text-[11px] font-medium text-[var(--v2-accent)]">
+            <span
+              data-testid="v2/toast"
+              className="rounded-full bg-[var(--v2-accent-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--v2-accent)]"
+            >
               {saveToast}
             </span>
           ) : null}
@@ -591,16 +594,16 @@ export default function V2App(): React.JSX.Element {
                 data-testid="v2/export-report"
                 title="Export comparison report"
                 onClick={() => setExportOpen(true)}
-                className="v2-btn h-[22px] text-[11px]"
+                className="v2-btn h-[26px] text-[11px]"
               >
-                <Download size={11} />
+                <Download size={11.5} />
                 Export
               </button>
               <button
                 type="button"
                 data-testid="v2/save-session"
                 onClick={() => void handleSaveWorkspaceSession()}
-                className="v2-btn h-[22px] text-[11px]"
+                className="v2-btn h-[26px] text-[11px]"
               >
                 Save Session
               </button>
@@ -611,7 +614,7 @@ export default function V2App(): React.JSX.Element {
             data-testid="v2/open-palette"
             title="Command Palette (Cmd+K)"
             onClick={() => setPaletteOpen(true)}
-            className="v2-btn h-[22px] gap-1 px-2 text-[11px] text-[var(--v2-fg-secondary)]"
+            className="v2-mono inline-flex h-7 items-center gap-1 rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] px-2.5 text-[11px] text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:text-[var(--v2-fg)]"
           >
             <Command size={11} />
             <span>K</span>
@@ -622,7 +625,7 @@ export default function V2App(): React.JSX.Element {
             title="Keyboard Shortcuts (? or Cmd+/)"
             aria-label="Keyboard Shortcuts"
             onClick={toggleShortcuts}
-            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-muted)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:text-[var(--v2-fg)]"
           >
             <CircleHelp size={14} />
           </button>
@@ -632,7 +635,7 @@ export default function V2App(): React.JSX.Element {
             title="Preferences (Cmd+,)"
             aria-label="Preferences"
             onClick={openSettings}
-            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-muted)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:text-[var(--v2-fg)]"
           >
             <Settings size={14} />
           </button>
@@ -642,7 +645,7 @@ export default function V2App(): React.JSX.Element {
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
             onClick={toggleTheme}
-            className="inline-flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-btn-hover)] hover:text-[var(--v2-fg)]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-muted)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:text-[var(--v2-fg)]"
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
           </button>
@@ -666,6 +669,9 @@ export default function V2App(): React.JSX.Element {
               <V2Home
                 onNewSession={openSession}
                 onOpenSessionManager={() => setSessionManagerOpen(true)}
+                onOpenNewSessionModal={openNewSession}
+                onOpenCommandPalette={togglePalette}
+                openComparisonsCount={Math.max(0, tabs.length - 1)}
                 refreshSignal={sessionRefresh}
               />
             ) : (() => {
@@ -696,20 +702,35 @@ export default function V2App(): React.JSX.Element {
         </V2ViewErrorBoundary>
       </div>
 
-      {/* 4. Clean 3-Zone Status Bar */}
+      {/* 4. Spotlight-Inspired 3-Zone Status Bar */}
       <footer
         data-testid="v2/statusbar"
-        className="flex h-[24px] shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-chrome)] px-3 text-[11px] text-[var(--v2-fg-muted)]"
+        className="v2-mono flex h-7 shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-surface)] px-4 text-[11px] text-[var(--v2-fg-muted)]"
       >
         <span className="truncate">
-          {activeTab.kind === "home" ? "Ready" : status.left || "Ready"}
-        </span>
-        <span className="truncate">{activeTab.kind === "home" ? "" : status.center}</span>
-        <span className="v2-mono truncate">
           {activeTab.kind === "home"
-            ? `${Math.max(0, tabs.length - 1)} open ${tabs.length - 1 === 1 ? "comparison" : "comparisons"}`
-            : status.right}
+            ? `${listComparators().length} plugins enabled`
+            : status.left || "Ready"}
         </span>
+        <span className="truncate">
+          {activeTab.kind === "home" ? (
+            <span className="rounded-md bg-[var(--v2-accent-soft)] px-2 py-0.5 font-medium text-[var(--v2-accent)]">
+              Free &amp; Open Source
+            </span>
+          ) : (
+            status.center
+          )}
+        </span>
+        <div className="flex shrink-0 items-center gap-2 truncate">
+          {activeTab.kind === "home" ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+              <span>Ready</span>
+            </>
+          ) : (
+            <span>{status.right || "Ready"}</span>
+          )}
+        </div>
       </footer>
 
       {/* Native Drag-and-Drop Overlay Indicator */}

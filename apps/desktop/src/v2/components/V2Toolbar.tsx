@@ -39,13 +39,13 @@ function TopBarBtn({
       data-testid={`v2/toolbar-${label.toLowerCase()}`}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-[38px] min-w-[44px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-[6px] px-2 text-[10.5px] font-medium transition select-none ${
+      className={`inline-flex h-[38px] min-w-[46px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-[10.5px] font-medium transition-colors select-none ${
         active
           ? "bg-[var(--v2-accent-soft)] text-[var(--v2-accent)]"
-          : "text-[var(--v2-fg)] hover:bg-[var(--v2-btn-hover)]"
+          : "text-[var(--v2-fg-secondary)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
       } disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
     >
-      <Icon size={15} strokeWidth={1.75} />
+      <Icon size={15} strokeWidth={1.8} />
       <span className="leading-none">{label}</span>
     </button>
   );
@@ -71,7 +71,7 @@ export default function V2Toolbar({
       role="toolbar"
       data-testid="v2/toolbar"
       aria-label="Comparison actions"
-      className="flex h-[46px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--v2-border)] bg-[var(--v2-surface-subtle)] px-2.5"
+      className="flex h-[48px] shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--v2-border)] bg-[var(--v2-surface)] px-3"
     >
       <TopBarBtn icon={Home} label="Home" onClick={onGoHome} />
       <TopBarBtn icon={FolderOpen} label="Sessions" onClick={onOpenSessions} />
