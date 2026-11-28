@@ -338,6 +338,8 @@ pub enum Command {
         #[arg(long)]
         no_open: bool,
     },
+    /// Inspect local telemetry traces (ODD Phase 9, offline only).
+    Trace(crate::trace::TraceArgs),
 }
 
 #[cfg(test)]

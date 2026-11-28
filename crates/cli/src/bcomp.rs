@@ -17,6 +17,8 @@ const KNOWN_SUBCOMMANDS: &[&str] = &[
     "folder-merge",
     "audio",
     "session",
+    "web",
+    "trace",
     "help",
     "--help",
     "-h",

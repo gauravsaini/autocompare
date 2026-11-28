@@ -335,6 +335,7 @@ pub fn run(cli: &Cli, color: bool, report: Option<&ReportSpec>) -> Result<Outcom
             save_tab(cli.save_session.as_deref(), "session", path, path, is_ro)?;
             Ok(outcome.to_mode(mode))
         }
+        Command::Trace(trace_args) => crate::trace::run(&trace_args.action, color),
         Command::Web {
             port,
             dist,

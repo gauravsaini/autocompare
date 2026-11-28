@@ -24,6 +24,7 @@ pub mod report_adapter_media;
 pub mod runner;
 pub mod session_cmd;
 pub mod term;
+pub mod trace;
 
 pub use args::{Cli, ColorWhen, Command, SyncDir};
 pub use error::CliError;
