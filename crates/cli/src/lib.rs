@@ -7,6 +7,7 @@
 
 pub mod args;
 pub mod bcomp;
+pub mod diagnose;
 pub mod error;
 pub mod outcome;
 pub mod render_audio;

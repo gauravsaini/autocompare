@@ -120,6 +120,18 @@ pub enum TraceAction {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Diagnose likely causes + completeness for one trace or a whole root (ODD Phase 11).
+    Diagnose {
+        /// Diagnose a single trace id (omit to diagnose every trace under the root).
+        #[arg(long)]
+        trace_id: Option<String>,
+        /// Emit stable snake_case machine JSON instead of human text.
+        #[arg(long)]
+        json: bool,
+        /// Telemetry root override (`<support-dir>/telemetry` by default).
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 /// One parsed JSONL line with its provenance.
@@ -1313,6 +1325,9 @@ pub fn run(action: &TraceAction, _color: bool) -> Result<Outcome, CliError> {
                 bundle.out_path.display()
             );
             Ok(Outcome::Same)
+        }
+        TraceAction::Diagnose { trace_id, json, dir } => {
+            crate::diagnose::run_diagnose(trace_id, *json, dir)
         }
     }
 }
