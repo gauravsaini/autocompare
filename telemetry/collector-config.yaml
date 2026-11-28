@@ -1,0 +1,70 @@
+# ODD Phase 8 — local OpenTelemetry Collector config (OPTIONAL).
+#
+# JSONL (`<support-dir>/telemetry/YYYY-MM-DD/*.jsonl`, 7-day retention) stays
+# the default and only built-in sink. This file is for operators who want to
+# ALSO forward telemetry to an OTLP backend for local debugging.
+#
+# Status: template only — nothing in the app reads this file automatically.
+# OTLP is DISABLED BY DEFAULT. To opt in:
+#   1. Uncomment the `otlp` exporter + the `traces/otlp` pipeline below.
+#   2. Run: otelcol-contrib --config telemetry/collector-config.yaml
+#   3. Set AUTOCOMPARE_OTLP=on (documents intent; app export is future work —
+#      until an OTLP exporter ships, forward by tailing the JSONL day files).
+#
+# Wire format: snake_case JSON, one record per line, `schema_version: 1`.
+# See telemetry/schema/v1/{span,event,ops}.json.
+
+receivers:
+  # Tails the Phase 8 dated layout. `<support-dir>` is platform-specific:
+  #   macOS:   ~/Library/Application Support/AutoCompare/telemetry
+  #   Linux:   ~/.local/share/autocompare/telemetry
+  #   Windows: %LOCALAPPDATA%/AutoCompare/telemetry
+  filelog/telemetry:
+    include:
+      - <support-dir>/telemetry/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*.jsonl
+    start_at: end
+    include_file_name: false
+    operators:
+      - type: json_parser
+        timestamp:
+          parse_from: attributes.started_at
+          layout: "%Y-%m-%dT%H:%M:%S.%LZ"
+          layout_type: gotime
+        severity:
+          parse_from: attributes.status
+
+processors:
+  batch: {}
+  # Drop ui.* high-volume ok spans before any (future) OTLP export.
+  filter/ui_noise:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["op"] == "ui.tab_switch" and attributes["status"] == "ok"'
+
+exporters:
+  # Local debug output — safe default, prints to the collector log.
+  debug:
+    verbosity: basic
+  # OPTIONAL, DISABLED BY DEFAULT — uncomment to forward to a local backend.
+  # otlp:
+  #   endpoint: 127.0.0.1:4317
+  #   tls:
+  #     insecure: true
+
+extensions:
+  health_check:
+    endpoint: 127.0.0.1:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    logs/telemetry:
+      receivers: [filelog/telemetry]
+      processors: [batch]
+      exporters: [debug]
+    # OPTIONAL, DISABLED BY DEFAULT.
+    # traces/otlp:
+    #   receivers: [filelog/telemetry]
+    #   processors: [batch, filter/ui_noise]
+    #   exporters: [otlp]
