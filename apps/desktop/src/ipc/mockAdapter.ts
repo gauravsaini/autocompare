@@ -92,6 +92,28 @@ function strArg(args: Record<string, unknown>, names: readonly string[], fallbac
   return fallback;
 }
 
+// ---------------------------------------------------------------------------
+// ODD Phase 3: trace echo (mock branch ONLY).
+//
+// When the caller injects a `__trace` envelope (see `client.ts`), every
+// text-domain OBJECT response echoes it back verbatim plus `__mock: true`,
+// so e2e correlation tests prove propagation without Rust. Non-object
+// responses (numbers, arrays, null) pass through untouched — echo fields
+// must never change a response shape. When no `__trace` arrives (telemetry
+// disabled or uninstrumented caller), responses are byte-identical to before.
+// ---------------------------------------------------------------------------
+
+function withTraceEcho<T>(incomingTrace: unknown, value: T): T {
+  if (incomingTrace === null || incomingTrace === undefined) return value;
+  if (typeof incomingTrace !== "object") return value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  return {
+    ...(value as Record<string, unknown>),
+    __trace: incomingTrace,
+    __mock: true,
+  } as unknown as T;
+}
+
 const MOCK_SESSIONS_KEY = "autocompare:mockSessionStore:v1";
 const MOCK_SESSION_SEQ_KEY = "autocompare:mockSessionSeq:v1";
 
@@ -587,6 +609,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
   const store = mockSessionStoreRead();
 
   const args: Record<string, unknown> = _args ?? {};
+  const incomingTrace: unknown = args["__trace"];
   const dumped = await loadDumped();
   if (dumped === null) {
     // Fixture file missing: preserve the pre-4A empty-fixture behavior so
@@ -816,7 +839,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         if (eol !== undefined) base["eol"] = eol;
         if (supp !== undefined) base["suppressedLines"] = supp;
       }
-      return base as unknown as T;
+      return withTraceEcho(incomingTrace, base) as unknown as T;
     }
     case "text_get_rows": {
       const sessId = strArg(args, ["session"], activeMockTextSessionId);
@@ -855,7 +878,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
           suppressed,
         };
       });
-      return { session: sessId, start, total, rows } as unknown as T;
+      return withTraceEcho(incomingTrace, { session: sessId, start, total, rows }) as unknown as T;
     }
     case "text_find": {
       // Wave-127: full-fixture search mirroring backend `text_find`
@@ -886,7 +909,12 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
               ];
         for (const { side, line } of sides) {
           if (line !== null && line.includes(query)) {
-            return { index: row.index, side, column: line.indexOf(query), line } as unknown as T;
+            return withTraceEcho(incomingTrace, {
+              index: row.index,
+              side,
+              column: line.indexOf(query),
+              line,
+            }) as unknown as T;
           }
         }
       }
@@ -922,13 +950,13 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
       const right = side === "right" ? text : (prev.right !== undefined ? prev.right : row.right);
       const kind =
         left !== null && right !== null && left === right ? "equal" : row.kind;
-      return {
+      return withTraceEcho(incomingTrace, {
         session: sessId,
         index,
         side,
         kind,
         rows: sourceRows.length,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "text_apply_hunk": {
       // Wave-178: mock parity with Rust `text_apply_hunk` (copy-persist
@@ -999,7 +1027,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         rightLines,
         opCount,
       });
-      return {
+      return withTraceEcho(incomingTrace, {
         session: sessId,
         start,
         end: start + total - 1,
@@ -1007,7 +1035,7 @@ export async function mockInvoke<T>(cmd: string, _args?: Record<string, unknown>
         applied,
         total,
         rows: nextRows.length,
-      } as unknown as T;
+      }) as unknown as T;
     }
     case "text_restore_rows": {
       const sessId = strArg(args, ["session"], activeMockTextSessionId);

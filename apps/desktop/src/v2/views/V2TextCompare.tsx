@@ -9,6 +9,13 @@ import {
   textUpdateSide,
 } from "../../ipc/text";
 import type { TextCompareDto, TextRowDto, TextSide } from "../../ipc/text";
+import { clearActiveTrace, setActiveTrace } from "../../ipc/client";
+import {
+  endSpan,
+  isTelemetryEnabled,
+  startRootSpan,
+  type Span,
+} from "../../observability/tracer";
 import V2ErrorBanner from "../components/V2ErrorBanner";
 import V2ReloadPromptBanner from "../components/V2ReloadPromptBanner";
 import V2DualPathBar from "../components/V2DualPathBar";
@@ -257,6 +264,13 @@ export default function V2TextCompare({
     async (l: string, r: string): Promise<void> => {
       const postNotice = pendingNoticeRef.current;
       pendingNoticeRef.current = null;
+      // ODD Phase 3: one root span per compare trigger (op text.compare).
+      // When telemetry is off this stays null and the body below runs
+      // exactly as before (ambient slot untouched).
+      const obs: Span | null = isTelemetryEnabled()
+        ? startRootSpan({ op: "text.compare", component: "ts.ui/TextView", view_id: "text" })
+        : null;
+      if (obs !== null) setActiveTrace(obs.context());
       setLoading(true);
       setError(null);
       setNotice(postNotice);
@@ -303,11 +317,33 @@ export default function V2TextCompare({
         setManualAnchors([]);
         setAlignSource(null);
         setRows(fetched);
+        if (obs !== null) {
+          const hunks = collectHunks(fetched);
+          obs.set({
+            rows: fetched.length,
+            hunks: hunks.length,
+            equal: fetched.length > 0 && fetched.every((row) => row.kind === "equal"),
+            left_lines: dto.leftLines,
+            right_lines: dto.rightLines,
+            session: dto.session,
+          });
+        }
         if (dto.encoding) setDetectedEncoding(dto.encoding);
         if (dto.eol) setDetectedEol(dto.eol);
       } catch (e) {
+        if (obs !== null) {
+          obs.error({
+            kind: "text_compare_failed",
+            component: "ts.ui/TextView",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }
         setError(e instanceof Error ? e.message : String(e));
       } finally {
+        if (obs !== null) {
+          clearActiveTrace();
+          endSpan(obs);
+        }
         setLoading(false);
       }
     },

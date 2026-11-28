@@ -173,11 +173,13 @@ dependencies = [
  "autocompare-diff",
  "autocompare-reports",
  "autocompare-sessions",
+ "autocompare-telemetry",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tracing",
 ]
 
 [[package]]

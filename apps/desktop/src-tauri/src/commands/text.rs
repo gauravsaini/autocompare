@@ -33,6 +33,7 @@ use autocompare_compare::{TextOptions, compare_text_files, compare_text_lines};
 use autocompare_diff::DiffScript;
 use autocompare_diff::text_diff::DiffAlgorithm;
 use autocompare_diff::inline_diff;
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// Maximum rows returned by one [`text_get_rows`] call. Bounds every IPC
@@ -200,6 +201,11 @@ pub struct TextCompareDto {
     pub left_meta: Option<FileMetaDto>,
     #[serde(default)]
     pub right_meta: Option<FileMetaDto>,
+    /// ODD Phase 3: echoed `__trace` envelope on the wire. Present only
+    /// when the caller supplied a valid `__trace`; omitted otherwise so
+    /// uninstrumented callers see a byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One aligned row of a text comparison.
@@ -916,7 +922,42 @@ pub fn text_compare(
     left_encoding: Option<String>,
     rightEncoding: Option<String>,
     right_encoding: Option<String>,
+    // ODD Phase 3: optional `__trace` envelope (`{trace_id, span_id,
+    // sampled}`). Tauri fills a missing `Option` param with `None`;
+    // unknown/absent stays `None` and changes nothing.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TextCompareDto, String> {
+    // ODD Phase 3 vertical slice: extract the incoming trace (if any),
+    // derive a child span for this command, and echo it in the response.
+    // Absent, malformed, or telemetry-off input yields no span and no
+    // echo field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "text.compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/text"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
@@ -1028,6 +1069,7 @@ pub fn text_compare(
         },
         left_meta: read_file_meta(&left),
         right_meta: read_file_meta(&right),
+        trace_echo,
     };
     let mut guard = lock_store()?;
     guard.insert(
@@ -1852,7 +1894,7 @@ mod tests {
     ) -> Result<TextCompareDto, String> {
         text_compare(
             left, right, ws, cs, ws_snake, cs_snake, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
     }
 
@@ -1923,6 +1965,7 @@ mod tests {
                 mtime_unix: Some(1700000000),
             }),
             right_meta: None,
+            trace_echo: None,
         };
         let json = serde_json::to_string(&dto).unwrap_or_default();
         assert!(json.contains("\"leftPath\""));
@@ -1934,6 +1977,8 @@ mod tests {
         assert!(json.contains("\"bytes\":42"));
         assert!(json.contains("\"mtimeUnix\":1700000000"));
         assert!(json.contains("\"rightMeta\":null"));
+        // ODD Phase 3: no trace input => no echo field on the wire.
+        assert!(!json.contains("__trace"));
         let back: TextCompareDto = serde_json::from_str(&json).unwrap_or_else(|_| TextCompareDto {
             session: String::new(),
             left_path: String::new(),
@@ -1947,6 +1992,7 @@ mod tests {
             applied_options: AppliedTextOptions::default(),
             left_meta: None,
             right_meta: None,
+            trace_echo: None,
         });
         assert_eq!(back, dto);
     }
@@ -2236,7 +2282,7 @@ mod tests {
             None,
             None,
             None,
-            None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare must succeed");
 
@@ -2269,7 +2315,7 @@ mod tests {
             None,
             None,
             None,
-            None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare with snake_case must succeed");
 
@@ -2320,7 +2366,7 @@ mod tests {
             None,
             None,
             None,
-            None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("text_compare must succeed");
 
@@ -2383,7 +2429,7 @@ mod tests {
             ls.clone(),
             rs.clone(),
             None, None, None, None, None, None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("exact compare must succeed");
         assert!(!exact.applied_options.ignore_blank_lines);
@@ -2395,7 +2441,7 @@ mod tests {
             Some("patience".to_string()),
             None,
             Some(true),
-            None, None, None, None, None, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None, None, None, None, None,
         )
         .expect("folded compare must succeed");
         assert!(folded.applied_options.ignore_blank_lines);
@@ -2445,6 +2491,7 @@ mod tests {
             Some("Windows-1252".to_string()),
             None,
             Some("UTF-8".to_string()),
+            None,
             None,
         );
         let _ = std::fs::remove_file(&left);

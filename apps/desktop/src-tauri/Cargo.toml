@@ -22,10 +22,12 @@ autocompare-compare = { version = "0.5.0", path = "../../../crates/compare" }
 autocompare-diff = { version = "0.5.0", path = "../../../crates/diff" }
 autocompare-reports = { version = "0.5.0", path = "../../../crates/reports" }
 autocompare-sessions = { version = "0.5.0", path = "../../../crates/sessions" }
+autocompare-telemetry = { version = "0.5.0", path = "../../../crates/telemetry" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-dialog = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
+tracing = { version = "0.1" }
 
 [lints]
 workspace = true
