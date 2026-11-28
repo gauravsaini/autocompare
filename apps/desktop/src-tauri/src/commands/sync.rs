@@ -16,6 +16,7 @@
 use std::path::Path;
 
 use autocompare_compare::{FolderOptions, SyncAction, SyncOptions, SyncPlan, SyncReport};
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// Outcome of [`sync_apply`].
@@ -39,6 +40,12 @@ pub struct SyncApplyReport {
     pub planned_deletes: usize,
     /// Steps that failed: (relative path, plain-English error).
     pub failed: Vec<(String, String)>,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 fn count_plan(plan: &SyncPlan) -> (usize, usize) {
@@ -68,7 +75,38 @@ pub fn sync_plan(
     left: String,
     right: String,
     opts: Option<SyncOptions>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the engine `SyncPlan` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
 ) -> Result<SyncPlan, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "sync.plan",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/sync"
+        )
+        .entered()
+    });
     let options = opts.unwrap_or_default();
     autocompare_compare::plan_sync_with_compare(
         Path::new(&left),
@@ -90,7 +128,41 @@ pub fn sync_apply(
     right: String,
     plan: SyncPlan,
     dry_run: bool,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope. Tauri fills a
+    // missing `Option` param with `None`; unknown/absent stays `None`.
+    __trace: Option<serde_json::Value>,
 ) -> Result<SyncApplyReport, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "sync.apply",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/sync"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if dry_run {
         let (planned_copies, planned_deletes) = count_plan(&plan);
         return Ok(SyncApplyReport {
@@ -100,6 +172,7 @@ pub fn sync_apply(
             planned_copies,
             planned_deletes,
             failed: Vec::new(),
+            trace_echo,
         });
     }
     let report: SyncReport =
@@ -112,6 +185,7 @@ pub fn sync_apply(
         planned_copies: 0,
         planned_deletes: 0,
         failed: report.failed,
+        trace_echo,
     })
 }
 
@@ -145,7 +219,7 @@ mod tests {
     }
 
     fn plan_or_fail(left: &str, right: &str, opts: Option<SyncOptions>) -> SyncPlan {
-        match sync_plan(left.to_string(), right.to_string(), opts) {
+        match sync_plan(left.to_string(), right.to_string(), opts, None) {
             Ok(plan) => plan,
             Err(e) => {
                 assert!(e.is_empty(), "sync_plan failed: {e}");
@@ -198,6 +272,7 @@ mod tests {
             dir.join("left").display().to_string(),
             dir.join("right").display().to_string(),
             None,
+            None,
         );
         assert!(result.is_err_and(|e| e.contains("path not found")));
         let _ = std::fs::remove_dir_all(&dir);
@@ -213,7 +288,7 @@ mod tests {
         let (l, r) = (left.display().to_string(), right.display().to_string());
         let plan = plan_or_fail(&l, &r, None);
         assert!(!plan.steps.is_empty());
-        let report = match sync_apply(l.clone(), r.clone(), plan, true) {
+        let report = match sync_apply(l.clone(), r.clone(), plan, true, None) {
             Ok(report) => report,
             Err(e) => {
                 assert!(e.is_empty(), "dry run failed: {e}");
@@ -247,7 +322,7 @@ mod tests {
         assert!(write_file(&right.join("marker.txt"), "x\n"));
         let (l, r) = (left.display().to_string(), right.display().to_string());
         let plan = plan_or_fail(&l, &r, None);
-        let report = match sync_apply(l, r, plan, false) {
+        let report = match sync_apply(l, r, plan, false, None) {
             Ok(report) => report,
             Err(e) => {
                 assert!(e.is_empty(), "apply failed: {e}");
@@ -265,13 +340,58 @@ mod tests {
     }
 
     #[test]
+    fn trace_echo_round_trip_on_sync_apply() {
+        // ODD Phase 4 Leaf B: a valid `__trace` envelope yields a child
+        // echo on the dry-run receipt (same trace, fresh span); absent
+        // input leaves the wire shape byte-identical (no `__trace` key).
+        let dir = unique_dir("trace");
+        let left = dir.join("left");
+        let right = dir.join("right");
+        assert!(write_file(&left.join("new.txt"), "payload\n"));
+        assert!(write_file(&right.join("marker.txt"), "x\n"));
+        let (l, r) = (left.display().to_string(), right.display().to_string());
+        let plan = plan_or_fail(&l, &r, None);
+        assert!(!plan.steps.is_empty());
+
+        let plain = match sync_apply(l.clone(), r.clone(), plan.clone(), true, None) {
+            Ok(report) => report,
+            Err(e) => {
+                assert!(e.is_empty(), "plain apply failed: {e}");
+                return;
+            }
+        };
+        assert!(plain.dry_run);
+        assert_eq!(plain.trace_echo, None);
+        let plain_json = serde_json::to_string(&plain).unwrap_or_default();
+        assert!(!plain_json.contains("__trace"));
+
+        let parent = TraceContext::fresh(true);
+        let parent_env = parent.to_envelope();
+        let traced = match sync_apply(l, r, plan, true, Some(parent_env.clone())) {
+            Ok(report) => report,
+            Err(e) => {
+                assert!(e.is_empty(), "traced apply failed: {e}");
+                return;
+            }
+        };
+        assert!(traced.trace_echo.is_some(), "echo must be present");
+        let echo = traced.trace_echo.clone().unwrap_or(serde_json::Value::Null);
+        assert_eq!(echo.get("trace_id"), parent_env.get("trace_id"));
+        assert_ne!(echo.get("span_id"), parent_env.get("span_id"));
+        assert_eq!(echo.get("sampled"), parent_env.get("sampled"));
+        let traced_json = serde_json::to_string(&traced).unwrap_or_default();
+        assert!(traced_json.contains("__trace"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn plan_runs_on_parity_sync_fixtures_when_present() {
         let left = "../../../tools/parity-harness/fixtures/sync/left";
         let right = "../../../tools/parity-harness/fixtures/sync/right";
         if !Path::new(left).exists() || !Path::new(right).exists() {
             return;
         }
-        match sync_plan(left.to_string(), right.to_string(), None) {
+        match sync_plan(left.to_string(), right.to_string(), None, None) {
             Ok(plan) => {
                 let (copies, deletes) = count_plan(&plan);
                 assert_eq!(copies + deletes, plan.steps.len());

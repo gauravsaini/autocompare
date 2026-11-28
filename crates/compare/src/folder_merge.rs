@@ -45,6 +45,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use autocompare_diff::merge3;
 
 use crate::binary::files_equal;
+use crate::folder::{odd_enabled, odd_path_token};
 use crate::{Error, Result, TreeMergeAction, TreeMergePlan, TreeMergeReport, TreeMergeStep};
 
 /// Files whose readable sides exceed this size are merged as binary
@@ -166,6 +167,29 @@ pub fn plan_tree_merge_with_policy_cancellable(
     policy: MergeResolutionPolicy,
     cancel: Option<&AtomicBool>,
 ) -> Result<TreeMergePlan> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let policy_name = match policy {
+        MergeResolutionPolicy::TakeNonConflicting => "TakeNonConflicting",
+        MergeResolutionPolicy::FavorLeft => "FavorLeft",
+        MergeResolutionPolicy::FavorRight => "FavorRight",
+        MergeResolutionPolicy::Newest => "Newest",
+    };
+    let odd_span = tracing::info_span!(
+        "merge.folder_plan",
+        component = "rs.compare/merge",
+        base = %odd_path_token(base),
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        policy = policy_name,
+        steps = tracing::field::Empty,
+        conflicts = tracing::field::Empty,
+        skipped = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     require_dir(base)?;
     require_dir(left)?;
     require_dir(right)?;
@@ -223,6 +247,9 @@ pub fn plan_tree_merge_with_policy_cancellable(
 
     // Only the rare walk-level skips can be out of order.
     plan.skipped.sort_by(|a, b| a.0.cmp(&b.0));
+    odd_span.record("steps", plan.steps.len() as u64);
+    odd_span.record("conflicts", plan.conflicts.len() as u64);
+    odd_span.record("skipped", plan.skipped.len() as u64);
     Ok(plan)
 }
 
@@ -246,6 +273,23 @@ pub fn apply_tree_merge_cancellable(
     cancel: Option<&AtomicBool>,
     progress: Option<TreeMergeProgressCallback<'_>>,
 ) -> Result<TreeMergeReport> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "merge.folder_apply",
+        component = "rs.compare/merge",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        output = %odd_path_token(output),
+        steps = plan.steps.len() as u64,
+        written = tracing::field::Empty,
+        dirs_created = tracing::field::Empty,
+        failed = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let mut report = TreeMergeReport::default();
     prepare_output(output)?;
     let total = plan.steps.len();
@@ -281,6 +325,9 @@ pub fn apply_tree_merge_cancellable(
         p(total, total, "complete");
     }
 
+    odd_span.record("written", report.written as u64);
+    odd_span.record("dirs_created", report.dirs_created as u64);
+    odd_span.record("failed", report.failed.len() as u64);
     Ok(report)
 }
 
@@ -415,7 +462,23 @@ fn resolve_file(
                 }
                 MergeResolutionPolicy::TakeNonConflicting => Ok(match merge_all3(bn, ln, rn)? {
                     Some(merged) => merged_outcome(rel, merged),
-                    None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
+                    None => {
+                        // ODD Phase 4 Leaf B: text merge fell back to a
+                        // binary conflict (unreadable, oversized, or
+                        // non-UTF8). Rare per-file fallback, annotated as
+                        // a child span with a hashed path only.
+                        if odd_enabled() {
+                            let _fallback = tracing::info_span!(
+                                "merge.text_fallback",
+                                component = "rs.compare/merge",
+                                rel = %odd_path_token(Path::new(rel)),
+                                kind = "binary_conflict",
+                                attempt = 1u64,
+                            )
+                            .entered();
+                        }
+                        copy_step(rel, ln, TreeMergeAction::Conflict, true)
+                    }
                 }),
             }
         }
@@ -492,7 +555,22 @@ fn resolve_file(
                 MergeResolutionPolicy::TakeNonConflicting => {
                     Ok(match merge_over_empty_base(ln, rn)? {
                         Some(merged) => merged_outcome(rel, merged),
-                        None => copy_step(rel, ln, TreeMergeAction::Conflict, true),
+                        None => {
+                            // ODD Phase 4 Leaf B: both-added text merge
+                            // fell back to a binary conflict. Annotated
+                            // child span, hashed path only.
+                            if odd_enabled() {
+                                let _fallback = tracing::info_span!(
+                                    "merge.text_fallback",
+                                    component = "rs.compare/merge",
+                                    rel = %odd_path_token(Path::new(rel)),
+                                    kind = "binary_conflict",
+                                    attempt = 1u64,
+                                )
+                                .entered();
+                            }
+                            copy_step(rel, ln, TreeMergeAction::Conflict, true)
+                        }
                     })
                 }
             }

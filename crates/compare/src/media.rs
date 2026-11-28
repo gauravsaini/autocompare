@@ -10,6 +10,7 @@ use std::path::Path;
 
 use autocompare_diff::{PcmAudio, decode_audio, diff_audio_with_tolerance};
 
+use crate::folder::{odd_enabled, odd_path_token};
 use crate::{AudioComparison, Error, Result};
 
 /// Compares two audio files. See the crate documentation.
@@ -58,11 +59,30 @@ pub fn compare_audio_files_with_tolerance(
     right: &Path,
     tol: &AudioTolerance,
 ) -> Result<AudioComparison> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "media.audio_compare",
+        component = "rs.compare/media",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        tolerance = tol.amplitude_tolerance,
+        identical = tracing::field::Empty,
+        config_mismatch = tracing::field::Empty,
+        windows_differing = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let left_bytes = read_bytes(left)?;
     let right_bytes = read_bytes(right)?;
     let left_audio = decode_side(left, &left_bytes)?;
     let right_audio = decode_side(right, &right_bytes)?;
     let diff = diff_audio_with_tolerance(&left_audio, &right_audio, tol.amplitude_tolerance);
+    odd_span.record("identical", diff.identical);
+    odd_span.record("config_mismatch", diff.config_mismatch);
+    odd_span.record("windows_differing", diff.windows_differing);
     Ok(AudioComparison { diff })
 }
 

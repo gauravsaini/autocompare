@@ -37,6 +37,7 @@ use autocompare_compare::{
     FolderComparison, FolderEntry, FolderOptions, FolderStatus, NodeInfo,
     compare_folders_cancellable,
 };
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// Maximum entries returned by one [`folder_get_tree`] call. Bounds every
@@ -56,6 +57,12 @@ pub struct FolderCompareDto {
     pub right_root: String,
     pub total: u64,
     pub truncated: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One side's metadata. `modified_ms` is millis since the Unix epoch
@@ -156,6 +163,12 @@ pub struct TreePage {
     pub total: u64,
     pub filter: String,
     pub entries: Vec<FolderEntryDto>,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Receipt returned by [`folder_cancel`].
@@ -164,6 +177,12 @@ pub struct TreePage {
 pub struct FolderCancelDto {
     pub session: String,
     pub cancelled: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Receipt returned by [`folder_copy_entry`] and [`folder_delete_entry`].
@@ -174,6 +193,12 @@ pub struct FolderActionReceipt {
     pub rel_path: String,
     pub action: String,
     pub bytes_affected: u64,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Cached full folder comparison. Lives in Rust memory only; the UI pages
@@ -272,7 +297,7 @@ pub fn entry_matches(status: FolderStatusDto, filter: &str) -> Result<bool, Stri
 /// registered up front, so a concurrent [`folder_cancel`] for the returned
 /// session id can interrupt it.
 #[tauri::command]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn folder_compare(
     left: String,
     right: String,
@@ -281,7 +306,42 @@ pub fn folder_compare(
     content_compare: Option<bool>,
     quickCompare: Option<bool>,
     quick_compare: Option<bool>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope (`{trace_id,
+    // span_id, sampled}`). Tauri fills a missing `Option` param with
+    // `None`; unknown/absent stays `None` and changes nothing.
+    __trace: Option<serde_json::Value>,
 ) -> Result<FolderCompareDto, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "folder.compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/folder"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
@@ -290,13 +350,7 @@ pub fn folder_compare(
     }
     // Empty/whitespace-only masks mean "no filtering", matching the
     // engine's backward-compatible default.
-    let masks = masks.and_then(|m| {
-        if m.trim().is_empty() {
-            None
-        } else {
-            Some(m)
-        }
-    });
+    let masks = masks.and_then(|m| if m.trim().is_empty() { None } else { Some(m) });
     let session = next_session_id();
     let cancel = Arc::new(AtomicBool::new(false));
     {
@@ -328,6 +382,7 @@ pub fn folder_compare(
         right_root: right.clone(),
         total: comparison.entries.len() as u64,
         truncated: comparison.truncated,
+        trace_echo,
     };
     {
         let mut guard = lock_snapshots()?;
@@ -351,7 +406,41 @@ pub fn folder_get_tree(
     start: u64,
     limit: u64,
     filter: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`folder_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TreePage, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "folder.get_tree",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/folder"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     // Validate the filter before touching the snapshot so typos surface
     // even on empty trees.
     FolderStatusDto::parse_filter(&filter)?;
@@ -383,6 +472,7 @@ pub fn folder_get_tree(
         total,
         filter,
         entries,
+        trace_echo,
     })
 }
 
@@ -390,7 +480,43 @@ pub fn folder_get_tree(
 /// cached snapshot. `cancelled` is true when a running job or a snapshot
 /// was actually found; unknown sessions report `false`, never an error.
 #[tauri::command]
-pub fn folder_cancel(session: String) -> Result<FolderCancelDto, String> {
+pub fn folder_cancel(
+    session: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`folder_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
+) -> Result<FolderCancelDto, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "folder.cancel",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/folder"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let mut cancelled = false;
     {
         let inflight = lock_inflight()?;
@@ -405,7 +531,11 @@ pub fn folder_cancel(session: String) -> Result<FolderCancelDto, String> {
             cancelled = true;
         }
     }
-    Ok(FolderCancelDto { session, cancelled })
+    Ok(FolderCancelDto {
+        session,
+        cancelled,
+        trace_echo,
+    })
 }
 
 /// Safely joins a relative path onto `root`, rejecting absolute paths or `..` traversal.
@@ -463,7 +593,41 @@ pub fn folder_copy_entry(
     session: String,
     rel_path: String,
     dir: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`folder_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<FolderActionReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "folder.copy_entry",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/folder"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let cached = snapshot(&session)?;
     let (src_root, dst_root) = match dir.as_str() {
         "leftToRight" => (&cached.left_root, &cached.right_root),
@@ -478,6 +642,7 @@ pub fn folder_copy_entry(
         rel_path,
         action: dir,
         bytes_affected,
+        trace_echo,
     })
 }
 
@@ -487,7 +652,41 @@ pub fn folder_delete_entry(
     session: String,
     rel_path: String,
     side: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`folder_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<FolderActionReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "folder.delete_entry",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/folder"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let cached = snapshot(&session)?;
     let root = match side.as_str() {
         "left" => &cached.left_root,
@@ -513,10 +712,17 @@ pub fn folder_delete_entry(
         rel_path,
         action: format!("delete:{side}"),
         bytes_affected,
+        trace_echo,
     })
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
 
@@ -605,38 +811,167 @@ mod tests {
 
     #[test]
     fn error_paths_on_missing_dirs_and_sessions() {
-        assert!(folder_compare(String::new(), "/b".to_string(), None, None, None, None, None).is_err());
-        assert!(folder_compare("/a".to_string(), String::new(), None, None, None, None, None).is_err());
-        let missing = "/definitely/not/here-wave1a-left".to_string();
-        assert!(folder_compare(
-            missing,
-            "/definitely/not/here-wave1a-right".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None
-        )
-        .is_err());
-        assert!(folder_compare(
-            "/definitely/not/here-wave1a-left".to_string(),
-            "/definitely/not/here-wave1a-right".to_string(),
-            Some("*.ts".to_string()),
-            None,
-            None,
-            None,
-            None
-        )
-        .is_err());
-        assert!(folder_get_tree("no-such-session".to_string(), 0, 10, "all".to_string()).is_err());
         assert!(
-            folder_get_tree("no-such-session".to_string(), 0, 10, "bogus".to_string()).is_err()
+            folder_compare(
+                String::new(),
+                "/b".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            folder_compare(
+                "/a".to_string(),
+                String::new(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )
+            .is_err()
+        );
+        let missing = "/definitely/not/here-wave1a-left".to_string();
+        assert!(
+            folder_compare(
+                missing,
+                "/definitely/not/here-wave1a-right".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            folder_compare(
+                "/definitely/not/here-wave1a-left".to_string(),
+                "/definitely/not/here-wave1a-right".to_string(),
+                Some("*.ts".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            folder_get_tree(
+                "no-such-session".to_string(),
+                0,
+                10,
+                "all".to_string(),
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            folder_get_tree(
+                "no-such-session".to_string(),
+                0,
+                10,
+                "bogus".to_string(),
+                None
+            )
+            .is_err()
         );
     }
 
     #[test]
+    fn trace_echo_round_trip_on_folder_compare() {
+        // ODD Phase 4 Leaf B: a valid `__trace` envelope yields a child
+        // echo (same trace, fresh span); absent or malformed input
+        // leaves the wire shape byte-identical (no `__trace` key).
+        let tag = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let base = std::env::temp_dir().join(format!(
+            "autocompare-folder-trace-{}-{tag}",
+            std::process::id()
+        ));
+        let left = base.join("left");
+        let right = base.join("right");
+        assert!(std::fs::create_dir_all(&left).is_ok());
+        assert!(std::fs::create_dir_all(&right).is_ok());
+        assert!(std::fs::write(left.join("a.txt"), "same\n").is_ok());
+        assert!(std::fs::write(right.join("a.txt"), "same\n").is_ok());
+        let l = left.display().to_string();
+        let r = right.display().to_string();
+
+        let plain = match folder_compare(l.clone(), r.clone(), None, None, None, None, None, None) {
+            Ok(dto) => dto,
+            Err(e) => {
+                assert!(e.is_empty(), "plain compare failed: {e}");
+                return;
+            }
+        };
+        assert_eq!(plain.trace_echo, None);
+        let plain_json = serde_json::to_string(&plain).unwrap_or_default();
+        assert!(!plain_json.contains("__trace"));
+
+        let parent = TraceContext::fresh(true);
+        let parent_env = parent.to_envelope();
+        let traced = match folder_compare(
+            l.clone(),
+            r.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(parent_env.clone()),
+        ) {
+            Ok(dto) => dto,
+            Err(e) => {
+                assert!(e.is_empty(), "traced compare failed: {e}");
+                return;
+            }
+        };
+        assert!(traced.trace_echo.is_some(), "echo must be present");
+        let echo = traced.trace_echo.clone().unwrap_or(serde_json::Value::Null);
+        assert_eq!(echo.get("trace_id"), parent_env.get("trace_id"));
+        assert_ne!(echo.get("span_id"), parent_env.get("span_id"));
+        assert_eq!(echo.get("sampled"), parent_env.get("sampled"));
+        let traced_json = serde_json::to_string(&traced).unwrap_or_default();
+        assert!(traced_json.contains("__trace"));
+
+        let malformed = match folder_compare(
+            l,
+            r,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(serde_json::json!({"bogus": 1})),
+        ) {
+            Ok(dto) => dto,
+            Err(e) => {
+                assert!(e.is_empty(), "malformed-trace compare failed: {e}");
+                return;
+            }
+        };
+        assert_eq!(malformed.trace_echo, None);
+
+        let _ = folder_cancel(plain.session, None);
+        let _ = folder_cancel(traced.session, None);
+        let _ = folder_cancel(malformed.session, None);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn cancel_unknown_session_reports_false() {
-        let receipt = folder_cancel("no-such-session-wave1a".to_string());
+        let receipt = folder_cancel("no-such-session-wave1a".to_string(), None);
         assert_eq!(receipt.map(|r| r.cancelled), Ok(false));
     }
 
@@ -662,9 +997,7 @@ mod tests {
                     let stamp = std::time::UNIX_EPOCH
                         .checked_add(std::time::Duration::from_secs(1_700_000_000))
                         .unwrap_or(std::time::UNIX_EPOCH);
-                    let _ = file.set_times(
-                        std::fs::FileTimes::new().set_modified(stamp),
-                    );
+                    let _ = file.set_times(std::fs::FileTimes::new().set_modified(stamp));
                 }
             }
         }
@@ -676,7 +1009,7 @@ mod tests {
     }
 
     fn tree_paths(session: &str) -> Vec<String> {
-        let page = folder_get_tree(session.to_string(), 0, 500, "all".to_string())
+        let page = folder_get_tree(session.to_string(), 0, 500, "all".to_string(), None)
             .unwrap_or_else(|_| panic!("tree fetch must succeed for {session}"));
         page.entries.iter().map(|e| e.rel_path.clone()).collect()
     }
@@ -685,51 +1018,97 @@ mod tests {
     fn masks_param_filters_before_status_filter() {
         // No masks: everything is listed (backward compatible).
         let (base_none, left, right) = mask_fixture_roots("none");
-        let dto = folder_compare(left.clone(), right.clone(), None, None, None, None, None).unwrap_or_else(|_| {
+        let dto = folder_compare(
+            left.clone(),
+            right.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| {
             panic!("compare without masks must succeed");
         });
         assert_eq!(dto.total, 3);
         assert_eq!(tree_paths(&dto.session), vec!["a.ts", "app.min.js", "b.js"]);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_none).unwrap_or(());
 
         // Include-only: only *.ts survives.
         let (base_inc, left, right) = mask_fixture_roots("inc");
-        let dto = folder_compare(left, right, Some("*.ts".to_string()), None, None, None, None)
-            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        let dto = folder_compare(
+            left,
+            right,
+            Some("*.ts".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 1);
         assert_eq!(tree_paths(&dto.session), vec!["a.ts"]);
         // Status filter composes on the masked snapshot.
-        let changed = folder_get_tree(dto.session.clone(), 0, 500, "changed".to_string())
+        let changed = folder_get_tree(dto.session.clone(), 0, 500, "changed".to_string(), None)
             .unwrap_or_else(|_| panic!("filtered fetch must succeed"));
         assert!(changed.entries.is_empty());
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_inc).unwrap_or(());
 
         // Exclude-only: the minified bundle is hidden.
         let (base_exc, left, right) = mask_fixture_roots("exc");
-        let dto = folder_compare(left, right, Some("-*.min.js".to_string()), None, None, None, None)
-            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        let dto = folder_compare(
+            left,
+            right,
+            Some("-*.min.js".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 2);
         assert_eq!(tree_paths(&dto.session), vec!["a.ts", "b.js"]);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_exc).unwrap_or(());
 
         // Mixed: include *.js but still drop the minified bundle.
         let (base_mix, left, right) = mask_fixture_roots("mix");
-        let dto = folder_compare(left, right, Some("*.js;-*.min.js".to_string()), None, None, None, None)
-            .unwrap_or_else(|_| panic!("compare with masks must succeed"));
+        let dto = folder_compare(
+            left,
+            right,
+            Some("*.js;-*.min.js".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| panic!("compare with masks must succeed"));
         assert_eq!(dto.total, 1);
         assert_eq!(tree_paths(&dto.session), vec!["b.js"]);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_mix).unwrap_or(());
 
         // Empty masks string behaves like None.
         let (base_empty, left, right) = mask_fixture_roots("empty");
-        let dto = folder_compare(left, right, Some("  ".to_string()), None, None, None, None)
-            .unwrap_or_else(|_| panic!("compare with empty masks must succeed"));
+        let dto = folder_compare(
+            left,
+            right,
+            Some("  ".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| panic!("compare with empty masks must succeed"));
         assert_eq!(dto.total, 3);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base_empty).unwrap_or(());
     }
 
@@ -759,38 +1138,45 @@ mod tests {
                 .write(true)
                 .open(root.join("same.bin"))
             {
-                let _ = file.set_times(
-                    std::fs::FileTimes::new().set_modified(stamp),
-                );
+                let _ = file.set_times(std::fs::FileTimes::new().set_modified(stamp));
             }
         }
         let l = left.display().to_string();
         let r = right.display().to_string();
         // Fast path (default): mtime equal => Same.
-        let dto = folder_compare(l.clone(), r.clone(), None, None, None, None, None)
+        let dto = folder_compare(l.clone(), r.clone(), None, None, None, None, None, None)
             .unwrap_or_else(|_| panic!("fast compare must succeed"));
         assert_eq!(dto.total, 1);
-        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string(), None)
             .unwrap_or_else(|_| panic!("tree fetch must succeed"));
         assert_eq!(page.entries.len(), 1);
         assert_eq!(page.entries[0].status, FolderStatusDto::Same);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         // Content path (camelCase spelling): bytes differ => Different.
-        let dto = folder_compare(l.clone(), r.clone(), None, Some(true), None, None, None)
-            .unwrap_or_else(|_| panic!("content compare must succeed"));
-        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+        let dto = folder_compare(
+            l.clone(),
+            r.clone(),
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|_| panic!("content compare must succeed"));
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string(), None)
             .unwrap_or_else(|_| panic!("tree fetch must succeed"));
         assert_eq!(page.entries.len(), 1);
         assert_eq!(page.entries[0].status, FolderStatusDto::Different);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         // Quick alias (quick=true => fast path => Same again).
-        let dto = folder_compare(l, r, None, None, None, Some(true), None)
+        let dto = folder_compare(l, r, None, None, None, Some(true), None, None)
             .unwrap_or_else(|_| panic!("quick compare must succeed"));
-        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string())
+        let page = folder_get_tree(dto.session.clone(), 0, 500, "all".to_string(), None)
             .unwrap_or_else(|_| panic!("tree fetch must succeed"));
         assert_eq!(page.entries.len(), 1);
         assert_eq!(page.entries[0].status, FolderStatusDto::Same);
-        folder_cancel(dto.session).unwrap_or_else(|_| panic!("cancel must succeed"));
+        folder_cancel(dto.session, None).unwrap_or_else(|_| panic!("cancel must succeed"));
         std::fs::remove_dir_all(&base).unwrap_or(());
     }
 
@@ -799,16 +1185,43 @@ mod tests {
         let (base, left, right) = mask_fixture_roots("copy-del");
         let extra = PathBuf::from(&left).join("only_left.txt");
         let _ = std::fs::write(&extra, "hello world");
-        let dto = folder_compare(left.clone(), right.clone(), None, None, None, None, None)
-            .expect("compare must succeed");
-        assert!(folder_copy_entry(dto.session.clone(), "../escape.txt".to_string(), "leftToRight".to_string()).is_err());
-        let copied = folder_copy_entry(dto.session.clone(), "only_left.txt".to_string(), "leftToRight".to_string());
+        let dto = folder_compare(
+            left.clone(),
+            right.clone(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("compare must succeed");
+        assert!(
+            folder_copy_entry(
+                dto.session.clone(),
+                "../escape.txt".to_string(),
+                "leftToRight".to_string(),
+                None
+            )
+            .is_err()
+        );
+        let copied = folder_copy_entry(
+            dto.session.clone(),
+            "only_left.txt".to_string(),
+            "leftToRight".to_string(),
+            None,
+        );
         assert!(copied.is_ok());
         assert!(PathBuf::from(&right).join("only_left.txt").exists());
-        let deleted = folder_delete_entry(dto.session.clone(), "only_left.txt".to_string(), "right".to_string());
+        let deleted = folder_delete_entry(
+            dto.session.clone(),
+            "only_left.txt".to_string(),
+            "right".to_string(),
+            None,
+        );
         assert!(deleted.is_ok());
         assert!(!PathBuf::from(&right).join("only_left.txt").exists());
-        let _ = folder_cancel(dto.session);
+        let _ = folder_cancel(dto.session, None);
         let _ = std::fs::remove_dir_all(&base);
     }
 }

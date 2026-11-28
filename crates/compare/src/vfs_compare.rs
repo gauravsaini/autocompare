@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use autocompare_vfs::{Vfs, VfsPath};
 
-use crate::folder::{FileMasks, glob_match, masks_allow, parse_file_masks};
+use crate::folder::{FileMasks, glob_match, masks_allow, odd_enabled, parse_file_masks};
 use crate::{Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, NodeInfo, Result};
 
 /// Streaming chunk size for VFS byte equality.
@@ -40,6 +40,23 @@ pub fn compare_vfs_folders_cancellable(
     opts: &FolderOptions,
     cancel: Option<&AtomicBool>,
 ) -> Result<FolderComparison> {
+    // ODD Phase 4 Leaf B: orchestration span. VFS roots have no
+    // filesystem paths, so only option flags and result counts are
+    // recorded; entry names and contents never enter telemetry.
+    let odd_span = tracing::info_span!(
+        "folder.compare",
+        component = "rs.compare/vfs",
+        depth_limit = opts.depth_limit as u64,
+        content_compare = opts.content_compare,
+        case_insensitive = opts.case_insensitive,
+        entries = tracing::field::Empty,
+        truncated = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     require_vfs_dir(left, "left")?;
     require_vfs_dir(right, "right")?;
 
@@ -124,7 +141,10 @@ pub fn compare_vfs_folders_cancellable(
     }
 
     entries.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
-    Ok(FolderComparison { entries, truncated })
+    let comparison = FolderComparison { entries, truncated };
+    odd_span.record("entries", comparison.entries.len() as u64);
+    odd_span.record("truncated", comparison.truncated);
+    Ok(comparison)
 }
 
 /// A directory pair (or one-sided directory) pending the walk.

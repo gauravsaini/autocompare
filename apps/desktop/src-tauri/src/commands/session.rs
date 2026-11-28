@@ -47,6 +47,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// Current session schema version (mirrors the engine constant).
@@ -366,7 +367,39 @@ fn escape_html(input: &str) -> String {
 /// Lists saved sessions (newest... in directory order). Unreadable files
 /// are skipped; a missing store is an empty list, never an error.
 #[tauri::command]
-pub fn session_list() -> Vec<SessionEntry> {
+pub fn session_list(
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the `Vec<SessionEntry>` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
+) -> Vec<SessionEntry> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "session.list",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     let mut entries = Vec::new();
     let dir = match std::fs::read_dir(sessions_dir()) {
         Ok(dir) => dir,
@@ -408,7 +441,41 @@ pub fn session_list() -> Vec<SessionEntry> {
 /// Loads a saved session by id. Dangling `active_tab_index` values are
 /// clamped to 0, mirroring the engine loader.
 #[tauri::command]
-pub fn session_load(id: String) -> Result<SessionDocument, String> {
+pub fn session_load(
+    id: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the persisted `SessionDocument` schema cannot carry an
+    // echo field.
+    __trace: Option<serde_json::Value>,
+) -> Result<SessionDocument, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "session.load",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     if !valid_id(&id) {
         return Err(format!("unknown session id '{id}'"));
     }
@@ -456,7 +523,41 @@ fn validate_descriptor(doc: &SessionDocument) -> Result<(), String> {
 /// Saves a session descriptor under a minted id and returns the id.
 /// Locked descriptors are refused unless the lock is cleared first.
 #[tauri::command]
-pub fn session_save(descriptor: SessionDocument) -> Result<String, String> {
+pub fn session_save(
+    descriptor: SessionDocument,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the persisted `SessionDocument` schema cannot carry an
+    // echo field.
+    __trace: Option<serde_json::Value>,
+) -> Result<String, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "session.save",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     validate_descriptor(&descriptor)?;
     if descriptor.locked {
         return Err("session is locked against overwrite".to_string());
@@ -480,7 +581,40 @@ pub fn session_save(descriptor: SessionDocument) -> Result<String, String> {
 /// row: the SessionManager delete path never checks `locked` (last-row
 /// guard only), so refusing here would silently strand undeletable rows.
 #[tauri::command]
-pub fn session_delete(id: String) -> Result<bool, String> {
+pub fn session_delete(
+    id: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the `bool` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
+) -> Result<bool, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "session.delete",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     if !valid_id(&id) {
         return Err(format!("unknown session id '{id}'"));
     }
@@ -495,7 +629,40 @@ pub fn session_delete(id: String) -> Result<bool, String> {
 /// Loads persisted settings, or defaults when nothing is stored yet.
 /// A corrupt store is an error, never a silent default.
 #[tauri::command]
-pub fn settings_get() -> Result<AppSettings, String> {
+pub fn settings_get(
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the persisted `AppSettings` schema cannot carry an echo
+    // field.
+    __trace: Option<serde_json::Value>,
+) -> Result<AppSettings, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "settings.get",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     let path = settings_path();
     let content = match std::fs::read_to_string(&path) {
         Ok(content) => content,
@@ -520,12 +687,46 @@ pub fn settings_get() -> Result<AppSettings, String> {
 /// Applies a JSON settings patch onto the stored settings. Unknown keys
 /// are rejected; only documented value types are accepted.
 #[tauri::command]
-pub fn settings_set(patch: serde_json::Value) -> Result<AppSettings, String> {
+pub fn settings_set(
+    patch: serde_json::Value,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the persisted `AppSettings` schema cannot carry an echo
+    // field.
+    __trace: Option<serde_json::Value>,
+) -> Result<AppSettings, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "settings.set",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     let fields = match patch {
         serde_json::Value::Object(fields) => fields,
         _ => return Err("settings patch must be a JSON object".to_string()),
     };
-    let current = settings_get()?;
+    let current = settings_get(None)?;
     if current.locked {
         return Err("settings are locked against modification".to_string());
     }
@@ -649,7 +850,38 @@ pub fn report_export(
     format: String,
     out_path: String,
     rendered_body: Option<String>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the `String` path shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
 ) -> Result<String, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "report.export",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/session"
+        )
+        .entered()
+    });
     validate_descriptor(&session)?;
     let parsed_format = ReportFormat::parse(&format)?;
     let rendered = match rendered_body {
@@ -808,25 +1040,25 @@ mod tests {
     #[test]
     fn save_load_list_round_trip() {
         let doc = sample_doc();
-        let id = session_save(doc.clone()).expect("save");
+        let id = session_save(doc.clone(), None).expect("save");
         assert!(valid_id(&id));
-        let loaded = session_load(id.clone()).expect("load");
+        let loaded = session_load(id.clone(), None).expect("load");
         assert_eq!(loaded.tabs, doc.tabs);
         assert_eq!(loaded.name, doc.name);
-        let entries = session_list();
+        let entries = session_list(None);
         assert!(entries.iter().any(|e| e.id == id && e.tabs == 2));
     }
 
     #[test]
     fn load_missing_session_errors() {
-        let err = session_load("sess-does-not-exist-1d".to_string()).expect_err("must fail");
+        let err = session_load("sess-does-not-exist-1d".to_string(), None).expect_err("must fail");
         assert!(err.contains("not found"), "unexpected: {err}");
     }
 
     #[test]
     fn load_rejects_bad_ids() {
         for bad in ["", "../evil", "a/b", "a\\b", "..", "."] {
-            assert!(session_load(bad.to_string()).is_err(), "id: {bad}");
+            assert!(session_load(bad.to_string(), None).is_err(), "id: {bad}");
         }
     }
 
@@ -834,7 +1066,7 @@ mod tests {
     fn save_rejects_dangling_active_index() {
         let mut doc = sample_doc();
         doc.active_tab_index = 99;
-        let err = session_save(doc).expect_err("must fail");
+        let err = session_save(doc, None).expect_err("must fail");
         assert!(err.contains("active_tab_index"), "unexpected: {err}");
     }
 
@@ -842,7 +1074,7 @@ mod tests {
     fn save_rejects_locked_descriptor() {
         let mut doc = sample_doc();
         doc.locked = true;
-        let err = session_save(doc).expect_err("must fail");
+        let err = session_save(doc, None).expect_err("must fail");
         assert!(err.contains("locked"), "unexpected: {err}");
     }
 
@@ -850,36 +1082,39 @@ mod tests {
     fn save_rejects_future_schema() {
         let mut doc = sample_doc();
         doc.schema_version = CURRENT_SESSION_SCHEMA_VERSION + 1;
-        assert!(session_save(doc).is_err());
+        assert!(session_save(doc, None).is_err());
     }
 
     #[test]
     fn session_delete_round_trip_removes_file_and_relist_misses() {
         let doc = sample_doc();
-        let id = session_save(doc).expect("save");
+        let id = session_save(doc, None).expect("save");
         let path = sessions_dir().join(format!("{id}.json"));
         assert!(path.is_file(), "saved doc must exist on disk");
-        assert_eq!(session_delete(id.clone()).expect("delete"), true);
+        assert_eq!(session_delete(id.clone(), None).expect("delete"), true);
         assert!(!path.exists(), "deleted doc must be gone from disk");
         assert!(
-            session_list().iter().all(|e| e.id != id),
+            session_list(None).iter().all(|e| e.id != id),
             "re-list must miss the deleted id"
         );
         // Idempotent second delete: missing file is Ok(false), never error.
-        assert_eq!(session_delete(id.clone()).expect("re-delete"), false);
-        assert!(session_load(id).is_err(), "load after delete must fail");
+        assert_eq!(session_delete(id.clone(), None).expect("re-delete"), false);
+        assert!(
+            session_load(id, None).is_err(),
+            "load after delete must fail"
+        );
     }
 
     #[test]
     fn session_delete_rejects_bad_ids() {
         for bad in ["", "../evil", "a/b", "a\\b", "..", "."] {
-            assert!(session_delete(bad.to_string()).is_err(), "id: {bad}");
+            assert!(session_delete(bad.to_string(), None).is_err(), "id: {bad}");
         }
     }
 
     #[test]
     fn settings_round_trip() {
-        let settings = settings_get().expect("get");
+        let settings = settings_get(None).expect("get");
         let json = serde_json::to_string(&settings).expect("serialize");
         let back: AppSettings = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(settings.theme, back.theme);
@@ -889,20 +1124,20 @@ mod tests {
     #[test]
     fn settings_rejects_unknown_keys() {
         let patch = serde_json::json!({"no_such_key": true, "theme": "light"});
-        let err = settings_set(patch).expect_err("unknown key must fail");
+        let err = settings_set(patch, None).expect_err("unknown key must fail");
         assert!(err.contains("unknown settings key"), "unexpected: {err}");
     }
 
     #[test]
     fn settings_rejects_mistyped_values() {
         let patch = serde_json::json!({"theme": 42});
-        assert!(settings_set(patch).is_err());
+        assert!(settings_set(patch, None).is_err());
         let patch = serde_json::json!({"auto_save": "yes"});
-        assert!(settings_set(patch).is_err());
+        assert!(settings_set(patch, None).is_err());
         let patch = serde_json::json!({"extra": [1, 2]});
-        assert!(settings_set(patch).is_err());
+        assert!(settings_set(patch, None).is_err());
         let patch = serde_json::json!("just a string");
-        assert!(settings_set(patch).is_err());
+        assert!(settings_set(patch, None).is_err());
     }
 
     #[test]
@@ -912,11 +1147,11 @@ mod tests {
             "tab_size": 2,
             "extra": {"suite": "1d"},
         });
-        let updated = settings_set(patch).expect("set");
+        let updated = settings_set(patch, None).expect("set");
         assert_eq!(updated.theme, "wave1d-test-theme");
         assert_eq!(updated.tab_size, Some(2));
         assert_eq!(updated.extra.get("suite").map(String::as_str), Some("1d"));
-        let reloaded = settings_get().expect("get");
+        let reloaded = settings_get(None).expect("get");
         assert_eq!(reloaded.theme, "wave1d-test-theme");
 
         // Restore defaults so later waves see a clean store.
@@ -925,7 +1160,7 @@ mod tests {
             "tab_size": 4,
             "extra": {},
         });
-        let restored = settings_set(restore).expect("restore");
+        let restored = settings_set(restore, None).expect("restore");
         assert_eq!(restored.theme, "dark");
     }
 
@@ -947,6 +1182,7 @@ mod tests {
                 doc.clone(),
                 format.to_string(),
                 out.to_string_lossy().to_string(),
+                None,
                 None,
             )
             .expect("export");
@@ -980,6 +1216,7 @@ mod tests {
             "patch".to_string(),
             out.to_string_lossy().to_string(),
             Some(patch.clone()),
+            None,
         )
         .expect("export custom patch");
         let content = std::fs::read_to_string(&written).expect("read");
@@ -996,6 +1233,7 @@ mod tests {
             "pdf".to_string(),
             out.to_string_lossy().to_string(),
             None,
+            None,
         )
         .expect_err("unknown format must fail");
         assert!(err.contains("unknown report format"), "unexpected: {err}");
@@ -1003,6 +1241,7 @@ mod tests {
             doc,
             "html".to_string(),
             "/etc/wave1d-evil.html".to_string(),
+            None,
             None,
         )
         .expect_err("escaping tmp must fail");

@@ -18,6 +18,7 @@ use std::path::Path;
 
 use autocompare_diff::diff_lines;
 
+use crate::folder::{odd_enabled, odd_path_token};
 use crate::{Error, Result, TextComparison, TextOptions};
 
 /// Decodes raw file bytes per an `encoding` name (case-insensitive,
@@ -167,9 +168,28 @@ pub(crate) fn compare_text_files(
     right: &Path,
     opts: &TextOptions,
 ) -> Result<TextComparison> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "text.compare",
+        component = "rs.compare/text",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        ignore_case = opts.ignore_case,
+        ignore_space_change = opts.ignore_space_change,
+        left_lines = tracing::field::Empty,
+        right_lines = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let left_lines = load_lines_with_opts(left, opts)?;
     let right_lines = load_lines_with_opts(right, opts)?;
-    Ok(compare_text_lines(&left_lines, &right_lines, opts))
+    let compared = compare_text_lines(&left_lines, &right_lines, opts);
+    odd_span.record("left_lines", compared.left_lines.len() as u64);
+    odd_span.record("right_lines", compared.right_lines.len() as u64);
+    Ok(compared)
 }
 
 /// Compares two in-memory line vectors with the same keys + diff engine
@@ -181,6 +201,22 @@ pub fn compare_text_lines(
     right_lines: &[String],
     opts: &TextOptions,
 ) -> TextComparison {
+    // ODD Phase 4 Leaf B: orchestration span. Inputs already live in
+    // memory, so only counts and flags are recorded, never contents.
+    let odd_span = tracing::info_span!(
+        "text.compare_lines",
+        component = "rs.compare/text",
+        ignore_case = opts.ignore_case,
+        ignore_space_change = opts.ignore_space_change,
+        left_lines = left_lines.len() as u64,
+        right_lines = right_lines.len() as u64,
+        ops = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let eol = opts.eol.as_deref();
     let left_keys: Vec<String> = left_lines
         .iter()
@@ -193,6 +229,7 @@ pub fn compare_text_lines(
     let left_refs: Vec<&str> = left_keys.iter().map(|key| key.as_str()).collect();
     let right_refs: Vec<&str> = right_keys.iter().map(|key| key.as_str()).collect();
     let script = diff_lines(&left_refs, &right_refs);
+    odd_span.record("ops", script.ops.len() as u64);
     TextComparison {
         left_lines: left_lines.to_vec(),
         right_lines: right_lines.to_vec(),

@@ -159,10 +159,12 @@ name = "autocompare-compare"
 version = "0.5.0"
 dependencies = [
  "autocompare-diff",
+ "autocompare-telemetry",
  "autocompare-vfs",
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -208,9 +210,11 @@ dependencies = [
  "autocompare-compare",
  "autocompare-diff",
  "autocompare-sessions",
+ "autocompare-telemetry",
  "autocompare-vfs",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

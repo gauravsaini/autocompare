@@ -50,6 +50,7 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// Maximum diff-sample entries returned over IPC. Longer runs set the
@@ -110,6 +111,12 @@ pub struct PictureSummary {
     pub samples: Vec<ByteDiffSample>,
     /// True when differing positions exceeded the sample cap.
     pub truncated: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One downsampled differing 10 ms audio window. Mirrors
@@ -163,6 +170,12 @@ pub struct AudioSummary {
     pub diff_windows: Vec<AudioDiffWindow>,
     /// True when differing windows exceeded the sample cap.
     pub truncated: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Reads a file's bytes; a missing path is a `Missing`-style string, any
@@ -257,7 +270,41 @@ pub fn picture_compare(
     left: String,
     right: String,
     tolerance: Option<f32>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope. Tauri fills a
+    // missing `Option` param with `None`; unknown/absent stays `None`.
+    __trace: Option<serde_json::Value>,
 ) -> Result<PictureSummary, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "media.picture_compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/media"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
@@ -270,7 +317,9 @@ pub fn picture_compare(
     }
     let left_bytes = read_bytes(Path::new(&left))?;
     let right_bytes = read_bytes(Path::new(&right))?;
-    Ok(summarize_picture(&left_bytes, &right_bytes, tol))
+    let mut picture = summarize_picture(&left_bytes, &right_bytes, tol);
+    picture.trace_echo = trace_echo;
+    Ok(picture)
 }
 
 /// Byte distance under the wave-C2c tolerance: `0.0` is exact
@@ -343,6 +392,7 @@ fn summarize_picture(left: &[u8], right: &[u8], tol: f32) -> PictureSummary {
         total_bytes,
         samples,
         truncated,
+        trace_echo: None,
     }
 }
 
@@ -456,7 +506,41 @@ pub fn audio_compare(
     left: String,
     right: String,
     tolerance: Option<f32>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`picture_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<AudioSummary, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "media.audio_compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/media"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if left.is_empty() {
         return Err("left path must not be empty".to_string());
     }
@@ -473,13 +557,9 @@ pub fn audio_compare(
     let right_bytes = read_bytes(right_path)?;
     let left_wav = parse_wav(left_path, &left_bytes)?;
     let right_wav = parse_wav(right_path, &right_bytes)?;
-    Ok(summarize_audio(
-        &left_bytes,
-        &left_wav,
-        &right_bytes,
-        &right_wav,
-        tol,
-    ))
+    let mut audio = summarize_audio(&left_bytes, &left_wav, &right_bytes, &right_wav, tol);
+    audio.trace_echo = trace_echo;
+    Ok(audio)
 }
 
 /// Bounded audio summary over two decoded WAV buffers.
@@ -517,6 +597,7 @@ fn summarize_audio(
             score: 0.0,
             diff_windows: Vec::new(),
             truncated: false,
+            trace_echo: None,
         };
     }
 
@@ -633,6 +714,7 @@ fn summarize_audio(
         score,
         diff_windows,
         truncated,
+        trace_echo: None,
     }
 }
 
@@ -711,6 +793,7 @@ mod tests {
             "/definitely/missing/left-1d.png".to_string(),
             "/definitely/missing/right-1d.png".to_string(),
             None,
+            None,
         )
         .expect_err("missing files must fail");
         assert!(err.contains("path not found"), "unexpected: {err}");
@@ -718,8 +801,8 @@ mod tests {
 
     #[test]
     fn picture_empty_paths_rejected() {
-        assert!(picture_compare(String::new(), "b".to_string(), None).is_err());
-        assert!(picture_compare("a".to_string(), String::new(), None).is_err());
+        assert!(picture_compare(String::new(), "b".to_string(), None, None).is_err());
+        assert!(picture_compare("a".to_string(), String::new(), None, None).is_err());
     }
 
     #[test]
@@ -730,6 +813,7 @@ mod tests {
         let summary = picture_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
             None,
         )
         .expect("identical compare");
@@ -756,6 +840,7 @@ mod tests {
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
             None,
+            None,
         )
         .expect("differing compare");
         assert!(!summary.identical);
@@ -780,10 +865,10 @@ mod tests {
         let right = write_temp("pic-tol-r.png", &right_bytes);
         let l = left.to_string_lossy().to_string();
         let r = right.to_string_lossy().to_string();
-        let strict = picture_compare(l.clone(), r.clone(), None).expect("strict compare");
+        let strict = picture_compare(l.clone(), r.clone(), None, None).expect("strict compare");
         assert!(!strict.identical);
         assert_eq!(strict.differing_bytes, 1);
-        let relaxed = picture_compare(l, r, Some(1.0)).expect("relaxed compare");
+        let relaxed = picture_compare(l, r, Some(1.0), None).expect("relaxed compare");
         assert!(relaxed.identical);
         assert_eq!(relaxed.differing_bytes, 0);
         assert_eq!(relaxed.score, 1.0);
@@ -794,9 +879,9 @@ mod tests {
         let bytes = fake_png(4, 4, 0xAB, 8);
         let left = write_temp("pic-badtol.png", &bytes);
         let l = left.to_string_lossy().to_string();
-        assert!(picture_compare(l.clone(), l.clone(), Some(-1.0)).is_err());
-        assert!(picture_compare(l.clone(), l.clone(), Some(f32::NAN)).is_err());
-        assert!(picture_compare(l.clone(), l, Some(f32::INFINITY)).is_err());
+        assert!(picture_compare(l.clone(), l.clone(), Some(-1.0), None).is_err());
+        assert!(picture_compare(l.clone(), l.clone(), Some(f32::NAN), None).is_err());
+        assert!(picture_compare(l.clone(), l, Some(f32::INFINITY), None).is_err());
     }
 
     #[test]
@@ -813,6 +898,7 @@ mod tests {
             "/definitely/missing/left-1d.wav".to_string(),
             "/definitely/missing/right-1d.wav".to_string(),
             None,
+            None,
         )
         .expect_err("missing files must fail");
         assert!(err.contains("path not found"), "unexpected: {err}");
@@ -822,9 +908,9 @@ mod tests {
     fn audio_rejects_bad_tolerance() {
         let left = write_temp("tol-l.wav", &mono_wav(8000, &[0, 0]));
         let l = left.to_string_lossy().to_string();
-        assert!(audio_compare(l.clone(), l.clone(), Some(-1.0)).is_err());
-        assert!(audio_compare(l.clone(), l.clone(), Some(f32::NAN)).is_err());
-        assert!(audio_compare(l.clone(), l, Some(f32::INFINITY)).is_err());
+        assert!(audio_compare(l.clone(), l.clone(), Some(-1.0), None).is_err());
+        assert!(audio_compare(l.clone(), l.clone(), Some(f32::NAN), None).is_err());
+        assert!(audio_compare(l.clone(), l, Some(f32::INFINITY), None).is_err());
     }
 
     #[test]
@@ -834,6 +920,7 @@ mod tests {
         let err = audio_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
             None,
         )
         .expect_err("non-WAV must fail");
@@ -848,6 +935,7 @@ mod tests {
         let same = audio_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
             None,
         )
         .expect("identical compare");
@@ -866,6 +954,7 @@ mod tests {
             left.to_string_lossy().to_string(),
             drifted_path.to_string_lossy().to_string(),
             None,
+            None,
         )
         .expect("strict compare");
         assert!(!strict.identical);
@@ -874,6 +963,7 @@ mod tests {
             left.to_string_lossy().to_string(),
             drifted_path.to_string_lossy().to_string(),
             Some(0.001),
+            None,
         )
         .expect("relaxed compare");
         assert!(relaxed.identical);
@@ -886,6 +976,7 @@ mod tests {
         let summary = audio_compare(
             left.to_string_lossy().to_string(),
             right.to_string_lossy().to_string(),
+            None,
             None,
         )
         .expect("mismatch compare");

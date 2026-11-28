@@ -33,6 +33,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::folder::{odd_enabled, odd_path_token};
 use crate::{
     Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, Result, SyncAction,
     SyncDirection, SyncOptions, SyncPlan, SyncReport, SyncStep, compare_folders,
@@ -82,6 +83,28 @@ pub fn plan_sync_with_compare_cancellable(
     compare: &FolderOptions,
     cancel: Option<&AtomicBool>,
 ) -> Result<SyncPlan> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let direction = match opts.direction {
+        SyncDirection::LeftToRight => "LeftToRight",
+        SyncDirection::RightToLeft => "RightToLeft",
+        SyncDirection::NewerWins => "NewerWins",
+    };
+    let odd_span = tracing::info_span!(
+        "sync.plan",
+        component = "rs.compare/sync",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        direction = direction,
+        prune = opts.prune,
+        steps = tracing::field::Empty,
+        skipped = tracing::field::Empty,
+        truncated = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     require_dir(left)?;
     require_dir(right)?;
 
@@ -94,7 +117,11 @@ pub fn plan_sync_with_compare_cancellable(
         return Err(Error::Cancelled);
     }
 
-    build_plan(&comparison, left, right, opts, cancel)
+    let plan = build_plan(&comparison, left, right, opts, cancel)?;
+    odd_span.record("steps", plan.steps.len() as u64);
+    odd_span.record("skipped", plan.skipped.len() as u64);
+    odd_span.record("truncated", plan.truncated);
+    Ok(plan)
 }
 
 /// Turns a finished comparison into steps and skips, honouring
@@ -146,6 +173,22 @@ pub fn apply_sync_cancellable(
     cancel: Option<&AtomicBool>,
     progress: Option<SyncProgressCallback<'_>>,
 ) -> Result<SyncReport> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "sync.apply",
+        component = "rs.compare/sync",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        steps = plan.steps.len() as u64,
+        copied = tracing::field::Empty,
+        deleted = tracing::field::Empty,
+        failed = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     require_dir(left)?;
     require_dir(right)?;
 
@@ -173,6 +216,9 @@ pub fn apply_sync_cancellable(
         p(total, total, "complete");
     }
 
+    odd_span.record("copied", report.copied as u64);
+    odd_span.record("deleted", report.deleted as u64);
+    odd_span.record("failed", report.failed.len() as u64);
     Ok(report)
 }
 
@@ -354,9 +400,35 @@ fn apply_delete(root: &Path, step: &SyncStep, report: &mut SyncReport) {
 
 /// Records one failed step with a plain-English reason.
 fn fail_step(report: &mut SyncReport, step: &SyncStep, reason: &str) {
+    // ODD Phase 4 Leaf B: failures are rare fallback annotations, each a
+    // child span of the apply span. Only the failure class and a hashed
+    // path are recorded; raw IO messages may name paths and stay out.
+    if odd_enabled() {
+        let _fallback = tracing::info_span!(
+            "sync.step_fallback",
+            component = "rs.compare/sync",
+            rel = %odd_path_token(Path::new(&step.rel_path)),
+            class = odd_fail_class(reason),
+            attempt = 1u64,
+        )
+        .entered();
+    }
     report
         .failed
         .push((step.rel_path.clone(), reason.to_owned()));
+}
+
+/// Failure class for telemetry: coarse buckets only, never raw messages.
+fn odd_fail_class(reason: &str) -> &'static str {
+    if reason.contains("symlink") {
+        "symlink"
+    } else if reason.contains("vanished") || reason.contains("gone") {
+        "missing"
+    } else if reason.contains("unsafe") {
+        "unsafe_path"
+    } else {
+        "io_error"
+    }
 }
 
 /// Verifies that `path` exists and is a directory, mirroring the

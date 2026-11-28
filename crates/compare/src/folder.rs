@@ -40,6 +40,27 @@ use autocompare_vfs::LocalFs;
 use crate::binary::files_equal_cancellable;
 use crate::{Error, FolderComparison, FolderEntry, FolderOptions, FolderStatus, NodeInfo, Result};
 
+/// ODD Phase 4 Leaf B orchestration helpers (crate-internal).
+///
+/// Spans stay at command-to-algorithm depth: one entry span per public
+/// compare plus rare fallback children, never per-item spans. Every
+/// attribute is a redacted summary; file contents and raw paths never
+/// enter telemetry.
+pub(crate) fn odd_enabled() -> bool {
+    autocompare_telemetry::Sampling::enabled()
+}
+
+/// Process-unique salt for path hashing: stable in-process so one run
+/// correlates, never persisted anywhere.
+pub(crate) fn odd_salt() -> String {
+    format!("odd-compare-v1-{}", std::process::id())
+}
+
+/// Opaque token for a filesystem path. The raw path never leaves the process.
+pub(crate) fn odd_path_token(path: &Path) -> String {
+    autocompare_telemetry::redact::hash_path(&path.display().to_string(), &odd_salt())
+}
+
 /// Folder comparison engine over physical directories or [`LocalFs`].
 #[derive(Debug, Clone)]
 pub struct FolderCompare {
@@ -210,6 +231,25 @@ fn compare_folders_inner(
     opts: &FolderOptions,
     cancel: Option<&AtomicBool>,
 ) -> Result<FolderComparison> {
+    // ODD Phase 4 Leaf B: one orchestration span for the whole compare.
+    // Attributes are redacted summaries only: hashed roots, option
+    // flags, result counts. Never per-item spans, never contents.
+    let odd_span = tracing::info_span!(
+        "folder.compare",
+        component = "rs.compare/folder",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        depth_limit = opts.depth_limit as u64,
+        content_compare = opts.content_compare,
+        case_insensitive = opts.case_insensitive,
+        entries = tracing::field::Empty,
+        truncated = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     require_dir(left)?;
     require_dir(right)?;
 
@@ -294,7 +334,10 @@ fn compare_folders_inner(
     }
 
     entries.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
-    Ok(FolderComparison { entries, truncated })
+    let comparison = FolderComparison { entries, truncated };
+    odd_span.record("entries", comparison.entries.len() as u64);
+    odd_span.record("truncated", comparison.truncated);
+    Ok(comparison)
 }
 
 /// Verifies that `path` exists and is a directory.
@@ -1128,6 +1171,26 @@ mod tests {
     fn test_masks_allow_inactive_passes_everything() {
         let masks = parse_file_masks(None);
         assert!(masks_allow(&masks, "anything.bin", "sub/anything.bin", false));
+    }
+
+    #[test]
+    fn odd_redaction_never_leaks_paths_or_contents() {
+        // Path tokens are opaque, stable in-process, and distinct per path.
+        let token_a = odd_path_token(std::path::Path::new("/secret/home/user/tokens.txt"));
+        let token_b = odd_path_token(std::path::Path::new("/secret/home/user/tokens.txt"));
+        assert!(!token_a.is_empty());
+        assert_eq!(token_a, token_b);
+        assert!(!token_a.contains("secret"));
+        assert!(!token_a.contains("tokens"));
+        let other = odd_path_token(std::path::Path::new("/secret/home/user/other.txt"));
+        assert_ne!(token_a, other);
+        // Byte summaries carry shape only: hash prefix, size, line count.
+        let summary = autocompare_telemetry::redact::summarize_bytes(b"super-secret-contents");
+        assert_eq!(summary.bytes, 21);
+        assert_eq!(summary.lines, 0);
+        assert_eq!(summary.sha12.len(), 12);
+        let view = format!("{summary:?}");
+        assert!(!view.contains("super-secret"));
     }
 
     #[test]

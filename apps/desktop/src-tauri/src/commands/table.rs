@@ -34,7 +34,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use super::{read_file_meta, FileMetaDto};
+use super::{FileMetaDto, read_file_meta};
+use autocompare_telemetry::TraceContext;
 
 /// Maximum table file size accepted for parsing (both sides).
 pub const TABLE_MAX_BYTES: u64 = 8 * 1024 * 1024;
@@ -78,6 +79,12 @@ pub struct TableSummary {
     pub left_meta: Option<FileMetaDto>,
     #[serde(default)]
     pub right_meta: Option<FileMetaDto>,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One bounded cell window over both tables.
@@ -111,6 +118,12 @@ pub struct TablePage {
     pub total_cols: u64,
     /// True when rows or columns remain beyond this window.
     pub truncated: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One substring hit. Row/col are 0-based data-cell indexes on `side`.
@@ -137,6 +150,12 @@ pub struct TableEditReceipt {
     pub row: u64,
     pub col: u64,
     pub value: String,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Receipt returned after serializing one table side back to disk.
@@ -148,6 +167,12 @@ pub struct TableSaveReceipt {
     pub path: String,
     pub rows_written: u64,
     pub bytes_written: u64,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Server-side session: parsed tables plus the effective delimiter.
@@ -583,7 +608,7 @@ fn page_cells(cells: &[String], start_col: u64, col_limit: u64) -> Vec<String> {
 /// mode alike (engine `cells_equal_with_tolerance` parity); text
 /// equality is untouched.
 #[tauri::command]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::too_many_arguments)]
 pub fn table_compare(
     left: String,
     right: String,
@@ -597,7 +622,41 @@ pub fn table_compare(
     numericTolerance: Option<f64>,
     numeric_tolerance: Option<f64>,
     epsilon: Option<f64>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope. Tauri fills a
+    // missing `Option` param with `None`; unknown/absent stays `None`.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TableSummary, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "table.compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/table"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let ignore_cs = ignoreCase.or(ignore_case).unwrap_or(false);
     let ignore_ws = ignoreSpace.or(ignore_space).unwrap_or(false);
     let delim = resolve_delimiter(delimiter)?;
@@ -650,8 +709,14 @@ pub fn table_compare(
             Some(k) => *k,
             None => 0,
         };
-        let (_, modified, left_only, right_only) =
-            align_counts(rows_l.as_slice(), rows_r.as_slice(), key, ignore_cs, ignore_ws, num_tol);
+        let (_, modified, left_only, right_only) = align_counts(
+            rows_l.as_slice(),
+            rows_r.as_slice(),
+            key,
+            ignore_cs,
+            ignore_ws,
+            num_tol,
+        );
         let diff_rows = modified
             .saturating_add(left_only)
             .saturating_add(right_only);
@@ -676,6 +741,7 @@ pub fn table_compare(
         key_columns: keys.iter().map(|k| *k as u64).collect(),
         left_meta: read_file_meta(&left),
         right_meta: read_file_meta(&right),
+        trace_echo,
     };
     put_session(
         summary.session_id.as_str(),
@@ -702,7 +768,41 @@ pub fn table_get_page(
     limit: u64,
     start_col: u64,
     col_limit: u64,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`table_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TablePage, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "table.get_page",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/table"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let snapshot = get_session(session.as_str())?;
     let eff_limit = limit.min(MAX_PAGE_ROWS);
     let eff_cols = col_limit.min(MAX_PAGE_COLS);
@@ -743,6 +843,7 @@ pub fn table_get_page(
         total_rows_r,
         total_cols,
         truncated: !rows_done_l || !rows_done_r || !cols_done,
+        trace_echo,
     })
 }
 
@@ -767,7 +868,41 @@ fn cell_matches_find(query: &str, cell: &str) -> bool {
 /// returns at most [`MAX_FIND_HITS`] hits in row-major order, left
 /// table first. Empty queries are an error.
 #[tauri::command]
-pub fn table_find(session: String, query: String) -> Result<Vec<TableHit>, String> {
+pub fn table_find(
+    session: String,
+    query: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the `Vec<TableHit>` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
+) -> Result<Vec<TableHit>, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "table.find",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/table"
+        )
+        .entered()
+    });
     if query.is_empty() {
         return Err("empty table query".to_string());
     }
@@ -829,7 +964,41 @@ pub fn table_apply_edit(
     row: u64,
     col: u64,
     value: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`table_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TableEditReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "table.apply_edit",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/table"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let is_left = match side.as_str() {
         "left" => true,
         "right" => false,
@@ -861,6 +1030,7 @@ pub fn table_apply_edit(
         row,
         col,
         value,
+        trace_echo,
     })
 }
 
@@ -870,7 +1040,41 @@ pub fn table_save_side(
     session: String,
     side: String,
     path: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`table_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TableSaveReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "table.save_side",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/table"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     if path.trim().is_empty() {
         return Err("path must not be empty".to_string());
     }
@@ -894,10 +1098,17 @@ pub fn table_save_side(
         path,
         rows_written: rows.len() as u64,
         bytes_written: content.len() as u64,
+        trace_echo,
     })
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -950,6 +1161,7 @@ mod tests {
             ignore_case,
             None,
             ignore_space,
+            None,
             None,
             None,
             None,
@@ -1077,6 +1289,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert!(res.is_err());
         let msg = match res {
@@ -1095,7 +1308,7 @@ mod tests {
             Ok(s) => s.session_id,
             Err(_) => return,
         };
-        let page = table_get_page(session_id, 0, u64::MAX, 0, u64::MAX);
+        let page = table_get_page(session_id, 0, u64::MAX, 0, u64::MAX, None);
         assert!(page.is_ok());
         let page = match page {
             Ok(p) => p,
@@ -1118,7 +1331,7 @@ mod tests {
             Ok(s) => s.session_id,
             Err(_) => return,
         };
-        let page = table_get_page(session_id, 100, 10, 50, 10);
+        let page = table_get_page(session_id, 100, 10, 50, 10, None);
         assert!(page.is_ok());
         let page = match page {
             Ok(p) => p,
@@ -1131,7 +1344,7 @@ mod tests {
 
     #[test]
     fn page_unknown_session_errors() {
-        let res = table_get_page("table-no-such-session".to_string(), 0, 10, 0, 10);
+        let res = table_get_page("table-no-such-session".to_string(), 0, 10, 0, 10, None);
         assert!(res.is_err());
         let msg = match res {
             Ok(_) => return,
@@ -1255,7 +1468,7 @@ mod tests {
             Ok(s) => s.session_id,
             Err(_) => return,
         };
-        let hits = table_find(session_id, "amy".to_string());
+        let hits = table_find(session_id, "amy".to_string(), None);
         assert!(hits.is_ok());
         let hits = match hits {
             Ok(h) => h,
@@ -1282,7 +1495,7 @@ mod tests {
             Ok(s) => s.session_id,
             Err(_) => return,
         };
-        let hits = table_find(session_id, String::new());
+        let hits = table_find(session_id, String::new(), None);
         assert!(hits.is_err());
     }
 
@@ -1296,7 +1509,7 @@ mod tests {
             Err(_) => return,
         };
         // "42.00" is not a substring of "42.0" but parses to the same f64.
-        let hits = table_find(session_id.clone(), "42.00".to_string());
+        let hits = table_find(session_id.clone(), "42.00".to_string(), None);
         assert!(hits.is_ok());
         let hits = match hits {
             Ok(h) => h,
@@ -1323,7 +1536,7 @@ mod tests {
         };
         // "1,000" comma-parses to NaN/fails, so it falls back to substring
         // only and never hits "1000".
-        let hits = table_find(session_id, "1,000".to_string());
+        let hits = table_find(session_id, "1,000".to_string(), None);
         assert!(hits.is_ok());
         let hits = match hits {
             Ok(h) => h,
@@ -1383,6 +1596,7 @@ mod tests {
                 mtime_unix: Some(1700000000),
             }),
             right_meta: None,
+            trace_echo: None,
         };
         let json_result = serde_json::to_string(&summary);
         assert!(json_result.is_ok());
@@ -1427,8 +1641,22 @@ mod tests {
         }
         let ls = left.display().to_string();
         let rs = right.display().to_string();
-        let res = table_compare(ls.clone(), rs.clone(), false, Vec::new(), None, None, None, None, None, None, None, None)
-            .expect("table_compare must succeed");
+        let res = table_compare(
+            ls.clone(),
+            rs.clone(),
+            false,
+            Vec::new(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("table_compare must succeed");
 
         let left_meta = res.left_meta.expect("left_meta should be populated");
         assert_eq!(left_meta.bytes, left_content.len() as u64);
@@ -1502,6 +1730,7 @@ mod tests {
             numeric_tolerance,
             None,
             epsilon,
+            None,
         );
         remove_quiet(&l);
         remove_quiet(&r);
@@ -1530,7 +1759,8 @@ mod tests {
         assert_eq!(summary.left_cols, 2);
         assert_eq!(summary.diff_rows, 0);
         // Cross-delimiter files genuinely differ (`,` side stays one col).
-        let mixed = open_session_with_pic_opts(semi, "id,name\n1,amy\n", Some(";".to_string()), None, None);
+        let mixed =
+            open_session_with_pic_opts(semi, "id,name\n1,amy\n", Some(";".to_string()), None, None);
         let mixed_summary = match mixed {
             Ok(s) => s,
             Err(_) => return,
@@ -1540,7 +1770,8 @@ mod tests {
 
     #[test]
     fn delimiter_multi_char_is_rejected() {
-        let res = open_session_with_pic_opts("a\n1\n", "a\n1\n", Some(";;".to_string()), None, None);
+        let res =
+            open_session_with_pic_opts("a\n1\n", "a\n1\n", Some(";;".to_string()), None, None);
         assert!(res.is_err());
         let msg = match res {
             Ok(_) => return,
@@ -1617,10 +1848,22 @@ mod tests {
             Ok(s) => s.session_id,
             Err(_) => return,
         };
-        let edit = table_apply_edit(session_id.clone(), "right".to_string(), 0, 1, "amy, jr".to_string());
+        let edit = table_apply_edit(
+            session_id.clone(),
+            "right".to_string(),
+            0,
+            1,
+            "amy, jr".to_string(),
+            None,
+        );
         assert!(edit.is_ok());
         let out = temp_path("saved-csv");
-        let saved = table_save_side(session_id, "right".to_string(), out.display().to_string());
+        let saved = table_save_side(
+            session_id,
+            "right".to_string(),
+            out.display().to_string(),
+            None,
+        );
         assert!(saved.is_ok());
         let content = std::fs::read_to_string(&out).unwrap_or_default();
         remove_quiet(&out);

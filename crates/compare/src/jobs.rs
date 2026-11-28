@@ -11,12 +11,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
+use crate::folder::odd_enabled;
 use crate::folder_merge::{FolderMerge, apply_tree_merge_cancellable, plan_tree_merge_cancellable};
 use crate::sync::{SyncPlanner, apply_sync_cancellable, plan_sync_with_compare_cancellable};
 use crate::{
     Error, FolderComparison, FolderOptions, Result, SyncOptions, SyncPlan, SyncReport,
     TreeMergePlan, TreeMergeReport, compare_folders_cancellable,
 };
+use autocompare_telemetry::TraceContext;
 
 pub use crate::folder::{FolderStatusCounts, FolderTreeNode};
 
@@ -126,6 +128,14 @@ pub struct JobHandle<T> {
     latest_progress: Arc<Mutex<Option<JobProgress>>>,
     progress_history: Arc<Mutex<VecDeque<JobProgress>>>,
     status: Arc<Mutex<JobStatus>>,
+    /// ODD Phase 4 Leaf B: fork-join parent context shared by every
+    /// shard of one logical operation. `None` when telemetry is off.
+    trace_parent: Option<TraceContext>,
+    /// Child context derived by the worker thread at start, read back
+    /// after [`JobHandle::join`] to prove parent linkage.
+    trace_child: Arc<Mutex<Option<TraceContext>>>,
+    /// Parent span the worker's shard span follows from.
+    parent_span: Option<tracing::Span>,
 }
 
 impl<T> JobHandle<T> {
@@ -241,7 +251,18 @@ impl<T> JobHandle<T> {
                 source: std::io::Error::other("worker thread failed to spawn"),
             });
         };
-        match thread.join() {
+        // ODD Phase 4 Leaf B: join timings are recorded on the
+        // fork-join parent span so one logical operation shows one
+        // parent with its shard joins.
+        let started = std::time::Instant::now();
+        let out = thread.join();
+        let elapsed_us = started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64;
+        if let Some(parent) = self.parent_span.as_ref() {
+            parent.in_scope(|| {
+                tracing::info!(phase = "join", elapsed_us = elapsed_us);
+            });
+        }
+        match out {
             Ok(res) => res,
             Err(_) => Err(Error::Io {
                 path: "background-job".to_string(),
@@ -249,11 +270,105 @@ impl<T> JobHandle<T> {
             }),
         }
     }
+
+    /// Fork-join parent context for this job, if telemetry is on.
+    pub fn trace_parent(&self) -> Option<TraceContext> {
+        self.trace_parent
+    }
+
+    /// Child context derived by the worker thread, if it started and
+    /// telemetry is on. Shares the parent's trace id by construction.
+    pub fn trace_shard(&self) -> Option<TraceContext> {
+        match self.trace_child.lock() {
+            Ok(guard) => *guard,
+            Err(_) => None,
+        }
+    }
 }
 
 /// A runner that spawns background tasks with cancellation and progress reporting.
 #[derive(Debug, Default, Clone)]
 pub struct JobRunner;
+
+/// Outcome of one joined fanout shard.
+pub struct ShardOutcome<T> {
+    /// Shard position in the fanout group.
+    pub index: usize,
+    /// Wall time around this shard's join, in microseconds.
+    pub elapsed_us: u64,
+    /// Child context derived by the shard worker, if it started and
+    /// telemetry is on. Shares the fanout parent's trace id.
+    pub trace: Option<TraceContext>,
+    /// The shard's own result.
+    pub result: Result<T>,
+}
+
+/// Joined report for a fanout group: one parent, per-shard outcomes.
+pub struct FanoutReport<T> {
+    /// The shared fork-join parent context, if telemetry is on.
+    pub parent: Option<TraceContext>,
+    /// Per-shard outcomes in shard order.
+    pub outcomes: Vec<ShardOutcome<T>>,
+}
+
+/// A fork-join group of background shards under one parent context.
+pub struct FanoutHandle<T> {
+    parent: Option<TraceContext>,
+    shards: Vec<JobHandle<T>>,
+}
+
+impl<T> FanoutHandle<T> {
+    /// Number of shards in the group.
+    pub fn len(&self) -> usize {
+        self.shards.len()
+    }
+
+    /// Whether the group holds no shards.
+    pub fn is_empty(&self) -> bool {
+        self.shards.is_empty()
+    }
+
+    /// The shared fork-join parent context, if telemetry is on.
+    pub fn parent_trace(&self) -> Option<TraceContext> {
+        self.parent
+    }
+
+    /// Requests cancellation of every shard in the group.
+    pub fn cancel_all(&self) {
+        for handle in &self.shards {
+            handle.cancel();
+        }
+    }
+
+    /// Joins every shard in order, collecting per-shard join timings
+    /// and child contexts into one report.
+    pub fn join(mut self) -> FanoutReport<T> {
+        let mut outcomes = Vec::new();
+        for (index, handle) in self.shards.drain(..).enumerate() {
+            // Read back the child slot after the blocking join: the
+            // worker records it first thing, so it is always set when
+            // telemetry is on and the thread started.
+            let slot = Arc::clone(&handle.trace_child);
+            let started = std::time::Instant::now();
+            let result = handle.join();
+            let elapsed_us = started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64;
+            let trace = match slot.lock() {
+                Ok(guard) => *guard,
+                Err(_) => None,
+            };
+            outcomes.push(ShardOutcome {
+                index,
+                elapsed_us,
+                trace,
+                result,
+            });
+        }
+        FanoutReport {
+            parent: self.parent,
+            outcomes,
+        }
+    }
+}
 
 impl JobRunner {
     /// Creates a new `JobRunner`.
@@ -281,6 +396,30 @@ impl JobRunner {
             + 'static,
     {
         let cancel_flag = Arc::new(AtomicBool::new(false));
+        let parent = if odd_enabled() {
+            Some(TraceContext::fresh(true))
+        } else {
+            None
+        };
+        Self::spawn_inner(name, cancel_flag, parent, work)
+    }
+
+    /// Shared worker-thread setup for every spawn path: progress
+    /// plumbing, status tracking, plus the ODD fork-join linkage (one
+    /// parent context/span per logical operation, one child per shard).
+    fn spawn_inner<T, F>(
+        name: &str,
+        cancel_flag: Arc<AtomicBool>,
+        parent: Option<TraceContext>,
+        work: F,
+    ) -> JobHandle<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(Arc<AtomicBool>, Arc<dyn Fn(JobProgress) + Send + Sync>) -> Result<T>
+            + Send
+            + 'static,
+    {
+        let job_name = name.to_string();
         let cancel_for_thread = Arc::clone(&cancel_flag);
         let latest_progress = Arc::new(Mutex::new(None));
         let progress_state = Arc::clone(&latest_progress);
@@ -288,6 +427,18 @@ impl JobRunner {
         let history_state = Arc::clone(&progress_history);
         let status = Arc::new(Mutex::new(JobStatus::Running));
         let status_for_thread = Arc::clone(&status);
+        let trace_child: Arc<Mutex<Option<TraceContext>>> = Arc::new(Mutex::new(None));
+        let child_slot = Arc::clone(&trace_child);
+        let parent_span: Option<tracing::Span> = if parent.is_some() {
+            Some(tracing::info_span!(
+                "jobs.fork_join",
+                component = "rs.compare/jobs",
+                job = job_name.clone()
+            ))
+        } else {
+            None
+        };
+        let shard_parent = parent_span.clone();
 
         let progress_fn: Arc<dyn Fn(JobProgress) + Send + Sync> =
             Arc::new(move |p: JobProgress| {
@@ -302,8 +453,22 @@ impl JobRunner {
                 }
             });
 
-        let thread_builder = thread::Builder::new().name(name.to_string());
+        let thread_builder = thread::Builder::new().name(job_name.clone());
         let thread_handle = thread_builder.spawn(move || {
+            // Every shard derives a child of the fork-join parent (read
+            // back after join to prove linkage) and runs under a shard
+            // span that follows from the parent span.
+            if let Some(child) = parent.map(|p| p.child())
+                && let Ok(mut slot) = child_slot.lock()
+            {
+                *slot = Some(child);
+            }
+            let shard_span =
+                tracing::info_span!("jobs.shard", component = "rs.compare/jobs", job = job_name);
+            if let Some(follow) = shard_parent.as_ref() {
+                shard_span.follows_from(follow);
+            }
+            let _shard_guard = shard_span.enter();
             let res = work(cancel_for_thread, progress_fn);
             if let Ok(mut lock) = status_for_thread.lock() {
                 *lock = match &res {
@@ -323,6 +488,9 @@ impl JobRunner {
             latest_progress,
             progress_history,
             status,
+            trace_parent: parent,
+            trace_child,
+            parent_span,
         }
     }
 
@@ -335,48 +503,41 @@ impl JobRunner {
             + 'static,
     {
         let cancel_flag = token.arc_atomic();
-        let cancel_for_thread = Arc::clone(&cancel_flag);
-        let latest_progress = Arc::new(Mutex::new(None));
-        let progress_state = Arc::clone(&latest_progress);
-        let progress_history = Arc::new(Mutex::new(VecDeque::new()));
-        let history_state = Arc::clone(&progress_history);
-        let status = Arc::new(Mutex::new(JobStatus::Running));
-        let status_for_thread = Arc::clone(&status);
+        let parent = if odd_enabled() {
+            Some(TraceContext::fresh(true))
+        } else {
+            None
+        };
+        Self::spawn_inner("autocompare-job", cancel_flag, parent, work)
+    }
 
-        let progress_fn: Arc<dyn Fn(JobProgress) + Send + Sync> =
-            Arc::new(move |p: JobProgress| {
-                if let Ok(mut lock) = progress_state.lock() {
-                    *lock = Some(p.clone());
-                }
-                if let Ok(mut h_lock) = history_state.lock() {
-                    if h_lock.len() >= MAX_PROGRESS_HISTORY {
-                        let _ = h_lock.pop_front();
-                    }
-                    h_lock.push_back(p);
-                }
-            });
-
-        let thread_builder = thread::Builder::new().name("autocompare-job".to_string());
-        let thread_handle = thread_builder.spawn(move || {
-            let res = work(cancel_for_thread, progress_fn);
-            if let Ok(mut lock) = status_for_thread.lock() {
-                *lock = match &res {
-                    Ok(_) => JobStatus::Completed,
-                    Err(Error::Cancelled) => JobStatus::Cancelled,
-                    Err(_) => JobStatus::Failed,
-                };
-            }
-            res
-        });
-
-        let thread = thread_handle.ok();
-
-        JobHandle {
-            cancel_flag,
-            thread,
-            latest_progress,
-            progress_history,
-            status,
+    /// Spawns a fork-join group: every shard runs on its own thread but
+    /// derives a child of ONE shared parent context, so the join below
+    /// can attribute per-shard timings to one logical operation.
+    ///
+    /// ODD Phase 4 Leaf B: parallel shards as child spans of one parent
+    /// with join timings. Shard names are `{name}-shard-{index}`.
+    pub fn spawn_fanout<T, F>(name: &str, shards: Vec<F>) -> FanoutHandle<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(Arc<AtomicBool>, Arc<dyn Fn(JobProgress) + Send + Sync>) -> Result<T>
+            + Send
+            + 'static,
+    {
+        let parent = if odd_enabled() {
+            Some(TraceContext::fresh(true))
+        } else {
+            None
+        };
+        let mut handles = Vec::new();
+        for (index, work) in shards.into_iter().enumerate() {
+            let shard_name = format!("{name}-shard-{index}");
+            let cancel_flag = Arc::new(AtomicBool::new(false));
+            handles.push(Self::spawn_inner(&shard_name, cancel_flag, parent, work));
+        }
+        FanoutHandle {
+            parent,
+            shards: handles,
         }
     }
 
@@ -800,5 +961,57 @@ mod tests {
         assert_eq!(handle.status(), JobStatus::Cancelled);
         let err = handle.join().unwrap_err();
         assert!(matches!(err, Error::Cancelled));
+    }
+
+    #[test]
+    fn test_fanout_parent_linkage_and_join_timings() {
+        // ODD Phase 4 Leaf B: parallel shards as children of one parent
+        // with join timings. When telemetry is on every shard shares
+        // the parent trace id under a distinct span id; when off every
+        // side is None and the values/timings still hold.
+        let make_shard = |value: i32| {
+            move |_cancel: Arc<AtomicBool>,
+                  progress: Arc<dyn Fn(JobProgress) + Send + Sync>|
+                  -> Result<i32> {
+                progress(JobProgress::new(1, Some(2), "shard working"));
+                thread::sleep(Duration::from_millis(5));
+                progress(JobProgress::new(2, Some(2), "shard done"));
+                Ok(value)
+            }
+        };
+        let fanout = JobRunner::spawn_fanout(
+            "odd-fanout-test",
+            vec![make_shard(10), make_shard(20), make_shard(30)],
+        );
+        assert_eq!(fanout.len(), 3);
+        assert!(!fanout.is_empty());
+        let parent = fanout.parent_trace();
+        let report = fanout.join();
+        assert_eq!(report.outcomes.len(), 3);
+        assert_eq!(report.parent, parent);
+        let mut values = Vec::new();
+        let mut seen_spans = Vec::new();
+        for outcome in &report.outcomes {
+            match &outcome.result {
+                Ok(v) => values.push(*v),
+                Err(_) => panic!("shard must succeed"),
+            }
+            assert!(outcome.elapsed_us > 0, "join timing must be recorded");
+            match (parent, outcome.trace) {
+                (Some(p), Some(child)) => {
+                    assert_eq!(child.trace_id, p.trace_id);
+                    assert_ne!(child.span_id, p.span_id);
+                    seen_spans.push(child.span_id);
+                }
+                (None, None) => {}
+                _ => panic!("parent and shard linkage must agree"),
+            }
+        }
+        assert_eq!(values, vec![10, 20, 30]);
+        for (i, a) in seen_spans.iter().enumerate() {
+            for b in seen_spans.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
     }
 }

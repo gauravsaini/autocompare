@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use autocompare_compare::{TreeMergePlan, TreeMergeReport};
 use autocompare_diff::merge::{MergeBlock, MergeSession, TakeChoice, TakeResolution};
+use autocompare_telemetry::TraceContext;
 use serde::{Deserialize, Serialize};
 
 /// The three text sides of a 3-way merge: (base, left, right).
@@ -50,6 +51,12 @@ pub struct TextMergePlan {
     pub clean_block_count: usize,
     /// Whether any conflict exists.
     pub has_conflicts: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// How to resolve one text conflict. Serde names mirror the engine
@@ -89,6 +96,12 @@ pub struct TextMergeApplyReport {
     pub unresolved_count: usize,
     /// Whether the output still contains conflict markers.
     pub has_conflict_markers: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Outcome of [`merge_folder_apply`]: engine counts plus the
@@ -108,6 +121,12 @@ pub struct FolderMergeApplyReport {
     pub conflict_paths: Vec<String>,
     /// Steps that failed: (relative path, plain-English error).
     pub failed: Vec<(String, String)>,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// `out_path` is mandatory for every destructive merge: `None` or a
@@ -179,7 +198,45 @@ fn refs(lines: &[String]) -> Vec<&str> {
 /// base/left/right lines. Read-only; missing paths error as
 /// `path not found: ...`.
 #[tauri::command]
-pub fn merge_text_plan(base: String, left: String, right: String) -> Result<TextMergePlan, String> {
+pub fn merge_text_plan(
+    base: String,
+    left: String,
+    right: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope. Tauri fills a
+    // missing `Option` param with `None`; unknown/absent stays `None`.
+    __trace: Option<serde_json::Value>,
+) -> Result<TextMergePlan, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "merge.text_plan",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/merge"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let (b, l, r) = load_three(&base, &left, &right)?;
     let session = MergeSession::new(&refs(&b), &refs(&l), &refs(&r));
     let mut conflicts = Vec::new();
@@ -209,6 +266,7 @@ pub fn merge_text_plan(base: String, left: String, right: String) -> Result<Text
         conflict_count,
         clean_block_count,
         has_conflicts: conflict_count > 0,
+        trace_echo,
     })
 }
 
@@ -224,7 +282,41 @@ pub fn merge_text_apply(
     right: String,
     resolutions: Vec<TextResolution>,
     out_path: Option<String>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`merge_text_plan`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TextMergeApplyReport, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "merge.text_apply",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/merge"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let out = require_out_path(out_path)?;
     reject_input_output(&out, &[&base, &left, &right])?;
 
@@ -295,6 +387,7 @@ pub fn merge_text_apply(
         resolved_count,
         unresolved_count,
         has_conflict_markers,
+        trace_echo,
     })
 }
 
@@ -305,7 +398,38 @@ pub fn merge_folder_plan(
     base: String,
     left: String,
     right: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the engine `TreeMergePlan` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
 ) -> Result<TreeMergePlan, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "merge.folder_plan",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/merge"
+        )
+        .entered()
+    });
     autocompare_compare::plan_tree_merge(Path::new(&base), Path::new(&left), Path::new(&right))
         .map_err(|e| e.to_string())
 }
@@ -320,7 +444,41 @@ pub fn merge_folder_apply(
     right: String,
     plan: TreeMergePlan,
     out_path: Option<String>,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`merge_text_plan`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<FolderMergeApplyReport, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "merge.folder_apply",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/merge"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let out = require_out_path(out_path)?;
     reject_input_output(&out, &[&left, &right])?;
 
@@ -334,6 +492,7 @@ pub fn merge_folder_apply(
         conflict_count: plan.conflicts.len(),
         conflict_paths: plan.conflicts.clone(),
         failed: report.failed,
+        trace_echo,
     })
 }
 
@@ -393,7 +552,7 @@ mod tests {
         let dir = unique_dir("plan");
         assert!(write_text_tree(&dir, "a\nb\nc\n", "a\nB\nc\n", "a\nC\nc\n"));
         let (base, left, right) = plan_paths(&dir);
-        let plan = match merge_text_plan(base, left, right) {
+        let plan = match merge_text_plan(base, left, right, None) {
             Ok(plan) => plan,
             Err(e) => {
                 assert!(e.is_empty(), "plan failed: {e}");
@@ -427,7 +586,7 @@ mod tests {
             "a\nb\nc\nD\n"
         ));
         let (base, left, right) = plan_paths(&dir);
-        let plan = match merge_text_plan(base, left, right) {
+        let plan = match merge_text_plan(base, left, right, None) {
             Ok(plan) => plan,
             Err(e) => {
                 assert!(e.is_empty(), "plan failed: {e}");
@@ -455,6 +614,7 @@ mod tests {
                 choice: TextChoice::Left,
             }],
             Some(out.clone()),
+            None,
         ) {
             Ok(report) => report,
             Err(e) => {
@@ -487,6 +647,7 @@ mod tests {
                 choice: TextChoice::Base,
             }],
             Some(out.clone()),
+            None,
         ) {
             Ok(report) => report,
             Err(e) => {
@@ -518,6 +679,7 @@ mod tests {
                 choice: TextChoice::BothLeftFirst,
             }],
             Some(out.clone()),
+            None,
         ) {
             Ok(report) => report,
             Err(e) => {
@@ -537,7 +699,7 @@ mod tests {
         assert!(write_text_tree(&dir, "a\nb\nc\n", "a\nB\nc\n", "a\nC\nc\n"));
         let (base, left, right) = plan_paths(&dir);
         let out = dir.join("out.txt").display().to_string();
-        let report = match merge_text_apply(base, left, right, vec![], Some(out.clone())) {
+        let report = match merge_text_apply(base, left, right, vec![], Some(out.clone()), None) {
             Ok(report) => report,
             Err(e) => {
                 assert!(e.is_empty(), "apply failed: {e}");
@@ -573,6 +735,7 @@ mod tests {
                 choice: TextChoice::Right,
             }],
             Some(out),
+            None,
         );
         assert!(result.is_err());
         let _ = std::fs::remove_dir_all(&dir);
@@ -583,8 +746,20 @@ mod tests {
         let dir = unique_dir("no-out");
         assert!(write_text_tree(&dir, "a\n", "a\n", "a\n"));
         let (base, left, right) = plan_paths(&dir);
-        assert!(merge_text_apply(base.clone(), left.clone(), right.clone(), vec![], None).is_err());
-        assert!(merge_text_apply(base, left, right, vec![], Some("   ".to_string())).is_err());
+        assert!(
+            merge_text_apply(
+                base.clone(),
+                left.clone(),
+                right.clone(),
+                vec![],
+                None,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            merge_text_apply(base, left, right, vec![], Some("   ".to_string()), None).is_err()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -599,11 +774,12 @@ mod tests {
                 left.clone(),
                 right.clone(),
                 vec![],
-                Some(left.clone())
+                Some(left.clone()),
+                None,
             )
             .is_err()
         );
-        assert!(merge_text_apply(base.clone(), left, right, vec![], Some(base)).is_err());
+        assert!(merge_text_apply(base.clone(), left, right, vec![], Some(base), None).is_err());
         // Inputs are untouched by the refused runs.
         assert_eq!(read_file(&dir.join("base.txt")), Some("a\nb\n".to_string()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -613,7 +789,7 @@ mod tests {
     fn text_plan_missing_path_errors() {
         let dir = unique_dir("missing");
         let missing = dir.join("nope.txt").display().to_string();
-        let result = merge_text_plan(missing, "l".to_string(), "r".to_string());
+        let result = merge_text_plan(missing, "l".to_string(), "r".to_string(), None);
         assert!(result.is_err_and(|e| e.contains("path not found")));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -627,7 +803,7 @@ mod tests {
         ) else {
             return;
         };
-        match merge_text_plan(base, left, right) {
+        match merge_text_plan(base, left, right, None) {
             Ok(plan) => {
                 assert_eq!(plan.conflict_count, plan.conflicts.len());
                 assert_eq!(plan.has_conflicts, !plan.conflicts.is_empty());
@@ -654,6 +830,7 @@ mod tests {
             base.display().to_string(),
             left.display().to_string(),
             right.display().to_string(),
+            None,
         ) {
             Ok(plan) => plan,
             Err(e) => {
@@ -667,6 +844,7 @@ mod tests {
             right.display().to_string(),
             plan,
             Some(out.display().to_string()),
+            None,
         ) {
             Ok(report) => report,
             Err(e) => {
@@ -695,6 +873,7 @@ mod tests {
             base.display().to_string(),
             left.display().to_string(),
             right.display().to_string(),
+            None,
         ) {
             Ok(plan) => plan,
             Err(e) => {
@@ -718,7 +897,8 @@ mod tests {
                 left.display().to_string(),
                 left.display().to_string(),
                 empty,
-                None
+                None,
+                None,
             )
             .is_err()
         );
@@ -727,6 +907,7 @@ mod tests {
             dir.join("base").display().to_string(),
             dir.join("left").display().to_string(),
             dir.join("right").display().to_string(),
+            None,
         );
         assert!(result.is_err());
         let _ = std::fs::remove_dir_all(&dir);

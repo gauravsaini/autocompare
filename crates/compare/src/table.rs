@@ -14,6 +14,7 @@ use autocompare_diff::{
     parse_delimited,
 };
 
+use crate::folder::{odd_enabled, odd_path_token};
 use crate::{Error, Result, TableComparison, TableOptions};
 
 /// Reads and parses one delimited file: bytes in, lenient UTF-8
@@ -44,8 +45,25 @@ pub(crate) fn compare_table_files(
     right: &Path,
     opts: &TableOptions,
 ) -> Result<TableComparison> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "table.compare",
+        component = "rs.compare/table",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        header = opts.header,
+        left_rows = tracing::field::Empty,
+        right_rows = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let left_table = load_table(left, opts)?;
     let right_table = load_table(right, opts)?;
+    odd_span.record("left_rows", left_table.rows.len() as u64);
+    odd_span.record("right_rows", right_table.rows.len() as u64);
     let script = diff_rows(&left_table.rows, &right_table.rows);
     Ok(TableComparison {
         header_l: left_table.header,
@@ -96,8 +114,27 @@ pub(crate) fn compare_table_files_by_key(
     opts: &TableOptions,
     key_opts: &TableKeyOptions,
 ) -> Result<TableKeyFileComparison> {
+    // ODD Phase 4 Leaf B: orchestration span (redacted summaries only).
+    let odd_span = tracing::info_span!(
+        "table.compare_by_key",
+        component = "rs.compare/table",
+        left = %odd_path_token(left),
+        right = %odd_path_token(right),
+        key_columns = key_opts.key_columns.len() as u64,
+        numeric_tolerance = key_opts.numeric_tolerance.is_some(),
+        ignore_case = key_opts.ignore_case,
+        left_rows = tracing::field::Empty,
+        right_rows = tracing::field::Empty,
+    );
+    let _odd_guard = if odd_enabled() {
+        Some(odd_span.enter())
+    } else {
+        None
+    };
     let left_table = load_table(left, opts)?;
     let right_table = load_table(right, opts)?;
+    odd_span.record("left_rows", left_table.rows.len() as u64);
+    odd_span.record("right_rows", right_table.rows.len() as u64);
     let cmp_opts = TableCompareOptions {
         key_columns: key_opts.key_columns.clone(),
         numeric_tolerance: key_opts.numeric_tolerance,

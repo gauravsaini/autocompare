@@ -35,6 +35,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use autocompare_telemetry::TraceContext;
+
 /// Maximum bytes served per side by one [`hex_get_page`] call.
 pub const MAX_PAGE_LEN: u64 = 4096;
 
@@ -58,6 +60,12 @@ pub struct HexSummary {
     pub equal: bool,
     /// Offset of the first differing byte, if any.
     pub first_diff: Option<u64>,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// One bounded byte window over both files. Mirrors `ipc/hex.ts` `HexPage`.
@@ -78,6 +86,12 @@ pub struct HexPage {
     pub total: u64,
     /// True when bytes remain beyond this window.
     pub truncated: bool,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Receipt returned after staging a single byte patch. Mirrors `ipc/hex.ts` `HexEditReceipt`.
@@ -89,6 +103,12 @@ pub struct HexEditReceipt {
     pub offset: u64,
     pub value: u8,
     pub pending_edits: usize,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Receipt returned after flushing staged edits to disk. Mirrors `ipc/hex.ts` `HexSaveReceipt`.
@@ -100,6 +120,12 @@ pub struct HexSaveReceipt {
     pub path: String,
     pub bytes_written: u64,
     pub edits_applied: usize,
+    /// ODD Phase 4 Leaf B: echoed `__trace` envelope on the wire.
+    /// Present only when the caller supplied a valid `__trace`;
+    /// omitted otherwise so uninstrumented callers see a
+    /// byte-identical shape.
+    #[serde(rename = "__trace", default, skip_serializing_if = "Option::is_none")]
+    pub trace_echo: Option<serde_json::Value>,
 }
 
 /// Server-side session: paths, sizes, and sparse staged byte edits.
@@ -357,7 +383,44 @@ fn overlay_edits(buf: &mut [u8], base_offset: u64, edits: &HashMap<u64, u8>) {
 }
 
 #[tauri::command]
-pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
+pub fn hex_compare(
+    left: String,
+    right: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope. Tauri fills a
+    // missing `Option` param with `None`; unknown/absent stays `None`.
+    __trace: Option<serde_json::Value>,
+) -> Result<HexSummary, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "hex.compare",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/hex"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let left_path = Path::new(left.as_str());
     let right_path = Path::new(right.as_str());
     let (left_size, right_size, first_diff, equal) = summarize_paths(left_path, right_path)?;
@@ -379,6 +442,7 @@ pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
         right_size,
         equal,
         first_diff,
+        trace_echo,
     })
 }
 
@@ -387,7 +451,45 @@ pub fn hex_compare(left: String, right: String) -> Result<HexSummary, String> {
 /// `len` is clamped to [`MAX_PAGE_LEN`]. Offsets past EOF yield empty
 /// sides with `truncated == false`.
 #[tauri::command]
-pub fn hex_get_page(session: String, offset: u64, len: u64) -> Result<HexPage, String> {
+pub fn hex_get_page(
+    session: String,
+    offset: u64,
+    len: u64,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`hex_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
+) -> Result<HexPage, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "hex.get_page",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/hex"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let snapshot = get_session(session.as_str())?;
     let take = len.min(MAX_PAGE_LEN);
     let mut left = read_window(snapshot.left.as_path(), offset, take)?;
@@ -405,6 +507,7 @@ pub fn hex_get_page(session: String, offset: u64, len: u64) -> Result<HexPage, S
         right,
         total,
         truncated,
+        trace_echo,
     })
 }
 
@@ -415,7 +518,41 @@ pub fn hex_apply_edit(
     side: String,
     offset: u64,
     value: u8,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`hex_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<HexEditReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "hex.apply_edit",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/hex"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let is_left = match side.as_str() {
         "left" => true,
         "right" => false,
@@ -431,7 +568,9 @@ pub fn hex_apply_edit(
         (&mut entry.right_edits, entry.right_size)
     };
     if offset >= size {
-        return Err(format!("offset {offset} is past end of file ({size} bytes)"));
+        return Err(format!(
+            "offset {offset} is past end of file ({size} bytes)"
+        ));
     }
     edits.insert(offset, value);
     let pending_edits = edits.len();
@@ -441,6 +580,7 @@ pub fn hex_apply_edit(
         offset,
         value,
         pending_edits,
+        trace_echo,
     })
 }
 
@@ -450,7 +590,41 @@ pub fn hex_save_side(
     session: String,
     side: String,
     path: String,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; see
+    // [`hex_compare`] for the echo contract.
+    __trace: Option<serde_json::Value>,
 ) -> Result<HexSaveReceipt, String> {
+    // ODD Phase 4 Leaf B: extract the incoming trace (if any), derive a
+    // child span for this command, and echo it in the response. Absent,
+    // malformed, or telemetry-off input yields no span and no echo
+    // field — the response shape is then byte-identical to before.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "hex.save_side",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/hex"
+        )
+        .entered()
+    });
+    let trace_echo: Option<serde_json::Value> =
+        trace_child.as_ref().map(|child| child.to_envelope());
     let is_left = match side.as_str() {
         "left" => true,
         "right" => false,
@@ -462,7 +636,11 @@ pub fn hex_save_side(
             .get(session.as_str())
             .ok_or_else(|| unknown_session_msg(session.as_str()))?;
         let src = if is_left { &entry.left } else { &entry.right };
-        let map = if is_left { &entry.left_edits } else { &entry.right_edits };
+        let map = if is_left {
+            &entry.left_edits
+        } else {
+            &entry.right_edits
+        };
         let mut pairs: Vec<(u64, u8)> = map.iter().map(|(&k, &v)| (k, v)).collect();
         pairs.sort_by_key(|(off, _)| *off);
         (src.clone(), pairs)
@@ -512,6 +690,7 @@ pub fn hex_save_side(
         path,
         bytes_written,
         edits_applied,
+        trace_echo,
     })
 }
 
@@ -522,13 +701,50 @@ pub fn hex_find(
     session: String,
     needle_hex: String,
     from_offset: u64,
+    // ODD Phase 4 Leaf B: optional `__trace` envelope; span-only here
+    // because the `Option<u64>` shape cannot carry an echo field.
+    __trace: Option<serde_json::Value>,
 ) -> Result<Option<u64>, String> {
+    // ODD Phase 4 Leaf B vertical slice: extract the incoming trace (if
+    // any) and derive a child span for this command. Absent, malformed,
+    // or telemetry-off input yields no span and changes nothing.
+    let trace_child: Option<TraceContext> = if autocompare_telemetry::Sampling::enabled() {
+        __trace.as_ref().and_then(|v| {
+            TraceContext::from_envelope(&serde_json::json!({ "__trace": v })).map(|ctx| ctx.child())
+        })
+    } else {
+        None
+    };
+    let _odd_span_guard = trace_child.as_ref().map(|child| {
+        let envelope = child.to_envelope();
+        let trace_id = envelope
+            .get("trace_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let span_id = envelope
+            .get("span_id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        tracing::info_span!(
+            "hex.find",
+            trace_id = ?trace_id,
+            span_id = ?span_id,
+            component = "rs.cmd/hex"
+        )
+        .entered()
+    });
     let snapshot = get_session(session.as_str())?;
     let needle = parse_needle_hex(needle_hex.as_str())?;
     find_in_file(snapshot.left.as_path(), needle.as_slice(), from_offset)
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
 
@@ -555,7 +771,11 @@ mod tests {
         let bytes = vec![1u8, 2, 3, 250, 0, 77];
         assert!(write_bytes(&left, bytes.as_slice()));
         assert!(write_bytes(&right, bytes.as_slice()));
-        let res = hex_compare(left.display().to_string(), right.display().to_string());
+        let res = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(res.is_ok());
@@ -576,7 +796,11 @@ mod tests {
         let right = temp_path("diff-r");
         assert!(write_bytes(&left, &[1u8, 2, 3, 4]));
         assert!(write_bytes(&right, &[1u8, 2, 9, 4]));
-        let res = hex_compare(left.display().to_string(), right.display().to_string());
+        let res = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(res.is_ok());
@@ -594,7 +818,11 @@ mod tests {
         let right = temp_path("prefix-r");
         assert!(write_bytes(&left, &[1u8, 2]));
         assert!(write_bytes(&right, &[1u8, 2, 3]));
-        let res = hex_compare(left.display().to_string(), right.display().to_string());
+        let res = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(res.is_ok());
@@ -613,7 +841,11 @@ mod tests {
         let empty: Vec<u8> = Vec::new();
         assert!(write_bytes(&left, empty.as_slice()));
         assert!(write_bytes(&right, empty.as_slice()));
-        let res = hex_compare(left.display().to_string(), right.display().to_string());
+        let res = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(res.is_ok());
@@ -632,6 +864,7 @@ mod tests {
         let res = hex_compare(
             "/tmp/wave1b-definitely-missing-left.bin".to_string(),
             "/tmp/wave1b-definitely-missing-right.bin".to_string(),
+            None,
         );
         assert!(res.is_err());
         let msg = match res {
@@ -648,7 +881,11 @@ mod tests {
         let bytes: Vec<u8> = (0u32..200).map(|i| (i % 251) as u8).collect();
         assert!(write_bytes(&left, bytes.as_slice()));
         assert!(write_bytes(&right, bytes.as_slice()));
-        let cmp = hex_compare(left.display().to_string(), right.display().to_string());
+        let cmp = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         assert!(cmp.is_ok());
         let session_id = match cmp {
             Ok(s) => s.session_id,
@@ -658,7 +895,7 @@ mod tests {
                 return;
             }
         };
-        let page = hex_get_page(session_id, 0, u64::MAX);
+        let page = hex_get_page(session_id, 0, u64::MAX, None);
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(page.is_ok());
@@ -679,7 +916,11 @@ mod tests {
         let right = temp_path("eof-r");
         assert!(write_bytes(&left, &[7u8, 8]));
         assert!(write_bytes(&right, &[7u8, 8]));
-        let cmp = hex_compare(left.display().to_string(), right.display().to_string());
+        let cmp = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         assert!(cmp.is_ok());
         let session_id = match cmp {
             Ok(s) => s.session_id,
@@ -689,7 +930,7 @@ mod tests {
                 return;
             }
         };
-        let page = hex_get_page(session_id, 10_000, 64);
+        let page = hex_get_page(session_id, 10_000, 64, None);
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(page.is_ok());
@@ -704,7 +945,7 @@ mod tests {
 
     #[test]
     fn page_unknown_session_errors() {
-        let res = hex_get_page("hex-no-such-session".to_string(), 0, 16);
+        let res = hex_get_page("hex-no-such-session".to_string(), 0, 16, None);
         assert!(res.is_err());
         let msg = match res {
             Ok(_) => return,
@@ -719,7 +960,11 @@ mod tests {
         let right = temp_path("find-r");
         assert!(write_bytes(&left, &[10u8, 20, 30, 40, 50]));
         assert!(write_bytes(&right, &[10u8, 20, 30, 40, 50]));
-        let cmp = hex_compare(left.display().to_string(), right.display().to_string());
+        let cmp = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         assert!(cmp.is_ok());
         let session_id = match cmp {
             Ok(s) => s.session_id,
@@ -729,8 +974,8 @@ mod tests {
                 return;
             }
         };
-        let hit = hex_find(session_id.clone(), "1E28".to_string(), 0);
-        let miss = hex_find(session_id, "ff".to_string(), 0);
+        let hit = hex_find(session_id.clone(), "1E28".to_string(), 0, None);
+        let miss = hex_find(session_id, "ff".to_string(), 0, None);
         remove_quiet(&left);
         remove_quiet(&right);
         assert!(hit.is_ok());
@@ -756,6 +1001,7 @@ mod tests {
             right_size: 5,
             equal: false,
             first_diff: Some(2),
+            trace_echo: None,
         };
         let json_result = serde_json::to_string(&summary);
         assert!(json_result.is_ok());
@@ -780,6 +1026,7 @@ mod tests {
             right: vec![1u8, 9],
             total: 4,
             truncated: true,
+            trace_echo: None,
         };
         let json_result = serde_json::to_string(&page);
         assert!(json_result.is_ok());
@@ -798,7 +1045,11 @@ mod tests {
         let right = temp_path("edit-r");
         assert!(write_bytes(&left, &[0x10, 0x20, 0x30, 0x40]));
         assert!(write_bytes(&right, &[0x10, 0x20, 0x30, 0x40]));
-        let cmp = hex_compare(left.display().to_string(), right.display().to_string());
+        let cmp = hex_compare(
+            left.display().to_string(),
+            right.display().to_string(),
+            None,
+        );
         assert!(cmp.is_ok());
         let session_id = match cmp {
             Ok(s) => s.session_id,
@@ -808,9 +1059,9 @@ mod tests {
                 return;
             }
         };
-        let edit = hex_apply_edit(session_id.clone(), "right".to_string(), 1, 0xFF);
+        let edit = hex_apply_edit(session_id.clone(), "right".to_string(), 1, 0xFF, None);
         assert!(edit.is_ok());
-        let page = hex_get_page(session_id.clone(), 0, 16);
+        let page = hex_get_page(session_id.clone(), 0, 16, None);
         assert!(page.is_ok());
         if let Ok(p) = page {
             assert_eq!(p.right, vec![0x10, 0xFF, 0x30, 0x40]);
@@ -819,6 +1070,7 @@ mod tests {
             session_id,
             "right".to_string(),
             right.display().to_string(),
+            None,
         );
         assert!(saved.is_ok());
         if let Ok(receipt) = saved {
