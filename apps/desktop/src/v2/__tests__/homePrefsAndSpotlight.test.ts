@@ -5,7 +5,9 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
+  loadDemoModePref,
   loadHomeSidebarPrefs,
+  saveDemoModePref,
   saveHomeSidebarPrefs,
 } from "../utils/homePrefs.ts";
 import {
@@ -23,7 +25,7 @@ class MemoryStorage {
   }
 }
 
-describe("homePrefs (Sidebar width & dock persistence)", () => {
+describe("homePrefs (Sidebar width, dock & Demo Mode persistence)", () => {
   it("clamps sidebar widths safely within bounds", () => {
     assert.equal(clampSidebarWidth(100), MIN_SIDEBAR_WIDTH);
     assert.equal(clampSidebarWidth(999), MAX_SIDEBAR_WIDTH);
@@ -46,6 +48,15 @@ describe("homePrefs (Sidebar width & dock persistence)", () => {
     const store = new MemoryStorage();
     store.setItem("autocompare.v2.home.sidebar.v1", "{bad-json");
     assert.deepEqual(loadHomeSidebarPrefs(store), { open: true, width: DEFAULT_SIDEBAR_WIDTH });
+  });
+
+  it("persists Demo Mode toggle defaulting to false", () => {
+    const store = new MemoryStorage();
+    assert.equal(loadDemoModePref(store), false);
+    saveDemoModePref(true, store);
+    assert.equal(loadDemoModePref(store), true);
+    saveDemoModePref(false, store);
+    assert.equal(loadDemoModePref(store), false);
   });
 });
 

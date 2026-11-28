@@ -39,6 +39,7 @@ import { matchSavedSessions, parseSpotlightPaths } from "../utils/spotlightSearc
 import type { SessionKind } from "../types";
 
 export interface V2HomeProps {
+  readonly demoMode?: boolean;
   readonly onNewSession: (kind: SessionKind, left?: string, right?: string, title?: string) => void;
   readonly onOpenSessionManager: () => void;
   readonly onOpenNewSessionModal?: () => void;
@@ -61,6 +62,7 @@ function inferSessionBadge(name: string): {
 }
 
 export default function V2Home({
+  demoMode = false,
   onNewSession,
   onOpenSessionManager,
   onOpenNewSessionModal,
@@ -564,28 +566,34 @@ export default function V2Home({
               </div>
             ) : null}
 
-            {/* Quick Launch Action Pills */}
+            {/* Quick Launch Action Pills (Demo actions visible only when Demo Mode is ON) */}
             <div className="flex flex-wrap items-center justify-center gap-2.5">
-              <button
-                type="button"
-                aria-label="Try Demo Text Diff"
-                title="Try Demo Text Diff"
-                onClick={() => onNewSession("text", "", "", "Demo Text Compare")}
-                className="flex h-9 items-center gap-1.5 rounded-full bg-[var(--v2-accent)] px-3.5 text-[12px] font-medium text-[var(--v2-accent-fg)] shadow-sm transition-colors hover:bg-[var(--v2-accent-hover)]"
-              >
-                <Sparkles size={14} />
-                <span>Try Demo Text Diff</span>
-              </button>
-              <button
-                type="button"
-                aria-label="Demo Folder Diff"
-                title="Demo Folder Diff"
-                onClick={() => onNewSession("folder", "", "", "Demo Folder Compare")}
-                className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] px-3.5 text-[12px] font-medium text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
-              >
-                <FolderOpen size={14} />
-                <span>Demo Folder Diff</span>
-              </button>
+              {demoMode ? (
+                <>
+                  <button
+                    type="button"
+                    data-testid="v2/demo-text-btn"
+                    aria-label="Try Demo Text Diff"
+                    title="Try Demo Text Diff"
+                    onClick={() => onNewSession("text", "", "", "Demo Text Compare")}
+                    className="flex h-9 items-center gap-1.5 rounded-full bg-[var(--v2-accent)] px-3.5 text-[12px] font-medium text-[var(--v2-accent-fg)] shadow-sm transition-colors hover:bg-[var(--v2-accent-hover)]"
+                  >
+                    <Sparkles size={14} />
+                    <span>Try Demo Text Diff</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="v2/demo-folder-btn"
+                    aria-label="Demo Folder Diff"
+                    title="Demo Folder Diff"
+                    onClick={() => onNewSession("folder", "", "", "Demo Folder Compare")}
+                    className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--v2-border)] bg-[var(--v2-surface)] px-3.5 text-[12px] font-medium text-[var(--v2-fg-secondary)] shadow-sm transition-colors hover:border-[var(--v2-border-strong)] hover:bg-[var(--v2-surface-subtle)] hover:text-[var(--v2-fg)]"
+                  >
+                    <FolderOpen size={14} />
+                    <span>Demo Folder Diff</span>
+                  </button>
+                </>
+              ) : null}
               {onOpenNewSessionModal ? (
                 <button
                   type="button"

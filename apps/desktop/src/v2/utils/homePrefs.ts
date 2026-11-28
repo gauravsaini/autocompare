@@ -56,3 +56,28 @@ export function saveHomeSidebarPrefs(
     // Ignore quota or private browsing storage failures
   }
 }
+
+const DEMO_MODE_STORAGE_KEY = "autocompare.v2.demoMode.v1";
+
+export function loadDemoModePref(
+  storage: Pick<Storage, "getItem"> | null = getDefaultStorage(),
+): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(DEMO_MODE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveDemoModePref(
+  enabled: boolean,
+  storage: Pick<Storage, "setItem"> | null = getDefaultStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(DEMO_MODE_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Ignore quota or private browsing storage failures
+  }
+}

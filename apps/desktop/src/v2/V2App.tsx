@@ -20,6 +20,7 @@ import {
   saveFileFormats,
   saveVfsProfiles,
 } from "./utils/formatsAndProfiles";
+import { loadDemoModePref, saveDemoModePref } from "./utils/homePrefs";
 import type { V2StatusInfo, V2ViewCommands } from "./types";
 
 // Register all built-in + litmus comparator plugins into the Comparator Seam
@@ -111,6 +112,7 @@ export default function V2App(): React.JSX.Element {
       ? "dark"
       : "light",
   );
+  const [demoMode, setDemoMode] = useState<boolean>(() => loadDemoModePref());
   const [layoutDensity, setLayoutDensity] = useState<"standard" | "compact">("standard");
   const [paneOrientation, setPaneOrientation] = useState<PaneOrientation>("side-by-side");
   const [commands, setCommands] = useState<V2ViewCommands>({});
@@ -157,10 +159,22 @@ export default function V2App(): React.JSX.Element {
     document.documentElement.dataset.layout = layoutDensity;
   }, [layoutDensity]);
 
+  useEffect(() => {
+    saveDemoModePref(demoMode);
+  }, [demoMode]);
+
   const toggleTheme = useCallback(
     () => setTheme((t) => (t === "dark" ? "light" : "dark")),
     [],
   );
+
+  const toggleDemoMode = useCallback(() => {
+    setDemoMode((prev) => {
+      const next = !prev;
+      showToast(`Demo Mode: ${next ? "ON" : "OFF"}`, 1800);
+      return next;
+    });
+  }, [showToast]);
 
   const toggleLayout = useCallback(() => {
     setLayoutDensity((d) => {
@@ -641,6 +655,26 @@ export default function V2App(): React.JSX.Element {
           </button>
           <button
             type="button"
+            role="switch"
+            aria-checked={demoMode}
+            data-testid="v2/toggle-demo-mode"
+            title={demoMode ? "Demo Mode is ON — click to hide demo shortcuts" : "Demo Mode is OFF — click to show demo shortcuts"}
+            onClick={toggleDemoMode}
+            className={`v2-mono inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium shadow-sm transition-colors ${
+              demoMode
+                ? "border-[var(--v2-accent)]/50 bg-[var(--v2-accent-soft)] text-[var(--v2-accent)]"
+                : "border-[var(--v2-border)] bg-[var(--v2-surface)] text-[var(--v2-fg-muted)] hover:border-[var(--v2-border-strong)] hover:text-[var(--v2-fg)]"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                demoMode ? "bg-[var(--v2-accent)]" : "bg-[var(--v2-fg-muted)]/50"
+              }`}
+            />
+            <span>Demo: {demoMode ? "ON" : "OFF"}</span>
+          </button>
+          <button
+            type="button"
             data-testid="v2/toggle-theme"
             title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
@@ -667,6 +701,7 @@ export default function V2App(): React.JSX.Element {
           <Suspense fallback={<ViewLoadingFallback />}>
             {activeTab.kind === "home" ? (
               <V2Home
+                demoMode={demoMode}
                 onNewSession={openSession}
                 onOpenSessionManager={() => setSessionManagerOpen(true)}
                 onOpenNewSessionModal={openNewSession}
@@ -705,30 +740,32 @@ export default function V2App(): React.JSX.Element {
       {/* 4. Spotlight-Inspired 3-Zone Status Bar */}
       <footer
         data-testid="v2/statusbar"
-        className="v2-mono flex h-7 shrink-0 items-center justify-between border-t border-[var(--v2-border)] bg-[var(--v2-surface)] px-4 text-[11px] text-[var(--v2-fg-muted)]"
+        className="v2-mono grid h-7 shrink-0 grid-cols-3 items-center border-t border-[var(--v2-border)] bg-[var(--v2-surface)] px-4 text-[11px] text-[var(--v2-fg-muted)]"
       >
-        <span className="truncate">
-          {activeTab.kind === "home"
-            ? `${listComparators().length} plugins enabled`
-            : status.left || "Ready"}
-        </span>
-        <span className="truncate">
+        <div className="flex min-w-0 items-center gap-2 truncate">
+          {activeTab.kind === "home" ? (
+            <>
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
+              <span>Ready</span>
+            </>
+          ) : (
+            <span className="truncate">{status.left || "Ready"}</span>
+          )}
+        </div>
+        <div className="flex min-w-0 items-center justify-center truncate">
+          {activeTab.kind === "home" ? (
+            <span>{listComparators().length} plugins enabled</span>
+          ) : (
+            <span className="truncate">{status.center}</span>
+          )}
+        </div>
+        <div className="flex min-w-0 items-center justify-end gap-2 truncate">
           {activeTab.kind === "home" ? (
             <span className="rounded-md bg-[var(--v2-accent-soft)] px-2 py-0.5 font-medium text-[var(--v2-accent)]">
               Free &amp; Open Source
             </span>
           ) : (
-            status.center
-          )}
-        </span>
-        <div className="flex shrink-0 items-center gap-2 truncate">
-          {activeTab.kind === "home" ? (
-            <>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-              <span>Ready</span>
-            </>
-          ) : (
-            <span>{status.right || "Ready"}</span>
+            <span className="truncate">{status.right || "Ready"}</span>
           )}
         </div>
       </footer>
