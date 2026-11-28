@@ -72,7 +72,14 @@ export function isValidSpanId(value: unknown): value is string {
   return typeof value === "string" && SPAN_ID_RE.test(value);
 }
 
-/** Mint a fresh root context (head-based sampling decision happens here). */
+/** Mint a fresh root context (head-based sampling decision happens here).
+ *
+ * ODD §7/§11 defaults review (Phase 12, comment-only): `sampled: true` is the
+ * 100% local-dev profile (`DEV_SAMPLE_RATE` in `crates/telemetry/src/sample.rs`).
+ * Prod-like callers pass `{ sampled: <5% coin flip> }` (`PROD_SAMPLE_RATE = 0.05`,
+ * inside the §2 "1–5% prod-like" band); error spans bypass sampling anyway
+ * (`shouldKeep`), so lowering the rate never hides failures.
+ */
 export function newRootContext(opts?: { sampled?: boolean }): TraceContext {
   return {
     trace_id: generateTraceId(),

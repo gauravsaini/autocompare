@@ -93,3 +93,79 @@ test("text.compare produces one complete correlated trace (mock)", async ({
     true,
   );
 });
+
+test("tracer overhead: telemetry on vs off delta within §11 budget (offline)", async () => {
+  // ODD Phase 12 overhead gate (§11): telemetry ON vs OFF wall-clock delta on
+  // a representative CPU workload must stay within the p99 <3% added-latency
+  // budget, and mean per-op tracer cost must stay under the <1ms/op UI-thread
+  // budget. Node-side microbench of the bundled TS tracer (no browser timing
+  // involved); interleaved A/B rounds with medians collapse GC/drift noise.
+  // Additive-only: touches no existing test, fixture, or app logic.
+  const tracer = await import("../../src/observability/tracer.ts");
+  const sink = await import("../../src/observability/sink.ts");
+
+  const ITER = 20; // spans per round (one span ≈ one traced op)
+  const WORK = 600_000; // busy-loop iterations ≈ stand-in op body (ms scale)
+  const ROUNDS = 5;
+
+  let blackhole = 0;
+  function workload(): void {
+    let acc = 0;
+    for (let i = 0; i < WORK; i += 1) acc = (acc + i) % 100_003;
+    blackhole = (blackhole + acc) % 100_003;
+  }
+
+  function roundSeconds(telemetryOn: boolean): number {
+    tracer.setTelemetryEnabled(telemetryOn);
+    sink.clearBuffer();
+    const start = performance.now();
+    for (let i = 0; i < ITER; i += 1) {
+      if (!telemetryOn) {
+        workload();
+        continue;
+      }
+      const span = tracer.startRootSpan({
+        op: "perf.budget_probe",
+        component: "ts.perf/probe",
+      });
+      workload();
+      span.set({ iters: WORK });
+      tracer.endSpan(span);
+    }
+    const elapsed = performance.now() - start;
+    if (telemetryOn) {
+      // Sanity: telemetry really was on — one span per op landed in the ring.
+      expect(sink.getBufferedRecords().length).toBe(ITER);
+    }
+    return elapsed / 1000;
+  }
+
+  function median(values: number[]): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 1) return sorted[mid] as number;
+    return ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
+  }
+
+  try {
+    const offSecs: number[] = [];
+    const onSecs: number[] = [];
+    for (let r = 0; r < ROUNDS; r += 1) {
+      offSecs.push(roundSeconds(false));
+      onSecs.push(roundSeconds(true));
+    }
+    const off = median(offSecs);
+    const on = median(onSecs);
+    const delta = Math.max(0, on - off);
+
+    // §11: added latency <3% of the operation wall time.
+    expect(off).toBeGreaterThan(0);
+    expect(delta).toBeLessThan(off * 0.03);
+    // §11: UI-thread tracing <1ms per op (mean over the round).
+    expect(delta / ITER).toBeLessThan(0.001);
+  } finally {
+    tracer.setTelemetryEnabled(true);
+    sink.clearBuffer();
+  }
+  expect(blackhole).toBeGreaterThanOrEqual(0);
+});

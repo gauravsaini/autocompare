@@ -17,7 +17,12 @@
 /** Minimal structural view of an emitted record (schema lives in tracer). */
 export type SinkRecord = Record<string, unknown>;
 
-/** Ring capacity: one batch window (1s / 512 events, §11) with headroom. */
+/** Ring capacity: one batch window (1s / 512 events, §11) with headroom.
+ *
+ * ODD §11 budget note (Phase 12, comment-only): 1024 records × ~2KB/op worst
+ * case (the <2MB-per-1k-ops volume ceiling) ≈ 2MB, comfortably inside the 8MB
+ * sink-memory cap. Overflow still degrades to drop-oldest + counter.
+ */
 export const SINK_BUFFER_LIMIT = 1024;
 
 let buffer: SinkRecord[] = [];

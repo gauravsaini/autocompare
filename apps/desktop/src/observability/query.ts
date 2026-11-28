@@ -25,6 +25,12 @@ export interface SpanQuery {
   to?: string;
 }
 
+/**
+ * ODD Phase 12 defaults review (comment-only): 50 keeps ad-hoc queries (and
+ * the e2e introspection hook) bounded to a fraction of the 1024-record ring,
+ * so a query can never force a full-buffer scan into a hot path. No §11
+ * budget constrains this value; it is a guardrail, not a sampling rate.
+ */
 const DEFAULT_LIMIT = 50;
 
 function isSpanRecord(record: SinkRecord): boolean {
