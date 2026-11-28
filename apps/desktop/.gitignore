@@ -1,6 +1,7 @@
 node_modules/
 dist/
 storybook-static/
+.vitest/
 playwright-report/
 test-results/
 icon.iconset/
