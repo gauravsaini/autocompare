@@ -370,6 +370,145 @@ impl<T> FanoutHandle<T> {
     }
 }
 
+/// ODD Phase 5: retry/fallback policy for orchestration-level retries.
+///
+/// Retries annotate the enclosing (fork-join parent or shard) span with
+/// events — never new leaf spans — so volume stays flat: one
+/// `retry_attempt` event per backoff plus one terminal `retry_done`.
+/// Only attempt counts, backoff budgets and the final outcome are
+/// recorded; error payloads stay out of telemetry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetryPolicy {
+    /// Total attempts including the first (minimum 1; `0` means 1).
+    pub max_attempts: u32,
+    /// Base backoff between attempts, milliseconds (doubles per attempt).
+    pub base_backoff_ms: u64,
+    /// Cap for the exponential backoff, milliseconds.
+    pub max_backoff_ms: u64,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self { max_attempts: 3, base_backoff_ms: 10, max_backoff_ms: 200 }
+    }
+}
+
+/// Accounting for one [`run_with_retry`] call: attempt count, total slept
+/// backoff, and the final outcome. The outcome value itself travels in the
+/// paired `Result`; this struct only counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetryAccounting {
+    /// Number of attempts actually executed (>= 1).
+    pub attempts: u32,
+    /// Whether the final attempt succeeded.
+    pub succeeded: bool,
+    /// Total backoff slept between attempts, milliseconds.
+    pub backoff_ms_total: u64,
+}
+
+/// Outcome wrapper for [`JobRunner::spawn_with_retry`]: the operation value
+/// plus its retry accounting, so joiners can assert attempts without
+/// scraping logs.
+#[derive(Debug)]
+pub struct RetryOutcome<T> {
+    /// The successful operation value.
+    pub value: T,
+    /// Number of attempts actually executed (>= 1).
+    pub attempts: u32,
+    /// Total backoff slept between attempts, milliseconds.
+    pub backoff_ms_total: u64,
+}
+
+/// Backoff before attempt `attempt` (1-based): `base * 2^(attempt-1)`,
+/// capped at `max_backoff_ms`. Attempt 1 never backs off (returns 0).
+pub fn retry_backoff_ms(policy: &RetryPolicy, attempt: u32) -> u64 {
+    if attempt <= 1 {
+        return 0;
+    }
+    let shift = attempt.saturating_sub(2).min(62);
+    let scaled = policy.base_backoff_ms.saturating_mul(1u64 << shift);
+    scaled.min(policy.max_backoff_ms)
+}
+
+/// Runs `op` up to `policy.max_attempts` times, sleeping exponential
+/// backoff between attempts. The closure receives the 1-based attempt
+/// number. [`Error::Cancelled`] is never retried — it returns immediately
+/// so cancellation stays prompt.
+///
+/// Telemetry (ODD Phase 5, gated on `odd_enabled`): one `retry_attempt`
+/// event per backoff plus one terminal `retry_done` event on the current
+/// span. No child spans — leaf volume stays flat.
+pub fn run_with_retry<T, F>(policy: RetryPolicy, mut op: F) -> (Result<T>, RetryAccounting)
+where
+    F: FnMut(u32) -> Result<T>,
+{
+    let max = policy.max_attempts.max(1);
+    let mut backoff_total = 0u64;
+    let mut attempt = 0u32;
+    loop {
+        attempt = attempt.saturating_add(1);
+        match op(attempt) {
+            Ok(value) => {
+                if odd_enabled() {
+                    tracing::info!(
+                        phase = "retry_done",
+                        attempts = attempt,
+                        outcome = "ok",
+                        backoff_ms_total = backoff_total,
+                    );
+                }
+                return (
+                    Ok(value),
+                    RetryAccounting { attempts: attempt, succeeded: true, backoff_ms_total: backoff_total },
+                );
+            }
+            Err(Error::Cancelled) => {
+                if odd_enabled() {
+                    tracing::info!(
+                        phase = "retry_done",
+                        attempts = attempt,
+                        outcome = "cancelled",
+                        backoff_ms_total = backoff_total,
+                    );
+                }
+                return (
+                    Err(Error::Cancelled),
+                    RetryAccounting { attempts: attempt, succeeded: false, backoff_ms_total: backoff_total },
+                );
+            }
+            Err(err) => {
+                if attempt >= max {
+                    if odd_enabled() {
+                        tracing::info!(
+                            phase = "retry_done",
+                            attempts = attempt,
+                            outcome = "err",
+                            backoff_ms_total = backoff_total,
+                        );
+                    }
+                    return (
+                        Err(err),
+                        RetryAccounting { attempts: attempt, succeeded: false, backoff_ms_total: backoff_total },
+                    );
+                }
+                let backoff = retry_backoff_ms(&policy, attempt + 1);
+                if odd_enabled() {
+                    tracing::info!(
+                        phase = "retry_attempt",
+                        attempt = attempt,
+                        next_attempt = attempt + 1,
+                        backoff_ms = backoff,
+                    );
+                }
+                backoff_total = backoff_total.saturating_add(backoff);
+                if backoff > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(backoff));
+                }
+            }
+        }
+    }
+}
+
 impl JobRunner {
     /// Creates a new `JobRunner`.
     pub const fn new() -> Self {
@@ -402,6 +541,32 @@ impl JobRunner {
             None
         };
         Self::spawn_inner(name, cancel_flag, parent, work)
+    }
+
+    /// Spawns a background job that retries an idempotent operation under
+    /// `policy`, joining to a [`RetryOutcome`] with attempt accounting.
+    ///
+    /// ODD Phase 5: retries annotate the existing fork-join parent span
+    /// (events only, no new spans — see [`run_with_retry`]).
+    /// [`Error::Cancelled`] is never retried. The `op` closure receives
+    /// the 1-based attempt number.
+    pub fn spawn_with_retry<T, F>(
+        policy: RetryPolicy,
+        name: &str,
+        op: F,
+    ) -> JobHandle<RetryOutcome<T>>
+    where
+        T: Send + 'static,
+        F: FnMut(u32) -> Result<T> + Send + 'static,
+    {
+        Self::spawn_with_name(name, move |_cancel, _progress| {
+            let (result, accounting) = run_with_retry(policy, op);
+            result.map(|value| RetryOutcome {
+                value,
+                attempts: accounting.attempts,
+                backoff_ms_total: accounting.backoff_ms_total,
+            })
+        })
     }
 
     /// Shared worker-thread setup for every spawn path: progress
@@ -1013,5 +1178,91 @@ mod tests {
                 assert_ne!(a, b);
             }
         }
+    }
+
+    #[test]
+    fn test_retry_backoff_grows_and_caps() {
+        // ODD Phase 5: attempt count, backoff, final outcome — no leaf spam
+        // (events only, so this asserts the pure backoff table instead).
+        let policy = RetryPolicy { max_attempts: 5, base_backoff_ms: 10, max_backoff_ms: 25 };
+        assert_eq!(retry_backoff_ms(&policy, 1), 0);
+        assert_eq!(retry_backoff_ms(&policy, 2), 10);
+        assert_eq!(retry_backoff_ms(&policy, 3), 20);
+        assert_eq!(retry_backoff_ms(&policy, 4), 25);
+        assert_eq!(retry_backoff_ms(&policy, 5), 25);
+    }
+
+    #[test]
+    fn test_retry_counts_attempts_then_succeeds() {
+        let policy = RetryPolicy { max_attempts: 3, base_backoff_ms: 0, max_backoff_ms: 0 };
+        let mut calls = 0u32;
+        let (result, accounting) = run_with_retry(policy, |attempt| {
+            calls += 1;
+            assert_eq!(attempt, calls);
+            if attempt < 3 {
+                Err(Error::Io {
+                    path: "retry-test".to_string(),
+                    source: std::io::Error::other("boom"),
+                })
+            } else {
+                Ok("ok")
+            }
+        });
+        assert_eq!(result.unwrap(), "ok");
+        assert_eq!(calls, 3);
+        assert_eq!(accounting.attempts, 3);
+        assert!(accounting.succeeded);
+        assert_eq!(accounting.backoff_ms_total, 0);
+    }
+
+    #[test]
+    fn test_retry_exhausts_and_reports_final_outcome() {
+        let policy = RetryPolicy { max_attempts: 2, base_backoff_ms: 0, max_backoff_ms: 0 };
+        let (result, accounting) = run_with_retry(policy, |_| {
+            Err::<u32, _>(Error::Unsupported {
+                path: "t".to_string(),
+                what: "nope",
+            })
+        });
+        assert!(result.is_err());
+        assert_eq!(accounting.attempts, 2);
+        assert!(!accounting.succeeded);
+    }
+
+    #[test]
+    fn test_retry_does_not_retry_cancelled() {
+        let policy = RetryPolicy::default();
+        let mut calls = 0u32;
+        let (result, accounting) = run_with_retry(policy, |_| {
+            calls += 1;
+            Err::<u32, _>(Error::Cancelled)
+        });
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert_eq!(calls, 1);
+        assert_eq!(accounting.attempts, 1);
+        assert!(!accounting.succeeded);
+    }
+
+    #[test]
+    fn test_spawn_with_retry_reports_accounting() {
+        let tries = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let tries_clone = Arc::clone(&tries);
+        let policy = RetryPolicy { max_attempts: 3, base_backoff_ms: 0, max_backoff_ms: 0 };
+        let handle = JobRunner::spawn_with_retry(policy, "odd-retry-test", move |attempt| {
+            tries_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if attempt < 2 {
+                Err(Error::Io {
+                    path: "retry-spawn".to_string(),
+                    source: std::io::Error::other("flaky"),
+                })
+            } else {
+                Ok(7)
+            }
+        });
+        let outcome = handle.join().expect("retry spawn joins");
+        assert_eq!(outcome.value, 7);
+        assert_eq!(outcome.attempts, 2);
+        assert_eq!(outcome.backoff_ms_total, 0);
+        assert_eq!(tries.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 }

@@ -9,6 +9,8 @@ import {
   isTelemetryEnabled,
   startRootSpan,
 } from "../observability/tracer";
+import { emitEvent } from "../observability/sink";
+import { redactAttributes } from "../observability/redact";
 import {
   listRecentSpans,
   type SpanQuery,
@@ -149,7 +151,11 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   });
   const params: Record<string, unknown> = { ...(args ?? {}), __trace: ipcSpan.context() };
   const startedAt = Date.now();
+  // ODD Phase 5: transport-resolver clock. The selection order below is
+  // Phase 3 behaviour (untouched); this only times it for the span.
+  const resolverStartMs = nowMs();
   let transport: string = "tauri";
+  let fallbackChain = "";
   try {
     let result: T;
     if (rpcCfg !== null && !mockForced) {
@@ -163,22 +169,39 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
       result = await httpRpcInvoke<T>(rpcCfg, cmd, params, traceparent);
     } else if (isMockIpc()) {
       transport = "mock";
+      // ODD Phase 5: record WHY we fell back to mock (primary unavailable).
+      // Mirrors describeTransportDecision() below (test parity); the branch
+      // conditions above are Phase 3 and unchanged.
+      fallbackChain = mockForced
+        ? "mock-forced->mock"
+        : rpcCfg !== null
+          ? "http-suppressed->mock"
+          : "tauri-unavailable->mock";
       const mod = await import("./mockAdapter");
       result = await mod.mockInvoke<T>(cmd, params);
     } else {
       transport = "tauri";
       result = await tauriInvoke<T>(cmd, params);
     }
+    const resolverLatencyMs = Math.max(0, nowMs() - resolverStartMs);
     const attrs: Record<string, unknown> = {
       transport,
       duration_ms: Math.max(0, Date.now() - startedAt),
+      resolver_latency_ms: resolverLatencyMs,
     };
+    if (fallbackChain !== "") attrs["fallback_chain"] = fallbackChain;
     // Response correlation check (§5.2): warn-shaped attribute when the
     // responder echo is missing or belongs to another trace (catches
     // mock/real divergence without touching the result).
     let echoOk = false;
     let sawMock = false;
-    if (result !== null && typeof result === "object" && !Array.isArray(result)) {
+    // ODD Phase 5: only object envelopes can carry an echo. Non-object
+    // responses (numbers, arrays, null) pass through untouched by design
+    // (see mockAdapter), so a missing echo there is expected, not a
+    // divergence — no warning for those.
+    const isEchoCandidate =
+      result !== null && typeof result === "object" && !Array.isArray(result);
+    if (isEchoCandidate) {
       const envelope = result as Record<string, unknown>;
       if (envelope["__mock"] === true) sawMock = true;
       const echoed = parse(envelope["__trace"]);
@@ -187,6 +210,30 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     attrs["trace_echo"] = echoOk;
     if (sawMock) attrs["is_mock"] = true;
     ipcSpan.set(attrs);
+    // ODD Phase 5: response-correlation warning. Trace echo was expected
+    // (ambient trace injected) but absent or for another trace — a
+    // mock/real divergence signal. Warn-level event linked to the ambient
+    // trace via this span's ids; never alters the result or throws.
+    if (isEchoCandidate && !echoOk) {
+      try {
+        emitEvent({
+          schema_version: 1,
+          kind: "event",
+          name: "trace.echo_missing",
+          trace_id: ipcSpan.trace_id,
+          span_id: ipcSpan.span_id,
+          at: new Date().toISOString(),
+          severity: "warn",
+          attributes: redactAttributes({
+            op: opForCommand(cmd),
+            transport,
+            trace_echo: false,
+          }),
+        });
+      } catch {
+        // Introspection must never break the IPC path.
+      }
+    }
     endSpan(ipcSpan);
     return result;
   } catch (err) {
@@ -253,6 +300,80 @@ function opForCommand(cmd: string): string {
   const sep = cmd.indexOf("_");
   if (sep > 0) return `${cmd.slice(0, sep)}.${cmd.slice(sep + 1)}`;
   return cmd;
+}
+
+// ---------------------------------------------------------------------------
+// ODD Phase 5: transport-resolver decision table (pure, unit-testable).
+// ---------------------------------------------------------------------------
+
+/** Resolved transport for one `invoke` round-trip. */
+export type ResolvedTransport = "http" | "mock" | "tauri";
+
+/** Inputs to the transport decision (mirror the `invoke` branch order). */
+export interface TransportDecisionInput {
+  /** HTTP RPC config present (`getHttpRpcConfig() !== null`). */
+  readonly rpcConfigured: boolean;
+  /** `VITE_MOCK_IPC=1` forced. */
+  readonly mockForced: boolean;
+  /** `isMockIpc()` (mock forced or no Tauri globals and no RPC config). */
+  readonly mockIpc: boolean;
+}
+
+/** Transport plus the fallback chain that led there (`""` when direct). */
+export interface TransportDecision {
+  readonly transport: ResolvedTransport;
+  readonly fallbackChain: string;
+}
+
+/**
+ * Pure transport decision table. Mirrors the `invoke` branch order exactly:
+ * HTTP when configured (unless mock-forced), else mock, else Tauri.
+ * `fallbackChain` is `""` when the primary transport was available and a
+ * `"<reason>->mock"` chain when we fell back to mock.
+ */
+export function describeTransportDecision(
+  input: TransportDecisionInput,
+): TransportDecision {
+  if (input.rpcConfigured && !input.mockForced) {
+    return { transport: "http", fallbackChain: "" };
+  }
+  if (input.mockIpc) {
+    const fallbackChain = input.mockForced
+      ? "mock-forced->mock"
+      : input.rpcConfigured
+        ? "http-suppressed->mock"
+        : "tauri-unavailable->mock";
+    return { transport: "mock", fallbackChain };
+  }
+  return { transport: "tauri", fallbackChain: "" };
+}
+
+/**
+ * Whether a missing trace echo deserves the Phase 5 `trace.echo_missing`
+ * warn event. Only object envelopes can carry an echo; non-object
+ * responses (numbers, arrays, null) pass through untouched by design, so a
+ * missing echo there is expected, not a divergence.
+ */
+export function shouldWarnOnMissingEcho(result: unknown, echoOk: boolean): boolean {
+  if (echoOk) return false;
+  return (
+    result !== null && typeof result === "object" && !Array.isArray(result)
+  );
+}
+
+/** Monotonic-ish millisecond clock for resolver latency (never throws). */
+function nowMs(): number {
+  try {
+    if (
+      typeof performance !== "undefined" &&
+      typeof performance.now === "function"
+    ) {
+      return performance.now();
+    }
+  } catch {
+    // fall through to Date.now
+  }
+  return Date.now();
 }
 
 // Read-only e2e introspection (mock-mode trace assertions). Registered once
