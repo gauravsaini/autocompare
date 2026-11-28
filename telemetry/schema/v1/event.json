@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autocompare.local/telemetry/schema/v1/event.json",
+  "title": "ODD Event (telemetry/v1)",
+  "description": "Point-in-time fact linked to a span. File contents, tokens and raw paths are forbidden.",
+  "type": "object",
+  "required": ["schema_version", "kind", "name", "trace_id", "span_id", "at", "severity"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": { "const": "event" },
+    "name": { "type": "string", "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+$" },
+    "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "at": { "type": "string", "format": "date-time" },
+    "severity": { "enum": ["debug", "info", "warn", "error"] },
+    "attributes": { "type": "object" },
+    "repro": {
+      "type": "object",
+      "properties": {
+        "e2e": { "type": "string" },
+        "fixture": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

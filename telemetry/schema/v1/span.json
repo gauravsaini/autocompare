@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autocompare.local/telemetry/schema/v1/span.json",
+  "title": "ODD Span (telemetry/v1)",
+  "description": "Closed timed operation. Wire format is snake_case everywhere.",
+  "type": "object",
+  "required": ["schema_version", "kind", "trace_id", "span_id", "op", "component", "started_at", "status"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": { "const": "span" },
+    "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "parent_span_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{16}$" },
+    "op": { "type": "string", "description": "Must exist in ops.json registry" },
+    "component": { "type": "string", "pattern": "^[a-z]{2}\\.[a-z0-9_/]+" },
+    "view_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "duration_ns": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["ok", "error"] },
+    "attributes": { "type": "object" },
+    "redaction": { "const": "v1-default" }
+  },
+  "additionalProperties": false
+}
